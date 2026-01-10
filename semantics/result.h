@@ -7,35 +7,43 @@
 
 /**
  * @file result.h
- * @brief Explicit success or failure with value or error
+ * @brief Explicit success/failure with value or error – Rust-style Result<T, E> for C
  *
- * Result<T, E> represents either:
- *   - Ok(value)    : successful computation returning a value of type T
- *   - Err(error)   : failure with an error value of type E
+ * Represents either:
+ * - Ok(value)  → successful result with value of type T
+ * - Err(error) → failure with error value of type E
  *
- * Goals:
- *   - Fully explicit error handling (no exceptions, no errno, no sentinel values)
- *   - Zero-cost abstraction (struct with bool + union)
- *   - Type-safe via per-type macros (one struct per value_type + error_type pair)
+ * Philosophy & goals:
+ *   - Fully explicit error handling (no exceptions, no errno, no sentinels)
+ *   - Zero-cost abstraction (struct + bool flag + union)
+ *   - Type-safe via macros (one concrete struct per (T,E) pair)
  *   - Header-only, no runtime dependencies
+ *   - Chainable & composable (map, and_then, or_else, etc.)
+ *   - Panic/unwrap only in debug builds (production code should check)
  *
- * Basic usage example:
- *   result_int_int errcode = result_int_int_ok(42);
- *   if (result_int_int_is_ok(errcode)) {
- *       printf("Success: %d\n", result_int_int_unwrap(errcode));
- *   } else {
- *       printf("Error: %d\n", result_int_int_unwrap_err(errcode));
+ * Recommended pattern:
+ *   Always check is_ok / is_err before unwrap
+ *   Use TRY / TRY_REMAP macros for clean propagation
+ *   Prefer get_ok / get_err or unwrap_or over raw unwrap in production
+ *
+ * Classic example:
+ *   result_int_constcharp parse_number(const char* s) { ... }
+ *
+ *   int process() {
+ *       TRY(int n = parse_number("42"));           // early return on error
+ *       return n * 2;
  *   }
  */
 
 /**
- * @brief Defines a concrete Result type for a given value_type and error_type
+ * @brief Defines a concrete Result<T, E> type for given value_type and error_type
  *
- * Generates: struct result_##value_type##_##error_type with is_ok flag and union,
- * plus a full set of constructor/accessor/transformation functions.
- *
- * @param value_type Type of the success value (e.g. int, void*, custom struct)
- * @param error_type Type of the error value (e.g. int, enum ErrorCode, const char*)
+ * Generates:
+ *   - struct result_##value_type##_##error_type
+ *   - Constructors: ok(...), err(...)
+ *   - Queries: is_ok, is_err
+ *   - Accessors: get_ok, get_err, unwrap, unwrap_or, expect
+ *   - Transformations: map, map_err, and_then, or_else
  */
 #define CANON_C_DEFINE_RESULT(value_type, error_type) \
 typedef struct { \
@@ -46,188 +54,133 @@ typedef struct { \
     }; \
 } result_##value_type##_##error_type; \
 \
-/** \
- * @brief Constructs successful result (Ok) \
- * @param v The success value \
- * @return result_##value_type##_##error_type in Ok state \
- */ \
 static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_ok(value_type v) \
-{ \
-    result_##value_type##_##error_type r = {0}; \
-    r.is_ok = true; \
-    r.ok = v; \
-    return r; \
+result_##value_type##_##error_type##_ok(value_type v) { \
+    return (result_##value_type##_##error_type){ .is_ok = true, .ok = v }; \
 } \
 \
-/** \
- * @brief Constructs failed result (Err) \
- * @param e The error value \
- * @return result_##value_type##_##error_type in Err state \
- */ \
 static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_err(error_type e) \
-{ \
-    result_##value_type##_##error_type r = {0}; \
-    r.is_ok = false; \
-    r.err = e; \
-    return r; \
+result_##value_type##_##error_type##_err(error_type e) { \
+    return (result_##value_type##_##error_type){ .is_ok = false, .err = e }; \
 } \
 \
-/** \
- * @brief Checks if the result is successful \
- * @param r Result instance \
- * @return true if Ok, false if Err \
- */ \
 static inline bool \
-result_##value_type##_##error_type##_is_ok(result_##value_type##_##error_type r) \
-{ \
+result_##value_type##_##error_type##_is_ok(result_##value_type##_##error_type r) { \
     return r.is_ok; \
 } \
 \
-/** \
- * @brief Checks if the result contains an error \
- * @param r Result instance \
- * @return true if Err, false if Ok \
- */ \
 static inline bool \
-result_##value_type##_##error_type##_is_err(result_##value_type##_##error_type r) \
-{ \
+result_##value_type##_##error_type##_is_err(result_##value_type##_##error_type r) { \
     return !r.is_ok; \
 } \
 \
-/** \
- * @brief Safely extracts Ok value if present \
- * @param r   Result instance \
- * @param out Pointer to receive the value (may be NULL) \
- * @return    true if value was written (Ok), false otherwise (Err) \
- */ \
 static inline bool \
 result_##value_type##_##error_type##_get_ok( \
-    result_##value_type##_##error_type r, \
-    value_type *out \
-) { \
-    if (r.is_ok && out) { \
-        *out = r.ok; \
-        return true; \
-    } \
+    result_##value_type##_##error_type r, value_type* out) { \
+    if (r.is_ok && out) { *out = r.ok; return true; } \
     return false; \
 } \
 \
-/** \
- * @brief Safely extracts Err value if present \
- * @param r   Result instance \
- * @param out Pointer to receive the error (may be NULL) \
- * @return    true if error was written (Err), false otherwise (Ok) \
- */ \
 static inline bool \
 result_##value_type##_##error_type##_get_err( \
-    result_##value_type##_##error_type r, \
-    error_type *out \
-) { \
-    if (!r.is_ok && out) { \
-        *out = r.err; \
-        return true; \
-    } \
+    result_##value_type##_##error_type r, error_type* out) { \
+    if (!r.is_ok && out) { *out = r.err; return true; } \
     return false; \
 } \
 \
-/** \
- * @brief Returns Ok value or fallback if Err \
- * @param r        Result instance \
- * @param fallback Value to return when Err \
- * @return         Ok value or fallback \
- */ \
 static inline value_type \
 result_##value_type##_##error_type##_unwrap_or( \
-    result_##value_type##_##error_type r, \
-    value_type fallback \
-) { \
+    result_##value_type##_##error_type r, value_type fallback) { \
     return r.is_ok ? r.ok : fallback; \
 } \
 \
-/** \
- * @brief Extracts Ok value or panics if Err (debug only) \
- * @param r Result instance \
- * @return  Ok value (asserts if Err) \
- */ \
 static inline value_type \
-result_##value_type##_##error_type##_unwrap(result_##value_type##_##error_type r) \
-{ \
-    assert(r.is_ok && "Called unwrap on Err"); \
+result_##value_type##_##error_type##_unwrap(result_##value_type##_##error_type r) { \
+    assert(r.is_ok && "unwrap called on Err value"); \
     return r.ok; \
 } \
 \
-/** \
- * @brief Extracts Ok value or panics with custom message if Err \
- * @param r   Result instance \
- * @param msg Custom panic message \
- * @return    Ok value \
- */ \
 static inline value_type \
 result_##value_type##_##error_type##_expect( \
-    result_##value_type##_##error_type r, \
-    const char *msg \
-) { \
+    result_##value_type##_##error_type r, const char* msg) { \
     assert(r.is_ok && msg); \
-    (void)msg; /* avoid unused warning in release builds */ \
+    (void)msg; \
     return r.ok; \
 } \
 \
-/** \
- * @brief Applies transformation to Ok value; passes Err unchanged \
- * @param r  Result instance \
- * @param f  Function: value_type → value_type \
- * @return   New Result with mapped Ok or original Err \
- */ \
 static inline result_##value_type##_##error_type \
 result_##value_type##_##error_type##_map( \
-    result_##value_type##_##error_type r, \
-    value_type (*f)(value_type) \
-) { \
+    result_##value_type##_##error_type r, value_type (*f)(value_type)) { \
     return r.is_ok ? result_##value_type##_##error_type##_ok(f(r.ok)) : r; \
 } \
 \
-/** \
- * @brief Applies transformation to Err value; passes Ok unchanged \
- * @param r  Result instance \
- * @param f  Function: error_type → error_type \
- * @return   New Result with mapped Err or original Ok \
- */ \
 static inline result_##value_type##_##error_type \
 result_##value_type##_##error_type##_map_err( \
-    result_##value_type##_##error_type r, \
-    error_type (*f)(error_type) \
-) { \
+    result_##value_type##_##error_type r, error_type (*f)(error_type)) { \
     return r.is_ok ? r : result_##value_type##_##error_type##_err(f(r.err)); \
 } \
 \
-/** \
- * @brief Chains computations that return Result (flat_map / and_then) \
- * @param r  Result instance \
- * @param f  Function: value_type → result_##value_type##_##error_type \
- * @return   Result of f if Ok, original Err otherwise \
- */ \
 static inline result_##value_type##_##error_type \
 result_##value_type##_##error_type##_and_then( \
     result_##value_type##_##error_type r, \
-    result_##value_type##_##error_type (*f)(value_type) \
-) { \
+    result_##value_type##_##error_type (*f)(value_type)) { \
     return r.is_ok ? f(r.ok) : r; \
 } \
 \
-/** \
- * @brief Provides alternative Result if current is Err \
- * @param r       Result instance \
- * @param fallback Function taking error_type and returning result_... \
- * @return        Current if Ok, result of fallback() if Err \
- */ \
 static inline result_##value_type##_##error_type \
 result_##value_type##_##error_type##_or_else( \
     result_##value_type##_##error_type r, \
-    result_##value_type##_##error_type (*fallback)(error_type) \
-) { \
-    return r.is_ok ? r : fallback(r.err); \
+    result_##value_type##_##error_type (*f)(error_type)) { \
+    return r.is_ok ? r : f(r.err); \
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Popular propagation & convenience macros
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Early return on error – the most common pattern
+ * @example:
+ *     TRY(open_file(path));
+ *     // only executes on success
+ */
+#define TRY(expr) \
+    do { \
+        auto _res_ = (expr); \
+        if (result_is_err(_res_)) return _res_; \
+    } while (0)
+
+/**
+ * @brief Early return with custom/remapped error
+ * @example:
+ *     TRY_REMAP(parse_config(), ERR_CONFIG_INVALID);
+ */
+#define TRY_REMAP(expr, new_error) \
+    do { \
+        auto _res_ = (expr); \
+        if (result_is_err(_res_)) return result_err(new_error); \
+    } while (0)
+
+/**
+ * @brief Unwrap or return fallback value
+ * @example:
+ *     int value = UNWRAP_OR(parse_number(str), -1);
+ */
+#define UNWRAP_OR(expr, fallback) \
+    ({ \
+        auto _res_ = (expr); \
+        result_is_ok(_res_) ? result_unwrap(_res_) : (fallback); \
+    })
+
+/**
+ * @brief Optional-style: if none → early return with error
+ * Useful when mixing Result + Option
+ */
+#define TRY_SOME(opt_expr, err_code) \
+    ({ \
+        auto _opt_ = (opt_expr); \
+        if (option_is_none(_opt_)) return result_err(err_code); \
+        option_unwrap(_opt_); \
+    })
 
 #endif /* CANON_C_SEMANTICS_RESULT_H */
