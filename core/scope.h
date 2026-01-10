@@ -4,63 +4,90 @@
 
 /**
  * @file scope.h
- * @brief Deferred cleanup at scope exit (RAII-style pattern for C)
+ * @brief Deferred cleanup at scope exit – RAII-style pattern for pure C
  *
- * Provides a simple, macro-based way to execute cleanup code automatically
- * when leaving the current scope — regardless of how the scope exits:
- *   - normal end of block
- *   - early return
- *   - break / continue
- *   - goto (as long as it doesn't jump over the SCOPE_DEFER)
+ * Provides macro-based automatic cleanup when leaving current block,
+ * regardless of exit reason (return, break, continue, end of block, goto within scope).
  *
- * Key properties:
- *   - Zero runtime overhead (pure preprocessor expansion)
- *   - No hidden state or global variables
- *   - No dependencies on compiler extensions (works with standard C99+)
- *   - Very lightweight alternative to full RAII (no classes/structs needed)
+ * =====================================================================
+ *                          IMPORTANT SEMANTICS
+ * =====================================================================
  *
- * Limitations & warnings:
- *   - The cleanup block **must not** contain break/continue/goto that jumps
- *     outside the SCOPE_DEFER scope (undefined behavior in C)
- *   - Works best with simple cleanup (free, fclose, unlock, etc.)
- *   - Not suitable for complex control flow or exception-like semantics
- *   - Multiple SCOPE_DEFER in the same scope execute in reverse order
- *     (LIFO — like stack unwinding)
+ * 1. Execution order
+ *    • Multiple SCOPE_DEFER statements in the same block are executed in **LIFO** order
+ *      (Last declared → executed first – like stack unwinding)
  *
- * Basic usage example:
- *   FILE* f = fopen("file.txt", "r");
- *   if (!f) return -1;
- *   SCOPE_DEFER {
- *       fclose(f);
- *   }
- *   // ... use f ...
- *   // file automatically closed on return/break/end of block
+ * 2. When are defers executed?
+ *
+ *    ┌─────────────────────────────┬──────────────────────────────┐
+ *    │ How the block is exited     │ Are deferred blocks run?     │
+ *    ├─────────────────────────────┼──────────────────────────────┤
+ *    │ Normal end of block         │ YES                          │
+ *    │ return from function        │ YES                          │
+ *    │ break / continue            │ YES (current block only)     │
+ *    │ goto label **inside** block │ YES                          │
+ *    │ goto label **outside** block│ NO                           │
+ *    │ longjmp out of the block    │ NO                           │
+ *    └─────────────────────────────┴──────────────────────────────┘
+ *
+ *    → goto that jumps **out** of the current SCOPE block **skips** cleanup!
+ *      This is standard C behavior (the for-loop trick cannot intercept it).
+ *
+ * 3. Critical warnings
+ *
+ *    • Do NOT put break/continue/goto that jumps **outside** the block
+ *      inside a SCOPE_DEFER cleanup block → undefined behavior
+ *
+ *    • longjmp / setjmp will **bypass** deferred cleanups
+ *      → If you must longjmp, call cleanup code manually before jump
+ *
+ *    • Nested SCOPE_DEFER blocks work correctly (each level independent)
+ *
+ * 4. Best practice recommendations
+ *
+ *    • Keep cleanup blocks **very simple** (free, fclose, unlock, release...)
+ *    • Prefer **small, nested blocks** over huge functions with many defers
+ *    • For complex control flow → consider explicit cleanup labels + goto
+ *
+ * =====================================================================
+ *                          Basic usage pattern
+ * =====================================================================
+ *
+ *     FILE *f = fopen("data.txt", "r");
+ *     if (!f) return error_open_failed;
+ *
+ *     SCOPE_DEFER {
+ *         fclose(f);
+ *     }
+ *
+ *     // ... safe usage of f here ...
+ *     // file is guaranteed closed on any normal exit from this point
+ *
+ * =====================================================================
+ *                          Multiple cleanups (LIFO order)
+ * =====================================================================
+ *
+ *     void *mem = malloc(4096);
+ *     if (!mem) return error_alloc;
+ *
+ *     FILE *log = fopen("log.txt", "a");
+ *     if (!log) {
+ *         free(mem);
+ *         return error_logfile;
+ *     }
+ *
+ *     SCOPE_DEFER { fclose(log); }     // executed LAST
+ *     SCOPE_DEFER { free(mem); }       // executed FIRST
+ *
+ *     // both will be cleaned up automatically in reverse order
  */
 
-/**
- * @brief Macro that defers execution of a block until scope exit
- *
- * The block following SCOPE_DEFER is executed exactly once when leaving
- * the current compound statement (block), in reverse order of declaration.
- *
- * Implementation uses a clever for-loop trick (no extra runtime cost):
- *   - Outer for: runs once
- *   - Inner for: controls execution of the cleanup block
- *
- * Recommended usage pattern:
- *   ResourceType* res = acquire_resource();
- *   if (!res) return error;
- *   SCOPE_DEFER {
- *       release_resource(res);
- *   }
- *   // safe usage of res here
- */
 #define SCOPE_DEFER \
     for (int _scope_once = 1; _scope_once; _scope_once = 0) \
         for (; _scope_once; ) \
-            for (int _scope_done = 0; !_scope_done; _scope_done = 1)
+            for (int _scope_done = 0; !_scope_done; _scope_done = 1, _scope_once = 0)
 
-/* Alternative nicer-looking name (optional — you can choose either) */
+// Optional: many people prefer the shorter name
 // #define defer SCOPE_DEFER
 
 #endif /* CANON_CORE_SCOPE_H */
