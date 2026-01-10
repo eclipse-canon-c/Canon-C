@@ -1,50 +1,89 @@
-#ifndef CANON_C_ALGO_MAP_H
-#define CANON_C_ALGO_MAP_H
+// algo/map.h
+#ifndef CANON_ALGO_MAP_H
+#define CANON_ALGO_MAP_H
 
 #include <stddef.h>
+#include "data/vec.h"  // For vec integration macros (optional)
 
-/*
-    map.h — Element-wise transformations (functional data flow)
+/**
+ * @file map.h
+ * @brief Element-wise transformations (functional mapping over sequences)
+ *
+ * Applies a transformation function to each element of an input sequence,
+ * writing results to a caller-provided output buffer.
+ *
+ * Core ideas:
+ *   - Input is read-only — never mutated
+ *   - Output storage is fully managed by caller (pre-allocated)
+ *   - No allocation inside functions
+ *   - No ownership transfer
+ *   - Supports same-type and different-type mapping
+ *   - Explicit in-place mutation variant (when desired)
+ *   - Bounded and safe (uses minimum of input/output lengths)
+ *   - Seamless integration with vec.h containers
+ *
+ * Typical use cases:
+ *   - Convert types (int → double, string → length)
+ *   - Apply transformations (square numbers, uppercase strings)
+ *   - In-place modification (increment all values)
+ *   - Safe bounded processing (never overflows output)
+ *
+ * Transformation function signatures:
+ *   - Different types: void fn(OutType* out, const InType* in)
+ *   - In-place:      void fn(Type* elem)
+ *
+ * Usage example (typed):
+ *   void square(const int* in, double* out) { *out = (*in) * (*in); }
+ *   int input[] = {1, 2, 3};
+ *   double output[3];
+ *   ALGO_MAP_TYPED(output, input, 3, double, int, square);
+ *
+ * Usage example (in-place):
+ *   void increment(int* elem) { (*elem)++; }
+ *   int arr[] = {10, 20, 30};
+ *   ALGO_MAP_INPLACE(arr, 3, int, increment);
+ *   // arr now {11, 21, 31}
+ *
+ * Usage example (vec):
+ *   vec_int in_vec = ...;
+ *   vec_double out_vec = vec_double_init(...);
+ *   ALGO_MAP_VEC(out_vec, in_vec, double, int, square);
+ */
 
-    Core idea: input → transform → output
-      - No mutation of input
-      - No allocation
-      - No ownership transfer
-      - Output storage fully owned and managed by caller
+/* ────────────────────────────────────────────────────────────────────────────
+   Generic map (flexible, different input/output types possible)
+   ──────────────────────────────────────────────────────────────────────────── */
 
-    Supports:
-      - Same-type mapping
-      - Different input/output types
-      - In-place mutation (explicitly named)
-      - Safe Vec integration
-*/
-
-#include "data/vec.h"  // For MAP_VEC macros (optional include if needed)
-
-/* ============================================================
-   Generic map (different input/output types possible)
-   ============================================================ */
-
-/*
-    MapFn: transforms one input element into one output element
-      out : pointer to output storage (writable)
-      in  : pointer to input element (read-only)
-*/
+/**
+ * @brief Transformation function type (different input/output)
+ *
+ * @param out  Writable pointer to output element
+ * @param in   Read-only pointer to input element
+ */
 typedef void (*algo_map_fn)(void* out, const void* in);
 
-/*
-    algo_map:
-      Applies f to each input element, writing result to corresponding output
-      Uses minimum of in_len and out_len to prevent overflow
-*/
+/**
+ * @brief Applies transformation to each input element
+ *
+ * Writes results to caller-provided output array.
+ * Uses minimum of input/output lengths to prevent overflow.
+ *
+ * @param input     Array of input pointers (or cast from contiguous array)
+ * @param output    Array of output pointers (pre-allocated writable storage)
+ * @param in_len    Number of input elements
+ * @param out_len   Number of output slots available
+ * @param f         Mapping function
+ *
+ * Does nothing on invalid input (NULL input/output/f).
+ * Safe: never writes beyond min(in_len, out_len).
+ */
 static inline void algo_map(
-    const void** input,     // array of input pointers (or direct elements if contiguous)
-    void** output,          // array of output pointers (pre-allocated storage)
+    const void** input,   // array of input pointers
+    void** output,        // array of output pointers
     size_t in_len,
     size_t out_len,
     algo_map_fn f
-)
-{
+) {
     if (!input || !output || !f) return;
 
     const size_t len = (in_len < out_len) ? in_len : out_len;
@@ -53,40 +92,20 @@ static inline void algo_map(
     }
 }
 
-/*
-    algo_map_contiguous:
-      Convenience for contiguous arrays (common case)
-      input/in_items  : direct pointer to input array
-      output/out_items: direct pointer to output array
-*/
-static inline void algo_map_contiguous(
-    const void* in_items,
-    void* out_items,
-    size_t len,
-    algo_map_fn f
-)
-{
-    if (!in_items || !out_items || !f) return;
+/* ────────────────────────────────────────────────────────────────────────────
+   Strongly typed mapping (recommended — type-safe and clean)
+   ──────────────────────────────────────────────────────────────────────────── */
 
-    const char* in_bytes = (const char*)in_items;
-    char* out_bytes = (char*)out_items;
-
-    for (size_t i = 0; i < len; ++i) {
-        const void* in_elem = in_bytes + i * sizeof(*((const void**)0));  // fake pointer arithmetic
-        void* out_elem = out_bytes + i * sizeof(*(void**)0);
-        // Better: assume caller passes correct stride — use typed version instead
-    }
-    // Actually: better to avoid — use typed macro for contiguous
-}
-
-/* ============================================================
-   Strongly typed mapping (recommended)
-   ============================================================ */
-
-/*
-    ALGO_MAP_TYPED(out_array, in_array, len, InType, OutType, fn)
-      fn signature: void fn(OutType* out, const InType* in)
-*/
+/**
+ * @brief Typed map with different input/output types
+ *
+ * @param out_array Output array of OutType (caller provides writable storage)
+ * @param in_array  Input array of InType (read-only)
+ * @param len       Number of elements to process (uses this length)
+ * @param OutType   Output element type
+ * @param InType    Input element type
+ * @param fn        Mapping function: void (*)(OutType*, const InType*)
+ */
 #define ALGO_MAP_TYPED(out_array, in_array, len, OutType, InType, fn) \
     do { \
         if ((out_array) && (in_array) && (fn)) { \
@@ -97,10 +116,14 @@ static inline void algo_map_contiguous(
         } \
     } while (0)
 
-/*
-    ALGO_MAP_INPLACE(array, len, Type, fn)
-      Explicit in-place mutation: fn(Type* elem)
-*/
+/**
+ * @brief Explicit in-place mapping (mutates input array)
+ *
+ * @param array   Array of Type (read-write)
+ * @param len     Number of elements
+ * @param Type    Element type
+ * @param fn      In-place function: void (*)(Type*)
+ */
 #define ALGO_MAP_INPLACE(array, len, Type, fn) \
     do { \
         if ((array) && (fn)) { \
@@ -111,10 +134,16 @@ static inline void algo_map_contiguous(
         } \
     } while (0)
 
-/* ============================================================
-   Vec integration (safe bounded mapping)
-   ============================================================ */
+/* ────────────────────────────────────────────────────────────────────────────
+   Vec integration (most convenient for Canon-C containers)
+   ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * @brief Maps input vec to output vec (different types possible)
+ *
+ * Uses minimum of input/output lengths.
+ * Output vec must have sufficient capacity (caller responsibility).
+ */
 #define ALGO_MAP_VEC(out_vec, in_vec, OutType, InType, fn) \
     ALGO_MAP_TYPED( \
         (out_vec).items, \
@@ -124,7 +153,12 @@ static inline void algo_map_contiguous(
         fn \
     )
 
+/**
+ * @brief Maps input vec to output vec (same type)
+ *
+ * Convenience wrapper when input/output types match.
+ */
 #define ALGO_MAP_VEC_SAME_TYPE(vec_out, vec_in, Type, fn) \
     ALGO_MAP_VEC(vec_out, vec_in, Type, Type, fn)
 
-#endif /* CANON_C_ALGO_MAP_H */
+#endif /* CANON_ALGO_MAP_H */
