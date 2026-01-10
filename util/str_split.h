@@ -1,45 +1,74 @@
-#ifndef CANON_C_UTIL_STR_SPLIT_H
-#define CANON_C_UTIL_STR_SPLIT_H
+// util/str_split.h
+#ifndef CANON_UTIL_STR_SPLIT_H
+#define CANON_UTIL_STR_SPLIT_H
 
 #include <stddef.h>
 #include <stdbool.h>
 #include <string.h>
+#include "core/memory.h"   // for memmove (used in trim)
 
-/*
-    str_split.h — Safe, non-mutating string splitting utilities
+/**
+ * @file str_split.h
+ * @brief Safe, non-mutating string splitting and trimming utilities
+ *
+ * Provides zero-allocation, non-destructive string processing functions.
+ * All operations:
+ *   - Never modify the input string (const-correct where possible)
+ *   - Never allocate memory
+ *   - Never take ownership
+ *   - Return borrowed views (pointers into original string)
+ *   - Are null-safe and bounds-checked
+ *
+ * Perfect for parsing, tokenization, CSV/line splitting, config parsing, etc.
+ * without copying or destroying the source string.
+ *
+ * Core philosophy:
+ *   - Split functions return borrowed substrings (valid as long as source lives)
+ *   - Trimming functions are explicitly in-place (named "..._in_place")
+ *   - Caller provides storage for results (array of const char*)
+ *
+ * Usage example (split):
+ *   const char* parts[16];
+ *   size_t count = str_split("a,b,,d,e", ',', parts, 16);
+ *   // parts[0] = "a", parts[1] = "b", parts[2] = "d", parts[3] = "e"
+ *   // count = 4 (empty segments skipped)
+ *
+ * Usage example (trim):
+ *   char buf[] = "   hello world   ";
+ *   str_trim_whitespace(buf);
+ *   // buf now == "hello world"
+ */
 
-    All functions:
-      - Never mutate input strings (const-correct)
-      - Never allocate
-      - Never take ownership
-      - Output parts reference original string (borrowed views)
-      - Caller provides storage for pointers
-
-    Perfect for parsing without copying or destroying input.
-*/
-
-#include "util/str_join.h"  // for str_join, str_alloc_join (optional include)
-
-/* ============================================================
+/* ────────────────────────────────────────────────────────────────────────────
    Core: Non-mutating split (safe, recommended)
-   ============================================================ */
+   ──────────────────────────────────────────────────────────────────────────── */
 
-/*
-    str_split:
-      Splits const string `s` by `delim` into `out_parts` buffer.
-      - Does NOT modify `s`
-      - Skips empty segments (consecutive delimiters → one split)
-      - Stops at max_parts
-      - Returns number of parts written
-      - Substrings are borrowed views into `s` (valid as long as `s` lives)
-*/
+/**
+ * @brief Splits a string by single character delimiter into borrowed views
+ *
+ * @param s         Null-terminated input string (const, never modified)
+ * @param delim     Single character delimiter
+ * @param out_parts Array of const char* to receive part pointers (borrowed views)
+ * @param max_parts Maximum number of parts to write (size of out_parts)
+ * @return          Number of parts actually written (≤ max_parts)
+ *
+ * Behavior:
+ *   - Skips consecutive delimiters (no empty parts produced)
+ *   - Skips leading/trailing delimiters
+ *   - If delim == '\0', treats whole string as single part
+ *   - Stops when max_parts reached or input exhausted
+ *   - All returned pointers are valid as long as original `s` lives
+ *   - Null-safe: returns 0 on invalid input
+ *
+ * Note: Does **not** null-terminate individual parts — they are length-implicit
+ * (stop at next delimiter or end of string).
+ */
 static inline size_t str_split(
     const char* s,
     char delim,
     const char** out_parts,
     size_t max_parts
-)
-{
+) {
     if (!s || !out_parts || max_parts == 0) return 0;
 
     /* Special case: no delimiter → single part */
@@ -62,25 +91,30 @@ static inline size_t str_split(
 
         /* Find end of part */
         while (*start && *start != delim) ++start;
-
-        /* If at delimiter, next loop will skip it */
+        /* Next loop will skip the delimiter if present */
     }
 
     return count;
 }
 
-/* ============================================================
-   Trimming (in-place, explicit mutation)
-   ============================================================ */
+/* ────────────────────────────────────────────────────────────────────────────
+   Trimming (explicit in-place mutation)
+   ──────────────────────────────────────────────────────────────────────────── */
 
-/*
-    str_trim_in_place:
-      Removes leading and trailing instances of `trim_ch` from `s`.
-      - Modifies `s` in-place (explicitly named)
-      - Returns pointer to start of trimmed content (may shift)
-*/
-static inline char* str_trim_in_place(char* s, char trim_ch)
-{
+/**
+ * @brief Removes leading and trailing instances of a character (in-place)
+ *
+ * @param s        Null-terminated string to trim (modified in-place)
+ * @param trim_ch  Character to remove from start and end
+ * @return         Pointer to the trimmed string (may be same as input)
+ *
+ * Behavior:
+ *   - Shifts content left if leading chars removed
+ *   - Null-terminates after trimming trailing chars
+ *   - Safe on empty or all-trim-char strings (results in empty string)
+ *   - Null-safe: returns NULL if input is NULL
+ */
+static inline char* str_trim_in_place(char* s, char trim_ch) {
     if (!s) return NULL;
 
     /* Trim leading */
@@ -106,12 +140,15 @@ static inline char* str_trim_in_place(char* s, char trim_ch)
     return s;
 }
 
-/*
-    str_trim_whitespace:
-      Convenience: trim common whitespace (\t\n\r )
-*/
-static inline char* str_trim_whitespace(char* s)
-{
+/**
+ * @brief Removes leading/trailing whitespace (space, tab, newline, carriage return)
+ *
+ * Convenience wrapper around str_trim_in_place with common whitespace chars.
+ *
+ * @param s Null-terminated string to trim (modified in-place)
+ * @return  Pointer to trimmed string (may be same as input)
+ */
+static inline char* str_trim_whitespace(char* s) {
     if (!s) return NULL;
 
     char* start = s;
@@ -133,4 +170,4 @@ static inline char* str_trim_whitespace(char* s)
     return s;
 }
 
-#endif /* CANON_C_UTIL_STR_SPLIT_H */
+#endif /* CANON_UTIL_STR_SPLIT_H */
