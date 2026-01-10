@@ -1,99 +1,170 @@
-#ifndef CANON_C_DATA_VEC_H
-#define CANON_C_DATA_VEC_H
+// data/vec.h
+#ifndef CANON_DATA_VEC_H
+#define CANON_DATA_VEC_H
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "core/memory.h"      // for mem_copy, etc. if needed later
+#include "core/memory.h"   // for mem_copy, etc. (if extended later)
 #include "semantics/result.h"
 
-/*
-    vec.h — Bounded dynamic vector (explicit buffer, no ownership)
+/**
+ * @file vec.h
+ * @brief Bounded dynamic vector with explicit caller-owned buffer
+ *
+ * Provides a safe, bounded contiguous sequence (like std::vector but no allocation/resizing).
+ * Key properties:
+ *   - Caller provides and owns the buffer (stack, arena, static, etc.)
+ *   - Fixed maximum capacity (no growth)
+ *   - All operations are explicit and bounds-checked
+ *   - Push/pop return Result for composable, safe error handling
+ *   - Zero hidden state or allocations
+ *
+ * Usage patterns:
+ *   - Stack-allocated: char buf[1024]; vec_int v = vec_int_init((int*)buf, 1024/sizeof(int));
+ *   - Arena-backed: vec_str v = vec_str_init(arena_alloc_array(arena, const char*, 100), 100);
+ *   - Error handling: result_bool_constcharp res = vec_int_push(&v, 42); if (result_is_err(res)) { ... }
+ */
 
-    Vec<T> is a contiguous sequence with:
-      - explicit length
-      - explicit capacity
-      - caller-owned buffer
+/* ────────────────────────────────────────────────────────────────────────────
+   Result type for unit success/failure (true = success, const char* error)
+   ──────────────────────────────────────────────────────────────────────────── */
+CANON_C_DEFINE_RESULT_UNIT(const char*)  // result_bool_constcharp
 
-    No allocation, no resizing, no freeing.
-    All operations are bounded and explicit.
-    Push/pop return Result for safe, composable error handling.
-*/
+/* ────────────────────────────────────────────────────────────────────────────
+   Generic base vector (void** items) — for low-level or untyped use
+   ──────────────────────────────────────────────────────────────────────────── */
 
-#define CANON_C_DEFINE_RESULT_UNIT(error_type) \
-    CANON_C_DEFINE_RESULT(bool, error_type)  // true = Ok(()), false not used
-
-CANON_C_DEFINE_RESULT_UNIT(const char*)  // Result<bool, const char*> ≈ Result<(), const char*>
-
-/* ============================================================
-   Generic Vec (void*)
-   ============================================================ */
-
+/**
+ * @brief Generic vector of void* pointers (bounded, caller-owned buffer)
+ */
 typedef struct {
-    void** items;
-    size_t len;
-    size_t capacity;
+    void** items;     ///< Pointer to caller-owned buffer
+    size_t len;       ///< Current number of elements
+    size_t capacity;  ///< Maximum number of elements (fixed)
 } vec_voidp;
 
-/* Initialization */
-static inline vec_voidp vec_voidp_init(void** buffer, size_t capacity)
-{
+/**
+ * @brief Initializes a generic vector with caller-provided buffer
+ * @param buffer   Pointer to array of void* (must remain valid)
+ * @param capacity Maximum number of elements the buffer can hold
+ * @return         Initialized vec_voidp
+ */
+static inline vec_voidp vec_voidp_init(void** buffer, size_t capacity) {
     return (vec_voidp){ .items = buffer, .len = 0, .capacity = capacity };
 }
 
-static inline vec_voidp vec_voidp_empty(void)
-{
+/**
+ * @brief Returns an empty/invalid generic vector (useful for defaults)
+ */
+static inline vec_voidp vec_voidp_empty(void) {
     return (vec_voidp){0};
 }
 
-/* Queries */
-static inline bool      vec_voidp_is_empty(const vec_voidp* v) { return !v || v->len == 0; }
-static inline bool      vec_voidp_is_full(const vec_voidp* v)  { return v && v->len >= v->capacity; }
-static inline size_t    vec_voidp_len(const vec_voidp* v)      { return v ? v->len : 0; }
-static inline size_t    vec_voidp_capacity(const vec_voidp* v){ return v ? v->capacity : 0; }
+/**
+ * @brief Checks if vector is empty
+ */
+static inline bool vec_voidp_is_empty(const vec_voidp* v) {
+    return !v || v->len == 0;
+}
 
-/* Safe access */
-static inline bool vec_voidp_get(const vec_voidp* v, size_t i, void** out)
-{
+/**
+ * @brief Checks if vector is full (cannot push more)
+ */
+static inline bool vec_voidp_is_full(const vec_voidp* v) {
+    return v && v->len >= v->capacity;
+}
+
+/**
+ * @brief Returns current number of elements
+ */
+static inline size_t vec_voidp_len(const vec_voidp* v) {
+    return v ? v->len : 0;
+}
+
+/**
+ * @brief Returns maximum capacity
+ */
+static inline size_t vec_voidp_capacity(const vec_voidp* v) {
+    return v ? v->capacity : 0;
+}
+
+/**
+ * @brief Safely gets element at index (with bounds check)
+ * @param v    Vector instance
+ * @param i    Index (0 <= i < len)
+ * @param out  Pointer to receive the item
+ * @return     true if successful, false if invalid index or null pointers
+ */
+static inline bool vec_voidp_get(const vec_voidp* v, size_t i, void** out) {
     if (!v || !out || i >= v->len) return false;
     *out = v->items[i];
     return true;
 }
 
-static inline void* vec_voidp_get_unchecked(const vec_voidp* v, size_t i)
-{
+/**
+ * @brief Gets element at index without bounds check (unsafe — use with caution)
+ */
+static inline void* vec_voidp_get_unchecked(const vec_voidp* v, size_t i) {
     return v->items[i];
 }
 
-/* Mutation with explicit failure */
-static inline result_bool_constcharp vec_voidp_push(vec_voidp* v, void* item)
-{
+/**
+ * @brief Pushes an item to the end if capacity allows
+ * @param v     Vector instance
+ * @param item  Pointer to add
+ * @return      Ok(true) on success, Err(message) on failure
+ */
+static inline result_bool_constcharp vec_voidp_push(vec_voidp* v, void* item) {
     if (!v || !v->items)
         return result_bool_constcharp_err("null vec or buffer");
     if (v->len >= v->capacity)
         return result_bool_constcharp_err("capacity exceeded");
+
     v->items[v->len++] = item;
     return result_bool_constcharp_ok(true);
 }
 
-static inline result_bool_constcharp vec_voidp_pop(vec_voidp* v, void** out)
-{
+/**
+ * @brief Pops the last item if vector is not empty
+ * @param v    Vector instance
+ * @param out  Pointer to receive the popped item
+ * @return     Ok(true) on success, Err(message) on failure
+ */
+static inline result_bool_constcharp vec_voidp_pop(vec_voidp* v, void** out) {
     if (!v || !out || !v->items)
         return result_bool_constcharp_err("null vec or buffer");
     if (v->len == 0)
         return result_bool_constcharp_err("pop from empty vec");
+
     *out = v->items[--v->len];
     return result_bool_constcharp_ok(true);
 }
 
-static inline void vec_voidp_clear(vec_voidp* v)
-{
+/**
+ * @brief Clears the vector (sets length to 0 — does not zero buffer)
+ */
+static inline void vec_voidp_clear(vec_voidp* v) {
     if (v) v->len = 0;
 }
 
-/* ============================================================
-   Typed Vec Macro (recommended usage)
-   ============================================================ */
+/* ────────────────────────────────────────────────────────────────────────────
+   Typed vector macro — recommended way to use (type-safe)
+   ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * @brief Defines a type-safe vector for a specific element type
+ *
+ * Generates: struct vec_##type + full set of typed functions.
+ * All operations are bounds-checked and return Result where appropriate.
+ *
+ * @param type Element type (e.g. int, const char*, struct Point)
+ *
+ * Example usage:
+ *   DEFINE_VEC(int);
+ *   int buf[100];
+ *   vec_int v = vec_int_init(buf, 100);
+ *   vec_int_push(&v, 42);
+ */
 #define DEFINE_VEC(type) \
 typedef struct { \
     type* items; \
@@ -101,52 +172,75 @@ typedef struct { \
     size_t capacity; \
 } vec_##type; \
 \
-static inline vec_##type vec_##type##_init(type* buffer, size_t capacity) \
-{ \
+/** \
+ * @brief Initializes typed vector with caller-provided buffer \
+ * @param buffer   Array of type (must remain valid) \
+ * @param capacity Max number of elements buffer can hold \
+ * @return         Initialized vec_##type \
+ */ \
+static inline vec_##type vec_##type##_init(type* buffer, size_t capacity) { \
     return (vec_##type){ .items = buffer, .len = 0, .capacity = capacity }; \
 } \
 \
-static inline vec_##type vec_##type##_empty(void) \
-{ \
+/** \
+ * @brief Returns empty/invalid typed vector (for defaults) \
+ */ \
+static inline vec_##type vec_##type##_empty(void) { \
     return (vec_##type){0}; \
 } \
 \
 static inline bool vec_##type##_is_empty(const vec_##type* v) { return !v || v->len == 0; } \
-static inline bool vec_##type##_is_full(const vec_##type* v)  { return v && v->len >= v->capacity; } \
-static inline size_t vec_##type##_len(const vec_##type* v)    { return v ? v->len : 0; } \
+static inline bool vec_##type##_is_full(const vec_##type* v) { return v && v->len >= v->capacity; } \
+static inline size_t vec_##type##_len(const vec_##type* v) { return v ? v->len : 0; } \
 static inline size_t vec_##type##_capacity(const vec_##type* v){ return v ? v->capacity : 0; } \
 \
-static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out) \
-{ \
+/** \
+ * @brief Safely gets element at index \
+ * @param v    Vector \
+ * @param i    Index \
+ * @param out  Where to store the value \
+ * @return     true on success, false on invalid index/pointers \
+ */ \
+static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out) { \
     if (!v || !out || i >= v->len) return false; \
     *out = v->items[i]; \
     return true; \
 } \
 \
-static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i) \
-{ \
+/** \
+ * @brief Gets element at index without check (unsafe) \
+ */ \
+static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i) { \
     return v->items[i]; \
 } \
 \
-static inline result_bool_constcharp vec_##type##_push(vec_##type* v, type item) \
-{ \
+/** \
+ * @brief Pushes a value to the end if space available \
+ * @return Ok(true) on success, Err(message) on failure \
+ */ \
+static inline result_bool_constcharp vec_##type##_push(vec_##type* v, type item) { \
     if (!v || !v->items) return result_bool_constcharp_err("null vec or buffer"); \
     if (v->len >= v->capacity) return result_bool_constcharp_err("capacity exceeded"); \
     v->items[v->len++] = item; \
     return result_bool_constcharp_ok(true); \
 } \
 \
-static inline result_bool_constcharp vec_##type##_pop(vec_##type* v, type* out) \
-{ \
+/** \
+ * @brief Pops the last value if not empty \
+ * @return Ok(true) on success, Err(message) on failure \
+ */ \
+static inline result_bool_constcharp vec_##type##_pop(vec_##type* v, type* out) { \
     if (!v || !out || !v->items) return result_bool_constcharp_err("null vec or buffer"); \
     if (v->len == 0) return result_bool_constcharp_err("pop from empty vec"); \
     *out = v->items[--v->len]; \
     return result_bool_constcharp_ok(true); \
 } \
 \
-static inline void vec_##type##_clear(vec_##type* v) \
-{ \
+/** \
+ * @brief Clears the vector (len = 0, buffer unchanged) \
+ */ \
+static inline void vec_##type##_clear(vec_##type* v) { \
     if (v) v->len = 0; \
 }
 
-#endif /* CANON_C_DATA_VEC_H */
+#endif /* CANON_DATA_VEC_H */
