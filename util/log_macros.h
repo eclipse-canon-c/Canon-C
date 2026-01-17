@@ -6,90 +6,125 @@
 
 /**
  * @file log_macros.h
- * @brief Convenient and safe logging macros built on top of log.h
+ * @brief Convenient, safe and expressive logging macros on top of log.h
  *
- * Provides a clean, easy-to-use interface for logging with:
- *   - Explicit levels: INFO, WARN, ERROR
- *   - Two styles:
- *     - Simple message: LOG_XXX_MSG("text")
- *     - Formatted: LOG_XXX_FMT("format %s", arg)
- *   - Optional "checked" variants (debug builds verify I/O success)
- *   - Never silently ignores failures (checked variants report meta-errors)
- *   - Zero allocation (all formatting is stack-based via log_fmt)
- *   - Conditional debug behavior via NDEBUG
+ * Provides a clean, ergonomic interface for most common logging needs with:
+ * - Clear separation of simple messages vs formatted logging
+ * - Three standard levels: INFO, WARN, ERROR
+ * - Fire-and-forget behavior in release builds
+ * - Optional "checked" variants in debug builds that detect I/O failures
+ * - Zero allocation — all formatting done through log.h's stack-based functions
+ * - Conditional behavior controlled by standard NDEBUG macro
  *
- * Key safety guarantees:
- *   - Fire-and-forget in release builds (void cast discards Result)
- *   - Debug builds can detect and report logging failures
- *   - All macros expand to simple calls — no hidden control flow
- *   - Compatible with log.h Result-based API
+ * Design goals:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Make logging feel natural and low-friction in day-to-day code
+ * - Never silently swallow I/O failures (debug builds can catch them)
+ * - Keep macro expansions simple and predictable
+ * - Provide both convenience (fire-and-forget) and safety (checked)
+ * - Minimal impact on release binary size/performance
  *
- * Usage examples:
- *   LOG_INFO_MSG("Application started");
- *   LOG_WARN_FMT("Invalid input: %s", user_input);
- *   LOG_ERROR_CHECKED("Failed to open file: %s", filename);
+ * Important notes:
+ * - All macros expand to direct calls to log.h functions
+ * - Simple _MSG variants are slightly more efficient (no vfprintf)
+ * - _CHECKED variants in debug mode add meta-logging on failure
+ * - In release builds (_NDEBUG defined), all _CHECKED become plain fire-and-forget
  *
- * Recommended:
- *   - Use _CHECKED variants during development
- *   - Switch to plain macros in release (via NDEBUG)
- *   - Always pair with proper error handling (don't rely on logging alone)
+ * Recommended usage:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Development/Debug:
+ *   LOG_INFO_CHECKED("Server starting on port %d", port);
+ *   LOG_ERROR_CHECKED("Failed to load config: %s", error_str);
+ *
+ * Release/Production:
+ *   LOG_INFO_FMT("User %s logged in", username);
+ *   LOG_ERROR("Critical: connection timeout");
+ *
+ * Simple static messages:
+ *   LOG_WARN_MSG("Deprecated API called");
  */
-
-/**
- * @brief Logs a simple message at INFO level
- * @param msg Static or literal message string
- */
-#define LOG_INFO_MSG(msg) (void)log_msg(LOG_INFO, (msg))
-
-/**
- * @brief Logs a simple message at WARN level
- * @param msg Static or literal message string
- */
-#define LOG_WARN_MSG(msg) (void)log_msg(LOG_WARN, (msg))
-
-/**
- * @brief Logs a simple message at ERROR level
- * @param msg Static or literal message string
- */
-#define LOG_ERROR_MSG(msg) (void)log_msg(LOG_ERROR, (msg))
-
-/**
- * @brief Logs a formatted message at INFO level
- * @param ... printf-style format + arguments
- */
-#define LOG_INFO_FMT(...) (void)log_fmt(LOG_INFO, __VA_ARGS__)
-
-/**
- * @brief Logs a formatted message at WARN level
- * @param ... printf-style format + arguments
- */
-#define LOG_WARN_FMT(...) (void)log_fmt(LOG_WARN, __VA_ARGS__)
-
-/**
- * @brief Logs a formatted message at ERROR level
- * @param ... printf-style format + arguments
- */
-#define LOG_ERROR_FMT(...) (void)log_fmt(LOG_ERROR, __VA_ARGS__)
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Checked variants (behavior changes based on NDEBUG)
+   Simple message macros (most efficient for literal strings)
    ──────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * @brief Logs a simple static/literal message at INFO level
+ * @param msg Message string (can be literal or variable, but no formatting)
+ */
+#define LOG_INFO_MSG(msg)    (void)log_msg(LOG_INFO, (msg))
+
+/**
+ * @brief Logs a simple static/literal message at WARN level
+ * @param msg Message string
+ */
+#define LOG_WARN_MSG(msg)    (void)log_msg(LOG_WARN, (msg))
+
+/**
+ * @brief Logs a simple static/literal message at ERROR level
+ * @param msg Message string
+ */
+#define LOG_ERROR_MSG(msg)   (void)log_msg(LOG_ERROR, (msg))
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Formatted logging macros (most commonly used)
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Formatted logging at INFO level
+ * @param ... printf-style format string + arguments
+ */
+#define LOG_INFO_FMT(...)    (void)log_fmt(LOG_INFO, __VA_ARGS__)
+
+/**
+ * @brief Formatted logging at WARN level
+ * @param ... printf-style format string + arguments
+ */
+#define LOG_WARN_FMT(...)    (void)log_fmt(LOG_WARN, __VA_ARGS__)
+
+/**
+ * @brief Formatted logging at ERROR level
+ * @param ... printf-style format string + arguments
+ */
+#define LOG_ERROR_FMT(...)   (void)log_fmt(LOG_ERROR, __VA_ARGS__)
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Checked variants — safety net during development
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Checked logging macros (behavior changes with NDEBUG)
+ *
+ * In **debug builds** (NDEBUG not defined):
+ * - Executes the log operation
+ * - Checks the returned Result
+ * - On logging failure, prints a meta-error to stderr
+ *
+ * In **release builds** (NDEBUG defined):
+ * - Becomes identical to the plain fire-and-forget macros
+ * - Zero runtime overhead compared to normal macros
+ *
+ * Use these during development to catch cases where logging itself fails
+ * (disk full, closed stream, permission issues, etc.)
+ */
+
 #ifdef NDEBUG
-    /* Release builds: fire-and-forget (ignore Result) */
+    // Release: same as normal fire-and-forget
     #define LOG_INFO_CHECKED(...)   LOG_INFO_FMT(__VA_ARGS__)
     #define LOG_WARN_CHECKED(...)   LOG_WARN_FMT(__VA_ARGS__)
     #define LOG_ERROR_CHECKED(...)  LOG_ERROR_FMT(__VA_ARGS__)
 #else
-    /* Debug builds: verify logging succeeded, fallback to stderr on failure */
+    // Debug: verify success + meta-log on failure
     #define LOG_INFO_CHECKED(...)   (void)log_fmt(LOG_INFO, __VA_ARGS__)
+
     #define LOG_WARN_CHECKED(...)   (void)log_fmt(LOG_WARN, __VA_ARGS__)
-    #define LOG_ERROR_CHECKED(...) \
+
+    #define LOG_ERROR_CHECKED(...)  \
         do { \
             result_bool_constcharp _r = log_fmt(LOG_ERROR, __VA_ARGS__); \
             if (result_bool_constcharp_is_err(_r)) { \
-                /* Meta-logging: report failure to stderr */ \
-                fprintf(stderr, "[LOG FAILURE] Could not log message\n"); \
+                fprintf(stderr, "[LOG-FAIL] Could not write error message: %s\n", \
+                        result_bool_constcharp_unwrap_err(_r)); \
             } \
         } while (0)
 #endif
