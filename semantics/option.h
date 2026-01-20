@@ -44,26 +44,7 @@
  * ✗ Don't unwrap() without checking in production code
  * ✗ Don't use Option for error reporting (use Result<T,E> instead)
  * ✗ Don't use Option<bool> (prefer explicit Result or enum)
- *
- * Classic example:
- * CANON_C_DEFINE_OPTION(int)
- *
- * option_int maybe_parse(const char* s) {
- *     if (!s) return option_int_none();
- *     // ... parsing logic ...
- *     return option_int_some(42);
- * }
- *
- * int process(void) {
- *     option_int maybe = maybe_parse("42");
- *     if (option_int_is_none(maybe)) {
- *         return ERROR_PARSE_FAILED;
- *     }
- *     int n = option_int_unwrap(maybe);
- *     return n * 2;
- * }
  */
-
 /**
  * @brief Defines a concrete Option<T> type for given value type
  *
@@ -346,7 +327,6 @@ static inline bool option_##type##_eq( \
     if (o1.has_value != o2.has_value) return false; \
     return eq(o1.value, o2.value); \
 }
-
 /* ────────────────────────────────────────────────────────────────────────────
    Propagation & convenience macros (require GNU C extensions or C23)
    ──────────────────────────────────────────────────────────────────────────── */
@@ -371,7 +351,6 @@ static inline bool option_##type##_eq( \
         if (option_##type##_is_none(_opt_)) return (err_code); \
         option_##type##_unwrap(_opt_); \
     })
-
 /**
  * @brief Unwraps Option or evaluates to default value
  *
@@ -385,11 +364,9 @@ static inline bool option_##type##_eq( \
             option_##type##_unwrap(_opt_) : (default_val); \
     })
 #endif /* CANON_NO_GNU_EXTENSIONS */
-
 /* ────────────────────────────────────────────────────────────────────────────
    Common type instantiations
    ──────────────────────────────────────────────────────────────────────────── */
-
 /* Uncomment the types you need, or define your own in your code: */
 // CANON_C_DEFINE_OPTION(int)
 // CANON_C_DEFINE_OPTION(unsigned)
@@ -399,70 +376,104 @@ static inline bool option_##type##_eq( \
 // CANON_C_DEFINE_OPTION(double)
 // CANON_C_DEFINE_OPTION(char)
 // CANON_C_DEFINE_OPTION(bool)
-
 /* For pointer types: */
 // typedef void* void_ptr;
 // CANON_C_DEFINE_OPTION(void_ptr)
-
 /* For custom types: */
 // CANON_C_DEFINE_OPTION(MyStruct)
-
 /* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Example
+   Complete Usage Examples — real code wrapped in comments
+   (to use any example as real code, delete the opening /* and closing */ lines)
    ──────────────────────────────────────────────────────────────────────────── */
 
-#include "option.h"
+/*
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: Define needed Option types
+    // ────────────────────────────────────────────────────────────────────────
+    CANON_C_DEFINE_OPTION(int)
+    CANON_C_DEFINE_OPTION(float)
 
-/* Define Option types we need */
-CANON_C_DEFINE_OPTION(int)
-CANON_C_DEFINE_OPTION(float)
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: function that might return a parsed integer or nothing
+    // ────────────────────────────────────────────────────────────────────────
+    option_int parse_int(const char* str) {
+        if (!str) return option_int_none();
 
-/* Function that might fail to parse */
-option_int parse_int(const char* str) {
-    if (!str) return option_int_none();
-    
-    char* end;
-    long val = strtol(str, &end, 10);
-    
-    if (end == str || *end != '\0') {
-        return option_int_none(); // Parse failed
+        char* end;
+        long val = strtol(str, &end, 10);
+
+        if (end == str || *end != '\0') {
+            return option_int_none(); // invalid format
+        }
+
+        // Could add range checks here if needed
+        return option_int_some((int)val);
     }
-    
-    return option_int_some((int)val);
-}
 
-/* Safe usage with checking */
-void example_safe(void) {
-    option_int result = parse_int("42");
-    
-    // Method 1: Check before unwrap
-    if (option_int_is_some(result)) {
-        int value = option_int_unwrap(result);
-        printf("Parsed: %d\n", value);
-    } else {
-        printf("Parse failed\n");
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: safe usage patterns (recommended for production)
+    // ────────────────────────────────────────────────────────────────────────
+    void example_safe_usage(void) {
+        option_int result = parse_int("123");
+
+        // Pattern 1: explicit check + unwrap
+        if (option_int_is_some(result)) {
+            int value = option_int_unwrap(result);
+            printf("Value: %d\n", value);
+        } else {
+            printf("No value\n");
+        }
+
+        // Pattern 2: safe extraction with pointer
+        int extracted;
+        if (option_int_get(result, &extracted)) {
+            printf("Extracted: %d\n", extracted);
+        }
+
+        // Pattern 3: default value when absent
+        int value_or_zero = option_int_unwrap_or(result, 0);
+        printf("Value or zero: %d\n", value_or_zero);
+
+        // Pattern 4: expect with message (for invariants)
+        // int must_exist = option_int_expect(result, "parse_int should have succeeded");
     }
-    
-    // Method 2: Use get()
-    int value;
-    if (option_int_get(result, &value)) {
-        printf("Parsed: %d\n", value);
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: chaining operations (map, filter, and_then, ...)
+    // ────────────────────────────────────────────────────────────────────────
+    int double_it(int x) { return x * 2; }
+    bool is_even(int x)   { return (x % 2) == 0; }
+
+    void example_chaining(void) {
+        option_int opt = parse_int("21");
+
+        // Apply transformation if present
+        opt = option_int_map(opt, double_it);
+
+        // Keep only even values
+        opt = option_int_filter(opt, is_even);
+
+        // Use default if still none
+        int final = option_int_unwrap_or(opt, -1);
     }
-    
-    // Method 3: Provide default
-    int value = option_int_unwrap_or(result, 0);
-}
 
-/* Chaining operations */
-int double_value(int x) { return x * 2; }
-bool is_positive(int x) { return x > 0; }
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: and_then chaining (for operations that return Option)
+    // ────────────────────────────────────────────────────────────────────────
+    option_int half_if_even(int x) {
+        if (x % 2 == 0) {
+            return option_int_some(x / 2);
+        }
+        return option_int_none();
+    }
 
-void example_chaining(void) {
-    option_int result = parse_int("21");
-    
-    // Using functions explicitly
-    result = option_int_map(result, double_value);
-    result = option_int_filter(result, is_positive);
-}
+    void example_and_then(void) {
+        option_int start = option_int_some(42);
+        option_int result = option_int_and_then(start, half_if_even);
+
+        int value = option_int_unwrap_or(result, 0);
+        // value == 21
+    }
+*/
 
 #endif /* CANON_C_SEMANTICS_OPTION_H */
