@@ -96,13 +96,13 @@
  * 5. Optionally add specialized error types (e.g., ErrorIO, ErrorParse)
  * 6. Update documentation with use cases
  *
- * Example of domain-specific extension (conceptual):
- *   When building a JSON parser, one might define a separate enum
- *   with codes starting at 1000 or similar, for example:
- *     ERR_JSON_INVALID,
+ * Example of domain-specific extension:
+ * typedef enum {
+ *     ERR_JSON_INVALID = 1000,
  *     ERR_JSON_UNEXPECTED_TOKEN,
  *     ERR_JSON_NESTING_TOO_DEEP,
- *   This keeps the general Error enum clean while allowing domain-specific detail.
+ *     // ... more JSON-specific errors
+ * } ErrorJSON;
  */
 /* ────────────────────────────────────────────────────────────────────────────
    Error code enumeration
@@ -127,8 +127,10 @@
  * ERR_COUNT always reflects the total number of error codes.
  *
  * Usage in Result types:
- *   CANON_C_DEFINE_RESULT(int, Error)
- *   CANON_C_DEFINE_RESULT(void_ptr, Error)
+ * ```c
+ * CANON_C_DEFINE_RESULT(int, Error)
+ * CANON_C_DEFINE_RESULT(void_ptr, Error)
+ * ```
  */
 typedef enum {
     /* ────────────────────────────────────────────────────────────────────
@@ -156,7 +158,7 @@ typedef enum {
      * - Argument value is semantically invalid
      * - Precondition violated
      *
-     * Example situation: parse_int(NULL) → ERR_INVALID_ARG
+     * Example: parse_int(NULL) → ERR_INVALID_ARG
      */
     ERR_INVALID_ARG,
    
@@ -168,7 +170,7 @@ typedef enum {
      * - Index out of array bounds
      * - Value not in expected domain
      *
-     * Example situation: array_get(arr, 1000) where len=10 → ERR_OUT_OF_RANGE
+     * Example: array_get(arr, 1000) where len=10 → ERR_OUT_OF_RANGE
      */
     ERR_OUT_OF_RANGE,
    
@@ -180,7 +182,7 @@ typedef enum {
      * - Invalid syntax in parsed input
      * - Malformed data structure
      *
-     * Example situation: parse_int("abc") → ERR_PARSE_FAILED
+     * Example: parse_int("abc") → ERR_PARSE_FAILED
      */
     ERR_PARSE_FAILED,
    
@@ -192,7 +194,7 @@ typedef enum {
      * - Data structure is malformed
      * - Checksum/validation failed
      *
-     * Example situation: load_json("not json") → ERR_INVALID_FORMAT
+     * Example: load_json("not json") → ERR_INVALID_FORMAT
      */
     ERR_INVALID_FORMAT,
    
@@ -204,7 +206,7 @@ typedef enum {
      * - Operation precondition not met
      * - Resource not initialized
      *
-     * Example situation: vec_pop(empty_vec) → ERR_INVALID_STATE
+     * Example: vec_pop(empty_vec) → ERR_INVALID_STATE
      */
     ERR_INVALID_STATE,
   
@@ -220,7 +222,7 @@ typedef enum {
      * - System out of memory
      * - Allocation size too large
      *
-     * Example situation: vec_push(vec, item) when malloc fails → ERR_OUT_OF_MEMORY
+     * Example: vec_push(vec, item) when malloc fails → ERR_OUT_OF_MEMORY
      */
     ERR_OUT_OF_MEMORY,
    
@@ -232,7 +234,7 @@ typedef enum {
      * - Buffer size insufficient for operation
      * - String truncation would occur
      *
-     * Example situation: to_string(buf, 10, large_number) → ERR_BUFFER_TOO_SMALL
+     * Example: to_string(buf, 10, large_number) → ERR_BUFFER_TOO_SMALL
      */
     ERR_BUFFER_TOO_SMALL,
    
@@ -244,7 +246,7 @@ typedef enum {
      * - Resource limit reached
      * - Cannot grow further
      *
-     * Example situation: vec_push to full fixed vec → ERR_CAPACITY_EXCEEDED
+     * Example: vec_push to full fixed vec → ERR_CAPACITY_EXCEEDED
      */
     ERR_CAPACITY_EXCEEDED,
    
@@ -256,7 +258,7 @@ typedef enum {
      * - File doesn't exist
      * - Resource lookup failed
      *
-     * Example situation: map_get(map, "key") when key missing → ERR_NOT_FOUND
+     * Example: map_get(map, "key") when key missing → ERR_NOT_FOUND
      */
     ERR_NOT_FOUND,
   
@@ -272,7 +274,7 @@ typedef enum {
      * - Network I/O error
      * - Device I/O error
      *
-     * Example situation: file_read(path) with unreadable file → ERR_IO_FAILED
+     * Example: file_read(path) with unreadable file → ERR_IO_FAILED
      */
     ERR_IO_FAILED,
    
@@ -284,7 +286,7 @@ typedef enum {
      * - Access control violation
      * - Protected resource access attempt
      *
-     * Example situation: file_write(readonly_file) → ERR_PERMISSION
+     * Example: file_write(readonly_file) → ERR_PERMISSION
      */
     ERR_PERMISSION,
    
@@ -296,7 +298,7 @@ typedef enum {
      * - Network request timeout
      * - Resource lock timeout
      *
-     * Example situation: network_request(url, timeout=1s) → ERR_TIMEOUT
+     * Example: network_request(url, timeout=1s) → ERR_TIMEOUT
      */
     ERR_TIMEOUT,
    
@@ -308,7 +310,7 @@ typedef enum {
      * - Hardware doesn't support operation
      * - API not implemented for platform
      *
-     * Example situation: get_gpu_info() on system without GPU → ERR_NOT_SUPPORTED
+     * Example: get_gpu_info() on system without GPU → ERR_NOT_SUPPORTED
      */
     ERR_NOT_SUPPORTED,
    
@@ -320,7 +322,7 @@ typedef enum {
      * - Duplicate key insertion
      * - Resource name conflict
      *
-     * Example situation: file_create(path, exclusive=true) → ERR_ALREADY_EXISTS
+     * Example: file_create(path, exclusive=true) → ERR_ALREADY_EXISTS
      */
     ERR_ALREADY_EXISTS,
   
@@ -336,7 +338,7 @@ typedef enum {
      * - Result too large for type
      * - Computation exceeds maximum value
      *
-     * Example situation: safe_add(INT_MAX, 1) → ERR_OVERFLOW
+     * Example: safe_add(INT_MAX, 1) → ERR_OVERFLOW
      */
     ERR_OVERFLOW,
    
@@ -348,7 +350,7 @@ typedef enum {
      * - Result too small for type
      * - Computation below minimum value
      *
-     * Example situation: safe_sub(INT_MIN, 1) → ERR_UNDERFLOW
+     * Example: safe_sub(INT_MIN, 1) → ERR_UNDERFLOW
      */
     ERR_UNDERFLOW,
    
@@ -360,7 +362,7 @@ typedef enum {
      * - Mathematical undefined operation
      * - Infinite result would occur
      *
-     * Example situation: safe_divide(10, 0) → ERR_DIVIDE_BY_ZERO
+     * Example: safe_divide(10, 0) → ERR_DIVIDE_BY_ZERO
      */
     ERR_DIVIDE_BY_ZERO,
   
@@ -388,7 +390,7 @@ typedef enum {
      * - Feature planned but not complete
      * - Platform-specific code missing
      *
-     * Example situation: future_feature() → ERR_NOT_IMPLEMENTED
+     * Example: future_feature() → ERR_NOT_IMPLEMENTED
      */
     ERR_NOT_IMPLEMENTED,
   
@@ -445,6 +447,11 @@ typedef enum {
  * - Returned string is static — do not free or modify it
  * - Safe to call even with invalid enum values
  * - Deterministic (same input always gives same output)
+ *
+ * Example usage:
+ * Error err = ERR_OUT_OF_MEMORY;
+ * printf("Error occurred: %s\n", error_message(err));
+ * // Output: "Error occurred: Out of memory"
  */
 static inline const char* error_message(Error e) {
     switch (e) {
@@ -517,10 +524,6 @@ static inline const char* error_message(Error e) {
  *
  * @param e Error code to check
  * @return true if e == ERR_OK, false otherwise
- *
- * Performance:
- * - Time: O(1) - single comparison
- * - Space: O(1)
  */
 static inline bool error_is_ok(Error e) {
     return e == ERR_OK;
@@ -533,17 +536,6 @@ static inline bool error_is_ok(Error e) {
  *
  * @param e Error code to validate
  * @return true if e is between ERR_OK and ERR_COUNT-1, false otherwise
- *
- * Preconditions:
- * - None (handles all inputs)
- *
- * Postconditions:
- * - Returns true only for defined error codes
- * - Returns false for ERR_COUNT and invalid values
- *
- * Performance:
- * - Time: O(1) - two comparisons
- * - Space: O(1)
  */
 static inline bool error_is_valid(Error e) {
     return e >= ERR_OK && e < ERR_COUNT;
@@ -556,10 +548,6 @@ static inline bool error_is_valid(Error e) {
  *
  * @param e Error code
  * @return Integer representation of the error code
- *
- * Performance:
- * - Time: O(1) - simple cast (likely no-op)
- * - Space: O(1)
  */
 static inline int error_code(Error e) {
     return (int)e;
@@ -572,9 +560,6 @@ static inline int error_code(Error e) {
  *
  * Shorthand for result_##T##_Error_ok(val). Makes code more concise
  * and readable when working with Result types.
- *
- * @param T Type parameter (e.g., int, double, void_ptr)
- * @param val Success value to wrap
  */
 #define RESULT_OK(T, val) result_##T##_Error_ok(val)
 /**
@@ -582,9 +567,6 @@ static inline int error_code(Error e) {
  *
  * Shorthand for result_##T##_Error_err(err_code). Makes error
  * returns more concise and consistent.
- *
- * @param T Type parameter (e.g., int, double, void_ptr)
- * @param err_code Error code from Error enum
  */
 #define RESULT_ERR(T, err_code) result_##T##_Error_err(err_code)
 /**
@@ -593,10 +575,6 @@ static inline int error_code(Error e) {
  * Helper macro that combines error checking with message extraction.
  * Useful for logging or error reporting. Returns NULL if result is Ok,
  * otherwise returns the error message string.
- *
- * @param T Type parameter
- * @param result Result value to check
- * @return Error message string if Err, NULL if Ok
  */
 #define RESULT_ERROR_MSG(T, result) \
     (result_##T##_Error_is_err(result) ? \
@@ -613,145 +591,151 @@ static inline int error_code(Error e) {
 /* typedef void* void_ptr; */
 // CANON_C_DEFINE_RESULT(void_ptr, Error)
 /* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Examples — now in prose + comment style (non-compilable)
+   Complete Usage Examples — real code wrapped in comments
+   (to use any example as real code, delete the /* and */ lines around it)
    ──────────────────────────────────────────────────────────────────────────── */
 
 /*
-  Example concept: robust integer parsing from string with multiple failure modes
-  ────────────────────────────────────────────────────────────────────────────────
-  Goal: show typical input validation + parsing + range checking pattern
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: Define the Result types used below
+    // ────────────────────────────────────────────────────────────────────────
+    CANON_C_DEFINE_RESULT(int, Error)
+    CANON_C_DEFINE_RESULT(double, Error)
 
-  Typical steps inside such a function (parse_int):
+    typedef void* void_ptr;
+    CANON_C_DEFINE_RESULT(void_ptr, Error)
 
-  1. First protect against NULL pointer
-     → if input string is NULL → immediately return Result.Err(ERR_INVALID_ARG)
-     Reasoning: prevents crashes and gives clear diagnostic
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: robust integer parsing from string with multiple failure modes
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_Error parse_int(const char* str) {
+        if (!str) {
+            return RESULT_ERR(int, ERR_INVALID_ARG);
+        }
+      
+        if (strlen(str) == 0) {
+            return RESULT_ERR(int, ERR_INVALID_FORMAT);
+        }
+      
+        char* end;
+        long val = strtol(str, &end, 10);
+      
+        if (end == str || *end != '\0') {
+            return RESULT_ERR(int, ERR_PARSE_FAILED);
+        }
+      
+        if (val > INT_MAX || val < INT_MIN) {
+            return RESULT_ERR(int, ERR_OVERFLOW);
+        }
+      
+        return RESULT_OK(int, (int)val);
+    }
 
-  2. Reject empty string early
-     → if strlen(str) == 0 → return Result.Err(ERR_INVALID_FORMAT)
-     Reasoning: empty is not a number; better to fail fast
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: diagnostic printing of parse results
+    // ────────────────────────────────────────────────────────────────────────
+    void example_basic_parsing(void) {
+        const char* inputs[] = {
+            "42",               // normal success
+            "abc",              // invalid characters
+            "",                 // empty string
+            NULL,               // null pointer
+            "2147483648"        // overflow for int32
+        };
+        const char* descriptions[] = {
+            "Valid number",
+            "Invalid characters",
+            "Empty string",
+            "NULL pointer",
+            "Overflow"
+        };
+      
+        printf("Parsing examples:\n");
+      
+        for (size_t i = 0; i < sizeof(inputs)/sizeof(inputs[0]); i++) {
+            printf(" %s → ", descriptions[i]);
+          
+            result_int_Error result = parse_int(inputs[i]);
+          
+            if (result_int_Error_is_err(result)) {
+                Error err = result_int_Error_unwrap_err(result);
+                printf("FAILED → %s (code %d)\n",
+                       error_message(err), error_code(err));
+            } else {
+                printf("OK → %d\n", result_int_Error_unwrap(result));
+            }
+        }
+    }
 
-  3. Use standard library conversion with end pointer
-     → call strtol(str, &end, 10)
-     → check whether any digits were consumed (end != str)
-     → check whether whole string was used (*end == '\0')
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: safe division preventing division by zero
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_Error safe_divide(int a, int b) {
+        if (b == 0) {
+            return RESULT_ERR(int, ERR_DIVIDE_BY_ZERO);
+        }
+      
+        return RESULT_OK(int, a / b);
+    }
 
-  4. On any of those checks failing → return Result.Err(ERR_PARSE_FAILED)
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: multi-step computation showing error propagation
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_Error compute_average(const char* num1_str, const char* num2_str) {
+        result_int_Error r1 = parse_int(num1_str);
+        if (result_int_Error_is_err(r1)) {
+            return r1;
+        }
+        int a = result_int_Error_unwrap(r1);
+      
+        result_int_Error r2 = parse_int(num2_str);
+        if (result_int_Error_is_err(r2)) {
+            return r2;
+        }
+        int b = result_int_Error_unwrap(r2);
+      
+        result_int_Error div_result = safe_divide(a + b, 2);
+        if (result_int_Error_is_err(div_result)) {
+            return div_result;
+        }
+      
+        return div_result;
+    }
 
-  5. After successful conversion, protect against overflow into target type
-     → if (long value > INT_MAX || value < INT_MIN) → Result.Err(ERR_OVERFLOW)
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: using RESULT_ERROR_MSG macro for quick error reporting
+    // ────────────────────────────────────────────────────────────────────────
+    void example_macro_style(void) {
+        result_int_Error r = parse_int("2147483648");  // overflow
+      
+        const char* msg = RESULT_ERROR_MSG(int, r);
+        if (msg) {
+            fprintf(stderr, "Operation failed: %s\n", msg);
+        } else {
+            printf("Success: %d\n", result_int_Error_unwrap(r));
+        }
+    }
 
-  6. Otherwise return Result.Ok( (int)value )
+    // ────────────────────────────────────────────────────────────────────────
+    // Optional: string_view example (non-owning string slice)
+    // ────────────────────────────────────────────────────────────────────────
+    typedef struct {
+        size_t len;
+        const char* data;
+    } string_view;
 
-  This pattern appears very often when wrapping strtol/strtoul/strtod etc.
+    CANON_C_DEFINE_RESULT(string_view, Error)
+
+    result_string_view_Error make_view(const char* start, size_t len) {
+        if (!start && len > 0) {
+            return RESULT_ERR(string_view, ERR_INVALID_ARG);
+        }
+        string_view v = { .len = len, .data = start };
+        return RESULT_OK(string_view, v);
+    }
 */
 
-/*
-  Example concept: diagnostic printing of parse results
-  ─────────────────────────────────────────────────────────
-  Goal: show how to handle both Ok and Err paths for logging / UI / tests
-
-  Typical loop over test inputs:
-
-  For each test string + description pair:
-
-    Print the description being tested
-
-    Call the parsing function → get Result
-
-    Branch:
-      If result is Err:
-        Extract the Error code
-        Print "FAILED → " + error_message(code) + " (code " + error_code + ")"
-      Else:
-        Print "OK → " + the unwrapped integer value
-
-  Common test cases to cover:
-    "42"           → normal success
-    "abc"          → invalid characters
-    ""             → empty string
-    NULL           → null pointer
-    "2147483648"   → overflow (for int32)
-
-  This style of output is very useful during development and in unit test runners.
-*/
-
-/*
-  Example concept: safe division preventing division by zero
-  ────────────────────────────────────────────────────────────
-  Goal: show minimal arithmetic protection
-
-  In a function safe_divide(a, b):
-
-    First explicit check: if b == 0 → return Result.Err(ERR_DIVIDE_BY_ZERO)
-    Reason: this is the most important arithmetic error to catch explicitly
-
-    Otherwise return Result.Ok(a / b)
-    (note: this version does not protect against INT_MIN / -1 overflow)
-
-  This tiny function is often used as a building block in larger computations.
-*/
-
-/*
-  Example concept: multi-step computation with error propagation
-  ───────────────────────────────────────────────────────────────
-  Goal: show the classic "early return on error" idiom
-
-  In a function compute_average(num1_str, num2_str):
-
-    Step 1: parse first string
-      Call parse_int(num1_str)
-      If Err → return that same Result (propagate)
-
-    Step 2: parse second string
-      Call parse_int(num2_str)
-      If Err → return that same Result (propagate)
-
-    Step 3: compute average safely
-      Call safe_divide(a + b, 2)
-      If Err → return that Result (propagate arithmetic error)
-
-    Step 4: all succeeded → return the final Result.Ok
-
-  This "railroad" style (check → early return) is the dominant pattern
-  when using Result in C for clean, readable error handling.
-*/
-
-/*
-  Example concept: using the RESULT_ERROR_MSG convenience macro
-  ───────────────────────────────────────────────────────────────
-  Goal: show one-liner style for quick logging / reporting
-
-  After calling a function that returns Result<T, Error>:
-
-    const char* msg = RESULT_ERROR_MSG(int, result);
-
-    If msg != NULL:
-      → log or print "Operation failed: " + msg
-    Else:
-      → success path: use the unwrapped value
-
-  This macro is especially convenient in:
-    - Error logging blocks
-    - Command-line tools with simple stderr output
-    - Quick prototypes / scripts
-*/
-
-/*
-  Example concept: using Result with a simple struct type (string_view)
-  ──────────────────────────────────────────────────────────────────────
-  Goal: show that Result works well beyond primitives
-
-  Define a lightweight string view struct:
-    Fields: size_t len; const char* data;
-
-  Factory function make_view(start, len):
-
-    Consistency check:
-      if start == NULL && len > 0 → Result.Err(ERR_INVALID_ARG)
-      Reason: NULL pointer with positive length is almost always a bug
-
-    Otherwise construct the view and return Result.Ok(view)
-*/
-
+/* ────────────────────────────────────────────────────────────────────────────
+   End of public API & examples
+   ──────────────────────────────────────────────────────────────────────────── */
 #endif /* CANON_SEMANTICS_ERROR_H */
