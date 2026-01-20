@@ -1,70 +1,67 @@
 // semantics/option.h
 #ifndef CANON_C_SEMANTICS_OPTION_H
 #define CANON_C_SEMANTICS_OPTION_H
-
 #include <stdbool.h>
 #include <assert.h>
-
 /**
  * @file option.h
  * @brief Explicit presence/absence of a value – Rust-style Option<T> for C
  *
  * Represents either:
  * - Some(value) → value is present
- * - None        → value is absent (safe alternative to NULL/sentinels)
+ * - None → value is absent (safe alternative to NULL/sentinels)
  *
  * Philosophy & goals:
- *   - Fully explicit nullability (no accidental dereference of NULL)
- *   - Zero-cost abstraction (bool + value, natural alignment/padding)
- *   - Type-safe via macros (one concrete struct per type)
- *   - Header-only, no runtime dependencies
- *   - Chainable & composable (map, and_then, or_else, filter...)
- *   - Panic/unwrap only in debug builds (production code should check)
+ * - Fully explicit nullability (no accidental dereference of NULL)
+ * - Zero-cost abstraction (bool + value, natural alignment/padding)
+ * - Type-safe via macros (one concrete struct per type)
+ * - Header-only, no runtime dependencies
+ * - Chainable & composable (map, and_then, or_else, filter...)
+ * - Panic/unwrap only in debug builds (production code should check)
  *
  * Portability:
- *   - Requires C99 or later (for inline functions, stdbool.h, compound literals)
- *   - Statement expressions require GNU C extension or C23
- *   - Define CANON_NO_GNU_EXTENSIONS to disable macros requiring extensions
- *   - All core functionality works in strict C99
+ * - Requires C99 or later (for inline functions, stdbool.h, compound literals)
+ * - Statement expressions require GNU C extension or C23
+ * - Define CANON_NO_GNU_EXTENSIONS to disable macros requiring extensions
+ * - All core functionality works in strict C99
  *
  * Thread-safety: Each Option instance is independent - no shared state
  *
- * Performance: Zero runtime overhead - compiles to simple struct operations
- *
- * Memory layout:
- *   - Minimal overhead: 1 bool + 1 value + padding for alignment
- *   - Typically sizeof(option_T) = sizeof(bool) + sizeof(T) + padding
- *   - Same ABI stability as regular structs
+ * Performance:
+ * - Time complexity: O(1) — constant time for all operations
+ * - Space complexity: O(1) — bool + value + alignment padding only
+ * - No dynamic allocations or runtime overhead
+ * - Zero-cost abstraction (compiles to simple struct operations)
  *
  * Recommended patterns:
- *   ✓ Always check is_some / is_none before unwrap
- *   ✓ Use TRY_SOME for clean propagation (if using Result types)
- *   ✓ Prefer unwrap_or / get / filter over raw unwrap in production code
- *   ✓ Use expect() with descriptive messages for invariant violations
- *   ✓ Combine with Result<T,E> for comprehensive error handling
+ * ✓ Always check is_some / is_none before unwrap
+ * ✓ Use TRY_SOME for clean propagation (if using Result types)
+ * ✓ Prefer unwrap_or / get / filter over raw unwrap in production code
+ * ✓ Use expect() with descriptive messages for invariant violations
+ * ✓ Combine with Result<T,E> for comprehensive error handling
  *
  * Anti-patterns to avoid:
- *   ✗ Don't unwrap() without checking in production code
- *   ✗ Don't use Option for error reporting (use Result<T,E> instead)
- *   ✗ Don't use Option<bool> (prefer explicit Result or enum)
+ * ✗ Don't unwrap() without checking in production code
+ * ✗ Don't use Option for error reporting (use Result<T,E> instead)
+ * ✗ Don't use Option<bool> (prefer explicit Result or enum)
  *
  * Classic example:
- *   CANON_C_DEFINE_OPTION(int)
+ * CANON_C_DEFINE_OPTION(int)
  *
- *   option_int maybe_parse(const char* s) {
- *       if (!s) return option_int_none();
- *       // ... parsing logic ...
- *       return option_int_some(42);
- *   }
+ * option_int maybe_parse(const char* s) {
+ *     if (!s) return option_int_none();
+ *     // ... parsing logic ...
+ *     return option_int_some(42);
+ * }
  *
- *   int process(void) {
- *       option_int maybe = maybe_parse("42");
- *       if (option_int_is_none(maybe)) {
- *           return ERROR_PARSE_FAILED;
- *       }
- *       int n = option_int_unwrap(maybe);
- *       return n * 2;
- *   }
+ * int process(void) {
+ *     option_int maybe = maybe_parse("42");
+ *     if (option_int_is_none(maybe)) {
+ *         return ERROR_PARSE_FAILED;
+ *     }
+ *     int n = option_int_unwrap(maybe);
+ *     return n * 2;
+ * }
  */
 
 /**
@@ -75,31 +72,25 @@
  *
  * Generated type: option_##type
  * Generated functions:
- *   - Constructors: option_##type##_some(value), option_##type##_none()
- *   - Queries: option_##type##_is_some(o), option_##type##_is_none(o)
- *   - Safe accessors: option_##type##_get(o, &out)
- *   - Unsafe accessors: option_##type##_unwrap(o), option_##type##_expect(o, msg)
- *   - Defaults: option_##type##_unwrap_or(o, fallback)
- *   - Transformations: option_##type##_map(o, fn)
- *   - Chaining: option_##type##_and_then(o, fn), option_##type##_or_else(o, fn)
- *   - Filtering: option_##type##_filter(o, predicate)
- *   - Combining: option_##type##_zip(o1, o2, combine)
- *   - Replacement: option_##type##_replace(o, new_value)
- *   - Taking: option_##type##_take(&o)
+ * - Constructors: option_##type##_some(value), option_##type##_none()
+ * - Queries: option_##type##_is_some(o), option_##type##_is_none(o)
+ * - Safe accessors: option_##type##_get(o, &out)
+ * - Unsafe accessors: option_##type##_unwrap(o), option_##type##_expect(o, msg)
+ * - Defaults: option_##type##_unwrap_or(o, fallback)
+ * - Transformations: option_##type##_map(o, fn)
+ * - Chaining: option_##type##_and_then(o, fn), option_##type##_or_else(o, fn)
+ * - Filtering: option_##type##_filter(o, predicate)
+ * - Combining: option_##type##_zip(o1, o2, combine)
+ * - Replacement: option_##type##_replace(o, new_value)
+ * - Taking: option_##type##_take(&o)
  *
  * Usage:
- *   CANON_C_DEFINE_OPTION(int)        // Defines option_int
- *   CANON_C_DEFINE_OPTION(float)      // Defines option_float
- *   CANON_C_DEFINE_OPTION(MyStruct)   // Defines option_MyStruct
- *
- * Example:
- *   option_int x = option_int_some(42);
- *   if (option_int_is_some(x)) {
- *       printf("Value: %d\n", option_int_unwrap(x));
- *   }
+ * CANON_C_DEFINE_OPTION(int) // Defines option_int
+ * CANON_C_DEFINE_OPTION(float) // Defines option_float
+ * CANON_C_DEFINE_OPTION(MyStruct) // Defines option_MyStruct
  *
  * Note: This must be used at file or global scope, not inside functions.
- *       Use once per type in a header or source file.
+ * Use once per type in a header or source file.
  */
 #define CANON_C_DEFINE_OPTION(type) \
 \
@@ -107,8 +98,8 @@
  * @brief Option type for 'type' - represents optional value \
  * \
  * Fields: \
- *   - has_value: true if value is present (Some), false if absent (None) \
- *   - value: the contained value (only valid when has_value is true) \
+ * - has_value: true if value is present (Some), false if absent (None) \
+ * - value: the contained value (only valid when has_value is true) \
  * \
  * Do not access fields directly - use the provided functions. \
  */ \
@@ -122,8 +113,6 @@ typedef struct { \
  * \
  * @param v Value to wrap \
  * @return Option containing the value \
- * \
- * Example: option_int x = option_int_some(42); \
  */ \
 static inline option_##type option_##type##_some(type v) { \
     return (option_##type){ .has_value = true, .value = v }; \
@@ -133,8 +122,6 @@ static inline option_##type option_##type##_some(type v) { \
  * @brief Constructs None - an Option without a value \
  * \
  * @return Empty Option \
- * \
- * Example: option_int x = option_int_none(); \
  */ \
 static inline option_##type option_##type##_none(void) { \
     return (option_##type){ .has_value = false }; \
@@ -145,8 +132,6 @@ static inline option_##type option_##type##_none(void) { \
  * \
  * @param o Option to check \
  * @return true if Some(value), false if None \
- * \
- * Example: if (option_int_is_some(x)) { ... } \
  */ \
 static inline bool option_##type##_is_some(option_##type o) { \
     return o.has_value; \
@@ -157,8 +142,6 @@ static inline bool option_##type##_is_some(option_##type o) { \
  * \
  * @param o Option to check \
  * @return true if None, false if Some(value) \
- * \
- * Example: if (option_int_is_none(x)) { return ERROR; } \
  */ \
 static inline bool option_##type##_is_none(option_##type o) { \
     return !o.has_value; \
@@ -169,15 +152,9 @@ static inline bool option_##type##_is_none(option_##type o) { \
  * \
  * This is the recommended way to extract values in production code. \
  * \
- * @param o   Option to extract from \
+ * @param o Option to extract from \
  * @param out Pointer to store the value (NULL-safe) \
- * @return    true if value was extracted, false if None or out is NULL \
- * \
- * Example: \
- *   int value; \
- *   if (option_int_get(x, &value)) { \
- *       printf("Got: %d\n", value); \
- *   } \
+ * @return true if value was extracted, false if None or out is NULL \
  */ \
 static inline bool option_##type##_get(option_##type o, type* out) { \
     if (o.has_value && out) { \
@@ -192,11 +169,9 @@ static inline bool option_##type##_get(option_##type o, type* out) { \
  * \
  * Safe alternative to unwrap() - never panics. \
  * \
- * @param o        Option to extract from \
+ * @param o Option to extract from \
  * @param fallback Value to return if None \
- * @return         Contained value if Some, fallback if None \
- * \
- * Example: int n = option_int_unwrap_or(x, 0); \
+ * @return Contained value if Some, fallback if None \
  */ \
 static inline type option_##type##_unwrap_or( \
     option_##type o, type fallback) { \
@@ -206,17 +181,15 @@ static inline type option_##type##_unwrap_or( \
 /** \
  * @brief Extracts value, panicking if None \
  * \
- * ⚠️  WARNING: Only use when you are certain the value is present! \
+ * ⚠️ WARNING: Only use when you are certain the value is present! \
  * In debug builds, this asserts. In release builds, undefined if None. \
  * \
  * Prefer: get(), unwrap_or(), expect() over unwrap() in production. \
  * \
  * @param o Option to unwrap \
- * @return  Contained value \
+ * @return Contained value \
  * \
  * Panics: If o is None (assertion failure in debug builds) \
- * \
- * Example: int n = option_int_unwrap(x);  // Only if certain x is Some \
  */ \
 static inline type option_##type##_unwrap(option_##type o) { \
     assert(o.has_value && "option_unwrap called on None"); \
@@ -229,14 +202,11 @@ static inline type option_##type##_unwrap(option_##type o) { \
  * Like unwrap(), but with a descriptive error message for debugging. \
  * Use this for invariant violations that should never happen. \
  * \
- * @param o   Option to extract from \
+ * @param o Option to extract from \
  * @param msg Error message if None (used in assertion) \
- * @return    Contained value \
+ * @return Contained value \
  * \
  * Panics: If o is None (assertion failure in debug builds with msg) \
- * \
- * Example: \
- *   int n = option_int_expect(x, "config value must be present"); \
  */ \
 static inline type option_##type##_expect( \
     option_##type o, const char* msg) { \
@@ -253,11 +223,7 @@ static inline type option_##type##_expect( \
  * \
  * @param o Option to transform \
  * @param f Transformation function \
- * @return  Some(f(value)) if o is Some(value), None if o is None \
- * \
- * Example: \
- *   int double_it(int x) { return x * 2; } \
- *   option_int doubled = option_int_map(x, double_it); \
+ * @return Some(f(value)) if o is Some(value), None if o is None \
  */ \
 static inline option_##type option_##type##_map( \
     option_##type o, type (*f)(type)) { \
@@ -272,13 +238,7 @@ static inline option_##type option_##type##_map( \
  * \
  * @param o Option to chain from \
  * @param f Function returning Option \
- * @return  f(value) if o is Some(value), None if o is None \
- * \
- * Example: \
- *   option_int safe_divide(int a, int b) { \
- *       return b != 0 ? option_int_some(a / b) : option_int_none(); \
- *   } \
- *   option_int result = option_int_and_then(x, safe_divide); \
+ * @return f(value) if o is Some(value), None if o is None \
  */ \
 static inline option_##type option_##type##_and_then( \
     option_##type o, option_##type (*f)(type)) { \
@@ -290,13 +250,9 @@ static inline option_##type option_##type##_and_then( \
  * \
  * Returns o if Some, otherwise calls fallback() to get alternative. \
  * \
- * @param o        Option to check \
+ * @param o Option to check \
  * @param fallback Function providing alternative Option \
- * @return         o if Some, fallback() if None \
- * \
- * Example: \
- *   option_int get_default(void) { return option_int_some(0); } \
- *   option_int result = option_int_or_else(x, get_default); \
+ * @return o if Some, fallback() if None \
  */ \
 static inline option_##type option_##type##_or_else( \
     option_##type o, option_##type (*fallback)(void)) { \
@@ -309,13 +265,9 @@ static inline option_##type option_##type##_or_else( \
  * Converts Some(value) to None if predicate(value) is false. \
  * Useful for conditional extraction. \
  * \
- * @param o    Option to filter \
+ * @param o Option to filter \
  * @param pred Predicate function \
- * @return     o if Some(v) and pred(v), None otherwise \
- * \
- * Example: \
- *   bool is_positive(int x) { return x > 0; } \
- *   option_int positive = option_int_filter(x, is_positive); \
+ * @return o if Some(v) and pred(v), None otherwise \
  */ \
 static inline option_##type option_##type##_filter( \
     option_##type o, bool (*pred)(type)) { \
@@ -328,14 +280,10 @@ static inline option_##type option_##type##_filter( \
  * Returns Some(combine(a, b)) if both Options are Some. \
  * Returns None if either Option is None. \
  * \
- * @param o1      First Option \
- * @param o2      Second Option \
+ * @param o1 First Option \
+ * @param o2 Second Option \
  * @param combine Function to combine values \
- * @return        Some(combine(v1, v2)) if both Some, None otherwise \
- * \
- * Example: \
- *   int add(int a, int b) { return a + b; } \
- *   option_int sum = option_int_zip(x, y, add); \
+ * @return Some(combine(v1, v2)) if both Some, None otherwise \
  */ \
 static inline option_##type option_##type##_zip( \
     option_##type o1, option_##type o2, type (*combine)(type, type)) { \
@@ -350,12 +298,9 @@ static inline option_##type option_##type##_zip( \
  * \
  * Updates the Option with a new value, returning the previous state. \
  * \
- * @param o         Pointer to Option to update \
+ * @param o Pointer to Option to update \
  * @param new_value New value to set \
- * @return          Previous Option state \
- * \
- * Example: \
- *   option_int old = option_int_replace(&x, 100); \
+ * @return Previous Option state \
  */ \
 static inline option_##type option_##type##_replace( \
     option_##type* o, type new_value) { \
@@ -372,13 +317,9 @@ static inline option_##type option_##type##_replace( \
  * Useful for moving values out of Option containers. \
  * \
  * @param o Pointer to Option to take from \
- * @return  The previous Option state \
+ * @return The previous Option state \
  * \
  * Postcondition: *o is None after this call \
- * \
- * Example: \
- *   option_int taken = option_int_take(&x); \
- *   // x is now None, taken contains the old value \
  */ \
 static inline option_##type option_##type##_take(option_##type* o) { \
     assert(o != NULL && "option_take: o parameter cannot be NULL"); \
@@ -397,11 +338,7 @@ static inline option_##type option_##type##_take(option_##type* o) { \
  * @param o1 First Option \
  * @param o2 Second Option \
  * @param eq Equality comparison function for values \
- * @return   true if Options are equal, false otherwise \
- * \
- * Example: \
- *   bool int_eq(int a, int b) { return a == b; } \
- *   if (option_int_eq(x, y, int_eq)) { ... } \
+ * @return true if Options are equal, false otherwise \
  */ \
 static inline bool option_##type##_eq( \
     option_##type o1, option_##type o2, bool (*eq)(type, type)) { \
@@ -413,9 +350,7 @@ static inline bool option_##type##_eq( \
 /* ────────────────────────────────────────────────────────────────────────────
    Propagation & convenience macros (require GNU C extensions or C23)
    ──────────────────────────────────────────────────────────────────────────── */
-
 #ifndef CANON_NO_GNU_EXTENSIONS
-
 /**
  * @brief Unwraps Option or returns from function with error code
  *
@@ -426,19 +361,9 @@ static inline bool option_##type##_eq( \
  * If the Option is None, returns immediately with the error code.
  * If Some, extracts and returns the value.
  *
- * @param type      Type name (e.g., int, float)
- * @param opt_expr  Expression evaluating to option_##type
- * @param err_code  Value to return if None
- *
- * Example:
- *   Result parse_and_double(const char* s) {
- *       TRY_SOME(int, maybe_parse(s), ERR_PARSE);
- *       // If we get here, n contains the parsed value
- *       return result_ok(n * 2);
- *   }
- *
- * Note: This assumes you're using a Result type with result_err().
- *       Adapt as needed for your error handling strategy.
+ * @param type Type name (e.g., int, float)
+ * @param opt_expr Expression evaluating to option_##type
+ * @param err_code Value to return if None
  */
 #define TRY_SOME(type, opt_expr, err_code) \
     ({ \
@@ -452,15 +377,6 @@ static inline bool option_##type##_eq( \
  *
  * Requires: GNU C statement expressions or C23
  * Disable with: #define CANON_NO_GNU_EXTENSIONS
- *
- * Convenience macro for unwrap_or that works as an expression.
- *
- * @param type         Type name
- * @param opt_expr     Expression evaluating to Option
- * @param default_val  Value to use if None
- *
- * Example:
- *   int value = UNWRAP_OR_DEFAULT(int, maybe_get_value(), 42);
  */
 #define UNWRAP_OR_DEFAULT(type, opt_expr, default_val) \
     ({ \
@@ -468,93 +384,85 @@ static inline bool option_##type##_eq( \
         option_##type##_is_some(_opt_) ? \
             option_##type##_unwrap(_opt_) : (default_val); \
     })
-
 #endif /* CANON_NO_GNU_EXTENSIONS */
 
 /* ────────────────────────────────────────────────────────────────────────────
    Common type instantiations
-   ────────────────────────────────────────────────────────────────────────────
-   
-   Uncomment the types you need, or define your own in your code:
-   
-   CANON_C_DEFINE_OPTION(int)
-   CANON_C_DEFINE_OPTION(unsigned)
-   CANON_C_DEFINE_OPTION(long)
-   CANON_C_DEFINE_OPTION(size_t)
-   CANON_C_DEFINE_OPTION(float)
-   CANON_C_DEFINE_OPTION(double)
-   CANON_C_DEFINE_OPTION(char)
-   CANON_C_DEFINE_OPTION(bool)
-   
-   For pointer types:
-   CANON_C_DEFINE_OPTION(void_ptr)  // For void*
-   typedef void* void_ptr;
-   
-   For custom types:
-   CANON_C_DEFINE_OPTION(MyStruct)
-   
    ──────────────────────────────────────────────────────────────────────────── */
+
+/* Uncomment the types you need, or define your own in your code: */
+// CANON_C_DEFINE_OPTION(int)
+// CANON_C_DEFINE_OPTION(unsigned)
+// CANON_C_DEFINE_OPTION(long)
+// CANON_C_DEFINE_OPTION(size_t)
+// CANON_C_DEFINE_OPTION(float)
+// CANON_C_DEFINE_OPTION(double)
+// CANON_C_DEFINE_OPTION(char)
+// CANON_C_DEFINE_OPTION(bool)
+
+/* For pointer types: */
+// typedef void* void_ptr;
+// CANON_C_DEFINE_OPTION(void_ptr)
+
+/* For custom types: */
+// CANON_C_DEFINE_OPTION(MyStruct)
 
 /* ────────────────────────────────────────────────────────────────────────────
    Complete Usage Example
-   ────────────────────────────────────────────────────────────────────────────
-
-    #include "option.h"
-    
-    // Define Option types we need
-    CANON_C_DEFINE_OPTION(int)
-    CANON_C_DEFINE_OPTION(float)
-    
-    // Function that might fail to parse
-    option_int parse_int(const char* str) {
-        if (!str) return option_int_none();
-        
-        char* end;
-        long val = strtol(str, &end, 10);
-        
-        if (end == str || *end != '\0') {
-            return option_int_none();  // Parse failed
-        }
-        
-        return option_int_some((int)val);
-    }
-    
-    // Safe usage with checking
-    void example_safe(void) {
-        option_int result = parse_int("42");
-        
-        // Method 1: Check before unwrap
-        if (option_int_is_some(result)) {
-            int value = option_int_unwrap(result);
-            printf("Parsed: %d\n", value);
-        } else {
-            printf("Parse failed\n");
-        }
-        
-        // Method 2: Use get()
-        int value;
-        if (option_int_get(result, &value)) {
-            printf("Parsed: %d\n", value);
-        }
-        
-        // Method 3: Provide default
-        int value = option_int_unwrap_or(result, 0);
-    }
-    
-    // Chaining operations
-    int double_value(int x) { return x * 2; }
-    bool is_positive(int x) { return x > 0; }
-    
-    void example_chaining(void) {
-        option_int result = parse_int("21")
-            .map(double_value)           // 42
-            .filter(is_positive);        // Still Some(42)
-        
-        // Using functions explicitly
-        result = option_int_map(parse_int("21"), double_value);
-        result = option_int_filter(result, is_positive);
-    }
-
    ──────────────────────────────────────────────────────────────────────────── */
+
+#include "option.h"
+
+/* Define Option types we need */
+CANON_C_DEFINE_OPTION(int)
+CANON_C_DEFINE_OPTION(float)
+
+/* Function that might fail to parse */
+option_int parse_int(const char* str) {
+    if (!str) return option_int_none();
+    
+    char* end;
+    long val = strtol(str, &end, 10);
+    
+    if (end == str || *end != '\0') {
+        return option_int_none(); // Parse failed
+    }
+    
+    return option_int_some((int)val);
+}
+
+/* Safe usage with checking */
+void example_safe(void) {
+    option_int result = parse_int("42");
+    
+    // Method 1: Check before unwrap
+    if (option_int_is_some(result)) {
+        int value = option_int_unwrap(result);
+        printf("Parsed: %d\n", value);
+    } else {
+        printf("Parse failed\n");
+    }
+    
+    // Method 2: Use get()
+    int value;
+    if (option_int_get(result, &value)) {
+        printf("Parsed: %d\n", value);
+    }
+    
+    // Method 3: Provide default
+    int value = option_int_unwrap_or(result, 0);
+}
+
+/* Chaining operations */
+int double_value(int x) { return x * 2; }
+bool is_positive(int x) { return x > 0; }
+
+void example_chaining(void) {
+    option_int result = parse_int("21");
+    
+    // Using functions explicitly
+    result = option_int_map(result, double_value);
+    result = option_int_filter(result, is_positive);
+}
 
 #endif /* CANON_C_SEMANTICS_OPTION_H */
