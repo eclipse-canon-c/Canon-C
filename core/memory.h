@@ -10,423 +10,386 @@
 
 /**
  * @file memory.h
- * @brief Low-level memory utilities with safety checks and alignment helpers
+ * @brief Safe, explicit, low-level memory manipulation and alignment utilities
  *
- * Provides explicit, safe wrappers around standard memory functions (memcpy, memset, etc.)
- * plus alignment helpers for allocation and type-safe memory management.
+ * Provides thin, safety-checked wrappers around standard memory functions
+ * (memcpy, memmove, memset, memcmp) and powerful alignment helpers.
+ * Designed for use in custom allocators (arenas, pools, slab), parsers,
+ * and performance-critical code where explicit control is required.
  *
- * All functions:
- * - Are null-safe where reasonable
- * - Handle zero-size operations gracefully
- * - Have no hidden side effects
- * - Are suitable for use in arenas, pools, and other explicit allocators
- * - Include overflow protection where applicable
- * - Validate preconditions via assertions in debug builds
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Null-safe and zero-size safe on all operations
+ * - Overflow-protected alignment calculations
+ * - Explicit over implicit — preconditions checked in debug builds
+ * - No hidden allocations, no thread-local state
+ * - Type-safe convenience macros reduce sizeof boilerplate
+ * - Portable — relies only on C99 standard library
+ * - Debug assertions catch misuse early
+ *
+ * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - All functions: O(1) for alignment helpers, O(n) for memory ops
+ * - Alignment helpers compile to 2–5 instructions on most platforms
+ * - Wrappers usually inlined and optimized identically to direct stdlib calls
+ * - mem_is_all / mem_is_zero: linear scan (no SIMD yet — could be added)
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * All functions are fully thread-safe — no shared mutable state.
  *
  * Portability:
- * - Requires C99 or later (for inline, stdint.h, stdbool.h)
- * - Uses standard library functions only (memcpy, memmove, memset, memcmp)
- * - No platform-specific code
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later (inline functions, stdint.h, stdbool.h)
+ * - Uses only: memcpy, memmove, memset, memcmp, uintptr_t
+ * - No platform-specific intrinsics or assembly
  *
- * Thread-safety: All functions are thread-safe (no shared state)
+ * Typical use cases:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Custom allocators (arena alignment padding, pool block sizing)
+ * - Struct initialization / zeroing before use
+ * - Safe buffer copying in parsers / serializers
+ * - SIMD alignment verification
+ * - Constant-time-ish comparison avoidance documentation
+ * - Sanitizing / zeroing sensitive memory regions
+ * - Debugging memory pattern checks
+ *
+ * NOT suitable for:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Constant-time comparison of secrets (use dedicated crypto function)
+ * - Very large regions where SIMD-optimized routines exist
+ * - Overaligned allocations beyond max_align_t (use mem_align_to)
+ * - Replacing compiler builtins (__builtin_memcpy etc.) in hot loops
+ *
+ * @sa mem_align(), mem_align_to(), mem_zero(), mem_copy(), mem_move()
  */
 
-/* ============================================================
+/* ────────────────────────────────────────────────────────────────────────────
    Alignment utilities
-   ============================================================ */
+   ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Rounds size up to the next multiple of max_align_t
+ * @brief Rounds size up to the next multiple of `max_align_t`
  *
- * Useful for natural alignment of most types. Natural alignment is typically:
- * - 8 bytes on 64-bit systems
- * - 4 bytes on 32-bit systems
+ * This is the "natural" alignment most types expect on the current platform:
+ *   - Usually 8 bytes on 64-bit systems
+ *   - Usually 4 bytes on 32-bit systems
  *
- * Safe against overflow: returns SIZE_MAX if alignment would overflow.
+ * @param size Bytes to align (0 is allowed → returns 0)
+ * @return Smallest multiple of `sizeof(max_align_t)` ≥ size,
+ *         or `SIZE_MAX` if overflow would occur
  *
- * @param size Bytes to align (0 is valid, returns 0)
- * @return     Aligned size (multiple of sizeof(max_align_t)), or SIZE_MAX on overflow
+ * @remark Overflow-safe: checks before adding padding
  *
  * Example:
- *   size_t aligned = mem_align(37);  // Returns 40 on typical 64-bit system
+ * ```c
+ * size_t aligned = mem_align(37);     // → 40 on 64-bit
+ * size_t zero    = mem_align(0);      // → 0
+ * ```
  *
- * Performance: O(1), compiles to a few CPU instructions
+ * @sa mem_align_to()
  */
 static inline size_t mem_align(size_t size) {
     const size_t align = sizeof(max_align_t);
-    
-    // Handle zero size explicitly
+
     if (size == 0) return 0;
-    
-    // Prevent overflow in addition
+
+    // Overflow protection
     if (size > SIZE_MAX - (align - 1u)) {
         return SIZE_MAX;
     }
-    
+
     return (size + align - 1u) & ~(align - 1u);
 }
 
 /**
- * @brief Rounds size up to the next multiple of a specific power-of-two alignment
+ * @brief Rounds size up to the next multiple of requested power-of-2 alignment
  *
- * @param size       Bytes to align (0 is valid, returns 0)
- * @param alignment  Required alignment (must be power of 2: 1, 2, 4, 8, 16, 32, ...)
- * @return           Aligned size or SIZE_MAX on overflow
+ * @param size      Bytes to align (0 is allowed → returns 0)
+ * @param alignment Power-of-2 alignment value (1,2,4,8,16,…)
  *
- * Preconditions:
- * - alignment must be a power of 2
- * - In debug builds, this is validated via assertion
+ * @return Smallest multiple of alignment ≥ size,
+ *         or `SIZE_MAX` on overflow or invalid alignment
+ *
+ * @pre alignment > 0 and is power of 2 (asserted in debug builds)
  *
  * Example:
- *   size_t aligned = mem_align_to(100, 16);  // Returns 112
+ * ```c
+ * size_t a = mem_align_to(100, 16);   // → 112
+ * size_t b = mem_align_to(64, 64);    // → 64
+ * ```
  *
- * Returns SIZE_MAX if:
- * - Alignment would cause overflow
- * - alignment is 0 (invalid)
- * - alignment is not power of 2 (invalid, but only checked in debug)
+ * @sa mem_align(), mem_is_aligned()
  */
 static inline size_t mem_align_to(size_t size, size_t alignment) {
-    assert(alignment > 0 && "mem_align_to: alignment must be greater than 0");
+    assert(alignment > 0 && "mem_align_to: alignment must be > 0");
     assert((alignment & (alignment - 1u)) == 0 && "mem_align_to: alignment must be power of 2");
-    
-    // Handle invalid or zero alignment
+
     if (alignment == 0 || (alignment & (alignment - 1u)) != 0) {
         return SIZE_MAX;
     }
-    
-    // Handle zero size explicitly
+
     if (size == 0) return 0;
-    
-    // Prevent overflow in addition
+
     if (size > SIZE_MAX - (alignment - 1u)) {
         return SIZE_MAX;
     }
-    
+
     return (size + alignment - 1u) & ~(alignment - 1u);
 }
 
 /**
- * @brief Checks if a pointer is aligned to a specific boundary
+ * @brief Checks whether a pointer satisfies a given alignment requirement
  *
- * @param ptr        Pointer to check (NULL returns false)
- * @param alignment  Required alignment (must be power of 2)
- * @return           true if ptr is aligned to 'alignment' bytes, false otherwise
+ * @param ptr       Pointer to test (NULL → false)
+ * @param alignment Power-of-2 alignment to check (1,2,4,8,…)
+ *
+ * @return `true` if ptr is aligned to `alignment` bytes, `false` otherwise
+ *
+ * @pre alignment is power of 2 (asserted in debug builds)
  *
  * Example:
- *   void* p = malloc(100);
- *   if (mem_is_aligned(p, 16)) {
- *       // Can safely use 16-byte aligned SIMD operations
- *   }
+ * ```c
+ * if (mem_is_aligned(my_ptr, 32)) {
+ *     // safe to use AVX / NEON load
+ * }
+ * ```
+ *
+ * @sa mem_get_alignment()
  */
 static inline bool mem_is_aligned(const void* ptr, size_t alignment) {
-    assert(alignment > 0 && "mem_is_aligned: alignment must be greater than 0");
+    assert(alignment > 0 && "mem_is_aligned: alignment must be > 0");
     assert((alignment & (alignment - 1u)) == 0 && "mem_is_aligned: alignment must be power of 2");
-    
+
     if (!ptr || alignment == 0 || (alignment & (alignment - 1u)) != 0) {
         return false;
     }
-    
+
     return ((uintptr_t)ptr & (alignment - 1u)) == 0;
 }
 
 /**
- * @brief Returns the alignment of a pointer (largest power of 2 that divides the address)
+ * @brief Determines the current alignment of a pointer
  *
- * @param ptr Pointer to check (NULL returns 0)
- * @return    Alignment in bytes (always a power of 2), or 0 if ptr is NULL
+ * Returns the largest power of 2 that divides the pointer address.
+ *
+ * @param ptr Pointer to inspect (NULL → 0)
+ * @return Alignment in bytes (power of 2), or 0 if ptr is NULL
+ *
+ * @remark For ptr == NULL returns 0 (not SIZE_MAX)
+ * @remark Very large alignments (e.g. page-aligned) are correctly detected
  *
  * Example:
- *   void* p = (void*)0x1000;
- *   size_t align = mem_get_alignment(p);  // Returns 4096 (0x1000)
+ * ```c
+ * void* p = aligned_alloc(4096, 4096);
+ * size_t align = mem_get_alignment(p); // → 4096
+ * ```
  */
 static inline size_t mem_get_alignment(const void* ptr) {
     if (!ptr) return 0;
-    
+
     uintptr_t addr = (uintptr_t)ptr;
-    if (addr == 0) return SIZE_MAX;  // Zero address is aligned to everything
-    
-    // Count trailing zeros to find alignment
-    // This finds the largest power of 2 that divides addr
+    if (addr == 0) return SIZE_MAX; // technically aligned to everything
+
+    // isolate lowest set bit
     return addr & (~addr + 1u);
 }
 
-/* ============================================================
+/* ────────────────────────────────────────────────────────────────────────────
    Safe memory operations
-   ============================================================ */
+   ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Copies non-overlapping memory regions (wrapper around memcpy)
+ * @brief Copies non-overlapping memory regions (safe memcpy wrapper)
  *
- * Does nothing if dest/src is NULL or size == 0.
- *
- * @param dest Destination pointer (must not overlap with src)
- * @param src  Source pointer (must not overlap with dest)
+ * @param dest Destination memory
+ * @param src  Source memory
  * @param size Number of bytes to copy
  *
- * Preconditions:
- * - dest and src must not overlap (undefined behavior if they do)
- * - In debug builds, asserts that dest != src when size > 0
+ * @pre If size > 0, dest and src must not overlap (asserted in debug)
+ * @pre dest and src may be NULL (operation becomes no-op)
  *
- * Note: For overlapping regions, use mem_move() instead.
+ * @note For possibly overlapping regions use mem_move() instead.
  *
- * Performance: O(size), typically optimized to use fast platform-specific instructions
+ * @sa mem_move(), mem_copy_type()
  */
-static inline void mem_copy(void* dest, const void* src, size_t size) {
+static inline void mem_copy(void* restrict dest, const void* restrict src, size_t size) {
     if (!dest || !src || size == 0) return;
-    
-    assert(dest != src && "mem_copy: dest and src must not be the same pointer");
-    
+
+    assert(dest != src && "mem_copy: overlapping regions — use mem_move instead");
+
     memcpy(dest, src, size);
 }
 
 /**
- * @brief Moves memory regions (handles overlap correctly)
+ * @brief Moves memory, correctly handling overlapping regions
  *
- * Wrapper around memmove — safe for overlapping regions.
- * Does nothing if dest/src is NULL or size == 0.
- *
- * @param dest Destination pointer (may overlap with src)
- * @param src  Source pointer (may overlap with dest)
+ * @param dest Destination memory (may overlap src)
+ * @param src  Source memory
  * @param size Number of bytes to move
  *
- * Use this instead of mem_copy() when regions might overlap.
- * Slightly slower than mem_copy() but handles all cases correctly.
+ * @remark NULL or zero-size inputs are gracefully ignored
  *
- * Performance: O(size)
+ * @sa mem_copy()
  */
 static inline void mem_move(void* dest, const void* src, size_t size) {
     if (!dest || !src || size == 0) return;
-    
     memmove(dest, src, size);
 }
 
 /**
  * @brief Zero-fills a memory region
  *
- * Wrapper around memset(ptr, 0, size).
- * Does nothing if ptr is NULL or size == 0.
- *
- * @param ptr  Memory block to zero
+ * @param ptr  Memory to clear
  * @param size Number of bytes to zero
  *
- * Common uses:
- * - Initialize structs: mem_zero(&my_struct, sizeof(my_struct))
- * - Clear arrays: mem_zero(array, sizeof(array))
- * - Sanitize sensitive data before freeing
+ * @remark Commonly used to initialize structs or sanitize memory
+ * @remark For crypto-sensitive zeroing consider explicit_bzero() or memset_s()
  *
- * Note: For security-critical zeroing (preventing compiler optimization),
- *       use memset_s() or explicit_bzero() if available on your platform.
- *
- * Performance: O(size), highly optimized by compilers
+ * @sa mem_zero_type(), mem_zero_array()
  */
 static inline void mem_zero(void* ptr, size_t size) {
     if (!ptr || size == 0) return;
-    
     memset(ptr, 0, size);
 }
 
 /**
- * @brief Fills a memory region with a specific byte value
+ * @brief Fills memory with a repeated byte value
  *
- * Wrapper around memset.
- * Does nothing if ptr is NULL or size == 0.
+ * @param ptr   Memory region to fill
+ * @param value Byte value (0–255)
+ * @param size  Number of bytes to set
  *
- * @param ptr    Memory block to fill
- * @param value  Byte value to fill with (0-255, values outside are masked)
- * @param size   Number of bytes to fill
- *
- * Example:
- *   mem_set(buffer, 0xFF, 100);  // Fill with 0xFF bytes
- *
- * Performance: O(size)
+ * @sa mem_zero()
  */
 static inline void mem_set(void* ptr, int value, size_t size) {
     if (!ptr || size == 0) return;
-    
     memset(ptr, value, size);
 }
 
 /**
- * @brief Compares two memory regions (like memcmp)
+ * @brief Compares two memory regions byte-by-byte
  *
- * Returns:
- *   - < 0 if a < b (first differing byte in a is less than in b)
- *   -   0 if equal (all bytes match)
- *   - > 0 if a > b (first differing byte in a is greater than in b)
+ * @return
+ *   - < 0 if a < b at first differing byte
+ *   -   0 if regions are equal
+ *   - > 0 if a > b at first differing byte
  *
- * Safe: returns 0 if any pointer is NULL or size == 0.
+ * @remark NULL pointers or size=0 → returns 0
+ * @remark Not constant-time — do **not** use for cryptographic secrets
  *
- * @param a    First memory region
- * @param b    Second memory region
- * @param size Number of bytes to compare
- *
- * Note: Comparison is done byte-by-byte as unsigned char.
- *       Not constant-time (vulnerable to timing attacks for secret data).
- *
- * Performance: O(size), optimized by compilers
+ * @sa mem_equal()
  */
 static inline int mem_compare(const void* a, const void* b, size_t size) {
-    if (!a || !b || size == 0) {
-        return 0;
-    }
-    
+    if (!a || !b || size == 0) return 0;
     return memcmp(a, b, size);
 }
 
 /**
- * @brief Checks if two memory regions are equal
+ * @brief Checks whether two memory regions are byte-for-byte identical
  *
- * More readable than mem_compare() == 0 for boolean checks.
+ * @return `true` if equal, `false` otherwise
  *
- * @param a    First memory region
- * @param b    Second memory region
- * @param size Number of bytes to compare
- * @return     true if all bytes match, false otherwise
+ * @remark Both NULL → true
+ * @remark size=0 → true
  *
- * Returns true (equal) if:
- * - Both pointers are NULL
- * - size is 0
- * - All bytes match
- *
- * Example:
- *   if (mem_equal(buffer1, buffer2, 256)) {
- *       // Buffers are identical
- *   }
+ * @sa mem_compare(), mem_equal_type()
  */
 static inline bool mem_equal(const void* a, const void* b, size_t size) {
-    if (!a || !b) {
-        return (a == b);  // Both NULL = equal, one NULL = not equal
-    }
-    
+    if (!a || !b) return a == b;
     if (size == 0) return true;
-    
     return memcmp(a, b, size) == 0;
 }
 
 /**
- * @brief Checks if a memory region contains only a specific byte value
+ * @brief Checks whether all bytes in a region have the same value
  *
- * Useful for verifying zero-initialization or detecting patterns.
- *
- * @param ptr   Memory region to check (NULL returns true)
- * @param value Byte value to check for (0-255)
+ * @param ptr   Memory region to inspect
+ * @param value Expected byte value
  * @param size  Number of bytes to check
- * @return      true if all bytes equal 'value', false otherwise
  *
- * Example:
- *   if (mem_is_all(buffer, 0, 1024)) {
- *       // Buffer is fully zeroed
- *   }
+ * @return `true` if every byte == value, `false` otherwise
  *
- * Performance: O(size)
+ * @remark NULL or size=0 → returns `true`
+ *
+ * @sa mem_is_zero()
  */
 static inline bool mem_is_all(const void* ptr, int value, size_t size) {
     if (!ptr || size == 0) return true;
-    
-    const unsigned char* bytes = (const unsigned char*)ptr;
-    const unsigned char byte_val = (unsigned char)value;
-    
+
+    const unsigned char* p = (const unsigned char*)ptr;
+    const unsigned char v = (unsigned char)value;
+
     for (size_t i = 0; i < size; i++) {
-        if (bytes[i] != byte_val) {
-            return false;
-        }
+        if (p[i] != v) return false;
     }
-    
     return true;
 }
 
 /**
- * @brief Checks if a memory region is all zeros
+ * @brief Convenience function: checks if region is entirely zero
  *
- * Convenience wrapper around mem_is_all(ptr, 0, size).
- *
- * @param ptr  Memory region to check (NULL returns true)
- * @param size Number of bytes to check
- * @return     true if all bytes are zero, false otherwise
+ * @sa mem_is_all()
  */
 static inline bool mem_is_zero(const void* ptr, size_t size) {
     return mem_is_all(ptr, 0, size);
 }
 
-/* ============================================================
-   Type-safe memory operations (macros)
-   ============================================================ */
+/* ────────────────────────────────────────────────────────────────────────────
+   Type-safe convenience macros
+   ──────────────────────────────────────────────────────────────────────────── */
 
-/**
- * @brief Zero-initializes a single object of any type
- *
- * Example: mem_zero_type(&my_struct);
- */
-#define mem_zero_type(ptr) \
-    mem_zero((ptr), sizeof(*(ptr)))
+/** Zero-initializes a single object */
+#define mem_zero_type(ptr)          mem_zero((ptr), sizeof(*(ptr)))
 
-/**
- * @brief Zero-initializes an array
- *
- * Example: int arr[100]; mem_zero_array(arr);
- */
-#define mem_zero_array(array) \
-    mem_zero((array), sizeof(array))
+/** Zero-initializes an entire array */
+#define mem_zero_array(array)       mem_zero((array), sizeof(array))
 
-/**
- * @brief Copies one object to another (same type)
- *
- * Example: mem_copy_type(&dest, &src);
- */
-#define mem_copy_type(dest, src) \
-    mem_copy((dest), (src), sizeof(*(dest)))
+/** Copies one object to another (same type) */
+#define mem_copy_type(dest, src)    mem_copy((dest), (src), sizeof(*(dest)))
 
-/**
- * @brief Compares two objects of the same type
- *
- * Example: if (mem_compare_type(&a, &b) == 0) { ... }
- */
-#define mem_compare_type(a, b) \
-    mem_compare((a), (b), sizeof(*(a)))
+/** Compares two objects of the same type */
+#define mem_compare_type(a, b)      mem_compare((a), (b), sizeof(*(a)))
 
-/**
- * @brief Checks if two objects of the same type are equal
- *
- * Example: if (mem_equal_type(&a, &b)) { ... }
- */
-#define mem_equal_type(a, b) \
-    mem_equal((a), (b), sizeof(*(a)))
+/** Checks if two objects of the same type are equal */
+#define mem_equal_type(a, b)        mem_equal((a), (b), sizeof(*(a)))
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Usage Examples (not compiled, for documentation only)
+   Usage Examples (documentation only)
    ────────────────────────────────────────────────────────────────────────────
 
-    #include "memory.h"
-    
-    void example(void) {
-        // Alignment helpers
-        size_t natural = mem_align(37);      // 40 on 64-bit
-        size_t custom  = mem_align_to(37, 16); // 48
-        
-        // Pointer alignment checks
-        void* ptr = malloc(100);
-        if (mem_is_aligned(ptr, 16)) {
-            // Can use SIMD operations
-        }
-        
-        // Safe memory operations
-        char buffer[256];
-        mem_zero(buffer, sizeof(buffer));
-        
-        struct Data { int x, y; } a, b;
-        mem_zero_type(&a);
-        mem_copy_type(&b, &a);
-        
-        if (mem_equal_type(&a, &b)) {
-            // Objects are identical
-        }
-        
-        // Verification
-        if (mem_is_zero(buffer, sizeof(buffer))) {
-            // Buffer is fully zeroed
-        }
+#include "core/memory.h"
+
+void example(void) {
+    // Alignment helpers
+    size_t pad = mem_align(45);               // → 48 (on 64-bit)
+    size_t pad16 = mem_align_to(45, 16);      // → 48
+
+    float f;
+    if (mem_is_aligned(&f, _Alignof(float))) {
+        // guaranteed by language — just demo
     }
 
-   ──────────────────────────────────────────────────────────────────────────── */
+    // Safe initialization
+    struct Packet { uint32_t len; char data[512]; } pkt;
+    mem_zero_type(&pkt);
+
+    // Safe copy
+    struct Packet copy;
+    mem_copy_type(&copy, &pkt);
+
+    // Pattern check
+    char buf[1024];
+    mem_set(buf, 0xAA, sizeof(buf));
+    if (mem_is_all(buf, 0xAA, sizeof(buf))) {
+        // yes
+    }
+
+    // Overlap-safe move
+    char overlap[32] = "1234567890";
+    mem_move(overlap + 4, overlap, 10);     // safe shift
+}
+
+──────────────────────────────────────────────────────────────────────────── */
 
 #endif /* CANON_CORE_MEMORY_H */
