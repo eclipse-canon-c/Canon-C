@@ -4,269 +4,174 @@
 
 /**
  * @file scope.h
- * @brief Deferred cleanup at scope exit – RAII-style pattern for pure C
+ * @brief RAII-style deferred cleanup for pure C using zero-overhead macros
  *
- * Provides macro-based automatic cleanup when leaving current block,
- * regardless of exit reason (return, break, continue, end of block, goto within scope).
+ * Provides automatic execution of cleanup code when leaving the current lexical scope,
+ * regardless of exit reason (normal end, return, break, continue, goto *within* scope).
+ *
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Zero runtime overhead: expands to nested for-loops optimized away by compiler
+ * - LIFO execution order: last declared defer runs first (stack-like unwinding)
+ * - Matches acquisition order: resources acquired first are released last
+ * - Works with return, break, continue, normal block end, goto inside block
+ * - No allocations, no function pointers, no vtables — pure macro expansion
+ * - Simple, readable syntax inspired by Go, Zig, Swift defer
+ *
+ * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Compile-time only: zero added instructions beyond the cleanup code itself
+ * - Compiler usually inlines and eliminates the for-loop structure
+ * - No indirection or dynamic dispatch
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Fully thread-safe — no shared state, each SCOPE_DEFER is local to its block
  *
  * Portability:
- *   - Requires C99 or later (for variable declarations in for-loop)
- *   - Works with all major compilers (GCC, Clang, MSVC)
- *   - No platform-specific code or extensions
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later (for loop variable declarations)
+ * - Compatible with GCC, Clang, MSVC, ICC, TCC, etc.
+ * - No compiler extensions required
+ * - No platform-specific code
  *
- * Thread-safety: Each scope is independent - no shared state
+ * Important limitations & semantics:
+ * ────────────────────────────────────────────────────────────────────────────
+ * | Exit method                        | Cleanup executed? | Notes                              |
+ * |------------------------------------|-------------------|------------------------------------|
+ * | Normal end of block                | Yes               |                                    |
+ * | return from function               | Yes               |                                    |
+ * | break / continue                   | Yes               | Only current loop/block            |
+ * | goto label **inside** block        | Yes               |                                    |
+ * | goto label **outside** block       | **No**            | Skips all defers — avoid!          |
+ * | longjmp / _longjmp out             | **No**            | Bypasses completely — avoid!       |
+ * | exit(), abort(), _Exit()           | **No**            | Process termination                |
  *
- * Performance: Zero runtime overhead - expands to simple for-loop at compile time
+ * Critical rules:
+ * - Never place break/continue/return/goto *inside* a SCOPE_DEFER block
+ * - Avoid goto that jumps *out* of the SCOPE_DEFER scope
+ * - Avoid longjmp across SCOPE_DEFER boundaries
+ * - Keep cleanup blocks extremely simple (free, fclose, unlock, reset_to…)
  *
- * =====================================================================
- *                          IMPORTANT SEMANTICS
- * =====================================================================
+ * Typical use cases:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - File / socket / handle cleanup
+ * - Memory allocation / arena checkpoint release
+ * - Mutex / lock / semaphore unlocking
+ * - Resource acquisition in error-prone code
+ * - Temporary allocations in parsers / serializers
+ * - Transaction-style scoped state changes
  *
- * 1. Execution order
- *    • Multiple SCOPE_DEFER statements in the same block are executed in **LIFO** order
- *      (Last declared → executed first – like stack unwinding in C++/Rust)
- *    • This matches intuition: cleanup happens in reverse order of acquisition
+ * NOT suitable for:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Code that must survive longjmp or abnormal termination
+ * - Cleanup that requires complex control flow inside defer block
+ * - Situations where goto jumps frequently escape scopes
+ * - Replacing proper exception / unwind mechanisms in very large codebases
  *
- * 2. When are defers executed?
- *
- *    ┌─────────────────────────────┬──────────────────────────────┐
- *    │ How the block is exited     │ Are deferred blocks run?     │
- *    ├─────────────────────────────┼──────────────────────────────┤
- *    │ Normal end of block         │ ✓ YES                        │
- *    │ return from function        │ ✓ YES                        │
- *    │ break / continue            │ ✓ YES (current block only)   │
- *    │ goto label **inside** block │ ✓ YES                        │
- *    │ goto label **outside** block│ ✗ NO (skips cleanup!)        │
- *    │ longjmp out of the block    │ ✗ NO (skips cleanup!)        │
- *    │ exit() / abort()            │ ✗ NO (process termination)   │
- *    └─────────────────────────────┴──────────────────────────────┘
- *
- *    → goto that jumps **out** of the current SCOPE block **skips** cleanup!
- *      This is fundamental C behavior (no mechanism to intercept it).
- *
- * 3. Critical warnings
- *
- *    ⚠️  Do NOT put break/continue/return/goto that jumps **outside** the block
- *        inside a SCOPE_DEFER cleanup block → undefined behavior
- *
- *    ⚠️  longjmp / setjmp will **bypass** deferred cleanups completely
- *        → If you must longjmp, call cleanup code manually before jump
- *
- *    ⚠️  Goto jumping out of scope skips cleanup - avoid or use explicit cleanup
- *
- *    ✓  Nested SCOPE_DEFER blocks work correctly (each level independent)
- *
- *    ✓  Multiple SCOPE_DEFER in same block work correctly (LIFO order)
- *
- * 4. Best practice recommendations
- *
- *    ✓  Keep cleanup blocks **very simple** (free, fclose, unlock, release...)
- *    ✓  Prefer **small, nested blocks** over huge functions with many defers
- *    ✓  For complex control flow → consider explicit cleanup labels + goto
- *    ✓  One resource per SCOPE_DEFER for clarity
- *    ✓  Always check for NULL before cleanup operations if needed
- *
- * 5. Implementation note
- *
- *    The macro expands to nested for-loops that execute the cleanup block
- *    exactly once when leaving scope. The compiler optimizes this away to
- *    have zero runtime overhead beyond the cleanup code itself.
- *
- * =====================================================================
- *                          Basic usage pattern
- * =====================================================================
- *
- *     FILE* f = fopen("data.txt", "r");
- *     if (!f) return ERROR_OPEN_FAILED;
- *
- *     SCOPE_DEFER {
- *         fclose(f);
- *     }
- *
- *     // ... safe usage of f here ...
- *     // File is guaranteed closed on any normal exit from this point
- *     // Works with: return, break, continue, end of block
- *
- * =====================================================================
- *                          Multiple cleanups (LIFO order)
- * =====================================================================
- *
- *     void* mem = malloc(4096);
- *     if (!mem) return ERROR_ALLOC;
- *
- *     FILE* log = fopen("log.txt", "a");
- *     if (!log) {
- *         free(mem);
- *         return ERROR_LOGFILE;
- *     }
- *
- *     SCOPE_DEFER { fclose(log); }     // Executed SECOND (last declared)
- *     SCOPE_DEFER { free(mem); }       // Executed FIRST (first declared)
- *
- *     // Both will be cleaned up automatically in reverse declaration order
- *     // This matches acquisition order: mem acquired first, freed last
- *
- * =====================================================================
- *                          Nested blocks
- * =====================================================================
- *
- *     {
- *         FILE* outer = fopen("outer.txt", "r");
- *         SCOPE_DEFER { fclose(outer); }
- *
- *         {
- *             FILE* inner = fopen("inner.txt", "r");
- *             SCOPE_DEFER { fclose(inner); }
- *
- *             // Both files open here
- *         }  // inner closed here
- *
- *         // Only outer still open here
- *     }  // outer closed here
- *
- * =====================================================================
- *                          Conditional cleanup
- * =====================================================================
- *
- *     void* ptr = malloc(1024);
- *     if (!ptr) return ERROR_ALLOC;
- *
- *     SCOPE_DEFER {
- *         if (ptr) {  // Safety check (optional but good practice)
- *             free(ptr);
- *         }
- *     }
- *
- * =====================================================================
- *                          Arena/pool pattern
- * =====================================================================
- *
- *     ArenaMark mark = arena_mark(&arena);
- *     SCOPE_DEFER {
- *         arena_reset_to(&arena, mark);
- *     }
- *
- *     // All arena allocations from this point are automatically freed
- *     void* temp1 = arena_alloc(&arena, 100);
- *     void* temp2 = arena_alloc(&arena, 200);
- *     // Both freed when scope exits
- *
- * =====================================================================
- *                          Mutex/lock pattern
- * =====================================================================
- *
- *     pthread_mutex_lock(&mutex);
- *     SCOPE_DEFER {
- *         pthread_mutex_unlock(&mutex);
- *     }
- *
- *     // Critical section protected - mutex always unlocked
- *     // even on early return or error conditions
- *
- * =====================================================================
- *                          Error handling pattern
- * =====================================================================
- *
- *     Result do_work(void) {
- *         Resource* r1 = acquire_resource();
- *         if (!r1) return ERR_RESOURCE;
- *         SCOPE_DEFER { release_resource(r1); }
- *
- *         Resource* r2 = acquire_resource();
- *         if (!r2) return ERR_RESOURCE;  // r1 automatically released
- *         SCOPE_DEFER { release_resource(r2); }
- *
- *         // Use both resources
- *         if (!process(r1, r2)) {
- *             return ERR_PROCESS;  // Both r1 and r2 automatically released
- *         }
- *
- *         return OK;  // Both resources still cleaned up
- *     }
- *
- * =====================================================================
- *                          ANTI-PATTERNS (DON'T DO THIS)
- * =====================================================================
- *
- *     // ❌ BAD: goto jumping out of scope
- *     {
- *         void* mem = malloc(100);
- *         SCOPE_DEFER { free(mem); }
- *         
- *         if (error) goto cleanup;  // SKIPS the SCOPE_DEFER!
- *     }
- *     cleanup:
- *         // mem was never freed - memory leak!
- *
- *     // ✓ GOOD: explicit cleanup before goto
- *     {
- *         void* mem = malloc(100);
- *         
- *         if (error) {
- *             free(mem);
- *             goto cleanup;
- *         }
- *         
- *         SCOPE_DEFER { free(mem); }
- *         // normal path cleanup
- *     }
- *
- *     // ❌ BAD: control flow inside defer
- *     SCOPE_DEFER {
- *         cleanup();
- *         return;  // DON'T DO THIS - undefined behavior
- *     }
- *
- *     // ✓ GOOD: simple cleanup only
- *     SCOPE_DEFER {
- *         cleanup();
- *     }
+ * @sa SCOPE_DEFER
  */
 
 /**
- * @brief Executes a block of code when leaving the current scope
+ * @def SCOPE_DEFER
+ * @brief Executes cleanup code automatically on scope exit
  *
- * The cleanup block is executed exactly once, regardless of how the scope
- * is exited (normal end, return, break, continue, or goto within scope).
+ * The cleanup block is guaranteed to run exactly once when control leaves
+ * the enclosing block — whether by reaching the end, returning, breaking,
+ * continuing, or jumping to a label inside the same block.
  *
- * Execution order: Multiple SCOPE_DEFER blocks execute in LIFO order
- * (reverse of declaration order).
+ * Multiple SCOPE_DEFER statements in the same block execute in **reverse**
+ * declaration order (LIFO — like stack unwinding).
  *
- * Implementation: Expands to nested for-loops with compile-time optimization.
- * Zero runtime overhead beyond the cleanup code itself.
+ * @remark Zero runtime cost — macro expands to nested for-loops that
+ *         modern compilers eliminate completely.
  *
- * Usage:
- *     SCOPE_DEFER {
- *         // cleanup code here
- *     }
+ * @remark The defer block must **not** contain:
+ *   - return
+ *   - break / continue that exits the defer itself
+ *   - goto that jumps out of the defer block
  *
- * Note: The cleanup block must not contain break, continue, return, or goto
- *       that exits the defer block itself.
+ * Basic pattern:
+ * ```c
+ * FILE* f = fopen("data.txt", "r");
+ * if (!f) return ERR_OPEN;
+ *
+ * SCOPE_DEFER {
+ *     if (f) fclose(f);
+ * }
+ *
+ * // use f safely — guaranteed closed on any normal exit
+ * ```
+ *
+ * Multiple resources (LIFO order):
+ * ```c
+ * void* mem = malloc(4096);
+ * if (!mem) return ERR_ALLOC;
+ *
+ * SCOPE_DEFER { free(mem); }           // runs first
+ *
+ * FILE* log = fopen("log.txt", "a");
+ * if (!log) return ERR_LOG;
+ *
+ * SCOPE_DEFER { if (log) fclose(log); } // runs second
+ *
+ * // both cleaned up automatically in reverse order
+ * ```
+ *
+ * Arena checkpoint example:
+ * ```c
+ * ArenaMark mark = arena_mark(&arena);
+ * SCOPE_DEFER {
+ *     arena_reset_to(&arena, mark);
+ * }
+ *
+ * // all allocations from here are auto-freed on scope exit
+ * ```
+ *
+ * Lock guard pattern:
+ * ```c
+ * pthread_mutex_lock(&mtx);
+ * SCOPE_DEFER { pthread_mutex_unlock(&mtx); }
+ *
+ * // critical section — mutex always released
+ * ```
+ *
+ * @note Avoid combining with goto that jumps **outside** the current block —
+ *       such jumps bypass all SCOPE_DEFER statements in that block.
+ *
+ * @note longjmp / setjmp will also bypass deferred cleanups completely.
+ *       If longjmp is required, perform cleanup manually before jumping.
+ *
+ * @see defer (optional alias)
  */
-#define SCOPE_DEFER \
+#define SCOPE_DEFER  \
     for (int _scope_once = 1; _scope_once; _scope_once = 0) \
         for (; _scope_once; ) \
             for (int _scope_done = 0; !_scope_done; _scope_done = 1, _scope_once = 0)
 
 /**
- * @brief Shorter alias for SCOPE_DEFER
+ * @def defer
+ * @brief Optional short alias for SCOPE_DEFER
  *
- * Many developers prefer the shorter name for readability.
- * Functionally identical to SCOPE_DEFER.
+ * Many developers prefer this shorter, Go/Zig-like name.
+ *
+ * To enable:
+ * ```c
+ * #define defer SCOPE_DEFER
+ * ```
  *
  * Usage:
- *     defer {
- *         // cleanup code here
- *     }
- *
- * Uncomment the following line to enable this alias:
+ * ```c
+ * defer { free(ptr); }
+ * ```
  */
-// #define defer SCOPE_DEFER
+#ifdef WANT_DEFER_ALIAS
+#define defer SCOPE_DEFER
+#endif
 
 /**
- * @brief Alternative spelling for those who prefer it
- *
- * Uncomment to enable:
+ * @def DEFER
+ * @brief Alternative uppercase alias (uncomment to enable)
  */
 // #define DEFER SCOPE_DEFER
 
@@ -274,70 +179,50 @@
    Comparison with other languages
    ────────────────────────────────────────────────────────────────────────────
 
-   Go:
-       defer file.Close()
-   
-   Rust:
-       // (automatic via Drop trait)
-   
-   C++:
-       // (automatic via RAII destructors)
-   
-   Zig:
-       defer file.close();
-   
-   Swift:
-       defer { file.close() }
-   
-   C (this library):
-       SCOPE_DEFER { fclose(file); }
+   Language | Syntax                              | Notes
+   ---------|-------------------------------------|--------------------------------------
+   Go       | defer file.Close()                  | Built-in, LIFO, simple
+   Zig      | defer file.close();                 | Compile-time, very similar
+   Swift    | defer { file.close() }              | Very close syntax
+   Rust     | (via Drop trait)                    | Automatic, type-based
+   C++      | (via RAII destructors)              | Most powerful, but requires classes
+   C        | SCOPE_DEFER { fclose(file); }       | Macro-based, zero-cost, pure C
 
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Advanced Example: Complete Resource Management
+   Complete realistic example
    ────────────────────────────────────────────────────────────────────────────
 
-    typedef struct {
-        FILE* file;
-        void* buffer;
-        pthread_mutex_t* lock;
-    } Context;
-    
-    Result process_file(const char* path) {
-        Context ctx = {0};
-        
-        // Acquire file
-        ctx.file = fopen(path, "r");
-        if (!ctx.file) return ERR_FILE;
-        SCOPE_DEFER { 
-            if (ctx.file) fclose(ctx.file); 
-        }
-        
-        // Acquire buffer
-        ctx.buffer = malloc(BUFFER_SIZE);
-        if (!ctx.buffer) return ERR_MEMORY;
-        SCOPE_DEFER { 
-            if (ctx.buffer) free(ctx.buffer); 
-        }
-        
-        // Acquire lock
-        if (pthread_mutex_lock(&global_lock) != 0) return ERR_LOCK;
-        ctx.lock = &global_lock;
-        SCOPE_DEFER { 
-            if (ctx.lock) pthread_mutex_unlock(ctx.lock); 
-        }
-        
-        // All resources acquired - do work
-        Result result = do_processing(&ctx);
-        
-        // All resources automatically cleaned up in reverse order:
-        // 1. Unlock mutex
-        // 2. Free buffer
-        // 3. Close file
-        
-        return result;
+Result process_config(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f) return ERR_FILE_OPEN;
+
+    SCOPE_DEFER {
+        if (f) fclose(f);
     }
+
+    char* buffer = malloc(8192);
+    if (!buffer) return ERR_ALLOC;
+
+    SCOPE_DEFER {
+        free(buffer);
+    }
+
+    // Read file into buffer safely
+    size_t n = fread(buffer, 1, 8192, f);
+    if (n == 0 && ferror(f)) return ERR_READ;
+
+    ArenaMark mark = arena_mark(&scratch_arena);
+    SCOPE_DEFER {
+        arena_reset_to(&scratch_arena, mark);
+    }
+
+    // Parse using temporary arena allocations
+    Config cfg = parse_config(buffer, n, &scratch_arena);
+
+    return validate_and_apply(&cfg);
+}
 
    ──────────────────────────────────────────────────────────────────────────── */
 
