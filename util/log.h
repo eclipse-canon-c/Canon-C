@@ -155,7 +155,7 @@ static inline result_bool_constcharp log_vfmt_to(
     if (fputs(prefix, stream) == EOF)
         return RESULT_ERR(bool, "failed to write log prefix");
 
-    if (vfprintf(stream, fmt, args) < 0)
+    if ((int)vfprintf(stream, fmt, args) < 0)
         return RESULT_ERR(bool, "failed to format/write message");
 
     if (fputc('\n', stream) == EOF)
@@ -202,8 +202,10 @@ static inline result_bool_constcharp log_to(
     const char* msg
 ) {
     if (!msg) return RESULT_ERR(bool, "null message");
+    if (!stream) return RESULT_ERR(bool, "null output stream");
     return log_fmt_to(stream, level, "%s", msg);
 }
+
 
 /**
  * @brief Formatted logging to default stream (stdout/stderr)
@@ -242,9 +244,9 @@ static inline result_bool_constcharp log_msg(
 #define LOG_WARN(msg)        (void)log_msg(LOG_WARN,  (msg))
 #define LOG_ERROR(msg)       (void)log_msg(LOG_ERROR, (msg))
 
-#define LOG_INFO_FMT(...)    (void)log_fmt(LOG_INFO,  __VA_ARGS__)
-#define LOG_WARN_FMT(...)    (void)log_fmt(LOG_WARN,  __VA_ARGS__)
-#define LOG_ERROR_FMT(...)   (void)log_fmt(LOG_ERROR, __VA_ARGS__)
+#define LOG_INFO_FMT(...)    (void)log_fmt(LOG_INFO,  (__VA_ARGS__))
+#define LOG_WARN_FMT(...)    (void)log_fmt(LOG_WARN,  (__VA_ARGS__))
+#define LOG_ERROR_FMT(...)   (void)log_fmt(LOG_ERROR, (__VA_ARGS__))
 
 /* ────────────────────────────────────────────────────────────────────────────
    Usage Examples (documentation only)
@@ -262,7 +264,7 @@ void example_basic(void) {
 
 // 2. Critical log — must succeed
 result_bool_constcharp audit_log(const char* user, const char* action) {
-    result_bool_constcharp res = LOG_ERROR_FMT("AUDIT: %s performed %s", user, action);
+    result_bool_constcharp res = log_fmt(LOG_ERROR, "AUDIT: %s performed %s", user, action);
     if (result_is_err(res)) {
         fprintf(stderr, "CRITICAL: Audit log failed: %s\n", result_unwrap_err(res));
         abort();
