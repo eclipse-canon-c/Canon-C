@@ -427,6 +427,7 @@ static inline result_int64_t_Error parse_int64(
     const char** endptr
 ) {
     if (!s || !*s) {
+        if (endptr) *endptr = s;
         return RESULT_ERR(int64_t, ERR_PARSE_FAILED);
     }
 
@@ -519,6 +520,13 @@ static inline result_uint64_t_Error parse_uint64(
     const char** endptr
 ) {
     if (!s || !*s) {
+        if (endptr) *endptr = s;
+        return RESULT_ERR(uint64_t, ERR_PARSE_FAILED);
+    }
+
+    // Fix: reject negative numbers
+    if (*s == '-') {
+        if (endptr) *endptr = s;
         return RESULT_ERR(uint64_t, ERR_PARSE_FAILED);
     }
 
@@ -527,6 +535,7 @@ static inline result_uint64_t_Error parse_uint64(
     uint64_t val = strtoull(s, &eptr, 0);
 
     if (eptr == s || errno == ERANGE) {
+        if (endptr) *endptr = s;
         return RESULT_ERR(uint64_t, ERR_PARSE_FAILED);
     }
 
@@ -684,6 +693,7 @@ static inline result_double_Error parse_double(
     // Only fail if no conversion was performed
     // Note: overflow/underflow still return Ok with ±HUGE_VAL or ±0
     if (eptr == s) {
+        if (endptr) *endptr = s;
         return RESULT_ERR(double, ERR_PARSE_FAILED);
     }
 
