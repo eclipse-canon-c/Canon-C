@@ -108,17 +108,17 @@
  * @brief printf-style formatted logging at INFO level (fire-and-forget)
  * @param ... Format string + arguments
  */
-#define LOG_INFO_FMT(...)   (void)log_fmt(LOG_INFO,   __VA_ARGS__)
+#define LOG_INFO_FMT(...)   (void)log_fmt(LOG_INFO,   (__VA_ARGS__))
 
 /**
  * @brief printf-style formatted logging at WARN level (fire-and-forget)
  */
-#define LOG_WARN_FMT(...)   (void)log_fmt(LOG_WARN,   __VA_ARGS__)
+#define LOG_WARN_FMT(...)   (void)log_fmt(LOG_WARN,   (__VA_ARGS__))
 
 /**
  * @brief printf-style formatted logging at ERROR level (fire-and-forget)
  */
-#define LOG_ERROR_FMT(...)  (void)log_fmt(LOG_ERROR,  __VA_ARGS__)
+#define LOG_ERROR_FMT(...)  (void)log_fmt(LOG_ERROR,  (__VA_ARGS__))
 
 /* ────────────────────────────────────────────────────────────────────────────
    Checked variants — development safety net
@@ -134,28 +134,28 @@
 
     #define LOG_INFO_CHECKED(...)   \
         do { \
-            result_bool_constcharp _r = log_fmt(LOG_INFO, __VA_ARGS__); \
-            if (result_is_err(_r)) { \
+            result_bool_constcharp __r_log = log_fmt(LOG_INFO, (__VA_ARGS__)); \
+            if (result_is_err(__r_log)) { \
                 fprintf(stderr, "[LOG-FAIL] INFO failed: %s\n", \
-                        result_unwrap_err(_r)); \
+                        result_unwrap_err(__r_log)); \
             } \
         } while (0)
 
     #define LOG_WARN_CHECKED(...)   \
         do { \
-            result_bool_constcharp _r = log_fmt(LOG_WARN, __VA_ARGS__); \
-            if (result_is_err(_r)) { \
+            result_bool_constcharp __r_log = log_fmt(LOG_WARN, (__VA_ARGS__)); \
+            if (result_is_err(__r_log)) { \
                 fprintf(stderr, "[LOG-FAIL] WARN failed: %s\n", \
-                        result_unwrap_err(_r)); \
+                        result_unwrap_err(__r_log)); \
             } \
         } while (0)
 
     #define LOG_ERROR_CHECKED(...)  \
         do { \
-            result_bool_constcharp _r = log_fmt(LOG_ERROR, __VA_ARGS__); \
-            if (result_is_err(_r)) { \
+            result_bool_constcharp __r_log = log_fmt(LOG_ERROR, (__VA_ARGS__)); \
+            if (result_is_err(__r_log)) { \
                 fprintf(stderr, "[LOG-FAIL] ERROR failed: %s\n", \
-                        result_unwrap_err(_r)); \
+                        result_unwrap_err(__r_log)); \
             } \
         } while (0)
 
