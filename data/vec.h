@@ -6,84 +6,52 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include "core/memory.h"
 #include "core/arena.h"
+#include "data/range.h"
+#include "data/stringbuf.h"
 #include "semantics/result.h"
+#include "semantics/error.h"
 
 /**
  * @file vec.h
- * @brief Fixed-capacity dynamic vector with **explicit caller-owned buffer** and optional heap/allocation support
+ * @brief Bounded dynamic vectors with explicit caller-owned buffer
  *
  * Canon-C vector is a **bounded**, **type-safe**, **explicit ownership** container.
- * It provides predictable memory behavior, composable error handling, and explicit lifetime control.
+ * Supports:
+ *  - Stack, heap, or arena-backed buffers
+ *  - Typed vectors via macro
+ *  - Generic `void*` vector
+ *  - Iterators, slices, and range integration
+ *  - Optional writing to `stringbuf`
  *
- * Features:
- *  - Stack, heap, or arena-backed buffer
- *  - Capacity fixed at initialization
- *  - All operations bounds-checked, returning Result for error handling
- *  - Optional explicit heap allocation via vec_alloc / vec_free
- *  - Iterators for safe, intention-revealing loops
- *  - Slice/subvector support for non-copy views
- *
- * Portability: Requires C99 or later
- * Thread-safety: Each vector instance independent; caller must synchronize for concurrent access
+ * Design Principles:
+ *  - Caller owns the buffer (stack, heap, arena, static)
+ *  - Fixed capacity (no automatic growth)
+ *  - Bounds-checked operations returning Result<T, Error>
+ *  - Deterministic memory and performance
  *
  * Performance & Memory:
- *  - Push/Pop: O(1)
- *  - Insert/Remove: O(n)
- *  - Extend: O(k) where k = number of elements being copied
- *  - Memory: contiguous buffer, no hidden allocations
- *
- * Key Design Principles:
- *  - Caller owns the buffer (stack, heap, arena, or static)
- *  - Capacity fixed at initialization (no automatic growth)
- *  - All operations bounds-checked by default
- *  - Push/pop/insert operations return Result → composable error handling
- *  - No hidden state, no global variables, fully deterministic
- *
- * Use Canon-C vector when:
- *  ✓ Predictable memory behavior
- *  ✓ Explicit ownership semantics
- *  ✓ Deterministic performance
- *  ✓ Error handling via Result
- *
- * Do NOT use when:
- *  ✗ Automatic resizing or amortized growth is required
- *  ✗ You want implicit memory management
- *
- * Typical patterns:
- *
- *   // 1. Stack allocated - zero heap allocation
- *   int numbers_buf[512];
- *   vec_int numbers = vec_int_init(numbers_buf, 512);
- *
- *   // 2. Arena allocated - explicit lifetime
- *   int* arena_buf = arena_alloc_array(&arena, int, 1024);
- *   vec_int large = vec_int_init(arena_buf, 1024);
- *
- *   // 3. Heap allocated - explicit ownership
- *   vec_int heap_vec = vec_int_alloc(1000);
- *   vec_int_free(&heap_vec);
- *
- *   // 4. Check capacity before bulk operations
- *   if (vec_int_remaining(&v) < items_to_add) {
- *       return result_bool_constcharptr_err("not enough capacity");
- *   }
+ *  - Push/Pop: O(1), memory: +sizeof(T) per element
+ *  - Insert/Remove: O(n), memory: no extra allocations
+ *  - Extend: O(k), memory: contiguous buffer usage for k elements
+ *  - Iterators: O(1) per step
+ *  - Slice/Subvector: O(1), no copy
  */
 
 /* ────────────────────────────────────────────────────────────────
    Result type for vector operations
    ──────────────────────────────────────────────────────────────── */
-typedef const char* constcharptr;
-CANON_C_DEFINE_RESULT(bool, constcharptr)
+CANON_C_DEFINE_RESULT(bool, Error)
 
 /* ────────────────────────────────────────────────────────────────
-   Generic void* vector (internal)
+   Generic void* vector
    ──────────────────────────────────────────────────────────────── */
 typedef struct {
     void** items;   ///< Caller-owned buffer
     size_t len;     ///< Current number of elements
-    size_t capacity;///< Maximum number of elements
+    size_t capacity;///< Maximum elements
 } vec_voidptr;
 
 static inline vec_voidptr vec_voidptr_init(void** buffer, size_t capacity) {
@@ -111,223 +79,98 @@ static inline void* vec_voidptr_get_unchecked(const vec_voidptr* v, size_t i) {
     return v->items[i];
 }
 
-static inline result_bool_constcharptr vec_voidptr_push(vec_voidptr* v, void* item) {
-    if (!v || !v->items) return result_bool_constcharptr_err("vec_push: null vector or buffer");
-    if (v->len >= v->capacity) return result_bool_constcharptr_err("vec_push: capacity exceeded");
+static inline result_bool_Error vec_voidptr_push(vec_voidptr* v, void* item) {
+    if (!v || !v->items) return result_bool_Error_err(ERR_INVALID_ARG);
+    if (v->len >= v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED);
     v->items[v->len++] = item;
-    return result_bool_constcharptr_ok(true);
+    return result_bool_Error_ok(true);
 }
 
-static inline result_bool_constcharptr vec_voidptr_pop(vec_voidptr* v, void** out) {
-    if (!v || !out || !v->items) return result_bool_constcharptr_err("vec_pop: null vector or buffer");
-    if (v->len == 0) return result_bool_constcharptr_err("vec_pop: empty vector");
+static inline result_bool_Error vec_voidptr_pop(vec_voidptr* v, void** out) {
+    if (!v || !out || !v->items) return result_bool_Error_err(ERR_INVALID_ARG);
+    if (v->len == 0) return result_bool_Error_err(ERR_INVALID_STATE);
     *out = v->items[--v->len];
-    return result_bool_constcharptr_ok(true);
+    return result_bool_Error_ok(true);
 }
 
 static inline void vec_voidptr_clear(vec_voidptr* v) { if (v) v->len = 0; }
-static inline void** vec_voidptr_first(const vec_voidptr* v) { return (v && v->len > 0) ? &v->items[0] : NULL; }
-static inline void** vec_voidptr_last(const vec_voidptr* v) { return (v && v->len > 0) ? &v->items[v->len - 1] : NULL; }
+static inline void** vec_voidptr_first(const vec_voidptr* v) { return (v && v->len>0)? &v->items[0]:NULL; }
+static inline void** vec_voidptr_last(const vec_voidptr* v) { return (v && v->len>0)? &v->items[v->len-1]:NULL; }
+
+/* Heap allocation */
+static inline vec_voidptr vec_voidptr_alloc(size_t capacity) {
+    if (capacity == 0) return vec_voidptr_empty();
+    void** buf = (void**)malloc(capacity * sizeof(void*));
+    if (!buf) return vec_voidptr_empty();
+    return vec_voidptr_init(buf, capacity);
+}
+
+static inline void vec_voidptr_free(vec_voidptr* v) {
+    if (v && v->items) { free(v->items); v->items=NULL; v->len=0; v->capacity=0; }
+}
+
+/* Arena allocation */
+static inline vec_voidptr vec_voidptr_arena_alloc(Arena* arena, size_t capacity) {
+    if (!arena || capacity==0) return vec_voidptr_empty();
+    void** buf = arena_alloc_array(arena, void*, capacity);
+    return vec_voidptr_init(buf, capacity);
+}
+
+/* Iterators */
+typedef struct { vec_voidptr* vec; size_t index; } vec_voidptr_iter;
+static inline vec_voidptr_iter vec_voidptr_iter_init(vec_voidptr* v) { return (vec_voidptr_iter){ .vec=v, .index=0 }; }
+static inline bool vec_voidptr_iter_next(vec_voidptr_iter* it, void** out) {
+    if (!it||!it->vec||!out) return false;
+    if (it->index >= it->vec->len) return false;
+    *out = it->vec->items[it->index++];
+    return true;
+}
+
+/* Slice */
+typedef struct { void** items; size_t len; } vec_voidptr_slice;
+static inline vec_voidptr_slice vec_voidptr_slice_init(vec_voidptr* v, size_t start, size_t end) {
+    vec_voidptr_slice s = {0};
+    if (!v || start>end || end>v->len) return s;
+    s.items = &v->items[start];
+    s.len = end-start;
+    return s;
+}
+static inline void** vec_voidptr_slice_get(const vec_voidptr_slice* s, size_t i) { assert(s && i<s->len); return &s->items[i]; }
 
 /* ────────────────────────────────────────────────────────────────
    Typed vector macro
    ──────────────────────────────────────────────────────────────── */
 #define DEFINE_VEC(type) \
-typedef struct { \
-    type* items; \
-    size_t len; \
-    size_t capacity; \
-} vec_##type; \
-\
-/** Initialize vector with caller-provided buffer */ \
-static inline vec_##type vec_##type##_init(type* buffer, size_t capacity) { \
-    assert(buffer != NULL || capacity == 0); \
-    assert(capacity <= SIZE_MAX / sizeof(type)); \
-    return (vec_##type){ .items = buffer, .len = 0, .capacity = capacity }; \
-} \
-\
-/** Create empty vector (no storage) */ \
-static inline vec_##type vec_##type##_empty(void) { return (vec_##type){0}; } \
-\
-/* Basic queries */ \
-static inline bool vec_##type##_is_empty(const vec_##type* v) { return !v || v->len == 0; } \
-static inline bool vec_##type##_is_full(const vec_##type* v) { return v && v->len >= v->capacity; } \
-static inline size_t vec_##type##_len(const vec_##type* v) { return v ? v->len : 0; } \
-static inline size_t vec_##type##_capacity(const vec_##type* v) { return v ? v->capacity : 0; } \
-static inline size_t vec_##type##_remaining(const vec_##type* v) { return v ? (v->capacity - v->len) : 0; } \
-\
-/* Element access */ \
-static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out) { \
-    if (!v || !out || i >= v->len) return false; \
-    *out = v->items[i]; \
-    return true; \
-} \
-static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i) { \
-    assert(v && v->items && i < v->len); \
-    return v->items[i]; \
-} \
-static inline bool vec_##type##_set(vec_##type* v, size_t i, type val) { \
-    if (!v || i >= v->len) return false; \
-    v->items[i] = val; \
-    return true; \
-} \
-\
-/* Push / Pop */ \
-static inline result_bool_constcharptr vec_##type##_push(vec_##type* v, type item) { \
-    if (!v || !v->items) return result_bool_constcharptr_err("vec_push: null vector or buffer"); \
-    if (v->len >= v->capacity) return result_bool_constcharptr_err("vec_push: capacity exceeded"); \
-    v->items[v->len++] = item; \
-    return result_bool_constcharptr_ok(true); \
-} \
-static inline result_bool_constcharptr vec_##type##_pop(vec_##type* v, type* out) { \
-    if (!v || !out || !v->items) return result_bool_constcharptr_err("vec_pop: null vector or buffer"); \
-    if (v->len == 0) return result_bool_constcharptr_err("vec_pop: empty vector"); \
-    *out = v->items[--v->len]; \
-    return result_bool_constcharptr_ok(true); \
-} \
-\
-/* Clear */ \
-static inline void vec_##type##_clear(vec_##type* v) { if (v) v->len = 0; } \
-\
-/* First / Last / Data */ \
-static inline type* vec_##type##_first(const vec_##type* v) { return (v && v->len > 0) ? &v->items[0] : NULL; } \
-static inline type* vec_##type##_last(const vec_##type* v) { return (v && v->len > 0) ? &v->items[v->len - 1] : NULL; } \
-static inline type* vec_##type##_data(const vec_##type* v) { return v ? v->items : NULL; } \
-\
-/* Insert / Remove / Extend */ \
-static inline result_bool_constcharptr vec_##type##_insert(vec_##type* v, size_t index, type item) { \
-    if (!v || !v->items) return result_bool_constcharptr_err("vec_insert: null vector or buffer"); \
-    if (index > v->len) return result_bool_constcharptr_err("vec_insert: index out of bounds"); \
-    if (v->len >= v->capacity) return result_bool_constcharptr_err("vec_insert: capacity exceeded"); \
-    for (size_t i = v->len; i > index; i--) v->items[i] = v->items[i-1]; \
-    v->items[index] = item; \
-    v->len++; \
-    return result_bool_constcharptr_ok(true); \
-} \
-static inline result_bool_constcharptr vec_##type##_remove(vec_##type* v, size_t index, type* out) { \
-    if (!v || !v->items || !out) return result_bool_constcharptr_err("vec_remove: null vector or buffer"); \
-    if (v->len == 0) return result_bool_constcharptr_err("vec_remove: empty vector"); \
-    if (index >= v->len) return result_bool_constcharptr_err("vec_remove: index out of bounds"); \
-    *out = v->items[index]; \
-    for (size_t i = index; i < v->len-1; i++) v->items[i] = v->items[i+1]; \
-    v->len--; \
-    return result_bool_constcharptr_ok(true); \
-} \
-static inline result_bool_constcharptr vec_##type##_extend(vec_##type* v, const type* src, size_t count) { \
-    if (!v || !v->items || !src) return result_bool_constcharptr_err("vec_extend: null vector or buffer"); \
-    if (v->len + count > v->capacity) return result_bool_constcharptr_err("vec_extend: capacity exceeded"); \
-    for (size_t i = 0; i < count; i++) v->items[v->len+i] = src[i]; \
-    v->len += count; \
-    return result_bool_constcharptr_ok(true); \
-} \
-\
-/* ────────────────────────────────────────────────────────────────
-   Phase 1 Enhancement: Heap-backed allocation
-   ──────────────────────────────────────────────────────────────── */ \
-static inline vec_##type vec_##type##_alloc(size_t capacity) { \
-    if (capacity == 0) return vec_##type##_empty(); \
-    type* buf = (type*)malloc(capacity * sizeof(type)); \
-    if (!buf) return vec_##type##_empty(); \
-    return vec_##type##_init(buf, capacity); \
-} \
-static inline void vec_##type##_free(vec_##type* v) { \
-    if (v && v->items) { \
-        free(v->items); \
-        v->items = NULL; \
-        v->len = 0; \
-        v->capacity = 0; \
-    } \
-} \
-\
-/* ────────────────────────────────────────────────────────────────
-   Phase 1 Enhancement: Arena-backed allocation
-   ──────────────────────────────────────────────────────────────── */ \
-static inline vec_##type vec_##type##_arena_alloc(Arena* arena, size_t capacity) { \
-    if (!arena || capacity == 0) return vec_##type##_empty(); \
-    type* buf = arena_alloc_array(arena, type, capacity); \
-    return vec_##type##_init(buf, capacity); \
-} \
-\
-/* ────────────────────────────────────────────────────────────────
-   Phase 1 Enhancement: Iterator / Range support
-   ──────────────────────────────────────────────────────────────── */ \
-typedef struct { \
-    vec_##type* vec; \
-    size_t index; \
-} vec_##type##_iter; \
-static inline vec_##type##_iter vec_##type##_iter_init(vec_##type* v) { return (vec_##type##_iter){ .vec = v, .index = 0 }; } \
-static inline bool vec_##type##_iter_next(vec_##type##_iter* it, type* out) { \
-    if (!it || !it->vec || !out) return false; \
-    if (it->index >= it->vec->len) return false; \
-    *out = it->vec->items[it->index++]; \
-    return true; \
-} \
-\
-/* ────────────────────────────────────────────────────────────────
-   Phase 1 Enhancement: Slice / Subvector views
-   ──────────────────────────────────────────────────────────────── */ \
-typedef struct { \
-    type* items; \
-    size_t len; \
-} vec_##type##_slice; \
-static inline vec_##type##_slice vec_##type##_slice_init(vec_##type* v, size_t start, size_t end) { \
-    vec_##type##_slice s = {0}; \
-    if (!v || start > end || end > v->len) return s; \
-    s.items = &v->items[start]; \
-    s.len = end - start; \
-    return s; \
-} \
-static inline type* vec_##type##_slice_get(const vec_##type##_slice* s, size_t i) { \
-    assert(s && i < s->len); \
-    return &s->items[i]; \
-}
-
-/* ────────────────────────────────────────────────────────────────
-   Examples
-   ──────────────────────────────────────────────────────────────── */
-/*
-#include "vec.h"
-
-DEFINE_VEC(int)
-
-void example_basic(void) {
-    // Stack-allocated
-    int buf[10];
-    vec_int v = vec_int_init(buf, 10);
-
-    vec_int_push(&v, 1);
-    vec_int_push(&v, 2);
-
-    int val;
-    if (vec_int_pop(&v, &val) == result_bool_constcharptr_ok(true)) {
-        printf("Popped: %d\n", val);
-    }
-
-    // Iterator
-    vec_int_iter it = vec_int_iter_init(&v);
-    while (vec_int_iter_next(&it, &val)) {
-        printf("%d ", val);
-    }
-    printf("\n");
-
-    // Slice
-    vec_int_slice s = vec_int_slice_init(&v, 0, vec_int_len(&v));
-    for (size_t i = 0; i < s.len; i++) {
-        printf("%d ", *vec_int_slice_get(&s, i));
-    }
-    printf("\n");
-}
-
-void example_heap(void) {
-    vec_int v = vec_int_alloc(5);
-    vec_int_push(&v, 10);
-    vec_int_free(&v);
-}
-
-void example_arena(Arena* arena) {
-    vec_int v = vec_int_arena_alloc(arena, 10);
-    vec_int_push(&v, 42);
-}
-*/
+typedef struct { type* items; size_t len; size_t capacity; } vec_##type; \
+static inline vec_##type vec_##type##_init(type* buffer, size_t capacity){ assert(buffer||capacity==0); return (vec_##type){buffer,0,capacity}; } \
+static inline vec_##type vec_##type##_empty(void){ return (vec_##type){0}; } \
+static inline bool vec_##type##_is_empty(const vec_##type* v){ return !v||v->len==0; } \
+static inline bool vec_##type##_is_full(const vec_##type* v){ return v&&v->len>=v->capacity; } \
+static inline size_t vec_##type##_len(const vec_##type* v){ return v?v->len:0; } \
+static inline size_t vec_##type##_capacity(const vec_##type* v){ return v?v->capacity:0; } \
+static inline size_t vec_##type##_remaining(const vec_##type* v){ return v?(v->capacity-v->len):0; } \
+static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out){ if(!v||!out||i>=v->len)return false; *out=v->items[i]; return true; } \
+static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i){ assert(v&&v->items&&i<v->len); return v->items[i]; } \
+static inline bool vec_##type##_set(vec_##type* v, size_t i, type val){ if(!v||i>=v->len)return false; v->items[i]=val; return true; } \
+static inline result_bool_Error vec_##type##_push(vec_##type* v, type item){ if(!v||!v->items) return result_bool_Error_err(ERR_INVALID_ARG); if(v->len>=v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); v->items[v->len++]=item; return result_bool_Error_ok(true); } \
+static inline result_bool_Error vec_##type##_pop(vec_##type* v, type* out){ if(!v||!out||!v->items) return result_bool_Error_err(ERR_INVALID_ARG); if(v->len==0) return result_bool_Error_err(ERR_INVALID_STATE); *out=v->items[--v->len]; return result_bool_Error_ok(true); } \
+static inline void vec_##type##_clear(vec_##type* v){ if(v)v->len=0; } \
+static inline type* vec_##type##_first(const vec_##type* v){ return (v&&v->len>0)?&v->items[0]:NULL; } \
+static inline type* vec_##type##_last(const vec_##type* v){ return (v&&v->len>0)?&v->items[v->len-1]:NULL; } \
+static inline type* vec_##type##_data(const vec_##type* v){ return v?v->items:NULL; } \
+static inline result_bool_Error vec_##type##_insert(vec_##type* v, size_t i, type item){ if(!v||!v->items)return result_bool_Error_err(ERR_INVALID_ARG); if(i>v->len)return result_bool_Error_err(ERR_OUT_OF_RANGE); if(v->len>=v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); for(size_t j=v->len;j>i;j--)v->items[j]=v->items[j-1]; v->items[i]=item; v->len++; return result_bool_Error_ok(true); } \
+static inline result_bool_Error vec_##type##_remove(vec_##type* v, size_t i, type* out){ if(!v||!v->items||!out)return result_bool_Error_err(ERR_INVALID_ARG); if(v->len==0)return result_bool_Error_err(ERR_INVALID_STATE); if(i>=v->len)return result_bool_Error_err(ERR_OUT_OF_RANGE); *out=v->items[i]; for(size_t j=i;j<v->len-1;j++) v->items[j]=v->items[j+1]; v->len--; return result_bool_Error_ok(true); } \
+static inline result_bool_Error vec_##type##_extend(vec_##type* v,const type* src,size_t count){ if(!v||!v->items||!src)return result_bool_Error_err(ERR_INVALID_ARG); if(v->len+count>v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); for(size_t j=0;j<count;j++)v->items[v->len+j]=src[j]; v->len+=count; return result_bool_Error_ok(true); } \
+static inline vec_##type vec_##type##_alloc(size_t capacity){ if(capacity==0)return vec_##type##_empty(); type* buf=(type*)malloc(capacity*sizeof(type)); if(!buf)return vec_##type##_empty(); return vec_##type##_init(buf,capacity); } \
+static inline void vec_##type##_free(vec_##type* v){ if(v&&v->items){ free(v->items); v->items=NULL; v->len=0; v->capacity=0; } } \
+static inline vec_##type vec_##type##_arena_alloc(Arena* arena,size_t capacity){ if(!arena||capacity==0)return vec_##type##_empty(); type* buf=arena_alloc_array(arena,type,capacity); return vec_##type##_init(buf,capacity); } \
+typedef struct{ vec_##type* vec; size_t index; } vec_##type##_iter; \
+static inline vec_##type##_iter vec_##type##_iter_init(vec_##type* v){ return (vec_##type##_iter){.vec=v,.index=0}; } \
+static inline bool vec_##type##_iter_next(vec_##type##_iter* it, type* out){ if(!it||!it->vec||!out)return false; if(it->index>=it->vec->len)return false; *out=it->vec->items[it->index++]; return true; } \
+typedef struct{ type* items; size_t len; } vec_##type##_slice; \
+static inline vec_##type##_slice vec_##type##_slice_init(vec_##type* v, size_t start, size_t end){ vec_##type##_slice s={0}; if(!v||start>end||end>v->len)return s; s.items=&v->items[start]; s.len=end-start; return s; } \
+static inline type* vec_##type##_slice_get(const vec_##type##_slice* s,size_t i){ assert(s&&i<s->len); return &s->items[i]; } \
+static inline result_bool_Error vec_##type##_extend_from_range(vec_##type* v, IntRange r){ size_t count=(r.end>r.start)?(r.end-r.start):0; if(v->len+count>v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); for(size_t i=0;i<count;i++)v->items[v->len+i]=r.start+i; v->len+=count; return result_bool_Error_ok(true); } \
+static inline void vec_##type##_to_stringbuf(const vec_##type* v, StringBuf* sb, const char* fmt){ for(size_t i=0;i<v->len;i++){ stringbuf_printf(sb,fmt,v->items[i]); } }
 
 #endif /* CANON_DATA_VEC_H */
