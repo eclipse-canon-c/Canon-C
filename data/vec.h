@@ -9,22 +9,26 @@
 #include <string.h>
 #include "core/memory.h"
 #include "core/arena.h"
+#include "core/scope.h"
 #include "data/range.h"
 #include "data/stringbuf.h"
 #include "semantics/result.h"
 #include "semantics/error.h"
+#include "semantics/option.h"
 
 /**
  * @file vec.h
  * @brief Bounded dynamic vectors with explicit caller-owned buffer
  *
  * Canon-C vector is a **bounded**, **type-safe**, **explicit ownership** container.
+ *
  * Supports:
  *  - Stack, heap, or arena-backed buffers
  *  - Typed vectors via macro
  *  - Generic `void*` vector
  *  - Iterators, slices, and range integration
  *  - Optional writing to `stringbuf`
+ *  - Optional safe access via `Option<T>`
  *
  * Design Principles:
  *  - Caller owns the buffer (stack, heap, arena, static)
@@ -38,6 +42,10 @@
  *  - Extend: O(k), memory: contiguous buffer usage for k elements
  *  - Iterators: O(1) per step
  *  - Slice/Subvector: O(1), no copy
+ *  - Generic `void*` vector: +sizeof(void*) per element
+ *  - Typed vectors: +sizeof(T) per element
+ *  - Heap allocation: +capacity*sizeof(T)
+ *  - Arena allocation: +capacity*sizeof(T) via arena
  */
 
 /* ────────────────────────────────────────────────────────────────
@@ -56,7 +64,6 @@ typedef struct {
 
 static inline vec_voidptr vec_voidptr_init(void** buffer, size_t capacity) {
     assert(buffer != NULL || capacity == 0);
-    assert(capacity <= SIZE_MAX / sizeof(void*));
     return (vec_voidptr){ .items = buffer, .len = 0, .capacity = capacity };
 }
 
@@ -72,6 +79,11 @@ static inline bool vec_voidptr_get(const vec_voidptr* v, size_t i, void** out) {
     if (!v || !out || i >= v->len) return false;
     *out = v->items[i];
     return true;
+}
+
+static inline Option_voidptr vec_voidptr_get_option(const vec_voidptr* v, size_t i) {
+    if (!v || i >= v->len) return option_none_voidptr();
+    return option_some_voidptr(v->items[i]);
 }
 
 static inline void* vec_voidptr_get_unchecked(const vec_voidptr* v, size_t i) {
@@ -150,6 +162,7 @@ static inline size_t vec_##type##_len(const vec_##type* v){ return v?v->len:0; }
 static inline size_t vec_##type##_capacity(const vec_##type* v){ return v?v->capacity:0; } \
 static inline size_t vec_##type##_remaining(const vec_##type* v){ return v?(v->capacity-v->len):0; } \
 static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out){ if(!v||!out||i>=v->len)return false; *out=v->items[i]; return true; } \
+static inline Option_##type vec_##type##_get_option(const vec_##type* v, size_t i){ if(!v||i>=v->len)return option_none_##type(); return option_some_##type(v->items[i]); } \
 static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i){ assert(v&&v->items&&i<v->len); return v->items[i]; } \
 static inline bool vec_##type##_set(vec_##type* v, size_t i, type val){ if(!v||i>=v->len)return false; v->items[i]=val; return true; } \
 static inline result_bool_Error vec_##type##_push(vec_##type* v, type item){ if(!v||!v->items) return result_bool_Error_err(ERR_INVALID_ARG); if(v->len>=v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); v->items[v->len++]=item; return result_bool_Error_ok(true); } \
