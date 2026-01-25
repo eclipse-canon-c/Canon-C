@@ -105,6 +105,12 @@ static inline result_bool_Error vec_voidptr_pop(vec_voidptr* v, void** out) {
     return result_bool_Error_ok(true);
 }
 
+static inline Option_voidptr vec_voidptr_pop_option(vec_voidptr* v) {
+    void* out;
+    if (vec_voidptr_pop(v, &out) == RESULT_OK(bool)) return option_some_voidptr(out);
+    return option_none_voidptr();
+}
+
 static inline void vec_voidptr_clear(vec_voidptr* v) { if (v) v->len = 0; }
 static inline void** vec_voidptr_first(const vec_voidptr* v) { return (v && v->len>0)? &v->items[0]:NULL; }
 static inline void** vec_voidptr_last(const vec_voidptr* v) { return (v && v->len>0)? &v->items[v->len-1]:NULL; }
@@ -125,6 +131,7 @@ static inline void vec_voidptr_free(vec_voidptr* v) {
 static inline vec_voidptr vec_voidptr_arena_alloc(Arena* arena, size_t capacity) {
     if (!arena || capacity==0) return vec_voidptr_empty();
     void** buf = arena_alloc_array(arena, void*, capacity);
+    if (!buf) return vec_voidptr_empty();
     return vec_voidptr_init(buf, capacity);
 }
 
@@ -150,7 +157,7 @@ static inline vec_voidptr_slice vec_voidptr_slice_init(vec_voidptr* v, size_t st
 static inline void** vec_voidptr_slice_get(const vec_voidptr_slice* s, size_t i) { assert(s && i<s->len); return &s->items[i]; }
 
 /* ────────────────────────────────────────────────────────────────
-   Typed vector macro
+   Typed vector macro with enhancements
    ──────────────────────────────────────────────────────────────── */
 #define DEFINE_VEC(type) \
 typedef struct { type* items; size_t len; size_t capacity; } vec_##type; \
@@ -164,26 +171,37 @@ static inline size_t vec_##type##_remaining(const vec_##type* v){ return v?(v->c
 static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out){ if(!v||!out||i>=v->len)return false; *out=v->items[i]; return true; } \
 static inline Option_##type vec_##type##_get_option(const vec_##type* v, size_t i){ if(!v||i>=v->len)return option_none_##type(); return option_some_##type(v->items[i]); } \
 static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i){ assert(v&&v->items&&i<v->len); return v->items[i]; } \
+static inline type* vec_##type##_at(const vec_##type* v, size_t i){ assert(v&&i<v->len); return &v->items[i]; } \
 static inline bool vec_##type##_set(vec_##type* v, size_t i, type val){ if(!v||i>=v->len)return false; v->items[i]=val; return true; } \
 static inline result_bool_Error vec_##type##_push(vec_##type* v, type item){ if(!v||!v->items) return result_bool_Error_err(ERR_INVALID_ARG); if(v->len>=v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); v->items[v->len++]=item; return result_bool_Error_ok(true); } \
 static inline result_bool_Error vec_##type##_pop(vec_##type* v, type* out){ if(!v||!out||!v->items) return result_bool_Error_err(ERR_INVALID_ARG); if(v->len==0) return result_bool_Error_err(ERR_INVALID_STATE); *out=v->items[--v->len]; return result_bool_Error_ok(true); } \
+static inline Option_##type vec_##type##_pop_option(vec_##type* v){ type out; if(vec_##type##_pop(v,&out)==RESULT_OK(bool)) return option_some_##type(out); return option_none_##type(); } \
 static inline void vec_##type##_clear(vec_##type* v){ if(v)v->len=0; } \
 static inline type* vec_##type##_first(const vec_##type* v){ return (v&&v->len>0)?&v->items[0]:NULL; } \
 static inline type* vec_##type##_last(const vec_##type* v){ return (v&&v->len>0)?&v->items[v->len-1]:NULL; } \
 static inline type* vec_##type##_data(const vec_##type* v){ return v?v->items:NULL; } \
 static inline result_bool_Error vec_##type##_insert(vec_##type* v, size_t i, type item){ if(!v||!v->items)return result_bool_Error_err(ERR_INVALID_ARG); if(i>v->len)return result_bool_Error_err(ERR_OUT_OF_RANGE); if(v->len>=v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); for(size_t j=v->len;j>i;j--)v->items[j]=v->items[j-1]; v->items[i]=item; v->len++; return result_bool_Error_ok(true); } \
 static inline result_bool_Error vec_##type##_remove(vec_##type* v, size_t i, type* out){ if(!v||!v->items||!out)return result_bool_Error_err(ERR_INVALID_ARG); if(v->len==0)return result_bool_Error_err(ERR_INVALID_STATE); if(i>=v->len)return result_bool_Error_err(ERR_OUT_OF_RANGE); *out=v->items[i]; for(size_t j=i;j<v->len-1;j++) v->items[j]=v->items[j+1]; v->len--; return result_bool_Error_ok(true); } \
+static inline Option_##type vec_##type##_remove_option(vec_##type* v, size_t i){ type out; if(vec_##type##_remove(v,i,&out)==RESULT_OK(bool)) return option_some_##type(out); return option_none_##type(); } \
 static inline result_bool_Error vec_##type##_extend(vec_##type* v,const type* src,size_t count){ if(!v||!v->items||!src)return result_bool_Error_err(ERR_INVALID_ARG); if(v->len+count>v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); for(size_t j=0;j<count;j++)v->items[v->len+j]=src[j]; v->len+=count; return result_bool_Error_ok(true); } \
 static inline vec_##type vec_##type##_alloc(size_t capacity){ if(capacity==0)return vec_##type##_empty(); type* buf=(type*)malloc(capacity*sizeof(type)); if(!buf)return vec_##type##_empty(); return vec_##type##_init(buf,capacity); } \
 static inline void vec_##type##_free(vec_##type* v){ if(v&&v->items){ free(v->items); v->items=NULL; v->len=0; v->capacity=0; } } \
-static inline vec_##type vec_##type##_arena_alloc(Arena* arena,size_t capacity){ if(!arena||capacity==0)return vec_##type##_empty(); type* buf=arena_alloc_array(arena,type,capacity); return vec_##type##_init(buf,capacity); } \
+static inline vec_##type vec_##type##_arena_alloc(Arena* arena,size_t capacity){ if(!arena||capacity==0)return vec_##type##_empty(); type* buf=arena_alloc_array(arena,type,capacity); if(!buf) return vec_##type##_empty(); return vec_##type##_init(buf,capacity); } \
 typedef struct{ vec_##type* vec; size_t index; } vec_##type##_iter; \
 static inline vec_##type##_iter vec_##type##_iter_init(vec_##type* v){ return (vec_##type##_iter){.vec=v,.index=0}; } \
 static inline bool vec_##type##_iter_next(vec_##type##_iter* it, type* out){ if(!it||!it->vec||!out)return false; if(it->index>=it->vec->len)return false; *out=it->vec->items[it->index++]; return true; } \
 typedef struct{ type* items; size_t len; } vec_##type##_slice; \
 static inline vec_##type##_slice vec_##type##_slice_init(vec_##type* v, size_t start, size_t end){ vec_##type##_slice s={0}; if(!v||start>end||end>v->len)return s; s.items=&v->items[start]; s.len=end-start; return s; } \
 static inline type* vec_##type##_slice_get(const vec_##type##_slice* s,size_t i){ assert(s&&i<s->len); return &s->items[i]; } \
-static inline result_bool_Error vec_##type##_extend_from_range(vec_##type* v, IntRange r){ size_t count=(r.end>r.start)?(r.end-r.start):0; if(v->len+count>v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); for(size_t i=0;i<count;i++)v->items[v->len+i]=r.start+i; v->len+=count; return result_bool_Error_ok(true); } \
-static inline void vec_##type##_to_stringbuf(const vec_##type* v, StringBuf* sb, const char* fmt){ for(size_t i=0;i<v->len;i++){ stringbuf_printf(sb,fmt,v->items[i]); } }
+static inline result_bool_Error vec_##type##_extend_from_range(vec_##type* v, IntRange r){ \
+    size_t step=(r.end>=r.start)?1:-1; \
+    size_t count=(r.end>=r.start)?(r.end-r.start):(r.start-r.end); \
+    if(v->len+count>v->capacity)return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    for(size_t i=0;i<count;i++) v->items[v->len+i]=r.start+i*step; \
+    v->len+=count; \
+    return result_bool_Error_ok(true); \
+} \
+static inline void vec_##type##_to_stringbuf(const vec_##type* v, StringBuf* sb, const char* fmt){ for(size_t i=0;i<v->len;i++){ stringbuf_printf(sb,fmt,v->items[i]); } } \
+static inline void vec_##type##_to_stringbuf_cb(const vec_##type* v, StringBuf* sb, void(*cb)(StringBuf*,type)){ for(size_t i=0;i<v->len;i++) cb(sb,v->items[i]); }
 
 #endif /* CANON_DATA_VEC_H */
