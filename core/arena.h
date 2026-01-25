@@ -375,17 +375,22 @@ static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
 
 /**
  * @brief Allocate and zero one object (portable version)
- * @warning Evaluates (arena) twice — avoid side effects!
+ * @remark Fixed: evaluates arena only once
  */
 #define arena_alloc_type_zero(arena, Type) \
-    ((Type*)memset(arena_alloc_type((arena), Type), 0, sizeof(Type)))
+    ({ void* _tmp = arena_alloc_type((arena), Type); \
+       if (_tmp) memset(_tmp, 0, sizeof(Type)); \
+       (Type*)_tmp; })
 
 /**
  * @brief Allocate and zero count objects (portable version)
- * @warning Evaluates (arena) and (count) twice — avoid side effects!
+ * @remark Fixed: evaluates arena and count only once
  */
 #define arena_alloc_array_zero(arena, Type, count) \
-    ((Type*)memset(arena_alloc_array((arena), Type, (count)), 0, sizeof(Type)*(count)))
+    ({ size_t _count = (count); \
+       void* _tmp = arena_alloc_array((arena), Type, _count); \
+       if (_tmp) memset(_tmp, 0, sizeof(Type)*_count); \
+       (Type*)_tmp; })
 
 #endif
 
