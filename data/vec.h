@@ -58,7 +58,6 @@
  * - All core functionality works in strict C99
  * - No dynamic dispatch or vtables
  * - Standard struct layout and alignment rules
- * - Tested on: GCC 4.9+, Clang 3.9+, MSVC 2015+, TinyCC
  *
  * Thread-Safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -99,7 +98,7 @@
  *
  * Typical Use Cases:
  * ────────────────────────────────────────────────────────────────────────────
- * - Dynamic arrays with predictable memory usage
+ * - Arrays with predictable memory usage
  * - Hot-path data structures in games, real-time systems, embedded
  * - Temporary collections during parsing/processing
  * - Stack-based buffers for small, known-size collections
