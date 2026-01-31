@@ -84,7 +84,8 @@ Abstractions must clarify behavior, not conceal it.
 ### data/convenience/
 - `dynvec.h` — auto-growing vector (unlimited capacity, hidden allocations)
 - `smallvec.h` — inline-first vector with one-time spill (stack-optimized)
-
+- `dynstring.h` — auto-growing string builder (hidden allocation)
+  
 ### semantics/
 - `option.h` — explicit presence/absence of a value (with combinators)
 - `result.h` — explicit success/failure with value or error (with combinators)
