@@ -201,8 +201,8 @@ static inline void stack_##Type##_init(stack_##Type* s, Type* buffer, size_t cap
  *   } \
  */ \
 static inline bool stack_##Type##_push(stack_##Type* s, Type item) { \
-    result_bool_constcharptr r = vec_##Type##_push(s, item); \
-    return result_bool_constcharptr_is_ok(r); \
+    result_bool_Error r = vec_##Type##_push(s, item); \
+    return result_bool_Error_is_ok(r); \
 } \
 \
 /** \
@@ -230,8 +230,8 @@ static inline bool stack_##Type##_push(stack_##Type* s, Type item) { \
  *   } \
  */ \
 static inline bool stack_##Type##_pop(stack_##Type* s, Type* out) { \
-    result_bool_constcharptr r = vec_##Type##_pop(s, out); \
-    return result_bool_constcharptr_is_ok(r); \
+    result_bool_Error r = vec_##Type##_pop(s, out); \
+    return result_bool_Error_is_ok(r); \
 } \
 \
 /** \
