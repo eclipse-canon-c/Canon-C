@@ -57,6 +57,11 @@
  *  - Concurrent reads safe if no thread modifying
  *  - Concurrent modifications require external synchronization
  *  - Iterator invalidation: modifications invalidate all iterators
+ *
+ * Note on capacity:
+ *  - vec.h is FIXED CAPACITY - no automatic growth
+ *  - For auto-growing vectors, use data/convenience/dynvec.h
+ *  - For inline-first with one spill, use data/convenience/smallvec.h
  */
 
 /* ────────────────────────────────────────────────────────────────
@@ -449,7 +454,10 @@ static inline result_bool_Error vec_voidptr_append_array(
 /* Heap allocation */
 
 /**
- * @brief Allocates vector on heap
+ * @brief Allocates vector on heap with fixed capacity
+ *
+ * ⚠️ Capacity is fixed - no automatic growth
+ * ⚠️ For auto-growing vectors, use data/convenience/dynvec.h
  *
  * @param capacity Maximum elements
  * @return Initialized vector or empty on failure
@@ -464,34 +472,6 @@ static inline vec_voidptr vec_voidptr_alloc(size_t capacity) {
     if (!buf) return vec_voidptr_empty();
     return vec_voidptr_init(buf, capacity);
 }
-
-#ifndef VEC_NO_GROWTH
-/**
- * @brief Reserves capacity
- *
- * ⚠️ Only for heap-allocated vectors!
- *
- * @param v            Vector to reserve
- * @param new_capacity Desired capacity
- * @return Ok(true) on success, Err on failure
- *
- * Performance:
- * - Time: O(n) if reallocation needed
- * - Space: O(new_capacity)
- */
-static inline result_bool_Error vec_voidptr_reserve(
-    vec_voidptr* v, size_t new_capacity) {
-    if (!v) return result_bool_Error_err(ERR_INVALID_ARG);
-    if (new_capacity <= v->capacity) return result_bool_Error_ok(true);
-    
-    void** new_buf = (void**)realloc(v->items, new_capacity * sizeof(void*));
-    if (!new_buf) return result_bool_Error_err(ERR_OUT_OF_MEMORY);
-    
-    v->items = new_buf;
-    v->capacity = new_capacity;
-    return result_bool_Error_ok(true);
-}
-#endif
 
 /**
  * @brief Frees heap-allocated vector
@@ -517,7 +497,9 @@ static inline void vec_voidptr_free(vec_voidptr* v) {
 /* Arena allocation */
 
 /**
- * @brief Allocates vector from arena
+ * @brief Allocates vector from arena with fixed capacity
+ *
+ * ⚠️ Capacity is fixed - no growth possible with arena
  *
  * @param arena Arena to allocate from
  * @param capacity Maximum elements
@@ -650,7 +632,7 @@ static inline void** vec_voidptr_slice_get(const vec_voidptr_slice* s, size_t i)
  * - Insertion/Removal: vec_##type##_insert, vec_##type##_remove, vec_##type##_remove_option
  * - Bulk: vec_##type##_append_array, vec_##type##_extend, vec_##type##_fill
  * - Pointers: vec_##type##_first, vec_##type##_last, vec_##type##_data
- * - Utility: vec_##type##_swap, vec_##type##_free, vec_##type##_reserve
+ * - Utility: vec_##type##_swap, vec_##type##_free
  * - Iteration: vec_##type##_iter_init, vec_##type##_iter_next
  * - Slicing: vec_##type##_slice_init, vec_##type##_slice_get
  * - Range: vec_##type##_extend_from_range
@@ -852,16 +834,6 @@ static inline void vec_##type##_free(vec_##type* v) { \
         v->len = 0; \
         v->capacity = 0; \
     } \
-} \
-\
-static inline result_bool_Error vec_##type##_reserve(vec_##type* v, size_t new_capacity) { \
-    if (!v) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (new_capacity <= v->capacity) return result_bool_Error_ok(true); \
-    type* new_buf = (type*)realloc(v->items, new_capacity * sizeof(type)); \
-    if (!new_buf) return result_bool_Error_err(ERR_OUT_OF_MEMORY); \
-    v->items = new_buf; \
-    v->capacity = new_capacity; \
-    return result_bool_Error_ok(true); \
 } \
 \
 static inline vec_##type vec_##type##_arena_alloc(Arena* arena, size_t capacity) { \
