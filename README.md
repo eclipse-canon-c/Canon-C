@@ -74,12 +74,16 @@ Abstractions must clarify behavior, not conceal it.
 - `scope.h` — RAII-style deferred cleanup macros
 
 ### data/
-- `vec.h` — bounded dynamic vector (caller-owned buffer)
+- `vec.h` — bounded dynamic vector (caller-owned buffer, fixed capacity)
+- `deque.h` — bounded double-ended queue (ring buffer, fixed capacity)
+- `queue.h` — FIFO queue wrapper (fixed capacity)
+- `stack.h` — LIFO stack wrapper (fixed capacity)
 - `range.h` — explicit integer range generator (ascending/descending, signed support)
-- `stringbuf.h` — incremental string builder (arena- or buffer-backed)
-- `deque.h` — bounded double-ended queue (ring buffer)
-- `queue.h` — FIFO queue wrapper
-- `stack.h` — LIFO stack wrapper
+- `stringbuf.h` — incremental string builder (arena- or buffer-backed, fixed capacity)
+
+### data/convenience/
+- `dynvec.h` — auto-growing vector (unlimited capacity, hidden allocations)
+- `smallvec.h` — inline-first vector with one-time spill (stack-optimized)
 
 ### semantics/
 - `option.h` — explicit presence/absence of a value (with combinators)
@@ -107,6 +111,12 @@ Abstractions must clarify behavior, not conceal it.
 - `time.h` — high-resolution stopwatch (monotonic timing)
 - `random.h` — fast, explicit PRNG (PCG32, no global state)
 
+---
+
+**Note:** Modules in `*/convenience/` subdirectories trade explicitness for ergonomics.
+Core modules prioritize determinism and explicit control; convenience modules prioritize
+ease of use and may include hidden allocations or automatic growth. Choose based on your
+constraints: use core for production/embedded/real-time, convenience for prototyping.
 
 All modules are **header-only** and require no runtime or build system integration.
 
