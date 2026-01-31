@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <assert.h>
+#include "semantics/result.h"
+#include "semantics/error.h"
 #include "vec.h"
 
 /**
@@ -16,7 +18,7 @@
  *
  * Portability:
  *   - Requires C99 or later (for inline functions, stdbool.h)
- *   - Depends on vec.h from this library
+ *   - Depends on vec.h, result.h, error.h from this library
  *   - No platform-specific code
  *
  * Thread-safety: Each stack instance is independent - not thread-safe for
@@ -45,8 +47,8 @@
  *   - Deterministic performance
  *
  * If you need a stack that grows automatically:
- *   → You must implement it yourself (e.g. using realloc + doubling strategy)
- *   → Or use a different container / external library
+ *   → Use data/convenience/dynvec.h as backing storage
+ *   → Or implement your own wrapper with growth strategy
  *
  *                           Key Properties
  * ──────────────────────────────────────────────────────────────────────────────
