@@ -144,3 +144,34 @@ All modules are **header-only** and require no runtime or build system integrati
 
 This project does not compete with languages.  
 It avoids them.
+
+---
+
+## Semantic Layers
+
+Modules are organized by **semantic depth**, not by feature count. Lower layers
+define unavoidable mechanics; higher layers build meaning on top of them.
+
+
+core/ — memory, lifetime, scope
+
+semantics/ — meaning (option, result)
+
+data/ — data shapes (vec, slice, range)
+
+algo/ — transformations (map, filter, fold)
+
+util/ — optional helpers
+
+
+
+### Dependency Rule (Strict)
+
+core → semantics → data → algo → util
+
+
+- Lower (lowest is core here) layers may be used by higher (highest is util here) layers.  
+- Upward or circular dependencies are strictly forbidden.  
+- Each module must be independently usable.  
+
+This rule ensures **explicitness** and prevents hidden behaviors or fragile dependencies.
