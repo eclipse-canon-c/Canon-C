@@ -1,4 +1,3 @@
-// core/scope.h
 #ifndef CANON_CORE_SCOPE_H
 #define CANON_CORE_SCOPE_H
 
@@ -36,22 +35,23 @@
  * - No platform-specific code
  *
  * Important limitations & semantics:
- * ────────────────────────────────────────────────────────────────────────────
- * | Exit method                        | Cleanup executed? | Notes                              |
- * |------------------------------------|-------------------|------------------------------------|
- * | Normal end of block                | Yes               |                                    |
- * | return from function               | Yes               |                                    |
- * | break / continue                   | Yes               | Only current loop/block            |
- * | goto label **inside** block        | Yes               |                                    |
- * | goto label **outside** block       | **No**            | Skips all defers — avoid!          |
- * | longjmp / _longjmp out             | **No**            | Bypasses completely — avoid!       |
- * | exit(), abort(), _Exit()           | **No**            | Process termination                |
+ * ──────────────────────────────────────────────────────────────────────────────
+ * | Exit method                          | Cleanup executed? | Notes                                      |
+ * |--------------------------------------|-------------------|--------------------------------------------|
+ * | Normal end of block                  | Yes               |                                            |
+ * | return from function                 | Yes               |                                            |
+ * | break / continue                     | Yes               | Only current loop/block                    |
+ * | goto label **inside** block          | Yes               |                                            |
+ * | goto label **outside** block         | **No**            | Skips all defers — avoid!                  |
+ * | longjmp / _longjmp out               | **No**            | Bypasses completely — avoid!               |
+ * | exit(), abort(), _Exit()             | **No**            | Process termination                        |
  *
  * Critical rules:
  * - Never place break/continue/return/goto *inside* a SCOPE_DEFER block
  * - Avoid goto that jumps *out* of the SCOPE_DEFER scope
  * - Avoid longjmp across SCOPE_DEFER boundaries
  * - Keep cleanup blocks extremely simple (free, fclose, unlock, reset_to…)
+ * - SCOPE_DEFER can be safely nested in loops/conditionals
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -84,12 +84,12 @@
  * declaration order (LIFO — like stack unwinding).
  *
  * @remark Zero runtime cost — macro expands to nested for-loops that
- *         modern compilers eliminate completely.
+ * modern compilers eliminate completely (especially with -O2 or higher).
  *
  * @remark The defer block must **not** contain:
- *   - return
- *   - break / continue that exits the defer itself
- *   - goto that jumps out of the defer block
+ * - return
+ * - break / continue that exits the defer itself
+ * - goto that jumps out of the defer block
  *
  * Basic pattern:
  * ```c
@@ -108,7 +108,7 @@
  * void* mem = malloc(4096);
  * if (!mem) return ERR_ALLOC;
  *
- * SCOPE_DEFER { free(mem); }           // runs first
+ * SCOPE_DEFER { free(mem); } // runs first
  *
  * FILE* log = fopen("log.txt", "a");
  * if (!log) return ERR_LOG;
@@ -137,35 +137,31 @@
  * ```
  *
  * @note Avoid combining with goto that jumps **outside** the current block —
- *       such jumps bypass all SCOPE_DEFER statements in that block.
+ * such jumps bypass all SCOPE_DEFER statements in that block.
  *
  * @note longjmp / setjmp will also bypass deferred cleanups completely.
- *       If longjmp is required, perform cleanup manually before jumping.
+ * If longjmp is required, perform cleanup manually before jumping.
  *
- * @see defer (optional alias)
+ * @see defer (recommended short alias)
  */
-#define SCOPE_DEFER  \
+#define SCOPE_DEFER \
     for (int _scope_once = 1; _scope_once; _scope_once = 0) \
         for (; _scope_once; ) \
             for (int _scope_done = 0; !_scope_done; _scope_done = 1, _scope_once = 0)
 
 /**
  * @def defer
- * @brief Optional short alias for SCOPE_DEFER
+ * @brief Recommended short alias for SCOPE_DEFER
  *
  * Many developers prefer this shorter, Go/Zig-like name.
- *
- * To enable:
- * ```c
- * #define defer SCOPE_DEFER
- * ```
+ * Enabled by default — disable with #define CANON_NO_DEFER_ALIAS
  *
  * Usage:
  * ```c
  * defer { free(ptr); }
  * ```
  */
-#ifdef WANT_DEFER_ALIAS
+#ifndef CANON_NO_DEFER_ALIAS
 #define defer SCOPE_DEFER
 #endif
 
@@ -178,34 +174,29 @@
 /* ────────────────────────────────────────────────────────────────────────────
    Comparison with other languages
    ────────────────────────────────────────────────────────────────────────────
-
-   Language | Syntax                              | Notes
-   ---------|-------------------------------------|--------------------------------------
-   Go       | defer file.Close()                  | Built-in, LIFO, simple
-   Zig      | defer file.close();                 | Compile-time, very similar
-   Swift    | defer { file.close() }              | Very close syntax
-   Rust     | (via Drop trait)                    | Automatic, type-based
-   C++      | (via RAII destructors)              | Most powerful, but requires classes
-   C        | SCOPE_DEFER { fclose(file); }       | Macro-based, zero-cost, pure C
-
+   Language | Syntax                       | Notes
+   ---------|--------------------------------|--------------------------------------
+   Go       | defer file.Close()            | Built-in, LIFO, simple
+   Zig      | defer file.close();           | Compile-time, very similar
+   Swift    | defer { file.close() }        | Very close syntax
+   Rust     | (via Drop trait)              | Automatic, type-based
+   C++      | (via RAII destructors)        | Most powerful, but requires classes
+   C        | defer { fclose(file); }       | Macro-based, zero-cost, pure C
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* ────────────────────────────────────────────────────────────────────────────
    Complete realistic example
    ────────────────────────────────────────────────────────────────────────────
-
 Result process_config(const char* path) {
     FILE* f = fopen(path, "r");
     if (!f) return ERR_FILE_OPEN;
-
-    SCOPE_DEFER {
+    defer {
         if (f) fclose(f);
     }
 
     char* buffer = malloc(8192);
     if (!buffer) return ERR_ALLOC;
-
-    SCOPE_DEFER {
+    defer {
         free(buffer);
     }
 
@@ -214,16 +205,14 @@ Result process_config(const char* path) {
     if (n == 0 && ferror(f)) return ERR_READ;
 
     ArenaMark mark = arena_mark(&scratch_arena);
-    SCOPE_DEFER {
+    defer {
         arena_reset_to(&scratch_arena, mark);
     }
 
     // Parse using temporary arena allocations
     Config cfg = parse_config(buffer, n, &scratch_arena);
-
     return validate_and_apply(&cfg);
 }
-
    ──────────────────────────────────────────────────────────────────────────── */
 
 #endif /* CANON_CORE_SCOPE_H */
