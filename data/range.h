@@ -7,6 +7,8 @@
 #include <limits.h>
 #include <assert.h>
 
+#include "semantics/option.h"
+
 /**
  * @file range.h
  * @brief Explicit, bounded integer range generator (iterator-style)
@@ -93,6 +95,7 @@
  *     printf("%d ", i);
  * }
  */
+
 /**
  * @brief Integer range iterator
  *
@@ -112,9 +115,9 @@
  * Do not modify fields directly during iteration - use range_next() instead.
  */
 typedef struct {
-    ptrdiff_t current;  ///< Next value to be returned by range_next()
-    ptrdiff_t end;      ///< Exclusive bound (iteration stops when current reaches/crosses this)
-    ptrdiff_t step;     ///< Step size (positive = ascending, negative = descending)
+    ptrdiff_t current; ///< Next value to be returned by range_next()
+    ptrdiff_t end;     ///< Exclusive bound (iteration stops when current reaches/crosses this)
+    ptrdiff_t step;    ///< Step size (positive = ascending, negative = descending)
 } range;
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -149,11 +152,10 @@ static inline range range_make(ptrdiff_t start, ptrdiff_t end, ptrdiff_t step) {
     if (step == 0) {
         step = 1;
     }
-
     return (range){
         .current = start,
-        .end     = end,
-        .step    = step
+        .end = end,
+        .step = step
     };
 }
 
@@ -238,13 +240,11 @@ static inline range range_downto(ptrdiff_t start, ptrdiff_t end) {
  */
 static inline bool range_is_empty(const range* r) {
     if (!r) return true;
-
     if (r->step > 0) {
         return r->current >= r->end;
     } else if (r->step < 0) {
         return r->current <= r->end;
     }
-
     return true; // step == 0 should not happen due to normalization
 }
 
@@ -287,25 +287,19 @@ static inline size_t range_len(const range* r) {
     if (!r || range_is_empty(r)) {
         return 0;
     }
-
     ptrdiff_t diff;
     ptrdiff_t abs_step = r->step > 0 ? r->step : -r->step;
-
     if (r->step > 0) {
         diff = r->end - r->current;
     } else {
         diff = r->current - r->end;
     }
-
     if (diff <= 0) {
         return 0;
     }
-
-    // If diff is too large for size_t division
     if (diff > (ptrdiff_t)SIZE_MAX) {
         return SIZE_MAX;
     }
-
     return (size_t)((diff - 1) / abs_step + 1);
 }
 
@@ -336,7 +330,6 @@ static inline bool range_peek(const range* r, ptrdiff_t* out) {
     if (!r || !out || range_is_empty(r)) {
         return false;
     }
-
     *out = r->current;
     return true;
 }
@@ -396,13 +389,10 @@ static inline bool range_is_valid(const range* r) {
 static inline ptrdiff_t range_next(range* r) {
     assert(r != NULL && "range_next: range cannot be NULL");
     assert(range_has_next(r) && "range_next: called on empty range");
-
     if (!r || !range_has_next(r)) {
         return 0; // Safety fallback
     }
-
     ptrdiff_t value = r->current;
-
     // Advance with overflow/underflow protection
     if (r->step > 0) {
         if (r->current > PTRDIFF_MAX - r->step) {
@@ -423,7 +413,6 @@ static inline ptrdiff_t range_next(range* r) {
             }
         }
     }
-
     return value;
 }
 
@@ -455,7 +444,6 @@ static inline void range_reset(range* r, ptrdiff_t new_start) {
  */
 static inline void range_skip(range* r, size_t n) {
     if (!r) return;
-
     for (size_t i = 0; i < n && range_has_next(r); i++) {
         range_next(r);
     }
@@ -509,10 +497,9 @@ static inline void range_skip(range* r, size_t n) {
 /* ────────────────────────────────────────────────────────────────────────────
    Complete Usage Example
    ──────────────────────────────────────────────────────────────────────────── */
-#if 0  // Example code - uncomment to use as real code
+#if 0 // Example code - uncomment to use as real code
     #include "range.h"
     #include <stdio.h>
-
     void example_basic(void) {
         // Simple ascending range
         int i;
@@ -520,72 +507,57 @@ static inline void range_skip(range* r, size_t n) {
             printf("%d ", i); // 0 1 2 3 4 5 6 7 8 9
         }
         printf("\n");
-
         // Convenience constructor
         RANGE_FOR(i, range_upto(5)) {
             printf("%d ", i); // 0 1 2 3 4
         }
         printf("\n");
-
         // Descending
         RANGE_FOR(i, range_make(10, 0, -1)) {
             printf("%d ", i); // 10 9 8 7 6 5 4 3 2 1
         }
         printf("\n");
-
         // With step
         RANGE_FOR(i, range_make(0, 20, 3)) {
             printf("%d ", i); // 0 3 6 9 12 15 18
         }
         printf("\n");
     }
-
     void example_manual_iteration(void) {
         range r = range_make(5, 10, 1);
-
         while (range_has_next(&r)) {
             ptrdiff_t val = range_next(&r);
             printf("%td ", val); // 5 6 7 8 9
         }
         printf("\n");
     }
-
     void example_preallocation(void) {
         range r = range_make(0, 1000, 1);
         size_t count = range_len(&r);
-
         if (count == SIZE_MAX) {
             fprintf(stderr, "Range too large\n");
             return;
         }
-
         int* array = malloc(sizeof(int) * count);
         if (!array) return;
-
         size_t idx = 0;
         while (range_has_next(&r)) {
             array[idx++] = (int)range_next(&r);
         }
-
         printf("Filled array with %zu elements\n", idx);
         free(array);
     }
-
     void example_peek_and_skip(void) {
         range r = range_make(0, 20, 1);
-
         ptrdiff_t val;
         if (range_peek(&r, &val)) {
             printf("Next value: %td\n", val); // 0
         }
-
         range_skip(&r, 5); // Skip first 5 elements
-
         if (range_peek(&r, &val)) {
             printf("After skip: %td\n", val); // 5
         }
     }
-
     void example_nested_loops(void) {
         int i, j;
         RANGE_FOR(i, range_upto(3)) {
