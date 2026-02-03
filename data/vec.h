@@ -1,4 +1,3 @@
-// data/vec.h
 #ifndef CANON_DATA_VEC_H
 #define CANON_DATA_VEC_H
 
@@ -7,6 +6,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "core/memory.h"
 #include "core/arena.h"
 #include "core/scope.h"
@@ -23,45 +23,45 @@
  * Canon-C vector is a **bounded**, **type-safe**, **explicit ownership** container.
  *
  * Supports:
- *  - Stack, heap, or arena-backed buffers
- *  - Typed vectors via macro
- *  - Generic `void*` vector
- *  - Iterators, slices, and range integration
- *  - Optional writing to `stringbuf`
- *  - Optional safe access via `Option<T>`
+ * - Stack, heap, or arena-backed buffers
+ * - Typed vectors via macro
+ * - Generic `void*` vector
+ * - Iterators, slices, and range integration
+ * - Optional writing to `stringbuf`
+ * - Optional safe access via `Option<T>`
  *
  * Design Principles:
- *  - Caller owns the buffer (stack, heap, arena, static)
- *  - Fixed capacity (no automatic growth)
- *  - Bounds-checked operations returning Result<T, Error>
- *  - Deterministic memory and performance
+ * - Caller owns the buffer (stack, heap, arena, static)
+ * - Fixed capacity (no automatic growth)
+ * - Bounds-checked operations returning Result<T, Error>
+ * - Deterministic memory and performance
  *
  * Performance & Memory:
- *  - Push/Pop: O(1), memory: +sizeof(T) per element
- *  - Insert/Remove: O(n), memory: no extra allocations
- *  - Extend: O(k), memory: contiguous buffer usage for k elements
- *  - Iterators: O(1) per step
- *  - Slice/Subvector: O(1), no copy
- *  - Generic `void*` vector: +sizeof(void*) per element
- *  - Typed vectors: +sizeof(T) per element
- *  - Heap allocation: +capacity*sizeof(T)
- *  - Arena allocation: +capacity*sizeof(T) via arena
+ * - Push/Pop: O(1), memory: +sizeof(T) per element
+ * - Insert/Remove: O(n), memory: no extra allocations
+ * - Extend: O(k), memory: contiguous buffer usage for k elements
+ * - Iterators: O(1) per step
+ * - Slice/Subvector: O(1), no copy
+ * - Generic `void*` vector: +sizeof(void*) per element
+ * - Typed vectors: +sizeof(T) per element
+ * - Heap allocation: +capacity*sizeof(T)
+ * - Arena allocation: +capacity*sizeof(T) via arena
  *
  * Portability:
- *  - Requires C99 or later (inline functions, stdbool, compound literals)
- *  - Optional C11 for _Static_assert
- *  - All core functionality works in strict C99
+ * - Requires C99 or later (inline functions, stdbool, compound literals)
+ * - Optional C11 for _Static_assert
+ * - All core functionality works in strict C99
  *
  * Thread-safety:
- *  - Each vector instance is independent - no shared state
- *  - Concurrent reads safe if no thread modifying
- *  - Concurrent modifications require external synchronization
- *  - Iterator invalidation: modifications invalidate all iterators
+ * - Each vector instance is independent - no shared state
+ * - Concurrent reads safe if no thread modifying
+ * - Concurrent modifications require external synchronization
+ * - Iterator invalidation: modifications invalidate all iterators
  *
  * Note on capacity:
- *  - vec.h is FIXED CAPACITY - no automatic growth
- *  - For auto-growing vectors, use data/convenience/dynvec.h
- *  - For inline-first with one spill, use data/convenience/smallvec.h
+ * - vec.h is FIXED CAPACITY - no automatic growth
+ * - For auto-growing vectors, use data/convenience/dynvec.h
+ * - For inline-first with one spill, use data/convenience/smallvec.h
  */
 
 /* ────────────────────────────────────────────────────────────────
@@ -77,16 +77,17 @@
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-    #define VEC_LIKELY(x)   __builtin_expect(!!(x), 1)
+    #define VEC_LIKELY(x) __builtin_expect(!!(x), 1)
     #define VEC_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
-    #define VEC_LIKELY(x)   (x)
+    #define VEC_LIKELY(x) (x)
     #define VEC_UNLIKELY(x) (x)
 #endif
 
 /* ────────────────────────────────────────────────────────────────
    Result type for vector operations
    ──────────────────────────────────────────────────────────────── */
+
 CANON_C_DEFINE_RESULT(bool, Error)
 
 /* ────────────────────────────────────────────────────────────────
@@ -110,9 +111,9 @@ CANON_C_DEFINE_RESULT(bool, Error)
  * ⚠️ Do not modify fields directly - use provided functions.
  */
 typedef struct {
-    void** items;    ///< Caller-owned buffer
-    size_t len;      ///< Current number of elements
-    size_t capacity; ///< Maximum elements
+    void** items;      ///< Caller-owned buffer
+    size_t len;        ///< Current number of elements
+    size_t capacity;   ///< Maximum elements
 } vec_voidptr;
 
 /**
@@ -217,8 +218,8 @@ static inline size_t vec_voidptr_remaining(const vec_voidptr* v) {
 /**
  * @brief Safely retrieves element at index
  *
- * @param v   Vector to access
- * @param i   Index to retrieve
+ * @param v Vector to access
+ * @param i Index to retrieve
  * @param out Pointer to store result
  * @return true if successful, false if out of bounds
  *
@@ -243,9 +244,9 @@ static inline bool vec_voidptr_get(const vec_voidptr* v, size_t i, void** out) {
  * - Time: O(1)
  * - Space: O(1)
  */
-static inline Option_voidptr vec_voidptr_get_option(const vec_voidptr* v, size_t i) {
-    if (!v || i >= v->len) return option_none_voidptr();
-    return option_some_voidptr(v->items[i]);
+static inline option_voidptr vec_voidptr_get_option(const vec_voidptr* v, size_t i) {
+    if (!v || i >= v->len) return option_voidptr_none();
+    return option_voidptr_some(v->items[i]);
 }
 
 /**
@@ -271,7 +272,7 @@ static inline void* vec_voidptr_get_unchecked(const vec_voidptr* v, size_t i) {
 /**
  * @brief Appends element
  *
- * @param v    Vector to push to
+ * @param v Vector to push to
  * @param item Item to append
  * @return Ok(true) on success, Err on failure
  *
@@ -291,7 +292,7 @@ static inline result_bool_Error vec_voidptr_push(vec_voidptr* v, void* item) {
  *
  * ⚠️ WARNING: Undefined behavior if full!
  *
- * @param v    Vector to push to
+ * @param v Vector to push to
  * @param item Item to append
  *
  * Panics: If len >= capacity (debug builds)
@@ -308,7 +309,7 @@ static inline void vec_voidptr_push_unchecked(vec_voidptr* v, void* item) {
 /**
  * @brief Tries to append element
  *
- * @param v    Vector to push to
+ * @param v Vector to push to
  * @param item Item to append
  * @return true on success, false on failure
  *
@@ -325,7 +326,7 @@ static inline bool vec_voidptr_try_push(vec_voidptr* v, void* item) {
 /**
  * @brief Removes last element
  *
- * @param v   Vector to pop from
+ * @param v Vector to pop from
  * @param out Pointer to store result
  * @return Ok(true) on success, Err on failure
  *
@@ -350,12 +351,12 @@ static inline result_bool_Error vec_voidptr_pop(vec_voidptr* v, void** out) {
  * - Time: O(1)
  * - Space: O(1)
  */
-static inline Option_voidptr vec_voidptr_pop_option(vec_voidptr* v) {
+static inline option_voidptr vec_voidptr_pop_option(vec_voidptr* v) {
     void* out;
     if (result_bool_Error_is_ok(vec_voidptr_pop(v, &out))) {
-        return option_some_voidptr(out);
+        return option_voidptr_some(out);
     }
-    return option_none_voidptr();
+    return option_voidptr_none();
 }
 
 /**
@@ -433,8 +434,8 @@ static inline void vec_voidptr_swap(vec_voidptr* a, vec_voidptr* b) {
 /**
  * @brief Appends array of elements
  *
- * @param v     Vector to extend
- * @param src   Source array
+ * @param v Vector to extend
+ * @param src Source array
  * @param count Number of elements
  * @return Ok(true) on success, Err on failure
  *
@@ -443,7 +444,7 @@ static inline void vec_voidptr_swap(vec_voidptr* a, vec_voidptr* b) {
  * - Space: O(1)
  */
 static inline result_bool_Error vec_voidptr_append_array(
-    vec_voidptr* v, void* const* src, size_t count) {
+    vec_voidptr* v, const void* const* src, size_t count) {
     if (!v || !v->items || !src) return result_bool_Error_err(ERR_INVALID_ARG);
     if (v->len + count > v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED);
     memcpy(&v->items[v->len], src, count * sizeof(void*));
@@ -452,7 +453,6 @@ static inline result_bool_Error vec_voidptr_append_array(
 }
 
 /* Heap allocation */
-
 /**
  * @brief Allocates vector on heap with fixed capacity
  *
@@ -495,7 +495,6 @@ static inline void vec_voidptr_free(vec_voidptr* v) {
 }
 
 /* Arena allocation */
-
 /**
  * @brief Allocates vector from arena with fixed capacity
  *
@@ -517,15 +516,14 @@ static inline vec_voidptr vec_voidptr_arena_alloc(Arena* arena, size_t capacity)
 }
 
 /* Iterators */
-
 /**
  * @brief Forward iterator
  *
  * ⚠️ Invalidated by vector modifications
  */
 typedef struct {
-    vec_voidptr* vec; ///< Vector being iterated
-    size_t index;     ///< Current position
+    vec_voidptr* vec;   ///< Vector being iterated
+    size_t index;       ///< Current position
 } vec_voidptr_iter;
 
 /**
@@ -545,7 +543,7 @@ static inline vec_voidptr_iter vec_voidptr_iter_init(vec_voidptr* v) {
 /**
  * @brief Advances iterator
  *
- * @param it  Iterator to advance
+ * @param it Iterator to advance
  * @param out Pointer to store element
  * @return true if element retrieved, false if end
  *
@@ -561,23 +559,22 @@ static inline bool vec_voidptr_iter_next(vec_voidptr_iter* it, void** out) {
 }
 
 /* Slice */
-
 /**
  * @brief Zero-copy slice view
  *
  * ⚠️ Invalidated by vector modifications
  */
 typedef struct {
-    void** items; ///< Pointer into parent vector
-    size_t len;   ///< Number of elements
+    void** items;   ///< Pointer into parent vector
+    size_t len;     ///< Number of elements
 } vec_voidptr_slice;
 
 /**
  * @brief Creates slice from [start, end)
  *
- * @param v     Vector to slice
+ * @param v Vector to slice
  * @param start Start index (inclusive)
- * @param end   End index (exclusive)
+ * @param end End index (exclusive)
  * @return Slice or empty on invalid range
  *
  * Performance:
@@ -640,14 +637,14 @@ static inline void** vec_voidptr_slice_get(const vec_voidptr_slice* s, size_t i)
  *
  * Type name convention:
  * For pointer types, use typedef first:
- *   typedef const char* constcharptr;
- *   DEFINE_VEC(constcharptr)
+ * typedef const char* constcharptr;
+ * DEFINE_VEC(constcharptr)
  *
  * Usage:
- *   DEFINE_VEC(int)      // vec_int
- *   DEFINE_VEC(float)    // vec_float
+ * DEFINE_VEC(int) // vec_int
+ * DEFINE_VEC(float) // vec_float
  *
- * Note: Use at file/global scope, not inside functions.
+ * Note: Use at file or global scope, not inside functions.
  *
  * @param type Element type for vector
  */
@@ -696,9 +693,9 @@ static inline bool vec_##type##_get(const vec_##type* v, size_t i, type* out) { 
     return true; \
 } \
 \
-static inline Option_##type vec_##type##_get_option(const vec_##type* v, size_t i) { \
-    if (!v || i >= v->len) return option_none_##type(); \
-    return option_some_##type(v->items[i]); \
+static inline option_##type vec_##type##_get_option(const vec_##type* v, size_t i) { \
+    if (!v || i >= v->len) return option_##type##_none(); \
+    return option_##type##_some(v->items[i]); \
 } \
 \
 static inline type vec_##type##_get_unchecked(const vec_##type* v, size_t i) { \
@@ -742,11 +739,11 @@ static inline result_bool_Error vec_##type##_pop(vec_##type* v, type* out) { \
     return result_bool_Error_ok(true); \
 } \
 \
-static inline Option_##type vec_##type##_pop_option(vec_##type* v) { \
+static inline option_##type vec_##type##_pop_option(vec_##type* v) { \
     type out; \
     if (result_bool_Error_is_ok(vec_##type##_pop(v, &out))) \
-        return option_some_##type(out); \
-    return option_none_##type(); \
+        return option_##type##_some(out); \
+    return option_##type##_none(); \
 } \
 \
 static inline void vec_##type##_clear(vec_##type* v) { \
@@ -789,11 +786,11 @@ static inline result_bool_Error vec_##type##_remove(vec_##type* v, size_t i, typ
     return result_bool_Error_ok(true); \
 } \
 \
-static inline Option_##type vec_##type##_remove_option(vec_##type* v, size_t i) { \
+static inline option_##type vec_##type##_remove_option(vec_##type* v, size_t i) { \
     type out; \
     if (result_bool_Error_is_ok(vec_##type##_remove(v, i, &out))) \
-        return option_some_##type(out); \
-    return option_none_##type(); \
+        return option_##type##_some(out); \
+    return option_##type##_none(); \
 } \
 \
 static inline result_bool_Error vec_##type##_append_array( \
