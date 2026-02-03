@@ -155,11 +155,11 @@ define unavoidable mechanics; higher layers build meaning on top of them.
 
 core/ — memory, lifetime, scope
 
-semantics/ — meaning (option, result)
+semantics/ — meaning 
 
-data/ — data shapes (vec, slice, range)
+data/ — data shapes 
 
-algo/ — transformations (map, filter, fold)
+algo/ — transformations 
 
 util/ — optional helpers
 
