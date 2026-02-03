@@ -1,6 +1,6 @@
 // semantics/result.h
-#ifndef CANON_C_SEMANTICS_RESULT_H
-#define CANON_C_SEMANTICS_RESULT_H
+#ifndef CANON_SEMANTICS_RESULT_H
+#define CANON_SEMANTICS_RESULT_H
 
 #include <stdbool.h>
 #include <assert.h>
