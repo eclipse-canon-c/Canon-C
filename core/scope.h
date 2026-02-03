@@ -189,20 +189,20 @@
    ────────────────────────────────────────────────────────────────────────────
 Result process_config(const char* path) {
     FILE* f = fopen(path, "r");
-    if (!f) return ERR_FILE_OPEN;
+    if (!f) return ERR_IO_FAILED;          // ← changed
     defer {
         if (f) fclose(f);
     }
 
     char* buffer = malloc(8192);
-    if (!buffer) return ERR_ALLOC;
+    if (!buffer) return ERR_OUT_OF_MEMORY; // ← changed
     defer {
         free(buffer);
     }
 
     // Read file into buffer safely
     size_t n = fread(buffer, 1, 8192, f);
-    if (n == 0 && ferror(f)) return ERR_READ;
+    if (n == 0 && ferror(f)) return ERR_IO_FAILED; // ← changed
 
     ArenaMark mark = arena_mark(&scratch_arena);
     defer {
