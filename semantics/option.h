@@ -1,6 +1,6 @@
 // semantics/option.h
-#ifndef CANON_C_SEMANTICS_OPTION_H
-#define CANON_C_SEMANTICS_OPTION_H
+#ifndef CANON_SEMANTICS_OPTION_H
+#define CANON_SEMANTICS_OPTION_H
 #include <stdbool.h>
 #include <assert.h>
 /**
