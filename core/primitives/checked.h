@@ -16,6 +16,7 @@
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
+ * - All operations: O(1) — constant time arithmetic and bitwise operations
  * - With builtins (GCC/Clang): 1-2 CPU instructions per operation
  * - Without builtins: 3-10 instructions (comparison + branch)
  * - All functions are static inline → zero call overhead
