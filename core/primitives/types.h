@@ -1,26 +1,49 @@
 /**
- * core/primitives/types.h
- * 
- * Portable integer and size types for Canon-C.
- * 
- * Provides short, readable type aliases for standard integer types.
- * This is the foundation header - everything else builds on this.
- * 
- * Philosophy:
+ * @file types.h
+ * @brief Portable integer and size type aliases for Canon-C
+ *
+ * Provides short, readable type names that replace verbose stdint.h types.
+ * This is the foundation header — every other module builds on these types.
+ *
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
  * - Explicitness: Type names clearly indicate signedness and size
- * - Readability: Short names reduce cognitive load
- * - Portability: Guaranteed sizes across all platforms
+ * - Readability: Short names (u8, usize) reduce cognitive load vs uint8_t, size_t
+ * - Portability: Guaranteed sizes across all platforms (via C99 stdint.h)
  * - Zero cost: Pure type aliases, no runtime overhead
- * 
- * Dependencies: None (foundation layer)
- * 
- * Usage:
- *   #include "core/primitives/types.h"
- *   
- *   u8* buffer = ...;       // unsigned 8-bit integer
- *   usize length = ...;     // platform size type
- *   isize offset = ...;     // signed offset/difference
- *   byte* data = ...;       // semantic clarity for raw bytes
+ * - Consistency: Uniform naming convention across entire codebase
+ *
+ * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Zero overhead: These are compile-time aliases
+ * - No conversions, no hidden operations
+ * - Identical codegen to using stdint.h types directly
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * N/A — pure type definitions, no runtime behavior
+ *
+ * Portability:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later (stdint.h, stddef.h, stdbool.h)
+ * - Works on all platforms where stdint.h exists (essentially universal)
+ * - usize/isize match pointer size (32-bit on 32-bit systems, 64-bit on 64-bit)
+ *
+ * Typical use cases:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Buffer handling: u8* buffer, usize capacity
+ * - Array indexing: for (usize i = 0; i < len; i++)
+ * - Offset calculations: isize offset = ptr2 - ptr1
+ * - Binary data: byte* raw_data
+ * - Fixed-width integers: u32 hash, i64 timestamp
+ *
+ * NOT suitable for:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Bit-fields (use unsigned int per C standard)
+ * - Atomic operations (use C11 _Atomic types directly)
+ * - printf format specifiers (use PRIu32, PRId64 from inttypes.h)
+ *
+ * @sa checked.h, bits.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_TYPES_H
