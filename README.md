@@ -7,6 +7,9 @@ A semantic standard library built from explicit, composable C modules.
 
 ## Motivation
 
+I kept rewriting the same patterns in C — arenas, error handling, vectors, parsing, file I/O, iteration utilities —
+and existing libraries didn’t match my preferences for explicit ownership, predictable allocation, header-only usage, and no hidden runtime behavior.
+
 C is fast, portable, and honest, but its native semantics are low-level and
 mechanical. Writing non-trivial programs in C often requires memorizing
 patterns, rules, and boilerplate such as manual memory management,
