@@ -15,6 +15,7 @@
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
+ * - O(1): Pure compile-time type aliases (no runtime cost)
  * - Zero overhead: These are compile-time aliases
  * - No conversions, no hidden operations
  * - Identical codegen to using stdint.h types directly
