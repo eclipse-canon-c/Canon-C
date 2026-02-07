@@ -1,10 +1,7 @@
 # Canon-C
 
-A collection of small, explicit C libraries designed to improve readability,
-semantic clarity, and development speed (via reduced cognitive load),
-while preserving C’s performance and predictability.
-
-This project treats **C as an execution backend**, not as a semantic authority.
+Canon-C — Treating C as an execution backend, not a semantic authority.
+A semantic standard library built from explicit, composable C modules.
 
 ---
 
