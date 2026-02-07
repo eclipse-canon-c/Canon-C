@@ -67,9 +67,16 @@ Abstractions must clarify behavior, not conceal it.
 
 ## Included Modules (Current)
 
+### core/primitives/
+- `types.h` — portable integer and size type aliases (u8, usize, isize, etc.)
+- `limits.h` — common constants and limits (integer bounds, alignment, capacity limits)
+- `bits.h` — portable bit manipulation (popcount, clz, rotate, power-of-2 checks)
+- `checked.h` — overflow-safe arithmetic (checked add/sub/mul, alignment helpers)
+- `contract.h` — explicit contracts and assertions (require, ensure, unreachable, panic)
+
 ### core/
-- `arena.h` — explicit linear allocation (bump allocator)
 - `memory.h` — low-level memory utilities (alignment, safe memcpy wrappers)
+- `arena.h` — explicit linear allocation (bump allocator)
 - `pool.h` — fixed-size object pool allocator (arena-backed)
 - `scope.h` — RAII-style deferred cleanup macros
 
@@ -111,14 +118,14 @@ Abstractions must clarify behavior, not conceal it.
 - `parse.h` — robust parsing of integers, unsigned, and floating-point values
 - `time.h` — high-resolution stopwatch (monotonic timing)
 - `random.h` — fast, explicit PRNG (PCG32, no global state)
-
 ---
 
 **Note:** Modules in `*/convenience/` subdirectories trade explicitness for ergonomics.
-Core modules prioritize determinism and explicit control; convenience modules prioritize
-ease of use and may include hidden allocations or automatic growth. Choose based on your
-constraints: use core for production/embedded/real-time, convenience for prototyping.
-
+The `core/primitives/` subdirectory contains foundational types and operations that all
+other modules depend on. Core modules prioritize determinism and explicit control; 
+convenience modules prioritize ease of use and may include hidden allocations or 
+automatic growth. Choose based on your constraints: use core for production/embedded/
+real-time, convenience for prototyping.   
 All modules are **header-only** and require no runtime or build system integration.
 
 ---
