@@ -24,6 +24,8 @@ this also increases semantic complexity and hides behavior. Canon-C takes a diff
 
 The result is a set of semantic building blocks that improve readability, maintain explicit control, preserve performance, and remain fully transparent.
 
+Canon-C is currently GPL to protect the shared foundation. Dual licensing may be introduced later to support wider adoption.
+
 ---
 
 ## Core Idea
