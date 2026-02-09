@@ -138,8 +138,8 @@ Canon-C is **header-only**. To use:
 2. Add the Canon-C directory to your include path
 3. Include the modules you need:
 ```c
-   #include "canon-c/core/arena.h"
-   #include "canon-c/semantics/option.h"
+   #include "Canon-c/core/arena.h"
+   #include "Canon-c/semantics/option.h"
 ```
 
 ---
