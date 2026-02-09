@@ -130,6 +130,24 @@ All modules are **header-only** and require no runtime or build system integrati
 
 ---
 
+## Usage
+
+Canon-C is **header-only**. To use:
+
+1. Clone or download the repository
+2. Add the Canon-C directory to your include path
+3. Include the modules you need:
+```c
+   #include "canon-c/core/arena.h"
+   #include "canon-c/semantics/option.h"
+```
+
+---
+
+No build system integration required. No linking step. Just include and use.
+
+**Compiler support**: C99 or later, works with GCC, Clang, MSVC.
+
 ## What This Is
 
 - A curated set of **foundational C modules**
