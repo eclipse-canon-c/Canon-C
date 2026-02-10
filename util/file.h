@@ -23,6 +23,17 @@
  * - binary mode by default for cross-platform consistency
  * - no silent failures or hidden errno usage
  *
+ * ⚠️ Portability note:
+ * Some functions (file_read_all_arena / file_read_all) use fseek() + ftell() to determine file size.
+ * - NOT suitable for: Random-access or memory-mapped I/O
+ * - NOT suitable for: Network protocols
+ * ISO C does not guarantee this works for:
+ *   - Very large files exceeding LONG_MAX
+ *   - Non-seekable streams (pipes, sockets)
+ *   - Certain exotic or platform-specific filesystems
+ * Typical binary files on common platforms are fine.
+ * Consider streaming or manual fread+realloc for full portability.
+ *
  * Allocation strategies:
  * ────────────────────────────────────────────────────────────────────────────
  * | Strategy       | Use when                              | Lifetime                  | Cleanup responsibility     | Typical functions          |
@@ -43,11 +54,6 @@
  * - Loading configuration, shader or script sources
  * - Simple logging
  * - Small-to-medium file caching
- *
- * NOT suitable for:
- * - Very large files (> few MB) — use streaming
- * - Random-access or memory-mapped I/O
- * - Network protocols (use sockets)
  *
  * @sa file_read_all_arena(), file_read_all(), file_write_all(), file_write_all_atomic()
  */
