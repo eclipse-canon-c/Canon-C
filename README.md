@@ -28,7 +28,7 @@ Canon-C is licensed under **GPL-3.0** to ensure the core remains open and shared
 
 **For library users**: You may use Canon-C in your projects under GPL-3.0 terms.
 
-**Future plans**: Dual licensing (GPL + permissive commercial license) may be 
+**Future plans**: Dual licensing (GPL + permissive commercial license) will be 
 introduced to support broader adoption in proprietary codebases. Feedback welcome.
 
 ---
