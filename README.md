@@ -94,8 +94,18 @@ Abstractions must clarify behavior, not conceal it.
 - `dynstring.h` — auto-growing string builder (hidden allocation)
   
 ### semantics/
-- `option.h` — explicit presence/absence of a value (with combinators)
-- `result.h` — explicit success/failure with value or error (with combinators)
+- **`option/`** — modular Option<T> implementation
+  - `option.h` — user-facing API for explicit presence/absence of a value
+  - `option_impl.h` — pure implementation logic (customizable)
+  - `option_mangle.h` — name mangling conventions (overridable)
+  - `option_decl.h` — declarations for separate compilation
+  - `option_defn.h` — definitions for header-only or .c files
+- **`result/`** — modular Result<T, E> implementation
+  - `result.h` — user-facing API for explicit success/failure handling
+  - `result_impl.h` — pure implementation logic (customizable)
+  - `result_mangle.h` — name mangling conventions (overridable)
+  - `result_decl.h` — declarations for separate compilation
+  - `result_defn.h` — definitions for header-only or .c files
 - `error.h` — common error codes and human-readable messages
 
 ### algo/
@@ -118,6 +128,7 @@ Abstractions must clarify behavior, not conceal it.
 - `parse.h` — robust parsing of integers, unsigned, and floating-point values
 - `time.h` — high-resolution stopwatch (monotonic timing)
 - `random.h` — fast, explicit PRNG (PCG32, no global state)
+
 ---
 
 **Note:** Modules in `*/convenience/` subdirectories trade explicitness for ergonomics.
@@ -125,8 +136,18 @@ The `core/primitives/` subdirectory contains foundational types and operations t
 other modules depend on. Core modules prioritize determinism and explicit control; 
 convenience modules prioritize ease of use and may include hidden allocations or 
 automatic growth. Choose based on your constraints: use core for production/embedded/
-real-time, convenience for prototyping.   
-All modules are **header-only** and require no runtime or build system integration.
+real-time, convenience for prototyping.
+
+**Modular architecture:** The `option/` and `result/` modules now use a modular design
+that separates implementation logic, naming conventions, declarations, and definitions.
+Most users only need to include `option.h` or `result.h`, but advanced users can customize
+behavior by overriding individual components. This architecture enables:
+- Custom naming schemes (e.g., `Maybe<T>` instead of `Option<T>`)
+- Function specialization for specific types
+- Flexible compilation models (header-only or separate compilation)
+- Easier maintenance and testing
+
+All modules are **header-only** by default and require no runtime or build system integration.
 
 ---
 
