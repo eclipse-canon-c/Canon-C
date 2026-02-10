@@ -2,7 +2,7 @@
 #ifndef CANON_SEMANTICS_ERROR_H
 #define CANON_SEMANTICS_ERROR_H
 #include <stdbool.h>
-#include "result.h"
+#include "result/result.h"
 /**
  * @file error.h
  * @brief Common error codes and human-readable messages
