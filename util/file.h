@@ -25,14 +25,16 @@
  *
  * ⚠️ Portability note:
  * Some functions (file_read_all_arena / file_read_all) use fseek() + ftell() to determine file size.
- * - NOT suitable for: Random-access or memory-mapped I/O
- * - NOT suitable for: Network protocols
  * ISO C does not guarantee this works for:
  *   - Very large files exceeding LONG_MAX
  *   - Non-seekable streams (pipes, sockets)
  *   - Certain exotic or platform-specific filesystems
  * Typical binary files on common platforms are fine.
- * Consider streaming or manual fread+realloc for full portability.
+ * For full portability or very large/non-seekable files, consider streaming with fread + manual realloc.
+ * 
+ * NOT suitable for:
+ *   - Random-access or memory-mapped I/O
+ *   - Network protocols (use sockets instead)
  *
  * Allocation strategies:
  * ────────────────────────────────────────────────────────────────────────────
