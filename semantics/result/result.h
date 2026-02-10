@@ -1,9 +1,8 @@
-// semantics/result.h
+// semantics/result/result.h
 #ifndef CANON_SEMANTICS_RESULT_H
 #define CANON_SEMANTICS_RESULT_H
 
-#include <stdbool.h>
-#include <assert.h>
+#include "result_defn.h"
 
 /**
  * @file result.h
@@ -18,7 +17,7 @@
  * - Fully explicit error handling (no exceptions, no errno, no sentinels)
  * - Zero-cost abstraction (struct + bool flag + union)
  * - Type-safe via macros (one concrete struct per (T,E) pair)
- * - Header-only, no runtime dependencies
+ * - Header-only by default, supports separate compilation
  * - Chainable & composable (map, and_then, or_else, etc.)
  * - Panic/unwrap only in debug builds (production code should check)
  *
@@ -29,8 +28,10 @@
  * - Define CANON_NO_GNU_EXTENSIONS to disable macros requiring extensions
  * - All core functionality works in strict C99
  *
- * Thread-safety: Each Result instance is independent - no shared state
- *                All functions are thread-safe (no shared mutable state)
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Each Result instance is independent - no shared state
+ * All functions are thread-safe (no shared mutable state)
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -69,382 +70,110 @@
  * - Use Option<T> when "no value" is the only failure mode
  * - Combine them: Result<Option<T>, E> for "success with optional value" vs "error"
  *
- * Typical use cases:
+ * Architecture:
  * ────────────────────────────────────────────────────────────────────────────
- * - Function return values for operations that can fail
- * - I/O operations (file read/write, network operations)
- * - Parsing and validation (converting strings to numbers, parsing formats)
- * - Resource allocation (memory, file handles, connections)
- * - Mathematical operations that can fail (division, overflow-safe arithmetic)
- * - State machine transitions (valid state changes vs invalid transitions)
- * - Configuration loading (valid config vs parsing errors)
- * - Error propagation through call chains
+ * This header is the user-facing facade that provides a simple API.
+ * Internally, it uses a modular architecture:
+ * - result_impl.h: Pure implementation logic
+ * - result_mangle.h: Name mangling conventions (customizable)
+ * - result_decl.h: Declaration macros (for separate compilation)
+ * - result_defn.h: Definition macros (generates implementations)
+ * - result.h: This file (simple user API)
+ *
+ * Advanced users can include the individual files for customization.
+ * Most users should just use CANON_RESULT(value_type, error_type) from this file.
+ *
+ * @sa option.h, error.h
  */
 
+/* ════════════════════════════════════════════════════════════════════════════
+   SIMPLE USER API - CEREMONY-FREE INTERFACE
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Defines a concrete Result<T, E> type for given value and error types
+ * @brief Defines a complete Result<T, E> type for given value and error types
  *
- * Generates a complete Result implementation for the specified types,
- * including struct definition and all associated functions.
+ * This is the main macro users should use. It generates a complete Result
+ * implementation for the specified type pair, including struct definition and
+ * all associated functions.
  *
- * Generated type: result_##value_type##_##error_type
+ * Generated type: result_T_E (e.g., result_int_error, result_float_constcharptr)
  *
- * Generated functions:
- * - Constructors: result_##value_type##_##error_type##_ok(value)
- *                 result_##value_type##_##error_type##_err(error)
- * - Queries: result_##value_type##_##error_type##_is_ok(r)
- *            result_##value_type##_##error_type##_is_err(r)
- * - Safe accessors: result_##value_type##_##error_type##_get_ok(r, &out)
- *                   result_##value_type##_##error_type##_get_err(r, &out)
- * - Unsafe accessors: result_##value_type##_##error_type##_unwrap(r)
- *                     result_##value_type##_##error_type##_unwrap_err(r)
- *                     result_##value_type##_##error_type##_expect(r, msg)
- * - Defaults: result_##value_type##_##error_type##_unwrap_or(r, fallback)
- * - Transformations: result_##value_type##_##error_type##_map(r, fn)
- *                    result_##value_type##_##error_type##_map_err(r, fn)
- * - Chaining: result_##value_type##_##error_type##_and_then(r, fn)
- *             result_##value_type##_##error_type##_or_else(r, fn)
- * - Equality: result_##value_type##_##error_type##_eq(r1, r2, eq_ok, eq_err)
+ * Generated functions (where T is value type, E is error type):
+ * ────────────────────────────────────────────────────────────────────────────
+ * Constructors:
+ *   - result_T_E_ok(value)         → Create Ok(value)
+ *   - result_T_E_err(error)        → Create Err(error)
+ *
+ * Queries:
+ *   - result_T_E_is_ok(r)          → Check if contains success value
+ *   - result_T_E_is_err(r)         → Check if contains error
+ *
+ * Safe extraction:
+ *   - result_T_E_get_ok(r, &out)   → Extract value to pointer (safe, NULL-allowed)
+ *   - result_T_E_get_err(r, &out)  → Extract error to pointer (safe, NULL-allowed)
+ *   - result_T_E_unwrap_or(r, def) → Extract or use default
+ *
+ * Unsafe extraction (use with caution):
+ *   - result_T_E_unwrap(r)         → Extract value or panic
+ *   - result_T_E_unwrap_err(r)     → Extract error or panic
+ *   - result_T_E_expect(r, msg)    → Extract or panic with message
+ *
+ * Transformations (combinators):
+ *   - result_T_E_map(r, fn)        → Transform value if Ok
+ *   - result_T_E_map_err(r, fn)    → Transform error if Err
+ *   - result_T_E_and_then(r, fn)   → Chain Result-returning operations
+ *   - result_T_E_or_else(r, fn)    → Provide alternative if Err
+ *
+ * Comparison:
+ *   - result_T_E_eq(r1, r2, eq_ok, eq_err) → Check equality
+ *
+ * Performance: All O(1) except combinators which are O(f) where f is the function
+ * Memory: sizeof(bool) + max(sizeof(T), sizeof(E)) + padding per instance
+ *
+ * Usage examples:
+ * ────────────────────────────────────────────────────────────────────────────
+ * ```c
+ * // Define Result types you need
+ * typedef enum { ERR_NONE, ERR_IO, ERR_PARSE } error;
+ * CANON_RESULT(int, error)
+ * CANON_RESULT(float, error)
+ * 
+ * // Use them
+ * result_int_error x = result_int_error_ok(42);
+ * if (result_int_error_is_ok(x)) {
+ *     int value = result_int_error_unwrap(x);
+ *     printf("Value: %d\n", value);
+ * }
+ * ```
  *
  * Type name convention:
+ * ────────────────────────────────────────────────────────────────────────────
  * For pointer types, use a typedef first:
  *   typedef const char* constcharptr;
- *   CANON_C_DEFINE_RESULT(int, constcharptr)
- * This produces: result_int_constcharptr
- *
- * Usage:
- *   CANON_C_DEFINE_RESULT(int, int)           // result_int_int
- *   CANON_C_DEFINE_RESULT(float, ErrorCode)   // result_float_ErrorCode
- *
- * Note: This must be used at file or global scope, not inside functions.
- *       Use once per (T,E) pair in a header or source file.
+ *   CANON_RESULT(int, constcharptr)  // result_int_constcharptr
  *
  * @param value_type The type for successful values (T)
  * @param error_type The type for error values (E)
+ *
+ * Note: This must be used at file or global scope, not inside functions.
+ *       Use once per (T,E) pair in your code.
+ */
+#define CANON_RESULT(value_type, error_type) \
+    DEFINE_RESULT_ALL(static inline, value_type, error_type)
+
+/**
+ * @brief Legacy alias for CANON_RESULT
+ *
+ * Kept for backward compatibility with existing Canon-C code.
+ * New code should prefer CANON_RESULT() for consistency.
  */
 #define CANON_C_DEFINE_RESULT(value_type, error_type) \
-\
-/** \
- * @brief Result type for (value_type, error_type) - represents success or failure \
- * \
- * Fields: \
- * - is_ok: true if Ok(value), false if Err(error) \
- * - union { ok, err }: only one is valid (determined by is_ok) \
- * \
- * Do not access fields directly - use the provided functions. \
- * Accessing the wrong union member is undefined behavior. \
- */ \
-typedef struct { \
-    bool is_ok; \
-    union { \
-        value_type ok; \
-        error_type err; \
-    }; \
-} result_##value_type##_##error_type; \
-\
-/** \
- * @brief Constructs Ok(value) - a successful result \
- * \
- * @param v Value to wrap \
- * @return Result containing the success value \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_ok(value_type v) { \
-    return (result_##value_type##_##error_type){ .is_ok = true, .ok = v }; \
-} \
-\
-/** \
- * @brief Constructs Err(error) - a failed result \
- * \
- * @param e Error value to wrap \
- * @return Result containing the error \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_err(error_type e) { \
-    return (result_##value_type##_##error_type){ .is_ok = false, .err = e }; \
-} \
-\
-/** \
- * @brief Checks if Result is Ok \
- * \
- * @param r Result to check \
- * @return true if Ok(value), false if Err(error) \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline bool \
-result_##value_type##_##error_type##_is_ok(result_##value_type##_##error_type r) { \
-    return r.is_ok; \
-} \
-\
-/** \
- * @brief Checks if Result is Err \
- * \
- * @param r Result to check \
- * @return true if Err(error), false if Ok(value) \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline bool \
-result_##value_type##_##error_type##_is_err(result_##value_type##_##error_type r) { \
-    return !r.is_ok; \
-} \
-\
-/** \
- * @brief Safely extracts success value if Ok \
- * \
- * This is the recommended way to extract values in production code. \
- * \
- * @param r   Result to extract from \
- * @param out Pointer to store the value (NULL-safe) \
- * @return    true if value was extracted, false if Err or out is NULL \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline bool \
-result_##value_type##_##error_type##_get_ok( \
-    result_##value_type##_##error_type r, value_type* out) { \
-    if (r.is_ok && out) { \
-        *out = r.ok; \
-        return true; \
-    } \
-    return false; \
-} \
-\
-/** \
- * @brief Safely extracts error value if Err \
- * \
- * @param r   Result to extract from \
- * @param out Pointer to store the error (NULL-safe) \
- * @return    true if error was extracted, false if Ok or out is NULL \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline bool \
-result_##value_type##_##error_type##_get_err( \
-    result_##value_type##_##error_type r, error_type* out) { \
-    if (!r.is_ok && out) { \
-        *out = r.err; \
-        return true; \
-    } \
-    return false; \
-} \
-\
-/** \
- * @brief Extracts value or returns fallback \
- * \
- * Safe alternative to unwrap() - never panics. \
- * \
- * @param r        Result to extract from \
- * @param fallback Value to return if Err \
- * @return         Success value if Ok, fallback if Err \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline value_type \
-result_##value_type##_##error_type##_unwrap_or( \
-    result_##value_type##_##error_type r, value_type fallback) { \
-    return r.is_ok ? r.ok : fallback; \
-} \
-\
-/** \
- * @brief Extracts success value, panicking if Err \
- * \
- * ⚠️ WARNING: Only use when you are certain the result is Ok! \
- * In debug builds, this asserts. In release builds, undefined if Err. \
- * \
- * Prefer: get_ok(), unwrap_or(), expect() over unwrap() in production. \
- * \
- * @param r Result to unwrap \
- * @return  Success value \
- * \
- * Panics: If r is Err (assertion failure in debug builds) \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline value_type \
-result_##value_type##_##error_type##_unwrap(result_##value_type##_##error_type r) { \
-    assert(r.is_ok && "result_unwrap called on Err value"); \
-    return r.ok; \
-} \
-\
-/** \
- * @brief Extracts error value, panicking if Ok \
- * \
- * The opposite of unwrap() - extracts error from Err. \
- * Useful for testing or cases where you expect failure. \
- * \
- * @param r Result to unwrap \
- * @return  Error value \
- * \
- * Panics: If r is Ok (assertion failure in debug builds) \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline error_type \
-result_##value_type##_##error_type##_unwrap_err(result_##value_type##_##error_type r) { \
-    assert(!r.is_ok && "result_unwrap_err called on Ok value"); \
-    return r.err; \
-} \
-\
-/** \
- * @brief Extracts value with custom panic message \
- * \
- * Like unwrap(), but with a descriptive error message for debugging. \
- * Use this for invariant violations that should never happen. \
- * \
- * @param r   Result to extract from \
- * @param msg Error message if Err (used in assertion) \
- * @return    Success value \
- * \
- * Panics: If r is Err (assertion failure in debug builds with msg) \
- * \
- * Performance: \
- * - Time: O(1) \
- * - Space: O(1) \
- */ \
-static inline value_type \
-result_##value_type##_##error_type##_expect( \
-    result_##value_type##_##error_type r, const char* msg) { \
-    assert(r.is_ok && msg); \
-    (void)msg; \
-    return r.ok; \
-} \
-\
-/** \
- * @brief Transforms the success value if Ok \
- * \
- * Applies function f to the success value, wrapping result in Result. \
- * If Err, returns Err unchanged without calling f. \
- * \
- * @param r Result to transform \
- * @param f Transformation function \
- * @return  Ok(f(value)) if r is Ok(value), r unchanged if Err \
- * \
- * Performance: \
- * - Time: O(1) + O(f) \
- * - Space: O(1) \
- */ \
-static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_map( \
-    result_##value_type##_##error_type r, value_type (*f)(value_type)) { \
-    return r.is_ok ? result_##value_type##_##error_type##_ok(f(r.ok)) : r; \
-} \
-\
-/** \
- * @brief Transforms the error value if Err \
- * \
- * Applies function f to the error value, wrapping result in Result. \
- * If Ok, returns Ok unchanged without calling f. \
- * \
- * @param r Result to transform \
- * @param f Error transformation function \
- * @return  r unchanged if Ok, Err(f(error)) if Err \
- * \
- * Performance: \
- * - Time: O(1) + O(f) \
- * - Space: O(1) \
- */ \
-static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_map_err( \
-    result_##value_type##_##error_type r, error_type (*f)(error_type)) { \
-    return r.is_ok ? r : result_##value_type##_##error_type##_err(f(r.err)); \
-} \
-\
-/** \
- * @brief Chains Result-returning operations \
- * \
- * Like map(), but f returns a Result instead of a plain value. \
- * Prevents nested Result<Result<T,E>,E>. \
- * \
- * @param r Result to chain from \
- * @param f Function returning Result \
- * @return  f(value) if r is Ok(value), r unchanged if Err \
- * \
- * Performance: \
- * - Time: O(1) + O(f) \
- * - Space: O(1) \
- */ \
-static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_and_then( \
-    result_##value_type##_##error_type r, \
-    result_##value_type##_##error_type (*f)(value_type)) { \
-    return r.is_ok ? f(r.ok) : r; \
-} \
-\
-/** \
- * @brief Provides alternative if Err \
- * \
- * Returns r if Ok, otherwise calls fallback(error) to get alternative. \
- * \
- * @param r        Result to check \
- * @param fallback Function providing alternative Result from error \
- * @return         r if Ok, fallback(error) if Err \
- * \
- * Performance: \
- * - Time: O(1) + O(fallback) \
- * - Space: O(1) \
- */ \
-static inline result_##value_type##_##error_type \
-result_##value_type##_##error_type##_or_else( \
-    result_##value_type##_##error_type r, \
-    result_##value_type##_##error_type (*f)(error_type)) { \
-    return r.is_ok ? r : f(r.err); \
-} \
-\
-/** \
- * @brief Checks equality of two Results \
- * \
- * Two Results are equal if: \
- * - Both are Ok and their values compare equal via eq_ok, OR \
- * - Both are Err and their errors compare equal via eq_err \
- * \
- * @param r1     First Result \
- * @param r2     Second Result \
- * @param eq_ok  Equality comparison function for success values \
- * @param eq_err Equality comparison function for error values \
- * @return       true if Results are equal, false otherwise \
- * \
- * Performance: \
- * - Time: O(1) + O(eq_ok) or O(eq_err) \
- * - Space: O(1) \
- */ \
-static inline bool \
-result_##value_type##_##error_type##_eq( \
-    result_##value_type##_##error_type r1, \
-    result_##value_type##_##error_type r2, \
-    bool (*eq_ok)(value_type, value_type), \
-    bool (*eq_err)(error_type, error_type)) { \
-    if (r1.is_ok != r2.is_ok) return false; \
-    if (r1.is_ok) return eq_ok(r1.ok, r2.ok); \
-    return eq_err(r1.err, r2.err); \
-}
+    CANON_RESULT(value_type, error_type)
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Propagation & convenience macros (require GNU C extensions or C23)
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   PROPAGATION & CONVENIENCE MACROS (GNU C EXTENSIONS OR C23)
+   ════════════════════════════════════════════════════════════════════════════ */
 
 #ifndef CANON_NO_GNU_EXTENSIONS
 
@@ -457,8 +186,23 @@ result_##value_type##_##error_type##_eq( \
  * If the Result is Err, returns immediately with the error.
  * If Ok, continues execution.
  *
+ * Performance: O(1) time, O(1) space
+ *
+ * Example:
+ * ```c
+ * result_int_error do_work(void) {
+ *     result_int_error res1 = step1();
+ *     TRY(int, error, res1);  // Returns early if Err
+ *     
+ *     result_int_error res2 = step2();
+ *     TRY(int, error, res2);  // Returns early if Err
+ *     
+ *     return result_int_error_ok(42);
+ * }
+ * ```
+ *
  * @param type_value Type name for value (e.g., int)
- * @param type_error Type name for error (e.g., int)
+ * @param type_error Type name for error (e.g., error)
  * @param expr       Expression evaluating to Result
  */
 #define TRY(type_value, type_error, expr) \
@@ -477,6 +221,18 @@ result_##value_type##_##error_type##_eq( \
  *
  * If the Result is Err, returns immediately with new_error instead.
  * Useful for error context or type conversion.
+ *
+ * Performance: O(1) time, O(1) space
+ *
+ * Example:
+ * ```c
+ * result_int_error parse_file(const char* path) {
+ *     result_int_ioerror io_res = read_file(path);
+ *     TRY_REMAP(int, ioerror, io_res, ERR_FILE_READ);  // Convert error type
+ *     
+ *     return result_int_error_ok(42);
+ * }
+ * ```
  *
  * @param type_value Type name for value
  * @param type_error Type name for error
@@ -497,6 +253,16 @@ result_##value_type##_##error_type##_eq( \
  * Requires: GNU C statement expressions or C23
  * Disable with: #define CANON_NO_GNU_EXTENSIONS
  *
+ * Similar to unwrap_or(), but as an expression macro.
+ * Useful in compound expressions.
+ *
+ * Performance: O(1) time, O(1) space
+ *
+ * Example:
+ * ```c
+ * int x = UNWRAP_OR(int, error, parse_int("123"), 0);
+ * ```
+ *
  * @param type_value Type name for value
  * @param type_error Type name for error
  * @param expr       Expression evaluating to Result
@@ -516,6 +282,19 @@ result_##value_type##_##error_type##_eq( \
  * Disable with: #define CANON_NO_GNU_EXTENSIONS
  *
  * Combines unwrapping with error propagation. Useful for cleaner code.
+ * This is the most convenient way to work with Results in expression context.
+ *
+ * Performance: O(1) time, O(1) space
+ *
+ * Example:
+ * ```c
+ * result_int_error do_work(void) {
+ *     int x = TRY_UNWRAP(int, error, step1());  // Extract or early return
+ *     int y = TRY_UNWRAP(int, error, step2());  // Extract or early return
+ *     
+ *     return result_int_error_ok(x + y);
+ * }
+ * ```
  *
  * @param type_value Type name for value
  * @param type_error Type name for error
@@ -534,19 +313,162 @@ result_##value_type##_##error_type##_eq( \
 
 #endif /* CANON_NO_GNU_EXTENSIONS */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Common type instantiations
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   COMMON TYPE INSTANTIATIONS (COMMENTED OUT BY DEFAULT)
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* Uncomment the types you need, or define your own: */
+/*
+ * Uncomment the types you need, or define your own in your code.
+ * 
+ * Performance note: Each CANON_RESULT() generates ~2-3KB of code per type pair.
+ * Only instantiate type pairs you actually use.
+ */
 
-// CANON_C_DEFINE_RESULT(int, int)
-// CANON_C_DEFINE_RESULT(long, int)
-// CANON_C_DEFINE_RESULT(size_t, int)
+// typedef enum { ERR_NONE, ERR_INVALID, ERR_IO } error;
+// CANON_RESULT(int, error)
+// CANON_RESULT(long, error)
+// CANON_RESULT(size_t, error)
+// CANON_RESULT(float, error)
+// CANON_RESULT(double, error)
+
+/* For pointer types: */
 // typedef const char* constcharptr;
-// CANON_C_DEFINE_RESULT(int, constcharptr)
-// CANON_C_DEFINE_RESULT(float, constcharptr)
 // typedef void* voidptr;
-// CANON_C_DEFINE_RESULT(voidptr, int)
+// CANON_RESULT(int, constcharptr)
+// CANON_RESULT(voidptr, error)
 
-#endif /* CANON_C_SEMANTICS_RESULT_H */
+/* For custom types: */
+// typedef struct { int x, y; } Point;
+// CANON_RESULT(Point, error)
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMPLETE USAGE EXAMPLES
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/*
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 1: Define needed Result types
+    // ────────────────────────────────────────────────────────────────────────
+    typedef enum {
+        ERR_NONE,
+        ERR_NOT_FOUND,
+        ERR_INVALID_INPUT,
+        ERR_IO
+    } error;
+
+    CANON_RESULT(int, error)
+    CANON_RESULT(float, error)
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 2: Function returning Result
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_error parse_int(const char* str) {
+        if (!str) {
+            return result_int_error_err(ERR_INVALID_INPUT);
+        }
+
+        char* end;
+        long val = strtol(str, &end, 10);
+
+        if (end == str || *end != '\0') {
+            return result_int_error_err(ERR_INVALID_INPUT);
+        }
+
+        if (val > INT_MAX || val < INT_MIN) {
+            return result_int_error_err(ERR_INVALID_INPUT);
+        }
+
+        return result_int_error_ok((int)val);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 3: Safe usage patterns (recommended for production)
+    // ────────────────────────────────────────────────────────────────────────
+    void example_safe_usage(void) {
+        result_int_error result = parse_int("123");
+
+        // Pattern 1: explicit check + unwrap
+        if (result_int_error_is_ok(result)) {
+            int value = result_int_error_unwrap(result);
+            printf("Value: %d\n", value);
+        } else {
+            error err = result_int_error_unwrap_err(result);
+            printf("Error code: %d\n", err);
+        }
+
+        // Pattern 2: safe extraction with pointer
+        int value;
+        if (result_int_error_get_ok(result, &value)) {
+            printf("Extracted: %d\n", value);
+        }
+
+        // Pattern 3: default value when error
+        int value_or_zero = result_int_error_unwrap_or(result, 0);
+        printf("Value or zero: %d\n", value_or_zero);
+
+        // Pattern 4: expect with message (for invariants)
+        // int must_exist = result_int_error_expect(result, "parse should succeed");
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 4: Error propagation with TRY macro
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_error add_parsed(const char* a, const char* b) {
+        result_int_error res_a = parse_int(a);
+        TRY(int, error, res_a);  // Early return if error
+
+        result_int_error res_b = parse_int(b);
+        TRY(int, error, res_b);  // Early return if error
+
+        int val_a = result_int_error_unwrap(res_a);
+        int val_b = result_int_error_unwrap(res_b);
+
+        return result_int_error_ok(val_a + val_b);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 5: Cleaner with TRY_UNWRAP
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_error add_parsed_clean(const char* a, const char* b) {
+        int val_a = TRY_UNWRAP(int, error, parse_int(a));
+        int val_b = TRY_UNWRAP(int, error, parse_int(b));
+
+        return result_int_error_ok(val_a + val_b);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 6: Chaining operations (map, and_then)
+    // ────────────────────────────────────────────────────────────────────────
+    int double_it(int x) { return x * 2; }
+
+    result_int_error compute(const char* str) {
+        result_int_error res = parse_int(str);
+        
+        // Transform value if Ok
+        res = result_int_error_map(res, double_it);
+        
+        return res;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example 7: Combining with Option
+    // ────────────────────────────────────────────────────────────────────────
+    #include "option.h"
+    CANON_OPTION(int)
+    CANON_RESULT(option_int, error)
+
+    // Returns Ok(Some(value)), Ok(None), or Err(error)
+    result_option_int_error find_value(int id) {
+        if (id < 0) {
+            return result_option_int_error_err(ERR_INVALID_INPUT);
+        }
+        
+        if (id == 0) {
+            return result_option_int_error_ok(option_int_none());
+        }
+        
+        return result_option_int_error_ok(option_int_some(id * 10));
+    }
+*/
+
+#endif /* CANON_SEMANTICS_RESULT_H */
