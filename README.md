@@ -165,12 +165,18 @@ Canon-C is **header-only**. To use:
 
 ---
 
-### Known Limitations
+## Known Limitations
 
-- Some file-reading utilities in `util/` use `fseek` + `ftell` to determine file size.
-  - ISO C does **not guarantee** this works for very large files or non-seekable streams (e.g., pipes).
-  - Typical binary files are fine.
-  - A future portable fallback using `fread` + `realloc` may be added.
+- **File I/O:** Some utilities in `util/file.h` use `fseek` + `ftell` to determine file size.
+  - ISO C does **not guarantee** this works for very large files, non-seekable streams (pipes, sockets), or certain exotic filesystems.
+  - Typical binary files on common platforms are fine.
+  - A future fallback using `fread` + `realloc` may be added for full portability.
+
+- **Integer sizes:** Canon-C uses fixed-width types (u8, usize, etc.). While portable across common platforms, extremely unusual architectures may require manual adjustment.
+
+- **Concurrency:** Canon-C modules do **not** provide internal thread-safety. Any shared data must be synchronized externally.
+
+- **Large allocations:** Convenience modules that allocate dynamically (`dynvec`, `dynstring`) do not guard against out-of-memory situations beyond returning errors. Embedded or real-time code should prefer core modules.
 
 ---
 
