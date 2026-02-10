@@ -1,8 +1,10 @@
 // semantics/error.h
 #ifndef CANON_SEMANTICS_ERROR_H
 #define CANON_SEMANTICS_ERROR_H
+
 #include <stdbool.h>
 #include "result/result.h"
+
 /**
  * @file error.h
  * @brief Common error codes and human-readable messages
@@ -12,16 +14,19 @@
  * error handling with consistent, human-readable error messages.
  *
  * Portability:
+ * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later (for inline functions, stdbool.h)
- * - Depends on result.h from this library
+ * - Depends on result/result.h from this library
  * - No platform-specific code
  * - No external dependencies beyond standard C library
  *
- * Thread-safety: All functions are thread-safe (no shared mutable state)
- * All functions are pure/const - safe to call from
- * multiple threads simultaneously
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * All functions are thread-safe (no shared mutable state)
+ * All functions are pure/const - safe to call from multiple threads simultaneously
  *
  * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
  * - Time complexity: O(1) - constant time for all operations
  * - Space complexity: O(1) - no allocations, static data only
  * - Error representation: simple integer (enum) - zero overhead
@@ -97,16 +102,20 @@
  * 6. Update documentation with use cases
  *
  * Example of domain-specific extension:
+ * ```c
  * typedef enum {
  *     ERR_JSON_INVALID = 1000,
  *     ERR_JSON_UNEXPECTED_TOKEN,
  *     ERR_JSON_NESTING_TOO_DEEP,
  *     // ... more JSON-specific errors
  * } ErrorJSON;
+ * ```
  */
-/* ────────────────────────────────────────────────────────────────────────────
-   Error code enumeration
-   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ERROR CODE ENUMERATION
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Common error codes used across the library
  *
@@ -128,14 +137,14 @@
  *
  * Usage in Result types:
  * ```c
- * CANON_C_DEFINE_RESULT(int, Error)
- * CANON_C_DEFINE_RESULT(void_ptr, Error)
+ * CANON_RESULT(int, Error)
+ * CANON_RESULT(void_ptr, Error)
  * ```
  */
 typedef enum {
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        Success (not typically used in Result::Err)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
    
     /**
      * @brief No error (success)
@@ -146,9 +155,9 @@ typedef enum {
      */
     ERR_OK = 0,
   
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        Argument and input validation errors (1-99)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
    
     /**
      * @brief Invalid or null argument provided
@@ -210,9 +219,9 @@ typedef enum {
      */
     ERR_INVALID_STATE,
   
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        Resource and memory errors (100-199)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
    
     /**
      * @brief Memory allocation failed
@@ -262,9 +271,9 @@ typedef enum {
      */
     ERR_NOT_FOUND,
   
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        I/O and system errors (200-299)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
    
     /**
      * @brief File or I/O operation failed
@@ -326,9 +335,9 @@ typedef enum {
      */
     ERR_ALREADY_EXISTS,
   
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        Arithmetic errors (300-399)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
    
     /**
      * @brief Numeric overflow detected
@@ -366,9 +375,9 @@ typedef enum {
      */
     ERR_DIVIDE_BY_ZERO,
   
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        Generic/miscellaneous (400+)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
    
     /**
      * @brief Unknown or unspecified error
@@ -394,9 +403,9 @@ typedef enum {
      */
     ERR_NOT_IMPLEMENTED,
   
-    /* ────────────────────────────────────────────────────────────────────
+    /* ════════════════════════════════════════════════════════════════════════
        Add more domain-specific errors here (before ERR_COUNT)
-       ──────────────────────────────────────────────────────────────────── */
+       ════════════════════════════════════════════════════════════════════════ */
   
     /**
      * @brief Total number of defined error codes
@@ -409,9 +418,11 @@ typedef enum {
      */
     ERR_COUNT
 } Error;
-/* ────────────────────────────────────────────────────────────────────────────
-   Error message and utility functions
-   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ERROR MESSAGE AND UTILITY FUNCTIONS
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Returns a human-readable string for a given error code
  *
@@ -424,7 +435,7 @@ typedef enum {
  *
  * @param e Error code (enum Error)
  * @return Static null-terminated string describing the error
- * Returns "Unknown error" for undefined/invalid values
+ *         Returns "Unknown error" for undefined/invalid values
  *
  * Preconditions:
  * - None (handles all inputs safely)
@@ -449,9 +460,11 @@ typedef enum {
  * - Deterministic (same input always gives same output)
  *
  * Example usage:
+ * ```c
  * Error err = ERR_OUT_OF_MEMORY;
  * printf("Error occurred: %s\n", error_message(err));
  * // Output: "Error occurred: Out of memory"
+ * ```
  */
 static inline const char* error_message(Error e) {
     switch (e) {
@@ -516,6 +529,7 @@ static inline const char* error_message(Error e) {
             return "Unknown error";
     }
 }
+
 /**
  * @brief Checks if an error code represents success
  *
@@ -528,6 +542,7 @@ static inline const char* error_message(Error e) {
 static inline bool error_is_ok(Error e) {
     return e == ERR_OK;
 }
+
 /**
  * @brief Checks if an error code is valid (within defined range)
  *
@@ -540,6 +555,7 @@ static inline bool error_is_ok(Error e) {
 static inline bool error_is_valid(Error e) {
     return e >= ERR_OK && e < ERR_COUNT;
 }
+
 /**
  * @brief Returns the error code value as an integer
  *
@@ -552,58 +568,93 @@ static inline bool error_is_valid(Error e) {
 static inline int error_code(Error e) {
     return (int)e;
 }
-/* ────────────────────────────────────────────────────────────────────────────
-   Convenience macros for Result<T, Error>
-   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CONVENIENCE MACROS FOR RESULT<T, ERROR>
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Convenience macro to create successful Result<T, Error>
  *
- * Shorthand for result_##T##_Error_ok(val). Makes code more concise
+ * Shorthand for result_T_Error_ok(val). Makes code more concise
  * and readable when working with Result types.
+ *
+ * Example:
+ * ```c
+ * return RESULT_OK(int, 42);
+ * // Equivalent to: return result_int_Error_ok(42);
+ * ```
  */
 #define RESULT_OK(T, val) result_##T##_Error_ok(val)
+
 /**
  * @brief Convenience macro to create failed Result<T, Error>
  *
- * Shorthand for result_##T##_Error_err(err_code). Makes error
+ * Shorthand for result_T_Error_err(err_code). Makes error
  * returns more concise and consistent.
+ *
+ * Example:
+ * ```c
+ * return RESULT_ERR(int, ERR_NOT_FOUND);
+ * // Equivalent to: return result_int_Error_err(ERR_NOT_FOUND);
+ * ```
  */
 #define RESULT_ERR(T, err_code) result_##T##_Error_err(err_code)
+
 /**
  * @brief Checks if Result contains an error and extracts message
  *
  * Helper macro that combines error checking with message extraction.
  * Useful for logging or error reporting. Returns NULL if result is Ok,
  * otherwise returns the error message string.
+ *
+ * Example:
+ * ```c
+ * result_int_Error res = parse_int("abc");
+ * const char* msg = RESULT_ERROR_MSG(int, res);
+ * if (msg) {
+ *     fprintf(stderr, "Error: %s\n", msg);
+ * }
+ * ```
  */
 #define RESULT_ERROR_MSG(T, result) \
     (result_##T##_Error_is_err(result) ? \
         error_message(result_##T##_Error_unwrap_err(result)) : NULL)
-/* ────────────────────────────────────────────────────────────────────────────
-   Common type instantiations
-   ──────────────────────────────────────────────────────────────────────────── */
-/* Uncomment the types you need: */
-// CANON_C_DEFINE_RESULT(int, Error)
-// CANON_C_DEFINE_RESULT(long, Error)
-// CANON_C_DEFINE_RESULT(size_t, Error)
-// CANON_C_DEFINE_RESULT(float, Error)
-// CANON_C_DEFINE_RESULT(double, Error)
-/* typedef void* void_ptr; */
-// CANON_C_DEFINE_RESULT(void_ptr, Error)
-/* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Examples — real code wrapped in comments
-   (to use any example as real code, delete the /* and */ lines around it)
-   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMMON TYPE INSTANTIATIONS (COMMENTED OUT BY DEFAULT)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Uncomment the types you need, or define your own in your code.
+ * 
+ * Note: These use the modern CANON_RESULT macro. The legacy
+ * CANON_C_DEFINE_RESULT is also supported for backward compatibility.
+ */
+
+// CANON_RESULT(int, Error)
+// CANON_RESULT(long, Error)
+// CANON_RESULT(size_t, Error)
+// CANON_RESULT(float, Error)
+// CANON_RESULT(double, Error)
+
+/* For pointer types: */
+// typedef void* void_ptr;
+// CANON_RESULT(void_ptr, Error)
+
+/* ════════════════════════════════════════════════════════════════════════════
+   COMPLETE USAGE EXAMPLES
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /*
     // ────────────────────────────────────────────────────────────────────────
     // Example: Define the Result types used below
     // ────────────────────────────────────────────────────────────────────────
-    CANON_C_DEFINE_RESULT(int, Error)
-    CANON_C_DEFINE_RESULT(double, Error)
+    CANON_RESULT(int, Error)
+    CANON_RESULT(double, Error)
 
     typedef void* void_ptr;
-    CANON_C_DEFINE_RESULT(void_ptr, Error)
+    CANON_RESULT(void_ptr, Error)
 
     // ────────────────────────────────────────────────────────────────────────
     // Example: robust integer parsing from string with multiple failure modes
@@ -717,6 +768,34 @@ static inline int error_code(Error e) {
     }
 
     // ────────────────────────────────────────────────────────────────────────
+    // Example: using modern TRY macro for cleaner error propagation
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_Error add_parsed(const char* a, const char* b) {
+        // Parse first number
+        result_int_Error res_a = parse_int(a);
+        TRY(int, Error, res_a);  // Early return if error
+        
+        // Parse second number
+        result_int_Error res_b = parse_int(b);
+        TRY(int, Error, res_b);  // Early return if error
+        
+        int val_a = result_int_Error_unwrap(res_a);
+        int val_b = result_int_Error_unwrap(res_b);
+        
+        return RESULT_OK(int, val_a + val_b);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Example: even cleaner with TRY_UNWRAP
+    // ────────────────────────────────────────────────────────────────────────
+    result_int_Error add_parsed_clean(const char* a, const char* b) {
+        int val_a = TRY_UNWRAP(int, Error, parse_int(a));
+        int val_b = TRY_UNWRAP(int, Error, parse_int(b));
+        
+        return RESULT_OK(int, val_a + val_b);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // Optional: string_view example (non-owning string slice)
     // ────────────────────────────────────────────────────────────────────────
     typedef struct {
@@ -724,7 +803,7 @@ static inline int error_code(Error e) {
         const char* data;
     } string_view;
 
-    CANON_C_DEFINE_RESULT(string_view, Error)
+    CANON_RESULT(string_view, Error)
 
     result_string_view_Error make_view(const char* start, size_t len) {
         if (!start && len > 0) {
@@ -735,7 +814,4 @@ static inline int error_code(Error e) {
     }
 */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   End of public API & examples
-   ──────────────────────────────────────────────────────────────────────────── */
 #endif /* CANON_SEMANTICS_ERROR_H */
