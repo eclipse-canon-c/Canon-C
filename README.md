@@ -165,6 +165,15 @@ Canon-C is **header-only**. To use:
 
 ---
 
+### Known Limitations
+
+- Some file-reading utilities in `util/` use `fseek` + `ftell` to determine file size.
+  - ISO C does **not guarantee** this works for very large files or non-seekable streams (e.g., pipes).
+  - Typical binary files are fine.
+  - A future portable fallback using `fread` + `realloc` may be added.
+
+---
+
 No build system integration required. No linking step. Just include and use.
 
 **Compiler support**: C99 or later, works with GCC, Clang, MSVC.
