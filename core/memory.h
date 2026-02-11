@@ -1,11 +1,10 @@
 #ifndef CANON_CORE_MEMORY_H
 #define CANON_CORE_MEMORY_H
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include "core/primitives/types.h"
+#include "core/primitives/limits.h"
+#include "core/primitives/contract.h"
 #include <string.h>
-#include <assert.h>
 
 /**
  * @file memory.h
@@ -20,18 +19,17 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Null-safe and zero-size safe on all operations
  * - Overflow-protected alignment calculations
- * - Explicit over implicit — preconditions checked in debug builds
+ * - Explicit over implicit — preconditions checked via contract.h
  * - No hidden allocations, no thread-local state
  * - Type-safe convenience macros reduce sizeof boilerplate
- * - Portable — relies only on C99 standard library
- * - Debug assertions catch misuse early
+ * - Portable — relies only on C99 standard library + Canon-C primitives
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - All functions: O(1) for alignment helpers, O(n) for memory ops
- * - Alignment helpers compile to 2–5 instructions on most platforms
+ * - Alignment helpers compile to 2-5 instructions on most platforms
  * - Wrappers usually inlined and optimized identically to direct stdlib calls
- * - mem_is_all / mem_is_zero: linear scan (no SIMD yet — could be added)
+ * - mem_is_all / mem_is_zero: linear scan
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -39,93 +37,93 @@
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (inline functions, stdint.h, stdbool.h)
+ * - Requires C99 or later (inline functions)
  * - Uses only: memcpy, memmove, memset, memcmp, uintptr_t
  * - No platform-specific intrinsics or assembly
  *
- * Typical use cases:
+ * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
- * - Custom allocators (arena alignment padding, pool block sizing)
- * - Struct initialization / zeroing before use
- * - Safe buffer copying in parsers / serializers
- * - SIMD alignment verification
- * - Constant-time-ish comparison avoidance documentation
- * - Sanitizing / zeroing sensitive memory regions
- * - Debugging memory pattern checks
+ * memory.h sits at the bottom of core/. It depends only on primitives/.
+ * No other core module may be included here.
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
  * - Constant-time comparison of secrets (use dedicated crypto function)
  * - Very large regions where SIMD-optimized routines exist
- * - Overaligned allocations beyond max_align_t (use mem_align_to)
- * - Replacing compiler builtins (__builtin_memcpy etc.) in hot loops
+ * - Replacing compiler builtins in hot loops
  *
  * @sa mem_align(), mem_align_to(), mem_zero(), mem_copy(), mem_move()
  */
+
+/* ────────────────────────────────────────────────────────────────────────────
+   mem_swap fixed buffer limit
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Maximum size (bytes) supported by mem_swap
+ *
+ * mem_swap uses a fixed-size stack buffer to avoid VLAs (which are
+ * optional in C11+). Swapping regions larger than this requires
+ * caller-managed scratch memory.
+ *
+ * Override by defining CANON_MEM_SWAP_MAX before including this header.
+ *
+ * @remark Default: 256 bytes — covers most struct swap use cases
+ */
+#ifndef CANON_MEM_SWAP_MAX
+    #define CANON_MEM_SWAP_MAX ((usize)256)
+#endif
 
 /* ────────────────────────────────────────────────────────────────────────────
    Alignment utilities
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Rounds size up to the next multiple of `max_align_t`
+ * @brief Rounds size up to the next multiple of max_align_t
  *
- * This is the "natural" alignment most types expect on the current platform:
+ * Natural alignment for the current platform:
  * - Usually 8 bytes on 64-bit systems
  * - Usually 4 bytes on 32-bit systems
  *
- * @param size Bytes to align (0 is allowed → returns 0)
- * @return Smallest multiple of `sizeof(max_align_t)` ≥ size,
- * or `SIZE_MAX` if overflow would occur
- *
- * @remark Overflow-safe: checks before adding padding
- *
- * Example:
- * ```c
- * size_t aligned = mem_align(37); // → 40 on 64-bit
- * size_t zero = mem_align(0); // → 0
- * ```
+ * @param size Bytes to align (0 allowed → returns 0)
+ * @return Smallest multiple of sizeof(max_align_t) >= size,
+ *         or CANON_USIZE_MAX if overflow would occur
  *
  * @sa mem_align_to()
  */
-static inline size_t mem_align(size_t size) {
-    const size_t align = sizeof(max_align_t);
+static inline usize mem_align(usize size) {
+    const usize align = sizeof(max_align_t);
     if (size == 0) return 0;
-    // Overflow protection
-    if (size > SIZE_MAX - (align - 1u)) {
-        return SIZE_MAX;
+    if (size > CANON_USIZE_MAX - (align - 1u)) {
+        return CANON_USIZE_MAX;
     }
     return (size + align - 1u) & ~(align - 1u);
 }
 
 /**
- * @brief Rounds size up to the next multiple of requested power-of-2 alignment
+ * @brief Rounds size up to the next multiple of a power-of-2 alignment
  *
- * @param size Bytes to align (0 is allowed → returns 0)
- * @param alignment Power-of-2 alignment value (1,2,4,8,16,…)
+ * @param size      Bytes to align (0 allowed → returns 0)
+ * @param alignment Power-of-2 alignment value (1, 2, 4, 8, 16, ...)
  *
- * @return Smallest multiple of alignment ≥ size,
- * or `SIZE_MAX` on overflow or invalid alignment
+ * @return Smallest multiple of alignment >= size,
+ *         or CANON_USIZE_MAX on overflow or invalid alignment
  *
- * @pre alignment > 0 and is power of 2 (asserted in debug builds)
- *
- * Example:
- * ```c
- * size_t a = mem_align_to(100, 16); // → 112
- * size_t b = mem_align_to(64, 64); // → 64
- * ```
+ * @pre alignment > 0 and is a power of 2
  *
  * @sa mem_align(), mem_is_aligned()
  */
-static inline size_t mem_align_to(size_t size, size_t alignment) {
-    assert(alignment > 0 && "mem_align_to: alignment must be > 0");
-    assert((alignment & (alignment - 1u)) == 0 && "mem_align_to: alignment must be power of 2");
+static inline usize mem_align_to(usize size, usize alignment) {
+    require_msg(alignment > 0,
+        "mem_align_to: alignment must be > 0");
+    require_msg((alignment & (alignment - 1u)) == 0,
+        "mem_align_to: alignment must be a power of 2");
     if (alignment == 0 || (alignment & (alignment - 1u)) != 0) {
-        return SIZE_MAX;
+        return CANON_USIZE_MAX;
     }
     if (size == 0) return 0;
-    if (size > SIZE_MAX - (alignment - 1u)) {
-        return SIZE_MAX;
+    if (size > CANON_USIZE_MAX - (alignment - 1u)) {
+        return CANON_USIZE_MAX;
     }
     return (size + alignment - 1u) & ~(alignment - 1u);
 }
@@ -133,25 +131,20 @@ static inline size_t mem_align_to(size_t size, size_t alignment) {
 /**
  * @brief Checks whether a pointer satisfies a given alignment requirement
  *
- * @param ptr Pointer to test (NULL → false)
- * @param alignment Power-of-2 alignment to check (1,2,4,8,…)
+ * @param ptr       Pointer to test (NULL → false)
+ * @param alignment Power-of-2 alignment to check (1, 2, 4, 8, ...)
  *
- * @return `true` if ptr is aligned to `alignment` bytes, `false` otherwise
+ * @return true if ptr is aligned to alignment bytes, false otherwise
  *
- * @pre alignment is power of 2 (asserted in debug builds)
- *
- * Example:
- * ```c
- * if (mem_is_aligned(my_ptr, 32)) {
- *     // safe to use AVX / NEON load
- * }
- * ```
+ * @pre alignment is a power of 2
  *
  * @sa mem_get_alignment()
  */
-static inline bool mem_is_aligned(const void* ptr, size_t alignment) {
-    assert(alignment > 0 && "mem_is_aligned: alignment must be > 0");
-    assert((alignment & (alignment - 1u)) == 0 && "mem_is_aligned: alignment must be power of 2");
+static inline bool mem_is_aligned(const void* ptr, usize alignment) {
+    require_msg(alignment > 0,
+        "mem_is_aligned: alignment must be > 0");
+    require_msg((alignment & (alignment - 1u)) == 0,
+        "mem_is_aligned: alignment must be a power of 2");
     if (!ptr || alignment == 0 || (alignment & (alignment - 1u)) != 0) {
         return false;
     }
@@ -165,31 +158,21 @@ static inline bool mem_is_aligned(const void* ptr, size_t alignment) {
  *
  * @param ptr Pointer to inspect (NULL → 0)
  * @return Alignment in bytes (power of 2), or 0 if ptr is NULL
- *
- * @remark For ptr == NULL returns 0 (not SIZE_MAX)
- * @remark Very large alignments (e.g. page-aligned) are correctly detected
- *
- * Example:
- * ```c
- * void* p = aligned_alloc(4096, 4096);
- * size_t align = mem_get_alignment(p); // → 4096
- * ```
  */
-static inline size_t mem_get_alignment(const void* ptr) {
+static inline usize mem_get_alignment(const void* ptr) {
     if (!ptr) return 0;
     uintptr_t addr = (uintptr_t)ptr;
-    if (addr == 0) return SIZE_MAX; // technically aligned to everything
-    // isolate lowest set bit
-    return addr & (~addr + 1u);
+    if (addr == 0) return CANON_USIZE_MAX;
+    return (usize)(addr & (~addr + 1u));
 }
 
 /**
  * @brief Checks if a size is a power of two
  *
  * @param n Value to test
- * @return true if n > 0 and is power of 2, false otherwise
+ * @return true if n > 0 and is a power of 2, false otherwise
  */
-static inline bool mem_is_power_of_two(size_t n) {
+static inline bool mem_is_power_of_two(usize n) {
     return n > 0 && (n & (n - 1)) == 0;
 }
 
@@ -200,20 +183,19 @@ static inline bool mem_is_power_of_two(size_t n) {
 /**
  * @brief Copies non-overlapping memory regions (safe memcpy wrapper)
  *
- * @param dest Destination memory
- * @param src Source memory
- * @param size Number of bytes to copy
+ * @param dest Destination memory (NULL → no-op)
+ * @param src  Source memory (NULL → no-op)
+ * @param size Number of bytes to copy (0 → no-op)
  *
- * @pre If size > 0, dest and src must not overlap (asserted in debug)
- * @pre dest and src may be NULL (operation becomes no-op)
- *
- * @note For possibly overlapping regions use mem_move() instead.
+ * @pre If size > 0, dest and src must not overlap (checked in debug builds)
+ * @note For overlapping regions use mem_move() instead.
  *
  * @sa mem_move(), mem_copy_type()
  */
-static inline void mem_copy(void* restrict dest, const void* restrict src, size_t size) {
+static inline void mem_copy(void* restrict dest, const void* restrict src, usize size) {
     if (!dest || !src || size == 0) return;
-    assert(dest != src && "mem_copy: overlapping regions — use mem_move instead");
+    ensure_msg(dest != src,
+        "mem_copy: overlapping regions — use mem_move instead");
     memcpy(dest, src, size);
 }
 
@@ -221,14 +203,12 @@ static inline void mem_copy(void* restrict dest, const void* restrict src, size_
  * @brief Moves memory, correctly handling overlapping regions
  *
  * @param dest Destination memory (may overlap src)
- * @param src Source memory
- * @param size Number of bytes to move
- *
- * @remark NULL or zero-size inputs are gracefully ignored
+ * @param src  Source memory
+ * @param size Number of bytes to move (0 → no-op)
  *
  * @sa mem_copy()
  */
-static inline void mem_move(void* dest, const void* src, size_t size) {
+static inline void mem_move(void* dest, const void* src, usize size) {
     if (!dest || !src || size == 0) return;
     memmove(dest, src, size);
 }
@@ -236,14 +216,12 @@ static inline void mem_move(void* dest, const void* src, size_t size) {
 /**
  * @brief Zero-fills a memory region
  *
- * @param ptr Memory to clear
- * @param size Number of bytes to zero
- *
- * @remark Commonly used to initialize structs or sanitize memory
+ * @param ptr  Memory to clear (NULL → no-op)
+ * @param size Number of bytes to zero (0 → no-op)
  *
  * @sa mem_zero_type(), mem_zero_array(), mem_secure_zero()
  */
-static inline void mem_zero(void* ptr, size_t size) {
+static inline void mem_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
     memset(ptr, 0, size);
 }
@@ -251,32 +229,33 @@ static inline void mem_zero(void* ptr, size_t size) {
 /**
  * @brief Securely zero-fills a memory region (crypto-sensitive data)
  *
- * Uses `memset_s` when available (C11 Annex K), otherwise volatile write loop.
- * Prevents compiler from optimizing away the zeroing.
+ * Uses memset_s when available (C11 Annex K), otherwise volatile write loop.
+ * Prevents the compiler from optimizing away the zeroing.
  *
- * @param ptr Memory to clear
- * @param size Number of bytes to zero
+ * @param ptr  Memory to clear (NULL → no-op)
+ * @param size Number of bytes to zero (0 → no-op)
  */
-static inline void mem_secure_zero(void* ptr, size_t size) {
+static inline void mem_secure_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
 #if defined(__STDC_LIB_EXT1__) && __STDC_LIB_EXT1__
     memset_s(ptr, size, 0, size);
 #else
-    volatile unsigned char* p = (volatile unsigned char*)ptr;
-    while (size--) *p++ = 0;
+    volatile u8* p = (volatile u8*)ptr;
+    usize remaining = size;
+    while (remaining--) *p++ = 0;
 #endif
 }
 
 /**
  * @brief Fills memory with a repeated byte value
  *
- * @param ptr Memory region to fill
- * @param value Byte value (0–255)
- * @param size Number of bytes to set
+ * @param ptr   Memory region to fill (NULL → no-op)
+ * @param value Byte value (0-255)
+ * @param size  Number of bytes to set (0 → no-op)
  *
  * @sa mem_zero()
  */
-static inline void mem_set(void* ptr, int value, size_t size) {
+static inline void mem_set(void* ptr, int value, usize size) {
     if (!ptr || size == 0) return;
     memset(ptr, value, size);
 }
@@ -284,17 +263,16 @@ static inline void mem_set(void* ptr, int value, size_t size) {
 /**
  * @brief Compares two memory regions byte-by-byte
  *
- * @return
- * - < 0 if a < b at first differing byte
- * - 0 if regions are equal
- * - > 0 if a > b at first differing byte
+ * @return < 0 if a < b at first differing byte
+ *           0 if regions are equal
+ *         > 0 if a > b at first differing byte
  *
  * @remark NULL pointers or size=0 → returns 0
- * @remark Not constant-time — do **not** use for cryptographic secrets
+ * @remark Not constant-time — do NOT use for cryptographic secrets
  *
  * @sa mem_equal()
  */
-static inline int mem_compare(const void* a, const void* b, size_t size) {
+static inline int mem_compare(const void* a, const void* b, usize size) {
     if (!a || !b || size == 0) return 0;
     return memcmp(a, b, size);
 }
@@ -302,14 +280,14 @@ static inline int mem_compare(const void* a, const void* b, size_t size) {
 /**
  * @brief Checks whether two memory regions are byte-for-byte identical
  *
- * @return `true` if equal, `false` otherwise
+ * @return true if equal, false otherwise
  *
  * @remark Both NULL → true
  * @remark size=0 → true
  *
  * @sa mem_compare(), mem_equal_type()
  */
-static inline bool mem_equal(const void* a, const void* b, size_t size) {
+static inline bool mem_equal(const void* a, const void* b, usize size) {
     if (!a || !b) return a == b;
     if (size == 0) return true;
     return memcmp(a, b, size) == 0;
@@ -318,45 +296,51 @@ static inline bool mem_equal(const void* a, const void* b, size_t size) {
 /**
  * @brief Checks whether all bytes in a region have the same value
  *
- * @param ptr Memory region to inspect
+ * @param ptr   Memory region to inspect (NULL → true)
  * @param value Expected byte value
- * @param size Number of bytes to check
+ * @param size  Number of bytes to check (0 → true)
  *
- * @return `true` if every byte == value, `false` otherwise
- *
- * @remark NULL or size=0 → returns `true`
+ * @return true if every byte == value, false otherwise
  *
  * @sa mem_is_zero()
  */
-static inline bool mem_is_all(const void* ptr, int value, size_t size) {
+static inline bool mem_is_all(const void* ptr, int value, usize size) {
     if (!ptr || size == 0) return true;
-    const unsigned char* p = (const unsigned char*)ptr;
-    const unsigned char v = (unsigned char)value;
-    for (size_t i = 0; i < size; i++) {
+    const u8* p = (const u8*)ptr;
+    const u8 v = (u8)value;
+    for (usize i = 0; i < size; i++) {
         if (p[i] != v) return false;
     }
     return true;
 }
 
 /**
- * @brief Convenience function: checks if region is entirely zero
+ * @brief Checks if a memory region is entirely zero
  *
  * @sa mem_is_all()
  */
-static inline bool mem_is_zero(const void* ptr, size_t size) {
+static inline bool mem_is_zero(const void* ptr, usize size) {
     return mem_is_all(ptr, 0, size);
 }
 
 /**
- * @brief Swaps contents of two memory regions of the same size
+ * @brief Swaps contents of two non-overlapping memory regions
  *
- * @param a First region
- * @param b Second region
+ * Uses a fixed-size stack buffer. Size must not exceed CANON_MEM_SWAP_MAX
+ * (default 256 bytes). For larger swaps, use caller-managed scratch memory.
+ *
+ * @param a    First region (NULL → no-op)
+ * @param b    Second region (NULL → no-op)
  * @param size Number of bytes (must be same for both)
+ *
+ * @pre size <= CANON_MEM_SWAP_MAX
+ * @pre a and b do not overlap
  */
-static inline void mem_swap(void* a, void* b, size_t size) {
+static inline void mem_swap(void* a, void* b, usize size) {
     if (!a || !b || size == 0) return;
-    char tmp[size]; // C99 VLA — small sizes only
+    require_msg(size <= CANON_MEM_SWAP_MAX,
+        "mem_swap: size exceeds CANON_MEM_SWAP_MAX — use caller-managed scratch buffer");
+    u8 tmp[CANON_MEM_SWAP_MAX];
     mem_copy(tmp, a, size);
     mem_copy(a, b, size);
     mem_copy(b, tmp, size);
@@ -367,55 +351,21 @@ static inline void mem_swap(void* a, void* b, size_t size) {
    ──────────────────────────────────────────────────────────────────────────── */
 
 /** Zero-initializes a single object */
-#define mem_zero_type(ptr) mem_zero((ptr), sizeof(*(ptr)))
+#define mem_zero_type(ptr)              mem_zero((ptr), sizeof(*(ptr)))
 
 /** Securely zero-initializes a single object (crypto-sensitive) */
-#define mem_secure_zero_type(ptr) mem_secure_zero((ptr), sizeof(*(ptr)))
+#define mem_secure_zero_type(ptr)       mem_secure_zero((ptr), sizeof(*(ptr)))
 
-/** Zero-initializes an entire array */
-#define mem_zero_array(array) mem_zero((array), sizeof(array))
+/** Zero-initializes an entire fixed-size array */
+#define mem_zero_array(array)           mem_zero((array), sizeof(array))
 
-/** Copies one object to another (same type) */
-#define mem_copy_type(dest, src) mem_copy((dest), (src), sizeof(*(dest)))
+/** Copies one object to another of the same type */
+#define mem_copy_type(dest, src)        mem_copy((dest), (src), sizeof(*(dest)))
 
 /** Compares two objects of the same type */
-#define mem_compare_type(a, b) mem_compare((a), (b), sizeof(*(a)))
+#define mem_compare_type(a, b)          mem_compare((a), (b), sizeof(*(a)))
 
 /** Checks if two objects of the same type are equal */
-#define mem_equal_type(a, b) mem_equal((a), (b), sizeof(*(a)))
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Usage Examples (documentation only)
-   ────────────────────────────────────────────────────────────────────────────
-#include "core/memory.h"
-void example(void) {
-    // Alignment helpers
-    size_t pad = mem_align(45); // → 48 (on 64-bit)
-    size_t pad16 = mem_align_to(45, 16); // → 48
-    float f;
-    if (mem_is_aligned(&f, _Alignof(float))) {
-        // guaranteed by language — just demo
-    }
-    // Safe initialization
-    struct Packet { uint32_t len; char data[512]; } pkt;
-    mem_zero_type(&pkt);
-    // Secure zeroing of sensitive data
-    uint8_t key[32];
-    // ... fill key ...
-    mem_secure_zero_type(&key); // crypto-safe zero
-    // Safe copy
-    struct Packet copy;
-    mem_copy_type(&copy, &pkt);
-    // Pattern check
-    char buf[1024];
-    mem_set(buf, 0xAA, sizeof(buf));
-    if (mem_is_all(buf, 0xAA, sizeof(buf))) {
-        // yes
-    }
-    // Overlap-safe move
-    char overlap[32] = "1234567890";
-    mem_move(overlap + 4, overlap, 10); // safe shift
-}
-──────────────────────────────────────────────────────────────────────────── */
+#define mem_equal_type(a, b)            mem_equal((a), (b), sizeof(*(a)))
 
 #endif /* CANON_CORE_MEMORY_H */
