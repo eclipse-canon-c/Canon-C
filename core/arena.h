@@ -1,12 +1,10 @@
 #ifndef CANON_CORE_ARENA_H
 #define CANON_CORE_ARENA_H
 
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include <assert.h>
-
-#include "memory.h"
+#include "core/primitives/types.h"
+#include "core/primitives/limits.h"
+#include "core/primitives/contract.h"
+#include "core/memory.h"
 
 /**
  * @file arena.h
@@ -25,13 +23,12 @@
  * - Caller completely controls memory lifetime and buffer
  * - Cache-friendly: all allocations are contiguous
  * - Explicit lifetime: reset or rollback required to reuse memory
- * - Debug-friendly: many assertions in debug builds
  * - Two reset modes: fast (just offset=0) and secure (memset 0)
  * - Checkpoint/rollback pattern via ArenaMark
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - Time complexity: O(1) for alloc (amortized), O(n) for secure reset
+ * - Time complexity: O(1) for alloc, O(n) for secure reset
  * - Space complexity: O(1) metadata (~24 bytes per arena)
  * - No per-allocation overhead (no headers/footers)
  * - Alignment padding is the only "waste"
@@ -46,9 +43,12 @@
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
- * - Relies on: uintptr_t, inline functions, assert()
- * - Optional GNU statement expressions for *_zero macros
- * (disabled with #define CANON_NO_GNU_EXTENSIONS)
+ * - No platform-specific code
+ *
+ * Dependency rule:
+ * ────────────────────────────────────────────────────────────────────────────
+ * arena.h is core/. It depends only on primitives/ and core/memory.h.
+ * No data/, semantics/, algo/, or util/ headers may be included here.
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -56,35 +56,43 @@
  * - Parser / lexer scratch memory
  * - AST / DOM / intermediate representation nodes
  * - Command buffers, transaction scratchpads
- * - Scoped temporary strings / buffers
- * - Game entity component temporary data
  * - Any workload with clear "begin → work → reset" phases
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
  * - Long-lived objects that outlive the arena
  * - General-purpose allocation (use malloc / pool instead)
- * - Very large individual allocations (> remaining space)
  * - Objects that require individual deallocation
  * - Multi-threaded allocation without external synchronization
  *
  * @sa arena_alloc(), arena_alloc_aligned(), arena_reset_to(), arena_mark()
  */
 
+/* ────────────────────────────────────────────────────────────────────────────
+   Arena struct and mark type
+   ──────────────────────────────────────────────────────────────────────────── */
+
 /**
  * @brief Arena instance — holds buffer, capacity and current position
+ *
+ * Fields are public for inspection but must not be modified directly.
+ * Use arena_init(), arena_reset(), and arena_reset_to() to manage state.
  */
 typedef struct Arena {
-    uint8_t* buffer;   ///< Start of the memory block (caller-owned)
-    size_t   capacity; ///< Total usable bytes in buffer
-    size_t   offset;   ///< Current bump pointer (next free byte)
+    u8*   buffer;   ///< Start of the memory block (caller-owned)
+    usize capacity; ///< Total usable bytes in buffer
+    usize offset;   ///< Current bump pointer (next free byte)
 } Arena;
 
 /**
  * @brief Opaque checkpoint type for partial rollback
+ *
+ * Returned by arena_mark(), consumed by arena_reset_to().
+ * Treat as opaque — do not rely on its internal representation.
+ *
  * @sa arena_mark(), arena_reset_to()
  */
-typedef size_t ArenaMark;
+typedef usize ArenaMark;
 
 /* ────────────────────────────────────────────────────────────────────────────
    Initialization & State Management
@@ -93,39 +101,38 @@ typedef size_t ArenaMark;
 /**
  * @brief Initializes an arena using caller-provided memory
  *
- * @param arena Valid pointer to uninitialized Arena struct
- * @param buffer Pointer to memory block (must remain valid)
+ * @param arena    Valid pointer to uninitialized Arena struct
+ * @param buffer   Pointer to memory block (must remain valid for arena lifetime)
  * @param capacity Size of buffer in bytes (> 0)
  *
  * @pre arena != NULL
  * @pre buffer != NULL
  * @pre capacity > 0
- * @pre buffer points to at least capacity bytes
+ * @pre capacity <= CANON_ARENA_MAX_SIZE
  *
  * @post arena->buffer == buffer
  * @post arena->capacity == capacity
  * @post arena->offset == 0
  *
- * @note In debug builds, preconditions are asserted.
- * In release builds, invalid inputs leave arena unusable.
- *
  * @sa arena_reset()
  */
-static inline void arena_init(Arena* arena, void* buffer, size_t capacity) {
-    assert(arena != NULL && "arena_init: arena cannot be NULL");
-    assert(buffer != NULL && "arena_init: buffer cannot be NULL");
-    assert(capacity > 0 && "arena_init: capacity must be > 0");
+static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
+    require_msg(arena != NULL,   "arena_init: arena cannot be NULL");
+    require_msg(buffer != NULL,  "arena_init: buffer cannot be NULL");
+    require_msg(capacity > 0,    "arena_init: capacity must be > 0");
+    require_msg(capacity <= CANON_ARENA_MAX_SIZE,
+        "arena_init: capacity exceeds CANON_ARENA_MAX_SIZE");
     if (!arena || !buffer || capacity == 0) return;
-    arena->buffer = (uint8_t*)buffer;
+    arena->buffer   = (u8*)buffer;
     arena->capacity = capacity;
-    arena->offset = 0;
+    arena->offset   = 0;
 }
 
 /**
  * @brief Resets arena to empty state (fast path)
  *
  * Invalidates all previous allocations by moving offset back to 0.
- * Memory content is **not** cleared.
+ * Memory content is NOT cleared — use arena_reset_secure() for sensitive data.
  *
  * @param arena Arena to reset (NULL-safe)
  *
@@ -141,10 +148,10 @@ static inline void arena_reset(Arena* arena) {
  * @brief Resets arena and securely wipes all previously allocated memory
  *
  * Use when arena contained sensitive data (keys, passwords, tokens, etc.).
+ * Slower than arena_reset() — O(used bytes).
  *
  * @param arena Arena to reset (NULL-safe)
  *
- * @remark Time complexity: O(used bytes)
  * @sa arena_reset()
  */
 static inline void arena_reset_secure(Arena* arena) {
@@ -161,30 +168,27 @@ static inline void arena_reset_secure(Arena* arena) {
 /**
  * @brief Allocates size bytes with natural alignment
  *
- * Natural alignment is typically:
+ * Natural alignment is sizeof(max_align_t):
  * - 8 bytes on 64-bit platforms
  * - 4 bytes on 32-bit platforms
  *
  * @param arena Valid initialized arena
- * @param size Bytes to allocate (> 0)
+ * @param size  Bytes to allocate (> 0)
  *
  * @return Pointer to aligned memory block, or NULL if:
- * - arena == NULL
- * - size == 0
- * - insufficient remaining space (after alignment padding)
+ *         - arena == NULL or size == 0
+ *         - insufficient remaining space (after alignment padding)
+ *         - alignment padding overflows usize
  *
  * @pre arena is initialized via arena_init()
  *
- * @note Alignment padding is inserted if needed.
- * No per-allocation metadata is stored.
- *
  * @sa arena_alloc_aligned(), arena_alloc_type()
  */
-static inline void* arena_alloc(Arena* arena, size_t size) {
-    assert(arena != NULL && "arena_alloc: arena cannot be NULL");
+static inline void* arena_alloc(Arena* arena, usize size) {
+    require_msg(arena != NULL, "arena_alloc: arena cannot be NULL");
     if (!arena || size == 0) return NULL;
-    size_t aligned = mem_align(size);
-    if (aligned < size || arena->offset > SIZE_MAX - aligned) return NULL;
+    usize aligned = mem_align(size);
+    if (aligned < size || arena->offset > CANON_USIZE_MAX - aligned) return NULL;
     if (arena->offset + aligned > arena->capacity) return NULL;
     void* ptr = arena->buffer + arena->offset;
     arena->offset += aligned;
@@ -192,37 +196,33 @@ static inline void* arena_alloc(Arena* arena, size_t size) {
 }
 
 /**
- * @brief Allocates size bytes with requested alignment
+ * @brief Allocates size bytes with a specific power-of-2 alignment
  *
- * @param arena Valid initialized arena
- * @param size Bytes to allocate (> 0)
- * @param alignment Power-of-2 alignment requirement (1,2,4,8,16,…)
+ * @param arena     Valid initialized arena
+ * @param size      Bytes to allocate (> 0)
+ * @param alignment Power-of-2 alignment requirement (1, 2, 4, 8, 16, ...)
  *
  * @return Aligned pointer or NULL if:
- * - arena == NULL
- * - size == 0
- * - alignment == 0 or not power of 2
- * - insufficient space (including padding)
+ *         - arena == NULL, size == 0, or alignment not power of 2
+ *         - insufficient space (including alignment padding)
  *
- * @pre alignment is power of 2 (checked in debug builds)
- *
- * @remark Inserts padding bytes before allocation if current offset
- * is not already suitably aligned.
+ * @pre alignment is a power of 2
  *
  * Example:
  * ```c
- * float* vec = arena_alloc_aligned(&arena, sizeof(float)*4, 16);
+ * float* v = arena_alloc_aligned(&arena, sizeof(float) * 4, 16);
  * ```
  */
-static inline void* arena_alloc_aligned(Arena* arena, size_t size, size_t alignment) {
-    assert(arena != NULL && "arena_alloc_aligned: arena cannot be NULL");
-    assert(mem_is_power_of_two(alignment) && "alignment must be power of 2");
+static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignment) {
+    require_msg(arena != NULL, "arena_alloc_aligned: arena cannot be NULL");
+    require_msg(mem_is_power_of_two(alignment),
+        "arena_alloc_aligned: alignment must be a power of 2");
     if (!arena || size == 0 || !mem_is_power_of_two(alignment)) return NULL;
     uintptr_t curr = (uintptr_t)(arena->buffer + arena->offset);
-    uintptr_t next = (curr + alignment - 1) & ~(alignment - 1);
-    size_t pad = (size_t)(next - curr);
-    if (arena->offset > SIZE_MAX - pad ||
-        arena->offset + pad > SIZE_MAX - size ||
+    uintptr_t next = (curr + alignment - 1) & ~((uintptr_t)alignment - 1);
+    usize pad = (usize)(next - curr);
+    if (arena->offset > CANON_USIZE_MAX - pad         ||
+        arena->offset + pad > CANON_USIZE_MAX - size  ||
         arena->offset + pad + size > arena->capacity) {
         return NULL;
     }
@@ -240,10 +240,10 @@ static inline void* arena_alloc_aligned(Arena* arena, size_t size, size_t alignm
  * @brief Allocates size bytes and zero-initializes them
  *
  * @param arena Valid arena
- * @param size Bytes to allocate and zero (> 0)
+ * @param size  Bytes to allocate and zero (> 0)
  * @return Zeroed pointer or NULL on failure
  */
-static inline void* arena_alloc_zero(Arena* arena, size_t size) {
+static inline void* arena_alloc_zero(Arena* arena, usize size) {
     void* p = arena_alloc(arena, size);
     if (p) mem_zero(p, size);
     return p;
@@ -252,12 +252,12 @@ static inline void* arena_alloc_zero(Arena* arena, size_t size) {
 /**
  * @brief Allocates aligned size bytes and zero-initializes them
  *
- * @param arena Valid arena
- * @param size Bytes to allocate and zero (> 0)
+ * @param arena     Valid arena
+ * @param size      Bytes to allocate and zero (> 0)
  * @param alignment Power-of-2 alignment
  * @return Zeroed aligned pointer or NULL on failure
  */
-static inline void* arena_alloc_aligned_zero(Arena* arena, size_t size, size_t alignment) {
+static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize alignment) {
     void* p = arena_alloc_aligned(arena, size, alignment);
     if (p) mem_zero(p, size);
     return p;
@@ -272,7 +272,7 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, size_t size, size_t a
  * @param arena Arena to query (NULL → 0)
  * @return Total bytes in buffer
  */
-static inline size_t arena_capacity(const Arena* arena) {
+static inline usize arena_capacity(const Arena* arena) {
     return arena ? arena->capacity : 0;
 }
 
@@ -281,7 +281,7 @@ static inline size_t arena_capacity(const Arena* arena) {
  * @param arena Arena to query (NULL → 0)
  * @return Remaining capacity in bytes
  */
-static inline size_t arena_remaining(const Arena* arena) {
+static inline usize arena_remaining(const Arena* arena) {
     return arena ? (arena->capacity - arena->offset) : 0;
 }
 
@@ -290,7 +290,7 @@ static inline size_t arena_remaining(const Arena* arena) {
  * @param arena Arena to query (NULL → 0)
  * @return Used bytes
  */
-static inline size_t arena_used(const Arena* arena) {
+static inline usize arena_used(const Arena* arena) {
     return arena ? arena->offset : 0;
 }
 
@@ -313,12 +313,17 @@ static inline bool arena_is_full(const Arena* arena) {
 }
 
 /**
- * @brief Creates a checkpoint of current allocation position
+ * @brief Creates a checkpoint of the current allocation position
  *
- * Pair with arena_reset_to() for scoped temporary allocations.
+ * Pair with arena_reset_to() for scoped temporary allocations:
+ * ```c
+ * ArenaMark mark = arena_mark(&arena);
+ * // ... temporary allocations ...
+ * arena_reset_to(&arena, mark); // all temporaries invalidated
+ * ```
  *
  * @param arena Arena to mark (NULL → 0)
- * @return Opaque mark value (current offset)
+ * @return Opaque mark value representing current position
  *
  * @sa arena_reset_to()
  */
@@ -329,18 +334,19 @@ static inline ArenaMark arena_mark(const Arena* arena) {
 /**
  * @brief Rolls back arena state to a previous mark
  *
- * Invalidates all allocations made after the mark.
+ * Invalidates all allocations made after the mark was taken.
  *
- * @param arena Arena to roll back
- * @param mark Value previously returned by arena_mark()
+ * @param arena Arena to roll back (NULL-safe)
+ * @param mark  Value previously returned by arena_mark()
  *
- * @pre mark <= current offset (enforced in debug builds)
+ * @pre mark <= arena->offset
  *
  * @sa arena_mark()
  */
 static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
     if (!arena) return;
-    assert(mark <= arena->offset && "arena_reset_to: mark is in the future");
+    ensure_msg(mark <= arena->offset,
+        "arena_reset_to: mark is ahead of current offset");
     if (mark <= arena->offset) {
         arena->offset = mark;
     }
@@ -351,86 +357,92 @@ static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Attempts to allocate size bytes, returns success + pointer
+ * @brief Attempts allocation, returns success flag and pointer via out param
  *
  * @param arena Valid arena
- * @param size Bytes to allocate
- * @param out Pointer to store result (set to NULL on failure)
+ * @param size  Bytes to allocate
+ * @param out   Receives allocated pointer (NULL on failure)
  * @return true on success, false on failure
  */
-static inline bool arena_try_alloc(Arena* arena, size_t size, void** out) {
+static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
     if (out) *out = p;
     return p != NULL;
 }
 
 /**
- * @brief Attempts to allocate aligned size bytes, returns success + pointer
+ * @brief Attempts aligned allocation, returns success flag and pointer via out param
+ *
+ * @param arena     Valid arena
+ * @param size      Bytes to allocate
+ * @param alignment Power-of-2 alignment
+ * @param out       Receives allocated pointer (NULL on failure)
+ * @return true on success, false on failure
  */
-static inline bool arena_try_alloc_aligned(Arena* arena, size_t size, size_t alignment, void** out) {
+static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
     if (out) *out = p;
     return p != NULL;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Convenience Typed Allocation Helpers
+   Convenience Typed Allocation Macros
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Allocate one object of type Type
+ * @brief Allocates one object of Type from arena
+ *
+ * @param arena Arena to allocate from
+ * @param Type  Type of object to allocate
+ * @return Pointer to Type, or NULL on failure
+ *
+ * NOTE: sizeof(Type) * 1 has no overflow risk — single object allocation
+ * is always safe as long as sizeof(Type) fits in usize, which it must by C standard.
  */
 #define arena_alloc_type(arena, Type) \
     ((Type*)arena_alloc((arena), sizeof(Type)))
 
 /**
- * @brief Allocate array of count objects of type Type
+ * @brief Allocates an array of count objects of Type from arena
+ *
+ * @param arena Arena to allocate from
+ * @param Type  Element type
+ * @param count Number of elements
+ * @return Pointer to Type array, or NULL on failure
+ *
+ * WARNING: sizeof(Type) * count is NOT overflow-checked here.
+ * For untrusted count values, use checked_mul() before calling:
+ * ```c
+ * usize total;
+ * if (!checked_mul(sizeof(Type), count, &total)) { handle_overflow(); }
+ * Type* arr = arena_alloc(arena, total);
+ * ```
  */
 #define arena_alloc_array(arena, Type, count) \
     ((Type*)arena_alloc((arena), sizeof(Type) * (count)))
 
 /**
- * @brief Allocate and zero one object of type Type
+ * @brief Allocates and zero-initializes one object of Type
+ *
+ * @param arena Arena to allocate from
+ * @param Type  Type of object
+ * @return Zeroed pointer to Type, or NULL on failure
  */
 #define arena_alloc_type_zero(arena, Type) \
     ((Type*)arena_alloc_zero((arena), sizeof(Type)))
 
 /**
- * @brief Allocate and zero array of count objects of type Type
+ * @brief Allocates and zero-initializes an array of count objects of Type
+ *
+ * @param arena Arena to allocate from
+ * @param Type  Element type
+ * @param count Number of elements
+ * @return Zeroed pointer to Type array, or NULL on failure
+ *
+ * WARNING: Same overflow caveat as arena_alloc_array — use checked_mul()
+ * for untrusted count values.
  */
 #define arena_alloc_array_zero(arena, Type, count) \
     ((Type*)arena_alloc_zero((arena), sizeof(Type) * (count)))
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Example Usage (documentation only)
-   ────────────────────────────────────────────────────────────────────────────
-#include "core/arena.h"
-#include <stdio.h>
-void example_usage(void) {
-    alignas(64) uint8_t mem[64 * 1024];
-    Arena a;
-    arena_init(&a, mem, sizeof(mem));
-
-    // Normal allocation
-    int* scores = arena_alloc_array(&a, int, 256);
-
-    // Zeroed struct
-    typedef struct { float x, y, z; } Vec3;
-    Vec3* origin = arena_alloc_type_zero(&a, Vec3);
-
-    // Scoped temporary block
-    ArenaMark mark = arena_mark(&a);
-    char* path = arena_alloc_array(&a, char, 1024);
-    // ... use path ...
-    arena_reset_to(&a, mark); // path invalid now
-
-    // Aligned SIMD-friendly buffer
-    float* points = arena_alloc_aligned(&a, sizeof(float)*4*1000, 32);
-
-    printf("Used: %zu / %zu bytes\n", arena_used(&a), arena_capacity(&a));
-
-    arena_reset(&a); // everything invalid
-}
-──────────────────────────────────────────────────────────────────────────── */
 
 #endif /* CANON_CORE_ARENA_H */
