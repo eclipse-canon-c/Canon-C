@@ -1,563 +1,405 @@
-// data/queue.h
 #ifndef CANON_DATA_QUEUE_H
 #define CANON_DATA_QUEUE_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <assert.h>
-#include "deque.h"
+#include "core/primitives/types.h"
+#include "core/primitives/contract.h"
+#include "semantics/result.h"
+#include "semantics/error.h"
+#include "semantics/option.h"
+#include "data/deque/deque.h"
 
 /**
  * @file queue.h
- * @brief Simple FIFO (First-In-First-Out) queue – thin wrapper over deque
+ * @brief Bounded FIFO queue — thin wrapper over canon_deque_##type
  *
- * Provides a clean, intention-revealing FIFO interface using the same fixed-capacity
- * buffer as `deque`. It is **not** a growable container.
+ * Provides a clean, intention-revealing FIFO interface with fixed capacity.
+ * All operations delegate directly to the underlying deque with zero overhead.
+ * enqueue = push_back, dequeue = pop_front, peek = peek_front.
+ *
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Zero overhead — every function is a direct deque passthrough
+ * - FIFO semantics only — no front-insert, no back-pop (use deque for that)
+ * - Result<bool, Error> from enqueue/dequeue — matches deque and vec
+ * - Option variants for dequeue and peek — no out-param required
+ * - Caller owns the buffer (stack, arena, static, heap)
+ * - Fixed capacity is intentional — real-time safe, deterministic
+ *
+ * Dependency rule:
+ * ────────────────────────────────────────────────────────────────────────────
+ * queue.h is data/. It wraps data/deque/deque.h.
+ * DEFINE_DEQUE(linkage, type) must be called before DEFINE_QUEUE(linkage, type).
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Each queue instance is independent — no shared state.
+ * Concurrent modifications require external synchronization.
  *
  * Portability:
- *   - Requires C99 or later (for inline functions, stdbool.h)
- *   - Depends on deque.h from this library
- *   - No platform-specific code
- *
- * Thread-safety: Each queue instance is independent - not thread-safe for
- *                concurrent modifications. Caller must synchronize if needed.
- *                Consider using a lock-free ring buffer for concurrent access.
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later
+ * - Depends on data/deque/deque.h
  *
  * Performance:
- *   - Zero overhead abstraction - direct passthrough to deque operations
- *   - Enqueue/dequeue are O(1) amortized (uses circular buffer internally)
- *   - All query operations are O(1)
- *   - No hidden allocations
- *   - Cache-friendly when used sequentially
+ * ────────────────────────────────────────────────────────────────────────────
+ * - enqueue / dequeue:       O(1) — ring buffer step, no allocation
+ * - peek:                    O(1)
+ * - len / capacity / remaining / is_empty / is_full: O(1)
+ * - clear:                   O(1)
+ * - struct size:             same as canon_deque_##type (typedef alias)
+ * - element overhead:        0 bytes beyond sizeof(type) per element
  *
- *                           CRITICAL DESIGN NOTE
- * ──────────────────────────────────────────────────────────────────────────────
- * FIXED CAPACITY – NO AUTOMATIC GROWTH
+ * Quick start:
+ * ```c
+ * #include "data/queue.h"
  *
- * • Capacity is **fixed** at initialization (caller provides the buffer)
- * • The queue will **NEVER** automatically resize or reallocate
- * • When full: enqueue operations **fail** (return false)
- * • When empty: dequeue operations **fail** (return false)
- * • No silent truncation, no hidden allocations
+ * // Deque must be instantiated first
+ * DEFINE_DEQUE(static inline, int)
+ * DEFINE_QUEUE(static inline, int)
  *
- * This is **intentional design**:
- *   - Maximum predictability & real-time safety
- *   - Zero surprise allocations
- *   - Perfect for arena, stack, embedded, real-time, or bounded buffer usage
- *   - Deterministic performance characteristics
- *
- * If you need a queue that grows automatically:
- *   → You must implement it yourself (e.g. using realloc + doubling strategy)
- *   → Or use a different container / external library
- *
- *                           Key Properties
- * ──────────────────────────────────────────────────────────────────────────────
- * • Zero runtime overhead – most operations are direct deque calls
- * • Bounds-checked enqueue/dequeue with clear success/failure
- * • Caller fully owns the underlying buffer (stack, arena, static, heap...)
- * • Type-safe via macro (DEFINE_QUEUE)
- * • Circular buffer implementation for efficiency
- * • Ideal for: task queues, BFS algorithms, message passing, bounded buffers, 
- *             event queues, producer-consumer patterns
- *
- *                           Recommended Usage Patterns
- * ──────────────────────────────────────────────────────────────────────────────
- *
- * // 1. Stack-allocated – zero dynamic allocation
- * DEFINE_QUEUE(int);
+ * // Stack-backed queue
  * int buf[128];
- * queue_int tasks;
- * queue_int_init(&tasks, buf, 128);
+ * canon_queue_int q;
+ * canon_queue_int_init(&q, buf, 128);
  *
- * queue_int_enqueue(&tasks, 42);
- * int value;
- * if (queue_int_dequeue(&tasks, &value)) {
- *     printf("Dequeued: %d\n", value);
- * }
+ * canon_queue_int_enqueue(&q, 10);
+ * canon_queue_int_enqueue(&q, 20);
  *
- * // 2. Arena-backed – explicit lifetime
- * int* arena_buf = arena_alloc_array(&my_arena, int, 256);
- * queue_int messages;
- * queue_int_init(&messages, arena_buf, 256);
+ * int val;
+ * canon_queue_int_dequeue(&q, &val);  // val = 10 (FIFO)
  *
- * // 3. Pre-check before bulk enqueue (recommended)
- * if (queue_int_remaining(&q) < items_to_add) {
- *     return ERROR_NOT_ENOUGH_SPACE;
- * }
- * for (int i = 0; i < items_to_add; i++) {
- *     queue_int_enqueue(&q, items[i]);  // Guaranteed to succeed
- * }
+ * // Option variant — no out param needed
+ * option_int next = canon_queue_int_dequeue_option(&q);  // Some(20)
  *
- * // 4. Error handling
- * if (!queue_int_enqueue(&q, value)) {
- *     fprintf(stderr, "Queue full (%zu/%zu)\n",
- *             queue_int_len(&q), queue_int_capacity(&q));
- * }
+ * // Peek without removing
+ * option_int front = canon_queue_int_peek_option(&q);
+ * ```
+ *
+ * Separate compilation:
+ * ```c
+ * // In tasks.h:
+ * #include "data/deque/deque_decl.h"
+ * #include "data/queue.h"
+ * DECLARE_DEQUE(Task)
+ * DECLARE_QUEUE(Task)
+ *
+ * // In tasks.c:
+ * #include "data/deque/deque_defn.h"
+ * #include "data/queue.h"
+ * DEFINE_DEQUE(, Task)
+ * DEFINE_QUEUE(, Task)
+ * ```
+ *
+ * Common use cases:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Task dispatch queues
+ * - BFS frontier buffers
+ * - Message passing between components
+ * - Producer-consumer bounded buffers
+ * - Rate-limited event queues
+ *
+ * NOT suitable for:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Double-ended access (use deque directly)
+ * - Random access by index (use vec)
+ * - Auto-growing containers
+ * - Multi-threaded access without external synchronization
+ *
+ * @sa data/deque/deque.h, data/stack.h
  */
 
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_QUEUE — emit all typedefs and functions for a typed FIFO queue
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Define a type-safe fixed-capacity FIFO queue for any element type
+ * @brief Instantiates a typed FIFO queue as a thin wrapper over canon_deque_##type
  *
- * Generates a complete queue implementation for the specified type,
- * including type definition and all associated functions.
+ * Generated type (typedef alias, no new struct):
+ * - canon_queue_##type  (alias for canon_deque_##type)
  *
- * This is a thin wrapper over deque_##Type - all operations delegate to
- * the underlying deque with FIFO semantics (enqueue at back, dequeue from front).
- *
- * @param Type Any complete type (int, float, struct Task, etc.)
- *
- * Generated type: queue_##Type
  * Generated functions:
- *   - queue_##Type##_init(q, buffer, capacity) - Initialize queue
- *   - queue_##Type##_enqueue(q, item) - Add item to back
- *   - queue_##Type##_dequeue(q, &out) - Remove item from front
- *   - queue_##Type##_peek(q, &out) - View front without removing
- *   - queue_##Type##_len(q) - Get current size
- *   - queue_##Type##_capacity(q) - Get maximum capacity
- *   - queue_##Type##_remaining(q) - Get free space
- *   - queue_##Type##_is_empty(q) - Check if empty
- *   - queue_##Type##_is_full(q) - Check if full
- *   - queue_##Type##_clear(q) - Remove all elements
  *
- * Precondition: DEFINE_DEQUE(Type) must have been called first
+ * Constructor:
+ * - canon_queue_##type##_init(q, buffer, capacity)  → void
  *
- * Usage:
- *   DEFINE_DEQUE(int)     // Required first
- *   DEFINE_QUEUE(int)     // Then define queue
+ * Queries:
+ * - canon_queue_##type##_len(q)                     → usize
+ * - canon_queue_##type##_capacity(q)                → usize
+ * - canon_queue_##type##_remaining(q)               → usize
+ * - canon_queue_##type##_is_empty(q)                → bool
+ * - canon_queue_##type##_is_full(q)                 → bool
  *
- * Example:
- *   DEFINE_DEQUE(int);
- *   DEFINE_QUEUE(int);
- *   
- *   int buf[64];
- *   queue_int q;
- *   queue_int_init(&q, buf, 64);
- *   
- *   queue_int_enqueue(&q, 10);
- *   queue_int_enqueue(&q, 20);
- *   queue_int_enqueue(&q, 30);
- *   
- *   int front;
- *   if (queue_int_peek(&q, &front)) {
- *       printf("Front: %d\n", front);  // 10
- *   }
- *   
- *   queue_int_dequeue(&q, &front);
- *   printf("Dequeued: %d\n", front);   // 10
- *   
- *   // Next dequeue gets 20, then 30
+ * Enqueue / dequeue (Result variants):
+ * - canon_queue_##type##_enqueue(q, item)           → result_bool_Error
+ * - canon_queue_##type##_dequeue(q, out)            → result_bool_Error
  *
- * Note: This must be used at file or global scope, not inside functions.
+ * Dequeue (Option variant):
+ * - canon_queue_##type##_dequeue_option(q)          → option_##type
+ *
+ * Peek (bool variant):
+ * - canon_queue_##type##_peek(q, out)               → bool
+ *
+ * Peek (Option variant):
+ * - canon_queue_##type##_peek_option(q)             → option_##type
+ *
+ * Misc:
+ * - canon_queue_##type##_clear(q)                   → void
+ *
+ * @param linkage C linkage specifier: `static inline`, `static`, or empty
+ * @param type    Element type — DEFINE_DEQUE(linkage, type) must be called first
+ *
+ * @pre DEFINE_DEQUE(linkage, type) has already been called for the same type
+ *
+ * @note queue is a typedef alias for deque — all deque functions remain usable.
+ *       DEFINE_QUEUE only adds the FIFO-named wrappers for clarity.
  */
-#define DEFINE_QUEUE(Type) \
+#define DEFINE_QUEUE(linkage, type) \
 \
 /** \
- * @brief Fixed-capacity FIFO queue for Type \
+ * @brief Fixed-capacity FIFO queue for type \
  * \
- * This is a type alias for deque_##Type - all deque operations are available. \
- * Use queue-specific functions for clearer intent. \
+ * Typedef alias for canon_deque_##type. \
+ * All canon_deque_##type functions are available; \
+ * use canon_queue_##type functions for FIFO-specific clarity. \
  */ \
-typedef deque_##Type queue_##Type; \
+typedef MANGLE_DEQUE_TYPE(type) canon_queue_##type; \
 \
 /** \
- * @brief Initializes the queue with caller-provided fixed buffer \
+ * @brief Initializes the queue with a caller-owned buffer \
  * \
- * @param q        Pointer to uninitialized queue_##Type \
- * @param buffer   Array of Type – must remain valid for queue lifetime \
- * @param capacity Maximum number of elements the buffer can hold \
+ * @param q        Pointer to uninitialized canon_queue_##type \
+ * @param buffer   Array of type — must remain valid for queue lifetime \
+ * @param capacity Maximum number of elements (> 0) \
  * \
- * Preconditions: \
- *   - q != NULL \
- *   - buffer != NULL (or capacity == 0) \
- *   - buffer has space for capacity elements \
+ * @pre q != NULL \
+ * @pre buffer != NULL || capacity == 0 \
+ * @pre capacity > 0 \
  * \
- * Postconditions: \
- *   - q is initialized as empty queue \
- *   - q can hold up to capacity elements \
+ * @post Queue is empty, ready for enqueue/dequeue \
+ * @post Capacity is fixed — no growth possible \
  * \
- * Note: Capacity is fixed forever – no growth possible later \
- * \
- * Example: \
- *   int buf[100]; \
- *   queue_int q; \
- *   queue_int_init(&q, buf, 100); \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) — wraps caller-provided buffer \
  */ \
-static inline void queue_##Type##_init(queue_##Type* q, Type* buffer, size_t capacity) { \
-    assert(q != NULL && "queue_init: q parameter cannot be NULL"); \
-    assert(buffer != NULL || capacity == 0); \
-    deque_##Type##_init(q, buffer, capacity); \
+linkage void canon_queue_##type##_init(canon_queue_##type* q, type* buffer, usize capacity) { \
+    require_msg(q != NULL, "canon_queue_" #type "_init: q cannot be NULL"); \
+    MANGLE_DEQUE_INIT(type)(q, buffer, capacity); \
 } \
 \
 /** \
  * @brief Adds an item to the back of the queue (enqueue) \
  * \
- * Inserts element at the rear of the queue. \
- * First-in-first-out: items are dequeued in the order they were enqueued. \
+ * FIFO ordering: items are dequeued in the order they were enqueued. \
  * \
  * @param q    Valid queue instance \
  * @param item Value to add \
- * @return     true on success, false if queue is full or invalid \
+ * @return result_bool_Error — Ok(true) on success \
  * \
- * Returns false if: \
- *   - q is NULL or invalid \
- *   - Queue is full (len >= capacity) \
+ * @post Returns Err(ERR_INVALID_ARG)       if q == NULL or q->buffer == NULL \
+ * @post Returns Err(ERR_CAPACITY_EXCEEDED) if queue is full \
  * \
- * Performance: O(1) amortized \
- * \
- * Example: \
- *   if (!queue_int_enqueue(&q, 42)) { \
- *       fprintf(stderr, "Queue overflow\n"); \
- *   } \
+ * Performance: \
+ * - Time:  O(1) — ring buffer tail advance \
+ * - Space: O(1) — no allocation \
  */ \
-static inline bool queue_##Type##_enqueue(queue_##Type* q, Type item) { \
-    return deque_##Type##_push_back(q, item); \
+linkage result_bool_Error canon_queue_##type##_enqueue(canon_queue_##type* q, type item) { \
+    return MANGLE_DEQUE_PUSH_BACK(type)(q, item); \
 } \
 \
 /** \
- * @brief Removes and returns the item from the front of the queue (dequeue) \
+ * @brief Removes and returns the front item (dequeue) \
  * \
- * Removes the oldest element (the one that was enqueued first). \
+ * Removes the oldest element — the one that was enqueued first. \
  * \
  * @param q   Valid queue instance \
- * @param out Pointer to store the dequeued value (NULL-safe) \
- * @return    true on success, false if queue is empty or invalid \
+ * @param out Pointer to store the dequeued value \
+ * @return result_bool_Error — Ok(true) on success \
  * \
- * Returns false if: \
- *   - q is NULL or invalid \
- *   - out is NULL \
- *   - Queue is empty (len == 0) \
+ * @pre out != NULL \
  * \
- * Performance: O(1) amortized \
+ * @post Returns Err(ERR_INVALID_ARG)   if q == NULL, out == NULL, or q->buffer == NULL \
+ * @post Returns Err(ERR_INVALID_STATE) if queue is empty \
  * \
- * Example: \
- *   int value; \
- *   if (queue_int_dequeue(&q, &value)) { \
- *       printf("Dequeued: %d\n", value); \
- *   } else { \
- *       fprintf(stderr, "Queue underflow\n"); \
- *   } \
+ * Performance: \
+ * - Time:  O(1) — ring buffer head advance \
+ * - Space: O(1) \
  */ \
-static inline bool queue_##Type##_dequeue(queue_##Type* q, Type* out) { \
-    return deque_##Type##_pop_front(q, out); \
+linkage result_bool_Error canon_queue_##type##_dequeue(canon_queue_##type* q, type* out) { \
+    return MANGLE_DEQUE_POP_FRONT(type)(q, out); \
 } \
 \
 /** \
- * @brief Peeks at the front item without removing it \
+ * @brief Removes and returns the front item as Option<type> \
  * \
- * Returns the value that would be dequeued, without modifying the queue. \
+ * @param q Valid queue instance \
+ * @return option_##type — Some(item) on success, None if empty or invalid \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
+linkage option_##type canon_queue_##type##_dequeue_option(canon_queue_##type* q) { \
+    return MANGLE_DEQUE_POP_FRONT_OPTION(type)(q); \
+} \
+\
+/** \
+ * @brief Returns the front item without removing it \
  * \
  * @param q   Valid queue instance \
- * @param out Pointer to store the front value (NULL-safe) \
- * @return    true on success, false if queue is empty or invalid \
+ * @param out Pointer to store the front value \
+ * @return true on success, false if empty or invalid \
  * \
- * Returns false if: \
- *   - q is NULL or invalid \
- *   - out is NULL \
- *   - Queue is empty (len == 0) \
+ * @post Queue is unchanged \
  * \
- * Performance: O(1) \
- * \
- * Example: \
- *   int front; \
- *   if (queue_int_peek(&q, &front)) { \
- *       printf("Front is %d (not removed)\n", front); \
- *   } \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool queue_##Type##_peek(const queue_##Type* q, Type* out) { \
-    return deque_##Type##_peek_front(q, out); \
+linkage bool canon_queue_##type##_peek(const canon_queue_##type* q, type* out) { \
+    return MANGLE_DEQUE_PEEK_FRONT(type)(q, out); \
 } \
 \
 /** \
- * @brief Returns current number of elements in the queue \
+ * @brief Returns the front item as Option<type> without removing it \
+ * \
+ * @param q Valid queue instance \
+ * @return option_##type — Some(item) on success, None if empty or invalid \
+ * \
+ * @post Queue is unchanged \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
+linkage option_##type canon_queue_##type##_peek_option(const canon_queue_##type* q) { \
+    return MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(q); \
+} \
+\
+/** \
+ * @brief Returns the current number of elements \
  * \
  * @param q Queue to query (NULL-safe) \
- * @return  Number of elements currently in queue \
+ * @return usize — 0 if q == NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline size_t queue_##Type##_len(const queue_##Type* q) { \
-    return deque_##Type##_len(q); \
+linkage usize canon_queue_##type##_len(const canon_queue_##type* q) { \
+    return MANGLE_DEQUE_LEN(type)(q); \
 } \
 \
 /** \
- * @brief Returns maximum capacity of the queue (fixed) \
+ * @brief Returns the fixed maximum capacity \
  * \
  * @param q Queue to query (NULL-safe) \
- * @return  Maximum number of elements queue can hold \
+ * @return usize — 0 if q == NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline size_t queue_##Type##_capacity(const queue_##Type* q) { \
-    return deque_##Type##_capacity(q); \
+linkage usize canon_queue_##type##_capacity(const canon_queue_##type* q) { \
+    return MANGLE_DEQUE_CAPACITY(type)(q); \
 } \
 \
 /** \
- * @brief Returns number of free slots remaining \
- * \
- * Equivalent to capacity - len. \
+ * @brief Returns remaining free slots (capacity - len) \
  * \
  * @param q Queue to query (NULL-safe) \
- * @return  Number of elements that can still be enqueued \
+ * @return usize — 0 if q == NULL \
  * \
- * Example: \
- *   if (queue_int_remaining(&q) < 10) { \
- *       fprintf(stderr, "Warning: queue nearly full\n"); \
- *   } \
- * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline size_t queue_##Type##_remaining(const queue_##Type* q) { \
-    return deque_##Type##_remaining(q); \
+linkage usize canon_queue_##type##_remaining(const canon_queue_##type* q) { \
+    return MANGLE_DEQUE_REMAINING(type)(q); \
 } \
 \
 /** \
- * @brief Checks if queue is empty \
+ * @brief Returns true if the queue has no elements (len == 0) \
  * \
  * @param q Queue to check (NULL-safe) \
- * @return  true if len == 0, false otherwise \
+ * @return true if empty or NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool queue_##Type##_is_empty(const queue_##Type* q) { \
-    return deque_##Type##_is_empty(q); \
+linkage bool canon_queue_##type##_is_empty(const canon_queue_##type* q) { \
+    return MANGLE_DEQUE_IS_EMPTY(type)(q); \
 } \
 \
 /** \
- * @brief Checks if queue is full (cannot enqueue more) \
+ * @brief Returns true if the queue is at capacity (len == capacity) \
  * \
  * @param q Queue to check (NULL-safe) \
- * @return  true if len >= capacity, false otherwise \
+ * @return true if full or NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool queue_##Type##_is_full(const queue_##Type* q) { \
-    return deque_##Type##_is_full(q); \
+linkage bool canon_queue_##type##_is_full(const canon_queue_##type* q) { \
+    return MANGLE_DEQUE_IS_FULL(type)(q); \
 } \
 \
 /** \
- * @brief Clears the queue (sets length to 0, buffer unchanged) \
+ * @brief Resets the queue to empty state (O(1), does not zero buffer) \
  * \
- * Does not modify buffer contents, only resets length to 0. \
- * All previously enqueued values become invalid. \
+ * @param q Queue to clear (NULL-safe) \
  * \
- * @param q Queue to clear \
+ * @post q->size == 0, head == 0, tail == 0 \
+ * @post Buffer contents are NOT zeroed — only logical state is reset \
+ * @note For sensitive data, zero the buffer manually before calling clear \
  * \
- * Performance: O(1) \
- * \
- * Example: \
- *   queue_int_clear(&q);  // Reuse queue for new sequence \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline void queue_##Type##_clear(queue_##Type* q) { \
-    deque_##Type##_clear(q); \
+linkage void canon_queue_##type##_clear(canon_queue_##type* q) { \
+    MANGLE_DEQUE_CLEAR(type)(q); \
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Common type instantiations
-   ────────────────────────────────────────────────────────────────────────────
-   
-   Uncomment after defining the corresponding deque types:
-   
-   DEFINE_DEQUE(int)
-   DEFINE_QUEUE(int)
-   
-   DEFINE_DEQUE(char)
-   DEFINE_QUEUE(char)
-   
-   typedef void* voidptr;
-   DEFINE_DEQUE(voidptr)
-   DEFINE_QUEUE(voidptr)
-   
-   // For task/message passing
-   typedef struct Task {
-       int id;
-       void (*func)(void*);
-       void* arg;
-   } Task;
-   DEFINE_DEQUE(Task)
-   DEFINE_QUEUE(Task)
-   
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   DECLARE_QUEUE — forward-declare a typed queue (for separate compilation)
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Example
-   ────────────────────────────────────────────────────────────────────────────
-
-    #include "queue.h"
-    #include <stdio.h>
-    
-    // Define types
-    DEFINE_DEQUE(int)
-    DEFINE_QUEUE(int)
-    
-    // Example 1: Basic queue operations
-    void example_basic(void) {
-        int buffer[32];
-        queue_int q;
-        queue_int_init(&q, buffer, 32);
-        
-        // Enqueue elements
-        queue_int_enqueue(&q, 10);
-        queue_int_enqueue(&q, 20);
-        queue_int_enqueue(&q, 30);
-        
-        printf("Queue size: %zu\n", queue_int_len(&q));
-        
-        // Peek at front
-        int front;
-        if (queue_int_peek(&q, &front)) {
-            printf("Front element: %d\n", front);  // 10
-        }
-        
-        // Dequeue elements (FIFO order)
-        while (!queue_int_is_empty(&q)) {
-            int value;
-            queue_int_dequeue(&q, &value);
-            printf("Dequeued: %d\n", value);  // 10, 20, 30
-        }
-    }
-    
-    // Example 2: BFS algorithm
-    typedef struct {
-        int x, y;
-    } Point;
-    
-    DEFINE_DEQUE(Point)
-    DEFINE_QUEUE(Point)
-    
-    void bfs_example(void) {
-        Point buffer[1000];
-        queue_Point q;
-        queue_Point_init(&q, buffer, 1000);
-        
-        // Start BFS from origin
-        queue_Point_enqueue(&q, (Point){0, 0});
-        
-        while (!queue_Point_is_empty(&q)) {
-            Point current;
-            queue_Point_dequeue(&q, &current);
-            
-            // Process current point
-            printf("Visiting (%d, %d)\n", current.x, current.y);
-            
-            // Add neighbors to queue
-            // queue_Point_enqueue(&q, neighbor1);
-            // queue_Point_enqueue(&q, neighbor2);
-        }
-    }
-    
-    // Example 3: Producer-consumer pattern
-    typedef struct {
-        int id;
-        char data[64];
-    } Message;
-    
-    DEFINE_DEQUE(Message)
-    DEFINE_QUEUE(Message)
-    
-    void producer_consumer_example(void) {
-        Message buffer[100];
-        queue_Message q;
-        queue_Message_init(&q, buffer, 100);
-        
-        // Producer
-        for (int i = 0; i < 10; i++) {
-            Message msg = {.id = i};
-            snprintf(msg.data, sizeof(msg.data), "Message %d", i);
-            
-            if (!queue_Message_enqueue(&q, msg)) {
-                fprintf(stderr, "Queue full!\n");
-                break;
-            }
-        }
-        
-        // Consumer
-        while (!queue_Message_is_empty(&q)) {
-            Message msg;
-            queue_Message_dequeue(&q, &msg);
-            printf("Processing: %s\n", msg.data);
-        }
-    }
-    
-    // Example 4: Task queue with error handling
-    typedef struct {
-        int priority;
-        void (*execute)(void);
-    } Task;
-    
-    DEFINE_DEQUE(Task)
-    DEFINE_QUEUE(Task)
-    
-    void task_queue_example(void) {
-        Task buffer[50];
-        queue_Task tasks;
-        queue_Task_init(&tasks, buffer, 50);
-        
-        // Check space before adding
-        if (queue_Task_remaining(&tasks) >= 5) {
-            // Safe to add 5 tasks
-            for (int i = 0; i < 5; i++) {
-                Task t = {.priority = i};
-                queue_Task_enqueue(&tasks, t);
-            }
-        }
-        
-        // Process tasks
-        Task task;
-        while (queue_Task_dequeue(&tasks, &task)) {
-            printf("Executing task priority %d\n", task.priority);
-            if (task.execute) {
-                task.execute();
-            }
-        }
-    }
-    
-    // Example 5: Arena-backed queue
-    void example_arena(Arena* arena) {
-        int* buf = arena_alloc_array(arena, int, 256);
-        queue_int q;
-        queue_int_init(&q, buf, 256);
-        
-        // Use queue...
-        for (int i = 0; i < 100; i++) {
-            queue_int_enqueue(&q, i);
-        }
-        
-        // Process first 50
-        for (int i = 0; i < 50; i++) {
-            int val;
-            queue_int_dequeue(&q, &val);
-            printf("%d ", val);
-        }
-        
-        // Queue lifetime tied to arena
-        // Becomes invalid after arena_reset()
-    }
-    
-    // Example 6: Error handling
-    void example_error_handling(void) {
-        int small_buf[2];
-        queue_int q;
-        queue_int_init(&q, small_buf, 2);
-        
-        // Fill queue
-        queue_int_enqueue(&q, 1);
-        queue_int_enqueue(&q, 2);
-        
-        // This will fail - queue is full
-        if (!queue_int_enqueue(&q, 3)) {
-            fprintf(stderr, "Queue overflow: %zu/%zu elements\n",
-                    queue_int_len(&q),
-                    queue_int_capacity(&q));
-        }
-        
-        // Check before enqueue
-        if (!queue_int_is_full(&q)) {
-            queue_int_enqueue(&q, 4);
-        } else {
-            fprintf(stderr, "No space remaining\n");
-        }
-    }
-
-   ──────────────────────────────────────────────────────────────────────────── */
+/**
+ * @brief Forward-declares a typed queue and all its function signatures
+ *
+ * Use in shared headers alongside DECLARE_DEQUE(type).
+ * Match with DEFINE_QUEUE(linkage, type) in exactly one .c file.
+ *
+ * @param type Element type — DECLARE_DEQUE(type) must be called first
+ *
+ * Example:
+ * ```c
+ * // In tasks.h:
+ * #include "data/deque/deque_decl.h"
+ * #include "data/queue.h"
+ * DECLARE_DEQUE(Task)
+ * DECLARE_QUEUE(Task)
+ * ```
+ */
+#define DECLARE_QUEUE(type) \
+\
+typedef MANGLE_DEQUE_TYPE(type) canon_queue_##type; \
+\
+extern void              canon_queue_##type##_init(canon_queue_##type* q, type* buffer, usize capacity); \
+extern result_bool_Error canon_queue_##type##_enqueue(canon_queue_##type* q, type item); \
+extern result_bool_Error canon_queue_##type##_dequeue(canon_queue_##type* q, type* out); \
+extern option_##type     canon_queue_##type##_dequeue_option(canon_queue_##type* q); \
+extern bool              canon_queue_##type##_peek(const canon_queue_##type* q, type* out); \
+extern option_##type     canon_queue_##type##_peek_option(const canon_queue_##type* q); \
+extern usize             canon_queue_##type##_len(const canon_queue_##type* q); \
+extern usize             canon_queue_##type##_capacity(const canon_queue_##type* q); \
+extern usize             canon_queue_##type##_remaining(const canon_queue_##type* q); \
+extern bool              canon_queue_##type##_is_empty(const canon_queue_##type* q); \
+extern bool              canon_queue_##type##_is_full(const canon_queue_##type* q); \
+extern void              canon_queue_##type##_clear(canon_queue_##type* q);
 
 #endif /* CANON_DATA_QUEUE_H */
