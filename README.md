@@ -72,35 +72,47 @@ Abstractions must clarify behavior, not conceal it.
 - `limits.h` — common constants and limits (integer bounds, alignment, capacity limits)
 - `bits.h` — portable bit manipulation (popcount, clz, rotate, power-of-2 checks)
 - `checked.h` — overflow-safe arithmetic (checked add/sub/mul, alignment helpers)
-- `contract.h` — explicit contracts and assertions (require, ensure, unreachable, panic)
+- `contract.h` — explicit contracts and assertions (require_msg, ensure_msg, unreachable, panic)
 
 ### core/
-- `memory.h` — low-level memory utilities (alignment, safe memcpy wrappers)
+- `memory.h` — low-level memory utilities (alignment, safe mem_copy/mem_move wrappers)
 - `arena.h` — explicit linear allocation (bump allocator)
 - `pool.h` — fixed-size object pool allocator (arena-backed)
 - `scope.h` — RAII-style deferred cleanup macros
 
 ### data/
-- `vec.h` — bounded dynamic vector (caller-owned buffer, fixed capacity)
-- `deque.h` — bounded double-ended queue (ring buffer, fixed capacity)
-- `queue.h` — FIFO queue wrapper (fixed capacity)
-- `stack.h` — LIFO stack wrapper (fixed capacity)
-- `range.h` — explicit integer range generator (ascending/descending, signed support)
+- **`vec/`** — bounded dynamic vector (caller-owned buffer, fixed capacity) — modular 7-file architecture
+  - `vec.h` — user-facing API; header-only entry point
+  - `vec_impl.h` — pure implementation logic (zero naming assumptions)
+  - `vec_mangle.h` — name mangling conventions (individually overridable)
+  - `vec_decl.h` — forward declarations for separate compilation
+  - `vec_defn.h` — complete definitions (header-only or .c files)
+  - `vec_range.h` — optional extension: `extend_from_range()` (depends on `range.h`)
+  - `vec_fmt.h` — optional extension: `to_stringbuf()` (depends on `stringbuf.h`)
+- **`deque/`** — bounded double-ended queue (ring buffer, fixed capacity) — modular 5-file architecture
+  - `deque.h` — user-facing API; header-only entry point
+  - `deque_impl.h` — pure implementation logic (zero naming assumptions)
+  - `deque_mangle.h` — name mangling conventions (individually overridable)
+  - `deque_decl.h` — forward declarations for separate compilation
+  - `deque_defn.h` — complete definitions (header-only or .c files)
+- `queue.h` — FIFO queue wrapper over deque (fixed capacity); includes `DECLARE_QUEUE`
+- `stack.h` — LIFO stack wrapper over vec (fixed capacity); includes `DECLARE_STACK`
+- `range.h` — explicit integer range generator (ascending/descending, isize-based, overflow-safe)
 - `stringbuf.h` — incremental string builder (arena- or buffer-backed, fixed capacity)
 
 ### data/convenience/
-- `dynvec.h` — auto-growing vector (unlimited capacity, hidden allocations)
-- `smallvec.h` — inline-first vector with one-time spill (stack-optimized)
-- `dynstring.h` — auto-growing string builder (hidden allocation)
-  
+- `dynvec.h` — auto-growing typed vector (hidden heap allocation, 2x growth)
+- `smallvec.h` — inline-first vector with at-most-one spill to heap or arena
+- `dynstring.h` — auto-growing string builder (hidden heap allocation, 2x growth)
+
 ### semantics/
-- **`option/`** — modular Option<T> implementation
+- **`option/`** — modular Option\<T\> implementation
   - `option.h` — user-facing API for explicit presence/absence of a value
   - `option_impl.h` — pure implementation logic (customizable)
   - `option_mangle.h` — name mangling conventions (overridable)
   - `option_decl.h` — declarations for separate compilation
   - `option_defn.h` — definitions for header-only or .c files
-- **`result/`** — modular Result<T, E> implementation
+- **`result/`** — modular Result\<T, E\> implementation
   - `result.h` — user-facing API for explicit success/failure handling
   - `result_impl.h` — pure implementation logic (customizable)
   - `result_mangle.h` — name mangling conventions (overridable)
@@ -133,19 +145,26 @@ Abstractions must clarify behavior, not conceal it.
 
 **Note:** Modules in `*/convenience/` subdirectories trade explicitness for ergonomics.
 The `core/primitives/` subdirectory contains foundational types and operations that all
-other modules depend on. Core modules prioritize determinism and explicit control; 
-convenience modules prioritize ease of use and may include hidden allocations or 
+other modules depend on. Core modules prioritize determinism and explicit control;
+convenience modules prioritize ease of use and may include hidden allocations or
 automatic growth. Choose based on your constraints: use core for production/embedded/
 real-time, convenience for prototyping.
 
-**Modular architecture:** The `option/` and `result/` modules now use a modular design
-that separates implementation logic, naming conventions, declarations, and definitions.
-Most users only need to include `option.h` or `result.h`, but advanced users can customize
-behavior by overriding individual components. This architecture enables:
-- Custom naming schemes (e.g., `Maybe<T>` instead of `Option<T>`)
+**Modular architecture:** The `vec/`, `deque/`, `option/`, and `result/` modules use a
+modular design that separates implementation logic, naming conventions, declarations, and
+definitions. Most users only need `vec.h`, `deque.h`, `option.h`, or `result.h`, but
+advanced users can customize behavior by overriding individual components. This enables:
+- Custom naming schemes (e.g. `Maybe<T>` instead of `Option<T>`, project-prefixed types)
 - Function specialization for specific types
-- Flexible compilation models (header-only or separate compilation)
-- Easier maintenance and testing
+- Flexible compilation models (header-only or separate compilation via `DECLARE_` / `DEFINE_`)
+- Easier maintenance and testing of individual layers
+
+**Result and Option variants:** All push/pop/enqueue/dequeue operations across `vec/`,
+`deque/`, `queue.h`, and `stack.h` now return `result_bool_Error` instead of bare `bool`,
+giving callers specific error codes (`ERR_CAPACITY_EXCEEDED`, `ERR_INVALID_STATE`, etc.).
+Option-returning variants (`pop_option`, `peek_option`, `dequeue_option`) are provided
+alongside the Result variants throughout, eliminating the need for an out-parameter in
+the common case.
 
 All modules are **header-only** by default and require no runtime or build system integration.
 
