@@ -1,532 +1,410 @@
 #ifndef CANON_DATA_STACK_H
 #define CANON_DATA_STACK_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <assert.h>
-
+#include "core/primitives/types.h"
+#include "core/primitives/contract.h"
 #include "semantics/result.h"
 #include "semantics/error.h"
-#include "vec.h"
+#include "semantics/option.h"
+#include "data/vec/vec.h"
 
 /**
  * @file stack.h
- * @brief Simple LIFO (Last-In-First-Out) stack – thin wrapper over vec
+ * @brief Bounded LIFO stack — thin wrapper over canon_vec_##type
  *
- * Provides a clean, intention-revealing stack interface using the same fixed-capacity
- * buffer as `vec`. It is **not** a growable container.
+ * Provides a clean, intention-revealing LIFO interface with fixed capacity.
+ * All operations delegate directly to the underlying vec with zero overhead.
+ * push = vec_push, pop = vec_pop, peek = vec_last.
+ *
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Zero overhead — every function is a direct vec passthrough
+ * - LIFO semantics only — no enqueue, no front-access (use deque for that)
+ * - result_bool_Error from push/pop — matches vec and deque
+ * - Option variants for pop and peek — no out-param required
+ * - Caller owns the buffer (stack memory, arena, static, heap)
+ * - Fixed capacity is intentional — real-time safe, deterministic
+ *
+ * Dependency rule:
+ * ────────────────────────────────────────────────────────────────────────────
+ * stack.h is data/. It wraps data/vec/vec.h.
+ * DEFINE_VEC(linkage, type) must be called before DEFINE_STACK(linkage, type).
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Each stack instance is independent — no shared state.
+ * Concurrent modifications require external synchronization.
  *
  * Portability:
- * - Requires C99 or later (for inline functions, stdbool.h)
- * - Depends on vec.h, result.h, error.h from this library
- * - No platform-specific code
- *
- * Thread-safety: Each stack instance is independent - not thread-safe for
- * concurrent modifications. Caller must synchronize if needed.
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later
+ * - Depends on data/vec/vec.h
  *
  * Performance:
- * - Zero overhead abstraction - direct passthrough to vec operations
- * - Push/pop are O(1)
- * - All query operations are O(1)
- * - No hidden allocations
+ * ────────────────────────────────────────────────────────────────────────────
+ * - push / pop:                      O(1) — no allocation
+ * - peek / peek_option:              O(1)
+ * - len / capacity / remaining:      O(1)
+ * - is_empty / is_full:              O(1)
+ * - clear:                           O(1)
+ * - struct size:                     same as canon_vec_##type (typedef alias)
+ * - element overhead:                0 bytes beyond sizeof(type) per element
  *
- * CRITICAL DESIGN NOTE
- * ──────────────────────────────────────────────────────────────────────────────
- * FIXED CAPACITY – NO AUTOMATIC GROWTH
+ * Quick start:
+ * ```c
+ * #include "data/stack.h"
  *
- * • Capacity is **fixed** at initialization (caller provides the buffer)
- * • The stack will **NEVER** automatically resize or reallocate
- * • When full: push operations **fail** (return false)
- * • When empty: pop operations **fail** (return false)
- * • No silent truncation, no hidden allocations
+ * // Vec must be instantiated first
+ * DEFINE_VEC(static inline, int)
+ * DEFINE_STACK(static inline, int)
  *
- * This is **intentional**:
- * - Maximum predictability
- * - Zero surprise allocations (ideal for real-time, embedded, arena usage)
- * - Strong ownership & lifetime control
- * - Deterministic performance
- *
- * If you need a stack that grows automatically:
- * → Use data/convenience/dynvec.h as backing storage
- * → Or implement your own wrapper with growth strategy
- *
- * Key Properties
- * ──────────────────────────────────────────────────────────────────────────────
- * • Zero runtime overhead – most operations are direct vec calls
- * • Bounds-checked push/pop with clear success/failure
- * • Caller fully owns the underlying buffer (stack, arena, static, heap...)
- * • Type-safe via macro (DEFINE_STACK)
- * • Perfect for: undo systems, expression evaluation, call stack simulation,
- * backtracking algorithms, recursive descent parsers
- *
- * Recommended Usage Patterns
- * ──────────────────────────────────────────────────────────────────────────────
- *
- * // 1. Stack-allocated – zero dynamic allocation
- * DEFINE_STACK(int);
+ * // Stack-backed stack (confusingly named but valid — stack-allocated memory)
  * int buf[128];
- * stack_int undo_stack;
- * stack_int_init(&undo_stack, buf, 128);
+ * canon_stack_int s;
+ * canon_stack_int_init(&s, buf, 128);
  *
- * stack_int_push(&undo_stack, 42);
- * int value;
- * if (stack_int_pop(&undo_stack, &value)) {
- *     printf("Popped: %d\n", value);
- * }
+ * canon_stack_int_push(&s, 10);
+ * canon_stack_int_push(&s, 20);
  *
- * // 2. Arena-backed – explicit lifetime
- * int* arena_buf = arena_alloc_array(&my_arena, int, 256);
- * stack_int history;
- * stack_int_init(&history, arena_buf, 256);
+ * int val;
+ * canon_stack_int_pop(&s, &val);   // val = 20 (LIFO)
  *
- * // 3. Pre-check before bulk pushes (recommended)
- * if (stack_int_remaining(&s) < items_to_add) {
- *     return ERROR_NOT_ENOUGH_SPACE;
- * }
- * for (int i = 0; i < items_to_add; i++) {
- *     stack_int_push(&s, items[i]); // Guaranteed to succeed
- * }
+ * // Option variant — no out param needed
+ * option_int top = canon_stack_int_pop_option(&s);   // Some(10)
  *
- * // 4. Error handling
- * if (!stack_int_push(&s, value)) {
- *     fprintf(stderr, "Stack full (%zu/%zu)\n",
- *             stack_int_len(&s), stack_int_capacity(&s));
- * }
+ * // Peek without popping
+ * option_int peek = canon_stack_int_peek_option(&s);
+ * ```
+ *
+ * Separate compilation:
+ * ```c
+ * // In tasks.h:
+ * #include "data/vec/vec_decl.h"
+ * #include "data/stack.h"
+ * DECLARE_VEC(Task)
+ * DECLARE_STACK(Task)
+ *
+ * // In tasks.c:
+ * #include "data/vec/vec_defn.h"
+ * #include "data/stack.h"
+ * DEFINE_VEC(, Task)
+ * DEFINE_STACK(, Task)
+ * ```
+ *
+ * Common use cases:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Undo/redo history
+ * - Expression evaluation (RPN, operator precedence)
+ * - Recursive descent parser state
+ * - Backtracking algorithms (DFS frontier)
+ * - Call stack simulation
+ *
+ * NOT suitable for:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - FIFO access (use queue.h)
+ * - Double-ended access (use deque.h)
+ * - Random access by index (use vec directly)
+ * - Auto-growing containers
+ * - Multi-threaded access without external synchronization
+ *
+ * @sa data/vec/vec.h, data/queue.h, data/deque/deque.h
  */
 
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_STACK — emit all typedefs and functions for a typed LIFO stack
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Define a type-safe fixed-capacity stack for any element type
+ * @brief Instantiates a typed LIFO stack as a thin wrapper over canon_vec_##type
  *
- * Generates a complete stack implementation for the specified type,
- * including type definition and all associated functions.
+ * Generated type (typedef alias, no new struct):
+ * - canon_stack_##type  (alias for canon_vec_##type)
  *
- * This is a thin wrapper over vec_##Type - all operations delegate to
- * the underlying vector with LIFO semantics.
- *
- * @param Type Any complete type (int, float, struct Point, etc.)
- *
- * Generated type: stack_##Type
  * Generated functions:
- * - stack_##Type##_init(s, buffer, capacity) - Initialize stack
- * - stack_##Type##_push(s, item) - Push item onto stack
- * - stack_##Type##_pop(s, &out) - Pop item from stack
- * - stack_##Type##_peek(s, &out) - View top without popping
- * - stack_##Type##_peek_option(s) - View top as Option<Type>
- * - stack_##Type##_len(s) - Get current size
- * - stack_##Type##_capacity(s) - Get maximum capacity
- * - stack_##Type##_remaining(s) - Get free space
- * - stack_##Type##_is_empty(s) - Check if empty
- * - stack_##Type##_is_full(s) - Check if full
- * - stack_##Type##_clear(s) - Remove all elements
  *
- * Precondition: DEFINE_VEC(Type) must have been called first
+ * Constructor:
+ * - canon_stack_##type##_init(s, buffer, capacity)  → void
  *
- * Usage:
- * DEFINE_VEC(int) // Required first
- * DEFINE_STACK(int) // Then define stack
+ * Queries:
+ * - canon_stack_##type##_len(s)                     → usize
+ * - canon_stack_##type##_capacity(s)                → usize
+ * - canon_stack_##type##_remaining(s)               → usize
+ * - canon_stack_##type##_is_empty(s)                → bool
+ * - canon_stack_##type##_is_full(s)                 → bool
  *
- * Example:
- * DEFINE_VEC(int);
- * DEFINE_STACK(int);
+ * Push / pop (Result variants):
+ * - canon_stack_##type##_push(s, item)              → result_bool_Error
+ * - canon_stack_##type##_pop(s, out)                → result_bool_Error
  *
- * int buf[64];
- * stack_int s;
- * stack_int_init(&s, buf, 64);
+ * Pop (Option variant):
+ * - canon_stack_##type##_pop_option(s)              → option_##type
  *
- * stack_int_push(&s, 10);
- * stack_int_push(&s, 20);
+ * Peek (bool variant):
+ * - canon_stack_##type##_peek(s, out)               → bool
  *
- * int top;
- * if (stack_int_peek(&s, &top)) {
- *     printf("Top: %d\n", top); // 20
- * }
+ * Peek (Option variant):
+ * - canon_stack_##type##_peek_option(s)             → option_##type
  *
- * stack_int_pop(&s, &top);
- * printf("Popped: %d\n", top); // 20
+ * Misc:
+ * - canon_stack_##type##_clear(s)                   → void
  *
- * Note: This must be used at file or global scope, not inside functions.
+ * @param linkage C linkage specifier: `static inline`, `static`, or empty
+ * @param type    Element type — DEFINE_VEC(linkage, type) must be called first
+ *
+ * @pre DEFINE_VEC(linkage, type) has already been called for the same type
+ *
+ * @note stack is a typedef alias for vec — all vec functions remain usable.
+ *       DEFINE_STACK only adds the LIFO-named wrappers for clarity.
  */
-#define DEFINE_STACK(Type) \
+#define DEFINE_STACK(linkage, type) \
 \
 /** \
- * @brief Fixed-capacity LIFO stack for Type \
+ * @brief Fixed-capacity LIFO stack for type \
  * \
- * This is a type alias for vec_##Type - all vector operations are available. \
- * Use stack-specific functions for clearer intent. \
+ * Typedef alias for canon_vec_##type. \
+ * All canon_vec_##type functions are available; \
+ * use canon_stack_##type functions for LIFO-specific clarity. \
  */ \
-typedef vec_##Type stack_##Type; \
+typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
 \
 /** \
- * @brief Initializes the stack with caller-provided fixed buffer \
+ * @brief Initializes the stack with a caller-owned buffer \
  * \
- * @param s Pointer to uninitialized stack_##Type \
- * @param buffer Array of Type – must remain valid for stack lifetime \
- * @param capacity Maximum number of elements the buffer can hold \
+ * @param s        Pointer to uninitialized canon_stack_##type \
+ * @param buffer   Array of type — must remain valid for stack lifetime \
+ * @param capacity Maximum number of elements (> 0) \
  * \
- * Preconditions: \
- * - s != NULL \
- * - buffer != NULL (or capacity == 0) \
- * - buffer has space for capacity elements \
+ * @pre s != NULL \
+ * @pre buffer != NULL || capacity == 0 \
+ * @pre capacity > 0 \
  * \
- * Postconditions: \
- * - s is initialized as empty stack \
- * - s can hold up to capacity elements \
+ * @post Stack is empty, ready for push/pop \
+ * @post Capacity is fixed — no growth possible \
  * \
- * Note: Capacity is fixed forever – no growth possible later \
- * \
- * Example: \
- * int buf[100]; \
- * stack_int s; \
- * stack_int_init(&s, buf, 100); \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) — wraps caller-provided buffer \
  */ \
-static inline void stack_##Type##_init(stack_##Type* s, Type* buffer, size_t capacity) { \
-    assert(s != NULL && "stack_init: s parameter cannot be NULL"); \
-    assert(buffer != NULL || capacity == 0); \
-    *s = vec_##Type##_init(buffer, capacity); \
+linkage void canon_stack_##type##_init(canon_stack_##type* s, type* buffer, usize capacity) { \
+    require_msg(s != NULL, "canon_stack_" #type "_init: s cannot be NULL"); \
+    *s = MANGLE_VEC_INIT(type)(buffer, capacity); \
 } \
 \
 /** \
  * @brief Pushes an item onto the top of the stack \
  * \
- * @param s Valid stack instance \
+ * @param s    Valid stack instance \
  * @param item Value to push \
- * @return true on success, false if stack is full or invalid \
+ * @return result_bool_Error — Ok(true) on success \
  * \
- * Returns false if: \
- * - s is NULL or invalid \
- * - Stack is full (len >= capacity) \
+ * @post Returns Err(ERR_INVALID_ARG)       if s == NULL or s->items == NULL \
+ * @post Returns Err(ERR_CAPACITY_EXCEEDED) if stack is full \
  * \
- * Performance: O(1) \
- * \
- * Example: \
- * if (!stack_int_push(&s, 42)) { \
- *     fprintf(stderr, "Stack overflow\n"); \
- * } \
+ * Performance: \
+ * - Time:  O(1) — no allocation \
+ * - Space: O(1) \
  */ \
-static inline bool stack_##Type##_push(stack_##Type* s, Type item) { \
-    result_bool_Error r = vec_##Type##_push(s, item); \
-    return result_bool_Error_is_ok(r); \
+linkage result_bool_Error canon_stack_##type##_push(canon_stack_##type* s, type item) { \
+    return MANGLE_VEC_PUSH(type)(s, item); \
 } \
 \
 /** \
- * @brief Pops the top item from the stack \
+ * @brief Removes and returns the top item (LIFO order) \
  * \
- * Removes and returns the most recently pushed item. \
+ * @param s   Valid stack instance \
+ * @param out Pointer to store the popped value \
+ * @return result_bool_Error — Ok(true) on success \
  * \
- * @param s Valid stack instance \
- * @param out Pointer to store the popped value (NULL-safe) \
- * @return true on success, false if stack is empty or invalid \
+ * @pre out != NULL \
  * \
- * Returns false if: \
- * - s is NULL or invalid \
- * - out is NULL \
- * - Stack is empty (len == 0) \
+ * @post Returns Err(ERR_INVALID_ARG)   if s == NULL, out == NULL, or s->items == NULL \
+ * @post Returns Err(ERR_INVALID_STATE) if stack is empty \
  * \
- * Performance: O(1) \
- * \
- * Example: \
- * int value; \
- * if (stack_int_pop(&s, &value)) { \
- *     printf("Popped: %d\n", value); \
- * } else { \
- *     fprintf(stderr, "Stack underflow\n"); \
- * } \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool stack_##Type##_pop(stack_##Type* s, Type* out) { \
-    result_bool_Error r = vec_##Type##_pop(s, out); \
-    return result_bool_Error_is_ok(r); \
+linkage result_bool_Error canon_stack_##type##_pop(canon_stack_##type* s, type* out) { \
+    return MANGLE_VEC_POP(type)(s, out); \
 } \
 \
 /** \
- * @brief Peeks at the top item without removing it \
- * \
- * Returns the value that would be popped, without modifying the stack. \
+ * @brief Removes and returns the top item as Option<type> \
  * \
  * @param s Valid stack instance \
- * @param out Pointer to store the top value (NULL-safe) \
- * @return true on success, false if stack is empty or invalid \
+ * @return option_##type — Some(item) on success, None if empty or invalid \
  * \
- * Returns false if: \
- * - s is NULL or invalid \
- * - out is NULL \
- * - Stack is empty (len == 0) \
- * \
- * Performance: O(1) \
- * \
- * Example: \
- * int top; \
- * if (stack_int_peek(&s, &top)) { \
- *     printf("Top is %d (not removed)\n", top); \
- * } \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool stack_##Type##_peek(const stack_##Type* s, Type* out) { \
-    if (!s || !out || vec_##Type##_is_empty(s)) { \
-        return false; \
-    } \
-    Type* last = vec_##Type##_last(s); \
-    if (!last) { \
-        return false; \
-    } \
+linkage option_##type canon_stack_##type##_pop_option(canon_stack_##type* s) { \
+    return MANGLE_VEC_POP_OPTION(type)(s); \
+} \
+\
+/** \
+ * @brief Returns the top item without removing it \
+ * \
+ * @param s   Valid stack instance \
+ * @param out Pointer to store the top value \
+ * @return true on success, false if empty or invalid \
+ * \
+ * @post Stack is unchanged \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
+linkage bool canon_stack_##type##_peek(const canon_stack_##type* s, type* out) { \
+    if (!s || !out || MANGLE_VEC_IS_EMPTY(type)(s)) return false; \
+    type* last = MANGLE_VEC_LAST(type)(s); \
+    if (!last) return false; \
     *out = *last; \
     return true; \
 } \
 \
 /** \
- * @brief Peeks at the top item and returns it as Option<Type> \
- * \
- * Safe alternative to peek() — returns None if empty or invalid. \
+ * @brief Returns the top item as Option<type> without removing it \
  * \
  * @param s Valid stack instance \
- * @return Some(top) if stack not empty, None otherwise \
+ * @return option_##type — Some(top) if not empty, None otherwise \
  * \
- * Performance: O(1) \
+ * @post Stack is unchanged \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline option_##Type stack_##Type##_peek_option(const stack_##Type* s) { \
-    Type val; \
-    if (stack_##Type##_peek(s, &val)) { \
-        return option_##Type##_some(val); \
-    } \
-    return option_##Type##_none(); \
+linkage option_##type canon_stack_##type##_peek_option(const canon_stack_##type* s) { \
+    type val; \
+    if (canon_stack_##type##_peek(s, &val)) \
+        return option_##type##_some(val); \
+    return option_##type##_none(); \
 } \
 \
 /** \
- * @brief Returns current number of elements in the stack \
+ * @brief Returns the current number of elements \
  * \
  * @param s Stack to query (NULL-safe) \
- * @return Number of elements currently on stack \
+ * @return usize — 0 if s == NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline size_t stack_##Type##_len(const stack_##Type* s) { \
-    return vec_##Type##_len(s); \
+linkage usize canon_stack_##type##_len(const canon_stack_##type* s) { \
+    return MANGLE_VEC_LEN(type)(s); \
 } \
 \
 /** \
- * @brief Returns maximum capacity of the stack (fixed) \
+ * @brief Returns the fixed maximum capacity \
  * \
  * @param s Stack to query (NULL-safe) \
- * @return Maximum number of elements stack can hold \
+ * @return usize — 0 if s == NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline size_t stack_##Type##_capacity(const stack_##Type* s) { \
-    return vec_##Type##_capacity(s); \
+linkage usize canon_stack_##type##_capacity(const canon_stack_##type* s) { \
+    return MANGLE_VEC_CAPACITY(type)(s); \
 } \
 \
 /** \
- * @brief Returns number of free slots remaining \
- * \
- * Equivalent to capacity - len. \
+ * @brief Returns remaining free slots (capacity - len) \
  * \
  * @param s Stack to query (NULL-safe) \
- * @return Number of elements that can still be pushed \
+ * @return usize — 0 if s == NULL \
  * \
- * Example: \
- * if (stack_int_remaining(&s) < 10) { \
- *     fprintf(stderr, "Warning: stack nearly full\n"); \
- * } \
- * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline size_t stack_##Type##_remaining(const stack_##Type* s) { \
-    return vec_##Type##_remaining(s); \
+linkage usize canon_stack_##type##_remaining(const canon_stack_##type* s) { \
+    return MANGLE_VEC_REMAINING(type)(s); \
 } \
 \
 /** \
- * @brief Checks if stack is empty \
+ * @brief Returns true if the stack has no elements (len == 0) \
  * \
  * @param s Stack to check (NULL-safe) \
- * @return true if len == 0, false otherwise \
+ * @return true if empty or NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool stack_##Type##_is_empty(const stack_##Type* s) { \
-    return vec_##Type##_is_empty(s); \
+linkage bool canon_stack_##type##_is_empty(const canon_stack_##type* s) { \
+    return MANGLE_VEC_IS_EMPTY(type)(s); \
 } \
 \
 /** \
- * @brief Checks if stack is full (cannot push more) \
+ * @brief Returns true if the stack is at capacity (len == capacity) \
  * \
  * @param s Stack to check (NULL-safe) \
- * @return true if len >= capacity, false otherwise \
+ * @return true if full or NULL \
  * \
- * Performance: O(1) \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline bool stack_##Type##_is_full(const stack_##Type* s) { \
-    return vec_##Type##_is_full(s); \
+linkage bool canon_stack_##type##_is_full(const canon_stack_##type* s) { \
+    return MANGLE_VEC_IS_FULL(type)(s); \
 } \
 \
 /** \
- * @brief Clears the stack (sets length to 0, buffer unchanged) \
+ * @brief Resets the stack to empty state (O(1), does not zero buffer) \
  * \
- * Does not modify buffer contents, only resets length to 0. \
- * All previously pushed values become invalid. \
+ * @param s Stack to clear (NULL-safe) \
  * \
- * @param s Stack to clear \
+ * @post s->len == 0 \
+ * @post Buffer contents are NOT zeroed — only logical state is reset \
+ * @note For sensitive data, zero the buffer manually before calling clear \
  * \
- * Performance: O(1) \
- * \
- * Example: \
- * stack_int_clear(&s); // Reuse stack for new sequence \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
-static inline void stack_##Type##_clear(stack_##Type* s) { \
-    vec_##Type##_clear(s); \
+linkage void canon_stack_##type##_clear(canon_stack_##type* s) { \
+    MANGLE_VEC_CLEAR(type)(s); \
 }
 
-/* Optional alias for clearer LIFO naming — common in stack APIs */
-/* #define stack_##Type##_top stack_##Type##_peek */
-/* #define stack_##Type##_top_option stack_##Type##_peek_option */
+/* ════════════════════════════════════════════════════════════════════════════
+   DECLARE_STACK — forward-declare a typed stack (for separate compilation)
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Common type instantiations
-   ────────────────────────────────────────────────────────────────────────────
-
-   Uncomment after defining the corresponding vec types:
-
-   DEFINE_VEC(int)
-   DEFINE_STACK(int)
-
-   DEFINE_VEC(char)
-   DEFINE_STACK(char)
-
-   DEFINE_VEC(size_t)
-   DEFINE_STACK(size_t)
-
-   typedef void* voidptr;
-   DEFINE_VEC(voidptr)
-   DEFINE_STACK(voidptr)
-
-   ──────────────────────────────────────────────────────────────────────────── */
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Example
-   ────────────────────────────────────────────────────────────────────────────
-    #include "stack.h"
-    #include <stdio.h>
-
-    // Define types
-    DEFINE_VEC(int)
-    DEFINE_STACK(int)
-
-    // Example 1: Basic stack operations
-    void example_basic(void) {
-        int buffer[32];
-        stack_int s;
-        stack_int_init(&s, buffer, 32);
-
-        // Push elements
-        stack_int_push(&s, 10);
-        stack_int_push(&s, 20);
-        stack_int_push(&s, 30);
-
-        printf("Stack size: %zu\n", stack_int_len(&s));
-
-        // Peek at top
-        int top;
-        if (stack_int_peek(&s, &top)) {
-            printf("Top element: %d\n", top); // 30
-        }
-
-        // Pop elements
-        while (!stack_int_is_empty(&s)) {
-            int value;
-            stack_int_pop(&s, &value);
-            printf("Popped: %d\n", value);
-        }
-    }
-
-    // Example 2: Expression evaluation (reverse Polish notation)
-    int evaluate_rpn(const char* expr) {
-        int buffer[64];
-        stack_int s;
-        stack_int_init(&s, buffer, 64);
-
-        // Parse and evaluate: "3 4 + 2 *" = (3+4)*2 = 14
-        for (const char* p = expr; *p; p++) {
-            if (*p >= '0' && *p <= '9') {
-                stack_int_push(&s, *p - '0');
-            } else if (*p == '+') {
-                int b, a;
-                stack_int_pop(&s, &b);
-                stack_int_pop(&s, &a);
-                stack_int_push(&s, a + b);
-            } else if (*p == '*') {
-                int b, a;
-                stack_int_pop(&s, &b);
-                stack_int_pop(&s, &a);
-                stack_int_push(&s, a * b);
-            }
-        }
-
-        int result;
-        stack_int_pop(&s, &result);
-        return result;
-    }
-
-    // Example 3: Undo system
-    typedef struct {
-        int type;
-        int data;
-    } Action;
-
-    DEFINE_VEC(Action)
-    DEFINE_STACK(Action)
-
-    void example_undo_system(void) {
-        Action buffer[100];
-        stack_Action undo;
-        stack_Action_init(&undo, buffer, 100);
-
-        // Perform actions
-        stack_Action_push(&undo, (Action){.type = 1, .data = 42});
-        stack_Action_push(&undo, (Action){.type = 2, .data = 99});
-
-        // Undo last action
-        Action last;
-        if (stack_Action_pop(&undo, &last)) {
-            printf("Undoing action type %d\n", last.type);
-        }
-    }
-
-    // Example 4: Error handling
-    void example_error_handling(void) {
-        int small_buf[2];
-        stack_int s;
-        stack_int_init(&s, small_buf, 2);
-
-        // Fill stack
-        stack_int_push(&s, 1);
-        stack_int_push(&s, 2);
-
-        // This will fail - stack is full
-        if (!stack_int_push(&s, 3)) {
-            fprintf(stderr, "Stack overflow: %zu/%zu elements\n",
-                    stack_int_len(&s),
-                    stack_int_capacity(&s));
-        }
-
-        // Check before push
-        if (stack_int_remaining(&s) > 0) {
-            stack_int_push(&s, 4);
-        } else {
-            fprintf(stderr, "No space remaining\n");
-        }
-    }
-
-    // Example 5: Arena-backed stack
-    void example_arena(Arena* arena) {
-        int* buf = arena_alloc_array(arena, int, 256);
-        stack_int s;
-        stack_int_init(&s, buf, 256);
-
-        // Use stack...
-        for (int i = 0; i < 100; i++) {
-            stack_int_push(&s, i);
-        }
-
-        // Stack lifetime tied to arena
-        // Becomes invalid after arena_reset()
-    }
-   ──────────────────────────────────────────────────────────────────────────── */
+/**
+ * @brief Forward-declares a typed stack and all its function signatures
+ *
+ * Use in shared headers alongside DECLARE_VEC(type).
+ * Match with DEFINE_STACK(linkage, type) in exactly one .c file.
+ *
+ * @param type Element type — DECLARE_VEC(type) must be called first
+ *
+ * Example:
+ * ```c
+ * // In tasks.h:
+ * #include "data/vec/vec_decl.h"
+ * #include "data/stack.h"
+ * DECLARE_VEC(Task)
+ * DECLARE_STACK(Task)
+ * ```
+ */
+#define DECLARE_STACK(type) \
+\
+typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
+\
+extern void              canon_stack_##type##_init(canon_stack_##type* s, type* buffer, usize capacity); \
+extern result_bool_Error canon_stack_##type##_push(canon_stack_##type* s, type item); \
+extern result_bool_Error canon_stack_##type##_pop(canon_stack_##type* s, type* out); \
+extern option_##type     canon_stack_##type##_pop_option(canon_stack_##type* s); \
+extern bool              canon_stack_##type##_peek(const canon_stack_##type* s, type* out); \
+extern option_##type     canon_stack_##type##_peek_option(const canon_stack_##type* s); \
+extern usize             canon_stack_##type##_len(const canon_stack_##type* s); \
+extern usize             canon_stack_##type##_capacity(const canon_stack_##type* s); \
+extern usize             canon_stack_##type##_remaining(const canon_stack_##type* s); \
+extern bool              canon_stack_##type##_is_empty(const canon_stack_##type* s); \
+extern bool              canon_stack_##type##_is_full(const canon_stack_##type* s); \
+extern void              canon_stack_##type##_clear(canon_stack_##type* s);
 
 #endif /* CANON_DATA_STACK_H */
