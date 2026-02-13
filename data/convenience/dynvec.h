@@ -1,72 +1,117 @@
 #ifndef CANON_DATA_CONVENIENCE_DYNVEC_H
 #define CANON_DATA_CONVENIENCE_DYNVEC_H
 
-/**
- * @file convenience/dynvec.h
- * @brief Fully automatic dynamic vector with hidden allocation
- *
- * CONVENIENCE LAYER - trades explicitness for ergonomics
- *
- * Differences from data/vec.h:
- * ────────────────────────────
- * - Automatic heap allocation (hidden)
- * - Automatic growth on overflow (implicit)
- * - Owns its own memory (no caller-provided buffers)
- * - Simplified API (fewer choices to make)
- *
- * When to use this:
- * ─────────────────
- * ✓ Rapid prototyping
- * ✓ Collections of unknown/unbounded size
- * ✓ When convenience matters more than determinism
- * ✓ Desktop/server applications with ample memory
- *
- * When to use data/vec.h instead:
- * ────────────────────────────────
- * ✓ Performance-critical code
- * ✓ Embedded systems
- * ✓ Real-time systems
- * ✓ When you need deterministic allocation behavior
- * ✓ When you want explicit control over memory
- *
- * Growth strategy:
- * ────────────────
- * - Initial capacity: 8 elements
- * - Growth factor: 2x (amortized O(1) push)
- * - No automatic shrinking
- * - Can explicitly shrink_to_fit() if needed
- *
- * Memory management:
- * ──────────────────
- * - Always heap-allocated
- * - Must call dynvec_##type##_free() to avoid leaks
- * - No arena support (use data/vec.h for arena-backed)
- *
- * Performance:
- * ────────────
- * - Push: Amortized O(1), worst-case O(n) on realloc
- * - Pop: O(1)
- * - Insert/Remove: O(n)
- * - Access: O(1)
- */
-
-#include <stddef.h>
-#include <stdbool.h>
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 
-/* ─────────────────────────────────────────────────────────────
+#include "core/primitives/types.h"
+#include "core/primitives/limits.h"
+#include "core/primitives/contract.h"
+
+/**
+ * @file convenience/dynvec.h
+ * @brief Auto-growing typed vector with hidden heap allocation
+ *
+ * CONVENIENCE LAYER — trades explicitness for ergonomics.
+ * All pushes grow automatically. Caller must free when done.
+ *
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Automatic heap allocation — no caller-provided buffer needed
+ * - Automatic growth on overflow — 2x doubling strategy
+ * - Owns its own memory — must call dynvec_##type##_free() to avoid leaks
+ * - No arena support — use data/vec/vec.h for arena-backed vectors
+ * - Type-safe via DEFINE_DYNVEC macro
+ *
+ * When to use this instead of data/vec/vec.h:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Collections of unknown or unbounded size
+ * - Rapid prototyping
+ * - Desktop/server applications with ample memory
+ * - When convenience matters more than determinism
+ *
+ * When to use data/vec/vec.h instead:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Performance-critical or real-time code
+ * - Embedded systems or bounded-memory environments
+ * - When you need explicit control over allocation strategy
+ * - Arena-backed or stack-backed vectors
+ *
+ * Growth strategy:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Initial capacity: DYNVEC_INITIAL_CAPACITY (default 8 elements)
+ * - Growth factor:    DYNVEC_GROWTH_FACTOR (default 2x)
+ * - No automatic shrinking — call dynvec_##type##_shrink_to_fit() explicitly
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Each dynvec instance is independent — no shared state.
+ * Concurrent modifications require external synchronization.
+ *
+ * Portability:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later
+ * - Uses <string.h> (memcpy, memmove), <stdlib.h> (malloc, realloc, free)
+ * - No platform-specific code
+ *
+ * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - push:           Amortized O(1), worst-case O(n) on realloc
+ * - pop:            O(1)
+ * - insert:         O(n) — shifts elements right, may realloc
+ * - remove:         O(n) — shifts elements left
+ * - extend:         O(count), may realloc
+ * - get/set/at:     O(1)
+ * - reserve:        O(1) if cap sufficient, else O(n) on realloc
+ * - shrink_to_fit:  O(n) — realloc to exact size
+ * - free:           O(1)
+ * - struct size:    sizeof(type*) + 2*sizeof(usize)
+ *
+ * Quick start:
+ * ```c
+ * #include "data/convenience/dynvec.h"
+ *
+ * DEFINE_DYNVEC(int)
+ *
+ * dynvec_int v = dynvec_int_init();
+ * dynvec_int_push(&v, 10);
+ * dynvec_int_push(&v, 20);
+ * dynvec_int_push(&v, 30);
+ *
+ * int val;
+ * dynvec_int_pop(&v, &val);   // val = 30
+ * dynvec_int_free(&v);        // REQUIRED — always call this
+ * ```
+ *
+ * @sa data/vec/vec.h — fixed-capacity, explicit-allocation alternative
+ */
+
+/* ════════════════════════════════════════════════════════════════════════════
    Configuration
-   ───────────────────────────────────────────────────────────── */
+   ════════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * @brief Initial heap allocation in elements when buffer is first needed
+ *
+ * Override before including this file.
+ * Default: 8 elements.
+ */
 #ifndef DYNVEC_INITIAL_CAPACITY
-#define DYNVEC_INITIAL_CAPACITY 8
+    #define DYNVEC_INITIAL_CAPACITY ((usize)8)
 #endif
 
+/**
+ * @brief Capacity growth multiplier applied when the buffer is full
+ *
+ * Default: 2 (doubles on each realloc).
+ */
 #ifndef DYNVEC_GROWTH_FACTOR
-#define DYNVEC_GROWTH_FACTOR 2
+    #define DYNVEC_GROWTH_FACTOR ((usize)2)
 #endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Branch hint helpers
+   ════════════════════════════════════════════════════════════════════════════ */
 
 #if defined(__GNUC__) || defined(__clang__)
     #define DYNVEC_LIKELY(x)   __builtin_expect(!!(x), 1)
@@ -76,227 +121,347 @@
     #define DYNVEC_UNLIKELY(x) (x)
 #endif
 
-/* ─────────────────────────────────────────────────────────────
-   DYNVEC DEFINITION
-   ───────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_DYNVEC — instantiate a typed auto-growing vector
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * DEFINE_DYNVEC(type)
- *
- * Generates a fully-typed dynamic vector with automatic growth:
- *   - dynvec_<type>
+ * @brief Instantiates a fully typed auto-growing vector for element type `type`
  *
  * Requirements:
- * ─────────────
  * - type must be trivially copyable (memcpy-safe)
+ * - For pointer types, typedef first: typedef void* voidptr; DEFINE_DYNVEC(voidptr)
  *
- * Memory model:
- * ─────────────
- * - Always owns heap-allocated buffer
- * - Grows automatically on overflow
- * - Must call _free() to release memory
+ * Generated type:
+ * - dynvec_##type
  *
- * Generated API:
- * ──────────────
+ * Generated functions:
+ *
  * Constructors:
- *   - dynvec_##type##_init()           - Empty vector
- *   - dynvec_##type##_with_capacity()  - Pre-allocate capacity
+ * - dynvec_##type##_init()                    → dynvec_##type (no allocation)
+ * - dynvec_##type##_with_capacity(capacity)   → dynvec_##type (pre-allocates)
  *
- * Capacity:
- *   - dynvec_##type##_len()
- *   - dynvec_##type##_capacity()
- *   - dynvec_##type##_is_empty()
- *   - dynvec_##type##_reserve()        - Ensure capacity
- *   - dynvec_##type##_shrink_to_fit()  - Free excess capacity
+ * Queries:
+ * - dynvec_##type##_len(v)                    → usize
+ * - dynvec_##type##_capacity(v)               → usize
+ * - dynvec_##type##_is_empty(v)               → bool
  *
- * Access:
- *   - dynvec_##type##_get()            - Bounds-checked
- *   - dynvec_##type##_get_unchecked()  - No bounds check
- *   - dynvec_##type##_set()            - Bounds-checked write
- *   - dynvec_##type##_data()           - Raw pointer
- *   - dynvec_##type##_first()
- *   - dynvec_##type##_last()
+ * Element access:
+ * - dynvec_##type##_get(v, i, out)            → bool (bounds-checked)
+ * - dynvec_##type##_get_unchecked(v, i)       → type (debug-checked, fast path)
+ * - dynvec_##type##_set(v, i, val)            → bool (bounds-checked)
+ * - dynvec_##type##_data(v)                   → type* (raw buffer pointer)
+ * - dynvec_##type##_first(v)                  → type* (NULL if empty)
+ * - dynvec_##type##_last(v)                   → type* (NULL if empty)
  *
- * Modification:
- *   - dynvec_##type##_push()           - Auto-grows if needed
- *   - dynvec_##type##_pop()            - Returns success/failure
- *   - dynvec_##type##_insert()         - Auto-grows if needed
- *   - dynvec_##type##_remove()
- *   - dynvec_##type##_clear()
+ * Modification (may allocate):
+ * - dynvec_##type##_push(v, val)              → bool
+ * - dynvec_##type##_pop(v, out)               → bool
+ * - dynvec_##type##_insert(v, i, val)         → bool (O(n), may allocate)
+ * - dynvec_##type##_remove(v, i, out)         → bool (O(n))
+ * - dynvec_##type##_clear(v)                  → void (O(1), does not free)
  *
- * Bulk:
- *   - dynvec_##type##_extend()         - Append array
+ * Bulk (may allocate):
+ * - dynvec_##type##_extend(v, src, count)     → bool
+ *
+ * Capacity management:
+ * - dynvec_##type##_reserve(v, min_cap)       → bool (may allocate)
+ * - dynvec_##type##_shrink_to_fit(v)          → bool (may realloc)
  *
  * Memory:
- *   - dynvec_##type##_free()           - Release memory
+ * - dynvec_##type##_free(v)                   → void (MUST call to avoid leaks)
+ *
+ * @param type Element type — must be a valid C identifier
  */
 #define DEFINE_DYNVEC(type) \
 \
+/** \
+ * @brief Auto-growing heap-allocated vector for type \
+ * \
+ * Invariants: \
+ * - data != NULL when cap > 0 \
+ * - len <= cap \
+ * \
+ * Do not access fields directly — use the provided functions. \
+ * \
+ * Memory layout: \
+ * - sizeof(dynvec_##type) = sizeof(type*) + 2*sizeof(usize) \
+ * - Backing buffer: cap * sizeof(type) bytes on the heap \
+ */ \
 typedef struct { \
-    type*  data;     /* Owned heap buffer */ \
-    size_t len;      /* Number of elements */ \
-    size_t cap;      /* Allocated capacity */ \
+    type*  data; /**< Heap-owned element buffer (NULL until first push) */ \
+    usize  len;  /**< Current element count */ \
+    usize  cap;  /**< Allocated buffer capacity in elements */ \
 } dynvec_##type; \
 \
-/* ───────────────────────────────────────────────────────── \
-   Internal helpers \
-   ───────────────────────────────────────────────────────── */ \
+/* ════════════════════════════════════════════════════════════════════════════ \
+   Internal helper — capacity growth \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
-static inline bool dynvec_##type##_grow(dynvec_##type* v, size_t min_cap) { \
-    assert(v); \
-    size_t new_cap = v->cap == 0 ? DYNVEC_INITIAL_CAPACITY : v->cap * DYNVEC_GROWTH_FACTOR; \
+/** \
+ * @brief Grows buffer to at least min_cap elements \
+ * \
+ * @pre v != NULL — checked via ensure_msg() in debug builds \
+ * \
+ * @note Internal use only. \
+ * \
+ * Performance: \
+ * - Time:  O(n) — realloc copies existing elements \
+ * - Space: Allocates up to 2x current cap * sizeof(type) \
+ */ \
+static inline bool dynvec_##type##_grow(dynvec_##type* v, usize min_cap) { \
+    ensure_msg(v != NULL, "dynvec_" #type "_grow: v cannot be NULL"); \
+    if (!v) return false; \
+    usize new_cap = (v->cap == 0) \
+        ? DYNVEC_INITIAL_CAPACITY \
+        : v->cap * DYNVEC_GROWTH_FACTOR; \
     if (new_cap < min_cap) new_cap = min_cap; \
-    \
     type* new_data = (type*)realloc(v->data, new_cap * sizeof(type)); \
     if (!new_data) return false; \
-    \
     v->data = new_data; \
-    v->cap = new_cap; \
+    v->cap  = new_cap; \
     return true; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
+/* ════════════════════════════════════════════════════════════════════════════ \
    Constructors \
-   ───────────────────────────────────────────────────────── */ \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Creates empty vector \
+ * @brief Creates an empty dynvec with no initial allocation \
  * \
- * No allocation until first push. \
+ * No heap allocation until the first push. \
+ * \
+ * @return Zero-initialized dynvec_##type \
+ * \
+ * @post result.data == NULL, result.len == 0, result.cap == 0 \
  * \
  * Performance: \
- * - Time: O(1) \
- * - Space: sizeof(dynvec_##type) \
- * - Heap: none \
+ * - Time:  O(1) \
+ * - Space: sizeof(dynvec_##type) — no heap allocation \
  */ \
 static inline dynvec_##type dynvec_##type##_init(void) { \
-    dynvec_##type v; \
-    v.data = NULL; \
-    v.len = 0; \
-    v.cap = 0; \
-    return v; \
+    return (dynvec_##type){ .data = NULL, .len = 0, .cap = 0 }; \
 } \
 \
 /** \
- * @brief Creates vector with pre-allocated capacity \
+ * @brief Creates a dynvec with pre-allocated heap capacity \
  * \
- * Useful when expected size is known. \
+ * Useful when the expected element count is known, avoiding \
+ * intermediate reallocations. \
+ * \
+ * @param capacity Number of elements to pre-allocate \
+ * @return Initialized dynvec_##type with reserved capacity \
+ * \
+ * @post On success: result.cap == capacity, result.len == 0 \
+ * @post On failure (OOM or capacity == 0): returns dynvec_##type##_init() \
+ * \
+ * @note Call dynvec_##type##_free() when done. \
  * \
  * Performance: \
- * - Time: O(1) \
- * - Space: sizeof(dynvec_##type) + capacity*sizeof(type) \
- * - Heap: capacity*sizeof(type) \
+ * - Time:  O(1) \
+ * - Space: capacity * sizeof(type) bytes on the heap \
  */ \
-static inline dynvec_##type dynvec_##type##_with_capacity(size_t capacity) { \
+static inline dynvec_##type dynvec_##type##_with_capacity(usize capacity) { \
     dynvec_##type v = dynvec_##type##_init(); \
-    if (capacity > 0) { \
-        v.data = (type*)malloc(capacity * sizeof(type)); \
-        if (v.data) v.cap = capacity; \
-    } \
+    if (capacity == 0) return v; \
+    v.data = (type*)malloc(capacity * sizeof(type)); \
+    if (v.data) v.cap = capacity; \
     return v; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
-   Capacity queries \
-   ───────────────────────────────────────────────────────── */ \
+/* ════════════════════════════════════════════════════════════════════════════ \
+   Queries \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
-static inline size_t dynvec_##type##_len(const dynvec_##type* v) { \
+/** \
+ * @brief Returns the current element count \
+ * \
+ * @param v dynvec to query (NULL-safe) \
+ * @return usize — 0 if v == NULL \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
+static inline usize dynvec_##type##_len(const dynvec_##type* v) { \
     return v ? v->len : 0; \
 } \
 \
-static inline size_t dynvec_##type##_capacity(const dynvec_##type* v) { \
+/** \
+ * @brief Returns the current heap capacity in elements \
+ * \
+ * @param v dynvec to query (NULL-safe) \
+ * @return usize — 0 if v == NULL or no allocation yet \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
+static inline usize dynvec_##type##_capacity(const dynvec_##type* v) { \
     return v ? v->cap : 0; \
 } \
 \
+/** \
+ * @brief Returns true if the vector has no elements \
+ * \
+ * @param v dynvec to check (NULL-safe) \
+ * @return true if empty or NULL \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
 static inline bool dynvec_##type##_is_empty(const dynvec_##type* v) { \
     return !v || v->len == 0; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
+/* ════════════════════════════════════════════════════════════════════════════ \
    Element access \
-   ───────────────────────────────────────────────────────── */ \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Bounds-checked read \
+ * @brief Copies element at index i into *out (bounds-checked) \
+ * \
+ * @param v   dynvec to read from (NULL-safe) \
+ * @param i   Index to read \
+ * @param out Pointer to store element value \
+ * @return true on success, false if v == NULL, out == NULL, or i >= v->len \
  * \
  * Performance: \
- * - Time: O(1) \
+ * - Time:  O(1) \
  * - Space: O(1) \
  */ \
 static inline bool dynvec_##type##_get( \
-    const dynvec_##type* v, size_t i, type* out) { \
+    const dynvec_##type* v, usize i, type* out) { \
     if (!v || !out || i >= v->len) return false; \
     *out = v->data[i]; \
     return true; \
 } \
 \
 /** \
- * @brief Unchecked read (zero overhead) \
+ * @brief Returns element at index i without bounds checking (fast path) \
  * \
- * ⚠️ Undefined behavior if i >= len \
+ * @param v dynvec to read from \
+ * @param i Index to read \
+ * @return Element value \
+ * \
+ * @pre v != NULL \
+ * @pre i < v->len — caller must guarantee this \
+ * \
+ * @note Preconditions checked via ensure_msg() in debug builds only. \
+ *       Undefined behavior in release builds if violated. \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
 static inline type dynvec_##type##_get_unchecked( \
-    const dynvec_##type* v, size_t i) { \
-    assert(v && i < v->len); \
+    const dynvec_##type* v, usize i) { \
+    ensure_msg(v != NULL,    "dynvec_" #type "_get_unchecked: v cannot be NULL"); \
+    ensure_msg(i < v->len,   "dynvec_" #type "_get_unchecked: index out of bounds"); \
     return v->data[i]; \
 } \
 \
 /** \
- * @brief Bounds-checked write \
+ * @brief Sets element at index i to value (bounds-checked) \
+ * \
+ * @param v     dynvec to write to (NULL-safe) \
+ * @param i     Index to write \
+ * @param value Value to set \
+ * @return true on success, false if v == NULL or i >= v->len \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
  */ \
 static inline bool dynvec_##type##_set( \
-    dynvec_##type* v, size_t i, type value) { \
+    dynvec_##type* v, usize i, type value) { \
     if (!v || i >= v->len) return false; \
     v->data[i] = value; \
     return true; \
 } \
 \
+/** \
+ * @brief Returns the raw buffer pointer \
+ * \
+ * @param v dynvec to query (NULL-safe) \
+ * @return type* — NULL if v == NULL or buffer not yet allocated \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
 static inline type* dynvec_##type##_data(const dynvec_##type* v) { \
     return v ? v->data : NULL; \
 } \
 \
+/** \
+ * @brief Returns pointer to first element, or NULL if empty \
+ * \
+ * @param v dynvec to query (NULL-safe) \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
 static inline type* dynvec_##type##_first(const dynvec_##type* v) { \
     return (v && v->len > 0) ? &v->data[0] : NULL; \
 } \
 \
+/** \
+ * @brief Returns pointer to last element, or NULL if empty \
+ * \
+ * @param v dynvec to query (NULL-safe) \
+ * \
+ * Performance: \
+ * - Time:  O(1) \
+ * - Space: O(1) \
+ */ \
 static inline type* dynvec_##type##_last(const dynvec_##type* v) { \
     return (v && v->len > 0) ? &v->data[v->len - 1] : NULL; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
+/* ════════════════════════════════════════════════════════════════════════════ \
    Modification (auto-growing) \
-   ───────────────────────────────────────────────────────── */ \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Appends element, growing if needed \
+ * @brief Appends an element, growing the buffer if needed \
  * \
- * ⚠️ May allocate memory! \
+ * @param v     dynvec to push into \
+ * @param value Element to append \
+ * @return true on success, false on allocation failure or v == NULL \
+ * \
+ * @post On true: element appended, v->len incremented by 1 \
+ * @post On false: v is unchanged \
+ * \
+ * @note May allocate heap memory. \
  * \
  * Performance: \
- * - Amortized time: O(1) \
- * - Worst-case: O(n) on realloc \
- * - Space: May allocate cap*2*sizeof(type) \
+ * - Time:  Amortized O(1), worst-case O(n) on realloc \
+ * - Space: May allocate up to 2x current cap * sizeof(type) \
  */ \
 static inline bool dynvec_##type##_push( \
     dynvec_##type* v, type value) { \
     if (!v) return false; \
-    \
     if (DYNVEC_UNLIKELY(v->len >= v->cap)) { \
-        if (!dynvec_##type##_grow(v, v->len + 1)) { \
-            return false; \
-        } \
+        if (!dynvec_##type##_grow(v, v->len + 1)) return false; \
     } \
-    \
     v->data[v->len++] = value; \
     return true; \
 } \
 \
 /** \
- * @brief Removes last element \
+ * @brief Removes and returns the last element \
+ * \
+ * @param v   dynvec to pop from (NULL-safe) \
+ * @param out Pointer to store the removed element \
+ * @return true on success, false if v == NULL, out == NULL, or v->len == 0 \
  * \
  * Performance: \
- * - Time: O(1) \
- * - Space: O(1) (no shrinking) \
+ * - Time:  O(1) — no shrinking \
+ * - Space: O(1) \
  */ \
 static inline bool dynvec_##type##_pop( \
     dynvec_##type* v, type* out) { \
@@ -306,24 +471,25 @@ static inline bool dynvec_##type##_pop( \
 } \
 \
 /** \
- * @brief Inserts element at index, growing if needed \
+ * @brief Inserts element at index i, shifting elements right, growing if needed \
  * \
- * ⚠️ May allocate memory! \
+ * @param v     dynvec to insert into \
+ * @param i     Insertion index (must be <= v->len) \
+ * @param value Element to insert \
+ * @return true on success, false on v == NULL, i > v->len, or allocation failure \
+ * \
+ * @note May allocate heap memory. \
  * \
  * Performance: \
- * - Time: O(n) \
- * - Space: May allocate on grow \
+ * - Time:  O(n) — shifts elements, may realloc \
+ * - Space: May allocate up to 2x current cap * sizeof(type) \
  */ \
 static inline bool dynvec_##type##_insert( \
-    dynvec_##type* v, size_t i, type value) { \
+    dynvec_##type* v, usize i, type value) { \
     if (!v || i > v->len) return false; \
-    \
     if (DYNVEC_UNLIKELY(v->len >= v->cap)) { \
-        if (!dynvec_##type##_grow(v, v->len + 1)) { \
-            return false; \
-        } \
+        if (!dynvec_##type##_grow(v, v->len + 1)) return false; \
     } \
-    \
     if (i < v->len) { \
         memmove(&v->data[i + 1], &v->data[i], \
                 (v->len - i) * sizeof(type)); \
@@ -334,14 +500,19 @@ static inline bool dynvec_##type##_insert( \
 } \
 \
 /** \
- * @brief Removes element at index \
+ * @brief Removes element at index i, shifting elements left \
+ * \
+ * @param v   dynvec to remove from (NULL-safe) \
+ * @param i   Index to remove (must be < v->len) \
+ * @param out Pointer to store the removed element \
+ * @return true on success, false if v == NULL, out == NULL, or i >= v->len \
  * \
  * Performance: \
- * - Time: O(n) \
- * - Space: O(1) \
+ * - Time:  O(n) — shifts elements left \
+ * - Space: O(1) — no shrinking \
  */ \
 static inline bool dynvec_##type##_remove( \
-    dynvec_##type* v, size_t i, type* out) { \
+    dynvec_##type* v, usize i, type* out) { \
     if (!v || !out || i >= v->len) return false; \
     *out = v->data[i]; \
     if (i < v->len - 1) { \
@@ -353,109 +524,129 @@ static inline bool dynvec_##type##_remove( \
 } \
 \
 /** \
- * @brief Clears all elements \
+ * @brief Resets the element count to 0 without freeing the buffer \
  * \
- * Does not free memory. Use shrink_to_fit() if needed. \
+ * @param v dynvec to clear (NULL-safe) \
+ * \
+ * @post v->len == 0 \
+ * @note Buffer contents are not zeroed — only logical state is reset. \
+ *       Use dynvec_##type##_shrink_to_fit() to also release excess memory. \
  * \
  * Performance: \
- * - Time: O(1) \
+ * - Time:  O(1) \
  * - Space: O(1) \
  */ \
 static inline void dynvec_##type##_clear(dynvec_##type* v) { \
     if (v) v->len = 0; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
+/* ════════════════════════════════════════════════════════════════════════════ \
    Bulk operations \
-   ───────────────────────────────────────────────────────── */ \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Appends array of elements, growing if needed \
+ * @brief Appends count elements from src array, growing if needed \
  * \
- * ⚠️ May allocate memory! \
+ * @param v     dynvec to extend \
+ * @param src   Source array (must point to at least count elements) \
+ * @param count Number of elements to append \
+ * @return true on success, false on v == NULL, src == NULL, or allocation failure \
+ * \
+ * @note May allocate heap memory. \
  * \
  * Performance: \
- * - Time: O(count) + possible O(n) realloc \
- * - Space: May allocate on grow \
+ * - Time:  O(count), plus possible O(n) realloc \
+ * - Space: May allocate up to 2x current cap * sizeof(type) \
  */ \
 static inline bool dynvec_##type##_extend( \
-    dynvec_##type* v, const type* src, size_t count) { \
+    dynvec_##type* v, const type* src, usize count) { \
     if (!v || !src) return false; \
-    \
+    if (count == 0) return true; \
     if (v->len + count > v->cap) { \
-        if (!dynvec_##type##_grow(v, v->len + count)) { \
-            return false; \
-        } \
+        if (!dynvec_##type##_grow(v, v->len + count)) return false; \
     } \
-    \
     memcpy(&v->data[v->len], src, count * sizeof(type)); \
     v->len += count; \
     return true; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
+/* ════════════════════════════════════════════════════════════════════════════ \
    Capacity management \
-   ───────────────────────────────────────────────────────── */ \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Ensures vector has at least min_cap capacity \
+ * @brief Ensures the buffer has capacity for at least min_cap elements \
  * \
- * ⚠️ May allocate memory! \
+ * Does nothing if current capacity is already sufficient. \
+ * \
+ * @param v       dynvec to reserve into (NULL-safe) \
+ * @param min_cap Minimum number of elements the buffer must hold \
+ * @return true on success (or if already sufficient), false on allocation failure \
+ * \
+ * @note May allocate heap memory. \
  * \
  * Performance: \
- * - Time: O(1) if cap >= min_cap, else O(n) \
+ * - Time:  O(1) if cap >= min_cap, else O(n) on realloc \
  * - Space: May allocate \
  */ \
 static inline bool dynvec_##type##_reserve( \
-    dynvec_##type* v, size_t min_cap) { \
+    dynvec_##type* v, usize min_cap) { \
     if (!v) return false; \
     if (v->cap >= min_cap) return true; \
     return dynvec_##type##_grow(v, min_cap); \
 } \
 \
 /** \
- * @brief Shrinks capacity to fit current length \
+ * @brief Shrinks the buffer to exactly fit the current element count \
  * \
- * Useful to free excess memory. \
+ * Frees excess capacity. If len == 0, frees the entire buffer. \
+ * \
+ * @param v dynvec to shrink (NULL-safe) \
+ * @return true on success, false on realloc failure (v is unchanged on failure) \
  * \
  * Performance: \
- * - Time: O(n) \
- * - Space: Frees (cap - len) * sizeof(type) \
+ * - Time:  O(n) — realloc \
+ * - Space: Frees (cap - len) * sizeof(type) bytes \
  */ \
 static inline bool dynvec_##type##_shrink_to_fit(dynvec_##type* v) { \
     if (!v || v->len == v->cap) return true; \
     if (v->len == 0) { \
         free(v->data); \
         v->data = NULL; \
-        v->cap = 0; \
+        v->cap  = 0; \
         return true; \
     } \
     type* new_data = (type*)realloc(v->data, v->len * sizeof(type)); \
     if (!new_data) return false; \
     v->data = new_data; \
-    v->cap = v->len; \
+    v->cap  = v->len; \
     return true; \
 } \
 \
-/* ───────────────────────────────────────────────────────── \
+/* ════════════════════════════════════════════════════════════════════════════ \
    Memory management \
-   ───────────────────────────────────────────────────────── */ \
+   ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Frees all memory \
+ * @brief Frees the heap buffer and resets all fields to zero \
  * \
- * ⚠️ MUST be called to avoid memory leaks! \
+ * @param v dynvec to free (NULL-safe) \
+ * \
+ * @post v->data == NULL, v->len == 0, v->cap == 0 \
+ * \
+ * ⚠️ MUST be called to avoid memory leaks. \
+ *    Subsequent use requires reinitializing via dynvec_##type##_init(). \
  * \
  * Performance: \
- * - Time: O(1) \
- * - Space: Frees cap * sizeof(type) \
+ * - Time:  O(1) \
+ * - Space: Frees cap * sizeof(type) bytes \
  */ \
 static inline void dynvec_##type##_free(dynvec_##type* v) { \
     if (!v) return; \
     free(v->data); \
     v->data = NULL; \
-    v->len = 0; \
-    v->cap = 0; \
+    v->len  = 0; \
+    v->cap  = 0; \
 }
 
 #endif /* CANON_DATA_CONVENIENCE_DYNVEC_H */
