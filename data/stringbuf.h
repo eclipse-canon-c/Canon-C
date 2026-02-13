@@ -1,672 +1,556 @@
 #ifndef CANON_DATA_STRINGBUF_H
 #define CANON_DATA_STRINGBUF_H
 
-#include <stddef.h>
 #include <stdarg.h>
-#include <stdbool.h>
-#include <string.h>
 #include <stdio.h>
-#include <assert.h>
+#include <string.h>
 
-#include "core/arena.h"
+#include "core/primitives/types.h"
+#include "core/primitives/limits.h"
+#include "core/primitives/contract.h"
 #include "core/memory.h"
+#include "core/arena.h"
 
 /**
  * @file stringbuf.h
  * @brief Fixed-capacity incremental string builder (arena-backed or caller-owned buffer)
  *
- * StringBuf provides efficient, safe string concatenation/formatting in a **fixed-size buffer**.
- * It is deliberately **NOT** a growable string like std::string, StringBuilder in C#, or Rust's String.
+ * StringBuf provides efficient, safe string concatenation and formatting into a
+ * fixed-size buffer. It is deliberately NOT a growable string.
+ *
+ * Core ideas:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Capacity is fixed at initialization — no automatic growth or reallocation
+ * - Always null-terminated — even when empty or after a failed append
+ * - All appends return bool — fail gracefully and leave buffer unchanged
+ * - Two backing strategies: Arena-allocated (recommended) or caller-owned buffer
+ * - Zero hidden state, no global variables, minimal overhead
+ *
+ * Dependency rule:
+ * ────────────────────────────────────────────────────────────────────────────
+ * stringbuf.h is data/. It may include core/ only.
+ * No other data/ headers may be included here.
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Each StringBuf instance is independent — no shared state.
+ * Concurrent modifications require external synchronization.
  *
  * Portability:
- * - Requires C99 or later (for inline functions, stdbool.h, variadic macros)
- * - Depends on arena.h and memory.h from this library
- * - Uses standard library: strlen, vsnprintf, snprintf
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later (vsnprintf, va_copy, inline)
+ * - Uses <stdarg.h>, <stdio.h>, <string.h> — no Canon-C replacements exist
  * - No platform-specific code
  *
- * Thread-safety: Each StringBuf instance is independent - not thread-safe for
- * concurrent modifications. Caller must synchronize if needed.
- *
  * Performance:
- * - Zero overhead abstraction - direct buffer manipulation
- * - All append operations are O(n) where n is the appended string length
- * - No hidden allocations after initialization
- * - Cache-friendly contiguous storage
+ * ────────────────────────────────────────────────────────────────────────────
+ * - append:            O(n) where n = appended string length
+ * - append_char:       O(1)
+ * - append_fmt:        O(n) — two vsnprintf passes (measure then write)
+ * - append_n:          O(min(n, strlen(s)))
+ * - All queries:       O(1)
+ * - No allocations after initialization
  *
- * KEY DESIGN PRINCIPLES
- * ──────────────────────────────────────────────────────────────────────────────
- * • Capacity is **fixed** at initialization — **no automatic growth/reallocation**
- * • Preferred usage: backed by Arena (buffer lives until arena reset)
- * • Alternative: caller-owned fixed buffer (stack/static/heap)
- * • All append operations return bool → fail gracefully when full
- * • Always null-terminated (even when empty or after failed append)
- * • Zero hidden state, no global variables, minimal runtime overhead
- * • Ideal for: formatting logs, building paths, JSON snippets, error messages...
- * ... where you can reasonably predict/estimate maximum size upfront
+ * Important limitations:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Once full, all appends fail (return false) — buffer is unchanged
+ * - capacity includes the null terminator — usable chars = capacity - 1
+ * - Arena-backed buffers become invalid after arena_reset()
+ * - No reserve, grow, or realloc functions — by design
  *
- * WHEN TO USE STRINGBUF
- * ──────────────────────────────────────────────────────────────────────────────
- * Use when you want:
- * ✓ Predictable memory usage (no surprise allocations)
- * ✓ Arena-friendly lifetime management
- * ✓ Bounds-checked appends with clear failure mode
- * ✓ Very low overhead
- * ✓ Known or bounded string length
- * ✓ Format strings without sprintf buffer overflow risks
+ * Quick start:
+ * ```c
+ * #include "data/stringbuf.h"
  *
- * Do NOT use when you want:
- * ✗ Automatic growth / unlimited appends
- * ✗ "I don't care about capacity" convenience
- * ✗ Dynamic resizing based on usage
- *
- * In those cases consider:
- * - Your own growable wrapper (using realloc or custom doubling strategy)
- * - External libraries with dynamic growth
- * - Building in multiple passes with temporary buffers
- *
- * IMPORTANT LIMITATIONS
- * ──────────────────────────────────────────────────────────────────────────────
- * • Once full → all append operations **fail** (return false), string unchanged
- * • No reserve/ensure_grow/append_with_realloc functions (by design)
- * • You must estimate sufficient capacity **at initialization**
- * • Arena-backed buffers become invalid after arena_reset() / arena destruction
- * • Buffer must have room for null terminator (capacity includes the '\0')
- *
- * Typical safe usage patterns:
- *
- * // 1. Arena-backed (most common & recommended)
- * uint8_t arena_buf[64 * 1024];
- * Arena temp;
- * arena_init(&temp, arena_buf, sizeof(arena_buf));
- *
+ * // Arena-backed (recommended — buffer lifetime tied to arena)
  * StringBuf sb;
- * if (!stringbuf_init_arena(&sb, &temp, 4096)) {
- * // Handle error
+ * if (!stringbuf_init_arena(&sb, &arena, 1024)) {
+ *     // handle error
  * }
- * stringbuf_append_fmt(&sb, "User: %s, Score: %d", name, score);
- * // sb.data valid until arena_reset(&temp)
+ * stringbuf_append(&sb, "Hello, ");
+ * stringbuf_append_fmt(&sb, "%s!", name);
+ * printf("%s\n", stringbuf_str(&sb));
  *
- * // 2. Stack-allocated fixed buffer (zero allocation)
- * char buf[512];
+ * // Stack-backed (zero allocation, fixed scope)
+ * char buf[256];
  * StringBuf path;
  * stringbuf_init_buffer(&path, buf, sizeof(buf));
- * stringbuf_append(&path, "/home/user/docs/");
+ * stringbuf_append(&path, "/home/user/");
  * stringbuf_append(&path, filename);
- * // buf contains result, valid until end of scope
+ * ```
  *
- * // 3. Error handling
- * if (!stringbuf_append(&sb, long_string)) {
- * fprintf(stderr, "Buffer full, %zu/%zu used\n",
- * stringbuf_len(&sb), stringbuf_capacity(&sb));
- * }
+ * @sa data/vec/vec_fmt.h — format a vec into a StringBuf
  */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   StringBuf struct
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief String builder with fixed capacity
- *
- * Maintains a null-terminated string in a fixed-size buffer.
- * Can be backed by an Arena or a caller-provided buffer.
- *
- * Fields:
- * - arena: Arena used for allocation (NULL if using caller-owned buffer)
- * - data: Pointer to buffer (always null-terminated when valid)
- * - len: Current string length (excluding '\0')
- * - capacity: Total buffer size **including** space for null terminator
+ * @brief Fixed-capacity string builder
  *
  * Invariants:
  * - data[len] == '\0' (always null-terminated)
  * - len < capacity (always room for null terminator)
  * - If arena != NULL, data was allocated from that arena
  *
- * Do not access fields directly - use the provided functions.
+ * Do not access or modify fields directly — use the provided functions.
+ *
+ * Memory layout:
+ * - sizeof(StringBuf) = sizeof(Arena*) + sizeof(char*) + 2*sizeof(usize)
+ * - Backing buffer: capacity bytes (includes null terminator)
  */
 typedef struct {
-    Arena* arena; ///< Arena used for allocation (NULL = caller-owned buffer)
-    char* data;   ///< Pointer to buffer (always null-terminated when valid)
-    size_t len;   ///< Current string length (excluding '\0')
-    size_t capacity; ///< Total buffer size **including** space for null terminator
+    Arena* arena;   ///< Backing arena (NULL = caller-owned buffer)
+    char*  data;    ///< Buffer pointer (always null-terminated when valid)
+    usize  len;     ///< Current string length (excluding '\0')
+    usize  capacity; ///< Total buffer size including space for '\0'
 } StringBuf;
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Constructors
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Initializes StringBuf using Arena-allocated buffer (recommended)
+ * @brief Initializes StringBuf using an Arena-allocated buffer (recommended)
  *
- * Allocates initial buffer from the given arena.
- * The buffer will be valid until the arena is reset or destroyed.
+ * Allocates initial_cap bytes from the given arena and sets up the StringBuf.
+ * Buffer lifetime is tied to the arena — it becomes invalid after arena_reset().
  *
- * @param sb Pointer to uninitialized StringBuf
- * @param arena Valid, initialized Arena with sufficient space
- * @param initial_cap Total capacity including null terminator (must be > 0)
+ * @param sb          Pointer to uninitialized StringBuf
+ * @param arena       Valid, initialized Arena with sufficient remaining space
+ * @param initial_cap Total capacity including null terminator (must be > 1)
  * @return true on success, false on failure
  *
- * Preconditions:
- * - sb != NULL
- * - arena != NULL and initialized
- * - initial_cap > 0
- * - arena has at least initial_cap bytes remaining
+ * @pre sb != NULL
+ * @pre arena != NULL and initialized via arena_init()
+ * @pre initial_cap > 1 (capacity must fit at least one character + null terminator)
  *
- * Postconditions on success:
- * - sb is initialized with empty string
- * - sb->data is allocated from arena
- * - sb->data[0] == '\0'
- * - sb->len == 0
- * - sb->capacity == initial_cap
+ * @post On success: sb->data[0] == '\0', sb->len == 0, sb->capacity == initial_cap
+ * @post On failure: sb state is undefined — do not use
  *
- * Postconditions on failure:
- * - sb state is undefined (do not use)
+ * @note Returns false if any parameter is NULL, initial_cap == 0,
+ *       or arena has insufficient remaining space.
  *
- * Returns false if:
- * - Any parameter is NULL
- * - initial_cap is 0
- * - Arena allocation fails (insufficient space)
- *
- * Example:
- * StringBuf sb;
- * if (!stringbuf_init_arena(&sb, &arena, 1024)) {
- * fprintf(stderr, "Failed to allocate string buffer\n");
- * return ERROR;
- * }
+ * Performance:
+ * - Time:  O(1) — single arena bump
+ * - Space: O(initial_cap) consumed from arena
  */
-static inline bool stringbuf_init_arena(StringBuf* sb, Arena* arena, size_t initial_cap) {
-    assert(sb != NULL && "stringbuf_init_arena: sb parameter cannot be NULL");
-    assert(arena != NULL && "stringbuf_init_arena: arena parameter cannot be NULL");
-    assert(initial_cap > 0 && "stringbuf_init_arena: initial_cap must be greater than 0");
-   
-    if (!sb || !arena || initial_cap == 0) {
-        return false;
-    }
-   
+static inline bool stringbuf_init_arena(StringBuf* sb, Arena* arena, usize initial_cap) {
+    require_msg(sb != NULL,         "stringbuf_init_arena: sb cannot be NULL");
+    require_msg(arena != NULL,      "stringbuf_init_arena: arena cannot be NULL");
+    require_msg(initial_cap > 1,    "stringbuf_init_arena: initial_cap must be > 1");
+
+    if (!sb || !arena || initial_cap == 0) return false;
+
     char* buf = (char*)arena_alloc(arena, initial_cap);
-    if (!buf) {
-        return false;
-    }
-   
+    if (!buf) return false;
+
     buf[0] = '\0';
     *sb = (StringBuf){
-        .arena = arena,
-        .data = buf,
-        .len = 0,
+        .arena    = arena,
+        .data     = buf,
+        .len      = 0,
         .capacity = initial_cap
     };
     return true;
 }
 
 /**
- * @brief Initializes StringBuf with a caller-provided fixed buffer
+ * @brief Initializes StringBuf with a caller-owned fixed buffer
  *
- * Useful for stack/static buffers or when arena is not desired.
- * Caller must ensure buffer remains valid for the lifetime of StringBuf.
+ * Wraps an existing buffer. The caller must ensure the buffer remains valid
+ * for the lifetime of the StringBuf.
  *
- * @param sb Pointer to uninitialized StringBuf
- * @param buffer Pointer to buffer (must remain valid)
- * @param cap Total capacity including null terminator (must be > 0)
+ * @param sb     Pointer to uninitialized StringBuf
+ * @param buffer Pointer to char buffer (must remain valid)
+ * @param cap    Total capacity including null terminator (must be > 1)
  *
- * Preconditions:
- * - sb != NULL
- * - buffer != NULL
- * - cap > 0
- * - buffer has at least cap bytes
+ * @pre sb != NULL
+ * @pre buffer != NULL
+ * @pre cap > 1
  *
- * Postconditions:
- * - sb is initialized with empty string
- * - sb->data points to buffer
- * - sb->data[0] == '\0'
- * - sb->len == 0
- * - sb->capacity == cap
- * - sb->arena == NULL (not arena-backed)
+ * @post sb->data == buffer, sb->data[0] == '\0', sb->len == 0
+ * @post sb->arena == NULL (not arena-backed)
  *
- * Warning: If buffer becomes invalid (e.g., stack variable goes out of scope),
- * the StringBuf becomes invalid. Caller must manage lifetime.
+ * @warning Buffer must remain valid for the entire lifetime of the StringBuf.
+ *          Stack-allocated buffers become invalid when their scope ends.
  *
- * Example:
- * char buf[256];
- * StringBuf path;
- * stringbuf_init_buffer(&path, buf, sizeof(buf));
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1) — no allocation
  */
-static inline void stringbuf_init_buffer(StringBuf* sb, char* buffer, size_t cap) {
-    assert(sb != NULL && "stringbuf_init_buffer: sb parameter cannot be NULL");
-    assert(buffer != NULL && "stringbuf_init_buffer: buffer parameter cannot be NULL");
-    assert(cap > 0 && "stringbuf_init_buffer: cap must be greater than 0");
-   
-    if (sb && buffer && cap > 0) {
-        buffer[0] = '\0';
-        *sb = (StringBuf){
-            .arena = NULL,
-            .data = buffer,
-            .len = 0,
-            .capacity = cap
-        };
-    }
+static inline void stringbuf_init_buffer(StringBuf* sb, char* buffer, usize cap) {
+    require_msg(sb != NULL,     "stringbuf_init_buffer: sb cannot be NULL");
+    require_msg(buffer != NULL, "stringbuf_init_buffer: buffer cannot be NULL");
+    require_msg(cap > 1,        "stringbuf_init_buffer: cap must be > 1");
+
+    if (!sb || !buffer || cap == 0) return;
+
+    buffer[0] = '\0';
+    *sb = (StringBuf){
+        .arena    = NULL,
+        .data     = buffer,
+        .len      = 0,
+        .capacity = cap
+    };
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Append operations
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Appends a null-terminated string (safe, bounds-checked)
+ * @brief Appends a null-terminated string (bounds-checked)
  *
- * Copies the string to the end of the buffer if space is available.
- * On failure, the buffer is unchanged and remains null-terminated.
+ * On failure the buffer is unchanged and remains null-terminated.
  *
  * @param sb StringBuf to append to
- * @param s String to append (NULL-safe, treated as empty string)
- * @return true if successfully appended, false otherwise
+ * @param s  String to append (NULL treated as empty string — no-op, returns true)
+ * @return true on success, false if sb is invalid or insufficient space
  *
- * Returns false if:
- * - sb is NULL or invalid
- * - Not enough remaining space (len + strlen(s) + 1 > capacity)
+ * @post On true: sb->data ends with s, sb->len increased by strlen(s)
+ * @post On false: sb is unchanged
  *
- * Performance: O(strlen(s)) - copies string once
- *
- * Example:
- * if (!stringbuf_append(&sb, "Hello, ")) {
- * fprintf(stderr, "Append failed - buffer full\n");
- * }
- * stringbuf_append(&sb, "World!");
+ * Performance:
+ * - Time:  O(strlen(s))
+ * - Space: O(1) — no allocation
  */
 static inline bool stringbuf_append(StringBuf* sb, const char* s) {
-    if (!sb || !sb->data) {
-        return false;
-    }
-   
-    if (!s) {
-        return true; // Appending NULL is a no-op (success)
-    }
-   
-    size_t add_len = strlen(s);
-   
-    // Check for overflow in addition
-    if (add_len > SIZE_MAX - sb->len - 1) {
-        return false;
-    }
-   
-    if (sb->len + add_len + 1 > sb->capacity) {
-        return false;
-    }
-   
+    if (!sb || !sb->data) return false;
+    if (!s) return true; /* NULL is a no-op */
+
+    usize add_len = (usize)strlen(s);
+
+    /* Overflow check: len + add_len + 1 must not exceed capacity */
+    if (add_len > CANON_USIZE_MAX - sb->len - 1) return false;
+    if (sb->len + add_len + 1 > sb->capacity)    return false;
+
     mem_copy(sb->data + sb->len, s, add_len);
     sb->len += add_len;
     sb->data[sb->len] = '\0';
-   
     return true;
 }
 
 /**
  * @brief Appends a single character
  *
- * More efficient than appending a 1-character string.
+ * More efficient than stringbuf_append for single characters.
  *
  * @param sb StringBuf to append to
- * @param c Character to append
- * @return true if successfully appended, false if buffer full
+ * @param c  Character to append
+ * @return true on success, false if sb is invalid or buffer full
  *
- * Example:
- * stringbuf_append_char(&sb, '\n');
+ * @post On true: c appended, sb->len incremented by 1
+ * @post On false: sb is unchanged
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1) — no allocation
  */
 static inline bool stringbuf_append_char(StringBuf* sb, char c) {
-    if (!sb || !sb->data) {
-        return false;
-    }
-   
-    if (sb->len + 2 > sb->capacity) {
-        return false; // Need room for char + '\0'
-    }
-   
+    if (!sb || !sb->data) return false;
+    if (sb->len + 2 > sb->capacity) return false; /* char + '\0' */
+
     sb->data[sb->len++] = c;
-    sb->data[sb->len] = '\0';
-   
+    sb->data[sb->len]   = '\0';
     return true;
 }
 
 /**
  * @brief Appends formatted text (printf-style)
  *
- * Uses vsnprintf to format and append text.
- * On failure, the buffer is unchanged and remains null-terminated.
+ * Uses vsnprintf internally — two passes (measure then write).
+ * On failure the buffer is unchanged and remains null-terminated.
  *
- * @param sb StringBuf to append to
- * @param fmt Format string (printf-style)
+ * @param sb  StringBuf to append to
+ * @param fmt printf-style format string
  * @param ... Format arguments
- * @return true on success, false on format error or insufficient capacity
+ * @return true on success, false if sb or fmt is NULL, format error, or insufficient space
  *
- * Returns false if:
- * - sb or fmt is NULL
- * - Format string is invalid (vsnprintf error)
- * - Insufficient space for formatted result
+ * @post On true: formatted text appended, sb->len increased accordingly
+ * @post On false: sb is unchanged
  *
- * Performance: Uses vsnprintf twice - once to measure, once to write
- *
- * Example:
- * if (!stringbuf_append_fmt(&sb, "Score: %d/%d (%.1f%%)",
- * score, max, percentage)) {
- * fprintf(stderr, "Format failed or buffer full\n");
- * }
+ * Performance:
+ * - Time:  O(n) — two vsnprintf passes where n = formatted string length
+ * - Space: O(1) — no allocation
  */
 static inline bool stringbuf_append_fmt(StringBuf* sb, const char* fmt, ...) {
-    if (!sb || !fmt || !sb->data) {
-        return false;
-    }
-   
+    if (!sb || !fmt || !sb->data) return false;
+
     va_list args;
     va_start(args, fmt);
-   
-    // First pass: measure how much space we need
     int needed = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
-   
-    if (needed < 0) {
-        return false; // Format error
-    }
-   
-    // Check for overflow and capacity
-    if ((size_t)needed > SIZE_MAX - sb->len - 1 ||
-        sb->len + (size_t)needed + 1 > sb->capacity) {
+
+    if (needed < 0) return false;
+
+    if ((usize)needed > CANON_USIZE_MAX - sb->len - 1 ||
+        sb->len + (usize)needed + 1 > sb->capacity) {
         return false;
     }
-   
-    // Second pass: actually write the formatted string
+
     va_start(args, fmt);
     int written = vsnprintf(sb->data + sb->len, sb->capacity - sb->len, fmt, args);
     va_end(args);
-   
-    if (written < 0 || written != needed) {
-        return false; // Shouldn't happen, but be safe
-    }
-   
-    sb->len += (size_t)written;
-   
+
+    if (written < 0 || written != needed) return false;
+
+    sb->len += (usize)written;
     return true;
 }
 
 /**
  * @brief Appends formatted text using an existing va_list
  *
- * Useful when you need to reuse the va_list or format multiple times.
+ * Useful when forwarding variadic arguments from a wrapper function.
+ * The caller is responsible for va_start/va_end on the original va_list.
  *
- * @param sb StringBuf to append to
- * @param fmt Format string
- * @param args va_list of arguments (caller must va_start/va_end)
+ * @param sb   StringBuf to append to
+ * @param fmt  Format string
+ * @param args va_list of arguments
  * @return true on success, false on failure
+ *
+ * @post On true: formatted text appended
+ * @post On false: sb is unchanged
+ *
+ * Performance:
+ * - Time:  O(n) — two vsnprintf passes
+ * - Space: O(1) — no allocation
  */
 static inline bool stringbuf_append_fmt_va(StringBuf* sb, const char* fmt, va_list args) {
-    if (!sb || !fmt || !sb->data) {
-        return false;
-    }
+    if (!sb || !fmt || !sb->data) return false;
 
     va_list args_copy;
     va_copy(args_copy, args);
     int needed = vsnprintf(NULL, 0, fmt, args_copy);
     va_end(args_copy);
 
-    if (needed < 0) {
-        return false;
-    }
+    if (needed < 0) return false;
 
-    if ((size_t)needed > SIZE_MAX - sb->len - 1 ||
-        sb->len + (size_t)needed + 1 > sb->capacity) {
+    if ((usize)needed > CANON_USIZE_MAX - sb->len - 1 ||
+        sb->len + (usize)needed + 1 > sb->capacity) {
         return false;
     }
 
     int written = vsnprintf(sb->data + sb->len, sb->capacity - sb->len, fmt, args);
-    if (written < 0 || written != needed) {
-        return false;
-    }
+    if (written < 0 || written != needed) return false;
 
-    sb->len += (size_t)written;
+    sb->len += (usize)written;
     return true;
 }
 
 /**
- * @brief Appends a substring (first n characters)
+ * @brief Appends at most n characters from string s
  *
- * Safely appends at most n characters from string s.
- * Automatically handles cases where n > strlen(s).
+ * Appends min(n, strlen(s)) characters — stops at null terminator or n,
+ * whichever comes first.
  *
  * @param sb StringBuf to append to
- * @param s String to append from (NULL-safe)
- * @param n Maximum number of characters to append
- * @return true if successfully appended, false if buffer full
+ * @param s  Source string (NULL treated as empty — no-op, returns true)
+ * @param n  Maximum number of characters to append
+ * @return true on success, false if insufficient space
  *
- * Example:
- * stringbuf_append_n(&sb, long_string, 10); // Append first 10 chars
+ * @post On true: up to n chars appended, buffer null-terminated
+ * @post On false: sb is unchanged
+ *
+ * Performance:
+ * - Time:  O(min(n, strlen(s)))
+ * - Space: O(1) — no allocation
  */
-static inline bool stringbuf_append_n(StringBuf* sb, const char* s, size_t n) {
-    if (!sb || !sb->data) {
-        return false;
-    }
-   
-    if (!s || n == 0) {
-        return true; // No-op
-    }
-   
-    // Find actual length to copy (min of n and strlen(s))
-    size_t actual_len = 0;
+static inline bool stringbuf_append_n(StringBuf* sb, const char* s, usize n) {
+    if (!sb || !sb->data) return false;
+    if (!s || n == 0)     return true; /* no-op */
+
+    usize actual_len = 0;
     while (actual_len < n && s[actual_len] != '\0') {
         actual_len++;
     }
-   
-    // Check for overflow and capacity
-    if (actual_len > SIZE_MAX - sb->len - 1 ||
-        sb->len + actual_len + 1 > sb->capacity) {
-        return false;
-    }
-   
+
+    if (actual_len > CANON_USIZE_MAX - sb->len - 1) return false;
+    if (sb->len + actual_len + 1 > sb->capacity)    return false;
+
     mem_copy(sb->data + sb->len, s, actual_len);
     sb->len += actual_len;
     sb->data[sb->len] = '\0';
-   
     return true;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Access
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Returns the current null-terminated string (borrowed view)
+ * @brief Returns a pointer to the current null-terminated string (borrowed view)
  *
- * Always safe to call — returns "" on invalid/empty builder.
- * Pointer valid until arena reset (if arena-backed) or buffer destruction.
+ * Always safe to call — returns "" on invalid or empty StringBuf.
+ * Pointer is valid until the backing buffer is destroyed or the arena is reset.
  *
  * @param sb StringBuf to access (NULL-safe)
- * @return Pointer to null-terminated string, never NULL
+ * @return Pointer to null-terminated string — never NULL
  *
- * Note: The returned pointer is borrowed - do not free it.
- * It becomes invalid if the StringBuf or backing buffer is destroyed.
+ * @note The returned pointer is borrowed — do not free it.
  *
- * Example:
- * printf("Result: %s\n", stringbuf_str(&sb));
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
 static inline const char* stringbuf_str(const StringBuf* sb) {
     return (sb && sb->data) ? sb->data : "";
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Query functions
+   ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Current length of the string (excluding null terminator)
+ * @brief Returns the current string length (excluding null terminator)
  *
  * @param sb StringBuf to query (NULL-safe)
- * @return Number of characters in string (not counting '\0')
+ * @return usize — 0 if sb == NULL
  *
- * Example:
- * printf("Length: %zu\n", stringbuf_len(&sb));
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
-static inline size_t stringbuf_len(const StringBuf* sb) {
+static inline usize stringbuf_len(const StringBuf* sb) {
     return sb ? sb->len : 0;
 }
 
 /**
- * @brief Total capacity including null terminator
+ * @brief Returns the total buffer capacity (including null terminator byte)
+ *
+ * Usable characters = capacity - 1.
  *
  * @param sb StringBuf to query (NULL-safe)
- * @return Total buffer size in bytes
+ * @return usize — 0 if sb == NULL
  *
- * Example:
- * printf("Using %zu/%zu bytes\n",
- * stringbuf_len(&sb), stringbuf_capacity(&sb));
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
-static inline size_t stringbuf_capacity(const StringBuf* sb) {
+static inline usize stringbuf_capacity(const StringBuf* sb) {
     return sb ? sb->capacity : 0;
 }
 
 /**
- * @brief Number of characters that can still be appended
+ * @brief Returns the number of characters that can still be appended
+ *
+ * Equivalent to capacity - len - 1 (the -1 reserves space for '\0').
  *
  * @param sb StringBuf to query (NULL-safe)
- * @return Number of characters of free space (excluding '\0')
+ * @return usize — 0 if sb == NULL or buffer is full
  *
- * Example:
- * if (stringbuf_remaining(&sb) < 100) {
- * fprintf(stderr, "Warning: buffer nearly full\n");
- * }
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
-static inline size_t stringbuf_remaining(const StringBuf* sb) {
-    if (!sb || sb->capacity == 0) {
-        return 0;
-    }
-    // capacity - 1 for null terminator, - len for used space
+static inline usize stringbuf_remaining(const StringBuf* sb) {
+    if (!sb || sb->capacity == 0) return 0;
     return (sb->capacity > sb->len + 1) ? (sb->capacity - sb->len - 1) : 0;
 }
 
 /**
- * @brief Checks if buffer is empty
+ * @brief Returns true if the string is empty (len == 0)
  *
  * @param sb StringBuf to check (NULL-safe)
- * @return true if length is 0, false otherwise
+ * @return true if empty or NULL
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
 static inline bool stringbuf_is_empty(const StringBuf* sb) {
     return !sb || sb->len == 0;
 }
 
 /**
- * @brief Checks if buffer is full (no space for more characters)
+ * @brief Returns true if no more characters can be appended
  *
  * @param sb StringBuf to check (NULL-safe)
- * @return true if no space remaining, false otherwise
+ * @return true if full or NULL
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
 static inline bool stringbuf_is_full(const StringBuf* sb) {
-    return sb && (sb->len + 1 >= sb->capacity);
+    return !sb || (sb->len + 1 >= sb->capacity);
 }
 
 /**
- * @brief Clears the string (sets length to 0)
- *
- * Resets to empty string without deallocating buffer.
- * O(1) operation.
- *
- * @param sb StringBuf to clear
- *
- * Example:
- * stringbuf_clear(&sb); // Reuse buffer for new string
- */
-static inline void stringbuf_clear(StringBuf* sb) {
-    if (sb && sb->data) {
-        sb->data[0] = '\0';
-        sb->len = 0;
-    }
-}
-
-/**
- * @brief Truncates string to specified length
- *
- * If new_len >= current length, does nothing.
- * If new_len < current length, truncates and maintains null termination.
- *
- * @param sb StringBuf to truncate
- * @param new_len New length (must be <= current length)
- *
- * Example:
- * stringbuf_truncate(&sb, 10); // Keep only first 10 characters
- */
-static inline void stringbuf_truncate(StringBuf* sb, size_t new_len) {
-    if (sb && sb->data && new_len < sb->len) {
-        sb->len = new_len;
-        sb->data[sb->len] = '\0';
-    }
-}
-
-/**
- * @brief Checks if StringBuf is arena-backed
+ * @brief Returns true if the StringBuf was allocated from an arena
  *
  * @param sb StringBuf to check (NULL-safe)
- * @return true if backed by arena, false if caller-owned buffer
+ * @return true if arena != NULL
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
  */
 static inline bool stringbuf_is_arena_backed(const StringBuf* sb) {
     return sb && sb->arena != NULL;
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Example
-   ────────────────────────────────────────────────────────────────────────────
-    #include "stringbuf.h"
-    #include <stdio.h>
-   
-    void example_arena_backed(void) {
-        // Create arena
-        uint8_t arena_buf[4096];
-        Arena arena;
-        arena_init(&arena, arena_buf, sizeof(arena_buf));
-       
-        // Initialize StringBuf
-        StringBuf log;
-        if (!stringbuf_init_arena(&log, &arena, 512)) {
-            fprintf(stderr, "Failed to allocate string buffer\n");
-            return;
-        }
-       
-        // Build string
-        stringbuf_append(&log, "[INFO] ");
-        stringbuf_append(&log, "Application started");
-        stringbuf_append_char(&log, '\n');
-        stringbuf_append_fmt(&log, "PID: %d, Version: %s", getpid(), "1.0.0");
-       
-        printf("%s\n", stringbuf_str(&log));
-       
-        // Check capacity
-        printf("Used %zu/%zu bytes\n",
-               stringbuf_len(&log),
-               stringbuf_capacity(&log));
-       
-        // Buffer valid until arena reset
-        arena_reset(&arena);
+/* ════════════════════════════════════════════════════════════════════════════
+   Mutation
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Resets the string to empty without freeing the buffer
+ *
+ * @param sb StringBuf to clear (NULL-safe)
+ *
+ * @post sb->len == 0, sb->data[0] == '\0'
+ * @post Buffer is NOT zeroed — only logical state is reset
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
+ */
+static inline void stringbuf_clear(StringBuf* sb) {
+    if (sb && sb->data) {
+        sb->data[0] = '\0';
+        sb->len     = 0;
     }
-   
-    void example_stack_buffer(void) {
-        char buf[256];
-        StringBuf path;
-        stringbuf_init_buffer(&path, buf, sizeof(buf));
-       
-        const char* home = "/home/user";
-        const char* file = "document.txt";
-       
-        stringbuf_append(&path, home);
-        stringbuf_append(&path, "/");
-        stringbuf_append(&path, file);
-       
-        printf("Path: %s\n", stringbuf_str(&path));
+}
+
+/**
+ * @brief Truncates the string to new_len characters
+ *
+ * Does nothing if new_len >= sb->len.
+ *
+ * @param sb      StringBuf to truncate (NULL-safe)
+ * @param new_len New length — must be <= current length to have effect
+ *
+ * @post If new_len < sb->len: sb->len == new_len, sb->data[new_len] == '\0'
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
+ */
+static inline void stringbuf_truncate(StringBuf* sb, usize new_len) {
+    if (sb && sb->data && new_len < sb->len) {
+        sb->len            = new_len;
+        sb->data[sb->len]  = '\0';
     }
-   
-    void example_error_handling(void) {
-        char small_buf[16];
-        StringBuf sb;
-        stringbuf_init_buffer(&sb, small_buf, sizeof(small_buf));
-       
-        if (!stringbuf_append(&sb, "This is a very long string")) {
-            fprintf(stderr, "Append failed - buffer full\n");
-            fprintf(stderr, "Used %zu/%zu bytes\n",
-                    stringbuf_len(&sb),
-                    stringbuf_capacity(&sb));
-        }
-       
-        // Partial content is still valid and null-terminated
-        printf("Partial: %s\n", stringbuf_str(&sb));
-    }
-   
-    void example_formatted_output(void) {
-        char buf[128];
-        StringBuf report;
-        stringbuf_init_buffer(&report, buf, sizeof(buf));
-       
-        int score = 95;
-        int max_score = 100;
-        float percentage = (float)score / max_score * 100.0f;
-       
-        stringbuf_append(&report, "Test Results:\n");
-        stringbuf_append_fmt(&report, "Score: %d/%d\n", score, max_score);
-        stringbuf_append_fmt(&report, "Grade: %.1f%%", percentage);
-       
-        printf("%s\n", stringbuf_str(&report));
-    }
-   ──────────────────────────────────────────────────────────────────────────── */
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Convenience alias
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Alias for stringbuf_append_fmt — matches printf naming conventions
+ *
+ * Some users prefer the shorter name in heavy formatting code.
+ * Both names compile to the same function call.
+ *
+ * Usage:
+ * ```c
+ * stringbuf_printf(&sb, "x=%d y=%d", x, y);
+ * ```
+ */
+#define stringbuf_printf stringbuf_append_fmt
 
 #endif /* CANON_DATA_STRINGBUF_H */
