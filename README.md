@@ -193,7 +193,8 @@ and where — stack-allocated context chain). `Diag` is always passed by pointer
 always optional — passing NULL is valid everywhere. `DIAG_PUSH` captures file/line/func
 automatically. `DIAG_PROPAGATE` handles the check-annotate-return pattern in one line.
 
-All modules are **header-only** by default and require no runtime or build system integration.
+All modules are header-only by default and require no runtime or build system integration.
+
 ---
 
 ## Usage
