@@ -73,12 +73,15 @@ Abstractions must clarify behavior, not conceal it.
 - `bits.h` — portable bit manipulation (popcount, clz, rotate, power-of-2 checks)
 - `checked.h` — overflow-safe arithmetic (checked add/sub/mul, alignment helpers)
 - `contract.h` — explicit contracts and assertions (require_msg, ensure_msg, unreachable, panic)
+- `ptr.h` — named pointer arithmetic and alignment (ptr_offset, ptr_diff, align_up, ptr_in_range, PTR_CONTAINER_OF)
 
 ### core/
 - `memory.h` — low-level memory utilities (alignment, safe mem_copy/mem_move wrappers)
 - `arena.h` — explicit linear allocation (bump allocator)
 - `pool.h` — fixed-size object pool allocator (arena-backed)
 - `scope.h` — RAII-style deferred cleanup macros
+- `slice.h` — non-owning views into contiguous memory (bytes_t, cbytes_t, str_t, DEFINE_SLICE)
+- `ownership.h` — explicit ownership and borrowing annotations (owned, borrowed, moved, dropped, DEFINE_OWNED, CANON_DROP)
 
 ### data/
 - **`vec/`** — bounded dynamic vector (caller-owned buffer, fixed capacity) — modular 7-file architecture
@@ -95,6 +98,7 @@ Abstractions must clarify behavior, not conceal it.
   - `deque_mangle.h` — name mangling conventions (individually overridable)
   - `deque_decl.h` — forward declarations for separate compilation
   - `deque_defn.h` — complete definitions (header-only or .c files)
+- `array.h` — fixed-size typed array with compile-time capacity (DEFINE_ARRAY, safe indexing, slice/bytes views, iteration macros)
 - `queue.h` — FIFO queue wrapper over deque (fixed capacity); includes `DECLARE_QUEUE`
 - `stack.h` — LIFO stack wrapper over vec (fixed capacity); includes `DECLARE_STACK`
 - `range.h` — explicit integer range generator (ascending/descending, isize-based, overflow-safe)
@@ -119,6 +123,8 @@ Abstractions must clarify behavior, not conceal it.
   - `result_decl.h` — declarations for separate compilation
   - `result_defn.h` — definitions for header-only or .c files
 - `error.h` — common error codes and human-readable messages
+- `borrow.h` — semantic non-owning view types (borrowed_ptr, borrowed_str, borrowed_bytes, DEFINE_BORROWED_SLICE)
+- `diag.h` — structured diagnostic frames for error context chains (Diag, DiagFrame, DIAG_PUSH, DIAG_PROPAGATE; no allocation)
 
 ### algo/
 - `map.h` — element-wise transformation (supports different input/output types)
@@ -150,6 +156,21 @@ convenience modules prioritize ease of use and may include hidden allocations or
 automatic growth. Choose based on your constraints: use core for production/embedded/
 real-time, convenience for prototyping.
 
+**Primitives integration:** All modules across `core/`, `data/`, and `data/convenience/`
+use `usize`/`isize` instead of `size_t`/`ptrdiff_t`, `CANON_USIZE_MAX`/`CANON_ISIZE_MAX`
+instead of `SIZE_MAX`/`PTRDIFF_MAX`, `require_msg()`/`ensure_msg()` instead of `assert()`,
+and `mem_copy()`/`mem_move()` instead of `memcpy()`/`memmove()`. The C standard headers
+`<stddef.h>`, `<stdbool.h>`, and `<assert.h>` are no longer included directly by any
+Canon-C module.
+
+**Ownership and borrowing:** `core/ownership.h` provides annotation macros (`owned`,
+`borrowed`, `moved`, `dropped`) that make ownership intent visible at every call site
+without runtime cost. `core/slice.h` provides the concrete non-owning view types
+(`bytes_t`, `cbytes_t`, `str_t`, `slice_##type`) that all borrow-passing APIs build on.
+`semantics/borrow.h` adds source-tagged wrappers (`borrowed_str`, `borrowed_bytes`,
+`borrowed_slice_##type`) for APIs where the non-ownership claim must be explicit at the
+type level, not just the annotation level.
+
 **Modular architecture:** The `vec/`, `deque/`, `option/`, and `result/` modules use a
 modular design that separates implementation logic, naming conventions, declarations, and
 definitions. Most users only need `vec.h`, `deque.h`, `option.h`, or `result.h`, but
@@ -160,14 +181,19 @@ advanced users can customize behavior by overriding individual components. This 
 - Easier maintenance and testing of individual layers
 
 **Result and Option variants:** All push/pop/enqueue/dequeue operations across `vec/`,
-`deque/`, `queue.h`, and `stack.h` now return `result_bool_Error` instead of bare `bool`,
+`deque/`, `queue.h`, and `stack.h` return `result_bool_Error` instead of bare `bool`,
 giving callers specific error codes (`ERR_CAPACITY_EXCEEDED`, `ERR_INVALID_STATE`, etc.).
 Option-returning variants (`pop_option`, `peek_option`, `dequeue_option`) are provided
 alongside the Result variants throughout, eliminating the need for an out-parameter in
 the common case.
 
-All modules are **header-only** by default and require no runtime or build system integration.
+**Error handling:** Canon-C's error handling has three legs: `error.h` (what failed —
+error codes), `result.h` (propagating it — Result\<T, E\>), and `semantics/diag.h` (why
+and where — stack-allocated context chain). `Diag` is always passed by pointer and is
+always optional — passing NULL is valid everywhere. `DIAG_PUSH` captures file/line/func
+automatically. `DIAG_PROPAGATE` handles the check-annotate-return pattern in one line.
 
+All modules are **header-only** by default and require no runtime or build system integration.
 ---
 
 ## Usage
