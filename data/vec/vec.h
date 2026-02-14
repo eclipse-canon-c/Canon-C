@@ -1,6 +1,8 @@
 #ifndef CANON_DATA_VEC_H
 #define CANON_DATA_VEC_H
 
+#include "core/primitives/ptr.h"
+#include "core/slice.h"
 #include "data/vec/vec_defn.h"
 
 /**
@@ -18,6 +20,7 @@
  * - All bounds-checked operations return Result<bool, Error> or Option<T>
  * - Unchecked variants available for hot paths (debug-mode guarded)
  * - Three allocation strategies: buffer-init, heap, arena
+ * - slice_##type and bytes_t views via DEFINE_VEC_SLICE (zero-copy)
  *
  * Design principles:
  * ────────────────────────────────────────────────────────────────────────────
@@ -33,7 +36,7 @@
  * - append_array/extend:   O(k), copies k elements
  * - get/set/at:            O(1)
  * - iter_next:             O(1) per step
- * - slice_init:            O(1), zero-copy
+ * - as_slice / as_bytes:   O(1), zero-copy view
  * - alloc:                 O(1), single malloc
  * - arena_alloc:           O(1), arena bump
  * - struct size:           sizeof(type*) + 2*sizeof(usize)
@@ -44,7 +47,7 @@
  * - Each vector instance is independent — no shared state
  * - Concurrent reads on the same instance are safe
  * - Concurrent modifications require external synchronization
- * - Iterators and slices are invalidated by any modification
+ * - Slices and views are invalidated by any modification to the vec
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
@@ -74,6 +77,13 @@
  * canon_vec_int_push(&a, 1);
  * // no free needed — arena owns the memory
  *
+ * // Slice and byte views (requires DEFINE_VEC_SLICE after DEFINE_VEC)
+ * DEFINE_SLICE(int)            // from core/slice.h — define once per type
+ * DEFINE_VEC_SLICE(int)        // wire up vec → slice integration
+ *
+ * slice_int sv = canon_vec_int_as_slice(&v);   // typed view, no copy
+ * bytes_t   bv = canon_vec_int_as_bytes(&v);   // raw byte view
+ *
  * // Pointer types (typedef first)
  * typedef void* voidptr;
  * DEFINE_VEC(static inline, voidptr)
@@ -98,8 +108,9 @@
  *
  * @sa vec_defn.h, vec_decl.h, vec_mangle.h, vec_impl.h
  * @sa vec_range.h, vec_fmt.h
- * @sa data/convenience/dynvec.h (auto-growing variant)
- * @sa data/convenience/smallvec.h (inline-first variant)
+ * @sa core/slice.h                     — DEFINE_SLICE, slice_##type, bytes_t
+ * @sa data/convenience/dynvec.h        — auto-growing variant
+ * @sa data/convenience/smallvec.h      — inline-first variant
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -128,18 +139,116 @@
      * @brief Hints to the compiler that condition is likely true
      *
      * Used on hot paths (push to non-full vec, get within bounds).
-     * Has no effect on non-GCC/Clang compilers.
      */
     #define VEC_LIKELY(x)   __builtin_expect(!!(x), 1)
     /**
      * @brief Hints to the compiler that condition is likely false
      *
-     * Used on error paths (push to full vec, out-of-bounds get).
+     * Used on error paths (push to full vec, out-of-bounds access).
      */
     #define VEC_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
     #define VEC_LIKELY(x)   (x)
     #define VEC_UNLIKELY(x) (x)
 #endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_VEC_SLICE — slice.h integration for a vec type
+   ════════════════════════════════════════════════════════════════════════════
+   Call this AFTER both DEFINE_VEC(linkage, type) and DEFINE_SLICE(type).
+   Generates zero-copy view functions that return canonical slice types
+   from core/slice.h instead of raw pointer + length pairs.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Wires up slice_##type and bytes_t view functions for a vec type
+ *
+ * Prerequisites:
+ * - DEFINE_VEC(linkage, type) must have been called
+ * - DEFINE_SLICE(type) from core/slice.h must have been called
+ *
+ * Generated functions:
+ * - canon_vec_##type##_as_slice(v)       → slice_##type (typed view of [data, data+len))
+ * - canon_vec_##type##_as_slice_full(v)  → slice_##type (typed view of [data, data+cap))
+ * - canon_vec_##type##_as_bytes(v)       → bytes_t (raw byte view of used elements)
+ *
+ * All views are non-owning — they become invalid after any modification
+ * to the vec (push, pop, insert, remove) or after the vec is freed/reset.
+ *
+ * @param type Element type — must match a prior DEFINE_VEC(linkage, type) call
+ *
+ * Example:
+ * ```c
+ * DEFINE_VEC(static inline, int)
+ * DEFINE_SLICE(int)
+ * DEFINE_VEC_SLICE(int)
+ *
+ * int buf[8];
+ * canon_vec_int v = canon_vec_int_init(buf, 8);
+ * canon_vec_int_push(&v, 1);
+ * canon_vec_int_push(&v, 2);
+ * canon_vec_int_push(&v, 3);
+ *
+ * slice_int sv = canon_vec_int_as_slice(&v);   // {ptr=buf, len=3}
+ * int val;
+ * slice_int_get(sv, 1, &val);  // val = 2
+ *
+ * bytes_t bv = canon_vec_int_as_bytes(&v);     // {ptr=buf, len=12} (3 * sizeof(int))
+ * ```
+ */
+#define DEFINE_VEC_SLICE(type) \
+\
+/** \
+ * @brief Returns a typed slice_##type view over the vec's current elements \
+ * \
+ * Covers [data, data + len) — only the initialized elements. \
+ * Does NOT include unfilled capacity slots. \
+ * Non-owning — do not free the returned slice's ptr. \
+ * \
+ * @param v Pointer to canon_vec_##type (NULL-safe — returns empty slice) \
+ * @return slice_##type with ptr == v->data and len == v->len \
+ * \
+ * Performance: O(1) \
+ */ \
+static inline slice_##type canon_vec_##type##_as_slice( \
+    const MANGLE_VEC_TYPE(type)* v) { \
+    if (!v || !v->data) return slice_##type##_empty(); \
+    return slice_##type##_from(v->data, v->len); \
+} \
+\
+/** \
+ * @brief Returns a typed slice_##type view over the vec's full capacity \
+ * \
+ * Covers [data, data + capacity) — includes uninitialized slots beyond len. \
+ * Use only when you need to inspect or pre-fill the entire buffer. \
+ * \
+ * @param v Pointer to canon_vec_##type (NULL-safe) \
+ * @return slice_##type with ptr == v->data and len == v->capacity \
+ * \
+ * Performance: O(1) \
+ */ \
+static inline slice_##type canon_vec_##type##_as_slice_full( \
+    const MANGLE_VEC_TYPE(type)* v) { \
+    if (!v || !v->data) return slice_##type##_empty(); \
+    return slice_##type##_from(v->data, v->capacity); \
+} \
+\
+/** \
+ * @brief Returns a bytes_t raw byte view over the vec's current elements \
+ * \
+ * Covers [data, data + len) in bytes — len * sizeof(type) total bytes. \
+ * Useful for serialization, hashing, or passing to byte-level APIs. \
+ * Non-owning — do not free the returned bytes_t's ptr. \
+ * \
+ * @param v Pointer to canon_vec_##type (NULL-safe) \
+ * @return bytes_t with ptr == (u8*)v->data and len == v->len * sizeof(type) \
+ * \
+ * Performance: O(1) \
+ */ \
+static inline bytes_t canon_vec_##type##_as_bytes( \
+    const MANGLE_VEC_TYPE(type)* v) { \
+    if (!v || !v->data) return bytes_empty(); \
+    return bytes_from(v->data, v->len * sizeof(type)); \
+}
 
 #endif /* CANON_DATA_VEC_H */
