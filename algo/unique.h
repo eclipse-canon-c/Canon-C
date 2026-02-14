@@ -89,8 +89,16 @@
  * usize new_len = algo_unique(arr, 8, sizeof(int), cmp_int, NULL);
  * // arr[0..new_len-1] = {1, 2, 3, 5}, new_len == 4
  *
- * // Typed macro
- * ALGO_UNIQUE_TYPED(arr, &new_len, int, cmp_int, NULL);
+ * // Typed macro (GNU version - returns new length)
+ * int arr2[] = {1, 1, 2, 2, 3};
+ * usize len = ALGO_UNIQUE_TYPED(arr2, 5, int, cmp_int, NULL);
+ * // len = 3
+ *
+ * // Typed macro (C99 fallback - updates via pointer)
+ * #define CANON_NO_GNU_EXTENSIONS
+ * usize len2 = 5;
+ * ALGO_UNIQUE_TYPED(arr2, &len2, int, cmp_int, NULL);
+ * // len2 = 3
  *
  * // Slice variant
  * DEFINE_SLICE(int)
@@ -325,14 +333,61 @@ static inline usize algo_count_unique(
 /* ════════════════════════════════════════════════════════════════════════════
    Typed macros — recommended for direct array use
    ════════════════════════════════════════════════════════════════════════════
-   C99-portable for basic usage.
+   GNU extension versions (statement expressions) provide better ergonomics.
+   C99 fallback versions available when CANON_NO_GNU_EXTENSIONS is defined.
    ════════════════════════════════════════════════════════════════════════════ */
+
+#ifndef CANON_NO_GNU_EXTENSIONS
+
+/**
+ * @def ALGO_UNIQUE_TYPED(array, len, Type, cmp, ctx)
+ * @brief Type-safe in-place unique — returns new length (GNU version)
+ *
+ * Requires: GNU C statement expressions or C23
+ * Disable with: #define CANON_NO_GNU_EXTENSIONS
+ *
+ * Modifies array in-place and returns the new length.
+ * This version can be used in expressions.
+ *
+ * @param array Array of Type to deduplicate (borrowed)
+ * @param len   Current number of elements
+ * @param Type  Element type
+ * @param cmp   algo_cmp_fn comparator (borrowed)
+ * @param ctx   Optional context (borrowed, may be NULL)
+ *
+ * @return New length after deduplication
+ *
+ * @note array is borrowed — array is modified in place but not freed
+ *
+ * Performance:
+ * - Time:  O(n)
+ * - Space: O(1)
+ *
+ * Example:
+ * ```c
+ * int arr[] = {1, 1, 2, 2, 3};
+ * usize new_len = ALGO_UNIQUE_TYPED(arr, 5, int, cmp_int, NULL);
+ * // new_len = 3, arr = {1, 2, 3, ...}
+ * ```
+ */
+#define ALGO_UNIQUE_TYPED(array, len, Type, cmp, ctx)                       \
+    ({                                                                       \
+        usize _new_len = (len);                                              \
+        if ((array)) {                                                       \
+            _new_len = algo_unique((array), _new_len, sizeof(Type),         \
+                                   (algo_cmp_fn)(cmp), (ctx));               \
+        }                                                                    \
+        _new_len;                                                            \
+    })
+
+#else /* CANON_NO_GNU_EXTENSIONS */
 
 /**
  * @def ALGO_UNIQUE_TYPED(array, len_ptr, Type, cmp, ctx)
- * @brief Type-safe in-place unique with length update
+ * @brief Type-safe in-place unique with length update (C99 fallback version)
  *
- * Modifies array in-place and updates len_ptr with new length.
+ * C99-compatible version that updates length via pointer.
+ * Cannot be used in expressions.
  *
  * @param array   Array of Type to deduplicate (borrowed)
  * @param len_ptr Pointer to length variable (updated with new length)
@@ -363,6 +418,8 @@ static inline usize algo_count_unique(
             *(len_ptr) = _new_len;                                           \
         }                                                                    \
     } while (0)
+
+#endif /* CANON_NO_GNU_EXTENSIONS */
 
 /**
  * @def ALGO_HAS_NO_CONSECUTIVE_DUPLICATES_TYPED(array, len, Type, cmp, ctx)
