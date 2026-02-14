@@ -1,13 +1,12 @@
 #ifndef CANON_ALGO_SORT_H
 #define CANON_ALGO_SORT_H
 
-#include <string.h>
-
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
+#include "core/memory.h"
 #include "core/slice.h"
+#include "core/ownership.h"
 
 /**
  * @file algo/sort.h
@@ -22,13 +21,14 @@
  * - Stable: equal elements keep their original relative order
  * - Hybrid: insertion sort for small arrays, merge sort for large ones
  * - No allocation inside functions — caller provides temp buffer for merge sort
- * - Inner swap uses a fixed 256-byte stack buffer — no VLAs, no mem_swap cap issues
+ * - Inner swap uses a fixed 256-byte stack buffer — no VLAs, no capacity issues
  * - Predicate: algo_cmp_fn (three-way, context-aware)
+ * - Explicit ownership: all borrowed parameters marked with borrowed macro
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * algo/ headers may include core/ and semantics/ only.
- * sort.h uses <string.h> directly for memcpy — not core/memory.h.
+ * sort.h uses core/memory.h for mem_copy instead of memcpy directly.
  *
  * Algorithm selection:
  * ────────────────────────────────────────────────────────────────────────────
@@ -40,7 +40,13 @@
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - Time:  O(n log n) with temp buffer, O(n²) fallback
- * - Space: O(n) for temp buffer (caller-provided), O(1) for insertion sort
+ * - Space: O(n) for temp buffer (caller-provided), O(log n) stack (recursion)
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - All functions are thread-safe (no shared mutable state)
+ * - Safe to sort different arrays concurrently from multiple threads
+ * - Same array should not be sorted concurrently without external synchronization
  *
  * Quick start:
  * ```c
@@ -68,7 +74,9 @@
  * ```
  *
  * @sa core/primitives/ptr.h  — ptr_elem used for index access in internals
- * @sa core/slice.h           — slice_##type used by DEFINE_ALGO_SORT
+ * @sa core/memory.h           — mem_copy, mem_move used for element operations
+ * @sa core/slice.h            — slice_##type used by DEFINE_ALGO_SORT
+ * @sa core/ownership.h        — borrowed macro for non-owning parameters
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -87,6 +95,9 @@
  * - cmp(a, a) == 0
  * - cmp(a, b) < 0 implies cmp(b, a) > 0
  * - Transitive: cmp(a,b) < 0 && cmp(b,c) < 0 implies cmp(a,c) < 0
+ *
+ * Thread-safety: Must be thread-safe if sorting from multiple threads
+ * Performance: Called O(n log n) times — keep it fast
  */
 typedef int (*algo_cmp_fn)(const void* a, const void* b, void* ctx);
 
@@ -100,17 +111,17 @@ typedef int (*algo_cmp_fn)(const void* a, const void* b, void* ctx);
 #define ALGO_SORT_SWAP_BUF_SIZE ((usize)256)
 
 static inline void algo_sort_swap(void* a, void* b, usize elem_size) {
-    unsigned char tmp[ALGO_SORT_SWAP_BUF_SIZE];
+    u8 tmp[ALGO_SORT_SWAP_BUF_SIZE];
     if (elem_size <= ALGO_SORT_SWAP_BUF_SIZE) {
-        memcpy(tmp, a, elem_size);
-        memcpy(a, b, elem_size);
-        memcpy(b, tmp, elem_size);
+        mem_copy(tmp, a, elem_size);
+        mem_copy(a, b, elem_size);
+        mem_copy(b, tmp, elem_size);
     } else {
         /* byte-by-byte for oversized elements — rare, correctness over speed */
-        unsigned char* pa = (unsigned char*)a;
-        unsigned char* pb = (unsigned char*)b;
+        u8* pa = (u8*)a;
+        u8* pb = (u8*)b;
         for (usize k = 0; k < elem_size; k++) {
-            unsigned char t = pa[k];
+            u8 t = pa[k];
             pa[k] = pb[k];
             pb[k] = t;
         }
@@ -160,25 +171,25 @@ static inline void algo_merge(
         const void* re = ptr_elem_const(base, j, elem_size);
         /* <= for stability: equal elements from left come first */
         if (cmp(le, re, ctx) <= 0) {
-            memcpy(ptr_elem(temp, k, elem_size), le, elem_size);
+            mem_copy(ptr_elem(temp, k, elem_size), le, elem_size);
             i++;
         } else {
-            memcpy(ptr_elem(temp, k, elem_size), re, elem_size);
+            mem_copy(ptr_elem(temp, k, elem_size), re, elem_size);
             j++;
         }
         k++;
     }
     while (i < mid) {
-        memcpy(ptr_elem(temp, k, elem_size),
-               ptr_elem_const(base, i, elem_size), elem_size);
+        mem_copy(ptr_elem(temp, k, elem_size),
+                 ptr_elem_const(base, i, elem_size), elem_size);
         i++; k++;
     }
     while (j < right) {
-        memcpy(ptr_elem(temp, k, elem_size),
-               ptr_elem_const(base, j, elem_size), elem_size);
+        mem_copy(ptr_elem(temp, k, elem_size),
+                 ptr_elem_const(base, j, elem_size), elem_size);
         j++; k++;
     }
-    memcpy(ptr_elem(base, left, elem_size), temp, (right - left) * elem_size);
+    mem_copy(ptr_elem(base, left, elem_size), temp, (right - left) * elem_size);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -212,30 +223,47 @@ static inline void algo_merge_sort_range(
 /**
  * @brief Sorts a flat array in-place (stable, hybrid insertion/merge sort)
  *
- * @param base        Pointer to first element (NULL-safe)
+ * @param base        Pointer to first element (borrowed — not owned, do not free)
  * @param len         Number of elements
  * @param elem_size   Size of each element in bytes (> 0)
- * @param cmp         Three-way comparator (NULL-safe — no-op)
- * @param ctx         Optional context passed to cmp (may be NULL)
- * @param temp_buffer Caller-provided scratch buffer of len * elem_size bytes.
+ * @param cmp         Three-way comparator (borrowed — must remain valid during call)
+ * @param ctx         Optional context passed to cmp (borrowed, may be NULL)
+ * @param temp_buffer Caller-provided scratch buffer of len * elem_size bytes
+ *                    (borrowed — only used during this call, not stored).
  *                    Required for merge sort (len >= 16). Pass NULL to fall
  *                    back to O(n²) insertion sort for any length.
+ *
+ * @pre elem_size > 0
+ * @pre If base != NULL, base points to valid array of len elements
+ * @pre If cmp != NULL, cmp implements a valid total order
+ * @pre If temp_buffer != NULL, it has capacity for len elements
+ * @pre base, temp_buffer do not overlap (undefined behavior if they do)
  *
  * @post Array is sorted in ascending order according to cmp
  * @post Equal elements preserve their original relative order (stable)
  * @post temp_buffer contents are undefined after return
  *
+ * Ownership:
+ * - base: borrowed (not modified ownership, elements reordered in place)
+ * - cmp: borrowed (function pointer used during call only)
+ * - ctx: borrowed (passed through to cmp, not stored)
+ * - temp_buffer: borrowed (used as scratch space, not stored)
+ *
  * Performance:
  * - Time:  O(n log n) with temp_buffer, O(n²) without
  * - Space: O(n) temp_buffer (caller-provided), O(log n) stack (recursion)
+ *
+ * Thread-safety:
+ * - Safe to call concurrently on different arrays
+ * - Not safe to call concurrently on same array without external sync
  */
 static inline void algo_sort(
-    void*       base,
-    usize       len,
-    usize       elem_size,
-    algo_cmp_fn cmp,
-    void*       ctx,
-    void*       temp_buffer)
+    borrowed void*       base,
+    usize                len,
+    usize                elem_size,
+    borrowed algo_cmp_fn cmp,
+    borrowed void*       ctx,
+    borrowed void*       temp_buffer)
 {
     require_msg(elem_size > 0, "algo_sort: elem_size must be > 0");
     if (!base || len < 2 || !cmp || elem_size == 0) return;
@@ -250,21 +278,34 @@ static inline void algo_sort(
 /**
  * @brief Returns true if array is sorted according to cmp (non-destructive)
  *
- * @param base      Pointer to first element (NULL-safe)
+ * @param base      Pointer to first element (borrowed — not modified)
  * @param len       Number of elements
  * @param elem_size Size of each element in bytes
- * @param cmp       Comparator
- * @param ctx       Optional context (may be NULL)
+ * @param cmp       Comparator (borrowed)
+ * @param ctx       Optional context (borrowed, may be NULL)
  * @return true if sorted or len < 2, false otherwise
  *
- * Performance: O(n) time, O(1) space
+ * @pre elem_size > 0
+ * @pre If base != NULL, base points to valid array of len elements
+ *
+ * Ownership:
+ * - base: borrowed (read-only)
+ * - cmp: borrowed (function pointer used during call only)
+ * - ctx: borrowed (passed through to cmp)
+ *
+ * Performance:
+ * - Time:  O(n)
+ * - Space: O(1)
+ *
+ * Thread-safety:
+ * - Safe to call concurrently as long as array is not being modified
  */
 static inline bool algo_is_sorted(
-    const void* base,
-    usize       len,
-    usize       elem_size,
-    algo_cmp_fn cmp,
-    void*       ctx)
+    borrowed const void* base,
+    usize                len,
+    usize                elem_size,
+    borrowed algo_cmp_fn cmp,
+    borrowed void*       ctx)
 {
     if (!base || len < 2 || !cmp) return true;
     for (usize i = 1; i < len; i++) {
@@ -306,11 +347,17 @@ static inline bool algo_is_sorted(
  * uses merge sort. For larger arrays: passes NULL and falls back to
  * insertion sort. Call algo_sort() directly for large arrays.
  *
- * @param base Array of Type to sort in-place
+ * @param base Array of Type to sort in-place (borrowed)
  * @param len  Number of elements
  * @param Type Element type
- * @param cmp  algo_cmp_fn comparator
- * @param ctx  Optional context (may be NULL)
+ * @param cmp  algo_cmp_fn comparator (borrowed)
+ * @param ctx  Optional context (borrowed, may be NULL)
+ *
+ * @note base is borrowed — array is modified in place but not freed
+ *
+ * Performance:
+ * - Time:  O(n log n) if len <= ALGO_SORT_STACK_TEMP_MAX, O(n²) otherwise
+ * - Space: O(n) stack for small arrays, O(1) for large
  *
  * Example:
  * ```c
@@ -341,6 +388,16 @@ static inline bool algo_is_sorted(
  *
  * C99-portable — no GCC statement expression.
  * Delegates to algo_is_sorted() with sizeof(Type).
+ *
+ * @param base Array to check (borrowed, read-only)
+ * @param len  Number of elements
+ * @param Type Element type
+ * @param cmp  algo_cmp_fn comparator (borrowed)
+ * @param ctx  Optional context (borrowed, may be NULL)
+ *
+ * Performance:
+ * - Time:  O(n)
+ * - Space: O(1)
  *
  * Example:
  * ```c
@@ -373,6 +430,12 @@ static inline bool algo_is_sorted(
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  *
+ * Ownership:
+ * - sv: borrowed (slice is non-owning view, but underlying array is modified)
+ * - cmp: borrowed (function pointer used during call only)
+ * - ctx: borrowed (passed through to cmp)
+ * - temp: borrowed (scratch space used during call only)
+ *
  * Example:
  * ```c
  * DEFINE_SLICE(int)
@@ -393,20 +456,33 @@ static inline bool algo_is_sorted(
 /** \
  * @brief Sorts the elements of a slice_##type in-place \
  * \
- * @param sv        Slice (non-owning — sorts the underlying array) \
- * @param cmp       Three-way comparator \
- * @param ctx       Optional context (may be NULL) \
- * @param temp      Caller-provided scratch buffer of type[temp_cap] \
+ * @param sv        Slice (borrowed non-owning view — sorts the underlying array) \
+ * @param cmp       Three-way comparator (borrowed) \
+ * @param ctx       Optional context (borrowed, may be NULL) \
+ * @param temp      Caller-provided scratch buffer of type[temp_cap] (borrowed) \
  * @param temp_cap  Number of elements temp can hold \
  * \
+ * @pre DEFINE_SLICE(type) has been called \
+ * @pre sv.ptr points to valid array if non-NULL \
+ * @pre temp points to valid buffer of temp_cap elements if non-NULL \
+ * @pre sv.ptr and temp do not overlap \
+ * \
+ * Ownership: \
+ * - sv: borrowed (underlying array modified in place) \
+ * - cmp: borrowed (used during call only) \
+ * - ctx: borrowed (passed to cmp) \
+ * - temp: borrowed (scratch space, not stored) \
+ * \
  * Performance: O(n log n) if temp_cap >= sv.len, O(n²) otherwise \
+ * \
+ * Thread-safety: Safe to call on different slices concurrently \
  */ \
 static inline void algo_sort_slice_##type( \
-    slice_##type sv, \
-    algo_cmp_fn  cmp, \
-    void*        ctx, \
-    type*        temp, \
-    usize        temp_cap) \
+    borrowed slice_##type sv, \
+    borrowed algo_cmp_fn  cmp, \
+    borrowed void*        ctx, \
+    borrowed type*        temp, \
+    usize                 temp_cap) \
 { \
     if (!sv.ptr || sv.len < 2 || !cmp) return; \
     void* tmp = (temp && temp_cap >= sv.len) ? (void*)temp : NULL; \
@@ -416,12 +492,25 @@ static inline void algo_sort_slice_##type( \
 /** \
  * @brief Returns true if slice_##type is sorted according to cmp \
  * \
+ * @param sv  Slice to check (borrowed, read-only) \
+ * @param cmp Comparator (borrowed) \
+ * @param ctx Optional context (borrowed, may be NULL) \
+ * \
+ * @pre DEFINE_SLICE(type) has been called \
+ * \
+ * Ownership: \
+ * - sv: borrowed (read-only) \
+ * - cmp: borrowed (used during call only) \
+ * - ctx: borrowed (passed to cmp) \
+ * \
  * Performance: O(n) time, O(1) space \
+ * \
+ * Thread-safety: Safe to call concurrently if array not being modified \
  */ \
 static inline bool algo_is_sorted_slice_##type( \
-    slice_##type sv, \
-    algo_cmp_fn  cmp, \
-    void*        ctx) \
+    borrowed slice_##type sv, \
+    borrowed algo_cmp_fn  cmp, \
+    borrowed void*        ctx) \
 { \
     return algo_is_sorted(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
@@ -430,26 +519,48 @@ static inline bool algo_is_sorted_slice_##type( \
    Built-in comparators
    ════════════════════════════════════════════════════════════════════════════ */
 
-/** @brief Ascending int comparator */
+/**
+ * @brief Ascending int comparator
+ *
+ * Performance: O(1)
+ * Thread-safety: Safe (no shared state)
+ */
 static inline int algo_cmp_int(const void* a, const void* b, void* ctx) {
     (void)ctx;
     int x = *(const int*)a, y = *(const int*)b;
     return (x > y) - (x < y);
 }
 
-/** @brief Descending int comparator */
+/**
+ * @brief Descending int comparator
+ *
+ * Performance: O(1)
+ * Thread-safety: Safe (no shared state)
+ */
 static inline int algo_cmp_int_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_int(b, a, ctx);
 }
 
-/** @brief Ascending usize comparator */
+/**
+ * @brief Ascending usize comparator
+ *
+ * Performance: O(1)
+ * Thread-safety: Safe (no shared state)
+ */
 static inline int algo_cmp_usize(const void* a, const void* b, void* ctx) {
     (void)ctx;
     usize x = *(const usize*)a, y = *(const usize*)b;
     return (x > y) - (x < y);
 }
 
-/** @brief Ascending double comparator — NaN sorted last */
+/**
+ * @brief Ascending double comparator — NaN sorted last
+ *
+ * Performance: O(1)
+ * Thread-safety: Safe (no shared state)
+ *
+ * @note NaN handling: NaN == NaN returns 0, NaN > any_number returns 1
+ */
 static inline int algo_cmp_double(const void* a, const void* b, void* ctx) {
     (void)ctx;
     double x = *(const double*)a, y = *(const double*)b;
