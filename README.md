@@ -222,7 +222,7 @@ Modules are organized by **semantic depth**, not by feature count. Lower layers
 define unavoidable mechanics; higher layers build meaning on top of them.
 
 
-core/ — memory, lifetime, scope, primitives
+core/ — fundamentals
 
 semantics/ — meaning 
 
