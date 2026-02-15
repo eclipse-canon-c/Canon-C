@@ -5,6 +5,7 @@
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
+#include "core/primitives/bits.h"
 #include "core/memory.h"
 #include "core/slice.h"
 
