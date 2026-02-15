@@ -82,7 +82,6 @@
  * slice_int_get(sv, 2, &val);  // val = 3
  * ```
  *
- * @sa core/primitives/ptr.h — alignment and pointer arithmetic used here
  * @sa semantics/borrow.h    — ownership-annotated slice wrappers
  */
 
