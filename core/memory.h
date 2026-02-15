@@ -2,11 +2,14 @@
 #define CANON_CORE_MEMORY_H
 
 #include <string.h>
+#include <stdint.h>           // uintptr_t
+#include <stdalign.h>         // max_align_t
 
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
+#include "core/primitives/bits.h"
 #include "core/slice.h"
 
 /**
