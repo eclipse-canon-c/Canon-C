@@ -101,6 +101,7 @@ Abstractions must clarify behavior, not conceal it.
   - `deque_decl.h` — forward declarations for separate compilation
   - `deque_defn.h` — complete definitions (header-only or .c files)
 - `array.h` — fixed-size typed array with compile-time capacity (DEFINE_ARRAY, safe indexing, slice/bytes views, iteration macros)
+- `priority_queue.h` — fixed-capacity binary heap (priority queue) with caller-owned buffer
 - `queue.h` — FIFO queue wrapper over deque (fixed capacity); includes `DECLARE_QUEUE`
 - `stack.h` — LIFO stack wrapper over vec (fixed capacity); includes `DECLARE_STACK`
 - `range.h` — explicit integer range generator (ascending/descending, isize-based, overflow-safe)
