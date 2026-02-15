@@ -150,49 +150,47 @@ Abstractions must clarify behavior, not conceal it.
 
 ---
 
-**Note:** Modules in `*/convenience/` subdirectories trade explicitness for ergonomics.
-The `core/primitives/` subdirectory contains foundational types and operations that all
-other modules depend on. Core modules prioritize determinism and explicit control;
-convenience modules prioritize ease of use and may include hidden allocations or
-automatic growth. Choose based on your constraints: use core for production/embedded/
-real-time, convenience for prototyping.
+**Note:** Modules in `*/convenience/` subdirectories trade explicitness for ergonomics — hidden allocations, automatic growth, fewer required parameters. 
+`core/` modules trade ergonomics for control — deterministic allocation, explicit lifetimes, no surprises. 
+Use core for production, embedded, and real-time; use convenience for prototyping and tools.
 
-**Primitives integration:** All modules across `core/`, `data/`, and `data/convenience/`
-use `usize`/`isize` instead of `size_t`/`ptrdiff_t`, `CANON_USIZE_MAX`/`CANON_ISIZE_MAX`
-instead of `SIZE_MAX`/`PTRDIFF_MAX`, `require_msg()`/`ensure_msg()` instead of `assert()`,
-and `mem_copy()`/`mem_move()` instead of `memcpy()`/`memmove()`. The C standard headers
-`<stddef.h>`, `<stdbool.h>`, and `<assert.h>` are no longer included directly by any
-Canon-C module.
+**Primitives integration:** Canon-C replaces C's semantically weak primitives with named equivalents that carry explicit intent:
 
-**Ownership and borrowing:** `core/ownership.h` provides annotation macros (`owned`,
-`borrowed`, `moved`, `dropped`) that make ownership intent visible at every call site
-without runtime cost. `core/slice.h` provides the concrete non-owning view types
-(`bytes_t`, `cbytes_t`, `str_t`, `slice_##type`) that all borrow-passing APIs build on.
-`semantics/borrow.h` adds source-tagged wrappers (`borrowed_str`, `borrowed_bytes`,
-`borrowed_slice_##type`) for APIs where the non-ownership claim must be explicit at the
-type level, not just the annotation level.
+`usize`/`isize` instead of `size_t`/`ptrdiff_t`, 
+`CANON_USIZE_MAX`/`CANON_ISIZE_MAX` instead of `SIZE_MAX`/`PTRDIFF_MAX`,
+`require_msg()`/`ensure_msg()` instead of `assert()`, 
+and `mem_copy()`/`mem_move()` instead of `memcpy()`/`memmove()`.
 
-**Modular architecture:** The `vec/`, `deque/`, `option/`, and `result/` modules use a
-modular design that separates implementation logic, naming conventions, declarations, and
-definitions. Most users only need `vec.h`, `deque.h`, `option.h`, or `result.h`, but
-advanced users can customize behavior by overriding individual components. This enables:
-- Custom naming schemes (e.g. `Maybe<T>` instead of `Option<T>`, project-prefixed types)
-- Function specialization for specific types
-- Flexible compilation models (header-only or separate compilation via `DECLARE_` / `DEFINE_`)
-- Easier maintenance and testing of individual layers
+As a result, `<stddef.h>`, `<stdbool.h>`, and `<assert.h>` are never included by any Canon-C module.
+The only exceptions are `<stdarg.h>`, `<stdio.h>`, and `<string.h>` in `data/stringbuf.h`,
+where no Canon-C substitute exists at the `data/` layer:
 
-**Result and Option variants:** All push/pop/enqueue/dequeue operations across `vec/`,
-`deque/`, `queue.h`, and `stack.h` return `result_bool_Error` instead of bare `bool`,
-giving callers specific error codes (`ERR_CAPACITY_EXCEEDED`, `ERR_INVALID_STATE`, etc.).
-Option-returning variants (`pop_option`, `peek_option`, `dequeue_option`) are provided
-alongside the Result variants throughout, eliminating the need for an out-parameter in
-the common case.
+`va_list` is a compiler ABI intrinsic; 
+`vsnprintf` has no Canon-C equivalent; 
+`strlen` is only needed because `stringbuf_append(const char*)` accepts unlengthed strings — `stringbuf_append_str(str_t)` avoids it entirely.
 
-**Error handling:** Canon-C's error handling has three legs: `error.h` (what failed —
-error codes), `result.h` (propagating it — Result\<T, E\>), and `semantics/diag.h` (why
-and where — stack-allocated context chain). `Diag` is always passed by pointer and is
-always optional — passing NULL is valid everywhere. `DIAG_PUSH` captures file/line/func
-automatically. `DIAG_PROPAGATE` handles the check-annotate-return pattern in one line.
+**Ownership and borrowing:** Ownership is expressed at three levels of explicitness.
+`core/ownership.h` provides annotation macros (`owned`, `borrowed`, `moved`, `dropped`) that make intent visible at every call site with zero runtime cost. 
+`core/slice.h` provides concrete non-owning view types (`bytes_t`, `cbytes_t`, `str_t`, `slice_##type`) that make non-ownership structural rather than conventional.
+`semantics/borrow.h` adds source-tagged wrappers (`borrowed_str`, `borrowed_bytes`, `borrowed_slice_##type`) for APIs where the non-ownership claim must be part of the type itself, not just an annotation.
+
+**Modular architecture:** `vec/`, `deque/`, `option/`, and `result/` separate implementation logic, naming conventions, declarations, and definitions into distinct files.
+The single-file entry points (`vec.h`, `deque.h`, `option.h`, `result.h`) cover the common case. 
+The underlying files exist for projects that need custom naming schemes (e.g. `Maybe<T>` instead of `Option<T>`, project-prefixed types), per-type specialization, or flexible compilation models (header-only or separate compilation via `DECLARE_`/`DEFINE_`).
+
+**Result and Option variants:** All push/pop/enqueue/dequeue operations across `vec/`, `deque/`, `queue.h`, and `stack.h` return `result_bool_Error` instead of bare `bool`,
+giving callers specific error codes (`ERR_CAPACITY_EXCEEDED`, `ERR_INVALID_STATE`, etc.). 
+Option-returning variants (`pop_option`, `peek_option`, `dequeue_option`) are provided alongside the Result variants throughout, 
+eliminating the need for an out-parameter in the common case.
+
+**Error handling:** Three roles, one chain:
+
+`error.h` names what failed (error codes),
+`result.h` propagates it (`Result<T, E>`), 
+and `semantics/diag.h` records where and why (stack-allocated context chain, no allocation). 
+
+Start with `result.h`. Add `diag.h` when call sites need context. `error.h` is always present implicitly through both. `Diag` is always passed by pointer and always optional — `NULL` is valid everywhere. 
+`DIAG_PUSH` captures file/line/func automatically; `DIAG_PROPAGATE` handles the check-annotate-return pattern in one line.
 
 All modules are header-only by default and require no runtime or build system integration.
 
