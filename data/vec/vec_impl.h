@@ -7,9 +7,9 @@
 #include "core/primitives/checked.h"
 #include "core/memory.h"
 #include "core/arena.h"
-#include "semantics/result.h"
+#include "semantics/result/result.h"
 #include "semantics/error.h"
-#include "semantics/option.h"
+#include "semantics/option/option.h"
 #include <stdlib.h>
 
 /**
