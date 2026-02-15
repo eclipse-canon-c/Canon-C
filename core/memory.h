@@ -1,16 +1,14 @@
 #ifndef CANON_CORE_MEMORY_H
 #define CANON_CORE_MEMORY_H
 
-#include <string.h>
-#include <stdint.h>           // uintptr_t
-#include <stdalign.h>         // max_align_t
+#include <string.h>                     // memcpy, memmove, memset, memcmp
 
-#include "core/primitives/types.h"
-#include "core/primitives/limits.h"
-#include "core/primitives/contract.h"
-#include "core/primitives/ptr.h"
-#include "core/primitives/bits.h"
-#include "core/slice.h"
+#include "core/primitives/types.h"      // u8, usize, bool, (and transitively uintptr_t via <stdint.h>)
+#include "core/primitives/limits.h"     // CANON_USIZE_MAX, CANON_DEFAULT_ALIGN
+#include "core/primitives/contract.h"   // require_msg
+#include "core/primitives/ptr.h"        // align_up, ptr_is_aligned
+#include "core/primitives/bits.h"       // is_power_of_two()
+#include "core/slice.h"                 // bytes_t, cbytes_t
 
 /**
  * @file memory.h
