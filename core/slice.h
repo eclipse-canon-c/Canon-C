@@ -4,10 +4,7 @@
 #include <string.h>
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
-#include "core/primitives/ptr.h"
-#include "core/memory.h"
 
 /**
  * @file core/slice.h
