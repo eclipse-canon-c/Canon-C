@@ -45,7 +45,7 @@
  * Relationship to other modules:
  * ────────────────────────────────────────────────────────────────────────────
  * - semantics/error.h  — DiagFrame.code is a Canon_Error value
- * - semantics/result.h — Diag can be attached to a Result failure path
+ * - semantics/result/result.h — Diag can be attached to a Result failure path
  * - data/stringbuf.h   — diag_render() formats a Diag into a StringBuf
  *                        (included conditionally — see diag_render below)
  * - core/slice.h       — DiagFrame.message is a str_t (no null terminator req.)
