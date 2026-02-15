@@ -1,34 +1,21 @@
-// algo/reverse.h
 #ifndef CANON_ALGO_REVERSE_H
 #define CANON_ALGO_REVERSE_H
 
-#include <stddef.h>
-#include <stdbool.h>
-#include <assert.h>
+#include "core/primitives/types.h"
+#include "core/primitives/contract.h"
+#include "core/primitives/ptr.h"
 #include "core/memory.h"
+#include "core/slice.h"
+#include "core/ownership.h"
+#include "algo/sort.h"  // For algo_cmp_fn typedef
 
 /**
- * @file reverse.h
+ * @file algo/reverse.h
  * @brief In-place sequence reversal algorithms
  *
  * Provides efficient, generic, in-place reversal of arrays and containers.
  * Uses a two-pointer technique with byte-level swapping to reverse elements
  * of any type in linear time with constant space.
- *
- * Portability:
- *   - Requires C99 or later (for inline functions, stdbool.h)
- *   - Depends on memory.h from this library (for mem_copy, mem_swap)
- *   - No external dependencies beyond standard C library
- *
- * Thread-safety: Functions are pure (no shared state) - safe to call from
- *                multiple threads on different data
- *
- * Performance:
- *   - Time complexity: O(n) - exactly n/2 swaps
- *   - Space complexity: O(1) - small fixed-size temporary buffer
- *   - In-place algorithm: modifies array directly
- *   - No heap allocations
- *   - Cache-friendly: sequential access pattern
  *
  * Core ideas:
  * ────────────────────────────────────────────────────────────────────────────
@@ -39,9 +26,10 @@
  * - Never allocates heap memory
  * - Works with any element size (including large structs)
  * - Strongly typed macros for compile-time safety
- * - Seamless integration with vec.h style containers
+ * - Seamless integration with data/ containers
  * - Maximum performance: no function pointers, excellent inlining
  * - Simple, understandable algorithm
+ * - Explicit ownership: all borrowed parameters marked with borrowed macro
  *
  * Algorithm explanation:
  * ────────────────────────────────────────────────────────────────────────────
@@ -56,6 +44,32 @@
  *   Step 2: [5, 2, 3, 4, 1]  → swap array[1] ↔ array[3]
  *   Step 3: [5, 4, 3, 2, 1]  → left == right (done)
  *
+ * Dependency rule:
+ * ────────────────────────────────────────────────────────────────────────────
+ * algo/ headers may include core/, semantics/, and data/ only.
+ * reverse.h uses core/memory.h for mem_copy instead of memcpy directly.
+ * reverse.h depends on algo/sort.h only for the algo_cmp_fn typedef.
+ *
+ * Portability:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Requires C99 or later
+ * - No platform-specific code
+ * - No allocations anywhere in this file
+ *
+ * Thread-safety:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - All functions are thread-safe (no shared mutable state)
+ * - Safe to call concurrently on different arrays from multiple threads
+ * - Same array should not be modified concurrently without external synchronization
+ *
+ * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Time complexity: O(n) - exactly ⌊n/2⌋ swaps
+ * - Space complexity: O(1) - small fixed-size temporary buffer
+ * - In-place algorithm: modifies array directly
+ * - No heap allocations
+ * - Cache-friendly: sequential access pattern
+ *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
  * - Reverse order of elements for processing
@@ -66,50 +80,62 @@
  * - String/array manipulation
  * - Quick reordering of collections
  * - Implementing reverse iterators
- * - Data structure operations (reverse linked list, etc.)
  * - Sorting helper (reverse to get descending order)
  *
- * Usage examples:
- *
- * Basic integer reversal:
+ * Quick start:
  * ```c
+ * #include "algo/reverse.h"
+ *
+ * // Basic integer reversal
  * int scores[] = {10, 20, 30, 40, 50};
  * ALGO_REVERSE_TYPED(scores, 5, int);
  * // Result: {50, 40, 30, 20, 10}
- * ```
  *
- * Reversing strings array:
- * ```c
+ * // Reversing strings array
  * const char* names[] = {"Alice", "Bob", "Charlie", "Dave"};
  * ALGO_REVERSE_TYPED(names, 4, const char*);
  * // Result: {"Dave", "Charlie", "Bob", "Alice"}
- * ```
  *
- * With vec container:
- * ```c
- * vec_int numbers = ...; // {1, 2, 3, 4, 5}
- * ALGO_REVERSE_VEC(numbers, int);
- * // Result: {5, 4, 3, 2, 1}
- * ```
- *
- * Generic (when type is not known at compile time):
- * ```c
+ * // Generic (when type is not known at compile time)
  * struct Point { float x, y; } points[100];
  * algo_reverse(points, 100, sizeof(struct Point));
- * ```
  *
- * Partial reversal (subrange):
- * ```c
+ * // Partial reversal (subrange)
  * int data[] = {1, 2, 3, 4, 5, 6, 7, 8};
  * // Reverse middle portion [3, 4, 5, 6]
  * algo_reverse(&data[2], 4, sizeof(int));
  * // Result: {1, 2, 6, 5, 4, 3, 7, 8}
+ *
+ * // Palindrome check
+ * int arr[] = {1, 2, 3, 2, 1};
+ * bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), cmp_int, NULL);
+ * // is_pal = true
  * ```
+ *
+ * @sa algo/sort.h           — companion algorithm, provides algo_cmp_fn
+ * @sa core/memory.h          — mem_copy used for element swapping
+ * @sa core/slice.h           — slice_##type used by DEFINE_ALGO_REVERSE
+ * @sa core/ownership.h       — borrowed macro for non-owning parameters
  */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Generic byte-wise in-place reverse
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   Swap buffer size limit
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Maximum element size supported by algo_reverse
+ *
+ * algo_reverse uses a fixed-size stack buffer for swapping elements.
+ * Override by defining ALGO_REVERSE_SWAP_BUF_SIZE before including this header.
+ * Default: 256 bytes (handles most types: doubles, small structs, pointers).
+ */
+#ifndef ALGO_REVERSE_SWAP_BUF_SIZE
+    #define ALGO_REVERSE_SWAP_BUF_SIZE ((usize)256)
+#endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Public interface
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * @brief Reverses array of arbitrary elements in-place
@@ -124,111 +150,76 @@
  *   - Stops when pointers meet (left >= right)
  *   - Performs exactly ⌊n/2⌋ swaps
  *
- * @param array      Pointer to the first element (NULL-safe)
+ * @param array      Pointer to the first element (borrowed — modified in place)
  * @param len        Number of elements in the array
- * @param elem_size  Size of each element in bytes (sizeof(Type))
+ * @param elem_size  Size of each element in bytes (> 0)
  *
- * Preconditions:
- *   - If array != NULL: array points to valid memory of size len * elem_size
- *   - elem_size > 0
- *   - elem_size <= 256 bytes (temp buffer limitation)
+ * @return           void
  *
- * Postconditions:
- *   - Array elements are reversed: array[i] ↔ array[n-1-i]
- *   - Original order is lost
- *   - For even length: all elements swapped
- *   - For odd length: middle element stays in place
+ * @pre elem_size > 0
+ * @pre elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE
+ * @pre If array != NULL, array points to valid memory of size len * elem_size
+ *
+ * @post Array elements are reversed: array[i] ↔ array[n-1-i]
+ * @post Original order is lost
+ * @post For even length: all elements swapped
+ * @post For odd length: middle element stays in place
+ *
+ * Ownership:
+ * - array: borrowed (modified in place, elements reordered)
  *
  * Performance:
- *   - Time: O(n) - exactly ⌊n/2⌋ swaps
- *   - Space: O(1) - 256-byte temporary buffer on stack
- *   - Swaps: ⌊n/2⌋ element swaps
- *   - Comparisons: None (no comparison needed)
- *   - Memory accesses: n total element reads/writes
+ * - Time:  O(n) - exactly ⌊n/2⌋ swaps
+ * - Space: O(1) - fixed-size temporary buffer on stack
+ *
+ * Thread-safety:
+ * - Safe to call concurrently on different arrays
+ * - Not safe to call concurrently on same array without external sync
  *
  * Does nothing if:
- *   - array is NULL
- *   - len < 2 (0 or 1 elements already "reversed")
+ * - array is NULL
+ * - len < 2 (0 or 1 elements already "reversed")
  *
  * Example:
- *   int arr[] = {1, 2, 3, 4, 5};
- *   algo_reverse(arr, 5, sizeof(int));
- *   // arr is now {5, 4, 3, 2, 1}
- *
- * Example with structs:
- *   struct Point { double x, y; } points[10];
- *   algo_reverse(points, 10, sizeof(struct Point));
+ * ```c
+ * int arr[] = {1, 2, 3, 4, 5};
+ * algo_reverse(arr, 5, sizeof(int));
+ * // arr is now {5, 4, 3, 2, 1}
+ * ```
  */
 static inline void algo_reverse(
-    void* array,
-    size_t len,
-    size_t elem_size
-) {
-    assert(elem_size > 0 && "algo_reverse: elem_size must be > 0");
-    assert(elem_size <= 256 && "algo_reverse: elem_size too large for temp buffer");
+    borrowed void* array,
+    usize          len,
+    usize          elem_size)
+{
+    require_msg(elem_size > 0, "algo_reverse: elem_size must be > 0");
+    require_msg(elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE,
+                "algo_reverse: elem_size exceeds ALGO_REVERSE_SWAP_BUF_SIZE");
     
-    // Handle NULL or trivial cases
+    /* Handle NULL or trivial cases */
     if (!array || len < 2) {
         return;
     }
     
-    char* bytes = (char*)array;
-    char* left  = bytes;
-    char* right = bytes + (len - 1) * elem_size;
+    u8* bytes = (u8*)array;
+    u8* left  = bytes;
+    u8* right = bytes + (len - 1) * elem_size;
     
-    // Temporary buffer for swapping
-    // 256 bytes handles most types: doubles, small structs, pointers, etc.
-    char temp[256];
+    /* Temporary buffer for swapping */
+    u8 temp[ALGO_REVERSE_SWAP_BUF_SIZE];
     
-    // Two-pointer technique: swap from ends toward middle
+    /* Two-pointer technique: swap from ends toward middle */
     while (left < right) {
-        // Three-way swap using temp buffer
+        /* Three-way swap using temp buffer */
         mem_copy(temp,  left,  elem_size);
         mem_copy(left,  right, elem_size);
         mem_copy(right, temp,  elem_size);
         
-        // Move pointers toward center
+        /* Move pointers toward center */
         left  += elem_size;
         right -= elem_size;
     }
 }
-
-/**
- * @brief Reverses a vector in-place
- *
- * Specialized version for vec-like structures with items and len fields.
- *
- * @param vec_ptr    Pointer to vector structure (NULL-safe)
- * @param elem_size  Size of each element in bytes
- *
- * Example:
- *   vec_int numbers = ...;
- *   algo_reverse_vec(&numbers, sizeof(int));
- */
-static inline void algo_reverse_vec(
-    void* vec_ptr,
-    size_t elem_size
-) {
-    if (!vec_ptr) return;
-    
-    // Assume vec has 'items' and 'len' fields at standard offsets
-    typedef struct {
-        void* items;
-        size_t len;
-    } vec_like;
-    
-    vec_like* vec = (vec_like*)vec_ptr;
-    
-    if (!vec->items || vec->len < 2) {
-        return;
-    }
-    
-    algo_reverse(vec->items, vec->len, elem_size);
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Utility: Check if array is palindrome (reads same forwards and backwards)
-   ──────────────────────────────────────────────────────────────────────────── */
 
 /**
  * @brief Checks if array is a palindrome
@@ -236,73 +227,103 @@ static inline void algo_reverse_vec(
  * Non-destructive check - array is not modified.
  * Requires a comparison function to check element equality.
  *
- * @param array      Pointer to first element (NULL-safe)
+ * @param array      Pointer to first element (borrowed, read-only)
  * @param len        Number of elements
- * @param elem_size  Size of each element in bytes
- * @param cmp        Comparison function (returns 0 if elements equal)
- * @param ctx        Optional context (NULL-safe)
+ * @param elem_size  Size of each element in bytes (> 0)
+ * @param cmp        Comparison function (borrowed — returns 0 if elements equal)
+ * @param ctx        Optional context (borrowed, may be NULL)
  *
  * @return           true if palindrome, false otherwise
  *
- * Performance: O(n/2) comparisons, O(1) space
+ * @pre elem_size > 0
+ * @pre If array != NULL, array points to valid array of len elements
+ *
+ * Ownership:
+ * - array: borrowed (read-only)
+ * - cmp: borrowed (function pointer used during call only)
+ * - ctx: borrowed (passed through to cmp)
+ *
+ * Performance:
+ * - Time:  O(n/2) comparisons
+ * - Space: O(1)
+ *
+ * Thread-safety:
+ * - Safe to call concurrently as long as array is not being modified
  *
  * Example:
- *   int arr[] = {1, 2, 3, 2, 1};
- *   bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), algo_cmp_int, NULL);
- *   // is_pal = true
+ * ```c
+ * int arr[] = {1, 2, 3, 2, 1};
+ * bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), cmp_int, NULL);
+ * // is_pal = true
+ * ```
  */
 static inline bool algo_is_palindrome(
-    const void* array,
-    size_t len,
-    size_t elem_size,
-    int (*cmp)(const void*, const void*, void*),
-    void* ctx
-) {
-    assert(elem_size > 0 && "algo_is_palindrome: elem_size must be > 0");
-    assert(cmp != NULL && "algo_is_palindrome: cmp function cannot be NULL");
+    borrowed const void* array,
+    usize                len,
+    usize                elem_size,
+    borrowed algo_cmp_fn cmp,
+    borrowed void*       ctx)
+{
+    require_msg(elem_size > 0, "algo_is_palindrome: elem_size must be > 0");
+    require_msg(cmp != NULL, "algo_is_palindrome: cmp function cannot be NULL");
     
     if (!array || len < 2) {
-        return true;  // Empty or single-element arrays are palindromes
+        return true;  /* Empty or single-element arrays are palindromes */
     }
     
-    const char* bytes = (const char*)array;
-    size_t left_idx = 0;
-    size_t right_idx = len - 1;
+    const u8* bytes = (const u8*)array;
+    usize left_idx = 0;
+    usize right_idx = len - 1;
     
     while (left_idx < right_idx) {
         const void* left_elem = bytes + left_idx * elem_size;
         const void* right_elem = bytes + right_idx * elem_size;
         
         if (cmp(left_elem, right_elem, ctx) != 0) {
-            return false;  // Mismatch found
+            return false;  /* Mismatch found */
         }
         
         ++left_idx;
         --right_idx;
     }
     
-    return true;  // All pairs matched
+    return true;  /* All pairs matched */
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Strongly typed convenience macros (recommended)
-   ──────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   Typed macros — recommended for direct array use
+   ════════════════════════════════════════════════════════════════════════════
+   GNU extension versions (statement expressions) provide better ergonomics.
+   C99 fallback versions available when CANON_NO_GNU_EXTENSIONS is defined.
+   ════════════════════════════════════════════════════════════════════════════ */
 
 #ifndef CANON_NO_GNU_EXTENSIONS
 
 /**
- * @brief Type-safe in-place reverse for known element type
+ * @def ALGO_REVERSE_TYPED(array, len, Type)
+ * @brief Type-safe in-place reverse for known element type (GNU version)
+ *
+ * Requires: GNU C statement expressions or C23
+ * Disable with: #define CANON_NO_GNU_EXTENSIONS
  *
  * Provides compile-time type safety by automatically calculating sizeof(Type).
  *
- * @param array  Array of Type (modified in-place)
- * @param len    Number of elements
- * @param Type   Element type (used for sizeof)
+ * @param array Array of Type (borrowed — modified in-place)
+ * @param len   Number of elements
+ * @param Type  Element type
+ *
+ * @note array is borrowed — array is modified in place but not freed
+ *
+ * Performance:
+ * - Time:  O(n)
+ * - Space: O(1)
  *
  * Example:
- *   int data[] = {1, 2, 3, 4, 5};
- *   ALGO_REVERSE_TYPED(data, 5, int);
- *   // data is now {5, 4, 3, 2, 1}
+ * ```c
+ * int data[] = {1, 2, 3, 4, 5};
+ * ALGO_REVERSE_TYPED(data, 5, int);
+ * // data is now {5, 4, 3, 2, 1}
+ * ```
  */
 #define ALGO_REVERSE_TYPED(array, len, Type) \
     do { \
@@ -312,417 +333,142 @@ static inline bool algo_is_palindrome(
     } while (0)
 
 /**
- * @brief Type-safe reverse for vec containers
+ * @def ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx)
+ * @brief Type-safe palindrome check — returns bool (GNU version)
  *
- * Automatically handles vector structure and reverses in-place.
- * Assumes vec has .items and .len fields (standard vec layout).
+ * @param array Array to check (borrowed, read-only)
+ * @param len   Number of elements
+ * @param Type  Element type
+ * @param cmp   algo_cmp_fn comparator (borrowed)
+ * @param ctx   Optional context (borrowed, may be NULL)
  *
- * @param vec   Vector to reverse (modified in-place)
- * @param Type  Element type stored in the vector
+ * @return true if palindrome, false otherwise
+ *
+ * Performance:
+ * - Time:  O(n/2)
+ * - Space: O(1)
  *
  * Example:
- *   vec_int numbers = ...;  // {10, 20, 30, 40}
- *   ALGO_REVERSE_VEC(numbers, int);
- *   // numbers is now {40, 30, 20, 10}
+ * ```c
+ * int arr[] = {1, 2, 3, 2, 1};
+ * bool is_pal = ALGO_IS_PALINDROME_TYPED(arr, 5, int, cmp_int, NULL);
+ * // is_pal = true
+ * ```
  */
-#define ALGO_REVERSE_VEC(vec, Type) \
-    do { \
-        if ((vec).items && (vec).len >= 2) { \
-            algo_reverse((vec).items, (vec).len, sizeof(Type)); \
-        } \
-    } while (0)
-
-/**
- * @brief Type-safe palindrome check
- *
- * @param array    Array to check
- * @param len      Number of elements
- * @param Type     Element type
- * @param cmp_expr Comparison function
- * @param ctx      Optional context
- *
- * @return         true if palindrome, false otherwise
- */
-#define ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp_expr, ctx) \
+#define ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx) \
     ({ \
         bool _result = true; \
         if ((array) && (len) >= 2) { \
-            typedef int (*_cmp_fn_t)(const void*, const void*, void*); \
             _result = algo_is_palindrome((array), (len), sizeof(Type), \
-                                        (_cmp_fn_t)(cmp_expr), (ctx)); \
+                                        (algo_cmp_fn)(cmp), (ctx)); \
         } \
         _result; \
     })
 
+#else /* CANON_NO_GNU_EXTENSIONS */
+
+/* C99 fallback versions */
+
+#define ALGO_REVERSE_TYPED(array, len, Type) \
+    do { \
+        if ((array) && (len) >= 2) { \
+            algo_reverse((array), (len), sizeof(Type)); \
+        } \
+    } while (0)
+
+#define ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx) \
+    ((array) && (len) >= 2 ? algo_is_palindrome((array), (len), sizeof(Type), \
+                                                (algo_cmp_fn)(cmp), (ctx)) : true)
+
 #endif /* CANON_NO_GNU_EXTENSIONS */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Complete Usage Example
-   ──────────────────────────────────────────────────────────────────────────
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_ALGO_REVERSE — typed slice variant per element type
+   ════════════════════════════════════════════════════════════════════════════
+   Requires DEFINE_SLICE(type).
+   ════════════════════════════════════════════════════════════════════════════ */
 
-    #include "algo/reverse.h"
-    #include "algo/sort.h"
-    #include <stdio.h>
-    #include <string.h>
-    
-    // Example 1: Basic integer reversal
-    void example_basic_reverse(void) {
-        int scores[] = {10, 20, 30, 40, 50};
-        size_t len = 5;
-        
-        printf("Before: ");
-        for (size_t i = 0; i < len; i++) {
-            printf("%d ", scores[i]);
-        }
-        printf("\n");
-        
-        ALGO_REVERSE_TYPED(scores, len, int);
-        
-        printf("After:  ");
-        for (size_t i = 0; i < len; i++) {
-            printf("%d ", scores[i]);
-        }
-        printf("\n");
-        // Output:
-        // Before: 10 20 30 40 50
-        // After:  50 40 30 20 10
-    }
-    
-    // Example 2: Reversing strings array
-    void example_string_reverse(void) {
-        const char* names[] = {"Alice", "Bob", "Charlie", "Dave"};
-        size_t len = 4;
-        
-        printf("Before: ");
-        for (size_t i = 0; i < len; i++) {
-            printf("%s ", names[i]);
-        }
-        printf("\n");
-        
-        ALGO_REVERSE_TYPED(names, len, const char*);
-        
-        printf("After:  ");
-        for (size_t i = 0; i < len; i++) {
-            printf("%s ", names[i]);
-        }
-        printf("\n");
-        // Output:
-        // Before: Alice Bob Charlie Dave
-        // After:  Dave Charlie Bob Alice
-    }
-    
-    // Example 3: With vector containers
-    #include "data/vec.h"
-    
-    DEFINE_VEC(int)
-    
-    void example_vector_reverse(void) {
-        int buffer[100];
-        vec_int numbers = vec_int_init(buffer, 100);
-        
-        // Add elements
-        for (int i = 1; i <= 5; i++) {
-            vec_int_push(&numbers, i * 10);
-        }
-        
-        printf("Original: ");
-        for (size_t i = 0; i < numbers.len; i++) {
-            printf("%d ", numbers.items[i]);
-        }
-        printf("\n");
-        
-        ALGO_REVERSE_VEC(numbers, int);
-        
-        printf("Reversed: ");
-        for (size_t i = 0; i < numbers.len; i++) {
-            printf("%d ", numbers.items[i]);
-        }
-        printf("\n");
-    }
-    
-    // Example 4: Reversing structs
-    struct Point {
-        int x;
-        int y;
-    };
-    
-    void example_struct_reverse(void) {
-        struct Point points[] = {
-            {1, 2},
-            {3, 4},
-            {5, 6},
-            {7, 8}
-        };
-        size_t len = 4;
-        
-        printf("Before:\n");
-        for (size_t i = 0; i < len; i++) {
-            printf("  (%d, %d)\n", points[i].x, points[i].y);
-        }
-        
-        ALGO_REVERSE_TYPED(points, len, struct Point);
-        
-        printf("After:\n");
-        for (size_t i = 0; i < len; i++) {
-            printf("  (%d, %d)\n", points[i].x, points[i].y);
-        }
-    }
-    
-    // Example 5: Partial reversal (subrange)
-    void example_partial_reverse(void) {
-        int data[] = {1, 2, 3, 4, 5, 6, 7, 8};
-        
-        printf("Original: ");
-        for (size_t i = 0; i < 8; i++) {
-            printf("%d ", data[i]);
-        }
-        printf("\n");
-        
-        // Reverse middle portion [3, 4, 5, 6]
-        algo_reverse(&data[2], 4, sizeof(int));
-        
-        printf("After reversing middle 4 elements: ");
-        for (size_t i = 0; i < 8; i++) {
-            printf("%d ", data[i]);
-        }
-        printf("\n");
-        // Output: 1 2 6 5 4 3 7 8
-    }
-    
-    // Example 6: Palindrome check
-    void example_palindrome_check(void) {
-        int palindrome[] = {1, 2, 3, 2, 1};
-        int not_palindrome[] = {1, 2, 3, 4, 5};
-        
-        bool is_pal1 = ALGO_IS_PALINDROME_TYPED(palindrome, 5, int,
-                                                 algo_cmp_int, NULL);
-        bool is_pal2 = ALGO_IS_PALINDROME_TYPED(not_palindrome, 5, int,
-                                                 algo_cmp_int, NULL);
-        
-        printf("Array {1, 2, 3, 2, 1} is palindrome: %s\n",
-               is_pal1 ? "yes" : "no");
-        printf("Array {1, 2, 3, 4, 5} is palindrome: %s\n",
-               is_pal2 ? "yes" : "no");
-        // Output:
-        // Array {1, 2, 3, 2, 1} is palindrome: yes
-        // Array {1, 2, 3, 4, 5} is palindrome: no
-    }
-    
-    // Example 7: Reverse after sorting (descending order)
-    void example_reverse_sorted(void) {
-        int data[] = {5, 2, 8, 1, 9, 3, 7};
-        size_t len = 7;
-        
-        // Sort ascending
-        ALGO_SORT_TYPED(data, len, int, algo_cmp_int, NULL);
-        
-        printf("Ascending:  ");
-        for (size_t i = 0; i < len; i++) {
-            printf("%d ", data[i]);
-        }
-        printf("\n");
-        
-        // Reverse to get descending
-        ALGO_REVERSE_TYPED(data, len, int);
-        
-        printf("Descending: ");
-        for (size_t i = 0; i < len; i++) {
-            printf("%d ", data[i]);
-        }
-        printf("\n");
-        // Output:
-        // Ascending:  1 2 3 5 7 8 9
-        // Descending: 9 8 7 5 3 2 1
-    }
-    
-    // Example 8: String reversal (array of chars)
-    void example_char_array_reverse(void) {
-        char str[] = "Hello";
-        size_t len = strlen(str);
-        
-        printf("Before: %s\n", str);
-        
-        ALGO_REVERSE_TYPED(str, len, char);
-        
-        printf("After:  %s\n", str);
-        // Output:
-        // Before: Hello
-        // After:  olleH
-    }
-    
-    // Example 9: Reversing in a loop (undo operation)
-    void example_double_reverse(void) {
-        int data[] = {1, 2, 3, 4, 5};
-        size_t len = 5;
-        
-        printf("Original: ");
-        for (size_t i = 0; i < len; i++) printf("%d ", data[i]);
-        printf("\n");
-        
-        // Reverse once
-        ALGO_REVERSE_TYPED(data, len, int);
-        printf("After 1st reverse: ");
-        for (size_t i = 0; i < len; i++) printf("%d ", data[i]);
-        printf("\n");
-        
-        // Reverse again (back to original)
-        ALGO_REVERSE_TYPED(data, len, int);
-        printf("After 2nd reverse: ");
-        for (size_t i = 0; i < len; i++) printf("%d ", data[i]);
-        printf("\n");
-        // Output:
-        // Original: 1 2 3 4 5
-        // After 1st reverse: 5 4 3 2 1
-        // After 2nd reverse: 1 2 3 4 5
-    }
-    
-    // Example 10: Reversing pointer arrays
-    void example_pointer_reverse(void) {
-        struct Record {
-            int id;
-            const char* name;
-        };
-        
-        struct Record* records[] = {
-            &(struct Record){1, "Alice"},
-            &(struct Record){2, "Bob"},
-            &(struct Record){3, "Charlie"}
-        };
-        
-        printf("Before:\n");
-        for (size_t i = 0; i < 3; i++) {
-            printf("  %d: %s\n", records[i]->id, records[i]->name);
-        }
-        
-        ALGO_REVERSE_TYPED(records, 3, struct Record*);
-        
-        printf("After:\n");
-        for (size_t i = 0; i < 3; i++) {
-            printf("  %d: %s\n", records[i]->id, records[i]->name);
-        }
-    }
-    
-    // Example 11: Even vs odd length arrays
-    void example_even_odd_length(void) {
-        int even[] = {1, 2, 3, 4};
-        int odd[] = {1, 2, 3, 4, 5};
-        
-        printf("Even length before: ");
-        for (size_t i = 0; i < 4; i++) printf("%d ", even[i]);
-        printf("\n");
-        
-        ALGO_REVERSE_TYPED(even, 4, int);
-        
-        printf("Even length after:  ");
-        for (size_t i = 0; i < 4; i++) printf("%d ", even[i]);
-        printf("\n");
-        
-        printf("\nOdd length before:  ");
-        for (size_t i = 0; i < 5; i++) printf("%d ", odd[i]);
-        printf("\n");
-        
-        ALGO_REVERSE_TYPED(odd, 5, int);
-        
-        printf("Odd length after:   ");
-        for (size_t i = 0; i < 5; i++) printf("%d ", odd[i]);
-        printf("\n");
-        // Note: middle element (3) stays in place for odd length
-    }
-    
-    // Example 12: Reversing within a range
-    void example_range_operations(void) {
-        int data[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-        
-        printf("Original: ");
-        for (size_t i = 0; i < 10; i++) printf("%d ", data[i]);
-        printf("\n");
-        
-        // Reverse first half
-        algo_reverse(data, 5, sizeof(int));
-        printf("First half reversed: ");
-        for (size_t i = 0; i < 10; i++) printf("%d ", data[i]);
-        printf("\n");
-        
-        // Reverse second half
-        algo_reverse(&data[5], 5, sizeof(int));
-        printf("Both halves reversed: ");
-        for (size_t i = 0; i < 10; i++) printf("%d ", data[i]);
-        printf("\n");
-    }
-    
-    // Example 13: Generic usage
-    void example_generic_usage(void) {
-        // When type isn't known at compile time
-        void* generic_array = malloc(10 * sizeof(double));
-        double* doubles = (double*)generic_array;
-        
-        for (int i = 0; i < 10; i++) {
-            doubles[i] = i * 1.5;
-        }
-        
-        printf("Before: ");
-        for (int i = 0; i < 10; i++) {
-            printf("%.1f ", doubles[i]);
-        }
-        printf("\n");
-        
-        algo_reverse(generic_array, 10, sizeof(double));
-        
-        printf("After:  ");
-        for (int i = 0; i < 10; i++) {
-            printf("%.1f ", doubles[i]);
-        }
-        printf("\n");
-        
-        free(generic_array);
-    }
-    
-    // Example 14: Checking if array equals its reverse
-    void example_symmetric_check(void) {
-        int sym[] = {1, 2, 3, 2, 1};
-        int temp[5];
-        
-        // Copy original
-        memcpy(temp, sym, sizeof(sym));
-        
-        // Reverse
-        ALGO_REVERSE_TYPED(temp, 5, int);
-        
-        // Compare
-        bool is_symmetric = (memcmp(sym, temp, sizeof(sym)) == 0);
-        printf("Array is symmetric: %s\n", is_symmetric ? "yes" : "no");
-        
-        // Or use palindrome check directly
-        is_symmetric = ALGO_IS_PALINDROME_TYPED(sym, 5, int,
-                                                 algo_cmp_int, NULL);
-        printf("Using palindrome check: %s\n", is_symmetric ? "yes" : "no");
-    }
-    
-    // Example 15: Practical use - processing queue in reverse
-    void example_queue_reverse_processing(void) {
-        struct Task {
-            int priority;
-            const char* description;
-        };
-        
-        struct Task tasks[] = {
-            {1, "Low priority task"},
-            {2, "Medium priority task"},
-            {3, "High priority task"},
-            {4, "Critical task"}
-        };
-        
-        printf("Processing in reverse order (highest priority first):\n");
-        
-        // Reverse to process high priority first
-        ALGO_REVERSE_TYPED(tasks, 4, struct Task);
-        
-        for (size_t i = 0; i < 4; i++) {
-            printf("  Priority %d: %s\n",
-                   tasks[i].priority, tasks[i].description);
-        }
-    }
-
-   ──────────────────────────────────────────────────────────────────────────── */
+/**
+ * @brief Generates reverse/palindrome functions that accept slice_##type directly
+ *
+ * Prerequisites: DEFINE_SLICE(type) must have been called.
+ *
+ * Generated functions:
+ * - algo_reverse_slice_##type(sv)                → void
+ * - algo_is_palindrome_slice_##type(sv, cmp, ctx) → bool
+ *
+ * @param type Element type — must match a prior DEFINE_SLICE(type) call
+ *
+ * Ownership:
+ * - sv: borrowed (slice is non-owning view, underlying array is modified by reverse)
+ * - cmp: borrowed (function pointer used during call only)
+ * - ctx: borrowed (passed through to cmp)
+ *
+ * Example:
+ * ```c
+ * DEFINE_SLICE(int)
+ * DEFINE_ALGO_REVERSE(int)
+ *
+ * int arr[] = {1, 2, 3, 4, 5};
+ * slice_int sv = slice_int_from(arr, 5);
+ *
+ * algo_reverse_slice_int(sv);
+ * // arr is now {5, 4, 3, 2, 1}
+ *
+ * int pal[] = {1, 2, 3, 2, 1};
+ * slice_int sv2 = slice_int_from(pal, 5);
+ * bool is_pal = algo_is_palindrome_slice_int(sv2, cmp_int, NULL);
+ * // is_pal = true
+ * ```
+ */
+#define DEFINE_ALGO_REVERSE(type) \
+\
+/** \
+ * @brief Reverses the elements of a slice_##type in-place \
+ * \
+ * @param sv Slice (borrowed non-owning view — reverses underlying array) \
+ * \
+ * @pre DEFINE_SLICE(type) has been called \
+ * @pre sv.ptr points to valid array if non-NULL \
+ * \
+ * Ownership: \
+ * - sv: borrowed (underlying array modified in place) \
+ * \
+ * Performance: O(n) time, O(1) space \
+ * \
+ * Thread-safety: Safe to call on different slices concurrently \
+ */ \
+static inline void algo_reverse_slice_##type( \
+    borrowed slice_##type sv) \
+{ \
+    if (!sv.ptr || sv.len < 2) return; \
+    algo_reverse(sv.ptr, sv.len, sizeof(type)); \
+} \
+\
+/** \
+ * @brief Returns true if slice_##type is a palindrome \
+ * \
+ * @param sv  Slice to check (borrowed, read-only) \
+ * @param cmp Comparator (borrowed) \
+ * @param ctx Optional context (borrowed, may be NULL) \
+ * \
+ * @pre DEFINE_SLICE(type) has been called \
+ * \
+ * Ownership: \
+ * - sv: borrowed (read-only) \
+ * - cmp: borrowed (used during call only) \
+ * - ctx: borrowed (passed to cmp) \
+ * \
+ * Performance: O(n/2) time, O(1) space \
+ * \
+ * Thread-safety: Safe to call concurrently if array not being modified \
+ */ \
+static inline bool algo_is_palindrome_slice_##type( \
+    borrowed slice_##type sv, \
+    borrowed algo_cmp_fn  cmp, \
+    borrowed void*        ctx) \
+{ \
+    return algo_is_palindrome(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
+}
 
 #endif /* CANON_ALGO_REVERSE_H */
