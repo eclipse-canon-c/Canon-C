@@ -104,6 +104,7 @@ Abstractions must clarify behavior, not conceal it.
 - `stack.h` — LIFO stack wrapper over vec (fixed capacity); includes `DECLARE_STACK`
 - `range.h` — explicit integer range generator (ascending/descending, isize-based, overflow-safe)
 - `stringbuf.h` — incremental string builder (arena- or buffer-backed, fixed capacity)
+- `bitset.h` — fixed-capacity bitset with O(1) set/clear/test and O(n/64) bulk ops
 
 ### data/convenience/
 - `dynvec.h` — auto-growing typed vector (hidden heap allocation, 2x growth)
