@@ -7,7 +7,7 @@
 #include "core/memory.h"
 #include "core/slice.h"
 #include "core/ownership.h"
-#include "algo/sort.h"  // For algo_cmp_fn typedef
+#include "core/primitives/compare.h"   // provides algo_cmp_fn
 
 /**
  * @file algo/reverse.h
@@ -34,21 +34,20 @@
  * Algorithm explanation:
  * ────────────────────────────────────────────────────────────────────────────
  * Two-pointer technique:
- *   1. Start with left pointer at array[0], right pointer at array[n-1]
- *   2. Swap elements at left and right
- *   3. Move left forward, right backward
- *   4. Repeat until left >= right (pointers meet in middle)
+ * 1. Start with left pointer at array[0], right pointer at array[n-1]
+ * 2. Swap elements at left and right
+ * 3. Move left forward, right backward
+ * 4. Repeat until left >= right (pointers meet in middle)
  *
  * Example: Reversing [1, 2, 3, 4, 5]
- *   Step 1: [1, 2, 3, 4, 5]  → swap array[0] ↔ array[4]
- *   Step 2: [5, 2, 3, 4, 1]  → swap array[1] ↔ array[3]
- *   Step 3: [5, 4, 3, 2, 1]  → left == right (done)
+ * Step 1: [1, 2, 3, 4, 5] → swap array[0] ↔ array[4]
+ * Step 2: [5, 2, 3, 4, 1] → swap array[1] ↔ array[3]
+ * Step 3: [5, 4, 3, 2, 1] → left == right (done)
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * algo/ headers may include core/, semantics/, and data/ only.
  * reverse.h uses core/memory.h for mem_copy instead of memcpy directly.
- * reverse.h depends on algo/sort.h only for the algo_cmp_fn typedef.
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
@@ -108,20 +107,19 @@
  *
  * // Palindrome check
  * int arr[] = {1, 2, 3, 2, 1};
- * bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), cmp_int, NULL);
+ * bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), algo_cmp_int, NULL);
  * // is_pal = true
  * ```
  *
- * @sa algo/sort.h           — companion algorithm, provides algo_cmp_fn
- * @sa core/memory.h          — mem_copy used for element swapping
- * @sa core/slice.h           — slice_##type used by DEFINE_ALGO_REVERSE
- * @sa core/ownership.h       — borrowed macro for non-owning parameters
+ * @sa core/primitives/compare.h — algo_cmp_fn for palindrome check
+ * @sa core/memory.h — mem_copy used for element swapping
+ * @sa core/slice.h — slice_##type used by DEFINE_ALGO_REVERSE
+ * @sa core/ownership.h — borrowed macro for non-owning parameters
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
    Swap buffer size limit
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Maximum element size supported by algo_reverse
  *
@@ -136,7 +134,6 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Public interface
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Reverses array of arbitrary elements in-place
  *
@@ -144,17 +141,17 @@
  * all element sizes, from single bytes to large structs.
  *
  * Algorithm:
- *   - Maintains left and right pointers
- *   - Swaps elements at left and right positions
- *   - Moves pointers toward center
- *   - Stops when pointers meet (left >= right)
- *   - Performs exactly ⌊n/2⌋ swaps
+ * - Maintains left and right pointers
+ * - Swaps elements at left and right positions
+ * - Moves pointers toward center
+ * - Stops when pointers meet (left >= right)
+ * - Performs exactly ⌊n/2⌋ swaps
  *
- * @param array      Pointer to the first element (borrowed — modified in place)
- * @param len        Number of elements in the array
- * @param elem_size  Size of each element in bytes (> 0)
+ * @param array Pointer to the first element (borrowed — modified in place)
+ * @param len Number of elements in the array
+ * @param elem_size Size of each element in bytes (> 0)
  *
- * @return           void
+ * @return void
  *
  * @pre elem_size > 0
  * @pre elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE
@@ -169,7 +166,7 @@
  * - array: borrowed (modified in place, elements reordered)
  *
  * Performance:
- * - Time:  O(n) - exactly ⌊n/2⌋ swaps
+ * - Time: O(n) - exactly ⌊n/2⌋ swaps
  * - Space: O(1) - fixed-size temporary buffer on stack
  *
  * Thread-safety:
@@ -179,44 +176,37 @@
  * Does nothing if:
  * - array is NULL
  * - len < 2 (0 or 1 elements already "reversed")
- *
- * Example:
- * ```c
- * int arr[] = {1, 2, 3, 4, 5};
- * algo_reverse(arr, 5, sizeof(int));
- * // arr is now {5, 4, 3, 2, 1}
- * ```
  */
 static inline void algo_reverse(
     borrowed void* array,
-    usize          len,
-    usize          elem_size)
+    usize len,
+    usize elem_size)
 {
     require_msg(elem_size > 0, "algo_reverse: elem_size must be > 0");
     require_msg(elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE,
                 "algo_reverse: elem_size exceeds ALGO_REVERSE_SWAP_BUF_SIZE");
-    
+   
     /* Handle NULL or trivial cases */
     if (!array || len < 2) {
         return;
     }
-    
+   
     u8* bytes = (u8*)array;
-    u8* left  = bytes;
+    u8* left = bytes;
     u8* right = bytes + (len - 1) * elem_size;
-    
+   
     /* Temporary buffer for swapping */
     u8 temp[ALGO_REVERSE_SWAP_BUF_SIZE];
-    
+   
     /* Two-pointer technique: swap from ends toward middle */
     while (left < right) {
         /* Three-way swap using temp buffer */
-        mem_copy(temp,  left,  elem_size);
-        mem_copy(left,  right, elem_size);
-        mem_copy(right, temp,  elem_size);
-        
+        mem_copy(temp, left, elem_size);
+        mem_copy(left, right, elem_size);
+        mem_copy(right, temp, elem_size);
+       
         /* Move pointers toward center */
-        left  += elem_size;
+        left += elem_size;
         right -= elem_size;
     }
 }
@@ -227,13 +217,13 @@ static inline void algo_reverse(
  * Non-destructive check - array is not modified.
  * Requires a comparison function to check element equality.
  *
- * @param array      Pointer to first element (borrowed, read-only)
- * @param len        Number of elements
- * @param elem_size  Size of each element in bytes (> 0)
- * @param cmp        Comparison function (borrowed — returns 0 if elements equal)
- * @param ctx        Optional context (borrowed, may be NULL)
+ * @param array Pointer to first element (borrowed, read-only)
+ * @param len Number of elements
+ * @param elem_size Size of each element in bytes (> 0)
+ * @param cmp Comparison function (borrowed — returns 0 if elements equal)
+ * @param ctx Optional context (borrowed, may be NULL)
  *
- * @return           true if palindrome, false otherwise
+ * @return true if palindrome, false otherwise
  *
  * @pre elem_size > 0
  * @pre If array != NULL, array points to valid array of len elements
@@ -244,50 +234,43 @@ static inline void algo_reverse(
  * - ctx: borrowed (passed through to cmp)
  *
  * Performance:
- * - Time:  O(n/2) comparisons
+ * - Time: O(n/2) comparisons
  * - Space: O(1)
  *
  * Thread-safety:
  * - Safe to call concurrently as long as array is not being modified
- *
- * Example:
- * ```c
- * int arr[] = {1, 2, 3, 2, 1};
- * bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), cmp_int, NULL);
- * // is_pal = true
- * ```
  */
 static inline bool algo_is_palindrome(
     borrowed const void* array,
-    usize                len,
-    usize                elem_size,
+    usize len,
+    usize elem_size,
     borrowed algo_cmp_fn cmp,
-    borrowed void*       ctx)
+    borrowed void* ctx)
 {
     require_msg(elem_size > 0, "algo_is_palindrome: elem_size must be > 0");
     require_msg(cmp != NULL, "algo_is_palindrome: cmp function cannot be NULL");
-    
+   
     if (!array || len < 2) {
-        return true;  /* Empty or single-element arrays are palindromes */
+        return true; /* Empty or single-element arrays are palindromes */
     }
-    
+   
     const u8* bytes = (const u8*)array;
     usize left_idx = 0;
     usize right_idx = len - 1;
-    
+   
     while (left_idx < right_idx) {
         const void* left_elem = bytes + left_idx * elem_size;
         const void* right_elem = bytes + right_idx * elem_size;
-        
+       
         if (cmp(left_elem, right_elem, ctx) != 0) {
-            return false;  /* Mismatch found */
+            return false; /* Mismatch found */
         }
-        
+       
         ++left_idx;
         --right_idx;
     }
-    
-    return true;  /* All pairs matched */
+   
+    return true; /* All pairs matched */
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -296,9 +279,7 @@ static inline bool algo_is_palindrome(
    GNU extension versions (statement expressions) provide better ergonomics.
    C99 fallback versions available when CANON_NO_GNU_EXTENSIONS is defined.
    ════════════════════════════════════════════════════════════════════════════ */
-
 #ifndef CANON_NO_GNU_EXTENSIONS
-
 /**
  * @def ALGO_REVERSE_TYPED(array, len, Type)
  * @brief Type-safe in-place reverse for known element type (GNU version)
@@ -307,23 +288,6 @@ static inline bool algo_is_palindrome(
  * Disable with: #define CANON_NO_GNU_EXTENSIONS
  *
  * Provides compile-time type safety by automatically calculating sizeof(Type).
- *
- * @param array Array of Type (borrowed — modified in-place)
- * @param len   Number of elements
- * @param Type  Element type
- *
- * @note array is borrowed — array is modified in place but not freed
- *
- * Performance:
- * - Time:  O(n)
- * - Space: O(1)
- *
- * Example:
- * ```c
- * int data[] = {1, 2, 3, 4, 5};
- * ALGO_REVERSE_TYPED(data, 5, int);
- * // data is now {5, 4, 3, 2, 1}
- * ```
  */
 #define ALGO_REVERSE_TYPED(array, len, Type) \
     do { \
@@ -335,25 +299,6 @@ static inline bool algo_is_palindrome(
 /**
  * @def ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx)
  * @brief Type-safe palindrome check — returns bool (GNU version)
- *
- * @param array Array to check (borrowed, read-only)
- * @param len   Number of elements
- * @param Type  Element type
- * @param cmp   algo_cmp_fn comparator (borrowed)
- * @param ctx   Optional context (borrowed, may be NULL)
- *
- * @return true if palindrome, false otherwise
- *
- * Performance:
- * - Time:  O(n/2)
- * - Space: O(1)
- *
- * Example:
- * ```c
- * int arr[] = {1, 2, 3, 2, 1};
- * bool is_pal = ALGO_IS_PALINDROME_TYPED(arr, 5, int, cmp_int, NULL);
- * // is_pal = true
- * ```
  */
 #define ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx) \
     ({ \
@@ -364,11 +309,8 @@ static inline bool algo_is_palindrome(
         } \
         _result; \
     })
-
 #else /* CANON_NO_GNU_EXTENSIONS */
-
 /* C99 fallback versions */
-
 #define ALGO_REVERSE_TYPED(array, len, Type) \
     do { \
         if ((array) && (len) >= 2) { \
@@ -379,7 +321,6 @@ static inline bool algo_is_palindrome(
 #define ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx) \
     ((array) && (len) >= 2 ? algo_is_palindrome((array), (len), sizeof(Type), \
                                                 (algo_cmp_fn)(cmp), (ctx)) : true)
-
 #endif /* CANON_NO_GNU_EXTENSIONS */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -387,39 +328,14 @@ static inline bool algo_is_palindrome(
    ════════════════════════════════════════════════════════════════════════════
    Requires DEFINE_SLICE(type).
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Generates reverse/palindrome functions that accept slice_##type directly
  *
  * Prerequisites: DEFINE_SLICE(type) must have been called.
  *
  * Generated functions:
- * - algo_reverse_slice_##type(sv)                → void
+ * - algo_reverse_slice_##type(sv) → void
  * - algo_is_palindrome_slice_##type(sv, cmp, ctx) → bool
- *
- * @param type Element type — must match a prior DEFINE_SLICE(type) call
- *
- * Ownership:
- * - sv: borrowed (slice is non-owning view, underlying array is modified by reverse)
- * - cmp: borrowed (function pointer used during call only)
- * - ctx: borrowed (passed through to cmp)
- *
- * Example:
- * ```c
- * DEFINE_SLICE(int)
- * DEFINE_ALGO_REVERSE(int)
- *
- * int arr[] = {1, 2, 3, 4, 5};
- * slice_int sv = slice_int_from(arr, 5);
- *
- * algo_reverse_slice_int(sv);
- * // arr is now {5, 4, 3, 2, 1}
- *
- * int pal[] = {1, 2, 3, 2, 1};
- * slice_int sv2 = slice_int_from(pal, 5);
- * bool is_pal = algo_is_palindrome_slice_int(sv2, cmp_int, NULL);
- * // is_pal = true
- * ```
  */
 #define DEFINE_ALGO_REVERSE(type) \
 \
@@ -427,16 +343,6 @@ static inline bool algo_is_palindrome(
  * @brief Reverses the elements of a slice_##type in-place \
  * \
  * @param sv Slice (borrowed non-owning view — reverses underlying array) \
- * \
- * @pre DEFINE_SLICE(type) has been called \
- * @pre sv.ptr points to valid array if non-NULL \
- * \
- * Ownership: \
- * - sv: borrowed (underlying array modified in place) \
- * \
- * Performance: O(n) time, O(1) space \
- * \
- * Thread-safety: Safe to call on different slices concurrently \
  */ \
 static inline void algo_reverse_slice_##type( \
     borrowed slice_##type sv) \
@@ -448,25 +354,14 @@ static inline void algo_reverse_slice_##type( \
 /** \
  * @brief Returns true if slice_##type is a palindrome \
  * \
- * @param sv  Slice to check (borrowed, read-only) \
+ * @param sv Slice to check (borrowed, read-only) \
  * @param cmp Comparator (borrowed) \
  * @param ctx Optional context (borrowed, may be NULL) \
- * \
- * @pre DEFINE_SLICE(type) has been called \
- * \
- * Ownership: \
- * - sv: borrowed (read-only) \
- * - cmp: borrowed (used during call only) \
- * - ctx: borrowed (passed to cmp) \
- * \
- * Performance: O(n/2) time, O(1) space \
- * \
- * Thread-safety: Safe to call concurrently if array not being modified \
  */ \
 static inline bool algo_is_palindrome_slice_##type( \
     borrowed slice_##type sv, \
-    borrowed algo_cmp_fn  cmp, \
-    borrowed void*        ctx) \
+    borrowed algo_cmp_fn cmp, \
+    borrowed void* ctx) \
 { \
     return algo_is_palindrome(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
