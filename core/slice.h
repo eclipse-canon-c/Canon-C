@@ -41,7 +41,7 @@
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
- * slice.h lives in core/ and may only include from core/primitives/ and core/memory.h.
+ * slice.h lives in core/ and may only include from core/
  * No data/, semantics/, or util/ headers may be included here.
  *
  * Portability:
