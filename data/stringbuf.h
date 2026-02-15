@@ -45,6 +45,11 @@
  * - Uses <stdarg.h>, <stdio.h>, <string.h> — no Canon-C replacements exist
  * - No platform-specific code
  *
+ * - <stdarg.h>: va_list/va_start/va_end are compiler ABI intrinsics — not a library concern
+ * - <stdio.h>:  vsnprintf is the only way to implement printf-style formatting — no Canon-C substitute
+ * - <string.h>: strlen required by stringbuf_append(const char*) — stringbuf_append_str(str_t)
+ *               avoids it entirely if you prefer length-explicit call sites
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - append:            O(n) where n = appended string length
