@@ -1,5 +1,6 @@
 #ifndef CANON_ALGO_UNIQUE_H
 #define CANON_ALGO_UNIQUE_H
+
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
