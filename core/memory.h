@@ -2,10 +2,11 @@
 #define CANON_CORE_MEMORY_H
 
 #include <string.h>                     // memcpy, memmove, memset, memcmp
+#include <stdint.h>                     // uintptr_t (used in mem_get_alignment)
 
-#include "core/primitives/types.h"      // u8, usize, bool, (and transitively uintptr_t via <stdint.h>)
+#include "core/primitives/types.h"      // u8, usize, bool
 #include "core/primitives/limits.h"     // CANON_USIZE_MAX, CANON_DEFAULT_ALIGN
-#include "core/primitives/contract.h"   // require_msg
+#include "core/primitives/contract.h"   // require_msg, ensure_msg
 #include "core/primitives/ptr.h"        // align_up, ptr_is_aligned
 #include "core/primitives/bits.h"       // is_power_of_two()
 #include "core/slice.h"                 // bytes_t, cbytes_t
@@ -60,13 +61,11 @@
  * and core/slice.h. No other core module may be included here.
  *
  * @sa core/primitives/ptr.h — pointer arithmetic, alignment, ptr_align_up
- * @sa core/slice.h          — bytes_t / cbytes_t used by _bytes variants here
+ * @sa core/slice.h — bytes_t / cbytes_t used by _bytes variants here
  */
-
 /* ════════════════════════════════════════════════════════════════════════════
    mem_swap stack buffer limit
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Maximum size (bytes) supported by mem_swap
  *
@@ -81,19 +80,19 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Alignment utilities (delegate to ptr.h)
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
- * @brief Rounds size up to the next multiple of max_align_t (natural alignment)
+ * @brief Rounds size up to the next multiple of natural alignment
+ *
+ * Uses CANON_DEFAULT_ALIGN (platform's natural alignment constant).
  *
  * @param size Bytes to align (0 → returns 0)
- * @return Smallest multiple of sizeof(max_align_t) >= size,
+ * @return Smallest multiple of CANON_DEFAULT_ALIGN >= size,
  *         or CANON_USIZE_MAX if overflow would occur
  *
- * @note Delegates to align_up() from core/primitives/ptr.h.
  * Performance: O(1)
  */
 static inline usize mem_align(usize size) {
-    const usize natural = sizeof(max_align_t);
+    const usize natural = CANON_DEFAULT_ALIGN;
     if (size == 0) return 0;
     if (size > CANON_USIZE_MAX - (natural - 1u)) return CANON_USIZE_MAX;
     return align_up(size, natural);
@@ -109,17 +108,16 @@ static inline usize mem_align(usize size) {
  *
  * @pre alignment > 0 && is_power_of_two(alignment)
  *
- * @note Delegates to align_up() from core/primitives/ptr.h.
  * Performance: O(1)
  */
 static inline usize mem_align_to(usize size, usize alignment) {
-    require_msg(alignment > 0,
-        "mem_align_to: alignment must be > 0");
-    require_msg(is_power_of_two(alignment),
-        "mem_align_to: alignment must be a power of 2");
+    require_msg(alignment > 0, "mem_align_to: alignment must be > 0");
+    require_msg(is_power_of_two(alignment), "mem_align_to: alignment must be a power of 2");
+
     if (!is_power_of_two(alignment)) return CANON_USIZE_MAX;
     if (size == 0) return 0;
     if (size > CANON_USIZE_MAX - (alignment - 1u)) return CANON_USIZE_MAX;
+
     return align_up(size, alignment);
 }
 
@@ -129,14 +127,11 @@ static inline usize mem_align_to(usize size, usize alignment) {
  * @param ptr       Pointer to test (NULL → false)
  * @param alignment Power-of-2 alignment (> 0)
  *
- * @note Delegates to ptr_is_aligned() from core/primitives/ptr.h.
  * Performance: O(1)
  */
 static inline bool mem_is_aligned(const void* ptr, usize alignment) {
-    require_msg(alignment > 0,
-        "mem_is_aligned: alignment must be > 0");
-    require_msg(is_power_of_two(alignment),
-        "mem_is_aligned: alignment must be a power of 2");
+    require_msg(alignment > 0, "mem_is_aligned: alignment must be > 0");
+    require_msg(is_power_of_two(alignment), "mem_is_aligned: alignment must be a power of 2");
     return ptr_is_aligned(ptr, alignment);
 }
 
@@ -158,7 +153,6 @@ static inline usize mem_get_alignment(const void* ptr) {
 /**
  * @brief Returns true if n is a power of two and > 0
  *
- * @note Delegates to is_power_of_two() from core/primitives/ptr.h.
  * Performance: O(1)
  */
 static inline bool mem_is_power_of_two(usize n) {
@@ -168,26 +162,20 @@ static inline bool mem_is_power_of_two(usize n) {
 /* ════════════════════════════════════════════════════════════════════════════
    Safe memory operations — raw pointer variants
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Copies non-overlapping memory regions (safe memcpy wrapper)
  *
  * @pre dest and src must not overlap
  * @note For overlapping regions use mem_move() instead.
- *
- * Performance: O(n)
  */
 static inline void mem_copy(void* restrict dest, const void* restrict src, usize size) {
     if (!dest || !src || size == 0) return;
-    ensure_msg(dest != src,
-        "mem_copy: dest == src — use mem_move for overlapping regions");
+    ensure_msg(dest != src, "mem_copy: dest == src — use mem_move for overlapping regions");
     memcpy(dest, src, size);
 }
 
 /**
  * @brief Moves memory, correctly handling overlapping regions
- *
- * Performance: O(n)
  */
 static inline void mem_move(void* dest, const void* src, usize size) {
     if (!dest || !src || size == 0) return;
@@ -196,8 +184,6 @@ static inline void mem_move(void* dest, const void* src, usize size) {
 
 /**
  * @brief Zero-fills a memory region
- *
- * Performance: O(n)
  */
 static inline void mem_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
@@ -208,8 +194,6 @@ static inline void mem_zero(void* ptr, usize size) {
  * @brief Securely zero-fills a memory region (prevents compiler optimization)
  *
  * Uses memset_s when available (C11 Annex K), otherwise a volatile write loop.
- *
- * Performance: O(n)
  */
 static inline void mem_secure_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
@@ -224,8 +208,6 @@ static inline void mem_secure_zero(void* ptr, usize size) {
 
 /**
  * @brief Fills a memory region with a repeated byte value
- *
- * Performance: O(n)
  */
 static inline void mem_set(void* ptr, int value, usize size) {
     if (!ptr || size == 0) return;
@@ -237,8 +219,6 @@ static inline void mem_set(void* ptr, int value, usize size) {
  *
  * @note NULL or size == 0 → returns 0
  * @note Not constant-time — do NOT use for cryptographic secrets
- *
- * Performance: O(n)
  */
 static inline int mem_compare(const void* a, const void* b, usize size) {
     if (!a || !b || size == 0) return 0;
@@ -249,8 +229,6 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
  * @brief Returns true if two memory regions are byte-for-byte identical
  *
  * @note Both NULL → true. size == 0 → true.
- *
- * Performance: O(n)
  */
 static inline bool mem_equal(const void* a, const void* b, usize size) {
     if (!a || !b) return a == b;
@@ -260,8 +238,6 @@ static inline bool mem_equal(const void* a, const void* b, usize size) {
 
 /**
  * @brief Returns true if every byte in a region equals value
- *
- * Performance: O(n)
  */
 static inline bool mem_is_all(const void* ptr, int value, usize size) {
     if (!ptr || size == 0) return true;
@@ -275,8 +251,6 @@ static inline bool mem_is_all(const void* ptr, int value, usize size) {
 
 /**
  * @brief Returns true if every byte in a region is zero
- *
- * Performance: O(n)
  */
 static inline bool mem_is_zero(const void* ptr, usize size) {
     return mem_is_all(ptr, 0, size);
@@ -287,13 +261,12 @@ static inline bool mem_is_zero(const void* ptr, usize size) {
  *
  * @pre size <= CANON_MEM_SWAP_MAX
  * @pre a and b do not overlap
- *
- * Performance: O(n)
  */
 static inline void mem_swap(void* a, void* b, usize size) {
     if (!a || !b || size == 0) return;
     require_msg(size <= CANON_MEM_SWAP_MAX,
-        "mem_swap: size exceeds CANON_MEM_SWAP_MAX — use caller-managed scratch buffer");
+                "mem_swap: size exceeds CANON_MEM_SWAP_MAX — use caller-managed scratch buffer");
+
     u8 tmp[CANON_MEM_SWAP_MAX];
     mem_copy(tmp, a, size);
     mem_copy(a, b, size);
@@ -303,19 +276,15 @@ static inline void mem_swap(void* a, void* b, usize size) {
 /* ════════════════════════════════════════════════════════════════════════════
    bytes_t / cbytes_t variants — slice.h integration
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Copies src bytes into dest (bounds-checked via view lengths)
  *
  * @pre dest.len >= src.len
  * @return Number of bytes copied, or 0 on failure
- *
- * Performance: O(n)
  */
 static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || src.len == 0) return 0;
-    require_msg(dest.len >= src.len,
-        "mem_copy_bytes: dest is smaller than src");
+    require_msg(dest.len >= src.len, "mem_copy_bytes: dest is smaller than src");
     if (dest.len < src.len) return 0;
     memcpy(dest.ptr, src.ptr, src.len);
     return src.len;
@@ -326,13 +295,10 @@ static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
  *
  * @pre dest.len >= src.len
  * @return Number of bytes moved, or 0 on failure
- *
- * Performance: O(n)
  */
 static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || src.len == 0) return 0;
-    require_msg(dest.len >= src.len,
-        "mem_move_bytes: dest is smaller than src");
+    require_msg(dest.len >= src.len, "mem_move_bytes: dest is smaller than src");
     if (dest.len < src.len) return 0;
     memmove(dest.ptr, src.ptr, src.len);
     return src.len;
@@ -340,8 +306,6 @@ static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
 
 /**
  * @brief Zero-fills an entire bytes_t region
- *
- * Performance: O(n)
  */
 static inline void mem_zero_bytes(bytes_t b) {
     if (!b.ptr || b.len == 0) return;
@@ -350,8 +314,6 @@ static inline void mem_zero_bytes(bytes_t b) {
 
 /**
  * @brief Fills a bytes_t region with a repeated byte value
- *
- * Performance: O(n)
  */
 static inline void mem_set_bytes(bytes_t b, int value) {
     if (!b.ptr || b.len == 0) return;
@@ -360,8 +322,6 @@ static inline void mem_set_bytes(bytes_t b, int value) {
 
 /**
  * @brief Returns true if two cbytes_t regions are byte-for-byte identical
- *
- * Performance: O(n)
  */
 static inline bool mem_equal_bytes(cbytes_t a, cbytes_t b) {
     if (a.len != b.len) return false;
@@ -372,8 +332,6 @@ static inline bool mem_equal_bytes(cbytes_t a, cbytes_t b) {
 
 /**
  * @brief Returns true if every byte in a cbytes_t region is zero
- *
- * Performance: O(n)
  */
 static inline bool mem_is_zero_bytes(cbytes_t b) {
     return mem_is_all(b.ptr, 0, b.len);
@@ -381,8 +339,6 @@ static inline bool mem_is_zero_bytes(cbytes_t b) {
 
 /**
  * @brief Securely zero-fills a bytes_t region (prevents compiler optimization)
- *
- * Performance: O(n)
  */
 static inline void mem_secure_zero_bytes(bytes_t b) {
     mem_secure_zero(b.ptr, b.len);
@@ -391,23 +347,22 @@ static inline void mem_secure_zero_bytes(bytes_t b) {
 /* ════════════════════════════════════════════════════════════════════════════
    Type-safe convenience macros
    ════════════════════════════════════════════════════════════════════════════ */
-
 /** @brief Zero-initializes a single object */
-#define mem_zero_type(ptr)              mem_zero((ptr), sizeof(*(ptr)))
+#define mem_zero_type(ptr) mem_zero((ptr), sizeof(*(ptr)))
 
 /** @brief Securely zero-initializes a single object (crypto-sensitive) */
-#define mem_secure_zero_type(ptr)       mem_secure_zero((ptr), sizeof(*(ptr)))
+#define mem_secure_zero_type(ptr) mem_secure_zero((ptr), sizeof(*(ptr)))
 
 /** @brief Zero-initializes an entire fixed-size array */
-#define mem_zero_array(array)           mem_zero((array), sizeof(array))
+#define mem_zero_array(array) mem_zero((array), sizeof(array))
 
 /** @brief Copies one object to another of the same type */
-#define mem_copy_type(dest, src)        mem_copy((dest), (src), sizeof(*(dest)))
+#define mem_copy_type(dest, src) mem_copy((dest), (src), sizeof(*(dest)))
 
 /** @brief Compares two objects of the same type */
-#define mem_compare_type(a, b)          mem_compare((a), (b), sizeof(*(a)))
+#define mem_compare_type(a, b) mem_compare((a), (b), sizeof(*(a)))
 
 /** @brief Returns true if two objects of the same type are byte-equal */
-#define mem_equal_type(a, b)            mem_equal((a), (b), sizeof(*(a)))
+#define mem_equal_type(a, b) mem_equal((a), (b), sizeof(*(a)))
 
 #endif /* CANON_CORE_MEMORY_H */
