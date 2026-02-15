@@ -165,7 +165,7 @@ Use core for production, embedded, and real-time; use convenience for prototypin
 and `mem_copy()`/`mem_move()` instead of `memcpy()`/`memmove()`.
 
 As a result, `<stddef.h>`, `<stdbool.h>`, and `<assert.h>` are never included by any Canon-C module.
-The only exceptions are `<stdarg.h>`, `<stdio.h>`, and `<string.h>` in `data/stringbuf.h`,
+The only exceptions are combinations of `<stdarg.h>`, `<stdio.h>`, and `<string.h>` in `data/stringbuf.h` and `priority_queue.h`,
 where no Canon-C substitute exists at the `data/` layer:
 
 `va_list` is a compiler ABI intrinsic; 
