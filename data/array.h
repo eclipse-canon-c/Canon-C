@@ -7,7 +7,7 @@
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/slice.h"
-#include "semantics/option.h"
+#include "semantics/option/option.h"
 
 /**
  * @file data/array.h
