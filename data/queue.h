@@ -3,9 +3,9 @@
 
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
-#include "semantics/result.h"
+#include "semantics/result/result.h"
 #include "semantics/error.h"
-#include "semantics/option.h"
+#include "semantics/option/option.h"
 #include "data/deque/deque.h"
 
 /**
