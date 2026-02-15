@@ -6,7 +6,7 @@
 #include "core/primitives/ptr.h"
 #include "core/slice.h"
 #include "core/ownership.h"
-#include "semantics/option.h"
+#include "semantics/option/option.h"
 #include "core/primitives/compare.h"   // provides algo_pred_fn
 
 /**
