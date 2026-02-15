@@ -35,7 +35,7 @@
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
- * data/priority_queue.h is data/. It may include core/ and algo/.
+ * data/priority_queue.h is data/.
  * No other data/ headers may be included here.
  *
  * Thread-safety:
