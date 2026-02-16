@@ -1,14 +1,12 @@
 #ifndef CANON_DATA_SMALLVEC_H
 #define CANON_DATA_SMALLVEC_H
 
-#include <string.h>
-#include <stdlib.h>
-
-#include "core/primitives/types.h"
-#include "core/primitives/limits.h"
-#include "core/primitives/contract.h"
-#include "core/arena.h"
-#include "data/vec/vec.h"
+#include "core/primitives/types.h"       // usize, bool
+#include "core/primitives/limits.h"      // growth constants, max capacity
+#include "core/primitives/contract.h"    // require_msg, ensure_msg
+#include "core/memory.h"                 // mem_copy, mem_move
+#include "core/arena.h"                  // Arena*, arena_alloc_array
+#include "data/vec/vec.h"                // canon_vec_type, MANGLE_VEC_INIT
 
 /**
  * @file convenience/smallvec.h
@@ -47,21 +45,22 @@
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
- * - Uses <string.h> (memcpy, memmove), <stdlib.h> (malloc, free)
+ * - Uses Canon-C core modules only
+ * - No platform-specific code
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - push (inline):       O(1) — no allocation
- * - push (spill):        O(n) — single allocation + memcpy, at most once
- * - push (post-spill):   O(1) if cap not yet exhausted, false if full
- * - pop:                 O(1)
- * - insert / remove:     O(n) — memmove
- * - extend:              O(count) — memcpy, may trigger one spill
- * - get / first / last:  O(1)
- * - clear:               O(1)
- * - free:                O(1)
- * - struct size:         sizeof(type*) + 2*sizeof(usize) + sizeof(Arena*) +
- *                        sizeof(bool) + INLINE_CAP*sizeof(type)
+ * - push (inline): O(1) — no allocation
+ * - push (spill): O(n) — single allocation + mem_copy, at most once
+ * - push (post-spill): O(1) if cap not yet exhausted, false if full
+ * - pop: O(1)
+ * - insert / remove: O(n) — mem_move
+ * - extend: O(count) — mem_copy, may trigger one spill
+ * - get / first / last: O(1)
+ * - clear: O(1)
+ * - free: O(1)
+ * - struct size: sizeof(type*) + 2*sizeof(usize) + sizeof(Arena*) +
+ *   sizeof(bool) + INLINE_CAP*sizeof(type)
  *
  * Quick start:
  * ```c
@@ -76,7 +75,7 @@
  * // ... no allocation yet
  *
  * // After the 9th push: spills to heap automatically
- * smallvec_int_free(&v);  // REQUIRED if heap-spilled without arena
+ * smallvec_int_free(&v); // REQUIRED if heap-spilled without arena
  *
  * // Arena-backed spill — no free needed
  * smallvec_int a = smallvec_int_init_arena(&my_arena);
@@ -96,73 +95,34 @@
  * - You need full caller control over the backing buffer
  * - You need multi-stage growth or reuse across arena resets
  *
- * @sa data/vec/vec.h, data/convenience/dynvec.h
+ * @sa data/vec/vec.h — fixed-capacity, explicit-allocation alternative
+ * @sa data/convenience/dynvec.h — unlimited growth, always heap
  */
-
 /* ════════════════════════════════════════════════════════════════════════════
    Branch hint helpers
    ════════════════════════════════════════════════════════════════════════════ */
-
 #if defined(__GNUC__) || defined(__clang__)
-    #define SMALLVEC_LIKELY(x)   __builtin_expect(!!(x), 1)
+    #define SMALLVEC_LIKELY(x) __builtin_expect(!!(x), 1)
     #define SMALLVEC_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
-    #define SMALLVEC_LIKELY(x)   (x)
+    #define SMALLVEC_LIKELY(x) (x)
     #define SMALLVEC_UNLIKELY(x) (x)
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_SMALLVEC — instantiate a typed inline-first vector
    ════════════════════════════════════════════════════════════════════════════ */
-
 /**
  * @brief Instantiates a typed inline-first vector for element type `type`
  *
  * Requirements:
  * - INLINE_CAP > 0
- * - type must be trivially copyable (memcpy-safe)
+ * - type must be trivially copyable (mem_copy-safe)
  * - For pointer types, typedef first: typedef void* voidptr; DEFINE_SMALLVEC(voidptr, 8)
  *
- * Generated type:
- * - smallvec_##type
+ * Generated type: `smallvec_##type`
  *
- * Generated functions:
- *
- * Constructors:
- * - smallvec_##type##_init()                     → smallvec_##type (inline, no heap)
- * - smallvec_##type##_init_arena(arena)           → smallvec_##type (arena spill)
- *
- * Queries:
- * - smallvec_##type##_len(v)                      → usize
- * - smallvec_##type##_capacity(v)                 → usize
- * - smallvec_##type##_is_empty(v)                 → bool
- * - smallvec_##type##_using_inline(v)             → bool
- *
- * Element access:
- * - smallvec_##type##_get(v, i, out)              → bool (bounds-checked)
- * - smallvec_##type##_get_unchecked(v, i)         → type (debug-checked, fast path)
- * - smallvec_##type##_data(v)                     → type* (raw buffer pointer)
- * - smallvec_##type##_first(v)                    → type* (NULL if empty)
- * - smallvec_##type##_last(v)                     → type* (NULL if empty)
- *
- * Modification (may spill once):
- * - smallvec_##type##_push(v, val)                → bool
- * - smallvec_##type##_pop(v, out)                 → bool
- * - smallvec_##type##_insert(v, i, val)           → bool (O(n))
- * - smallvec_##type##_remove(v, i, out)           → bool (O(n))
- * - smallvec_##type##_clear(v)                    → void (O(1), no free)
- *
- * Bulk (may spill once):
- * - smallvec_##type##_extend(v, src, count)       → bool
- *
- * Memory:
- * - smallvec_##type##_free(v)                     → void
- *
- * Interop:
- * - smallvec_##type##_as_vec(v)                   → canon_vec_##type (zero-copy view)
- *
- * @param type       Element type — must be a valid C identifier
- * @param INLINE_CAP Number of elements to store inline (> 0)
+ * Generated functions: (see quick start for examples)
  */
 #define DEFINE_SMALLVEC(type, INLINE_CAP) \
 \
@@ -182,12 +142,12 @@
  * - No heap allocation unless/until a spill occurs \
  */ \
 typedef struct { \
-    type*  data;         /**< Active buffer (inline_buf or heap/arena) */ \
-    usize  len;          /**< Number of elements currently stored */ \
-    usize  cap;          /**< Capacity of active buffer in elements */ \
-    Arena* arena;        /**< Spill destination (NULL = malloc) */ \
-    bool   using_inline; /**< true if data == inline_buf */ \
-    type   inline_buf[INLINE_CAP]; /**< Inline storage — lives in the struct */ \
+    type* data;             /**< Active buffer (inline_buf or heap/arena) */ \
+    usize len;              /**< Number of elements currently stored */ \
+    usize cap;              /**< Capacity of active buffer in elements */ \
+    Arena* arena;           /**< Spill destination (NULL = malloc) */ \
+    bool using_inline;      /**< true if data == inline_buf */ \
+    type inline_buf[INLINE_CAP]; /**< Inline storage — lives in the struct */ \
 } smallvec_##type; \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
@@ -202,17 +162,15 @@ typedef struct { \
  * @post v.data == v.inline_buf, v.len == 0, v.cap == INLINE_CAP \
  * @post v.using_inline == true, v.arena == NULL \
  * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: sizeof(smallvec_##type) — no heap allocation \
+ * Performance: O(1), no heap allocation \
  */ \
 static inline smallvec_##type smallvec_##type##_init(void) { \
     smallvec_##type v; \
-    v.len          = 0; \
-    v.cap          = INLINE_CAP; \
-    v.arena        = NULL; \
+    v.len = 0; \
+    v.cap = INLINE_CAP; \
+    v.arena = NULL; \
     v.using_inline = true; \
-    v.data         = v.inline_buf; \
+    v.data = v.inline_buf; \
     return v; \
 } \
 \
@@ -228,9 +186,7 @@ static inline smallvec_##type smallvec_##type##_init(void) { \
  * \
  * @pre arena != NULL — checked via require_msg() \
  * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: sizeof(smallvec_##type) — no heap allocation \
+ * Performance: O(1), no heap allocation \
  */ \
 static inline smallvec_##type smallvec_##type##_init_arena(Arena* arena) { \
     require_msg(arena != NULL, "smallvec_" #type "_init_arena: arena cannot be NULL"); \
@@ -255,14 +211,12 @@ static inline smallvec_##type smallvec_##type##_init_arena(Arena* arena) { \
  * \
  * @note Internal use only — do not call directly. \
  * \
- * Performance: \
- * - Time:  O(len) — single allocation + memcpy \
- * - Space: Allocates max(cap*2, min_cap) * sizeof(type) bytes \
+ * Performance: O(len) — single allocation + mem_copy \
  */ \
 static inline bool smallvec_##type##_spill( \
     smallvec_##type* v, usize min_cap) { \
-    ensure_msg(v != NULL,          "smallvec_" #type "_spill: v cannot be NULL"); \
-    ensure_msg(v->using_inline,    "smallvec_" #type "_spill: not using inline buffer"); \
+    ensure_msg(v != NULL, "smallvec_" #type "_spill: v cannot be NULL"); \
+    ensure_msg(v->using_inline, "smallvec_" #type "_spill: not using inline buffer"); \
     if (!v || !v->using_inline) return false; \
     \
     usize new_cap = v->cap * 2; \
@@ -274,9 +228,9 @@ static inline bool smallvec_##type##_spill( \
     \
     if (!new_buf) return false; \
     \
-    memcpy(new_buf, v->inline_buf, v->len * sizeof(type)); \
-    v->data         = new_buf; \
-    v->cap          = new_cap; \
+    mem_copy(new_buf, v->inline_buf, v->len * sizeof(type)); \
+    v->data = new_buf; \
+    v->cap = new_cap; \
     v->using_inline = false; \
     return true; \
 } \
@@ -290,10 +244,6 @@ static inline bool smallvec_##type##_spill( \
  * \
  * @param v smallvec to query (NULL-safe) \
  * @return usize — 0 if v == NULL \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline usize smallvec_##type##_len(const smallvec_##type* v) { \
     return v ? v->len : 0; \
@@ -304,10 +254,6 @@ static inline usize smallvec_##type##_len(const smallvec_##type* v) { \
  * \
  * @param v smallvec to query (NULL-safe) \
  * @return usize — 0 if v == NULL \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline usize smallvec_##type##_capacity(const smallvec_##type* v) { \
     return v ? v->cap : 0; \
@@ -318,10 +264,6 @@ static inline usize smallvec_##type##_capacity(const smallvec_##type* v) { \
  * \
  * @param v smallvec to check (NULL-safe) \
  * @return true if empty or NULL \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline bool smallvec_##type##_is_empty(const smallvec_##type* v) { \
     return !v || v->len == 0; \
@@ -332,10 +274,6 @@ static inline bool smallvec_##type##_is_empty(const smallvec_##type* v) { \
  * \
  * @param v smallvec to check (NULL-safe) \
  * @return true if using_inline == true and v != NULL \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline bool smallvec_##type##_using_inline(const smallvec_##type* v) { \
     return v && v->using_inline; \
@@ -348,14 +286,10 @@ static inline bool smallvec_##type##_using_inline(const smallvec_##type* v) { \
 /** \
  * @brief Copies element at index i into *out (bounds-checked) \
  * \
- * @param v   smallvec to read from (NULL-safe) \
- * @param i   Index to read \
+ * @param v smallvec to read from (NULL-safe) \
+ * @param i Index to read \
  * @param out Pointer to store element value \
  * @return true on success, false if v == NULL, out == NULL, or i >= v->len \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline bool smallvec_##type##_get( \
     const smallvec_##type* v, usize i, type* out) { \
@@ -375,16 +309,12 @@ static inline bool smallvec_##type##_get( \
  * @pre i < v->len — caller must guarantee this \
  * \
  * @note Preconditions checked via ensure_msg() in debug builds only. \
- *       Undefined behavior in release builds if violated. \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
+ * Undefined behavior in release builds if violated. \
  */ \
 static inline type smallvec_##type##_get_unchecked( \
     const smallvec_##type* v, usize i) { \
-    ensure_msg(v != NULL,    "smallvec_" #type "_get_unchecked: v cannot be NULL"); \
-    ensure_msg(i < v->len,   "smallvec_" #type "_get_unchecked: index out of bounds"); \
+    ensure_msg(v != NULL, "smallvec_" #type "_get_unchecked: v cannot be NULL"); \
+    ensure_msg(i < v->len, "smallvec_" #type "_get_unchecked: index out of bounds"); \
     return v->data[i]; \
 } \
 \
@@ -393,10 +323,6 @@ static inline type smallvec_##type##_get_unchecked( \
  * \
  * @param v smallvec to query (NULL-safe) \
  * @return type* — NULL if v == NULL \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline type* smallvec_##type##_data(const smallvec_##type* v) { \
     return v ? v->data : NULL; \
@@ -406,10 +332,6 @@ static inline type* smallvec_##type##_data(const smallvec_##type* v) { \
  * @brief Returns pointer to first element, or NULL if empty \
  * \
  * @param v smallvec to query (NULL-safe) \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline type* smallvec_##type##_first(const smallvec_##type* v) { \
     return (v && v->len > 0) ? &v->data[0] : NULL; \
@@ -419,10 +341,6 @@ static inline type* smallvec_##type##_first(const smallvec_##type* v) { \
  * @brief Returns pointer to last element, or NULL if empty \
  * \
  * @param v smallvec to query (NULL-safe) \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline type* smallvec_##type##_last(const smallvec_##type* v) { \
     return (v && v->len > 0) ? &v->data[v->len - 1] : NULL; \
@@ -438,17 +356,12 @@ static inline type* smallvec_##type##_last(const smallvec_##type* v) { \
  * If still in inline storage and full: spills once to heap or arena. \
  * If already spilled and full: returns false (no second growth). \
  * \
- * @param v     smallvec to push into \
+ * @param v smallvec to push into \
  * @param value Element to append \
  * @return true on success, false on spill failure or v == NULL or post-spill full \
  * \
  * @post On true: element appended, v->len incremented by 1 \
  * @post On false: v is unchanged \
- * \
- * Performance: \
- * - Time:  O(1) common case (inline, not full) \
- * - Time:  O(n) on spill (at most once) \
- * - Space: At most one allocation \
  */ \
 static inline bool smallvec_##type##_push( \
     smallvec_##type* v, type value) { \
@@ -471,13 +384,9 @@ static inline bool smallvec_##type##_push( \
 /** \
  * @brief Removes and returns the last element \
  * \
- * @param v   smallvec to pop from (NULL-safe) \
+ * @param v smallvec to pop from (NULL-safe) \
  * @param out Pointer to store the removed element \
  * @return true on success, false if v == NULL, out == NULL, or v->len == 0 \
- * \
- * Performance: \
- * - Time:  O(1) — no shrinking \
- * - Space: O(1) \
  */ \
 static inline bool smallvec_##type##_pop( \
     smallvec_##type* v, type* out) { \
@@ -493,16 +402,12 @@ static inline bool smallvec_##type##_pop( \
 /** \
  * @brief Inserts element at index i, shifting elements right (may spill once) \
  * \
- * @param v     smallvec to insert into \
- * @param i     Insertion index (must be <= v->len) \
+ * @param v smallvec to insert into \
+ * @param i Insertion index (must be <= v->len) \
  * @param value Element to insert \
  * @return true on success, false on v == NULL, i > v->len, or spill failure \
  * \
  * @note Returns false if already spilled and full — no second growth. \
- * \
- * Performance: \
- * - Time:  O(n) — memmove + possible spill \
- * - Space: At most one allocation \
  */ \
 static inline bool smallvec_##type##_insert( \
     smallvec_##type* v, usize i, type value) { \
@@ -515,8 +420,8 @@ static inline bool smallvec_##type##_insert( \
     } \
     \
     if (i < v->len) { \
-        memmove(&v->data[i + 1], &v->data[i], \
-                (v->len - i) * sizeof(type)); \
+        mem_move(&v->data[i + 1], &v->data[i], \
+                 (v->len - i) * sizeof(type)); \
     } \
     v->data[i] = value; \
     v->len++; \
@@ -526,22 +431,18 @@ static inline bool smallvec_##type##_insert( \
 /** \
  * @brief Removes element at index i, shifting elements left \
  * \
- * @param v   smallvec to remove from (NULL-safe) \
- * @param i   Index to remove (must be < v->len) \
+ * @param v smallvec to remove from (NULL-safe) \
+ * @param i Index to remove (must be < v->len) \
  * @param out Pointer to store the removed element \
  * @return true on success, false if v == NULL, out == NULL, or i >= v->len \
- * \
- * Performance: \
- * - Time:  O(n) — memmove \
- * - Space: O(1) — no shrinking \
  */ \
 static inline bool smallvec_##type##_remove( \
     smallvec_##type* v, usize i, type* out) { \
     if (!v || !out || i >= v->len) return false; \
     *out = v->data[i]; \
     if (i < v->len - 1) { \
-        memmove(&v->data[i], &v->data[i + 1], \
-                (v->len - i - 1) * sizeof(type)); \
+        mem_move(&v->data[i], &v->data[i + 1], \
+                 (v->len - i - 1) * sizeof(type)); \
     } \
     v->len--; \
     return true; \
@@ -554,16 +455,12 @@ static inline bool smallvec_##type##_remove( \
 /** \
  * @brief Appends count elements from src array, spilling once if needed \
  * \
- * @param v     smallvec to extend \
- * @param src   Source array (must point to at least count elements) \
+ * @param v smallvec to extend \
+ * @param src Source array (must point to at least count elements) \
  * @param count Number of elements to append \
  * @return true on success, false on v == NULL, src == NULL, or spill failure \
  * \
  * @note Returns false if already spilled and insufficient remaining capacity. \
- * \
- * Performance: \
- * - Time:  O(count) — memcpy, plus possible O(n) spill \
- * - Space: At most one allocation \
  */ \
 static inline bool smallvec_##type##_extend( \
     smallvec_##type* v, const type* src, usize count) { \
@@ -576,7 +473,7 @@ static inline bool smallvec_##type##_extend( \
         } \
     } \
     \
-    memcpy(&v->data[v->len], src, count * sizeof(type)); \
+    mem_copy(&v->data[v->len], src, count * sizeof(type)); \
     v->len += count; \
     return true; \
 } \
@@ -592,10 +489,6 @@ static inline bool smallvec_##type##_extend( \
  * \
  * @post v->len == 0 \
  * @note Buffer is not zeroed. Post-spill heap buffer is not freed. \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) \
  */ \
 static inline void smallvec_##type##_clear(smallvec_##type* v) { \
     if (v) v->len = 0; \
@@ -609,12 +502,8 @@ static inline void smallvec_##type##_clear(smallvec_##type* v) { \
  * @post v is re-initialized to inline storage \
  * \
  * @note If the spill was into an arena, nothing is freed — arena_reset() \
- *       handles cleanup. free() is called only if using_inline == false \
- *       AND arena == NULL. \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: Frees spill buffer if heap-allocated \
+ * handles cleanup. free() is called only if using_inline == false \
+ * AND arena == NULL. \
  */ \
 static inline void smallvec_##type##_free(smallvec_##type* v) { \
     if (!v) return; \
@@ -640,11 +529,7 @@ static inline void smallvec_##type##_free(smallvec_##type* v) { \
  * @pre v != NULL — checked via require_msg() \
  * \
  * @note Mutating the returned vec's buffer also mutates v's buffer. \
- *       Do not call vec functions that reallocate (e.g. vec_alloc). \
- * \
- * Performance: \
- * - Time:  O(1) \
- * - Space: O(1) — no allocation \
+ * Do not call vec functions that reallocate (e.g. vec_alloc). \
  */ \
 static inline MANGLE_VEC_TYPE(type) smallvec_##type##_as_vec( \
     smallvec_##type* v) { \
