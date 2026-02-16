@@ -6,6 +6,7 @@
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
+#include "core/primitives/checked.h"
 #include "core/slice.h"
 #include "semantics/option/option.h"
 
@@ -60,7 +61,8 @@
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
- * - Uses <string.h> for memset (array_fill_bytes) and memcmp (array_equal)
+ * - Uses <string.h> for memset and memcmp
+ * - Uses checked_mul() from core/primitives/checked.h for overflow-safe size calculations
  * - No platform-specific code
  *
  * Thread-safety:
@@ -109,6 +111,7 @@
  *
  * @sa data/vec/vec.h    — runtime-capacity companion
  * @sa core/slice.h      — slice_##type used by array_as_slice
+ * @sa core/primitives/checked.h — checked_mul() for overflow-safe arithmetic
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -224,6 +227,7 @@ static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
  * \
  * If count < N, remaining elements are zeroed. \
  * If count > N, only the first N elements are copied. \
+ * Uses checked_mul() for overflow-safe byte size calculation. \
  * \
  * @param src   Source pointer (must point to at least min(count, N) elements) \
  * @param count Number of elements to copy from src \
@@ -241,7 +245,15 @@ static inline array_##type##_##N array_##type##_##N##_from_ptr( \
     memset(a.items, 0, sizeof(a.items)); \
     if (!src || count == 0) return a; \
     usize copy_n = (count < (usize)(N)) ? count : (usize)(N); \
-    memcpy(a.items, src, copy_n * sizeof(type)); \
+    \
+    /* Use checked_mul for overflow-safe byte size calculation */ \
+    usize byte_size; \
+    if (!checked_mul(copy_n, sizeof(type), &byte_size)) { \
+        /* Overflow detected — return zeroed array */ \
+        return a; \
+    } \
+    \
+    memcpy(a.items, src, byte_size); \
     return a; \
 } \
 \
@@ -263,10 +275,17 @@ static inline usize array_##type##_##N##_len(void) { \
 /** \
  * @brief Returns the total size in bytes (N * sizeof(type)) \
  * \
+ * Uses checked_mul() for overflow-safe calculation. \
+ * Returns CANON_USIZE_MAX on overflow. \
+ * \
  * Performance: O(1) \
  */ \
 static inline usize array_##type##_##N##_size_bytes(void) { \
-    return (usize)(N) * sizeof(type); \
+    usize result; \
+    if (!checked_mul((usize)(N), sizeof(type), &result)) { \
+        return CANON_USIZE_MAX; \
+    } \
+    return result; \
 } \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
@@ -472,6 +491,9 @@ static inline slice_##type array_##type##_##N##_as_slice_const( \
 /** \
  * @brief Returns a mutable bytes_t view over all N * sizeof(type) bytes \
  * \
+ * Uses checked_mul() for overflow-safe byte size calculation. \
+ * Returns empty bytes_t on overflow. \
+ * \
  * @param a Array to view (must not be NULL) \
  * @return bytes_t — non-owning byte view, valid while a is alive \
  * \
@@ -479,18 +501,29 @@ static inline slice_##type array_##type##_##N##_as_slice_const( \
  */ \
 static inline bytes_t array_##type##_##N##_as_bytes(array_##type##_##N* a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_as_bytes: a cannot be NULL"); \
-    return bytes_from(a->items, (usize)(N) * sizeof(type)); \
+    usize byte_size; \
+    if (!checked_mul((usize)(N), sizeof(type), &byte_size)) { \
+        return bytes_empty(); \
+    } \
+    return bytes_from(a->items, byte_size); \
 } \
 \
 /** \
  * @brief Returns a read-only cbytes_t view over all N * sizeof(type) bytes \
+ * \
+ * Uses checked_mul() for overflow-safe byte size calculation. \
+ * Returns empty cbytes_t on overflow. \
  * \
  * Performance: O(1) \
  */ \
 static inline cbytes_t array_##type##_##N##_as_cbytes( \
     const array_##type##_##N* a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_as_cbytes: a cannot be NULL"); \
-    return cbytes_from(a->items, (usize)(N) * sizeof(type)); \
+    usize byte_size; \
+    if (!checked_mul((usize)(N), sizeof(type), &byte_size)) { \
+        return cbytes_from(NULL, 0); \
+    } \
+    return cbytes_from(a->items, byte_size); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
