@@ -9,8 +9,6 @@
 #include "core/arena.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
-#include "semantics/option/option.h"
-#include <stdlib.h>
 
 /**
  * @file vec_impl.h
