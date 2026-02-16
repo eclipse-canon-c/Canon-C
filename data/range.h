@@ -4,6 +4,7 @@
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
+#include "core/primitives/checked.h"
 #include "semantics/option/option.h"
 
 /**
@@ -19,7 +20,7 @@
  * - Not an infinite generator — iteration count is always pre-calculable
  * - [start, end) semantics — start inclusive, end exclusive (Python/C++ style)
  * - step > 0: ascending; step < 0: descending; step == 0: normalized to +1
- * - Overflow-safe: advances saturate to end rather than wrapping
+ * - Overflow-safe: uses checked_add_isize() to detect and saturate on overflow
  * - Empty ranges are valid and safe (e.g. range_make(5, 3, 1))
  *
  * Portability:
@@ -72,6 +73,7 @@
  * ```
  *
  * @sa data/vec/vec_range.h — extend a vec with values from a range
+ * @sa core/primitives/checked.h — checked_add_isize() for overflow-safe arithmetic
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -273,12 +275,21 @@ static inline bool range_is_valid(const range* r) {
  */
 static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) return 0;
+    
     isize abs_step = r->step > 0 ? r->step : -r->step;
     isize diff     = r->step > 0 ? (r->end - r->current)
                                  : (r->current - r->end);
+    
     if (diff <= 0) return 0;
     if (diff > (isize)CANON_USIZE_MAX) return CANON_USIZE_MAX;
-    return (usize)((diff - 1) / abs_step + 1);
+    
+    /* Use checked arithmetic to avoid overflow in (diff - 1) */
+    isize adjusted_diff;
+    if (!checked_sub_isize(diff, 1, &adjusted_diff)) {
+        return CANON_USIZE_MAX; /* Overflow - too many elements */
+    }
+    
+    return (usize)((adjusted_diff) / abs_step + 1);
 }
 
 /**
@@ -348,7 +359,8 @@ static inline option_isize range_peek_option(const range* r) {
  * @pre r != NULL — checked via require_msg() (hard precondition)
  * @pre range_has_next(r) == true — checked via ensure_msg() (debug only)
  *
- * @post r->current is advanced by r->step (saturates to r->end on overflow)
+ * @post r->current is advanced by r->step using checked_add_isize()
+ * @post On overflow, saturates to r->end for safety
  * @note Returns 0 as a safety fallback in release builds if called on empty range
  *
  * ⚠️ WARNING: Always check range_has_next() before calling, or use RANGE_FOR.
@@ -364,22 +376,22 @@ static inline isize range_next(range* r) {
     if (!r || !range_has_next(r)) return 0;
 
     isize value = r->current;
+    isize next_value;
 
-    /* Overflow-safe advance — saturate to end rather than wrapping */
-    if (r->step > 0) {
-        if (r->current > CANON_ISIZE_MAX - r->step) {
-            r->current = r->end; /* saturate on overflow */
-        } else {
-            r->current += r->step;
-            if (r->current >= r->end) r->current = r->end;
+    /* Use checked arithmetic for overflow-safe advance */
+    if (checked_add_isize(r->current, r->step, &next_value)) {
+        /* No overflow - update normally */
+        r->current = next_value;
+        
+        /* Clamp to end if we've crossed the boundary */
+        if (r->step > 0 && r->current >= r->end) {
+            r->current = r->end;
+        } else if (r->step < 0 && r->current <= r->end) {
+            r->current = r->end;
         }
-    } else { /* step < 0 */
-        if (r->current < CANON_ISIZE_MIN - r->step) {
-            r->current = r->end; /* saturate on underflow */
-        } else {
-            r->current += r->step;
-            if (r->current <= r->end) r->current = r->end;
-        }
+    } else {
+        /* Overflow detected - saturate to end */
+        r->current = r->end;
     }
 
     return value;
