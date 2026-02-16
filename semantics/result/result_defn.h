@@ -10,7 +10,6 @@
 #  include "result_impl.h"
 #endif
 
-#include <stdbool.h>
 
 /**
  * @file result_defn.h
