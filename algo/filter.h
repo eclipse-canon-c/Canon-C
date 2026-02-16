@@ -8,7 +8,6 @@
 #include "core/slice.h"
 #include "core/ownership.h"
 #include "core/primitives/compare.h"   // provides algo_pred_fn
-#include "algo/any_all.h"              // (still needed if you use ALGO_ANY_TYPED etc. elsewhere, otherwise can be removed)
 
 /**
  * @file algo/filter.h
