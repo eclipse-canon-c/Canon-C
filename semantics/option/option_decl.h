@@ -10,8 +10,6 @@
 #  include "option_impl.h"
 #endif
 
-#include <stdbool.h>
-
 /**
  * @file option_decl.h
  * @brief Declaration macros for Option<T> type (separate compilation support)
