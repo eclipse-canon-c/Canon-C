@@ -49,7 +49,7 @@
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * region.h lives in core/ and may include core/primitives/ and core/arena.h only.
- * No data/, semantics/, ownership/, or util/ headers may be included here.
+ * No data/, semantics/, algo/, or util/ headers may be included here.
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
