@@ -10,7 +10,6 @@
 #  include "option_impl.h"
 #endif
 
-#include <stdbool.h>
 
 /**
  * @file option_defn.h
