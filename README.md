@@ -146,6 +146,7 @@ Abstractions must clarify behavior, not conceal it.
 - `str_split.h` — non-mutating string splitting (borrowed views)
 - `str_join.h` — safe string joining (buffer-based & allocating)
 - `str_view.h` — Minimal immutable borrowed string view (pointer + length)
+- `intern.h` — Minimal string interning — returns shared immutable str_view_t
 - `log.h` — minimal, explicit logging with Result-based error handling
 - `log_macros.h` — Ergonomic, safe logging macros layered on log.h
 - `file.h` — safe file I/O (read/write whole files, arena-backed preferred)
