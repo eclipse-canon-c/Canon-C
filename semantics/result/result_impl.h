@@ -2,7 +2,7 @@
 #ifndef CANON_RESULT_IMPL_H
 #define CANON_RESULT_IMPL_H
 
-#include <stdbool.h>
+#include "../../core/primitives/types.h"
 #include "../../core/primitives/contract.h"
 
 /**
