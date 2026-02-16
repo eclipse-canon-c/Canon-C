@@ -86,7 +86,7 @@ Abstractions must clarify behavior, not conceal it.
 - `ownership.h` — explicit ownership and borrowing annotations (owned, borrowed, moved, dropped, DEFINE_OWNED, CANON_DROP)
 
 ### data/
-- **`vec/`** — bounded dynamic vector (caller-owned buffer, fixed capacity) — modular 7-file architecture
+- **`vec/`** — Bounded typed vectors with explicit caller-owned buffers (caller-owned buffer, fixed capacity) — modular 7-file architecture
   - `vec.h` — user-facing API; header-only entry point
   - `vec_impl.h` — pure implementation logic (zero naming assumptions)
   - `vec_mangle.h` — name mangling conventions (individually overridable)
