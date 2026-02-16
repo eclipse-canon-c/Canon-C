@@ -1,13 +1,12 @@
 #ifndef CANON_DATA_PRIORITY_QUEUE_H
 #define CANON_DATA_PRIORITY_QUEUE_H
 
-#include <string.h>  // only for memcpy in swap (no Canon-C substitute yet at data/ level)
-
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
 #include "core/primitives/compare.h"
+#include "core/memory.h"
 #include "core/slice.h"
 #include "semantics/option/option.h"   // for option_type
 #include "semantics/result/result.h"   // for result_bool_Error
@@ -54,6 +53,7 @@
  * @sa semantics/option/option.h — option_type for peek/pop
  * @sa semantics/result/result.h — result_bool_Error for fallible operations
  * @sa core/slice.h — bytes_t view of heap contents
+ * @sa core/memory.h — mem_copy() for element operations
  */
 /* ════════════════════════════════════════════════════════════════════════════
    PriorityQueue struct
@@ -68,23 +68,28 @@ typedef struct {
 } PriorityQueue;
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Internal helpers (unchanged)
+   Internal helpers
    ─────────────────────────────────────────────────────────────────────────── */
 static inline usize pq_parent(usize i) { return (i - 1) / 2; }
 static inline usize pq_left_child(usize i) { return 2 * i + 1; }
 static inline usize pq_right_child(usize i) { return 2 * i + 2; }
 
+/**
+ * @brief Swaps two elements in the heap
+ *
+ * Uses mem_swap() for elements <= CANON_MEM_SWAP_MAX (typically 256 bytes).
+ * For larger elements, falls back to byte-by-byte swapping.
+ */
 static inline void pq_swap(PriorityQueue* pq, usize a, usize b) {
     if (a == b) return;
-    unsigned char tmp[256];
     usize es = pq->elem_size;
     void* pa = ptr_elem(pq->data, a, es);
     void* pb = ptr_elem(pq->data, b, es);
-    if (es <= 256) {
-        memcpy(tmp, pa, es);
-        memcpy(pa, pb, es);
-        memcpy(pb, tmp, es);
+    
+    if (es <= CANON_MEM_SWAP_MAX) {
+        mem_swap(pa, pb, es);
     } else {
+        // Fallback for large elements exceeding mem_swap buffer
         unsigned char* ba = (unsigned char*)pa;
         unsigned char* bb = (unsigned char*)pb;
         for (usize k = 0; k < es; k++) {
@@ -181,7 +186,7 @@ static inline result_bool_Error pq_push_result(
         return result_bool_Error_err(ERR_CAPACITY_EXCEEDED);
     }
 
-    memcpy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
+    mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
     pq_sift_up(pq, pq->len - 1);
     return result_bool_Error_ok(true);
@@ -197,13 +202,13 @@ static inline option_type pq_pop_option(PriorityQueue* pq) {
     }
 
     type top;
-    memcpy(&top, ptr_elem(pq->data, 0, pq->elem_size), sizeof(type));
+    mem_copy(&top, ptr_elem(pq->data, 0, pq->elem_size), sizeof(type));
 
     pq->len--;
     if (pq->len > 0) {
-        memcpy(ptr_elem(pq->data, 0, pq->elem_size),
-               ptr_elem(pq->data, pq->len, pq->elem_size),
-               pq->elem_size);
+        mem_copy(ptr_elem(pq->data, 0, pq->elem_size),
+                 ptr_elem(pq->data, pq->len, pq->elem_size),
+                 pq->elem_size);
         pq_sift_down(pq, 0);
     }
 
@@ -239,9 +244,9 @@ static inline result_bool_Error pq_remove_at_result(
         return result_bool_Error_ok(true);
     }
 
-    memcpy(ptr_elem(pq->data, i, pq->elem_size),
-           ptr_elem(pq->data, pq->len, pq->elem_size),
-           pq->elem_size);
+    mem_copy(ptr_elem(pq->data, i, pq->elem_size),
+             ptr_elem(pq->data, pq->len, pq->elem_size),
+             pq->elem_size);
 
     pq_sift_up(pq, i);
     pq_sift_down(pq, i);
@@ -260,14 +265,14 @@ static inline bool pq_push(PriorityQueue* pq, const void* elem) {
 static inline bool pq_pop(PriorityQueue* pq, void* out) {
     option_type opt = pq_pop_option(pq);
     if (option_type_is_none(opt)) return false;
-    if (out) memcpy(out, &opt.value, pq->elem_size);
+    if (out) mem_copy(out, &opt.value, pq->elem_size);
     return true;
 }
 
 static inline bool pq_peek(const PriorityQueue* pq, void* out) {
     option_type opt = pq_peek_option(pq);
     if (option_type_is_none(opt)) return false;
-    if (out) memcpy(out, &opt.value, pq->elem_size);
+    if (out) mem_copy(out, &opt.value, pq->elem_size);
     return true;
 }
 
@@ -276,7 +281,7 @@ static inline bool pq_remove_at(PriorityQueue* pq, usize i) {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Queries — unchanged
+   Queries
    ─────────────────────────────────────────────────────────────────────────── */
 static inline usize pq_len(const PriorityQueue* pq)          { return pq ? pq->len : 0; }
 static inline usize pq_capacity(const PriorityQueue* pq)     { return pq ? pq->capacity : 0; }
