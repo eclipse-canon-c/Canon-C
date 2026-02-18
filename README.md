@@ -28,12 +28,7 @@ The result is a set of semantic building blocks that improve readability, mainta
 
 I want this "taxonomy" to become a standard that everyone uses. GPL ensures it stays open.
 
-Canon-C is licensed under **GPL-3.0** to ensure the core remains open and shared.
-
-**For library users**: You may use Canon-C in your projects under GPL-3.0 terms.
-
-**Future plans**: Dual licensing (GPL + permissive commercial license) will be 
-introduced to support broader adoption in proprietary codebases. Feedback welcome.
+Canon-C is licensed under **MPL 2.0** as the primary license. And **GPL-3.0** as an alternative license for ideologically aligned users.
 
 ---
 
