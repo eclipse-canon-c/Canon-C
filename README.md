@@ -24,6 +24,8 @@ this also increases semantic complexity and hides behavior. Canon-C takes a diff
 
 The result is a set of semantic building blocks that improve readability, maintain explicit control, preserve performance, and remain fully transparent.
 
+I want this "taxonomy" to become a standard that everyone uses. GPL ensures it stays open.
+
 Canon-C is licensed under **GPL-3.0** to ensure the core remains open and shared.
 
 **For library users**: You may use Canon-C in your projects under GPL-3.0 terms.
