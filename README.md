@@ -51,6 +51,23 @@ If this taxonomy makes sense to you, help me:
    
 ---
 
+### Dependency Rule (Strict)
+
+core/ → semantics/ → data/ → algo/ → util/
+
+Modules are organized by **semantic depth**, not by feature count. Lower layers
+define unavoidable mechanics; higher layers build meaning on top of them.
+
+- Lower (lowest is core here) layers may be used by higher (highest is util here) layers.  
+- Upward or circular dependencies are strictly forbidden.  
+- Each module must be independently usable.  
+
+This rule ensures **explicitness** and prevents hidden behaviors or fragile dependencies.
+
+
+---
+
+
 ## Design Philosophy
 
 - Everything is optional
@@ -195,59 +212,8 @@ Canon-C is **header-only**. To use:
 
 ---
 
-No build system integration required. No linking step. Just include and use.
-
-**Compiler support**: C99 or later, works with GCC, Clang, MSVC.
-
-## What This Is
-
-- A curated set of **foundational C modules**
-- A shared structure and discipline for semantic libraries
-- A functional-style semantic vocabulary built *on top of* C
-- Usable from both **C and C++**
-- Optimized for readability, predictability, and control
-
----
-
-## What This Is Not
-
-- Not a replacement for C++
-- Not a new programming language
-- Not object-oriented
-- Not macro-heavy metaprogramming
-- Not a framework
-- Not opinionated about application architecture
-
-This project does not compete with languages.  
-It avoids them.
-
----
-
-## Semantic Layers
-
-Modules are organized by **semantic depth**, not by feature count. Lower layers
-define unavoidable mechanics; higher layers build meaning on top of them.
-
-
-core/ — fundamentals
-
-semantics/ — meaning 
-
-data/ — data shapes 
-
-algo/ — transformations 
-
-util/ — optional helpers
 
 
 
-### Dependency Rule (Strict)
-
-core → semantics → data → algo → util
 
 
-- Lower (lowest is core here) layers may be used by higher (highest is util here) layers.  
-- Upward or circular dependencies are strictly forbidden.  
-- Each module must be independently usable.  
-
-This rule ensures **explicitness** and prevents hidden behaviors or fragile dependencies.
