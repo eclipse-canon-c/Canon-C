@@ -28,7 +28,7 @@ The result is a set of semantic building blocks that improve readability, mainta
 
 I want this "taxonomy" to become a standard that everyone uses. GPL ensures it stays open.
 
-Canon-C is licensed under **MPL 2.0** as the primary license. And **GPL-3.0** as an alternative license for ideologically aligned users.
+Canon-C is licensed under **MPL 2.0** as the primary license. 
 
 ---
 
