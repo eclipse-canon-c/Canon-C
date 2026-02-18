@@ -67,7 +67,6 @@ This rule ensures **explicitness** and prevents hidden behaviors or fragile depe
 
 ---
 
-
 ## Design Philosophy
 
 - Everything is optional
@@ -78,6 +77,7 @@ This rule ensures **explicitness** and prevents hidden behaviors or fragile depe
 - No framework coupling
 - No required runtime
 - No language extensions
+- Works in plain C99 with no special compiler extensions
 - No clever tricks
 
 If behavior cannot be understood by reading the header, it does not belong.
