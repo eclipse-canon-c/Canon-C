@@ -19,6 +19,8 @@ The goal is not to add new functionality, but to make program intent visible dir
 C is fast, portable, and predictable, but its native semantics are low-level and mechanical.
 Writing non-trivial programs in C often requires memorizing patterns, conventions, and boilerplate around memory management, ownership rules, error handling, and iteration. These details obscure intent and increase cognitive load.
 
+There is no standard taxonomy of most used libraries in C.
+
 Many modern languages embed abstractions directly into the language to address this. While powerful, 
 this also increases semantic complexity and hides behavior. Canon-C takes a different approach: C itself is left untouched. Meaning is added through explicit libraries, not syntax.
 
@@ -35,18 +37,23 @@ introduced to support broader adoption in proprietary codebases. Feedback welcom
 
 ---
 
-## Core Idea
+## IMPORTANT !!!
 
-Everything is a library.  
-Everything is explicit.  
+**I'm seeking feedback on:**
+1. Does this categorization make sense?
+2. Are things in the right layers?
+3. What's missing or wrong?
 
-C is used as a **low-level target**, while higher-level semantics
-(memory, lifetime, failure, data flow, transformation)
-are expressed through small, composable modules.
+**I'm NOT asking you to:**
+- Debug the code
+- Review implementation quality
+- Test compilation (not yet)
 
-You do not inherit semantics from the language.  
-You **select** semantics by choosing which headers to include.
-
+If this taxonomy makes sense to you, help me:
+1. Critique the structure
+2. Suggest better categorization
+3. Eventually: implement production-quality versions
+   
 ---
 
 ## Design Philosophy
