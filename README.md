@@ -121,6 +121,14 @@ Abstractions must clarify behavior, not conceal it.
   - `deque_mangle.h` — name mangling conventions (individually overridable)
   - `deque_decl.h` — forward declarations for separate compilation
   - `deque_defn.h` — complete definitions (header-only or .c files)
+- **`hashmap/`** — generic Robin Hood open-addressed hashmap (caller-owned buffer, fixed capacity) — modular 7-file architecture
+  - `hashmap.h` — user-facing API; header-only entry point
+  - `hashmap_impl.h` — pure implementation logic (zero naming assumptions)
+  - `hashmap_mangle.h` — name mangling conventions (individually overridable)
+  - `hashmap_decl.h` — forward declarations for separate compilation
+  - `hashmap_defn.h` — complete definitions (header-only or .c files)
+  - `hashmap_range.h` — optional extension: `collect_keys()`, `collect_values()`, `HASHMAP_FOR_EACH` (depends on `vec.h`)
+  - `hashmap_fmt.h` — optional extension: `to_stringbuf()` (depends on `stringbuf.h`)
 - `array.h` — fixed-size typed array with compile-time capacity (DEFINE_ARRAY, safe indexing, slice/bytes views, iteration macros)
 - `priority_queue.h` — fixed-capacity binary heap (priority queue) with caller-owned buffer
 - `queue.h` — FIFO queue wrapper over deque (fixed capacity); includes `DECLARE_QUEUE`
