@@ -1,10 +1,11 @@
 /**
  * @file hashmap_range.h
- * @brief Optional extension: collect hashmap keys or values into a vec
+ * @brief Optional extension: collect hashmap keys or values into a canon_vec
  *
- * Provides helpers that drain a hashmap's contents into caller-owned vecs
- * using the range/vec pattern from data/. Useful when you need a sorted or
- * indexed snapshot of the keys or values for further processing.
+ * Provides helpers that drain a hashmap's contents into caller-owned
+ * canon_vec instances, and a HASHMAP_FOR_EACH macro for ergonomic iteration.
+ * Useful when you need a snapshot of keys or values for sorting, indexed
+ * access, or passing to algo/ functions.
  *
  * This is an OPTIONAL extension. It is NOT included by hashmap.h by default.
  * Include it explicitly only when you need bulk collection operations.
@@ -12,50 +13,75 @@
  * Dependencies:
  * ────────────────────────────────────────────────────────────────────────────
  * Requires data/vec/vec.h. The key and value vec types must be instantiated
- * with DEFINE_VEC (or the appropriate Canon-C vec macro) for the key and
- * value types before including this header.
+ * with DEFINE_VEC before including this header:
  *
- * Required user definitions:
+ *   DEFINE_VEC(static inline, u64)  →  canon_vec_u64
+ *   DEFINE_VEC(static inline, int)  →  canon_vec_int
+ *
+ * Unlike hashmap_fmt.h, this extension does NOT require you to supply push
+ * function names manually. They are derived directly from HASHMAP_KEY_TYPE
+ * and HASHMAP_VAL_TYPE using the canon_vec naming convention:
+ *
+ *   push fn = canon_vec_##HASHMAP_KEY_TYPE##_push
+ *
+ * This works because DEFINE_VEC always generates functions with this exact
+ * naming pattern. No HASHMAP_KEY_PUSH_FN or HASHMAP_VAL_PUSH_FN needed.
+ *
+ * Required user definitions (must be set before including this file):
  * ────────────────────────────────────────────────────────────────────────────
- * Before including this file, define:
- *
- *   HASHMAP_KEY_VEC_TYPE  — the vec type for keys (e.g. vec_u64)
- *   HASHMAP_VAL_VEC_TYPE  — the vec type for values (e.g. vec_int)
+ * These must already be set (they are the same macros used for hashmap.h):
+ *   HASHMAP_KEY_TYPE   — e.g. u64
+ *   HASHMAP_VAL_TYPE   — e.g. int
+ *   HASHMAP_FN(name)   — function prefix (from hashmap_mangle.h)
  *
  * And ensure the corresponding vec types have been instantiated:
- *   DEFINE_VEC(u64)   →  vec_u64
- *   DEFINE_VEC(int)   →  vec_int
+ *   DEFINE_VEC(static inline, u64)
+ *   DEFINE_VEC(static inline, int)
  *
  * Usage example:
  * ────────────────────────────────────────────────────────────────────────────
  * ```c
  * #include "data/vec/vec.h"
- * DEFINE_VEC(u64)
- * DEFINE_VEC(int)
+ * DEFINE_VEC(static inline, u64)
+ * DEFINE_VEC(static inline, int)
  *
- * #define HASHMAP_KEY_TYPE     u64
- * #define HASHMAP_VAL_TYPE     int
- * #define HASHMAP_HASH_FN      hash_u64
- * #define HASHMAP_EQ_FN        eq_u64
- * #define HASHMAP_KEY_VEC_TYPE vec_u64
- * #define HASHMAP_VAL_VEC_TYPE vec_int
+ * #define HASHMAP_KEY_TYPE  u64
+ * #define HASHMAP_VAL_TYPE  int
+ * #define HASHMAP_HASH_FN   hash_u64
+ * #define HASHMAP_EQ_FN     eq_u64
  * #include "data/hashmap/hashmap.h"
  * #include "data/hashmap/hashmap_range.h"
  *
  * // Collect all keys into a caller-owned vec
  * u64 key_buf[64];
- * vec_u64 keys = vec_u64_from(key_buf, 64);
+ * canon_vec_u64 keys = canon_vec_u64_init(key_buf, 64);
  * result_bool_Error r = hashmap_collect_keys(&my_map, &keys);
  *
  * // Collect all values into a caller-owned vec
  * int val_buf[64];
- * vec_int vals = vec_int_from(val_buf, 64);
+ * canon_vec_int vals = canon_vec_int_init(val_buf, 64);
  * result_bool_Error r2 = hashmap_collect_values(&my_map, &vals);
+ *
+ * // Ergonomic iteration macro (no vec needed)
+ * const u64* k;
+ * const int* v;
+ * HASHMAP_FOR_EACH(&my_map, k, v) {
+ *     printf("%llu => %d\n", (unsigned long long)*k, *v);
+ * }
  * ```
  *
- * @sa hashmap.h      — main entry point
- * @sa data/vec/vec.h — required dependency
- * @sa data/range.h   — integer range iteration (conceptual model)
+ * Pointer key/value types:
+ * ────────────────────────────────────────────────────────────────────────────
+ * For pointer types, typedef first so the canon_vec macro works:
+ * ```c
+ * typedef const char* cstr;
+ * DEFINE_VEC(static inline, cstr)
+ * #define HASHMAP_KEY_TYPE u64
+ * #define HASHMAP_VAL_TYPE cstr
+ * ```
+ *
+ * @sa hashmap.h      — main entry point, must be included before this
+ * @sa data/vec/vec.h — required dependency (DEFINE_VEC)
  */
 
 #ifndef CANON_DATA_HASHMAP_RANGE_H
@@ -70,43 +96,67 @@
 #include "semantics/error.h"
 
 /* ============================================================================
- * Required user-defined vec types
+ * Validate required definitions
  * ========================================================================= */
-#ifndef HASHMAP_KEY_VEC_TYPE
-    #error "hashmap_range.h: define HASHMAP_KEY_VEC_TYPE (e.g. vec_u64) before including"
+#ifndef HASHMAP_KEY_TYPE
+    #error "hashmap_range.h: HASHMAP_KEY_TYPE must be defined (same as for hashmap.h)"
 #endif
-#ifndef HASHMAP_VAL_VEC_TYPE
-    #error "hashmap_range.h: define HASHMAP_VAL_VEC_TYPE (e.g. vec_int) before including"
+#ifndef HASHMAP_VAL_TYPE
+    #error "hashmap_range.h: HASHMAP_VAL_TYPE must be defined (same as for hashmap.h)"
 #endif
 
 /* ============================================================================
- * hashmap_collect_keys — copy all keys into a caller-owned vec
+ * Internal: derive canon_vec push function names from key/value types
+ *
+ * canon_vec naming convention (from data/vec/vec.h):
+ *   type name:  canon_vec_##TYPE
+ *   push fn:    canon_vec_##TYPE##_push(canon_vec_##TYPE*, const TYPE*)
+ *               returns result_bool_Error
+ *
+ * We derive these directly because DEFINE_VEC always generates
+ * identically-named functions. No user-supplied function pointer needed.
+ * ========================================================================= */
+
+/** @brief Expands to the canon_vec type for a given element type */
+#define _HM_RANGE_VEC(type)  canon_vec_##type
+
+/** @brief Calls the canon_vec push function for a given element type */
+#define _HM_RANGE_PUSH(type, vec_ptr, elem_ptr) \
+    canon_vec_##type##_push((vec_ptr), (elem_ptr))
+
+/* ============================================================================
+ * hashmap_collect_keys
  * ========================================================================= */
 
 /**
- * @brief Collects all keys from the hashmap into a caller-owned vec
+ * @brief Collects all keys from the hashmap into a caller-owned canon_vec
  *
- * Iterates all occupied slots and pushes each key into *out.
- * The vec must have sufficient capacity — if the vec fills before all keys
- * are collected, returns Err(ERR_CAPACITY_EXCEEDED). The vec is NOT cleared
- * before insertion; keys are appended to whatever is already in it.
+ * Iterates all occupied slots and pushes each key into *out using
+ * canon_vec_##HASHMAP_KEY_TYPE##_push(). The vec must have sufficient
+ * capacity — if it fills before all keys are pushed, returns
+ * Err(ERR_CAPACITY_EXCEEDED). Keys are appended to whatever is already
+ * in the vec; it is NOT cleared before insertion.
  *
- * Key ordering is unspecified (insertion order is not preserved by open
- * addressing). Sort the resulting vec if ordered output is required.
+ * Key ordering is unspecified (open addressing does not preserve insertion
+ * order). Sort the resulting vec with algo/sort.h if ordered output is needed.
  *
- * @param map  Pointer to initialized hashmap
- * @param out  Caller-owned vec to append keys into (must not be NULL)
+ * If you need key-value correspondence between a keys vec and a values vec,
+ * call collect_keys then collect_values without mutating the map between calls.
+ * Both use iter_next which visits slots in the same deterministic order.
+ *
+ * @param map  Pointer to initialized hashmap (must not be NULL)
+ * @param out  Caller-owned canon_vec for keys to append into (must not be NULL)
  * @return     result_bool_Error — Ok(true) on success,
- *             Err(ERR_CAPACITY_EXCEEDED) if vec is too small,
+ *             Err(ERR_CAPACITY_EXCEEDED) if vec fills before all keys are pushed,
  *             Err(ERR_INVALID_ARG) if any pointer is NULL
  *
  * Performance:
- * - Time:  O(capacity) — iterates all slots
- * - Space: O(1) — no allocation; output goes into caller's vec
+ * - Time:  O(capacity) — iterates all slots, pushes only occupied ones
+ * - Space: O(1) — no allocation; output goes into caller's vec buffer
  */
 static inline result_bool_Error HASHMAP_FN(collect_keys)(
-    const HASHMAP_TYPE_NAME* map,
-    borrowed(HASHMAP_KEY_VEC_TYPE*) out
+    const HASHMAP_TYPE_NAME*                   map,
+    borrowed(_HM_RANGE_VEC(HASHMAP_KEY_TYPE)*) out
 ) {
     if (!map) return RESULT_ERR(bool, ERR_INVALID_ARG);
     if (!out) return RESULT_ERR(bool, ERR_INVALID_ARG);
@@ -117,49 +167,8 @@ static inline result_bool_Error HASHMAP_FN(collect_keys)(
     const HASHMAP_VAL_TYPE* v;
 
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
-        /*
-         * vec_push returns a result. We use the boolean pattern:
-         * if it fails, the vec is full.
-         *
-         * Note: the exact push function name depends on the vec instantiation.
-         * Canon-C vec uses: vec_TYPE_push(vec*, const TYPE*) → result_bool_Error
-         * We call via the vec type's known API surface.
-         */
-        (void)v; /* suppress unused-variable warning — we only want keys */
-
-        /* Attempt push; vec_T_push returns result_bool_Error */
-        /* We use a generic approach: memcpy-style push via vec internal API */
-        /* 
-         * Because we cannot know the exact push fn name generically,
-         * the user must ensure HASHMAP_KEY_VEC_TYPE has a compatible push.
-         * The pattern below works for any Canon-C vec instantiated with DEFINE_VEC.
-         *
-         * HASHMAP_KEY_VEC_TYPE is e.g. vec_u64, so the push fn is vec_u64_push.
-         * We delegate via the macro-generated name pattern.
-         */
-        #define _HM_KEY_PUSH HASHMAP_FN_CONCAT(HASHMAP_KEY_VEC_TYPE, _push)
-
-        /* 
-         * Fallback: use a helper that the caller must provide if the above
-         * does not resolve cleanly. Document this as a known limitation.
-         *
-         * In practice, callers using this extension should call:
-         *   while (hashmap_iter_next(&map, &iter, &k, &v))
-         *       vec_u64_push(&keys, k);
-         * directly. This extension provides a convenience wrapper.
-         */
-
-        /*
-         * IMPLEMENTATION NOTE:
-         * C99 macros cannot generically compose two macro values into a function
-         * name without token pasting. The user must supply HASHMAP_KEY_PUSH_FN
-         * to make this fully generic. If not supplied, we emit a compile error.
-         */
-        #ifndef HASHMAP_KEY_PUSH_FN
-            #error "hashmap_range.h: define HASHMAP_KEY_PUSH_FN (result_bool_Error fn(VecType*, const K*)) before including"
-        #endif
-
-        result_bool_Error push_res = HASHMAP_KEY_PUSH_FN(out, k);
+        (void)v; /* only collecting keys */
+        result_bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_KEY_TYPE, out, k);
         if (result_bool_Error_is_err(push_res))
             return RESULT_ERR(bool, ERR_CAPACITY_EXCEEDED);
     }
@@ -168,20 +177,21 @@ static inline result_bool_Error HASHMAP_FN(collect_keys)(
 }
 
 /* ============================================================================
- * hashmap_collect_values — copy all values into a caller-owned vec
+ * hashmap_collect_values
  * ========================================================================= */
 
 /**
- * @brief Collects all values from the hashmap into a caller-owned vec
+ * @brief Collects all values from the hashmap into a caller-owned canon_vec
  *
- * Iterates all occupied slots and appends each value into *out.
- * Value ordering corresponds to the order returned by iter_next (unspecified).
- * The vec is NOT cleared before insertion.
+ * Iterates all occupied slots and appends each value into *out using
+ * canon_vec_##HASHMAP_VAL_TYPE##_push(). Value ordering corresponds to
+ * the order returned by iter_next (unspecified). The vec is NOT cleared
+ * before insertion.
  *
- * @param map  Pointer to initialized hashmap
- * @param out  Caller-owned vec to append values into (must not be NULL)
+ * @param map  Pointer to initialized hashmap (must not be NULL)
+ * @param out  Caller-owned canon_vec for values to append into (must not be NULL)
  * @return     result_bool_Error — Ok(true) on success,
- *             Err(ERR_CAPACITY_EXCEEDED) if vec is too small,
+ *             Err(ERR_CAPACITY_EXCEEDED) if vec fills before all values are pushed,
  *             Err(ERR_INVALID_ARG) if any pointer is NULL
  *
  * Performance:
@@ -189,24 +199,20 @@ static inline result_bool_Error HASHMAP_FN(collect_keys)(
  * - Space: O(1)
  */
 static inline result_bool_Error HASHMAP_FN(collect_values)(
-    const HASHMAP_TYPE_NAME*         map,
-    borrowed(HASHMAP_VAL_VEC_TYPE*) out
+    const HASHMAP_TYPE_NAME*                   map,
+    borrowed(_HM_RANGE_VEC(HASHMAP_VAL_TYPE)*) out
 ) {
     if (!map) return RESULT_ERR(bool, ERR_INVALID_ARG);
     if (!out) return RESULT_ERR(bool, ERR_INVALID_ARG);
     require_msg(map->slots != NULL, "hashmap_collect_values: map is uninitialized");
-
-    #ifndef HASHMAP_VAL_PUSH_FN
-        #error "hashmap_range.h: define HASHMAP_VAL_PUSH_FN (result_bool_Error fn(VecType*, const V*)) before including"
-    #endif
 
     usize iter = 0;
     const HASHMAP_KEY_TYPE* k;
     const HASHMAP_VAL_TYPE* v;
 
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
-        (void)k;
-        result_bool_Error push_res = HASHMAP_VAL_PUSH_FN(out, v);
+        (void)k; /* only collecting values */
+        result_bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_VAL_TYPE, out, v);
         if (result_bool_Error_is_err(push_res))
             return RESULT_ERR(bool, ERR_CAPACITY_EXCEEDED);
     }
@@ -215,34 +221,62 @@ static inline result_bool_Error HASHMAP_FN(collect_values)(
 }
 
 /* ============================================================================
- * hashmap_iter_as_range — structured key–value iteration helper
+ * HASHMAP_FOR_EACH — ergonomic iteration macro
  * ========================================================================= */
 
 /**
- * @brief Convenience macro for iterating all key–value pairs
+ * @def HASHMAP_FOR_EACH
+ * @brief Clean for-loop syntax for iterating all key-value pairs
  *
  * Expands to a for-loop that visits every occupied slot. Inside the loop body,
- * `_key` and `_val` are const pointers to the current slot's key and value.
+ * key_var and val_var are const pointers to the current slot's key and value.
+ * No vec, no allocation — direct forward iteration over the map.
  *
  * The map must not be mutated during iteration.
  *
  * @param map_ptr   Pointer to initialized hashmap
- * @param key_var   Name for the const KEY* loop variable
- * @param val_var   Name for the const VAL* loop variable
+ * @param key_var   Declared variable of type (const HASHMAP_KEY_TYPE*)
+ * @param val_var   Declared variable of type (const HASHMAP_VAL_TYPE*)
+ *
+ * @note key_var and val_var must be declared before the macro invocation
+ * @note break and continue work normally
+ * @note Uses __LINE__ to generate unique iterator variable names,
+ *       allowing nested HASHMAP_FOR_EACH loops without name collisions
  *
  * Usage:
  * ```c
+ * const u64* k;
+ * const int* v;
  * HASHMAP_FOR_EACH(&my_map, k, v) {
- *     printf("key=%llu\n", *k);
+ *     printf("%llu => %d\n", (unsigned long long)*k, *v);
+ * }
+ * ```
+ *
+ * Nested:
+ * ```c
+ * const u64* k1; const int* v1;
+ * const u64* k2; const int* v2;
+ * HASHMAP_FOR_EACH(&map_a, k1, v1) {
+ *     HASHMAP_FOR_EACH(&map_b, k2, v2) { ... }
  * }
  * ```
  */
-#define HASHMAP_FOR_EACH(map_ptr, key_var, val_var) \
-    for (usize _hm_iter_ = 0; \
-         HASHMAP_FN(iter_next)( \
-             (map_ptr), &_hm_iter_, \
-             (const HASHMAP_KEY_TYPE**)&(key_var), \
-             (const HASHMAP_VAL_TYPE**)&(val_var) \
+#define _HM_ITER_VAR_(line)  _hm_iter_##line
+#define _HM_ITER_VAR(line)   _HM_ITER_VAR_(line)
+
+#define HASHMAP_FOR_EACH(map_ptr, key_var, val_var)           \
+    for (usize _HM_ITER_VAR(__LINE__) = 0;                    \
+         HASHMAP_FN(iter_next)(                                \
+             (map_ptr),                                        \
+             &_HM_ITER_VAR(__LINE__),                         \
+             (const HASHMAP_KEY_TYPE**)&(key_var),            \
+             (const HASHMAP_VAL_TYPE**)&(val_var)             \
          ); )
+
+/* ============================================================================
+ * Clean up internal macros
+ * ========================================================================= */
+#undef _HM_RANGE_VEC
+#undef _HM_RANGE_PUSH
 
 #endif /* CANON_DATA_HASHMAP_RANGE_H */
