@@ -1,7 +1,7 @@
 #ifndef CANON_UTIL_LOG_MACROS_H
 #define CANON_UTIL_LOG_MACROS_H
 
-#include "util/log.h"
+#include "util/log/log.h"
 
 /**
  * @file util/log_macros.h
