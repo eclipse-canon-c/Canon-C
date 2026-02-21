@@ -3,6 +3,7 @@
 
 #include <string.h>                     // memcpy, memmove, memset, memcmp
 #include <stdint.h>                     // uintptr_t (used in mem_get_alignment)
+#include <stdlib.h>                     // malloc, free
 
 #include "core/primitives/types.h"      // u8, usize, bool
 #include "core/primitives/limits.h"     // CANON_USIZE_MAX, CANON_DEFAULT_ALIGN
@@ -16,7 +17,7 @@
  * @brief Safe, explicit, low-level memory manipulation and alignment utilities
  *
  * Provides thin, safety-checked wrappers around standard memory functions
- * (memcpy, memmove, memset, memcmp) and alignment helpers.
+ * (memcpy, memmove, memset, memcmp, malloc, free) and alignment helpers.
  * Designed for use in custom allocators (arenas, pools), parsers,
  * and performance-critical code where explicit control is required.
  *
@@ -30,6 +31,16 @@
  * - bytes_t / cbytes_t variants for all copy/move/zero/compare operations
  * - Portable — relies only on C99 standard library + Canon-C primitives
  *
+ * Heap allocation (mem_alloc / mem_free):
+ * ────────────────────────────────────────────────────────────────────────────
+ * mem_alloc and mem_free are explicit, named wrappers over malloc/free.
+ * They are provided for consistency with the rest of memory.h and to give
+ * call sites a uniform naming convention. Callers always know they are
+ * allocating — there is no hidden behavior.
+ *
+ * Prefer arena_alloc() for temporary allocations with deterministic lifetime.
+ * Use mem_alloc() only when heap allocation with explicit free is required.
+ *
  * Relationship to ptr.h:
  * ────────────────────────────────────────────────────────────────────────────
  * core/primitives/ptr.h handles pointer arithmetic and alignment at the
@@ -40,6 +51,7 @@
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - Alignment helpers: O(1)
+ * - mem_alloc, mem_free: O(1) amortized (platform malloc)
  * - mem_copy, mem_move, mem_zero, mem_set: O(n)
  * - mem_compare, mem_equal: O(n)
  * - mem_is_all, mem_is_zero: O(n)
@@ -48,11 +60,14 @@
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
  * All functions are fully thread-safe — no shared mutable state.
+ * mem_alloc/mem_free rely on platform malloc which is thread-safe on all
+ * modern platforms.
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
  * - Uses only: memcpy, memmove, memset, memcmp from <string.h>
+ *              malloc, free from <stdlib.h>
  * - No platform-specific intrinsics or assembly
  *
  * Dependency rule:
@@ -62,7 +77,9 @@
  *
  * @sa core/primitives/ptr.h — pointer arithmetic, alignment, ptr_align_up
  * @sa core/slice.h — bytes_t / cbytes_t used by _bytes variants here
+ * @sa core/arena.h — preferred allocator for temporary, scoped memory
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    mem_swap stack buffer limit
    ════════════════════════════════════════════════════════════════════════════ */
@@ -78,8 +95,46 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
+   Heap allocation — explicit, named wrappers over malloc/free
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Allocates size bytes on the heap (explicit malloc wrapper)
+ *
+ * Returns NULL if size == 0 or allocation fails.
+ * Caller MUST free the result with mem_free().
+ *
+ * Prefer arena_alloc() for temporary allocations with deterministic lifetime.
+ * Use mem_alloc() only when heap allocation with explicit free is required.
+ *
+ * @param size Number of bytes to allocate (0 → returns NULL)
+ * @return Pointer to allocated memory, or NULL on failure
+ *
+ * Performance: O(1) amortized
+ */
+static inline void* mem_alloc(usize size) {
+    if (size == 0) return NULL;
+    return malloc(size);
+}
+
+/**
+ * @brief Frees memory previously allocated by mem_alloc (explicit free wrapper)
+ *
+ * NULL-safe — calling with NULL is a no-op.
+ * Do NOT call on memory allocated by arena_alloc() or pool_alloc().
+ *
+ * @param ptr Pointer to free (NULL-safe)
+ *
+ * Performance: O(1) amortized
+ */
+static inline void mem_free(void* ptr) {
+    free(ptr);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    Alignment utilities (delegate to ptr.h)
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Rounds size up to the next multiple of natural alignment
  *
@@ -162,6 +217,7 @@ static inline bool mem_is_power_of_two(usize n) {
 /* ════════════════════════════════════════════════════════════════════════════
    Safe memory operations — raw pointer variants
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Copies non-overlapping memory regions (safe memcpy wrapper)
  *
@@ -276,6 +332,7 @@ static inline void mem_swap(void* a, void* b, usize size) {
 /* ════════════════════════════════════════════════════════════════════════════
    bytes_t / cbytes_t variants — slice.h integration
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Copies src bytes into dest (bounds-checked via view lengths)
  *
@@ -347,6 +404,7 @@ static inline void mem_secure_zero_bytes(bytes_t b) {
 /* ════════════════════════════════════════════════════════════════════════════
    Type-safe convenience macros
    ════════════════════════════════════════════════════════════════════════════ */
+
 /** @brief Zero-initializes a single object */
 #define mem_zero_type(ptr) mem_zero((ptr), sizeof(*(ptr)))
 
@@ -364,5 +422,11 @@ static inline void mem_secure_zero_bytes(bytes_t b) {
 
 /** @brief Returns true if two objects of the same type are byte-equal */
 #define mem_equal_type(a, b) mem_equal((a), (b), sizeof(*(a)))
+
+/** @brief Allocates one object of Type on the heap (caller must mem_free) */
+#define mem_alloc_type(Type) ((Type*)mem_alloc(sizeof(Type)))
+
+/** @brief Allocates an array of count objects of Type on the heap (caller must mem_free) */
+#define mem_alloc_array(Type, count) ((Type*)mem_alloc(sizeof(Type) * (count)))
 
 #endif /* CANON_CORE_MEMORY_H */
