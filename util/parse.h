@@ -2,7 +2,6 @@
 #define CANON_UTIL_PARSE_H
 
 #include "core/primitives/types.h"       // usize, bool, int64_t, uint64_t, double
-#include "core/memory.h"                 // str_len (used in helpers)
 #include "../../semantics/result/result.h"   // result_*_Error (adjust path if needed)
 #include "../../semantics/error.h"           // ERR_PARSE_FAILED
 
