@@ -4,7 +4,7 @@
 #include "core/primitives/types.h"       // usize, bool, uint64_t
 #include "core/memory.h"                 // str_len, str_ncompare, mem_copy, mem_equal
 #include "core/arena.h"                  // Arena, arena_alloc
-#include "util/str_view.h"               // str_view_t
+#include "util/str/str_view.h"               // str_view_t
 
 /**
  * @file util/intern.h
