@@ -8,7 +8,7 @@ These releases should be read as:
 - Design exploration
 - Progressive narrowing toward a canonical core
 
-Only versions ≥ v1.0.0 are considered semantically frozen.
+Only versions ≥ v1.2.0 are considered semantically frozen.
 
 No released code has been retroactively changed.
 Only documentation and classification have been clarified.
