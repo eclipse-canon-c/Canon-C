@@ -88,7 +88,7 @@ Abstractions must clarify behavior, not conceal it.
 
 ## Included Modules (Current)
 
-### core/primitives/
+## core/primitives/
 - `types.h` — portable integer and size type aliases (u8, usize, isize, etc.)
 - `compare.h` — Three-way comparator type and built-in comparators
 - `limits.h` — common constants and limits (integer bounds, alignment, capacity limits)
@@ -97,7 +97,7 @@ Abstractions must clarify behavior, not conceal it.
 - `contract.h` — explicit contracts and assertions (require_msg, ensure_msg, unreachable, panic)
 - `ptr.h` — named pointer arithmetic and alignment (ptr_offset, ptr_diff, align_up, ptr_in_range, PTR_CONTAINER_OF)
 
-### core/
+## core/
 - `memory.h` — low-level memory utilities (alignment, safe mem_copy/mem_move wrappers)
 - `region.h` — explicit lifetime boundaries for borrowed values
 - `arena.h` — explicit linear allocation (bump allocator)
@@ -106,8 +106,8 @@ Abstractions must clarify behavior, not conceal it.
 - `slice.h` — non-owning views into contiguous memory (bytes_t, cbytes_t, str_t, DEFINE_SLICE)
 - `ownership.h` — explicit ownership and borrowing annotations (owned, borrowed, moved, dropped, DEFINE_OWNED, CANON_DROP)
 
-### data/
-- **`vec/`** — Bounded typed vectors with explicit caller-owned buffers (caller-owned buffer, fixed capacity) — modular 7-file architecture
+## data/
+- **`vec/`** — bounded typed vectors with explicit caller-owned buffers (caller-owned buffer, fixed capacity) — modular 7-file architecture
   - `vec.h` — user-facing API; header-only entry point
   - `vec_impl.h` — pure implementation logic (zero naming assumptions)
   - `vec_mangle.h` — name mangling conventions (individually overridable)
@@ -137,12 +137,12 @@ Abstractions must clarify behavior, not conceal it.
 - `stringbuf.h` — incremental string builder (arena- or buffer-backed, fixed capacity)
 - `bitset.h` — fixed-capacity bitset with O(1) set/clear/test and O(n/64) bulk ops
 
-### data/convenience/
+## data/convenience/
 - `dynvec.h` — auto-growing typed vector (hidden heap allocation, 2x growth)
 - `smallvec.h` — inline-first vector with at-most-one spill to heap or arena
 - `dynstring.h` — auto-growing string builder (hidden heap allocation, 2x growth)
 
-### semantics/
+## semantics/
 - **`option/`** — modular Option\<T\> implementation
   - `option.h` — user-facing API for explicit presence/absence of a value
   - `option_impl.h` — pure implementation logic (customizable)
@@ -159,7 +159,7 @@ Abstractions must clarify behavior, not conceal it.
 - `borrow.h` — semantic non-owning view types (borrowed_ptr, borrowed_str, borrowed_bytes, DEFINE_BORROWED_SLICE)
 - `diag.h` — structured diagnostic frames for error context chains (Diag, DiagFrame, DIAG_PUSH, DIAG_PROPAGATE; no allocation)
 
-### algo/
+## algo/
 - `map.h` — element-wise transformation (supports different input/output types)
 - `filter.h` — select elements matching predicate
 - `fold.h` — reduce sequence to single value (infallible & fallible variants)
@@ -170,14 +170,18 @@ Abstractions must clarify behavior, not conceal it.
 - `unique.h` — remove consecutive duplicates (in-place)
 - `reverse.h` — reverse sequence in-place
 
-### util/
+## util/str/
 - `string.h` — safe string operations (copy, concat, predicates)
-- `str_split.h` — non-mutating string splitting (borrowed views)
-- `str_join.h` — safe string joining (buffer-based & allocating)
-- `str_view.h` — Minimal immutable borrowed string view (pointer + length)
-- `intern.h` — Minimal string interning — returns shared immutable str_view_t
+- `split.h` — non-mutating string splitting (borrowed views)
+- `join.h` — safe string joining (buffer-based & allocating)
+- `view.h` — minimal immutable borrowed string view (pointer + length)
+- `intern.h` — minimal string interning — returns shared immutable str_view_t
+
+## util/log/
 - `log.h` — minimal, explicit logging with Result-based error handling
-- `log_macros.h` — Ergonomic, safe logging macros layered on log.h
+- `log_macros.h` — ergonomic, safe logging macros layered on log.h
+
+## util/
 - `file.h` — safe file I/O (read/write whole files, arena-backed preferred)
 - `parse.h` — robust parsing of integers, unsigned, and floating-point values
 - `time.h` — high-resolution stopwatch (monotonic timing)
