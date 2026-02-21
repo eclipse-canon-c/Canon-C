@@ -38,7 +38,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - All operations:  O(1)
  * - range_len():     O(1) — pure arithmetic, no iteration
- * - range_skip(n):   O(n) — iterates n steps
+ * - range_skip(n):   O(1) — direct arithmetic advance (clamped to end)
  * - No allocations anywhere
  *
  * Semantics summary:
@@ -275,20 +275,19 @@ static inline bool range_is_valid(const range* r) {
  */
 static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) return 0;
-    
+
     isize abs_step = r->step > 0 ? r->step : -r->step;
     isize diff     = r->step > 0 ? (r->end - r->current)
                                  : (r->current - r->end);
-    
+
     if (diff <= 0) return 0;
     if (diff > (isize)CANON_USIZE_MAX) return CANON_USIZE_MAX;
-    
-    /* Use checked arithmetic to avoid overflow in (diff - 1) */
+
     isize adjusted_diff;
     if (!checked_sub_isize(diff, 1, &adjusted_diff)) {
-        return CANON_USIZE_MAX; /* Overflow - too many elements */
+        return CANON_USIZE_MAX;
     }
-    
+
     return (usize)((adjusted_diff) / abs_step + 1);
 }
 
@@ -378,19 +377,15 @@ static inline isize range_next(range* r) {
     isize value = r->current;
     isize next_value;
 
-    /* Use checked arithmetic for overflow-safe advance */
     if (checked_add_isize(r->current, r->step, &next_value)) {
-        /* No overflow - update normally */
         r->current = next_value;
-        
-        /* Clamp to end if we've crossed the boundary */
+
         if (r->step > 0 && r->current >= r->end) {
             r->current = r->end;
         } else if (r->step < 0 && r->current <= r->end) {
             r->current = r->end;
         }
     } else {
-        /* Overflow detected - saturate to end */
         r->current = r->end;
     }
 
@@ -415,12 +410,16 @@ static inline void range_reset(range* r, isize new_start) {
 }
 
 /**
- * @brief Skips n elements forward, consuming them
+ * @brief Skips n elements forward in O(1) using direct arithmetic
+ *
+ * Advances current by (n * step), clamped to end on overflow or boundary crossing.
  *
  * @param r Range to advance (NULL-safe)
  * @param n Number of elements to skip
  *
- * @note Stops early if range is exhausted before n steps are taken
+ * @note Does not iterate — computes new position directly
+ * @note Saturates to end on arithmetic overflow
+ * @note Clamps to end if skip would cross the boundary
  *
  * Example:
  * ```c
@@ -430,13 +429,33 @@ static inline void range_reset(range* r, isize new_start) {
  * ```
  *
  * Performance:
- * - Time:  O(n)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline void range_skip(range* r, usize n) {
-    if (!r) return;
-    for (usize i = 0; i < n && range_has_next(r); i++) {
-        range_next(r);
+    if (!r || n == 0 || range_is_empty(r)) return;
+
+    isize jump;
+    if (!checked_mul_isize((isize)n, r->step, &jump)) {
+        /* Overflow in jump computation — saturate to end */
+        r->current = r->end;
+        return;
+    }
+
+    isize new_current;
+    if (!checked_add_isize(r->current, jump, &new_current)) {
+        /* Overflow in advance — saturate to end */
+        r->current = r->end;
+        return;
+    }
+
+    /* Clamp to end if boundary crossed */
+    if (r->step > 0 && new_current >= r->end) {
+        r->current = r->end;
+    } else if (r->step < 0 && new_current <= r->end) {
+        r->current = r->end;
+    } else {
+        r->current = new_current;
     }
 }
 
