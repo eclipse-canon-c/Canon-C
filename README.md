@@ -100,7 +100,7 @@ Abstractions must clarify behavior, not conceal it.
 ## core/
 - `memory.h` — low-level memory utilities (alignment, safe mem_copy/mem_move wrappers)
 - `region.h` — explicit lifetime boundaries for borrowed values
-- `arena.h` — explicit linear allocation (bump allocator)
+- `arena.h` — Linear bump allocator with explicit lifetime control
 - `pool.h` — fixed-size object pool allocator (arena-backed)
 - `scope.h` — RAII-style deferred cleanup macros
 - `slice.h` — non-owning views into contiguous memory (bytes_t, cbytes_t, str_t, DEFINE_SLICE)
