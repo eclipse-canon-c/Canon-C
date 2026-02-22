@@ -31,10 +31,26 @@
  * - Two reset modes: fast (just offset=0) and secure (memset 0)
  * - Checkpoint/rollback pattern via ArenaMark
  *
+ * Debug instrumentation (optional):
+ * ────────────────────────────────────────────────────────────────────────────
+ * Define CANON_ARENA_DEBUG before including this header to enable
+ * additional tracking fields in the Arena struct:
+ *
+ *   #define CANON_ARENA_DEBUG
+ *   #include "core/arena.h"
+ *
+ * When enabled:
+ * - alloc_count: total number of successful arena_alloc() calls
+ * - peak: high watermark of bytes used (maximum offset ever reached)
+ *
+ * Both fields are zero-initialized by arena_init() and reset by arena_reset().
+ * Zero cost in release builds — struct layout is identical without the flag.
+ * Use arena_stats() to retrieve a snapshot of debug state.
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - Time complexity: O(1) for alloc, O(n) for secure reset
- * - Space complexity: O(1) metadata (~24 bytes per arena)
+ * - Space complexity: O(1) metadata (~24 bytes per arena, ~40 with debug)
  * - No per-allocation overhead (no headers/footers)
  * - Alignment padding is the only "waste"
  * - Typical alloc: <10 CPU cycles (just add + align)
@@ -74,19 +90,30 @@
  * @sa arena_alloc(), arena_alloc_aligned(), arena_reset_to(), arena_mark()
  * @sa core/region.h — attach an arena to a lifetime region
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    Arena struct and mark type
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Arena instance — holds buffer, capacity and current position
  *
  * Fields are public for inspection but must not be modified directly.
  * Use arena_init(), arena_reset(), and arena_reset_to() to manage state.
+ *
+ * When CANON_ARENA_DEBUG is defined, two additional fields are present:
+ * - alloc_count: number of successful allocations since last reset
+ * - peak: maximum bytes used since last reset (high watermark)
  */
 typedef struct Arena {
-    u8*  buffer;     ///< Start of the memory block (caller-owned)
-    usize capacity;  ///< Total usable bytes in buffer
-    usize offset;    ///< Current bump pointer offset from buffer start
+    u8*   buffer;     ///< Start of the memory block (caller-owned)
+    usize capacity;   ///< Total usable bytes in buffer
+    usize offset;     ///< Current bump pointer offset from buffer start
+
+#ifdef CANON_ARENA_DEBUG
+    usize alloc_count; ///< [debug] Number of successful arena_alloc() calls
+    usize peak;        ///< [debug] High watermark: maximum offset ever reached
+#endif
 } Arena;
 
 /**
@@ -98,8 +125,71 @@ typedef struct Arena {
 typedef usize ArenaMark;
 
 /* ════════════════════════════════════════════════════════════════════════════
+   Debug stats snapshot (only available with CANON_ARENA_DEBUG)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_ARENA_DEBUG
+/**
+ * @brief Snapshot of arena debug state
+ *
+ * Returned by arena_stats(). All values reflect state since last reset.
+ */
+typedef struct {
+    usize used;        ///< Bytes currently allocated
+    usize remaining;   ///< Bytes still available
+    usize capacity;    ///< Total arena capacity
+    usize peak;        ///< Maximum bytes ever used (high watermark)
+    usize alloc_count; ///< Total number of successful allocations
+} ArenaStats;
+
+/**
+ * @brief Returns a snapshot of current arena debug state
+ *
+ * Only available when CANON_ARENA_DEBUG is defined.
+ *
+ * @param arena Valid initialized arena (NULL-safe — returns zeroed stats)
+ * @return ArenaStats snapshot
+ */
+static inline ArenaStats arena_stats(const Arena* arena) {
+    if (!arena) {
+        ArenaStats s = {0};
+        return s;
+    }
+    ArenaStats s;
+    s.used        = arena->offset;
+    s.remaining   = arena->capacity - arena->offset;
+    s.capacity    = arena->capacity;
+    s.peak        = arena->peak;
+    s.alloc_count = arena->alloc_count;
+    return s;
+}
+#endif /* CANON_ARENA_DEBUG */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: debug field update helper (compiled away in release)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_ARENA_DEBUG
+    #define _arena_debug_update(arena)                          \
+        do {                                                    \
+            (arena)->alloc_count += 1;                          \
+            if ((arena)->offset > (arena)->peak)                \
+                (arena)->peak = (arena)->offset;                \
+        } while (0)
+    #define _arena_debug_reset(arena)                           \
+        do {                                                    \
+            (arena)->alloc_count = 0;                           \
+            (arena)->peak        = 0;                           \
+        } while (0)
+#else
+    #define _arena_debug_update(arena) ((void)0)
+    #define _arena_debug_reset(arena)  ((void)0)
+#endif
+
+/* ════════════════════════════════════════════════════════════════════════════
    Initialization & state management
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Initializes an arena using caller-provided memory
  *
@@ -113,6 +203,7 @@ typedef usize ArenaMark;
  * @post arena->buffer == buffer
  * @post arena->capacity == capacity
  * @post arena->offset == 0
+ * @post [debug] arena->alloc_count == 0, arena->peak == 0
  *
  * Performance: O(1)
  */
@@ -128,6 +219,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     arena->buffer   = (u8*)buffer;
     arena->capacity = capacity;
     arena->offset   = 0;
+    _arena_debug_reset(arena);
 }
 
 /**
@@ -136,12 +228,16 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
  * Invalidates all previous allocations by moving offset back to 0.
  * Memory content is NOT cleared — use arena_reset_secure() for sensitive data.
  *
+ * @note [debug] Resets alloc_count and peak to 0.
+ *
  * @param arena Arena to reset (NULL-safe)
  *
  * Performance: O(1)
  */
 static inline void arena_reset(Arena* arena) {
-    if (arena) arena->offset = 0;
+    if (!arena) return;
+    arena->offset = 0;
+    _arena_debug_reset(arena);
 }
 
 /**
@@ -149,6 +245,8 @@ static inline void arena_reset(Arena* arena) {
  *
  * Use when arena contained sensitive data (keys, passwords, tokens, etc.).
  * Slower than arena_reset() — O(used bytes).
+ *
+ * @note [debug] Resets alloc_count and peak to 0.
  *
  * @param arena Arena to reset (NULL-safe)
  *
@@ -158,12 +256,14 @@ static inline void arena_reset_secure(Arena* arena) {
     if (arena && arena->offset > 0) {
         mem_secure_zero(arena->buffer, arena->offset);
         arena->offset = 0;
+        _arena_debug_reset(arena);
     }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Allocation
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Allocates size bytes with natural alignment
  *
@@ -171,6 +271,8 @@ static inline void arena_reset_secure(Arena* arena) {
  *
  * Uses ptr_align_up() and ptr_span() from core/primitives/ptr.h for all
  * pointer arithmetic — no raw uintptr_t casts in the function body.
+ *
+ * @note [debug] On success, increments alloc_count and updates peak.
  *
  * @param arena Valid initialized arena
  * @param size  Bytes to allocate (> 0)
@@ -196,11 +298,15 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     arena->offset += pad;
     void* result = ptr_offset(arena->buffer, arena->offset);
     arena->offset += size;
+
+    _arena_debug_update(arena);
     return result;
 }
 
 /**
  * @brief Allocates size bytes with a specific power-of-2 alignment
+ *
+ * @note [debug] On success, increments alloc_count and updates peak.
  *
  * @param arena     Valid initialized arena
  * @param size      Bytes to allocate (> 0)
@@ -234,12 +340,15 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
     arena->offset += pad;
     void* result = ptr_offset(arena->buffer, arena->offset);
     arena->offset += size;
+
+    _arena_debug_update(arena);
     return result;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Zero-initializing variants
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Allocates size bytes and zero-initializes them
  *
@@ -265,6 +374,7 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
 /* ════════════════════════════════════════════════════════════════════════════
    Query & checkpoint
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Returns total capacity of the arena in bytes (NULL-safe)
  */
@@ -315,6 +425,9 @@ static inline ArenaMark arena_mark(const Arena* arena) {
  * Invalidates all allocations made after the mark was taken.
  * Memory content is NOT cleared.
  *
+ * @note [debug] alloc_count and peak are NOT rolled back — they reflect
+ *       cumulative activity since last full reset, not since the mark.
+ *
  * @pre mark <= arena->offset
  */
 static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
@@ -327,6 +440,7 @@ static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
 /* ════════════════════════════════════════════════════════════════════════════
    Byte views — slice.h integration
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Returns a bytes_t view over the currently allocated region
  *
@@ -366,6 +480,7 @@ static inline bytes_t arena_free_bytes(const Arena* arena) {
 /* ════════════════════════════════════════════════════════════════════════════
    Try-alloc variants
    ════════════════════════════════════════════════════════════════════════════ */
+
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
     if (out) *out = p;
@@ -381,6 +496,7 @@ static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize align
 /* ════════════════════════════════════════════════════════════════════════════
    Convenience typed allocation macros
    ════════════════════════════════════════════════════════════════════════════ */
+
 /** @brief Allocates one object of Type from arena */
 #define arena_alloc_type(arena, Type) \
     ((Type*)arena_alloc((arena), sizeof(Type)))
