@@ -1,6 +1,12 @@
-# Core/Primitives 
+# Canon-C Cheatsheet
 
-> Quick reference for `core/primitives/`. All functions are `static inline` — zero call overhead.
+> Quick reference for all Canon-C modules.
+
+---
+
+## `core/primitives/`
+
+> All functions are `static inline` — zero call overhead.
 
 ---
 
