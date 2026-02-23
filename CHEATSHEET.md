@@ -1,6 +1,6 @@
 # Canon-C Cheatsheet
 
-> Quick reference for all Canon-C modules.
+> Quick reference manual for all Canon-C modules.
 
 ---
 
