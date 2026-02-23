@@ -38,6 +38,11 @@
 - [`result_impl.h`](#result_implh) — Pure implementation logic
 - [`result_mangle.h`](#result_mangleh) — Name mangling conventions
 
+### `semantics/`
+- [`borrow.h`](#borrowh) — Non-owning view types with explicit borrowing intent
+- [`diag.h`](#diagh) — Structured diagnostic frames for error context chains
+- [`error.h`](#errorh) — Common error codes and Result\<T, Error\> helpers
+
 ---
 
 ## `core/primitives/`
@@ -1897,3 +1902,277 @@ myproject_res_int_error x = myproject_res_int_error_ok(42);
 ```
 
 > **Known Limitations:** All macros are guarded with `#ifndef` — overrides must be defined before the first include of any result header in that translation unit. With two type parameters, generated names grow longer — keep `T` and `E` type names short to avoid unwieldy identifiers. Overrides apply to all type pairs instantiated after them, not selectively per pair.
+
+---
+
+## `semantics/`
+
+---
+
+### `borrow.h`
+> Concrete non-owning view types with explicit borrowing intent. Complements `ownership.h` (annotation macros) with actual structs. All types carry a `source` debug tag — the address of the owning object — never dereferenced, only for human/debugger inspection.
+
+#### Core idea
+
+`slice_t`, `str_t`, `bytes_t` are plain `{ptr, len}` — they carry no ownership signal. `borrowed_*` types make non-ownership explicit at the type level: when you see `borrowed_str` in a signature you immediately know — do not free, do not outlive the source.
+
+#### `borrowed_ptr` — generic non-owning pointer
+```c
+borrowed_ptr borrowed_ptr_from(const void* ptr, const void* source)
+borrowed_ptr borrowed_ptr_null(void)                  // absent borrow
+const void*  borrowed_ptr_get(const borrowed_ptr* b)  // never free result
+bool         borrowed_ptr_is_valid(const borrowed_ptr* b)
+bool         borrowed_ptr_eq(borrowed_ptr a, borrowed_ptr b)
+```
+
+Use when the type is unknown or erased. Prefer typed borrowed wrappers when the type is known.
+
+#### `borrowed_str` — non-owning string view
+
+Wraps `str_t`. Characters are not null-terminated. Never free `str.ptr`.
+```c
+borrowed_str borrowed_str_from(str_t s, const void* source)
+borrowed_str borrowed_str_from_cstr(const char* cstr, const void* source)  // O(n) strlen
+borrowed_str borrowed_str_empty(void)
+str_t        borrowed_str_get(const borrowed_str* b)   // never free ptr
+bool         borrowed_str_is_valid(const borrowed_str* b)
+usize        borrowed_str_len(const borrowed_str* b)
+bool         borrowed_str_eq(borrowed_str a, borrowed_str b)  // O(n) content compare
+borrowed_str borrowed_str_slice(borrowed_str b, usize start, usize end)  // inherits source
+```
+
+#### `borrowed_bytes` — non-owning byte view
+
+Wraps `cbytes_t` (read-only bytes). Never free `bytes.ptr`.
+```c
+borrowed_bytes borrowed_bytes_from(const void* ptr, usize len, const void* source)
+borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t b, const void* source)
+borrowed_bytes borrowed_bytes_empty(void)
+cbytes_t       borrowed_bytes_get(const borrowed_bytes* b)  // never free ptr
+usize          borrowed_bytes_len(const borrowed_bytes* b)
+bool           borrowed_bytes_is_valid(const borrowed_bytes* b)
+borrowed_bytes borrowed_bytes_slice(borrowed_bytes b, usize start, usize end)  // clamps to len
+```
+
+#### `DEFINE_BORROWED_SLICE(type)` — typed borrowed slice
+
+Requires prior `DEFINE_SLICE(type)`. Generates `borrowed_slice_T` with:
+```c
+DEFINE_SLICE(int)
+DEFINE_BORROWED_SLICE(int)
+
+borrowed_slice_int borrowed_slice_int_from(slice_int s, const void* source)
+borrowed_slice_int borrowed_slice_int_empty(void)
+slice_int          borrowed_slice_int_get(const borrowed_slice_int* b)
+usize              borrowed_slice_int_len(const borrowed_slice_int* b)
+bool               borrowed_slice_int_is_valid(const borrowed_slice_int* b)
+const int*         borrowed_slice_int_at(const borrowed_slice_int* b, usize i)  // NULL if OOB
+borrowed_slice_int borrowed_slice_int_slice(borrowed_slice_int b, usize start, usize end)
+borrowed_bytes     borrowed_slice_int_as_bytes(const borrowed_slice_int* b)
+```
+
+#### Lifetime model
+```c
+borrowed_str s = borrowed_str_from_cstr("Alice", NULL);
+// valid as long as the string literal lives (forever here)
+
+borrowed_bytes region = borrowed_bytes_from(buf, 256, buf);
+// invalid after buf goes out of scope
+
+borrowed_slice_int view = borrowed_slice_int_from(slice_int_from(arr, 4), arr);
+// invalid after arr is freed or goes out of scope
+```
+
+Pass `&owning_struct` as `source` for debugger visibility. Pass `NULL` if no owner is meaningful.
+
+> **Known Limitations:**
+> - No runtime lifetime enforcement — discipline only.
+> - `source` is never dereferenced — it is a debug tag only, not a safe back-reference.
+> - `borrowed_str_from_cstr` is O(n) due to `strlen`.
+> - `borrowed_bytes_slice` clamps `end` to `len` silently rather than asserting.
+> - `borrowed_ptr_get` requires non-NULL `b` (asserts via `require_msg`) but does not assert `ptr != NULL`.
+> - `DEFINE_BORROWED_SLICE(type)` must be called at file scope after `DEFINE_SLICE(type)`.
+
+---
+
+### `diag.h`
+> Structured diagnostic frames — stack-allocated, allocation-free context chain for error propagation. Answers "why and where" to complement `error.h` (what failed) and `result.h` (propagation). Chain reads bottom-up: `frame[0]` = root cause, last frame = surface error.
+
+#### Configuration
+```c
+#define DIAG_MAX_FRAMES  8    // max frames before oldest is dropped
+#define DIAG_MAX_MSG_LEN 128  // inline message length per frame (truncated if exceeded)
+```
+
+Override before including. `sizeof(Diag)` ≈ 640 bytes — stack-safe.
+
+#### Types
+```c
+// Single context record
+typedef struct {
+    const char* file;                      // __FILE__ literal
+    usize       line;                      // __LINE__
+    const char* func;                      // __func__ literal
+    Error       code;                      // error code at this level
+    char        message[DIAG_MAX_MSG_LEN]; // inline, null-terminated
+} DiagFrame;
+
+// The chain itself — pass by pointer, NULL is always safe
+typedef struct {
+    DiagFrame frames[DIAG_MAX_FRAMES];
+    usize     depth;  // 0 = empty
+} Diag;
+```
+
+#### Construction & Reset
+```c
+Diag diag_init(void)       // zero-initialized, depth == 0
+void diag_clear(Diag* d)   // sets depth = 0, NULL-safe, does not zero frames
+```
+
+#### Pushing Frames
+```c
+// Manual push (rarely needed directly)
+void diag_push(Diag* d, const char* file, usize line,
+               const char* func, Error code, const char* msg);
+
+// Primary macro — captures __FILE__, __LINE__, __func__ automatically
+DIAG_PUSH(diag, code, msg)
+
+// Formatted message into caller-provided stack buffer
+DIAG_PUSH_FMT(diag, code, buf, buf_size, fmt, ...)
+```
+
+If the chain is full, the oldest frame is dropped (shifted out) and the new frame is appended — newest context is always preserved.
+
+#### Inspection
+```c
+usize            diag_depth(const Diag* d)           // NULL-safe
+bool             diag_has_error(const Diag* d)        // depth > 0
+const DiagFrame* diag_frame_at(const Diag* d, usize i) // NULL if OOB
+const DiagFrame* diag_root(const Diag* d)             // frame[0], root cause
+const DiagFrame* diag_latest(const Diag* d)           // frame[depth-1], surface error
+Error            diag_root_code(const Diag* d)         // ERR_OK if empty
+Error            diag_latest_code(const Diag* d)       // ERR_OK if empty
+```
+
+#### Output
+```c
+// Prints full chain root → latest to FILE*
+// Format: [0] file.c:42 in func() — error N: "message"
+void diag_print(const Diag* d, FILE* stream)
+```
+
+#### Propagation Macros
+```c
+// Push frame and return retval if condition is true
+DIAG_RETURN_IF(cond, diag, code, msg, retval)
+
+// Call expression; if it returns false → push frame and return retval
+DIAG_PROPAGATE(call, diag, code, msg, retval)
+```
+
+#### Typical usage
+```c
+Diag diag = diag_init();
+
+if (!parse_int(str, &val, &diag)) {
+    DIAG_PUSH(&diag, ERR_PARSE_FAILED, "invalid number format");
+    diag_print(&diag, stderr);
+    return false;
+}
+
+// With DIAG_PROPAGATE:
+DIAG_PROPAGATE(open_file(path, &diag), &diag, ERR_IO_FAILED, "could not open config", false);
+```
+
+> **Known Limitations:**
+> - No runtime enforcement — caller must pass `&diag` explicitly at every level.
+> - On overflow, oldest frame is silently dropped — deep chains lose root context if they exceed `DIAG_MAX_FRAMES`.
+> - `DIAG_PUSH_FMT` requires a caller-provided stack buffer — no internal formatting buffer.
+> - `diag_print` depends on `FILE*` / `fprintf` — not suitable for embedded targets without stdio.
+> - `diag_clear` does not zero frame contents — stale data remains in unused slots (depth is the authority).
+> - `file` and `func` are string literal pointers — never copied, never freed, but also never safe to store beyond program lifetime if pointing to dynamically loaded code.
+
+---
+
+### `error.h`
+> Common error codes and human-readable messages for use with `Result<T, Error>` throughout the library. Simple flat enum — no hierarchies, zero runtime cost, thread-safe pure functions.
+
+#### Error Codes
+
+| Code | Range | Meaning |
+|---|---|---|
+| `ERR_OK` | 0 | Success (rarely appears in `Result::Err`) |
+| `ERR_INVALID_ARG` | 1–99 | NULL pointer, invalid value, precondition failed |
+| `ERR_OUT_OF_RANGE` | | Index/value exceeds bounds |
+| `ERR_PARSE_FAILED` | | String/number parsing failed |
+| `ERR_INVALID_FORMAT` | | Data format corrupted or invalid |
+| `ERR_INVALID_STATE` | | Operation invalid in current state |
+| `ERR_OUT_OF_MEMORY` | 100–199 | Allocation failed |
+| `ERR_BUFFER_TOO_SMALL` | | Buffer too small for result |
+| `ERR_CAPACITY_EXCEEDED` | | Fixed container or resource full |
+| `ERR_NOT_FOUND` | | Key or resource not found |
+| `ERR_IO_FAILED` | 200–299 | File/network/device I/O error |
+| `ERR_PERMISSION` | | Access denied |
+| `ERR_TIMEOUT` | | Operation timed out |
+| `ERR_NOT_SUPPORTED` | | Feature unavailable on platform |
+| `ERR_ALREADY_EXISTS` | | Resource or file already exists |
+| `ERR_OVERFLOW` | 300–399 | Numeric overflow |
+| `ERR_UNDERFLOW` | | Numeric underflow |
+| `ERR_DIVIDE_BY_ZERO` | | Division or modulo by zero |
+| `ERR_UNKNOWN` | 400+ | Catch-all / unspecified error |
+| `ERR_NOT_IMPLEMENTED` | | Feature stubbed / not complete |
+| `ERR_COUNT` | — | Sentinel — do not use as real error |
+
+#### Utility Functions
+```c
+const char* error_message(Error e)   // static string, never NULL, O(1) switch lookup
+bool        error_is_ok(Error e)     // true if ERR_OK
+bool        error_is_valid(Error e)  // true if e >= ERR_OK && e < ERR_COUNT
+int         error_code(Error e)      // plain integer cast
+```
+
+#### Result\<T, Error\> Convenience Macros
+
+Requires `CANON_RESULT(T, Error)` to have been called first.
+```c
+RESULT_OK(T, val)       // result_T_Error_ok(val)
+RESULT_ERR(T, code)     // result_T_Error_err(code)
+
+// Returns error_message() string if Err, NULL if Ok
+RESULT_ERROR_MSG(T, res)
+```
+
+#### Typical usage
+```c
+CANON_RESULT(int, Error)
+
+result_int_Error parse_number(const char* s) {
+    if (!s) return RESULT_ERR(int, ERR_INVALID_ARG);
+
+    char* end;
+    long val = strtol(s, &end, 10);
+    if (end == s || *end != '\0') return RESULT_ERR(int, ERR_PARSE_FAILED);
+
+    return RESULT_OK(int, (int)val);
+}
+
+// Caller:
+result_int_Error r = parse_number(input);
+if (result_int_Error_is_err(r)) {
+    fprintf(stderr, "Error: %s\n", RESULT_ERROR_MSG(int, r));
+}
+```
+
+#### Extension guide
+
+Add new codes before `ERR_COUNT` in the enum, then add a `case` in `error_message()`. For domain-specific errors, define a separate enum (e.g. `ErrorJson`) and a separate `CANON_RESULT(T, ErrorJson)`.
+
+> **Known Limitations:**
+> - Flat enum only — no error hierarchies or subcategories.
+> - `RESULT_OK` / `RESULT_ERR` / `RESULT_ERROR_MSG` macros assume the error type is literally `Error` — they will not work with custom error enums without modification.
+> - `error_message` returns `"Unknown error"` for both `ERR_UNKNOWN` and any out-of-range value — callers cannot distinguish the two.
+> - `ERR_COUNT` is a sentinel — using it as a real error code will produce misleading messages.
+
+
