@@ -7,28 +7,21 @@ A semantic standard library built from explicit, composable C modules.
 
 ## Motivation
 
-Over time, I kept rewriting the same low-level patterns in C — arenas, error handling, vectors, parsing, file I/O, and many others.
-Existing libraries either hid allocation, imposed frameworks, relied on implicit conventions, or lacked consistency across modules. None matched my preferences for 
-explicit ownership, predictable allocation, header-only usage, and minimal hidden behavior.
+Over time, I found myself repeatedly re-implementing the same low-level patterns in C: arenas, error handling, vectors, parsing, file I/O, and more. Existing libraries either hide allocation, impose heavy frameworks, rely on implicit conventions, or lack consistency across modules. None matched my preference for explicit ownership, predictable allocation, header-only usage, and minimal hidden behavior.
 
-In practice, this meant repeatedly reimplementing the same infrastructure and re-learning the same rules across projects.
+In practice, this meant rewriting the same infrastructure across projects and re-learning the same informal rules every time.
 
-Canon-C is an attempt to unify these patterns into a small, disciplined, and composable set of C modules with strict design rules. 
-The goal is not to add new functionality, but to make program intent visible directly from APIs, so that ownership, lifetime, failure, and data flow are obvious at call sites.
+Canon-C is an attempt to unify these patterns into a small, disciplined, and composable semantic standard library for C, governed by strict design principles. The goal is not to add new functionality, but to make program intent visible directly in APIs, so that ownership, lifetime, failure, and data flow are immediately clear at call sites.
 
-C is fast, portable, and predictable, but its native semantics are low-level and mechanical.
-Writing non-trivial programs in C often requires memorizing patterns, conventions, and boilerplate around memory management, ownership rules, error handling, and iteration. These details obscure intent and increase cognitive load.
+C is fast, portable, and predictable, but its native semantics are low-level and mechanical. Writing non-trivial programs in C requires memorizing conventions and boilerplate around memory management, ownership rules, error handling, and iteration. These details obscure intent and significantly increase cognitive load.
 
-There is no standard taxonomy of most used libraries in C.
+Modern languages embed these abstractions directly into the language. While powerful, this often hides behavior, increases semantic complexity, and reduces transparency. Canon-C takes a different approach: C itself remains unchanged. Meaning is added explicitly through libraries, not syntax.
 
-Many modern languages embed abstractions directly into the language to address this. While powerful, 
-this also increases semantic complexity and hides behavior. Canon-C takes a different approach: C itself is left untouched. Meaning is added through explicit libraries, not syntax.
+The result is a set of semantic building blocks that improve readability, preserve explicit control, maintain performance, and remain fully transparent.
 
-The result is a set of semantic building blocks that improve readability, maintain explicit control, preserve performance, and remain fully transparent.
+The long-term goal is for this taxonomy of C abstractions to become a shared standard vocabulary — a common foundation that allows C programs to communicate intent clearly, consistently, and safely.
 
-I want this "taxonomy" to become a standard that everyone uses. 
-
-Canon-C is licensed under **MPL 2.0** as the primary license. 
+Canon-C is licensed under MPL 2.0.
 
 ---
 
