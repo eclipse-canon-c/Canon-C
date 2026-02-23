@@ -17,6 +17,12 @@
 
 ### `core/`
 - [`arena.h`](#arenah) — Linear bump allocator
+- [`memory.h`](#memoryh) — Safe low-level memory operations
+- [`ownership.h`](#ownershiph) — Ownership and borrowing annotations
+- [`pool.h`](#poolh) — Fixed-size object pool allocator
+- [`region.h`](#regionh) — Explicit lifetime region tokens
+- [`scope.h`](#scopeh) — RAII-style deferred cleanup
+- [`slice.h`](#sliceh) — Non-owning views into contiguous memory
 
 ---
 
@@ -743,3 +749,486 @@ ArenaStats s = arena_stats(&arena);
 > - `arena_alloc_array` and `arena_alloc_array_zero` do not overflow-check `sizeof(Type) * count` — use `checked_mul` first for untrusted counts.
 > - `arena_reset_to` does not roll back debug counters (`alloc_count`, `peak`) — they reflect cumulative activity since last full reset.
 > - Memory is not cleared on `arena_reset` — old data remains readable until overwritten.
+
+---
+
+### `memory.h`
+> Safe, explicit wrappers over `memcpy`, `memmove`, `memset`, `memcmp`, `malloc`, and `free`. Null-safe and zero-size safe throughout. Prefer `arena_alloc()` for temporary allocations; use `mem_alloc()` only when heap + explicit free is required.
+
+#### Heap Allocation
+
+**`void* mem_alloc(usize size)`**
+Allocates `size` bytes on the heap. Returns `NULL` if `size == 0` or allocation fails. Free with `mem_free()`.
+
+**`void mem_free(void* ptr)`**
+Frees heap memory. NULL-safe. Do NOT use on arena/pool memory.
+
+#### Alignment Utilities
+
+**`usize mem_align(usize size)`**
+Rounds `size` up to the next multiple of `CANON_DEFAULT_ALIGN`. Returns `CANON_USIZE_MAX` on overflow.
+
+**`usize mem_align_to(usize size, usize alignment)`**
+Rounds `size` up to the next multiple of `alignment` (must be power of 2). Returns `CANON_USIZE_MAX` on overflow or invalid alignment.
+
+**`bool mem_is_aligned(const void* ptr, usize alignment)`**
+Returns `true` if `ptr` satisfies the given power-of-2 alignment. `NULL` → false.
+
+**`usize mem_get_alignment(const void* ptr)`**
+Returns the largest power-of-2 alignment of a pointer's address. `NULL` → 0.
+
+**`bool mem_is_power_of_two(usize n)`**
+Returns `true` if `n` is a power of two and > 0.
+
+#### Raw Memory Operations
+
+**`void mem_copy(void* dest, const void* src, usize size)`**
+Non-overlapping copy (wraps `memcpy`). Null-safe, zero-size safe.
+```c
+mem_copy(dst, src, sizeof(MyStruct));
+```
+
+**`void mem_move(void* dest, const void* src, usize size)`**
+Overlapping-safe copy (wraps `memmove`).
+
+**`void mem_zero(void* ptr, usize size)`**
+Zero-fills a region. Null-safe.
+
+**`void mem_secure_zero(void* ptr, usize size)`**
+Zero-fills without compiler optimization (uses `memset_s` or volatile loop). Use for secrets.
+
+**`void mem_set(void* ptr, int value, usize size)`**
+Fills region with repeated byte `value`.
+
+**`int mem_compare(const void* a, const void* b, usize size)`**
+Byte comparison (`memcmp` semantics). Returns 0 for NULL or size == 0. **Not constant-time** — do not use for crypto.
+
+**`bool mem_equal(const void* a, const void* b, usize size)`**
+Returns `true` if regions are byte-identical. Both NULL → true, size == 0 → true.
+
+**`bool mem_is_all(const void* ptr, int value, usize size)`**
+Returns `true` if every byte equals `value`. NULL or size == 0 → true.
+
+**`bool mem_is_zero(const void* ptr, usize size)`**
+Returns `true` if every byte is zero.
+
+**`void mem_swap(void* a, void* b, usize size)`**
+Swaps two non-overlapping regions using a stack buffer.
+```c
+// size must be <= CANON_MEM_SWAP_MAX (default: 256 bytes)
+mem_swap(&items[i], &items[j], sizeof(Item));
+```
+
+#### `bytes_t` / `cbytes_t` Variants
+
+| Function | Description |
+|---|---|
+| `usize mem_copy_bytes(bytes_t dest, cbytes_t src)` | Copy; requires `dest.len >= src.len`. Returns bytes copied. |
+| `usize mem_move_bytes(bytes_t dest, cbytes_t src)` | Move (overlap-safe); requires `dest.len >= src.len`. |
+| `void mem_zero_bytes(bytes_t b)` | Zero-fill entire view. |
+| `void mem_set_bytes(bytes_t b, int value)` | Fill view with byte value. |
+| `bool mem_equal_bytes(cbytes_t a, cbytes_t b)` | True if same length and byte-identical. |
+| `bool mem_is_zero_bytes(cbytes_t b)` | True if all bytes are zero. |
+| `void mem_secure_zero_bytes(bytes_t b)` | Secure zero, optimizer-resistant. |
+
+#### Type-Safe Macros
+```c
+mem_zero_type(ptr)               // zero one object
+mem_secure_zero_type(ptr)        // secure zero one object
+mem_zero_array(array)            // zero a fixed-size array
+mem_copy_type(dest, src)         // copy one object
+mem_compare_type(a, b)           // compare two objects
+mem_equal_type(a, b)             // equality of two objects
+mem_alloc_type(Type)             // heap-alloc one Type
+mem_alloc_array(Type, count)     // heap-alloc array of Type
+```
+
+> **Known Limitations:**
+> - `mem_swap` requires `size <= CANON_MEM_SWAP_MAX` (default 256 bytes) — override by defining `CANON_MEM_SWAP_MAX` before including.
+> - `mem_compare` / `mem_equal` are not constant-time — never use for comparing cryptographic secrets.
+> - `mem_alloc_array` macro does not overflow-check `sizeof(Type) * count` — use `checked_mul` first for untrusted counts.
+> - `mem_secure_zero` falls back to a volatile loop when `memset_s` is unavailable (non-C11 Annex K platforms).
+
+---
+
+### `ownership.h`
+> Explicit ownership and borrowing annotations for Canon-C APIs. Pure preprocessor — zero runtime cost, zero enforcement. Annotations are promises, not guarantees.
+
+#### Annotation Macros
+
+These all expand to `T` at the compiler level — their value is documentation and grep-ability.
+
+**`owned(T)`**
+Pointer transfers ownership. On a parameter: callee owns it, caller must not use or free it after. On a return type: caller receives ownership and must eventually free it.
+
+**`borrowed(T)`**
+Non-owning view. On a parameter: caller retains ownership. On a return type: caller must NOT free it and must not use it after the owner is freed.
+
+**`moved(T)`**
+Signals the original value should be treated as invalid after the call. C cannot enforce this.
+
+**`dropped(T)`**
+Signals the value has been released and the pointer is now invalid.
+```c
+owned(Arena)        arena_create(owned(u8*) buffer, usize size);
+owned(void*)        arena_alloc(borrowed(Arena*) arena, usize size);
+void                arena_destroy(owned(Arena*) arena);
+borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb);
+```
+
+#### Drop Helpers
+
+**`CANON_DROP(ptr, free_fn)`**
+Calls `free_fn(ptr)` then sets `ptr = NULL`. Prevents accidental reuse but does not prevent UB if dereferenced.
+```c
+CANON_DROP(my_arena, arena_destroy);
+```
+
+**`CANON_DROP_IF(ptr, free_fn)`**
+Same as `CANON_DROP` but skips the call if `ptr` is already `NULL`. Safe for lazily-initialized resources.
+```c
+CANON_DROP_IF(optional_buf, mem_free);
+```
+
+#### Strong Wrappers (optional)
+
+Use `DEFINE_OWNED` / `DEFINE_BORROWED` when you want a distinct struct type that the compiler won't silently coerce to a raw pointer.
+
+**`DEFINE_OWNED(type)`**
+Generates `owned_##type` struct + helpers:
+
+| Helper | Description |
+|---|---|
+| `owned_T_wrap(ptr)` | Wraps a raw pointer into the owned struct |
+| `owned_T_unwrap(o)` | Extracts raw pointer and NULLs the wrapper |
+| `owned_T_borrow(o)` | Returns raw pointer without transferring ownership |
+| `owned_T_is_valid(o)` | Returns `true` if non-NULL and holds a non-NULL ptr |
+| `owned_T_drop(o, free_fn)` | Calls `free_fn`, NULLs internal ptr |
+
+**`DEFINE_BORROWED(type)`**
+Generates `borrowed_##type` struct + helpers:
+
+| Helper | Description |
+|---|---|
+| `borrowed_T_from(ptr)` | Wraps a `const T*` into the borrowed struct |
+| `borrowed_T_get(b)` | Returns the `const T*` |
+| `borrowed_T_is_valid(b)` | Returns `true` if non-NULL and holds a non-NULL ptr |
+
+#### Convention Summary
+```c
+// Caller owns, function borrows (most common)
+void vec_push(borrowed(Vec*) v, int item);
+
+// Function returns owned — caller must free
+owned(char*) str_duplicate(borrowed(const char*) src);
+
+// Function takes owned — callee responsible after call
+void dynvec_free(dropped(dynvec*) v);
+
+// Function returns borrowed — caller must NOT free
+borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb);
+```
+
+> **Known Limitations:** Annotations are documentation only — no compiler enforcement, no protection against use-after-move or double-free. `DEFINE_OWNED` / `DEFINE_BORROWED` give type-level distinction but still require manual discipline. The custom handler in `contract.h` applies if a `require_msg` inside a generated helper fires.
+
+---
+
+### `pool.h`
+> Fixed-size object pool allocator backed by an `Arena`. O(1) allocation for many objects of the same size. No individual deallocation — reset only.
+
+#### Initialization
+
+**`bool pool_init(Pool* pool, Arena* arena, usize object_size, usize max_objects)`**
+Initializes the pool using space from `arena`. Object sizes are aligned up automatically. Returns `false` if the arena has insufficient space or arguments are invalid.
+```c
+Pool pool;
+pool_init(&pool, &arena, sizeof(MyStruct), 128);
+```
+
+**`pool_init_type(pool, arena, Type, max_objects)`** *(macro)*
+Type-safe shorthand — passes `sizeof(Type)` automatically.
+```c
+pool_init_type(&pool, &arena, MyStruct, 128);
+```
+
+#### Allocation
+
+| Function | Description |
+|---|---|
+| `void* pool_alloc(Pool* pool)` | Allocates one object slot. Returns `NULL` if full. |
+| `void* pool_alloc_zero(Pool* pool)` | Same, but zero-initializes. |
+| `bool pool_try_alloc(Pool* pool, void** out)` | Writes pointer to `out`, returns `false` if full. |
+| `bool pool_try_alloc_zero(Pool* pool, void** out)` | Same, but zero-initializes. |
+
+#### Index Access
+
+**`void* pool_get(const Pool* pool, usize i)`**
+Returns a pointer to the object at index `i`. Bounds-checked against `pool->used`. Returns `NULL` if out of bounds.
+
+**`const void* pool_get_const(const Pool* pool, usize i)`**
+Same, returning a `const` pointer.
+
+#### Query
+```c
+pool_used(pool)             // number of allocated objects
+pool_capacity(pool)         // maximum objects
+pool_remaining(pool)        // slots still available
+pool_is_full(pool)          // true if used == capacity
+pool_is_empty(pool)         // true if used == 0
+pool_object_size(pool)      // aligned size per object in bytes
+pool_memory_used(pool)      // object_size * used
+pool_memory_reserved(pool)  // object_size * capacity
+```
+
+#### Reset
+
+**`void pool_reset(Pool* pool)`**
+Resets `used` to 0 and rolls back the arena to the pool's base mark. O(1). Does NOT zero memory. All prior `pool_get()` / `pool_alloc()` pointers are invalidated.
+
+**`void pool_reset_secure(Pool* pool)`**
+Same, but securely zeros all previously allocated object memory first. O(used bytes).
+
+#### Byte Views
+
+**`bytes_t pool_as_bytes(const Pool* pool)`**
+View over `[base, base + used * object_size)`. Non-owning — invalid after reset.
+
+**`bytes_t pool_reserved_bytes(const Pool* pool)`**
+View over the entire reserved region including unallocated slots.
+
+#### Type-Safe Macros
+```c
+pool_alloc_type(pool, Type)              // (Type*) pool_alloc
+pool_alloc_type_zero(pool, Type)         // (Type*) pool_alloc_zero
+pool_get_type(pool, i, Type)             // (Type*) pool_get
+pool_get_type_const(pool, i, Type)       // (const Type*) pool_get_const
+```
+
+> **Known Limitations:**
+> - No individual deallocation — `pool_reset()` resets the entire pool at once.
+> - `pool_get()` requires objects to be contiguous from `base_mark` — do not interleave other arena allocations between pool objects after `pool_init()`.
+> - `pool_init()` does not overflow-check `aligned_size * max_objects` beyond a basic guard — use `checked_mul` if counts are untrusted.
+> - Not thread-safe — inherits arena's single-threaded constraint.
+
+---
+
+### `region.h`
+> Named lifetime boundaries for borrow validity. A Region token represents a scope — borrowed views can be stamped with its ID and validated against it in debug builds. Stack-allocated only, zero heap use.
+
+#### Lifecycle
+
+**`Region region_begin(void)`**
+Opens a new region with a unique monotonic ID. Returns a fully initialized stack-allocated `Region`.
+```c
+Region r = region_begin();
+```
+
+**`void region_end(Region* r)`**
+Closes the region. Calls all registered cleanup hooks in LIFO order, then resets the attached arena (if any). After this call `r->open == false`.
+```c
+region_end(&r);
+```
+
+#### Configuration
+
+**`void region_attach_arena(Region* r, Arena* arena)`**
+Attaches an arena — `arena_reset()` will be called automatically on `region_end()`. Only one arena per region; attaching a second replaces the first without resetting it.
+```c
+Region r = region_begin();
+region_attach_arena(&r, &scratch);
+void* buf = arena_alloc(&scratch, 256);  // lives until region_end
+region_end(&r);                          // arena_reset called automatically
+```
+
+**`void region_set_parent(Region* r, Region* parent)`**
+Records a parent region for nesting intent. Informational only — the parent is never auto-ended.
+
+**`bool region_register(Region* r, void (*fn)(void* ctx), void* ctx)`**
+Registers a cleanup hook. Hooks are called LIFO on `region_end()`. Returns `false` if the hook table is full (`REGION_MAX_CLEANUP`, default 8).
+```c
+void release_lock(void* ctx) { mutex_unlock((Mutex*)ctx); }
+region_register(&r, release_lock, &my_mutex);
+```
+
+#### Inspection
+```c
+region_id(&r)           // unique region_id_t (0 if r == NULL)
+region_is_open(&r)      // true between begin and end
+region_has_parent(&r)   // true if parent was set
+region_hook_count(&r)   // number of registered hooks
+```
+
+#### Lifetime Assertions (debug only, no-op in release)
+
+**`void region_assert_open(const Region* r)`**
+Fires `ensure_msg` if the region is closed. Call before using a borrowed value tied to this region.
+
+**`void region_assert_borrow_valid(const Region* r, region_id_t borrow_region_id)`**
+Asserts the borrow's stamped ID matches this region and the region is still open. Silently passes for `REGION_ID_STATIC` (always valid).
+
+#### Special IDs
+
+**`REGION_ID_STATIC`** — reserved ID `0`. Borrows stamped with this are considered permanently valid (string literals, static buffers).
+
+#### `REGION_SCOPE` Macro
+
+If `scope.h` is included, `REGION_SCOPE(name)` declares a region that is automatically ended at scope exit via `SCOPE_DEFER`. Without `scope.h`, it expands to `region_begin()` only — `region_end()` must be called manually.
+```c
+#include "core/scope.h"
+#include "core/region.h"
+
+void my_function(void) {
+    REGION_SCOPE(r);
+    region_attach_arena(&r, &scratch);
+    // ... region_end(&r) called automatically at scope exit
+}
+```
+
+> **Known Limitations:**
+> - `region_next_id()` uses a static counter — not thread-safe. Use one region per thread in multi-threaded code.
+> - `REGION_MAX_CLEANUP` defaults to 8 hooks; override by defining it before including the header.
+> - Parent regions are never auto-ended — nesting order is always the caller's responsibility.
+> - Lifetime assertions are `ensure_msg` — compiled out in release (`NDEBUG`). No runtime protection in production builds.
+> - Attaching a second arena silently replaces the first without resetting it.
+
+---
+
+### `scope.h`
+> RAII-style deferred cleanup via zero-overhead macros. Cleanup code runs automatically when leaving a block — on normal end, `return`, `break`, `continue`, or `goto` within the block. Multiple defers in the same block execute in LIFO order.
+
+#### Macros
+
+**`SCOPE_DEFER { ... }`**
+Executes the block exactly once when control leaves the enclosing scope. Expands to nested `for`-loops — compiled away entirely at `-O2` or higher.
+
+**`defer { ... }`**
+Short alias for `SCOPE_DEFER` (Go/Zig-style). Disable with `#define CANON_NO_DEFER_ALIAS`.
+
+#### Usage
+```c
+// Single resource
+FILE* f = fopen("data.txt", "r");
+if (!f) return ERR_OPEN;
+defer { fclose(f); }
+// f is guaranteed closed on any normal exit
+
+// Multiple resources — released in reverse order
+void* mem = malloc(4096);
+defer { free(mem); }         // runs second
+
+FILE* log = fopen("log.txt", "a");
+defer { fclose(log); }       // runs first
+
+// Arena checkpoint
+ArenaMark mark = arena_mark(&arena);
+defer { arena_reset_to(&arena, mark); }
+
+// Lock guard
+pthread_mutex_lock(&mtx);
+defer { pthread_mutex_unlock(&mtx); }
+```
+
+#### Exit Method Behavior
+
+| Exit method | Cleanup runs? |
+|---|---|
+| Normal end of block | ✅ |
+| `return` | ✅ |
+| `break` / `continue` | ✅ |
+| `goto` inside block | ✅ |
+| `goto` outside block | ❌ |
+| `longjmp` out | ❌ |
+| `exit()` / `abort()` | ❌ |
+
+#### Critical Rules
+
+- Never put `return`, `break`, `continue`, or outward `goto` **inside** a defer block
+- Never use `longjmp` across a defer boundary — cleanup will be skipped
+- Keep defer blocks simple: `free`, `fclose`, `unlock`, `arena_reset_to`, etc.
+
+> **Known Limitations:** `goto` jumping **out** of the enclosing block silently skips all defers in that block — this is the most common footgun. `longjmp` bypasses all defers completely. Not a substitute for exception handling in large codebases with complex control flow.
+
+---
+
+### `slice.h`
+> Non-owning `{pointer, length}` views into contiguous memory. No allocations, no ownership. All operations are bounds-checked and NULL-safe. All functions are `static inline` — zero call overhead.
+
+#### Types
+
+**`bytes_t`** — mutable untyped byte view `{u8* ptr, usize len}`
+**`cbytes_t`** — read-only untyped byte view `{const u8* ptr, usize len}`
+**`str_t`** — read-only character view `{const char* ptr, usize len}` — null terminator NOT required
+
+#### `bytes_t` Construction
+```c
+bytes_from(ptr, len)      // mutable view over [ptr, ptr+len)
+bytes_empty()             // {NULL, 0}
+cbytes_from(ptr, len)     // read-only view
+bytes_as_const(b)         // bytes_t → cbytes_t
+```
+
+#### `bytes_t` Queries & Slicing
+```c
+bytes_is_empty(b)              // true if len == 0
+bytes_at(b, i)                 // u8* at index i, NULL if OOB
+bytes_equal(a, b)              // true if same length and contents — O(n)
+bytes_slice(b, start, end)     // sub-view [start, end), no copy
+bytes_take(b, n)               // first n bytes
+bytes_skip(b, n)               // bytes after skipping n
+```
+
+#### `str_t` Construction
+```c
+str_from(ptr, len)       // view from pointer + explicit length
+str_from_cstr(cstr)      // view from null-terminated string — O(n) strlen
+str_empty()              // {NULL, 0}
+```
+
+#### `str_t` Queries & Slicing
+```c
+str_is_empty(s)                 // true if len == 0
+str_equal(a, b)                 // true if same length and contents — O(n)
+str_starts_with(s, prefix)      // O(prefix.len)
+str_ends_with(s, suffix)        // O(suffix.len)
+str_slice(s, start, end)        // sub-view [start, end), no copy
+str_take(s, n)                  // first n characters
+str_skip(s, n)                  // characters after skipping n
+str_as_bytes(s)                 // str_t → cbytes_t
+```
+
+#### `DEFINE_SLICE(type)` — Typed Element Views
+
+Generates a `slice_##type` struct and helpers for any C type. For pointer types, `typedef` first.
+```c
+DEFINE_SLICE(int)
+
+int arr[8] = {1,2,3,4,5,6,7,8};
+slice_int sv = slice_int_from(arr, 8);
+```
+
+Generated functions:
+
+| Function | Returns | Description |
+|---|---|---|
+| `slice_T_from(ptr, len)` | `slice_T` | Construct from pointer + length |
+| `slice_T_empty()` | `slice_T` | `{NULL, 0}` |
+| `slice_T_len(s)` | `usize` | Element count |
+| `slice_T_is_empty(s)` | `bool` | True if len == 0 |
+| `slice_T_get(s, i, out)` | `bool` | Bounds-checked copy into `*out` |
+| `slice_T_get_unchecked(s, i)` | `type` | No bounds check (debug assert only) |
+| `slice_T_at(s, i)` | `type*` | Pointer to element, NULL if OOB |
+| `slice_T_first(s)` | `type*` | Pointer to first, NULL if empty |
+| `slice_T_last(s)` | `type*` | Pointer to last, NULL if empty |
+| `slice_T_slice(s, start, end)` | `slice_T` | Sub-view, no copy |
+| `slice_T_take(s, n)` | `slice_T` | First n elements |
+| `slice_T_skip(s, n)` | `slice_T` | After skipping n |
+| `slice_T_as_bytes(s)` | `bytes_t` | Raw byte view over backing memory |
+
+> **Known Limitations:**
+> - Slices do NOT own memory — they become invalid after `arena_reset()`, `mem_free()`, or when the backing stack buffer goes out of scope.
+> - `str_from_cstr()` calls `strlen()` — O(n). Use `str_from()` when length is already known.
+> - `slice_T_get_unchecked()` only asserts in debug builds (`ensure_msg`) — no protection in release.
+> - `DEFINE_SLICE` cannot be used directly with pointer types — `typedef` the pointer type first (e.g. `typedef int* intp;`).
+> - `bytes_equal` / `str_equal` / `slice_T_get` are not constant-time — do not use for cryptographic comparison.
+
+
