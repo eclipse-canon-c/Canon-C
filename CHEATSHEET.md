@@ -24,6 +24,13 @@
 - [`scope.h`](#scopeh) — RAII-style deferred cleanup
 - [`slice.h`](#sliceh) — Non-owning views into contiguous memory
 
+### `semantics/option/`
+- [`option.h`](#optionh) — Rust-style Option\<T\> for C
+- [`option_decl.h`](#option_declh) — Declaration macros (separate compilation)
+- [`option_defn.h`](#option_defnh) — Definition macros (implementation generation)
+- [`option_impl.h`](#option_implh) — Pure implementation logic
+- [`option_mangle.h`](#option_mangleh) — Name mangling conventions
+
 ---
 
 ## `core/primitives/`
@@ -1231,4 +1238,328 @@ Generated functions:
 > - `DEFINE_SLICE` cannot be used directly with pointer types — `typedef` the pointer type first (e.g. `typedef int* intp;`).
 > - `bytes_equal` / `str_equal` / `slice_T_get` are not constant-time — do not use for cryptographic comparison.
 
+---
 
+## `semantics/option/`
+
+---
+
+### `option.h`
+> Rust-style `Option<T>` for C. Represents either `Some(value)` or `None`. Zero-cost: `bool + T` on the stack, no heap allocation. One concrete struct and full function set generated per type via `CANON_OPTION(type)`.
+
+#### Setup
+```c
+CANON_OPTION(int)     // generates option_int + all functions
+CANON_OPTION(float)
+
+// Pointer types — typedef first:
+typedef void* void_ptr;
+CANON_OPTION(void_ptr)
+
+// Struct types:
+typedef struct { int x, y; } Point;
+CANON_OPTION(Point)
+```
+
+Must be used at file/global scope, not inside functions. Use once per type.
+
+#### Constructors
+```c
+option_int_some(42)   // Some(42)
+option_int_none()     // None
+```
+
+#### Queries
+```c
+option_int_is_some(o)   // true if contains a value
+option_int_is_none(o)   // true if empty
+```
+
+#### Safe Extraction
+```c
+int out;
+if (option_int_get(o, &out)) { /* use out */ }   // pointer output
+
+int val = option_int_unwrap_or(o, 0);            // default if None
+```
+
+#### Unsafe Extraction
+```c
+int val = option_int_unwrap(o);              // panics if None
+int val = option_int_expect(o, "msg");       // panics with message if None
+```
+
+Only use after an `is_some()` check, or when value presence is a guaranteed invariant.
+
+#### Combinators
+```c
+opt = option_int_map(opt, double_it);          // T → T, None passthrough
+opt = option_int_filter(opt, is_even);         // None if predicate fails
+opt = option_int_and_then(opt, half_if_even);  // T → option_T, no nesting
+opt = option_int_or_else(opt, get_default);    // alternative if None
+opt = option_int_zip(opt_a, opt_b, combine);   // Some(f(a,b)) if both Some
+```
+
+#### Mutation
+```c
+option_int old   = option_int_replace(&opt, 20); // swap in new, get old
+option_int taken = option_int_take(&opt);         // extract, leave None
+```
+
+#### Comparison
+```c
+bool eq = option_int_eq(opt_a, opt_b, int_eq_fn);
+// true if both None, or both Some with equal values
+```
+
+#### Propagation Macros (GNU C / C23 only)
+
+Disable with `#define CANON_NO_GNU_EXTENSIONS`.
+```c
+// Return err_code from current function if opt is None, else yield value
+int val = TRY_SOME(int, get_optional(), err(ERROR_NOT_FOUND));
+
+// Yield value or default as an inline expression
+int x = UNWRAP_OR_DEFAULT(int, get_config(), 100);
+```
+
+> **Known Limitations:**
+> - `CANON_OPTION(T)` generates ~1-2KB of code per type — only instantiate types you use.
+> - `unwrap()` and `expect()` use `require()` from `contract.h` — always-on panic, not debug-only.
+> - `TRY_SOME` / `UNWRAP_OR_DEFAULT` require GNU C statement expressions or C23 — not valid in strict C99.
+> - `map`, `and_then`, `filter`, `zip` take function pointers — cannot inline lambdas in C99.
+> - Do not use `Option<bool>` — prefer an explicit enum or `Result` instead.
+
+---
+
+### `option_decl.h`
+> Declaration macros for `Option<T>` — for separate compilation. Use in `.h` files to declare types and function signatures without generating implementations.
+
+#### When to use
+
+Use `option_decl.h` + `option_defn.h` together when you want faster incremental builds by defining Option types once in a `.c` file instead of re-generating them in every translation unit.
+
+#### Workflow
+```c
+// my_types.h — declare only
+#include "option_decl.h"
+DECLARE_OPTION_ALL(extern, int)
+
+// my_types.c — define once
+#include "option_defn.h"
+DEFINE_OPTION_ALL(, int)   // empty linkage for extern
+
+// main.c — just include the header
+#include "my_types.h"
+option_int x = option_int_some(42);
+```
+
+#### Macros
+
+**`DECLARE_OPTION_ALL(linkage, T)`**
+One-shot: declares the typedef, struct, and all function signatures.
+
+**`DECLARE_OPTION_TYPEDEF(T)`** — typedef only
+**`DECLARE_OPTION_STRUCT(T)`** — struct layout only
+**`DECLARE_OPTION_FUNCTIONS(linkage, T)`** — all function signatures, no type
+
+Individual function declaration macros (all take `linkage, T`):
+```c
+DECLARE_OPTION_SOME(linkage, T)
+DECLARE_OPTION_NONE(linkage, T)
+DECLARE_OPTION_IS_SOME(linkage, T)
+DECLARE_OPTION_IS_NONE(linkage, T)
+DECLARE_OPTION_GET(linkage, T)
+DECLARE_OPTION_UNWRAP_OR(linkage, T)
+DECLARE_OPTION_UNWRAP(linkage, T)
+DECLARE_OPTION_EXPECT(linkage, T)
+DECLARE_OPTION_MAP(linkage, T)
+DECLARE_OPTION_AND_THEN(linkage, T)
+DECLARE_OPTION_OR_ELSE(linkage, T)
+DECLARE_OPTION_FILTER(linkage, T)
+DECLARE_OPTION_ZIP(linkage, T)
+DECLARE_OPTION_REPLACE(linkage, T)
+DECLARE_OPTION_TAKE(linkage, T)
+DECLARE_OPTION_EQ(linkage, T)
+```
+
+#### Minimal API pattern
+
+Expose only what you want callers to see:
+```c
+DECLARE_OPTION_TYPEDEF(int)
+DECLARE_OPTION_STRUCT(int)
+DECLARE_OPTION_SOME(extern, int)
+DECLARE_OPTION_NONE(extern, int)
+DECLARE_OPTION_IS_SOME(extern, int)
+// unwrap, map, etc. stay internal
+```
+
+> **Known Limitations:** Declarations are compile-time only — no runtime cost, no code generation. Linkage attributes like `__declspec` are compiler-specific; pass them via the `linkage` parameter.
+
+---
+
+### `option_defn.h`
+> Definition macros for `Option<T>` — generates actual implementations. Use in `.c` files for separate compilation, or in `.h` files with `static inline` for header-only libraries.
+
+#### Workflow
+```c
+// Header-only (traditional Canon-C style)
+#include "option_defn.h"
+DEFINE_OPTION_ALL(static inline, int)
+
+// Separate compilation (.c file only)
+#include "option_defn.h"
+DEFINE_OPTION_ALL(, int)   // empty linkage = extern
+```
+
+#### Macros
+
+**`DEFINE_OPTION_ALL(linkage, T)`**
+One-shot: defines the struct and all function implementations.
+
+**`DEFINE_OPTION_STRUCT(T)`** — struct layout only
+**`DEFINE_OPTION_FUNCTIONS(linkage, T)`** — all functions, no struct
+
+Individual function definition macros (all take `linkage, T`):
+```c
+DEFINE_OPTION_SOME(linkage, T)
+DEFINE_OPTION_NONE(linkage, T)
+DEFINE_OPTION_IS_SOME(linkage, T)
+DEFINE_OPTION_IS_NONE(linkage, T)
+DEFINE_OPTION_GET(linkage, T)
+DEFINE_OPTION_UNWRAP_OR(linkage, T)
+DEFINE_OPTION_UNWRAP(linkage, T)
+DEFINE_OPTION_EXPECT(linkage, T)
+DEFINE_OPTION_MAP(linkage, T)
+DEFINE_OPTION_AND_THEN(linkage, T)
+DEFINE_OPTION_OR_ELSE(linkage, T)
+DEFINE_OPTION_FILTER(linkage, T)
+DEFINE_OPTION_ZIP(linkage, T)
+DEFINE_OPTION_REPLACE(linkage, T)
+DEFINE_OPTION_TAKE(linkage, T)
+DEFINE_OPTION_EQ(linkage, T)
+```
+
+#### Custom Implementation Override
+
+Override `IMPL_*` macros before including to specialize behavior for a type:
+```c
+#include "option_impl.h"
+#undef IMPL_OPTION_SOME
+#define IMPL_OPTION_SOME(t, topt, param) \
+    { \
+        require((param) != NULL, "option_some: NULL pointer not allowed"); \
+        return (topt){ .has_value = true, .value = (param) }; \
+    }
+
+#include "option_defn.h"
+typedef void* void_ptr;
+DEFINE_OPTION_ALL(static inline, void_ptr)
+// option_void_ptr_some(NULL) now panics at runtime
+```
+
+> **Known Limitations:** `DEFINE_OPTION_ALL` must be used at file/global scope. With `extern` linkage, define exactly once across all translation units — multiple definitions will cause linker errors. With `static inline`, each translation unit gets its own copy (safe but increases binary size).
+
+---
+
+### `option_impl.h`
+> Pure implementation logic for `Option<T>` — no name mangling, no naming conventions. These are the raw behavior macros used internally by `option_defn.h`. Override individual macros to specialize behavior for specific types.
+
+#### Struct Layout
+```c
+IMPL_OPTION_STRUCT(T)
+// expands to: { bool has_value; T value; }
+// sizeof(bool) + sizeof(T) + alignment padding
+```
+
+#### Available Implementation Macros
+
+| Macro | Behavior |
+|---|---|
+| `IMPL_OPTION_SOME(t, topt, param)` | Returns `{true, param}` |
+| `IMPL_OPTION_NONE(t, topt)` | Returns `{false}` |
+| `IMPL_OPTION_IS_SOME(t, o)` | Returns `o.has_value` |
+| `IMPL_OPTION_IS_NONE(t, o)` | Returns `!o.has_value` |
+| `IMPL_OPTION_GET(t, o, out)` | Writes to `*out` if Some and out != NULL |
+| `IMPL_OPTION_UNWRAP_OR(t, o, fallback)` | Returns value or fallback |
+| `IMPL_OPTION_UNWRAP(t, o)` | `require(has_value)` then returns value |
+| `IMPL_OPTION_EXPECT(t, o, msg)` | `require(has_value, msg)` then returns value |
+| `IMPL_OPTION_MAP(t, topt, o, f, some_fn, none_fn)` | `some_fn(f(value))` or `none_fn()` |
+| `IMPL_OPTION_AND_THEN(t, topt, o, f, none_fn)` | `f(value)` or `none_fn()` |
+| `IMPL_OPTION_OR_ELSE(t, topt, o, fallback)` | `o` if Some, else `fallback()` |
+| `IMPL_OPTION_FILTER(t, topt, o, pred, none_fn)` | `o` if `pred(value)`, else `none_fn()` |
+| `IMPL_OPTION_ZIP(t, topt, o1, o2, combine, some_fn, none_fn)` | `some_fn(combine(a,b))` if both Some |
+| `IMPL_OPTION_REPLACE(t, topt, o, new_value, some_fn)` | Swaps in new value, returns old |
+| `IMPL_OPTION_TAKE(t, topt, o, none_fn)` | Extracts value, leaves None |
+| `IMPL_OPTION_EQ(t, o1, o2, eq)` | Both None → true; both Some → `eq(a,b)` |
+
+#### Specialization
+
+Override any `IMPL_*` macro before including `option_defn.h` to customize behavior for a specific type:
+```c
+#include "option_impl.h"
+#undef IMPL_OPTION_UNWRAP
+#define IMPL_OPTION_UNWRAP(t, o) \
+    { \
+        require((o).has_value, "my_custom_panic_message"); \
+        return (o).value; \
+    }
+```
+
+> **Known Limitations:** These macros are internal — most users should never include `option_impl.h` directly. Overrides apply globally to all types defined after the `#undef`, not just one specific type. `IMPL_OPTION_GET` is intentionally permissive (NULL `out` allowed); `IMPL_OPTION_REPLACE` and `IMPL_OPTION_TAKE` are strict (NULL pointer triggers `require`).
+
+---
+
+### `option_mangle.h`
+> Name mangling conventions for `Option<T>`. Single source of truth for all generated type and function names. Override any macro before including to rename the entire API globally.
+
+#### Default Naming Scheme
+
+For a type `T`, the defaults produce:
+
+| What | Default name | Example for `int` |
+|---|---|---|
+| Type | `option_T` | `option_int` |
+| Struct tag | `option_T_s` | `option_int_s` |
+| `some` | `option_T_some` | `option_int_some` |
+| `none` | `option_T_none` | `option_int_none` |
+| `is_some` | `option_T_is_some` | `option_int_is_some` |
+| `is_none` | `option_T_is_none` | `option_int_is_none` |
+| `get` | `option_T_get` | `option_int_get` |
+| `unwrap_or` | `option_T_unwrap_or` | `option_int_unwrap_or` |
+| `unwrap` | `option_T_unwrap` | `option_int_unwrap` |
+| `expect` | `option_T_expect` | `option_int_expect` |
+| `map` | `option_T_map` | `option_int_map` |
+| `and_then` | `option_T_and_then` | `option_int_and_then` |
+| `or_else` | `option_T_or_else` | `option_int_or_else` |
+| `filter` | `option_T_filter` | `option_int_filter` |
+| `zip` | `option_T_zip` | `option_int_zip` |
+| `replace` | `option_T_replace` | `option_int_replace` |
+| `take` | `option_T_take` | `option_int_take` |
+| `eq` | `option_T_eq` | `option_int_eq` |
+
+#### Customization
+
+Define overrides **before** including any option header:
+```c
+// Haskell-style Maybe
+#define MANGLE_OPTION_TYPE(t)    Maybe##t
+#define MANGLE_OPTION_SOME(t)    Maybe##t##_Just
+#define MANGLE_OPTION_NONE(t)    Maybe##t##_Nothing
+#define MANGLE_OPTION_IS_SOME(t) Maybe##t##_isJust
+#define MANGLE_OPTION_IS_NONE(t) Maybe##t##_isNothing
+#include "option.h"
+CANON_OPTION(int)
+
+MaybeInt x = MaybeInt_Just(42);
+
+// Project namespace prefix
+#define MANGLE_OPTION_TYPE(t)    myproject_opt_##t
+#include "option.h"
+CANON_OPTION(int)
+
+myproject_opt_int x = myproject_opt_int_some(42);
+```
+
+> **Known Limitations:** All macros are guarded with `#ifndef` — overrides must be defined before the first include of any option header in that translation unit. Overrides apply to all types instantiated after them, not selectively per type.
