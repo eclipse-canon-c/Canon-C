@@ -60,9 +60,9 @@ core → semantics → data → algo → util
 
 PRs violating these rules will be returned with feedback. 
 
-## Frozen Modules (v1.0.0)
+## Frozen Modules (v1.2.0)
 
-All modules included in v1.0.0 are frozen.
+All modules included in v1.2.0 are frozen.
 
 Allowed changes:
 - Comments
