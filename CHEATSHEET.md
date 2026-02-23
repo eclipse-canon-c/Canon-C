@@ -31,6 +31,13 @@
 - [`option_impl.h`](#option_implh) — Pure implementation logic
 - [`option_mangle.h`](#option_mangleh) — Name mangling conventions
 
+### `semantics/result/`
+- [`result.h`](#resulth) — Rust-style Result\<T, E\> for C
+- [`result_decl.h`](#result_declh) — Declaration macros (separate compilation)
+- [`result_defn.h`](#result_defnh) — Definition macros (implementation generation)
+- [`result_impl.h`](#result_implh) — Pure implementation logic
+- [`result_mangle.h`](#result_mangleh) — Name mangling conventions
+
 ---
 
 ## `core/primitives/`
@@ -1563,3 +1570,330 @@ myproject_opt_int x = myproject_opt_int_some(42);
 ```
 
 > **Known Limitations:** All macros are guarded with `#ifndef` — overrides must be defined before the first include of any option header in that translation unit. Overrides apply to all types instantiated after them, not selectively per type.
+
+---
+
+## `semantics/result/`
+
+---
+
+### `result.h`
+> Rust-style `Result<T, E>` for C. Represents either `Ok(value)` or `Err(error)`. Zero-cost: `bool + union{T, E}` on the stack — union saves memory over storing both separately. One concrete struct and full function set generated per `(T, E)` pair via `CANON_RESULT(value_type, error_type)`.
+
+#### Setup
+```c
+typedef enum { ERR_NONE, ERR_IO, ERR_PARSE } error;
+
+CANON_RESULT(int, error)     // generates result_int_error + all functions
+CANON_RESULT(float, error)
+
+// Pointer types — typedef first:
+typedef const char* constcharptr;
+CANON_RESULT(int, constcharptr)
+
+// Combining with Option:
+CANON_OPTION(int)
+CANON_RESULT(option_int, error)  // Ok(Some/None) vs Err
+```
+
+Must be used at file/global scope. Use once per `(T, E)` pair.
+
+#### Constructors
+```c
+result_int_error_ok(42)          // Ok(42)
+result_int_error_err(ERR_IO)     // Err(ERR_IO)
+```
+
+#### Queries
+```c
+result_int_error_is_ok(r)    // true if Ok
+result_int_error_is_err(r)   // true if Err
+```
+
+#### Safe Extraction
+```c
+int val;
+if (result_int_error_get_ok(r, &val)) { /* use val */ }
+
+error err;
+if (result_int_error_get_err(r, &err)) { /* use err */ }
+
+int val = result_int_error_unwrap_or(r, 0);   // default if Err
+```
+
+#### Unsafe Extraction
+```c
+int val  = result_int_error_unwrap(r);         // panics if Err
+error e  = result_int_error_unwrap_err(r);     // panics if Ok
+int val  = result_int_error_expect(r, "msg");  // panics with message if Err
+```
+
+#### Combinators
+```c
+r = result_int_error_map(r, double_it);        // T → T if Ok, Err passthrough
+r = result_int_error_map_err(r, remap_err);    // E → E if Err, Ok passthrough
+r = result_int_error_and_then(r, next_step);   // T → result_T_E, no nesting
+r = result_int_error_or_else(r, recover);      // E → result_T_E if Err
+```
+
+#### Comparison
+```c
+bool eq = result_int_error_eq(r1, r2, int_eq, error_eq);
+// true if both Ok with equal values, or both Err with equal errors
+```
+
+#### Propagation Macros (GNU C / C23 only)
+
+Disable with `#define CANON_NO_GNU_EXTENSIONS`.
+```c
+// Early return with the Err if result is Err, continue if Ok
+TRY(int, error, step1());
+
+// Early return with a remapped error value
+TRY_REMAP(int, error, step1(), ERR_CONTEXT);
+
+// Extract value or early return with Err — use in expressions
+int x = TRY_UNWRAP(int, error, step1());
+
+// Extract value or use fallback — use in expressions
+int x = UNWRAP_OR(int, error, step1(), 0);
+```
+
+#### Full propagation example
+```c
+result_int_error add_parsed(const char* a, const char* b) {
+    int x = TRY_UNWRAP(int, error, parse_int(a));
+    int y = TRY_UNWRAP(int, error, parse_int(b));
+    return result_int_error_ok(x + y);
+}
+```
+
+> **Known Limitations:**
+> - `CANON_RESULT(T, E)` generates ~2-3KB of code per type pair — only instantiate pairs you use.
+> - Accessing the wrong union member (`ok` when `is_err`, or vice versa) is undefined behavior — always check `is_ok` first.
+> - `TRY`, `TRY_REMAP`, `TRY_UNWRAP`, `UNWRAP_OR` require GNU C statement expressions or C23 — not valid in strict C99.
+> - `map` and `map_err` use the same `T` and `E` types — they cannot change the type, only transform the value within it.
+> - For pointer types, `typedef` first — `CANON_RESULT(const char*, error)` will not work directly.
+
+---
+
+### `result_decl.h`
+> Declaration macros for `Result<T, E>` — for separate compilation. Use in `.h` files to declare types and function signatures without generating implementations. Same pattern as `option_decl.h` but takes two type parameters `(T, E)`.
+
+#### Workflow
+```c
+// my_results.h — declare only
+#include "result_decl.h"
+typedef enum { ERR_NONE, ERR_IO } error;
+DECLARE_RESULT_ALL(extern, int, error)
+
+// my_results.c — define once
+#include "result_defn.h"
+DEFINE_RESULT_ALL(, int, error)   // empty linkage for extern
+
+// main.c — just include the header
+#include "my_results.h"
+result_int_error x = result_int_error_ok(42);
+```
+
+#### Macros
+
+**`DECLARE_RESULT_ALL(linkage, T, E)`**
+One-shot: declares the typedef, struct, and all function signatures.
+
+**`DECLARE_RESULT_TYPEDEF(T, E)`** — typedef only
+**`DECLARE_RESULT_STRUCT(T, E)`** — struct layout only
+**`DECLARE_RESULT_FUNCTIONS(linkage, T, E)`** — all function signatures, no type
+
+Individual function declaration macros (all take `linkage, T, E`):
+```c
+DECLARE_RESULT_OK(linkage, T, E)
+DECLARE_RESULT_ERR(linkage, T, E)
+DECLARE_RESULT_IS_OK(linkage, T, E)
+DECLARE_RESULT_IS_ERR(linkage, T, E)
+DECLARE_RESULT_GET_OK(linkage, T, E)
+DECLARE_RESULT_GET_ERR(linkage, T, E)
+DECLARE_RESULT_UNWRAP_OR(linkage, T, E)
+DECLARE_RESULT_UNWRAP(linkage, T, E)
+DECLARE_RESULT_UNWRAP_ERR(linkage, T, E)
+DECLARE_RESULT_EXPECT(linkage, T, E)
+DECLARE_RESULT_MAP(linkage, T, E)
+DECLARE_RESULT_MAP_ERR(linkage, T, E)
+DECLARE_RESULT_AND_THEN(linkage, T, E)
+DECLARE_RESULT_OR_ELSE(linkage, T, E)
+DECLARE_RESULT_EQ(linkage, T, E)
+```
+
+#### Minimal API pattern
+```c
+DECLARE_RESULT_TYPEDEF(int, error)
+DECLARE_RESULT_STRUCT(int, error)
+DECLARE_RESULT_OK(extern, int, error)
+DECLARE_RESULT_ERR(extern, int, error)
+DECLARE_RESULT_IS_OK(extern, int, error)
+// unwrap, map, etc. stay internal
+```
+
+> **Known Limitations:** Same as `option_decl.h` — declarations are compile-time only, no code generated. With two type parameters, type names are concatenated as `result_T_E` — ensure `typedef` names are simple identifiers with no spaces or special characters.
+
+---
+
+### `result_defn.h`
+> Definition macros for `Result<T, E>` — generates actual implementations. Use in `.c` files for separate compilation, or in `.h` files with `static inline` for header-only libraries. Same pattern as `option_defn.h` but takes two type parameters `(T, E)`.
+
+#### Workflow
+```c
+// Header-only (traditional Canon-C style)
+#include "result_defn.h"
+typedef enum { ERR_NONE, ERR_IO } error;
+DEFINE_RESULT_ALL(static inline, int, error)
+
+// Separate compilation (.c file only)
+#include "result_defn.h"
+DEFINE_RESULT_ALL(, int, error)   // empty linkage = extern
+```
+
+#### Macros
+
+**`DEFINE_RESULT_ALL(linkage, T, E)`**
+One-shot: defines the struct and all function implementations.
+
+**`DEFINE_RESULT_STRUCT(T, E)`** — struct layout only
+**`DEFINE_RESULT_FUNCTIONS(linkage, T, E)`** — all functions, no struct
+
+Individual function definition macros (all take `linkage, T, E`):
+```c
+DEFINE_RESULT_OK(linkage, T, E)
+DEFINE_RESULT_ERR(linkage, T, E)
+DEFINE_RESULT_IS_OK(linkage, T, E)
+DEFINE_RESULT_IS_ERR(linkage, T, E)
+DEFINE_RESULT_GET_OK(linkage, T, E)
+DEFINE_RESULT_GET_ERR(linkage, T, E)
+DEFINE_RESULT_UNWRAP_OR(linkage, T, E)
+DEFINE_RESULT_UNWRAP(linkage, T, E)
+DEFINE_RESULT_UNWRAP_ERR(linkage, T, E)
+DEFINE_RESULT_EXPECT(linkage, T, E)
+DEFINE_RESULT_MAP(linkage, T, E)
+DEFINE_RESULT_MAP_ERR(linkage, T, E)
+DEFINE_RESULT_AND_THEN(linkage, T, E)
+DEFINE_RESULT_OR_ELSE(linkage, T, E)
+DEFINE_RESULT_EQ(linkage, T, E)
+```
+
+#### Custom Implementation Override
+```c
+#include "result_impl.h"
+#undef IMPL_RESULT_OK
+#define IMPL_RESULT_OK(t, e, tres, param) \
+    { \
+        require((param) != NULL, "result_ok: NULL pointer not allowed"); \
+        return (tres){ .is_ok = true, .ok = (param) }; \
+    }
+
+#include "result_defn.h"
+typedef void* void_ptr;
+DEFINE_RESULT_ALL(static inline, void_ptr, error)
+// result_void_ptr_error_ok(NULL) now panics at runtime
+```
+
+> **Known Limitations:** `DEFINE_RESULT_ALL` must be used at file/global scope. With `extern` linkage, define exactly once across all translation units. With `static inline`, each translation unit gets its own copy. Struct uses an anonymous union — requires C99 or later; some strict C89 compilers may reject it.
+
+---
+
+### `result_impl.h`
+> Pure implementation logic for `Result<T, E>` — no name mangling, no naming conventions. Raw behavior macros used internally by `result_defn.h`. Override individual macros to specialize behavior for specific type pairs.
+
+#### Struct Layout
+```c
+IMPL_RESULT_STRUCT(T, E)
+// expands to: { bool is_ok; union { T ok; E err; }; }
+// sizeof(bool) + max(sizeof(T), sizeof(E)) + alignment padding
+// Only one of ok/err is valid at any time — accessing the wrong member is UB
+```
+
+#### Available Implementation Macros
+
+| Macro | Behavior |
+|---|---|
+| `IMPL_RESULT_OK(t, e, tres, param)` | Returns `{true, .ok=param}` |
+| `IMPL_RESULT_ERR(t, e, tres, param)` | Returns `{false, .err=param}` |
+| `IMPL_RESULT_IS_OK(t, e, r)` | Returns `r.is_ok` |
+| `IMPL_RESULT_IS_ERR(t, e, r)` | Returns `!r.is_ok` |
+| `IMPL_RESULT_GET_OK(t, e, r, out)` | Writes to `*out` if Ok and out != NULL |
+| `IMPL_RESULT_GET_ERR(t, e, r, out)` | Writes to `*out` if Err and out != NULL |
+| `IMPL_RESULT_UNWRAP_OR(t, e, r, fallback)` | Returns `r.ok` or fallback |
+| `IMPL_RESULT_UNWRAP(t, e, r)` | `require(is_ok)` then returns `r.ok` |
+| `IMPL_RESULT_UNWRAP_ERR(t, e, r)` | `require(!is_ok)` then returns `r.err` |
+| `IMPL_RESULT_EXPECT(t, e, r, msg)` | `require(is_ok, msg)` then returns `r.ok` |
+| `IMPL_RESULT_MAP(t, e, tres, r, f, ok_fn)` | `ok_fn(f(r.ok))` if Ok, else `r` unchanged |
+| `IMPL_RESULT_MAP_ERR(t, e, tres, r, f, err_fn)` | `err_fn(f(r.err))` if Err, else `r` unchanged |
+| `IMPL_RESULT_AND_THEN(t, e, tres, r, f)` | `f(r.ok)` if Ok, else `r` unchanged |
+| `IMPL_RESULT_OR_ELSE(t, e, tres, r, f)` | `r` if Ok, else `f(r.err)` |
+| `IMPL_RESULT_EQ(t, e, r1, r2, eq_ok, eq_err)` | Both Ok → `eq_ok(a,b)`; both Err → `eq_err(a,b)`; mixed → false |
+
+#### Specialization
+```c
+#include "result_impl.h"
+#undef IMPL_RESULT_UNWRAP
+#define IMPL_RESULT_UNWRAP(t, e, r) \
+    { \
+        require((r).is_ok, "my_custom_unwrap_message"); \
+        return (r).ok; \
+    }
+```
+
+> **Known Limitations:** These macros are internal — most users should never include `result_impl.h` directly. Overrides apply globally to all type pairs defined after the `#undef`. The anonymous union in `IMPL_RESULT_STRUCT` requires C99 or later. `IMPL_RESULT_GET_OK` and `IMPL_RESULT_GET_ERR` are permissive (NULL `out` allowed); `IMPL_RESULT_UNWRAP` and `IMPL_RESULT_UNWRAP_ERR` are strict (`require` always fires on wrong variant).
+
+---
+
+### `result_mangle.h`
+> Name mangling conventions for `Result<T, E>`. Single source of truth for all generated type and function names. Takes two type parameters unlike `option_mangle.h`. Override any macro before including to rename the entire API globally.
+
+#### Default Naming Scheme
+
+For types `T` and `E`, the defaults produce:
+
+| What | Default name | Example for `int, error` |
+|---|---|---|
+| Type | `result_T_E` | `result_int_error` |
+| Struct tag | `result_T_E_s` | `result_int_error_s` |
+| `ok` | `result_T_E_ok` | `result_int_error_ok` |
+| `err` | `result_T_E_err` | `result_int_error_err` |
+| `is_ok` | `result_T_E_is_ok` | `result_int_error_is_ok` |
+| `is_err` | `result_T_E_is_err` | `result_int_error_is_err` |
+| `get_ok` | `result_T_E_get_ok` | `result_int_error_get_ok` |
+| `get_err` | `result_T_E_get_err` | `result_int_error_get_err` |
+| `unwrap_or` | `result_T_E_unwrap_or` | `result_int_error_unwrap_or` |
+| `unwrap` | `result_T_E_unwrap` | `result_int_error_unwrap` |
+| `unwrap_err` | `result_T_E_unwrap_err` | `result_int_error_unwrap_err` |
+| `expect` | `result_T_E_expect` | `result_int_error_expect` |
+| `map` | `result_T_E_map` | `result_int_error_map` |
+| `map_err` | `result_T_E_map_err` | `result_int_error_map_err` |
+| `and_then` | `result_T_E_and_then` | `result_int_error_and_then` |
+| `or_else` | `result_T_E_or_else` | `result_int_error_or_else` |
+| `eq` | `result_T_E_eq` | `result_int_error_eq` |
+
+#### Customization
+
+Define overrides **before** including any result header:
+```c
+// Haskell-style Either/Right/Left
+#define MANGLE_RESULT_TYPE(t, e)   Either_##t##_##e
+#define MANGLE_RESULT_OK(t, e)     Either_##t##_##e##_Right
+#define MANGLE_RESULT_ERR(t, e)    Either_##t##_##e##_Left
+#define MANGLE_RESULT_IS_OK(t, e)  Either_##t##_##e##_isRight
+#define MANGLE_RESULT_IS_ERR(t, e) Either_##t##_##e##_isLeft
+#include "result.h"
+CANON_RESULT(int, error)
+
+Either_int_error x = Either_int_error_Right(42);
+
+// Project namespace prefix
+#define MANGLE_RESULT_TYPE(t, e)   myproject_res_##t##_##e
+#include "result.h"
+CANON_RESULT(int, error)
+
+myproject_res_int_error x = myproject_res_int_error_ok(42);
+```
+
+> **Known Limitations:** All macros are guarded with `#ifndef` — overrides must be defined before the first include of any result header in that translation unit. With two type parameters, generated names grow longer — keep `T` and `E` type names short to avoid unwieldy identifiers. Overrides apply to all type pairs instantiated after them, not selectively per pair.
