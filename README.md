@@ -27,7 +27,6 @@ Meaning that:
 
 "using Canon-C headers unmodified in your project does not trigger MPL requirements — only modifications to Canon-C files themselves do."
 
-So that, if you find any better way to do anything than the things mentioned in this library, you have to contribute it to whole project.
 
 ---
 
