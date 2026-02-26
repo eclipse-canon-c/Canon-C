@@ -47,7 +47,13 @@ If this taxonomy makes sense to you, help me:
 1. Critique the structure
 2. Suggest better categorization
 3. Eventually: implement production-quality versions
-   
+
+**Note:** 
+
+This project is an architectural proposal and design foundation built by one person. The taxonomy, dependency rules, and API designs are intentional and have been carefully considered. The implementations are not yet fully tested or compiled end-to-end.
+This is not a finished library. It is a serious design looking for engineers who share the vision to help make it real. If you see value in the architecture, your contribution — critique, implementation, testing — is more valuable than a star.
+AI assistance was used in generating implementation scaffolding. The architecture, philosophy, and design decisions are my own.
+
 ---
 
 ### Dependency Rule (Strict)
