@@ -7,6 +7,7 @@
 #include "core/memory.h"                 // mem_copy, mem_move
 #include "core/arena.h"                  // Arena*, arena_alloc_array
 #include "data/vec/vec.h"                // canon_vec_type, MANGLE_VEC_INIT
+#include <stdlib.h>
 
 /**
  * @file convenience/smallvec.h
