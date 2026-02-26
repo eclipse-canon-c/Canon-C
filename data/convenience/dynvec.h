@@ -1,6 +1,7 @@
 #ifndef CANON_DATA_CONVENIENCE_DYNVEC_H
 #define CANON_DATA_CONVENIENCE_DYNVEC_H
 
+#include <stdlib.h>
 #include "core/primitives/types.h"       // usize, bool, type safety
 #include "core/primitives/limits.h"      // growth constants, max capacity
 #include "core/primitives/contract.h"    // require_msg, ensure_msg
