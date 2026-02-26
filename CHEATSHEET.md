@@ -43,6 +43,11 @@
 - [`diag.h`](#diagh) — Structured diagnostic frames for error context chains
 - [`error.h`](#errorh) — Common error codes and Result\<T, Error\> helpers
 
+### `data/convenience/`
+- [`dynstring.h`](#dynstringh) — Auto-growing heap string builder
+- [`dynvec.h`](#dynvech) — Auto-growing typed heap vector
+- [`smallvec.h`](#smallvech) — Inline-first vector with at-most-one heap/arena spill
+
 ---
 
 ## `core/primitives/`
@@ -2174,5 +2179,470 @@ Add new codes before `ERR_COUNT` in the enum, then add a `case` in `error_messag
 > - `RESULT_OK` / `RESULT_ERR` / `RESULT_ERROR_MSG` macros assume the error type is literally `Error` — they will not work with custom error enums without modification.
 > - `error_message` returns `"Unknown error"` for both `ERR_UNKNOWN` and any out-of-range value — callers cannot distinguish the two.
 > - `ERR_COUNT` is a sentinel — using it as a real error code will produce misleading messages.
+
+### `dynstring.h`
+> Auto-growing heap string builder. Always null-terminated. No arena support — use `data/stringbuf.h` for arena-backed strings. Must call `dynstring_free()` when done.
+
+#### Configuration (override before `#include`)
+```c
+DYNSTRING_INITIAL_CAPACITY  // default 64 — first heap allocation size in bytes
+DYNSTRING_GROWTH_FACTOR     // default 2  — capacity multiplier on realloc
+```
+
+#### Struct
+```c
+typedef struct {
+    char* data;  // heap buffer (NULL until first append)
+    usize len;   // string length, excluding '\0'
+    usize cap;   // total buffer capacity, including '\0'
+} DynString;
+```
+
+Do not access or modify fields directly — use the provided functions.
+
+#### Constructors
+
+**`DynString dynstring_init(void)`**
+Returns a zero-initialized DynString. No heap allocation until first append.
+```c
+DynString s = dynstring_init();
+// s.data == NULL, s.len == 0, s.cap == 0
+```
+
+**`DynString dynstring_with_capacity(usize capacity)`**
+Pre-allocates `capacity` bytes. Use when final size is roughly known.
+On OOM returns `dynstring_init()` — check with `dynstring_capacity()`.
+```c
+DynString s = dynstring_with_capacity(256);
+```
+
+**`DynString dynstring_from(const char* str)`**
+Creates a DynString by copying a C string. NULL input returns empty. On OOM returns `dynstring_init()`.
+```c
+DynString s = dynstring_from("hello");
+```
+
+#### Queries
+
+**`usize dynstring_len(const DynString* s)`**
+Returns string length excluding `'\0'`. NULL-safe — returns 0.
+
+**`usize dynstring_capacity(const DynString* s)`**
+Returns current heap capacity including `'\0'`. NULL-safe — returns 0.
+
+**`bool dynstring_is_empty(const DynString* s)`**
+Returns true if len == 0 or s == NULL.
+
+**`const char* dynstring_str(const DynString* s)`**
+Returns pointer to the null-terminated string. Never returns NULL — returns `""` if s == NULL or data == NULL. Pointer is valid until the next modification or `dynstring_free()`. Do not free the result.
+```c
+printf("%s\n", dynstring_str(&s));
+```
+
+#### Append
+
+All append functions return `false` on allocation failure and leave `s` unchanged. NULL-safe on `s`.
+
+**`bool dynstring_append(DynString* s, const char* str)`**
+Appends a null-terminated C string. NULL `str` is a no-op — returns true.
+```c
+dynstring_append(&s, "world");
+```
+
+**`bool dynstring_append_char(DynString* s, char c)`**
+Appends a single character.
+```c
+dynstring_append_char(&s, '!');
+```
+
+**`bool dynstring_append_fmt(DynString* s, const char* fmt, ...)`**
+printf-style formatted append. Uses two `vsnprintf` passes — measure then write. Returns false on format error or OOM.
+```c
+dynstring_append_fmt(&s, "value=%d", 42);
+```
+
+**`bool dynstring_append_n(DynString* s, const char* str, usize n)`**
+Appends at most `n` characters from `str`. Stops early at null terminator. NULL `str` is a no-op — returns true.
+```c
+dynstring_append_n(&s, "hello world", 5);  // appends "hello"
+```
+
+#### Mutation
+
+**`void dynstring_clear(DynString* s)`**
+Resets len to 0 and writes `'\0'` at index 0. No-op if data == NULL (e.g. after `dynstring_init()` with no appends). Does NOT free or zero the buffer. NULL-safe.
+
+**`void dynstring_truncate(DynString* s, usize new_len)`**
+Truncates to `new_len` characters. No-op if `new_len >= current len` or data == NULL. NULL-safe.
+```c
+dynstring_truncate(&s, 5);
+```
+
+#### Capacity Management
+
+**`bool dynstring_reserve(DynString* s, usize min_cap)`**
+Ensures buffer can hold at least `min_cap` bytes including null terminator. No-op if already sufficient. Returns false on OOM.
+
+**`bool dynstring_shrink_to_fit(DynString* s)`**
+Reallocates buffer to exactly `len + 1` bytes. Frees entirely if len == 0. Returns false if realloc fails — s is unchanged on failure.
+
+#### Memory
+
+**`void dynstring_free(DynString* s)`**
+Frees the heap buffer and resets all fields to zero. NULL-safe.
+```c
+DynString s = dynstring_init();
+dynstring_append(&s, "Hello, ");
+dynstring_append_fmt(&s, "%s!", name);
+printf("%s\n", dynstring_str(&s));
+dynstring_free(&s);  // REQUIRED — always call this
+```
+
+#### Utility
+
+**`char* dynstring_to_cstr(const DynString* s)`**
+Returns a heap-allocated copy as a plain C string. Caller must `free()` the result. Returns a heap-allocated `""` on NULL or empty input — never returns NULL itself.
+
+#### Performance
+
+| Operation | Time | Notes |
+|---|---|---|
+| `append` | Amortized O(n) | O(len + n) on realloc |
+| `append_char` | Amortized O(1) | O(len) on realloc |
+| `append_fmt` | O(n) | Two `vsnprintf` passes |
+| `append_n` | Amortized O(n) | O(len + n) on realloc |
+| All queries | O(1) | |
+| `free` | O(1) | |
+
+> **Known Limitations:**
+> - No arena support — use `data/stringbuf.h` for arena-backed strings.
+> - `dynstring_clear()` is a no-op if data == NULL — calling it on a freshly `dynstring_init()`-ed string with no appends does nothing.
+> - `dynstring_clear()` does NOT zero buffer contents — stale data remains readable until overwritten.
+> - `dynstring_with_capacity()` and `dynstring_from()` silently return an empty `DynString` on OOM — check `dynstring_capacity()` if pre-allocation is required.
+> - `dynstring_append_fmt()` makes two `vsnprintf` passes — for tight loops prefer `append_n` or `append` with pre-formatted strings.
+> - `realloc` is called directly rather than through a `mem_realloc` wrapper — growth relies on `<stdlib.h>` being included explicitly.
+> - No overflow guard on capacity growth — extremely large appends may cause `realloc` to fail without a prior size check.
+> - Not thread-safe — concurrent access requires external synchronization.
+
+### `dynvec.h`
+> Auto-growing typed heap vector, generated per element type via `DEFINE_DYNVEC(type)`. No arena support — use `data/vec/vec.h` for arena-backed vectors. Must call `dynvec_##type##_free()` when done.
+
+#### Configuration (override before `#include`)
+```c
+DYNVEC_INITIAL_CAPACITY  // default 8 — first heap allocation in elements
+DYNVEC_GROWTH_FACTOR     // default 2 — capacity multiplier on realloc
+```
+
+#### Setup
+```c
+DEFINE_DYNVEC(int)   // generates dynvec_int + all functions
+
+// For pointer types — typedef first:
+typedef void* voidptr;
+DEFINE_DYNVEC(voidptr)
+```
+
+Must be used at file/global scope. Use once per type. Element type must be trivially copyable (memcpy-safe).
+
+#### Generated Struct
+```c
+typedef struct {
+    type* data;  // heap buffer (NULL until first push)
+    usize len;   // current element count
+    usize cap;   // allocated capacity in elements
+} dynvec_##type;
+```
+
+Do not access or modify fields directly — use the provided functions.
+
+#### Constructors
+
+**`dynvec_T dynvec_T_init(void)`**
+Returns a zero-initialized dynvec. No heap allocation until first push.
+```c
+dynvec_int v = dynvec_int_init();
+// v.data == NULL, v.len == 0, v.cap == 0
+```
+
+**`dynvec_T dynvec_T_with_capacity(usize capacity)`**
+Pre-allocates `capacity` elements. Returns `_init()` result on OOM or `capacity == 0`.
+```c
+dynvec_int v = dynvec_int_with_capacity(64);
+```
+
+#### Queries
+
+**`usize dynvec_T_len(const dynvec_T* v)`**
+Returns current element count. NULL-safe — returns 0.
+
+**`usize dynvec_T_capacity(const dynvec_T* v)`**
+Returns current buffer capacity in elements. NULL-safe — returns 0.
+
+**`bool dynvec_T_is_empty(const dynvec_T* v)`**
+Returns true if len == 0 or v == NULL.
+
+#### Element Access
+
+**`bool dynvec_T_get(const dynvec_T* v, usize i, T* out)`**
+Bounds-checked copy into `*out`. Returns false if v == NULL, out == NULL, or i >= len.
+```c
+int val;
+if (dynvec_int_get(&v, 2, &val)) { /* use val */ }
+```
+
+**`T dynvec_T_get_unchecked(const dynvec_T* v, usize i)`**
+No bounds check. Debug-only `ensure_msg` — UB in release if i >= len.
+
+**`bool dynvec_T_set(dynvec_T* v, usize i, T value)`**
+Bounds-checked write. Returns false if v == NULL or i >= len.
+
+**`T* dynvec_T_data(const dynvec_T* v)`**
+Returns raw buffer pointer. NULL if v == NULL or no allocation yet.
+
+**`T* dynvec_T_first(const dynvec_T* v)`**
+Returns pointer to first element. NULL if empty or v == NULL.
+
+**`T* dynvec_T_last(const dynvec_T* v)`**
+Returns pointer to last element. NULL if empty or v == NULL.
+
+#### Modification
+
+All modification functions return `false` on allocation failure and leave `v` unchanged.
+
+**`bool dynvec_T_push(dynvec_T* v, T value)`**
+Appends element, growing buffer if needed. Returns false on OOM or v == NULL.
+```c
+dynvec_int_push(&v, 42);
+```
+
+**`bool dynvec_T_pop(dynvec_T* v, T* out)`**
+Removes and returns last element. Returns false if empty, v == NULL, or out == NULL.
+```c
+int val;
+dynvec_int_pop(&v, &val);
+```
+
+**`bool dynvec_T_insert(dynvec_T* v, usize i, T value)`**
+Inserts at index `i` (must be `<= len`), shifting elements right. May realloc. O(n).
+
+**`bool dynvec_T_remove(dynvec_T* v, usize i, T* out)`**
+Removes at index `i` (must be `< len`), shifting elements left. No shrink. O(n).
+
+**`void dynvec_T_clear(dynvec_T* v)`**
+Resets len to 0. Does NOT free buffer or zero contents. NULL-safe.
+
+#### Bulk Operations
+
+**`bool dynvec_T_extend(dynvec_T* v, const T* src, usize count)`**
+Appends `count` elements from `src`. Returns false on v == NULL, src == NULL, or OOM.
+```c
+int items[] = {1, 2, 3};
+dynvec_int_extend(&v, items, 3);
+```
+
+#### Capacity Management
+
+**`bool dynvec_T_reserve(dynvec_T* v, usize min_cap)`**
+Ensures capacity for at least `min_cap` elements. No-op if already sufficient. Returns false on OOM.
+
+**`bool dynvec_T_shrink_to_fit(dynvec_T* v)`**
+Reallocates to exact `len`. Frees entirely if len == 0. Returns false on realloc failure — v is unchanged on failure.
+
+#### Memory
+
+**`void dynvec_T_free(dynvec_T* v)`**
+Frees buffer and resets all fields to zero. NULL-safe.
+```c
+dynvec_int v = dynvec_int_with_capacity(32);
+dynvec_int_push(&v, 10);
+dynvec_int_push(&v, 20);
+dynvec_int_free(&v);  // REQUIRED — always call this
+```
+
+#### Performance
+
+| Operation | Time | Notes |
+|---|---|---|
+| `push` | Amortized O(1) | O(n) on realloc |
+| `pop` | O(1) | |
+| `insert` / `remove` | O(n) | Shifts elements |
+| `extend` | O(count) | May realloc |
+| `get` / `set` / `first` / `last` | O(1) | |
+| `shrink_to_fit` | O(n) | Realloc |
+| `free` | O(1) | |
+
+> **Known Limitations:**
+> - Element type must be trivially copyable — types with non-trivial copy semantics or internal pointers will be shallow-copied by `mem_copy` / `mem_move`.
+> - `get_unchecked` has no release-build bounds protection — always verify index bounds yourself.
+> - `clear()` does not zero buffer contents — stale element data remains readable until overwritten.
+> - `realloc` is called directly in `_grow()` rather than through a `mem_realloc` wrapper — growth relies on `<stdlib.h>` being included explicitly.
+> - No overflow guard on capacity growth — `_grow()` does not check against `CANON_VEC_MAX_CAPACITY` despite `limits.h` being imported. Extremely large element counts may cause `realloc` to fail without a prior size check.
+> - `mem_zero` is imported via `memory.h` but unused — likely intended for a future `_clear_zero()` variant mirroring `arena_reset_secure` and `pool_reset_secure`.
+> - No arena support — use `data/vec/vec.h` for arena-backed or bounded vectors.
+> - Not thread-safe — concurrent modifications require external synchronization.
+
+### `smallvec.h`
+> Inline-first typed vector with at-most-one spill to heap or arena, generated per type via `DEFINE_SMALLVEC(type, INLINE_CAP)`. Elements live inside the struct until `INLINE_CAP` is exceeded — at that point a single allocation occurs and capacity is fixed. No further growth after spill.
+
+#### Core Behaviour
+
+- While `len <= INLINE_CAP`: elements live in `inline_buf` inside the struct — zero heap allocation.
+- On first overflow: spills once to heap (`malloc`) or arena, doubling capacity.
+- After spill: capacity is fixed — push into a full post-spill buffer returns `false`, no second realloc.
+
+#### Setup
+```c
+DEFINE_SMALLVEC(int, 8)   // inline storage for 8 ints; spills to heap on overflow
+
+// Arena-backed spill — no free() needed:
+smallvec_int v = smallvec_int_init_arena(&my_arena);
+
+// For pointer types — typedef first:
+typedef void* voidptr;
+DEFINE_SMALLVEC(voidptr, 4)
+```
+
+Must be used at file/global scope. Use once per `(type, INLINE_CAP)` pair. Element type must be trivially copyable (mem_copy-safe). `INLINE_CAP` must be > 0.
+
+#### Generated Struct
+```c
+typedef struct {
+    type* data;                   // active buffer (inline_buf or heap/arena)
+    usize len;                    // current element count
+    usize cap;                    // capacity of active buffer in elements
+    Arena* arena;                 // spill destination (NULL = malloc)
+    bool using_inline;            // true if data == inline_buf
+    type inline_buf[INLINE_CAP];  // inline storage — lives inside the struct
+} smallvec_##type;
+```
+
+Do not access or modify fields directly — use the provided functions.
+
+#### Constructors
+
+**`smallvec_T smallvec_T_init(void)`**
+Initializes with inline storage. No heap allocation.
+```c
+smallvec_int v = smallvec_int_init();
+// v.data == v.inline_buf, v.cap == INLINE_CAP, v.using_inline == true
+```
+
+**`smallvec_T smallvec_T_init_arena(Arena* arena)`**
+Same as `_init()` but stores arena pointer — spill allocates from arena instead of `malloc`. `arena` must not be NULL — checked via `require_msg()`.
+```c
+smallvec_int v = smallvec_int_init_arena(&scratch);
+// spill goes into scratch — no free() needed, arena_reset() handles cleanup
+```
+
+#### Queries
+
+**`usize smallvec_T_len(const smallvec_T* v)`**
+Returns current element count. NULL-safe — returns 0.
+
+**`usize smallvec_T_capacity(const smallvec_T* v)`**
+Returns current buffer capacity in elements. NULL-safe — returns 0.
+
+**`bool smallvec_T_is_empty(const smallvec_T* v)`**
+Returns true if len == 0 or v == NULL.
+
+**`bool smallvec_T_using_inline(const smallvec_T* v)`**
+Returns true if spill has not yet occurred. NULL-safe — returns false.
+
+#### Element Access
+
+**`bool smallvec_T_get(const smallvec_T* v, usize i, T* out)`**
+Bounds-checked copy into `*out`. Returns false if v == NULL, out == NULL, or i >= len.
+
+**`T smallvec_T_get_unchecked(const smallvec_T* v, usize i)`**
+No bounds check. Debug-only `ensure_msg` — UB in release if i >= len.
+
+**`T* smallvec_T_data(const smallvec_T* v)`**
+Returns raw buffer pointer. NULL if v == NULL.
+
+**`T* smallvec_T_first(const smallvec_T* v)`**
+Returns pointer to first element. NULL if empty or v == NULL.
+
+**`T* smallvec_T_last(const smallvec_T* v)`**
+Returns pointer to last element. NULL if empty or v == NULL.
+
+#### Push / Pop
+
+**`bool smallvec_T_push(smallvec_T* v, T value)`**
+Appends element. Spills once if inline is full. Returns false on spill failure, if post-spill buffer is also full, or if v == NULL.
+```c
+smallvec_int_push(&v, 99);
+```
+
+**`bool smallvec_T_pop(smallvec_T* v, T* out)`**
+Removes and returns last element. Returns false if empty, v == NULL, or out == NULL.
+
+#### Insert / Remove
+
+**`bool smallvec_T_insert(smallvec_T* v, usize i, T value)`**
+Inserts at index `i` (must be `<= len`), shifting right. Triggers spill if inline is full. Returns false if already spilled and full — no second growth. O(n).
+
+**`bool smallvec_T_remove(smallvec_T* v, usize i, T* out)`**
+Removes at index `i` (must be `< len`), shifting left. Returns false if OOB, v == NULL, or out == NULL. O(n).
+
+#### Bulk
+
+**`bool smallvec_T_extend(smallvec_T* v, const T* src, usize count)`**
+Appends `count` elements from `src`. Triggers spill if needed. Returns false on v == NULL, src == NULL, spill failure, or insufficient post-spill capacity.
+
+#### Clear / Free
+
+**`void smallvec_T_clear(smallvec_T* v)`**
+Resets len to 0. Does not free spill buffer, zero contents, or revert to inline storage. NULL-safe.
+
+**`void smallvec_T_free(smallvec_T* v)`**
+If spilled to heap (not arena), calls `free()` on the spill buffer then re-initializes to inline state. No-op for arena-spilled instances — `arena_reset()` handles cleanup. NULL-safe.
+```c
+smallvec_int v = smallvec_int_init();
+smallvec_int_push(&v, 1);
+// ...
+smallvec_int_free(&v);  // REQUIRED if heap-spilled — safe to call either way
+```
+
+#### Interop
+
+**`canon_vec_T smallvec_T_as_vec(smallvec_T* v)`**
+Returns a zero-copy borrowed `canon_vec_T` view over the current buffer. Does NOT transfer ownership — do not free or store beyond `v`'s lifetime. v must not be NULL — checked via `require_msg()`. Do not call any reallocating vec functions on the returned view.
+```c
+canon_vec_int view = smallvec_int_as_vec(&v);
+// pass to any API accepting canon_vec_int
+```
+
+#### Spill Decision Summary
+
+| Situation | Spill target | Free needed? |
+|---|---|---|
+| `arena == NULL` (default) | `malloc` heap | Yes — call `_free()` |
+| `arena != NULL` | arena | No — `arena_reset()` handles it |
+| Never exceeded `INLINE_CAP` | No spill | No |
+
+#### Performance
+
+| Operation | Time | Notes |
+|---|---|---|
+| `push` (inline) | O(1) | No allocation |
+| `push` (spill) | O(n) | Single alloc + mem_copy, at most once |
+| `push` (post-spill) | O(1) | Returns false if full |
+| `pop` | O(1) | |
+| `insert` / `remove` | O(n) | mem_move |
+| `extend` | O(count) | May trigger one spill |
+| All queries | O(1) | |
+| `free` | O(1) | |
+
+> **Known Limitations:**
+> - At-most-one growth — post-spill push into a full buffer returns `false`. Size `INLINE_CAP` and expected max count accordingly.
+> - `clear()` does not revert to inline storage — after a spill, the spill buffer is retained even after clear.
+> - `clear()` does not zero buffer contents — stale element data remains readable until overwritten.
+> - `get_unchecked` has no release-build bounds protection — always verify index bounds yourself.
+> - Element type must be trivially copyable — spill uses `mem_copy`.
+> - `as_vec` returns a borrowed view — do not call any reallocating vec functions on it and do not store it beyond `v`'s lifetime.
+> - Struct size includes `INLINE_CAP` inline slots — large values on the stack may cause stack pressure in deeply recursive code.
+> - No overflow guard on spill capacity — `_spill()` does not check against `CANON_VEC_MAX_CAPACITY` despite `limits.h` being imported. Extremely large spill counts may cause `malloc` to fail without a prior size check.
+> - `realloc` is not used — spill is a single `malloc` or arena allocation. No `mem_realloc` wrapper needed here.
+> - Not thread-safe — concurrent modifications require external synchronization.
 
 
