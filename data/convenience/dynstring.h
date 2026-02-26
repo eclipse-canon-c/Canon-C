@@ -3,6 +3,7 @@
 
 #include <stdarg.h>                      // va_list, va_start, va_end — for append_fmt
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "core/primitives/types.h"       // usize, bool
 #include "core/primitives/limits.h"      // growth constants, max capacity
