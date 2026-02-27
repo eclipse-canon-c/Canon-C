@@ -55,6 +55,7 @@
 #define CANON_CORE_PRIMITIVES_CHECKED_H
 
 #include "types.h"
+#include "limits.h"    /* CANON_ISIZE_MAX, CANON_ISIZE_MIN — needed by checked_mul_isize fallback */
 
 /* ============================================================================
  * Compiler Builtin Detection
