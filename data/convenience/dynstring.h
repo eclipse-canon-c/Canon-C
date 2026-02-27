@@ -596,23 +596,22 @@ static inline void dynstring_free(DynString* s) {
  * The returned pointer is independent of the DynString — caller must free it.
  *
  * @param s DynString to copy (NULL-safe)
- * @return Heap-allocated null-terminated string, or empty string on failure
+ * @return Heap-allocated null-terminated string, or NULL on OOM
  *
  * @note Caller is responsible for calling free() on the returned pointer.
+ * @note Returns NULL on allocation failure — always check the return value.
  *
  * Performance:
  * - Time: O(len)
  * - Space: len + 1 bytes allocated on the heap
  */
 static inline char* dynstring_to_cstr(const DynString* s) {
-    if (!s || !s->data) {
-        char* empty = (char*)malloc(1);
-        if (empty) empty[0] = '\0';
-        return empty;
-    }
+    const char* src = (s && s->data) ? s->data : "";
+    usize len       = (s && s->data) ? s->len  : 0;
 
-    char* copy = (char*)malloc(s->len + 1);
-    if (copy) mem_copy(copy, s->data, s->len + 1);
+    char* copy = (char*)malloc(len + 1);
+    if (!copy) return NULL;  /* OOM — caller must check */
+    mem_copy(copy, src, len + 1);
     return copy;
 }
 
