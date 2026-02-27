@@ -2,10 +2,10 @@
 #define CANON_DATA_DEQUE_IMPL_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
-#include "core/primitives/contract.h"
-#include "semantics/result/result.h"
-#include "semantics/error.h"
+#include "core/primitives/limits.h"      /* CANON_VEC_MAX_CAPACITY */
+#include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "semantics/result/result.h"     /* CANON_RESULT */
+#include "semantics/error.h"             /* Error, ERR_* */
 
 /**
  * @file deque_impl.h
@@ -47,6 +47,39 @@
  *
  * @sa deque_mangle.h, deque_defn.h, deque_decl.h, deque.h
  */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CANON_DEQUE_MAX_CAPACITY — practical limit
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Maximum capacity for any deque instance
+ *
+ * Reuses CANON_VEC_MAX_CAPACITY from limits.h (both are 1GB by default).
+ * Override by defining CANON_DEQUE_MAX_CAPACITY before including this file.
+ *
+ * Must be defined before any IMPL_DEQUE_INIT expansion.
+ */
+#ifndef CANON_DEQUE_MAX_CAPACITY
+    #define CANON_DEQUE_MAX_CAPACITY CANON_VEC_MAX_CAPACITY
+#endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   result_bool_Error instantiation
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Instantiate result_bool_Error exactly once across all translation units
+ *
+ * push_front, push_back, pop_front, pop_back all return result_bool_Error.
+ * Guard prevents duplicate definition if multiple deque types are instantiated.
+ *
+ * Must be defined before any IMPL_DEQUE_PUSH_*/POP_* expansion.
+ */
+#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
+    #define CANON_RESULT_BOOL_ERROR_DEFINED
+    CANON_RESULT(bool, Error)
+#endif
 
 /* ════════════════════════════════════════════════════════════════════════════
    IMPL_DEQUE_STRUCT — struct typedef for the deque
@@ -96,7 +129,7 @@ typedef struct DequeTag { \
  * ```
  *
  * @pre d != NULL
- * @pre buffer != NULL || capacity == 0
+ * @pre buffer != NULL
  * @pre capacity > 0
  * @pre capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(type)
  *
@@ -105,6 +138,8 @@ typedef struct DequeTag { \
  * @post d->head == 0, d->tail == 0, d->size == 0
  *
  * @note Capacity is fixed forever — no growth possible.
+ * @note require_msg() panics on precondition violation — never returns on failure.
+ *       There is no defensive fallback path; callers must satisfy preconditions.
  *
  * Performance:
  * - Time:  O(1)
@@ -112,13 +147,11 @@ typedef struct DequeTag { \
  */
 #define IMPL_DEQUE_INIT(linkage, DequeType, fn, type) \
 linkage void fn(DequeType* d, type* buffer, usize capacity) { \
-    require_msg(d != NULL,                  #fn ": d cannot be NULL"); \
-    require_msg(buffer != NULL || capacity == 0, \
-        #fn ": buffer cannot be NULL when capacity > 0"); \
-    require_msg(capacity > 0,               #fn ": capacity must be > 0"); \
+    require_msg(d != NULL,      #fn ": d cannot be NULL"); \
+    require_msg(buffer != NULL, #fn ": buffer cannot be NULL"); \
+    require_msg(capacity > 0,   #fn ": capacity must be > 0"); \
     require_msg(capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(type), \
         #fn ": capacity exceeds CANON_DEQUE_MAX_CAPACITY"); \
-    if (!d || (!buffer && capacity > 0) || capacity == 0) return; \
     d->buffer   = buffer; \
     d->capacity = capacity; \
     d->head     = 0; \
@@ -581,35 +614,5 @@ linkage void fn(DequeType* a, DequeType* b) { \
     *a = *b; \
     *b = tmp; \
 }
-
-/* ════════════════════════════════════════════════════════════════════════════
-   result_bool_Error instantiation
-   ════════════════════════════════════════════════════════════════════════════ */
-
-/**
- * @brief Instantiate result_bool_Error exactly once across all translation units
- *
- * push_front, push_back, pop_front, pop_back all return result_bool_Error.
- * Guard prevents duplicate definition if multiple deque types are instantiated.
- */
-#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
-    #define CANON_RESULT_BOOL_ERROR_DEFINED
-    CANON_RESULT(bool, Error)
-#endif
-
-/* ════════════════════════════════════════════════════════════════════════════
-   CANON_DEQUE_MAX_CAPACITY — practical limit
-   ════════════════════════════════════════════════════════════════════════════ */
-
-/**
- * @brief Maximum capacity for any deque instance
- *
- * Reuses CANON_VEC_MAX_CAPACITY from limits.h (both are 1GB by default).
- * Override by defining CANON_DEQUE_MAX_CAPACITY before including this file.
- */
-#ifndef CANON_DEQUE_MAX_CAPACITY
-    #include "core/primitives/limits.h"
-    #define CANON_DEQUE_MAX_CAPACITY CANON_VEC_MAX_CAPACITY
-#endif
 
 #endif /* CANON_DATA_DEQUE_IMPL_H */
