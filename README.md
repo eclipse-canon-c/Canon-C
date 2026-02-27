@@ -25,7 +25,7 @@ Canon-C is licensed under MPL 2.0.
 
 Meaning that:
 
-"using Canon-C headers unmodified in your project does not trigger MPL requirements — only modifications to Canon-C files themselves do."
+"using Canon-C headers unmodified in your project (commercial or non-commercial) does not trigger MPL requirements — only modifications to Canon-C files themselves do."
 
 
 ---
