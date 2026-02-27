@@ -98,11 +98,11 @@ Abstractions must clarify behavior, not conceal it.
 ## core/primitives/
 - `types.h` — portable integer and size type aliases (u8, usize, isize, etc.)
 - `compare.h` — Three-way comparator type and built-in comparators
-- `limits.h` — common constants and limits (integer bounds, alignment, capacity limits)
+- `limits.h` — Numeric limits, alignment/platform constants & tuning defaults
 - `bits.h` — Portable bit manipulation (popcount, clz/ctz, rotate, power-of-2, extract/insert, byte swap
 - `checked.h` — Overflow-safe arithmetic (checked add/sub/mul), alignment helpers, and min/max/clamp utilities
 - `contract.h` — explicit contracts and assertions (require_msg, ensure_msg, unreachable, panic)
-- `ptr.h` — named pointer arithmetic and alignment (ptr_offset, ptr_diff, align_up, ptr_in_range, PTR_CONTAINER_OF)
+- `ptr.h` — Named pointer arithmetic + compile-time & structural alignment utilities
 
 ## core/
 - `memory.h` — low-level memory utilities (alignment, safe mem_copy/mem_move wrappers)
