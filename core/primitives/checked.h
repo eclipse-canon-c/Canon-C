@@ -48,14 +48,14 @@
  * - Modular arithmetic (use explicit modulo instead)
  * - Very tight loops where overflow is impossible (profile first)
  *
- * @sa types.h, contract.h
+ * @sa types.h, limits.h, contract.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_CHECKED_H
 #define CANON_CORE_PRIMITIVES_CHECKED_H
 
 #include "types.h"
-#include "limits.h"    /* CANON_ISIZE_MAX, CANON_ISIZE_MIN — needed by checked_mul_isize fallback */
+#include "limits.h"    /* CANON_ISIZE_MAX, CANON_ISIZE_MIN — needed by signed fallbacks */
 
 /* ============================================================================
  * Compiler Builtin Detection
@@ -107,7 +107,7 @@ static inline bool checked_add(usize a, usize b, usize* result) {
     return !__builtin_add_overflow(a, b, result);
 #else
     *result = a + b;
-    return *result >= a;  /* overflow if result wrapped around */
+    return *result >= a;  /* unsigned wraparound is well-defined; overflow iff result < a */
 #endif
 }
 
@@ -137,7 +137,7 @@ static inline bool checked_add_u32(u32 a, u32 b, u32* result) {
 #else
     u64 sum = (u64)a + (u64)b;
     *result = (u32)sum;
-    return sum <= 0xFFFFFFFF;
+    return sum <= 0xFFFFFFFFU;
 #endif
 }
 
@@ -146,7 +146,7 @@ static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
     return !__builtin_add_overflow(a, b, result);
 #else
     *result = a + b;
-    return *result >= a;
+    return *result >= a;  /* unsigned wraparound is well-defined */
 #endif
 }
 
@@ -155,25 +155,30 @@ static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
  * ========================================================================= */
 
 /**
- * Subtract two unsigned values with underflow detection.
- * 
+ * @brief Subtract two unsigned values with underflow detection
+ *
  * @param a First operand (minuend)
  * @param b Second operand (subtrahend)
- * @param result Output parameter for a - b
- * @return true if operation succeeded, false if underflow occurred
- * 
+ * @param result Output parameter for a - b (must not be NULL)
+ *
+ * @return true if a >= b (no underflow), false if b > a
+ *
+ * @pre result must be non-NULL (not checked — UB if violated)
+ *
  * Example:
- *   usize remaining;
- *   if (!checked_sub(capacity, used, &remaining)) {
- *       return ERROR_UNDERFLOW;
- *   }
+ * ```c
+ * usize remaining;
+ * if (!checked_sub(capacity, used, &remaining)) {
+ *     return ERROR_UNDERFLOW;
+ * }
+ * ```
  */
 static inline bool checked_sub(usize a, usize b, usize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
     *result = a - b;
-    return b <= a;  /* underflow if b > a */
+    return b <= a;  /* underflow iff b > a */
 #endif
 }
 
@@ -233,8 +238,8 @@ static inline bool checked_sub_u64(u64 a, u64 b, u64* result) {
  * @pre result must be non-NULL (not checked — UB if violated)
  *
  * @remark Uses __builtin_mul_overflow on GCC/Clang (1-2 instructions)
- * @remark Fallback checks: overflow iff (a * b) / a != b (division recovers b)
- * @remark Special case: if a == 0 or b == 0, returns true with result = 0
+ * @remark Fallback: if a == 0 or b == 0, returns true with result = 0;
+ *         otherwise checks via division after multiply (unsigned — no UB)
  *
  * Example:
  * ```c
@@ -258,7 +263,7 @@ static inline bool checked_mul(usize a, usize b, usize* result) {
         return true;
     }
     *result = a * b;
-    return *result / a == b;  /* overflow if division doesn't recover b */
+    return *result / a == b;  /* unsigned — well-defined; overflow iff division doesn't recover b */
 #endif
 }
 
@@ -288,7 +293,7 @@ static inline bool checked_mul_u32(u32 a, u32 b, u32* result) {
 #else
     u64 prod = (u64)a * (u64)b;
     *result = (u32)prod;
-    return prod <= 0xFFFFFFFF;
+    return prod <= 0xFFFFFFFFU;
 #endif
 }
 
@@ -301,38 +306,83 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
         return true;
     }
     *result = a * b;
-    return *result / a == b;
+    return *result / a == b;  /* unsigned — well-defined */
 #endif
 }
 
 /* ============================================================================
- * Signed Arithmetic (for completeness)
+ * Signed Arithmetic
  * ========================================================================= */
 
+/**
+ * @brief Add two signed isize values with overflow detection
+ *
+ * @param a First operand
+ * @param b Second operand
+ * @param result Output parameter for a + b (must not be NULL)
+ *
+ * @return true if a + b does not overflow isize, false otherwise
+ *
+ * @remark Fallback checks bounds BEFORE adding to avoid signed overflow UB.
+ *         Signed integer overflow is undefined behavior in C.
+ */
 static inline bool checked_add_isize(isize a, isize b, isize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
+    /*
+     * Check BEFORE adding — signed overflow is UB in C.
+     * Overflow only possible when both operands share the same sign:
+     *   (+, +): overflow if b > ISIZE_MAX - a  (both positive, sum too large)
+     *   (-, -): underflow if b < ISIZE_MIN - a (both negative, sum too small)
+     * Mixed signs can never overflow.
+     */
+    if (a > 0 && b > 0 && b > (CANON_ISIZE_MAX - a)) return false;
+    if (a < 0 && b < 0 && b < (CANON_ISIZE_MIN - a)) return false;
     *result = a + b;
-    /* Overflow if signs match but result sign differs */
-    if (a > 0 && b > 0) return *result > 0;
-    if (a < 0 && b < 0) return *result < 0;
     return true;
 #endif
 }
 
+/**
+ * @brief Subtract two signed isize values with overflow detection
+ *
+ * @param a First operand (minuend)
+ * @param b Second operand (subtrahend)
+ * @param result Output parameter for a - b (must not be NULL)
+ *
+ * @return true if a - b does not overflow isize, false otherwise
+ *
+ * @remark Fallback checks bounds BEFORE subtracting to avoid signed overflow UB.
+ */
 static inline bool checked_sub_isize(isize a, isize b, isize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
+    /*
+     * Check BEFORE subtracting — signed overflow is UB in C.
+     * a - b overflows when b and a have opposite signs and a is near a limit:
+     *   subtracting positive from near-ISIZE_MIN: underflow if a < ISIZE_MIN + b
+     *   subtracting negative from near-ISIZE_MAX: overflow if a > ISIZE_MAX + b
+     */
+    if (b > 0 && a < (CANON_ISIZE_MIN + b)) return false;
+    if (b < 0 && a > (CANON_ISIZE_MAX + b)) return false;
     *result = a - b;
-    /* Overflow if signs differ and result sign doesn't match a */
-    if (a >= 0 && b < 0) return *result >= 0;
-    if (a < 0 && b > 0) return *result < 0;
     return true;
 #endif
 }
 
+/**
+ * @brief Multiply two signed isize values with overflow detection
+ *
+ * @param a First operand
+ * @param b Second operand
+ * @param result Output parameter for a * b (must not be NULL)
+ *
+ * @return true if a * b does not overflow isize, false otherwise
+ *
+ * @remark Fallback checks bounds BEFORE multiplying to avoid signed overflow UB.
+ */
 static inline bool checked_mul_isize(isize a, isize b, isize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
@@ -347,12 +397,12 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
      * `a * b` must never be evaluated if it would overflow.
      *
      * Four cases covering all sign combinations:
-     *   (+, +): overflow if a > ISIZE_MAX / b
-     *   (-, -): result is positive; same bound as (+,+) after negation
+     *   (+, +): overflow  if a > ISIZE_MAX / b
+     *   (-, -): overflow  if a < ISIZE_MAX / b  (both negative → positive result)
      *   (+, -): underflow if b < ISIZE_MIN / a
      *   (-, +): underflow if a < ISIZE_MIN / b
      *
-     * Division is safe here because b != 0 and a != 0 (checked above).
+     * Division is safe: a != 0 and b != 0 are both guaranteed above.
      */
     if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;
     if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;
@@ -388,7 +438,7 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
  * ```c
  * usize offset = 17;
  * usize aligned = align_up(offset, 16); // → 32
- * 
+ *
  * // In arena allocator:
  * arena->offset = align_up(arena->offset, 16);
  * ```
@@ -401,14 +451,17 @@ static inline usize align_up(usize value, usize alignment) {
 }
 
 /**
- * Align a value down to the nearest multiple of alignment.
- * 
+ * @brief Rounds value down to the nearest multiple of alignment
+ *
  * @param value Value to align
  * @param alignment Must be a power of 2
- * @return Aligned value
- * 
+ *
+ * @return Largest multiple of alignment <= value
+ *
  * Example:
- *   usize aligned = align_down(17, 16);  // returns 16
+ * ```c
+ * usize aligned = align_down(17, 16);  // → 16
+ * ```
  */
 static inline usize align_down(usize value, usize alignment) {
     /* alignment must be power of 2 */
@@ -416,10 +469,11 @@ static inline usize align_down(usize value, usize alignment) {
 }
 
 /**
- * Check if a value is aligned to the specified alignment.
- * 
+ * @brief Returns true if value is aligned to the given power-of-2 alignment
+ *
  * @param value Value to check
  * @param alignment Must be a power of 2
+ *
  * @return true if aligned, false otherwise
  */
 static inline bool is_aligned(usize value, usize alignment) {
@@ -428,10 +482,11 @@ static inline bool is_aligned(usize value, usize alignment) {
 }
 
 /**
- * Check if a pointer is aligned to the specified alignment.
- * 
+ * @brief Returns true if pointer address is aligned to the given alignment
+ *
  * @param ptr Pointer to check
  * @param alignment Must be a power of 2
+ *
  * @return true if aligned, false otherwise
  */
 static inline bool is_ptr_aligned(const void* ptr, usize alignment) {
@@ -439,12 +494,26 @@ static inline bool is_ptr_aligned(const void* ptr, usize alignment) {
 }
 
 /* ============================================================================
- * Min/Max Utilities
+ * Min / Max / Clamp (macros)
  * ========================================================================= */
 
+/**
+ * @brief Returns the smaller of a and b
+ * @warning Macro — arguments may be evaluated twice. Do not use with side effects.
+ */
 #define checked_min(a, b) ((a) < (b) ? (a) : (b))
+
+/**
+ * @brief Returns the larger of a and b
+ * @warning Macro — arguments may be evaluated twice. Do not use with side effects.
+ */
 #define checked_max(a, b) ((a) > (b) ? (a) : (b))
-#define checked_clamp(x, lo, hi) (checked_max(lo, checked_min(x, hi)))
+
+/**
+ * @brief Clamps x to the inclusive range [lo, hi]
+ * @warning Macro — arguments may be evaluated twice. Do not use with side effects.
+ */
+#define checked_clamp(x, lo, hi) (checked_max((lo), checked_min((x), (hi))))
 
 /* ============================================================================
  * Usage Examples
@@ -460,19 +529,19 @@ static inline bool is_ptr_aligned(const void* ptr, usize alignment) {
  *     return result_err(ERROR_OUT_OF_MEMORY);
  * }
  * arena->offset = new_offset;
- * 
+ *
  * // Vector capacity calculation
  * usize total_bytes;
  * if (!checked_mul(count, elem_size, &total_bytes)) {
  *     return result_err(ERROR_OVERFLOW);
  * }
- * 
+ *
  * // Alignment in allocator
  * usize aligned_offset = align_up(arena->offset, 16);
  * if (!is_aligned(ptr, 8)) {
  *     return result_err(ERROR_ALIGNMENT);
  * }
- * 
+ *
  * // Safe index calculation
  * usize index;
  * if (!checked_add(base_index, offset, &index)) {
