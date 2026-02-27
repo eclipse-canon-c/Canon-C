@@ -82,6 +82,9 @@ This rule ensures **explicitness** and prevents hidden behaviors or fragile depe
 - No required runtime
 - No language extensions
 - Works in plain C99 with no special compiler extensions
+- GNU C extensions (GCC/Clang statement expressions) are used opportunistically
+  for propagation macros (TRY, TRY_UNWRAP) — disable with
+  #define CANON_NO_GNU_EXTENSIONS for strict C99 compliance
 - No clever tricks
 
 If behavior cannot be understood by reading the header, it does not belong.
