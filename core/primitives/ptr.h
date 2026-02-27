@@ -1,5 +1,6 @@
 #ifndef CANON_CORE_PRIMITIVES_PTR_H
 #define CANON_CORE_PRIMITIVES_PTR_H
+
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
