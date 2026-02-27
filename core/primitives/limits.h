@@ -64,6 +64,7 @@
 
 #ifndef CANON_CORE_PRIMITIVES_LIMITS_H
 #define CANON_CORE_PRIMITIVES_LIMITS_H
+
 #include "types.h"
 #include <limits.h>
 #include <stddef.h>
