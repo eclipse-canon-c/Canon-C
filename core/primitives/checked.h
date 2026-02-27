@@ -336,13 +336,29 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
-    /* Simple overflow check for signed multiplication */
     if (a == 0 || b == 0) {
         *result = 0;
         return true;
     }
+    /*
+     * Check BEFORE multiplying to avoid signed overflow UB.
+     * Signed integer overflow is undefined behavior in C —
+     * `a * b` must never be evaluated if it would overflow.
+     *
+     * Four cases covering all sign combinations:
+     *   (+, +): overflow if a > ISIZE_MAX / b
+     *   (-, -): result is positive; same bound as (+,+) after negation
+     *   (+, -): underflow if b < ISIZE_MIN / a
+     *   (-, +): underflow if a < ISIZE_MIN / b
+     *
+     * Division is safe here because b != 0 and a != 0 (checked above).
+     */
+    if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;
+    if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;
+    if (a > 0 && b < 0 && b < (CANON_ISIZE_MIN / a)) return false;
+    if (a < 0 && b > 0 && a < (CANON_ISIZE_MIN / b)) return false;
     *result = a * b;
-    return *result / a == b;
+    return true;
 #endif
 }
 
