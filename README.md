@@ -12,7 +12,7 @@ A semantic standard library built from explicit, composable C modules.
 3. [Dependency Rule (Strict)](#dependency-rule-strict)
 4. [Design Philosophy](#design-philosophy)
 5. [Getting Started](#getting-started)
-    - [1. core/primitives/ — Foundations](#1-coreprimitives-—-foundations)
+    - [1. core/primitives/ — Foundations](#1-coreprimitives--foundations)
     - [2. core/ — Core memory & ownership](#2-core-—-core-memory--ownership)
     - [3. semantics/ — Explicit semantic types](#3-semantics-—-explicit-semantic-types)
     - [4. data/ — Fixed-capacity collections](#4-data-—-fixed-capacity-collections)
