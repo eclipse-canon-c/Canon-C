@@ -152,7 +152,7 @@ bits_rotl(0b10110001, 2)  // → 0b11000110  (8-bit context)
 **`u64 bits_rotr(u64 value, u32 shift)`**
 Rotates bits right by `shift` positions. Bits that fall off wrap to the left.
 ```c
-bits_rotr(0b10110001, 2)  // → 0b01101100  (8-bit context)
+bits_rotr(0b10110001, 2)  // → 0b01101110  (8-bit context)
 ```
 
 #### Power of Two
@@ -250,6 +250,8 @@ checked_mul(1000, sizeof(Item), &out)  // → true  (typically)
 checked_mul(USIZE_MAX, 2, &out)        // → false
 ```
 
+> **Known Limitations:** All signed fallback implementations (`checked_add_isize`, `checked_sub_isize`, `checked_mul_isize`) check bounds **before** performing the operation to avoid signed integer overflow UB. The builtin path (`__builtin_*_overflow`) is always preferred when available.
+
 #### Alignment
 
 **`usize align_up(usize value, usize alignment)`**
@@ -293,7 +295,10 @@ checked_max(3, 7)         // → 7
 checked_clamp(15, 0, 10)  // → 10
 ```
 
-> **Known Limitations:** Macros — arguments may be evaluated more than once; don't put function calls or `i++` inside them.
+> **Known Limitations:**
+> - Macros (`checked_min`, `checked_max`, `checked_clamp`) — arguments may be evaluated more than once; don't put function calls or `i++` inside them.
+> - All signed fallback implementations (`checked_add_isize`, `checked_sub_isize`, `checked_mul_isize`) check bounds **before** performing the operation to avoid signed integer overflow UB. The builtin path (`__builtin_*_overflow`) is always preferred when available.
+> - Requires `limits.h` for `CANON_ISIZE_MAX` / `CANON_ISIZE_MIN` — used by the signed fallback paths.
 
 ---
 
@@ -2508,7 +2513,7 @@ dynstring_free(&s);  // REQUIRED — always call this
 #### Utility
 
 **`char* dynstring_to_cstr(const DynString* s)`**
-Returns a heap-allocated copy as a plain C string. Caller must `free()` the result. Returns a heap-allocated `""` on NULL or empty input — never returns NULL itself.
+Returns a heap-allocated copy as a plain C string. The returned pointer is independent of the DynString. Caller must `free()` the result. Returns `NULL` on allocation failure — always check the return value.
 
 #### Performance
 
@@ -2518,6 +2523,7 @@ Returns a heap-allocated copy as a plain C string. Caller must `free()` the resu
 | `append_char` | Amortized O(1) | O(len) on realloc |
 | `append_fmt` | O(n) | Two `vsnprintf` passes |
 | `append_n` | Amortized O(n) | O(len + n) on realloc |
+| `to_cstr` | O(len) | Returns NULL on OOM — always check |
 | All queries | O(1) | |
 | `free` | O(1) | |
 
@@ -3097,7 +3103,7 @@ IMPL_DEQUE_STRUCT(DequeType, DequeTag, type)
 > - These macros are internal — most users should never include `deque_impl.h` directly. Use `deque.h` or `deque_defn.h` instead.
 > - `IMPL_DEQUE_CLEAR` does not zero buffer contents — stale data remains readable until overwritten. For sensitive data, zero the buffer manually before calling clear.
 > - `IMPL_DEQUE_INIT` enforces `capacity > 0` via `require_msg` — zero-capacity deques are not allowed.
-> - `CANON_RESULT(bool, Error)` is instantiated inside `deque_impl.h` — this is inconsistent with the layering principle stated in the file itself, which says `deque_impl.h` may only include from `core/` and `semantics/`. `CANON_RESULT` is a definition macro and places generated code here rather than in `deque_defn.h` where it belongs.
+> - `CANON_RESULT(bool, Error)` is instantiated at the top of `deque_impl.h` under a define guard (`CANON_RESULT_BOOL_ERROR_DEFINED`). This must appear before any `IMPL_DEQUE_PUSH_*/POP_*` expansion and is intentionally placed there for that reason.
 > - Overrides to `CANON_DEQUE_MAX_CAPACITY` must be defined before the first include of `deque_impl.h` in that translation unit.
 
 ### `deque_mangle.h`
@@ -3149,4 +3155,3 @@ myproject_deque_int_push_front(&d, 42);
 > **Known Limitations:**
 > - All macros are guarded with `#ifndef` — overrides must be defined before the first include of any deque header in that translation unit.
 > - Overrides apply to all types instantiated after them, not selectively per type.
-> - No logic here — pure token generation only. Requires C99 or later for token pasting via `##`.
