@@ -61,7 +61,7 @@ Canon-C is licensed under **MPL 2.0**.
 
 **Note:**  
 
-This project is an **architectural proposal and design foundation** built by one person. The taxonomy, dependency rules, and API designs are intentional and carefully considered. The implementations are **not yet fully tested** or compiled end-to-end. AI assistance was used for scaffolding, but architecture and philosophy are entirely human-designed.
+This project is an **architectural proposal and design foundation** built by a team. The taxonomy, dependency rules, and API designs are intentional and carefully considered. The implementations are **not yet fully tested** or compiled end-to-end. AI assistance was used for scaffolding, but architecture and philosophy are entirely human-designed.
 
 ---
 
