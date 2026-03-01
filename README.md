@@ -189,7 +189,7 @@ Generic, reusable algorithms:
 
 Convenience utilities for **common tasks**:
 
-- Strings: `string.h`, `split.h`, `join.h`, `view.h`, `intern.h`
+- Strings: `string.h`, `str_split.h`, `str_join.h`, `str_view.h`, `intern.h`
 - Logging: `log.h`, `log_macros.h`
 - File I/O, parsing, random number generation, timing
 
