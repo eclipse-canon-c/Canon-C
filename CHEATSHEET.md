@@ -55,6 +55,14 @@
 - [`deque_impl.h`](#deque_implh) — Pure implementation logic
 - [`deque_mangle.h`](#deque_mangleh) — Name mangling conventions
 
+### `data/hashmap/`
+- [`hashmap.h`](#hashmaph) — Generic Robin Hood open-addressed hashmap
+- [`hashmap_decl.h`](#hashmap_declh) — Declaration macros (separate compilation)
+- [`hashmap_defn.h`](#hashmap_defnh) — Definition macros (implementation generation)
+- [`hashmap_impl.h`](#hashmap_implh) — Pure implementation logic
+- [`hashmap_mangle.h`](#hashmap_mangleh) — Name mangling conventions
+- [`hashmap_fmt.h`](#hashmap_fmth) — Optional: diagnostic string formatting
+- [`hashmap_range.h`](#hashmap_rangeh) — Optional: bulk key/value collection
 
 
 
@@ -3155,3 +3163,599 @@ myproject_deque_int_push_front(&d, 42);
 > **Known Limitations:**
 > - All macros are guarded with `#ifndef` — overrides must be defined before the first include of any deque header in that translation unit.
 > - Overrides apply to all types instantiated after them, not selectively per type.
+
+### `hashmap.h`
+> Generic Robin Hood open-addressed hashmap — header-only entry point. Including this file generates a complete, statically-inlined hashmap implementation for your key and value types. No `.c` file or build system integration required.
+
+#### Setup
+
+Before including, provide a hash function, an equality function, and define the configuration macros:
+```c
+static u64 hash_u64(const u64* key, void* ctx) {
+    (void)ctx;
+    u64 h = *key * 11400714819323198485ULL;
+    return h == 0 ? 1 : h;  // 0 is reserved as empty sentinel
+}
+
+static bool eq_u64(const u64* a, const u64* b, void* ctx) {
+    (void)ctx;
+    return *a == *b;
+}
+
+#define HASHMAP_KEY_TYPE u64
+#define HASHMAP_VAL_TYPE int
+#define HASHMAP_HASH_FN  hash_u64
+#define HASHMAP_EQ_FN    eq_u64
+#include "data/hashmap/hashmap.h"
+```
+
+#### Sizing & Initialization
+```c
+// To store N elements safely: capacity >= bits_next_power_of_two(N * 4 / 3 + 1)
+usize cap = bits_next_power_of_two(100 * 4 / 3 + 1);  // 100 elements → 256
+u8 buf[hashmap_buffer_size(cap)];                       // stack or static
+// or: u8* buf = malloc(hashmap_buffer_size(cap));      // heap
+
+hashmap map;
+result_bool_Error res = hashmap_init(&map, bytes_from(buf, sizeof(buf)), cap, NULL);
+```
+
+**`usize hashmap_buffer_size(usize capacity)`**
+Returns the byte count needed for a flat buffer holding `capacity` slots. Use this to size your buffer before `hashmap_init()`. Returns 0 on overflow.
+
+**`result_bool_Error hashmap_init(hashmap* map, bytes_t buf, usize capacity, void* ctx)`**
+Initializes map over caller-owned buffer. Zeroes all slots. Capacity must be a power of 2. `ctx` is forwarded to hash/eq functions (may be NULL). O(capacity).
+- `Err(ERR_INVALID_ARG)` — map/buf.ptr is NULL, capacity is 0, or capacity is not a power of 2
+- `Err(ERR_BUFFER_TOO_SMALL)` — buf.len < hashmap_buffer_size(capacity)
+
+#### Queries
+```c
+hashmap_len(&map)                // usize — number of stored entries
+hashmap_capacity(&map)           // usize — total slot count
+hashmap_is_empty(&map)           // bool  — true if len == 0
+hashmap_load_factor(&map)        // f64   — len / capacity in [0.0, 1.0]
+hashmap_contains_key(&map, &key) // bool
+```
+
+#### Mutation
+
+**`result_bool_Error hashmap_insert(hashmap* map, const K* key, const V* val)`**
+Inserts or overwrites a key-value pair. Keys and values are copied into slots — originals need not outlive the call.
+- `Ok(true)` — new key inserted
+- `Ok(false)` — key existed, value overwritten
+- `Err(ERR_CAPACITY_EXCEEDED)` — load ≥ 75%, no insertion performed
+- `Err(ERR_INVALID_ARG)` — any pointer is NULL
+
+**`result_V_Error hashmap_remove(hashmap* map, const K* key)`**
+Removes a key and returns its old value. Uses backward shift deletion — no tombstones.
+- `Ok(old_value)` — key found and removed
+- `Err(ERR_NOT_FOUND)` — key does not exist
+- `Err(ERR_INVALID_ARG)` — any pointer is NULL
+
+**`void hashmap_clear(hashmap* map)`**
+Removes all entries. Buffer and capacity unchanged. O(capacity).
+
+#### Lookup
+
+**`option_V hashmap_get(const hashmap* map, const K* key)`**
+Returns `Some(value)` (a copy) if found, `None` if not. O(1) expected — Robin Hood early termination on failed lookups.
+
+**`V* hashmap_get_or_null(hashmap* map, const K* key)`**
+Returns a direct pointer into the slot (borrowed). Valid until next insert or remove. NULL if not found. Avoids copy cost for large value types.
+
+#### Iteration
+```c
+usize iter = 0;
+const u64* k; const int* v;
+while (hashmap_iter_next(&map, &iter, &k, &v)) {
+    printf("%llu => %d\n", (unsigned long long)*k, *v);
+}
+```
+
+Initialize `iter = 0` before the first call. Do not mutate the map during iteration. O(1) per call, O(capacity) to exhaust.
+
+#### Multiple Instantiations
+
+`hashmap.h` has no include guard and can be included multiple times with different macro configs to generate distinct types in the same translation unit:
+```c
+// First: u64 → int
+#define HASHMAP_KEY_TYPE  u64
+#define HASHMAP_VAL_TYPE  int
+#define HASHMAP_HASH_FN   hash_u64
+#define HASHMAP_EQ_FN     eq_u64
+#define HASHMAP_TYPE_NAME map_u64_int
+#define HASHMAP_FN(name)  map_u64_int_##name
+#include "data/hashmap/hashmap.h"
+#undef HASHMAP_KEY_TYPE
+#undef HASHMAP_VAL_TYPE
+// ... undef all ...
+
+// Second: str_t → u32
+#define HASHMAP_KEY_TYPE  str_t
+#define HASHMAP_VAL_TYPE  u32
+#define HASHMAP_HASH_FN   hash_str
+#define HASHMAP_EQ_FN     eq_str
+#define HASHMAP_TYPE_NAME map_str_u32
+#define HASHMAP_FN(name)  map_str_u32_##name
+#include "data/hashmap/hashmap.h"
+```
+
+#### Built-in Hash Recipes
+```c
+// Integer keys — Fibonacci hashing
+static u64 hash_u64(const u64* k, void* ctx) {
+    (void)ctx;
+    u64 h = *k * 11400714819323198485ULL;
+    return h ? h : 1;
+}
+
+// String keys — FNV-1a over str_t
+static u64 hash_str(const str_t* s, void* ctx) {
+    (void)ctx;
+    u64 h = 14695981039346656037ULL;
+    for (usize i = 0; i < s->len; i++) {
+        h ^= (u8)s->ptr[i];
+        h *= 1099511628211ULL;
+    }
+    return h ? h : 1;
+}
+
+// Pointer identity
+static u64 hash_ptr(const void** p, void* ctx) {
+    (void)ctx;
+    u64 h = (u64)(uintptr_t)*p * 11400714819323198485ULL;
+    return h ? h : 1;
+}
+```
+
+> **Known Limitations:**
+> - The hashmap never rehashes — capacity is fixed at init. For auto-growth, a `dynhashmap.h` wrapper is planned.
+> - Hash function must return non-zero; the impl normalizes 0 to 1 but callers should not rely on this.
+> - `hashmap_get_or_null()` pointer is invalidated by any insert or remove.
+> - Not thread-safe — concurrent access requires external synchronization per map.
+> - Optional extensions (`hashmap_fmt.h`, `hashmap_range.h`) are not included by default.
+
+### `hashmap_decl.h`
+> Declaration macros for the Canon-C hashmap — for separate compilation. Use in `.h` files to declare hashmap types and function signatures without generating implementations. Pair with `hashmap_defn.h` in exactly one `.c` file.
+
+#### Workflow
+```c
+// my_map.h — declare only
+#define HASHMAP_KEY_TYPE  u64
+#define HASHMAP_VAL_TYPE  int
+#define HASHMAP_HASH_FN   hash_u64
+#define HASHMAP_EQ_FN     eq_u64
+#define HASHMAP_TYPE_NAME map_u64_int
+#define HASHMAP_FN(name)  map_u64_int_##name
+#include "data/hashmap/hashmap_decl.h"
+
+// my_map.c — define once
+#define HASHMAP_LINKAGE  /* external linkage */
+#include "data/hashmap/hashmap_defn.h"
+
+// main.c — just include the header
+#include "my_map.h"
+map_u64_int m;
+```
+
+#### What it generates
+
+- Slot typedef: `hashmap_slot` (or `HASHMAP_SLOT_NAME`)
+- Struct typedef: `hashmap` (or `HASHMAP_TYPE_NAME`)
+- `extern` declarations for all functions:
+
+| Category | Declared functions |
+|---|---|
+| Sizing | `buffer_size` |
+| Lifecycle | `init`, `clear` |
+| Queries | `len`, `capacity`, `is_empty`, `load_factor`, `contains_key` |
+| Mutation | `insert`, `remove` |
+| Lookup | `get`, `get_or_null` |
+| Iteration | `iter_next` |
+
+#### Option / Result instantiations
+
+`hashmap_decl.h` also instantiates the following types needed by the API:
+```c
+CANON_OPTION(VAL_TYPE)
+CANON_RESULT(bool, Error)
+CANON_RESULT(VAL_TYPE, Error)
+```
+
+> **Known Limitations:**
+> - Linkage is always `extern` in the declaration path — not configurable here.
+> - Must be matched by exactly one `hashmap_defn.h` include in a `.c` file — multiple definitions cause linker errors.
+> - Do NOT use `hashmap_decl.h` if you are using the header-only path via `hashmap.h`.
+> - All `HASHMAP_*` macros must be defined before including — missing any required macro is a compile error.
+
+### `hashmap_defn.h`
+> Definition macros for the Canon-C hashmap — generates actual function implementations with external linkage. Include in exactly one `.c` file for separate compilation. All other translation units should use `hashmap_decl.h` for declarations, or `hashmap.h` for header-only usage.
+
+#### Workflow
+```c
+// my_map.c — define once
+
+// Step 1: provide hash and equality functions
+static u64 hash_u64(const u64* k, void* ctx) {
+    (void)ctx;
+    u64 h = *k * 11400714819323198485ULL;
+    return h == 0 ? 1 : h;
+}
+static bool eq_u64(const u64* a, const u64* b, void* ctx) {
+    (void)ctx; return *a == *b;
+}
+
+// Step 2: configure
+#define HASHMAP_KEY_TYPE  u64
+#define HASHMAP_VAL_TYPE  int
+#define HASHMAP_HASH_FN   hash_u64
+#define HASHMAP_EQ_FN     eq_u64
+#define HASHMAP_TYPE_NAME map_u64_int
+#define HASHMAP_FN(name)  map_u64_int_##name
+
+// Step 3: generate definitions
+#include "data/hashmap/hashmap_defn.h"
+```
+
+#### What it generates
+
+Pulls in `hashmap_impl.h` with `HASHMAP_LINKAGE` set to empty (external linkage). Generates definitions for all functions:
+
+| Category | Generated functions |
+|---|---|
+| Sizing | `buffer_size` |
+| Lifecycle | `init`, `clear` |
+| Queries | `len`, `capacity`, `is_empty`, `load_factor`, `contains_key` |
+| Mutation | `insert`, `remove` |
+| Lookup | `get`, `get_or_null` |
+| Iteration | `iter_next` |
+
+#### vs. `hashmap.h`
+
+| | `hashmap.h` | `hashmap_defn.h` |
+|---|---|---|
+| Linkage | `static inline` | external |
+| Include in | any `.h` or `.c` | exactly one `.c` |
+| Build style | header-only | separate compilation |
+| Binary size | copy per TU | one shared definition |
+
+> **Known Limitations:**
+> - Must be included in exactly one translation unit — multiple inclusions with the same type configuration cause linker errors.
+> - All `HASHMAP_*` macros must be defined before including.
+> - `hashmap_impl.h` guards against direct inclusion — always go through `hashmap_defn.h` or `hashmap.h`.
+> - Do not mix `hashmap.h` (static inline) and `hashmap_defn.h` (extern) for the same type configuration in the same program.
+
+
+### `hashmap_impl.h`
+> Pure implementation logic for the Canon-C hashmap — no naming assumptions, no linkage decisions. Every identifier comes from `hashmap_mangle.h`. Do not include this file directly. Use `hashmap.h` for header-only usage or `hashmap_decl.h` + `hashmap_defn.h` for separate compilation.
+
+#### Algorithm: Robin Hood Open Addressing
+
+All elements live in a flat caller-owned buffer — no linked lists, no per-element allocation, no pointer chasing. During insertion, if the incoming element has probed farther from its home slot than the resident element, they swap. This keeps probe sequence lengths (PSL) short and near-equal across all elements.
+
+Deletion uses backward shift (no tombstones): after removing a slot, subsequent elements with PSL > 0 are shifted back one position, restoring the invariant without degrading future lookups.
+
+Lookup early-exit: if a probe reaches a slot whose PSL is less than the current probe distance, the key cannot exist — Robin Hood would have displaced it. Failed lookups terminate faster than vanilla linear probing.
+
+#### Memory Layout
+
+The caller provides a flat `u8` buffer. `hashmap_init()` partitions it into an array of slot structs aligned to `alignof(hashmap_slot)`.
+
+Slot layout per element:
+```c
+typedef struct {
+    u64       hash;     // cached full hash (0 = unoccupied sentinel)
+    u32       psl;      // probe sequence length (distance from home slot)
+    bool      occupied; // explicit occupancy flag
+    hm_key_t  key;      // stored key (copy)
+    hm_val_t  value;    // stored value (copy)
+} hashmap_slot;
+```
+
+#### Available Implementation Macros
+
+| Macro / Function | Behavior |
+|---|---|
+| `_hm_home(hash, capacity)` | Computes home slot index via bitmask (power-of-2 only) |
+| `_hm_wrap(index, capacity)` | Wraps slot index around capacity boundary |
+| `_hm_normalize_hash(h)` | Returns `h == 0 ? 1 : h` — enforces non-zero hash invariant |
+| `_HM_BUFFER_SIZE(capacity)` | `capacity * sizeof(slot)`, overflow-safe via `checked_mul` |
+| `_HM_INIT(map, buf, cap, ctx)` | Zeroes all slots, validates power-of-2 capacity and buffer size |
+| `_HM_CLEAR(map)` | `memset` all slots to zero, resets `len` |
+| `_HM_LEN(map)` | Returns `map->len` |
+| `_HM_CAPACITY(map)` | Returns `map->capacity` |
+| `_HM_IS_EMPTY(map)` | Returns `map->len == 0` |
+| `_HM_LOAD_FACTOR(map)` | Returns `(f64)len / (f64)capacity` |
+| `_HM_INSERT(map, key, val)` | Robin Hood insertion with 75% load cap |
+| `_HM_GET(map, key)` | Robin Hood lookup — returns `option_VAL` |
+| `_HM_GET_OR_NULL(map, key)` | Robin Hood lookup — returns borrowed `VAL*` or NULL |
+| `_HM_CONTAINS_KEY(map, key)` | Delegates to `_HM_GET`, checks `is_some` |
+| `_HM_REMOVE(map, key)` | Finds slot then backward-shifts to close gap |
+| `_HM_ITER_NEXT(map, iter, k, v)` | Advances `*iter` to next occupied slot |
+
+#### Required User Definitions
+
+All must be `#defined` before `hashmap_impl.h` is reached (via `hashmap.h` or `hashmap_defn.h`):
+```c
+HASHMAP_KEY_TYPE   // key type (e.g. u64, str_t, MyKey)
+HASHMAP_VAL_TYPE   // value type (e.g. int, void*, Record)
+HASHMAP_HASH_FN    // u64 fn(const K* key, void* ctx)
+HASHMAP_EQ_FN      // bool fn(const K* a, const K* b, void* ctx)
+HASHMAP_LINKAGE    // static inline (hashmap.h) or empty (hashmap_defn.h)
+```
+
+#### Internal Type Aliases
+
+`hashmap_impl.h` defines `hm_key_t` and `hm_val_t` as aliases for `HASHMAP_KEY_TYPE` and `HASHMAP_VAL_TYPE` for readability inside the implementation. Both are `#undef`-ed at the end of the file to avoid polluting downstream includes.
+
+#### Dependencies
+```
+core/primitives/types.h
+core/primitives/contract.h
+core/primitives/bits.h
+core/primitives/checked.h
+core/slice.h
+core/ownership.h
+semantics/option/option.h
+semantics/result/result.h
+semantics/error.h
+hashmap_mangle.h
+<string.h>  (memset, memcpy)
+```
+
+> **Known Limitations:**
+> - Do not include directly — `HASHMAP_LINKAGE` guard will produce a compile error.
+> - Internal helpers (`_hm_home`, `_hm_wrap`, `_hm_normalize_hash`) are `static inline` regardless of `HASHMAP_LINKAGE` — they are never exposed in the public API.
+> - `hm_key_t` / `hm_val_t` aliases are cleaned up with `#undef` at end of file — do not rely on them outside this file.
+> - `_HM_CONTAINS_KEY` has a typo in the source (`_hm_key_t` instead of `hm_key_t`) — may cause a compile error on some compilers; use `hashmap_get_or_null` as a workaround if needed.
+
+### `hashmap_mangle.h`
+> Name mangling conventions for the Canon-C hashmap. Single source of truth for all generated type and function names. Override any macro before including to rename the entire API globally.
+
+#### Default Naming Scheme
+
+For the default configuration, the following names are produced:
+
+| What | Default name |
+|---|---|
+| Type | `hashmap` |
+| Slot type | `hashmap_slot` |
+| `buffer_size` | `hashmap_buffer_size` |
+| `init` | `hashmap_init` |
+| `clear` | `hashmap_clear` |
+| `len` | `hashmap_len` |
+| `capacity` | `hashmap_capacity` |
+| `is_empty` | `hashmap_is_empty` |
+| `load_factor` | `hashmap_load_factor` |
+| `insert` | `hashmap_insert` |
+| `remove` | `hashmap_remove` |
+| `get` | `hashmap_get` |
+| `get_or_null` | `hashmap_get_or_null` |
+| `contains_key` | `hashmap_contains_key` |
+| `iter_next` | `hashmap_iter_next` |
+
+#### Customization
+
+Define overrides **before** including any hashmap header:
+```c
+// Project namespace prefix
+#define HASHMAP_TYPE_NAME   myproject_map
+#define HASHMAP_SLOT_NAME   myproject_map_slot
+#define HASHMAP_FN(name)    myproject_map_##name
+#include "data/hashmap/hashmap.h"
+
+myproject_map m;
+myproject_map_insert(&m, &key, &val);
+
+// Per-instantiation rename for multiple types in one TU
+#define HASHMAP_TYPE_NAME   map_u64_int
+#define HASHMAP_SLOT_NAME   map_u64_int_slot
+#define HASHMAP_FN(name)    map_u64_int_##name
+#include "data/hashmap/hashmap.h"
+#undef HASHMAP_TYPE_NAME
+#undef HASHMAP_SLOT_NAME
+#undef HASHMAP_FN
+
+#define HASHMAP_TYPE_NAME   map_str_u32
+#define HASHMAP_SLOT_NAME   map_str_u32_slot
+#define HASHMAP_FN(name)    map_str_u32_##name
+#include "data/hashmap/hashmap.h"
+```
+
+#### Derived Internal Names
+
+These are built from the macros above and should not be overridden directly:
+
+| Internal macro | Expands to |
+|---|---|
+| `_HM_INIT` | `HASHMAP_FN(init)` |
+| `_HM_CLEAR` | `HASHMAP_FN(clear)` |
+| `_HM_LEN` | `HASHMAP_FN(len)` |
+| `_HM_CAPACITY` | `HASHMAP_FN(capacity)` |
+| `_HM_IS_EMPTY` | `HASHMAP_FN(is_empty)` |
+| `_HM_LOAD_FACTOR` | `HASHMAP_FN(load_factor)` |
+| `_HM_INSERT` | `HASHMAP_FN(insert)` |
+| `_HM_GET` | `HASHMAP_FN(get)` |
+| `_HM_GET_OR_NULL` | `HASHMAP_FN(get_or_null)` |
+| `_HM_CONTAINS_KEY` | `HASHMAP_FN(contains_key)` |
+| `_HM_REMOVE` | `HASHMAP_FN(remove)` |
+| `_HM_ITER_NEXT` | `HASHMAP_FN(iter_next)` |
+| `_HM_BUFFER_SIZE` | `HASHMAP_FN(buffer_size)` |
+
+> **Known Limitations:**
+> - All macros are guarded with `#ifndef` — overrides must be defined before the first include of any hashmap header in that translation unit.
+> - `HASHMAP_TYPE_NAME` and `HASHMAP_SLOT_NAME` are independent — overriding one does not affect the other.
+> - Overrides apply to all instantiations after them, not selectively per type — use `#undef` between instantiations when generating multiple distinct types.
+> - `hashmap_mangle.h` has no includes of its own — it is safe to include from any layer.
+
+### `hashmap_fmt.h`
+> Optional formatting extension for the Canon-C hashmap. Provides `hashmap_to_stringbuf()` — a diagnostic helper that writes a human-readable representation of the hashmap into a caller-provided `StringBuf`. Intended for debugging and logging, not serialization. Not included by `hashmap.h` by default.
+
+#### Setup
+
+Requires `data/stringbuf.h`. Before including, define two formatter functions and include `hashmap.h` first:
+```c
+#include "data/stringbuf.h"
+
+static bool fmt_u64_key(StringBuf* sb, const u64* k) {
+    char tmp[24];
+    snprintf(tmp, sizeof(tmp), "%llu", (unsigned long long)*k);
+    return stringbuf_push_cstr(sb, tmp);
+}
+
+static bool fmt_int_val(StringBuf* sb, const int* v) {
+    char tmp[16];
+    snprintf(tmp, sizeof(tmp), "%d", *v);
+    return stringbuf_push_cstr(sb, tmp);
+}
+
+#define HASHMAP_KEY_TYPE   u64
+#define HASHMAP_VAL_TYPE   int
+#define HASHMAP_HASH_FN    hash_u64
+#define HASHMAP_EQ_FN      eq_u64
+#define HASHMAP_FMT_KEY_FN fmt_u64_key
+#define HASHMAP_FMT_VAL_FN fmt_int_val
+#include "data/hashmap/hashmap.h"
+#include "data/hashmap/hashmap_fmt.h"
+```
+
+#### Required User Definitions
+
+| Macro | Signature | Description |
+|---|---|---|
+| `HASHMAP_FMT_KEY_FN` | `bool fn(StringBuf* sb, const K* key)` | Formats a key into sb |
+| `HASHMAP_FMT_VAL_FN` | `bool fn(StringBuf* sb, const V* val)` | Formats a value into sb |
+
+Both must return `true` on success, `false` if the buffer is full. Missing either is a compile error.
+
+#### Usage
+
+**`bool hashmap_to_stringbuf(StringBuf* sb, const hashmap* map)`**
+Writes a human-readable representation of the hashmap into `sb`. Output is appended to whatever is already in `sb` — it is NOT cleared first. If `sb` fills before all entries are written, returns `false` and `sb` contains a partial result. No entries are lost from the map itself.
+```c
+u8 strbuf_mem[4096];
+StringBuf sb = stringbuf_from(bytes_from(strbuf_mem, sizeof(strbuf_mem)));
+bool ok = hashmap_to_stringbuf(&sb, &my_map);
+if (ok) printf("%.*s\n", (int)sb.len, sb.ptr);
+```
+
+#### Output Format
+```
+hashmap { len=3, cap=8, load=0.375 } {
+  [key0] => value0
+  [key1] => value1
+  [key2] => value2
+}
+```
+
+#### Performance
+
+- Time: O(capacity) — iterates all slots regardless of occupancy
+- Space: O(1) — no allocation
+
+> **Known Limitations:**
+> - Not included by `hashmap.h` — must be included explicitly after `hashmap.h`.
+> - `hashmap.h` must be included before `hashmap_fmt.h` in every translation unit that uses it.
+> - Output is appended to `sb` — clear it manually before calling if a fresh output is needed.
+> - Partial output on `StringBuf` overflow — no way to resume from where formatting stopped.
+> - Depends on `data/stringbuf.h` — not suitable for targets without that layer available.
+> - `HASHMAP_FMT_KEY_FN` and `HASHMAP_FMT_VAL_FN` must be defined before including — missing either is a compile error.
+
+### `hashmap_range.h`
+> Optional bulk collection extension for the Canon-C hashmap. Provides `hashmap_collect_keys()`, `hashmap_collect_values()`, and the `HASHMAP_FOR_EACH` iteration macro. Useful when you need a snapshot of keys or values for sorting, indexed access, or passing to algo/ functions. Not included by `hashmap.h` by default.
+
+#### Setup
+
+Requires `data/vec/vec.h`. The key and value vec types must be instantiated with `DEFINE_VEC` before including this header:
+```c
+#include "data/vec/vec.h"
+DEFINE_VEC(static inline, u64)
+DEFINE_VEC(static inline, int)
+
+#define HASHMAP_KEY_TYPE  u64
+#define HASHMAP_VAL_TYPE  int
+#define HASHMAP_HASH_FN   hash_u64
+#define HASHMAP_EQ_FN     eq_u64
+#include "data/hashmap/hashmap.h"
+#include "data/hashmap/hashmap_range.h"
+```
+
+For pointer types, typedef first:
+```c
+typedef const char* cstr;
+DEFINE_VEC(static inline, cstr)
+#define HASHMAP_KEY_TYPE u64
+#define HASHMAP_VAL_TYPE cstr
+```
+
+#### `hashmap_collect_keys`
+
+**`result_bool_Error hashmap_collect_keys(const hashmap* map, canon_vec_K* out)`**
+Iterates all occupied slots and appends each key into `out` using `canon_vec_K_push()`. The vec is NOT cleared before insertion — keys are appended to whatever is already in it. Key ordering is unspecified.
+
+- `Ok(true)` — all keys pushed successfully
+- `Err(ERR_CAPACITY_EXCEEDED)` — vec filled before all keys were pushed
+- `Err(ERR_INVALID_ARG)` — any pointer is NULL
+```c
+u64 key_buf[64];
+canon_vec_u64 keys = canon_vec_u64_init(key_buf, 64);
+result_bool_Error r = hashmap_collect_keys(&my_map, &keys);
+```
+
+#### `hashmap_collect_values`
+
+**`result_bool_Error hashmap_collect_values(const hashmap* map, canon_vec_V* out)`**
+Iterates all occupied slots and appends each value into `out` using `canon_vec_V_push()`. Value ordering corresponds to the order returned by `iter_next`. The vec is NOT cleared before insertion.
+
+- `Ok(true)` — all values pushed successfully
+- `Err(ERR_CAPACITY_EXCEEDED)` — vec filled before all values were pushed
+- `Err(ERR_INVALID_ARG)` — any pointer is NULL
+```c
+int val_buf[64];
+canon_vec_int vals = canon_vec_int_init(val_buf, 64);
+result_bool_Error r = hashmap_collect_values(&my_map, &vals);
+```
+
+#### Key-Value Correspondence
+
+If you need index correspondence between a keys vec and a values vec, call `collect_keys` then `collect_values` without mutating the map between calls. Both use `iter_next` which visits slots in the same deterministic order.
+
+#### `HASHMAP_FOR_EACH`
+
+Ergonomic for-loop macro for iterating all key-value pairs. No vec or allocation needed — direct forward iteration over the map.
+```c
+const u64* k;
+const int* v;
+HASHMAP_FOR_EACH(&my_map, k, v) {
+    printf("%llu => %d\n", (unsigned long long)*k, *v);
+}
+```
+
+Nested loops are supported — uses `__LINE__` to generate unique iterator variable names:
+```c
+const u64* k1; const int* v1;
+const u64* k2; const int* v2;
+HASHMAP_FOR_EACH(&map_a, k1, v1) {
+    HASHMAP_FOR_EACH(&map_b, k2, v2) { ... }
+}
+```
+
+`key_var` and `val_var` must be declared before the macro. `break` and `continue` work normally. The map must not be mutated during iteration.
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `collect_keys` | O(capacity) | O(1) — output goes into caller's vec |
+| `collect_values` | O(capacity) | O(1) — output goes into caller's vec |
+| `HASHMAP_FOR_EACH` per iteration | O(1) | O(1) |
+
+> **Known Limitations:**
+> - Not included by `hashmap.h` — must be included explicitly after `hashmap.h`.
+> - `DEFINE_VEC` must be called for both key and value types before including this header — missing instantiations cause compile errors.
+> - Push function names are derived directly from `HASHMAP_KEY_TYPE` and `HASHMAP_VAL_TYPE` via the `canon_vec_##TYPE##_push` naming convention — types must be simple identifiers, not raw pointer types.
+> - `collect_keys` and `collect_values` append to existing vec contents — clear the vec manually before calling if a fresh snapshot is needed.
+> - Key and value ordering is unspecified — sort with `algo/sort.h` if ordered output is needed.
+> - `HASHMAP_FOR_EACH` uses `__LINE__` for unique iterator names — two invocations on the same source line (e.g. via another macro) will collide. Expand manually if needed.
+> - The map must not be mutated during `HASHMAP_FOR_EACH` — inserts or removes may displace slots and corrupt the iterator position.
+
