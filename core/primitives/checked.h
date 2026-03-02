@@ -20,7 +20,6 @@
  * - With builtins (GCC/Clang): 1-2 CPU instructions per operation
  * - Without builtins: 3-10 instructions (comparison + branch)
  * - All functions are static inline → zero call overhead
- * - Alignment helpers: 2-5 instructions (bitwise operations only)
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -39,7 +38,6 @@
  * - Vector capacity: checked_mul(count, elem_size, &total_bytes)
  * - Pool initialization: checked_mul(num_blocks, block_size, &total)
  * - Index calculations: checked_add(base_index, offset, &final_index)
- * - Memory alignment: align_up(size, 16), is_aligned(ptr, 64)
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
@@ -48,7 +46,12 @@
  * - Modular arithmetic (use explicit modulo instead)
  * - Very tight loops where overflow is impossible (profile first)
  *
- * @sa types.h, limits.h, contract.h
+ * @note Alignment helpers (align_up, align_down, is_aligned, is_ptr_aligned)
+ *       have been removed from this file. They live in core/primitives/ptr.h,
+ *       which provides guarded versions with require_msg precondition checks.
+ *       Include ptr.h if you need alignment utilities.
+ *
+ * @sa types.h, limits.h, contract.h, ptr.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_CHECKED_H
@@ -414,86 +417,6 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
 }
 
 /* ============================================================================
- * Alignment Helpers
- * ========================================================================= */
-
-/**
- * @brief Rounds value up to the next multiple of alignment
- *
- * Uses efficient bitwise operations (not division/modulo). Commonly used
- * in allocators to ensure proper alignment of allocated blocks.
- *
- * @param value Value to align (0 is allowed → returns 0)
- * @param alignment Power-of-2 alignment requirement (1, 2, 4, 8, 16, ...)
- *
- * @return Smallest multiple of alignment >= value
- *
- * @pre alignment must be a power of 2 (not checked — UB if violated)
- *
- * @remark Formula: (value + alignment - 1) & ~(alignment - 1)
- * @remark Compiles to 2-3 instructions on most platforms
- * @remark Does NOT check for overflow — use checked_add first if needed
- *
- * Example:
- * ```c
- * usize offset = 17;
- * usize aligned = align_up(offset, 16); // → 32
- *
- * // In arena allocator:
- * arena->offset = align_up(arena->offset, 16);
- * ```
- *
- * @sa align_down(), is_aligned()
- */
-static inline usize align_up(usize value, usize alignment) {
-    /* alignment must be power of 2 */
-    return (value + alignment - 1) & ~(alignment - 1);
-}
-
-/**
- * @brief Rounds value down to the nearest multiple of alignment
- *
- * @param value Value to align
- * @param alignment Must be a power of 2
- *
- * @return Largest multiple of alignment <= value
- *
- * Example:
- * ```c
- * usize aligned = align_down(17, 16);  // → 16
- * ```
- */
-static inline usize align_down(usize value, usize alignment) {
-    /* alignment must be power of 2 */
-    return value & ~(alignment - 1);
-}
-
-/**
- * @brief Returns true if value is aligned to the given power-of-2 alignment
- *
- * @param value Value to check
- * @param alignment Must be a power of 2
- *
- * @return true if aligned, false otherwise
- */
-static inline bool is_aligned(usize value, usize alignment) {
-    /* alignment must be power of 2 */
-    return (value & (alignment - 1)) == 0;
-}
-
-/**
- * @brief Returns true if pointer address is aligned to the given alignment
- *
- * @param ptr Pointer to check
- * @param alignment Must be a power of 2
- *
- * @return true if aligned, false otherwise
- */
-static inline bool is_ptr_aligned(const void* ptr, usize alignment) {
-    return is_aligned((usize)ptr, alignment);
-}
-
-/* ============================================================================
  * Min / Max / Clamp (macros)
  * ========================================================================= */
 
@@ -536,12 +459,6 @@ static inline bool is_ptr_aligned(const void* ptr, usize alignment) {
  *     return result_err(ERROR_OVERFLOW);
  * }
  *
- * // Alignment in allocator
- * usize aligned_offset = align_up(arena->offset, 16);
- * if (!is_aligned(ptr, 8)) {
- *     return result_err(ERROR_ALIGNMENT);
- * }
- *
  * // Safe index calculation
  * usize index;
  * if (!checked_add(base_index, offset, &index)) {
@@ -549,6 +466,13 @@ static inline bool is_ptr_aligned(const void* ptr, usize alignment) {
  * }
  * if (index >= vec->len) {
  *     return result_err(ERROR_OUT_OF_BOUNDS);
+ * }
+ *
+ * // For alignment operations, use ptr.h:
+ * #include "core/primitives/ptr.h"
+ * usize aligned_offset = align_up(arena->offset, 16);
+ * if (!is_aligned(ptr, 8)) {
+ *     return result_err(ERROR_ALIGNMENT);
  * }
  */
 
