@@ -1,3 +1,6 @@
+cmake_minimum_required(VERSION 3.10)
+project(Canon-C)
+
 enable_testing()
 
 add_executable(core_test tests/core_test.c)
