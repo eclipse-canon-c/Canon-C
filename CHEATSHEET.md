@@ -211,10 +211,9 @@ bits_bswap64(0x0102030405060708)  // → 0x0807060504030201
 ---
 
 ### `checked.h`
-> Overflow-safe add, sub, mul for all integer sizes. Returns `true` on success, `false` on overflow. Also includes alignment helpers and min/max/clamp macros.
+> Overflow-safe add, sub, mul for all integer sizes. Returns `true` on success, `false` on overflow. Also includes min/max/clamp macros.
 
 All functions return `true` on success, `false` on overflow/underflow, and write the result to an output pointer.
-
 ```c
 usize result;
 if (!checked_add(a, b, &result)) {
@@ -267,38 +266,7 @@ checked_mul(USIZE_MAX, 2, &out)        // → false
 
 > **Known Limitations:** All signed fallback implementations (`checked_add_isize`, `checked_sub_isize`, `checked_mul_isize`) check bounds **before** performing the operation to avoid signed integer overflow UB. The builtin path (`__builtin_*_overflow`) is always preferred when available.
 
-#### Alignment
-
-**`usize align_up(usize value, usize alignment)`**
-Rounds `value` up to the next multiple of `alignment`.
-```c
-align_up(17, 16)  // → 32
-align_up(16, 16)  // → 16
-```
-
-**`usize align_down(usize value, usize alignment)`**
-Rounds `value` down to the nearest multiple of `alignment`.
-```c
-align_down(17, 16)  // → 16
-```
-
-**`bool is_aligned(usize value, usize alignment)`**
-Returns `true` if `value` is a multiple of `alignment`.
-```c
-is_aligned(32, 16)  // → true
-is_aligned(17, 16)  // → false
-```
-
-**`bool is_ptr_aligned(const void* ptr, usize alignment)`**
-Same as `is_aligned` but takes a pointer.
-```c
-is_ptr_aligned(buf, 64)  // → true if buf address % 64 == 0
-```
-
-> **Note:** All alignment functions require `alignment` to be a power of 2. Not checked at runtime — UB if violated.
-
 #### Min / Max / Clamp (macros)
-
 ```c
 checked_min(a, b)         // smaller of a, b
 checked_max(a, b)         // larger of a, b
@@ -314,6 +282,7 @@ checked_clamp(15, 0, 10)  // → 10
 > - Macros (`checked_min`, `checked_max`, `checked_clamp`) — arguments may be evaluated more than once; don't put function calls or `i++` inside them.
 > - All signed fallback implementations (`checked_add_isize`, `checked_sub_isize`, `checked_mul_isize`) check bounds **before** performing the operation to avoid signed integer overflow UB. The builtin path (`__builtin_*_overflow`) is always preferred when available.
 > - Requires `limits.h` for `CANON_ISIZE_MAX` / `CANON_ISIZE_MIN` — used by the signed fallback paths.
+> - Alignment helpers (`align_up`, `align_down`, `is_aligned`, `is_ptr_aligned`) have moved to `ptr.h`, which provides guarded versions with `require_msg` precondition checks.
 
 ---
 
