@@ -64,7 +64,14 @@
 - [`hashmap_fmt.h`](#hashmap_fmth) — Optional: diagnostic string formatting
 - [`hashmap_range.h`](#hashmap_rangeh) — Optional: bulk key/value collection
 
-
+### `data/vec/`
+- [`vec.h`](#vech) — Bounded typed vector with caller-owned buffer
+- [`vec_decl.h`](#vec_declh) — Declaration macros (separate compilation)
+- [`vec_defn.h`](#vec_defnh) — Definition macros (implementation generation)
+- [`vec_impl.h`](#vec_implh) — Pure implementation logic
+- [`vec_mangle.h`](#vec_mangleh) — Name mangling conventions
+- [`vec_fmt.h`](#vec_fmth) — Optional: StringBuf formatting
+- [`vec_range.h`](#vec_rangeh) — Optional: range-fill extension
 
 ---
 
@@ -3758,4 +3765,697 @@ HASHMAP_FOR_EACH(&map_a, k1, v1) {
 > - Key and value ordering is unspecified — sort with `algo/sort.h` if ordered output is needed.
 > - `HASHMAP_FOR_EACH` uses `__LINE__` for unique iterator names — two invocations on the same source line (e.g. via another macro) will collide. Expand manually if needed.
 > - The map must not be mutated during `HASHMAP_FOR_EACH` — inserts or removes may displace slots and corrupt the iterator position.
+
+### `vec.h`
+> Bounded typed vector with explicit caller-owned buffer — header-only entry point. Fixed capacity, no automatic growth. All bounds-checked operations return `Result<bool, Error>` or `Option<T>`. Three allocation strategies: caller buffer, heap, or arena.
+
+#### Setup
+```c
+#include "data/vec/vec.h"
+
+DEFINE_VEC(static inline, int)
+
+// Pointer types — typedef first:
+typedef void* voidptr;
+DEFINE_VEC(static inline, voidptr)
+```
+
+Must be used at file/global scope. `option_##type` must be instantiated via `CANON_OPTION(type)` before calling `DEFINE_VEC`.
+
+#### Constructors
+
+**`canon_vec_T canon_vec_T_init(T* buffer, usize capacity)`**
+Wraps a caller-owned buffer. No allocation. Returns zero struct if capacity exceeds `CANON_VEC_MAX_CAPACITY / sizeof(T)` or buffer is NULL with capacity > 0. O(1).
+```c
+int buf[64];
+canon_vec_int v = canon_vec_int_init(buf, 64);
+```
+
+**`canon_vec_T canon_vec_T_empty(void)`**
+Returns a zero-initialized vec with no buffer. Safe starting point before a buffer is available. O(1).
+
+**`canon_vec_T canon_vec_T_alloc(usize capacity)`**
+Heap-allocates a buffer of `capacity` elements. Returns `_empty()` on OOM, overflow, or capacity == 0. Must call `_free()` when done. O(1).
+```c
+canon_vec_int h = canon_vec_int_alloc(128);
+canon_vec_int_push(&h, 99);
+canon_vec_int_free(&h);
+```
+
+**`canon_vec_T canon_vec_T_arena_alloc(Arena* arena, usize capacity)`**
+Allocates buffer from arena. Returns `_empty()` on failure or arena == NULL. No `_free()` needed — arena owns the memory. O(1).
+```c
+canon_vec_int a = canon_vec_int_arena_alloc(&arena, 32);
+// no free needed — arena_reset() handles cleanup
+```
+
+**`void canon_vec_T_free(canon_vec_T* v)`**
+Frees a heap-allocated buffer. NULL-safe. Resets all fields to zero. Do NOT call on stack or arena-backed vecs.
+
+#### Queries
+```c
+canon_vec_int_len(&v)        // usize — current element count
+canon_vec_int_capacity(&v)   // usize — maximum elements
+canon_vec_int_remaining(&v)  // usize — free slots (capacity - len)
+canon_vec_int_is_empty(&v)   // bool
+canon_vec_int_is_full(&v)    // bool
+```
+
+All query functions are NULL-safe — return 0 or true if v == NULL.
+
+#### Element Access
+
+**`bool canon_vec_T_get(const canon_vec_T* v, usize i, T* out)`**
+Bounds-checked copy into `*out`. Returns false if v == NULL, out == NULL, or i >= len. O(1).
+
+**`option_T canon_vec_T_get_option(const canon_vec_T* v, usize i)`**
+Returns `Some(value)` or `None` — no out param. O(1).
+
+**`T canon_vec_T_get_unchecked(const canon_vec_T* v, usize i)`**
+No bounds check — debug-only `ensure_msg`. UB in release if violated.
+
+**`T* canon_vec_T_at(const canon_vec_T* v, usize i)`**
+Pointer to element for in-place mutation. Debug-checked. Invalidated by any modification.
+
+**`bool canon_vec_T_set(canon_vec_T* v, usize i, T val)`**
+Bounds-checked write. Returns false if OOB or v == NULL. O(1).
+
+**`T* canon_vec_T_first(const canon_vec_T* v)`** / **`T* canon_vec_T_last(const canon_vec_T* v)`**
+Pointer to first/last element. NULL if empty or v == NULL.
+
+**`T* canon_vec_T_data(const canon_vec_T* v)`**
+Raw buffer pointer. NULL if v == NULL.
+
+#### Modification
+
+**`result_bool_Error canon_vec_T_push(canon_vec_T* v, T item)`**
+Appends one element. O(1).
+- `Ok(true)` — element appended
+- `Err(ERR_INVALID_ARG)` — v or v->items is NULL
+- `Err(ERR_CAPACITY_EXCEEDED)` — vec is full
+
+**`bool canon_vec_T_try_push(canon_vec_T* v, T item)`**
+Same but returns plain bool — no `Result` overhead. Returns false on any failure.
+
+**`void canon_vec_T_push_unchecked(canon_vec_T* v, T item)`**
+No checking. Debug-only `ensure_msg`. UB in release if full.
+
+**`result_bool_Error canon_vec_T_pop(canon_vec_T* v, T* out)`**
+Removes and returns last element. O(1).
+- `Ok(true)` — element removed into `*out`
+- `Err(ERR_INVALID_ARG)` — v, out, or v->items is NULL
+- `Err(ERR_INVALID_STATE)` — vec is empty
+
+**`option_T canon_vec_T_pop_option(canon_vec_T* v)`**
+Same but returns `Option<T>` — no out param. `None` if empty.
+
+**`void canon_vec_T_clear(canon_vec_T* v)`**
+Resets len to 0. Does NOT zero memory. NULL-safe. O(1).
+
+**`result_bool_Error canon_vec_T_insert(canon_vec_T* v, usize i, T item)`**
+Inserts at index `i`, shifts elements right. O(n).
+- `Err(ERR_OUT_OF_RANGE)` — i > len
+- `Err(ERR_CAPACITY_EXCEEDED)` — vec is full
+
+**`result_bool_Error canon_vec_T_remove(canon_vec_T* v, usize i, T* out)`**
+Removes at index `i`, shifts elements left. O(n).
+- `Err(ERR_INVALID_STATE)` — vec is empty
+- `Err(ERR_OUT_OF_RANGE)` — i >= len
+
+**`option_T canon_vec_T_remove_option(canon_vec_T* v, usize i)`**
+Same but returns `Option<T>`.
+
+#### Bulk Operations
+
+**`result_bool_Error canon_vec_T_append_array(canon_vec_T* v, const T* src, usize count)`**
+Appends `count` elements from array. Overflow-checked via `checked_add`. O(count).
+- `Err(ERR_OVERFLOW)` — v->len + count overflows usize
+- `Err(ERR_CAPACITY_EXCEEDED)` — insufficient space
+
+**`result_bool_Error canon_vec_T_extend(canon_vec_T* v, const T* src, usize count)`**
+Alias for `append_array` — identical semantics.
+
+**`void canon_vec_T_fill(canon_vec_T* v, T value, usize count)`**
+Appends `value` repeated `min(count, remaining)` times. Silently stops at capacity — does not error on overflow.
+
+**`void canon_vec_T_swap(canon_vec_T* a, canon_vec_T* b)`**
+Swaps two vecs in O(1) — struct copy on stack. Both must be non-NULL (`require_msg`).
+
+#### Iterator
+```c
+canon_vec_int_iter it = canon_vec_int_iter_init(&v);
+int val;
+while (canon_vec_int_iter_next(&it, &val)) {
+    // use val
+}
+```
+Iterator is invalidated by any modification to the vec. O(1) per step.
+
+#### Vec-Internal Slice
+
+**`canon_vec_T_slice canon_vec_T_slice_init(canon_vec_T* v, usize start, usize end)`**
+Zero-copy sub-view of `[start, end)`. Returns empty slice on invalid range. Invalidated by any modification. O(1).
+
+**`T* canon_vec_T_slice_get(const canon_vec_T_slice* s, usize i)`**
+Pointer to slice element. Debug-checked only. O(1).
+
+#### `slice.h` Integration (`DEFINE_VEC_SLICE`)
+
+Call after both `DEFINE_VEC(linkage, type)` and `DEFINE_SLICE(type)` from `core/slice.h`:
+```c
+DEFINE_SLICE(int)
+DEFINE_VEC_SLICE(int)
+
+slice_int sv = canon_vec_int_as_slice(&v);       // typed view of [data, data+len)
+slice_int sf = canon_vec_int_as_slice_full(&v);  // typed view of [data, data+cap)
+bytes_t   bv = canon_vec_int_as_bytes(&v);       // raw byte view of used elements
+```
+All views are non-owning and invalidated by any modification to the vec.
+
+#### Struct Layout
+```c
+typedef struct {
+    T*    items;    // caller-owned element buffer
+    usize len;      // current element count (0 <= len <= capacity)
+    usize capacity; // maximum elements buffer can hold
+} canon_vec_T;
+
+typedef struct {
+    canon_vec_T* vec;  // pointer to parent vec
+    usize        index; // current position
+} canon_vec_T_iter;
+
+typedef struct {
+    T*    items; // pointer into parent vec's buffer (not owned)
+    usize len;   // number of elements in slice
+} canon_vec_T_slice;
+
+// sizeof(canon_vec_T) = sizeof(T*) + 2*sizeof(usize)
+// element overhead: 0 bytes beyond sizeof(T) per element
+```
+
+#### Performance
+
+| Operation | Time | Notes |
+|---|---|---|
+| `push` / `pop` | O(1) | No allocation |
+| `insert` / `remove` | O(n) | Shifts elements |
+| `append_array` / `extend` | O(k) | Copies k elements |
+| `get` / `set` / `at` | O(1) | |
+| `iter_next` | O(1) per step | |
+| `as_slice` / `as_bytes` | O(1) | Zero-copy view |
+| `alloc` | O(1) | Single malloc |
+| `arena_alloc` | O(1) | Arena bump |
+
+> **Known Limitations:**
+> - Fixed capacity — no automatic growth. For auto-growing vectors use `data/convenience/dynvec.h`.
+> - `option_##type` must be instantiated via `CANON_OPTION(type)` before calling `DEFINE_VEC` — missing this produces cryptic compile errors.
+> - `get_unchecked`, `at`, `push_unchecked`, and `slice_get` have no release-build bounds protection — verify bounds yourself before calling.
+> - `clear()` does not zero buffer contents — stale data remains readable until overwritten. Zero manually first for sensitive data.
+> - `fill()` silently stops at capacity rather than returning an error — check `remaining()` first if strict filling is required.
+> - Element type must be trivially copyable — `mem_copy` / `mem_move` used internally for insert, remove, and bulk operations.
+> - `_free()` must NOT be called on stack or arena-backed vecs — only on vecs created via `_alloc()`.
+> - Slices, byte views, and iterators are all invalidated by any modification to the vec.
+> - `_alloc()` and `_arena_alloc()` both return `_empty()` silently on failure — check `capacity()` afterwards if pre-allocation is required.
+> - Not thread-safe — concurrent modifications require external synchronization. Concurrent reads on the same instance are safe.
+
+### `vec_decl.h`
+> Declaration macros for typed Canon-C vectors — for separate compilation. Use in `.h` files to declare a typed vector struct and all function signatures without generating implementations. Pair with `DEFINE_VEC()` in `vec_defn.h` in exactly one `.c` file.
+
+#### Workflow
+```c
+// In tasks.h — declare only
+#include "data/vec/vec_decl.h"
+DECLARE_VEC(int)
+DECLARE_VEC(Task)
+
+// In tasks.c — define once
+#include "data/vec/vec_defn.h"
+DEFINE_VEC(static, int)
+DEFINE_VEC(static, Task)
+
+// In main.c — just include the header
+#include "tasks.h"
+canon_vec_int v;
+```
+
+Pointer types:
+```c
+typedef const char* cstr;
+DECLARE_VEC(cstr)
+```
+
+#### What `DECLARE_VEC(type)` Emits
+
+Struct typedefs: `canon_vec_T`, `canon_vec_T_iter`, `canon_vec_T_slice`
+
+`extern` declarations for all functions:
+
+| Category | Declared functions |
+|---|---|
+| Constructors | `_init`, `_empty`, `_alloc`, `_arena_alloc`, `_free` |
+| Queries | `_len`, `_capacity`, `_remaining`, `_is_empty`, `_is_full` |
+| Element access | `_get`, `_get_option`, `_get_unchecked`, `_at`, `_set`, `_first`, `_last`, `_data` |
+| Modification | `_push`, `_try_push`, `_push_unchecked`, `_pop`, `_pop_option`, `_clear`, `_insert`, `_remove`, `_remove_option` |
+| Bulk | `_append_array`, `_extend`, `_fill`, `_swap` |
+| Iterator | `_iter_init`, `_iter_next` |
+| Slice | `_slice_init`, `_slice_get` |
+
+> **Known Limitations:**
+> - Linkage is always `extern` in the declaration path — not configurable here.
+> - Must be matched by exactly one `DEFINE_VEC(linkage, type)` in a `.c` file — multiple definitions cause linker errors.
+> - Do NOT use `DECLARE_VEC` if you are using the header-only path via `vec.h`.
+> - `option_##type` must be instantiated via `CANON_OPTION(type)` before `DECLARE_VEC` — not enforced automatically, missing it produces cryptic compile errors.
+> - `DEFINE_VEC_SLICE` from `vec.h` is not covered by `DECLARE_VEC` — slice.h integration functions (`as_slice`, `as_slice_full`, `as_bytes`) must be declared separately if needed.
+
+### `vec_defn.h`
+> Definition macros for typed Canon-C vectors — generates all struct typedefs and function implementations. Use `DEFINE_VEC(linkage, type)` in `.c` files for separate compilation, or in any file with `static inline` for header-only usage.
+
+#### Workflow
+
+Header-only:
+```c
+#include "data/vec/vec_defn.h"
+DEFINE_VEC(static inline, int)
+
+int buf[64];
+canon_vec_int v = canon_vec_int_init(buf, 64);
+canon_vec_int_push(&v, 42);
+```
+
+Separate compilation:
+```c
+// In tasks.h:
+#include "data/vec/vec_decl.h"
+DECLARE_VEC(Task)
+
+// In tasks.c:
+#include "data/vec/vec_defn.h"
+DEFINE_VEC(, Task)   // empty linkage = external
+```
+
+Pointer types (typedef first):
+```c
+typedef void* voidptr;
+DEFINE_VEC(static inline, voidptr)
+// canon_vec_voidptr v = canon_vec_voidptr_init(buf, 64);
+```
+
+#### `DEFINE_VEC(linkage, type)` — Generated Types
+
+| Type | Description |
+|---|---|
+| `canon_vec_T` | The vector struct (`items`, `len`, `capacity`) |
+| `canon_vec_T_iter` | Forward iterator (`vec*` + `index`) |
+| `canon_vec_T_slice` | Zero-copy sub-view (`items*` + `len`) |
+
+#### `DEFINE_VEC(linkage, type)` — Generated Functions
+
+| Category | Functions |
+|---|---|
+| Constructors | `_init`, `_empty`, `_alloc`, `_arena_alloc`, `_free` |
+| Queries | `_len`, `_capacity`, `_remaining`, `_is_empty`, `_is_full` |
+| Element access | `_get`, `_get_option`, `_get_unchecked`, `_at`, `_set`, `_first`, `_last`, `_data` |
+| Modification | `_push`, `_try_push`, `_push_unchecked`, `_pop`, `_pop_option`, `_clear`, `_insert`, `_remove`, `_remove_option` |
+| Bulk | `_append_array`, `_extend`, `_fill`, `_swap` |
+| Iterator | `_iter_init`, `_iter_next` |
+| Slice | `_slice_init`, `_slice_get` |
+
+#### Linkage Comparison
+
+| Linkage | Use in | Binary size | Build style |
+|---|---|---|---|
+| `static inline` | any `.h` or `.c` | copy per TU | header-only |
+| `static` | one `.c` | local to TU | separate compilation |
+| `` (empty) | exactly one `.c` | one shared definition | separate compilation |
+
+#### `result_bool_Error` Instantiation
+
+`vec_impl.h` (pulled in by `vec_defn.h`) instantiates `CANON_RESULT(bool, Error)` exactly once using a define guard:
+```c
+#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
+    #define CANON_RESULT_BOOL_ERROR_DEFINED
+    CANON_RESULT(bool, Error)
+#endif
+```
+This is shared with `deque_impl.h` — safe to include both in the same translation unit.
+
+> **Known Limitations:**
+> - `DEFINE_VEC` must be used at file/global scope, not inside functions.
+> - `option_##type` must be instantiated via `CANON_OPTION(type)` before calling `DEFINE_VEC` — missing it produces cryptic compile errors referencing undefined `option_T_some` / `option_T_none`.
+> - With empty linkage (extern), define exactly once across all translation units — multiple definitions cause linker errors.
+> - With `static inline`, each translation unit gets its own copy — safe but increases binary size per TU.
+> - Element type must be a valid C identifier — use `typedef` for pointer types before calling `DEFINE_VEC`.
+> - `vec.h` is the preferred entry point for header-only use — it includes `vec_defn.h` and additionally provides `DEFINE_VEC_SLICE` for `slice.h` integration.
+
+
+
+### `vec_impl.h`
+> Pure implementation logic macros for the Canon-C vec module — no naming decisions, no linkage decisions. Every identifier is received as a parameter from `vec_defn.h`. Do not include this file directly. Use `vec.h` for header-only usage or `vec_decl.h` + `vec_defn.h` for separate compilation.
+
+#### Struct Layout
+
+Three structs are generated per instantiation:
+```c
+// Vector
+typedef struct canon_vec_T_s {
+    T*    items;    // caller-owned element buffer (NULL iff capacity == 0)
+    usize len;      // current element count (0 <= len <= capacity)
+    usize capacity; // maximum elements buffer can hold
+} canon_vec_T;
+
+// Forward iterator
+typedef struct canon_vec_T_iter_s {
+    canon_vec_T* vec;   // parent vec — invalidated by any modification
+    usize        index; // current position (0 = start)
+} canon_vec_T_iter;
+
+// Zero-copy sub-view
+typedef struct canon_vec_T_slice_s {
+    T*    items; // pointer into parent vec's buffer (not owned)
+    usize len;   // number of elements in this slice
+} canon_vec_T_slice;
+```
+
+#### Available Implementation Macros
+
+| Macro | Behavior |
+|---|---|
+| `IMPL_VEC_STRUCTS(...)` | Generates all three struct typedefs |
+| `IMPL_VEC_INIT(linkage, VecType, fn, type)` | Wraps caller-owned buffer; validates non-NULL and capacity limit |
+| `IMPL_VEC_EMPTY(linkage, VecType, fn)` | Returns zero-initialized vec |
+| `IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type)` | `malloc` + `checked_mul` overflow guard; returns `fn_empty()` on failure |
+| `IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type)` | `arena_alloc` + overflow guard; returns `fn_empty()` on failure |
+| `IMPL_VEC_FREE(linkage, VecType, fn)` | `free(items)`, NULLs all fields; NULL-safe |
+| `IMPL_VEC_LEN(linkage, VecType, fn)` | Returns `v->len`; 0 if NULL |
+| `IMPL_VEC_CAPACITY(linkage, VecType, fn)` | Returns `v->capacity`; 0 if NULL |
+| `IMPL_VEC_REMAINING(linkage, VecType, fn)` | Returns `capacity - len`; 0 if NULL |
+| `IMPL_VEC_IS_EMPTY(linkage, VecType, fn)` | Returns `true` if NULL or `len == 0` |
+| `IMPL_VEC_IS_FULL(linkage, VecType, fn)` | Returns `true` if NULL or `len >= capacity` |
+| `IMPL_VEC_GET(linkage, VecType, fn, type)` | Bounds-checked copy into `*out`; false if NULL/OOB |
+| `IMPL_VEC_GET_OPTION(...)` | Returns `Some(v->items[i])` or `None` |
+| `IMPL_VEC_GET_UNCHECKED(linkage, VecType, fn, type)` | No bounds check; `ensure_msg` debug only |
+| `IMPL_VEC_AT(linkage, VecType, fn, type)` | Pointer to element; `ensure_msg` debug only |
+| `IMPL_VEC_SET(linkage, VecType, fn, type)` | Bounds-checked write; false if NULL/OOB |
+| `IMPL_VEC_FIRST(linkage, VecType, fn, type)` | `&items[0]` or NULL if empty |
+| `IMPL_VEC_LAST(linkage, VecType, fn, type)` | `&items[len-1]` or NULL if empty |
+| `IMPL_VEC_DATA(linkage, VecType, fn, type)` | Returns `v->items`; NULL if NULL |
+| `IMPL_VEC_PUSH(linkage, VecType, fn, type)` | Appends item; `Err(ERR_CAPACITY_EXCEEDED)` if full |
+| `IMPL_VEC_TRY_PUSH(linkage, VecType, fn, type)` | Same; returns plain bool |
+| `IMPL_VEC_PUSH_UNCHECKED(linkage, VecType, fn, type)` | No check; `ensure_msg` debug only |
+| `IMPL_VEC_POP(linkage, VecType, fn, type)` | Removes last; `Err(ERR_INVALID_STATE)` if empty |
+| `IMPL_VEC_POP_OPTION(...)` | Delegates to `_pop`; returns `Some` or `None` |
+| `IMPL_VEC_CLEAR(linkage, VecType, fn)` | Sets `len = 0`; NULL-safe; does NOT zero memory |
+| `IMPL_VEC_INSERT(linkage, VecType, fn, type)` | Shifts right via `mem_move`; `Err(ERR_OUT_OF_RANGE)` if i > len |
+| `IMPL_VEC_REMOVE(linkage, VecType, fn, type)` | Shifts left via `mem_move`; `Err(ERR_OUT_OF_RANGE)` if i >= len |
+| `IMPL_VEC_REMOVE_OPTION(...)` | Delegates to `_remove`; returns `Some` or `None` |
+| `IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type)` | `checked_add` overflow guard + `mem_copy`; `Err(ERR_OVERFLOW)` on overflow |
+| `IMPL_VEC_EXTEND(linkage, VecType, fn, fn_append, type)` | Delegates to `_append_array` |
+| `IMPL_VEC_FILL(linkage, VecType, fn, type)` | Fills `min(count, remaining)` slots; silently stops at capacity |
+| `IMPL_VEC_SWAP(linkage, VecType, fn)` | Struct copy on stack; `require_msg` both non-NULL |
+| `IMPL_VEC_ITER_INIT(linkage, IterType, fn, VecType)` | Returns `{vec=v, index=0}` |
+| `IMPL_VEC_ITER_NEXT(linkage, IterType, fn, type)` | Advances index; copies element into `*out`; false when exhausted |
+| `IMPL_VEC_SLICE_INIT(linkage, SliceType, fn, VecType, type)` | Pointer into `v->items[start]`, len = end-start; empty on invalid range |
+| `IMPL_VEC_SLICE_GET(linkage, SliceType, fn, type)` | `&s->items[i]`; `ensure_msg` debug only |
+
+#### Required Dependencies
+```
+core/primitives/types.h
+core/primitives/limits.h
+core/primitives/contract.h
+core/primitives/checked.h
+core/memory.h
+core/arena.h
+semantics/result/result.h
+semantics/error.h
+<stdlib.h>   (malloc, free — called directly)
+```
+
+#### `result_bool_Error` Instantiation
+
+Instantiated exactly once per translation unit via define guard:
+```c
+#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
+    #define CANON_RESULT_BOOL_ERROR_DEFINED
+    CANON_RESULT(bool, Error)
+#endif
+```
+
+Shared with `deque_impl.h` — safe to include both in the same TU.
+
+#### Capacity Limit
+
+All constructors enforce `CANON_VEC_MAX_CAPACITY` (default 1 GB from `limits.h`):
+```c
+if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) return fn_empty();
+```
+Override before including `limits.h`:
+```c
+#define CANON_VEC_MAX_CAPACITY (256 * CANON_MB)
+```
+
+> **Known Limitations:**
+> - Do not include directly — all users should go through `vec.h` or `vec_defn.h`.
+> - `IMPL_VEC_CLEAR` does not zero buffer contents — stale data remains readable. For sensitive data, zero manually before calling clear.
+> - `IMPL_VEC_FILL` silently stops at capacity rather than returning an error — not symmetric with push/insert behavior.
+> - `IMPL_VEC_ALLOC` and `IMPL_VEC_ARENA_ALLOC` call `malloc` / `arena_alloc` directly rather than through a `mem_alloc` wrapper.
+> - `IMPL_VEC_GET_UNCHECKED`, `IMPL_VEC_AT`, `IMPL_VEC_PUSH_UNCHECKED`, and `IMPL_VEC_SLICE_GET` have no release-build protection — violations cause UB silently.
+> - `mem_move` is used for insert and remove shifts — element type must be trivially relocatable (no internal self-pointers).
+> - `IMPL_VEC_EXTEND` is a thin alias for `IMPL_VEC_APPEND_ARRAY` — they are identical in behavior.
+
+
+### `vec_mangle.h`
+> Name mangling conventions for the Canon-C vec module. Single source of truth for all generated type and function names. Every macro is individually overridable via `#ifndef` guards — override before including to rename the entire API globally.
+
+#### Default Naming Scheme
+
+For a type `T`, the defaults produce:
+
+| Category | What | Default name | Example for `int` |
+|---|---|---|---|
+| Types | Vector type | `canon_vec_T` | `canon_vec_int` |
+| | Struct tag | `canon_vec_T_s` | `canon_vec_int_s` |
+| | Iterator type | `canon_vec_T_iter` | `canon_vec_int_iter` |
+| | Iterator tag | `canon_vec_T_iter_s` | `canon_vec_int_iter_s` |
+| | Slice type | `canon_vec_T_slice` | `canon_vec_int_slice` |
+| | Slice tag | `canon_vec_T_slice_s` | `canon_vec_int_slice_s` |
+| Constructors | `init` | `canon_vec_T_init` | `canon_vec_int_init` |
+| | `empty` | `canon_vec_T_empty` | `canon_vec_int_empty` |
+| | `alloc` | `canon_vec_T_alloc` | `canon_vec_int_alloc` |
+| | `arena_alloc` | `canon_vec_T_arena_alloc` | `canon_vec_int_arena_alloc` |
+| | `free` | `canon_vec_T_free` | `canon_vec_int_free` |
+| Queries | `len` | `canon_vec_T_len` | `canon_vec_int_len` |
+| | `capacity` | `canon_vec_T_capacity` | `canon_vec_int_capacity` |
+| | `remaining` | `canon_vec_T_remaining` | `canon_vec_int_remaining` |
+| | `is_empty` | `canon_vec_T_is_empty` | `canon_vec_int_is_empty` |
+| | `is_full` | `canon_vec_T_is_full` | `canon_vec_int_is_full` |
+| Element access | `get` | `canon_vec_T_get` | `canon_vec_int_get` |
+| | `get_option` | `canon_vec_T_get_option` | `canon_vec_int_get_option` |
+| | `get_unchecked` | `canon_vec_T_get_unchecked` | `canon_vec_int_get_unchecked` |
+| | `at` | `canon_vec_T_at` | `canon_vec_int_at` |
+| | `set` | `canon_vec_T_set` | `canon_vec_int_set` |
+| | `first` | `canon_vec_T_first` | `canon_vec_int_first` |
+| | `last` | `canon_vec_T_last` | `canon_vec_int_last` |
+| | `data` | `canon_vec_T_data` | `canon_vec_int_data` |
+| Modification | `push` | `canon_vec_T_push` | `canon_vec_int_push` |
+| | `try_push` | `canon_vec_T_try_push` | `canon_vec_int_try_push` |
+| | `push_unchecked` | `canon_vec_T_push_unchecked` | `canon_vec_int_push_unchecked` |
+| | `pop` | `canon_vec_T_pop` | `canon_vec_int_pop` |
+| | `pop_option` | `canon_vec_T_pop_option` | `canon_vec_int_pop_option` |
+| | `clear` | `canon_vec_T_clear` | `canon_vec_int_clear` |
+| | `insert` | `canon_vec_T_insert` | `canon_vec_int_insert` |
+| | `remove` | `canon_vec_T_remove` | `canon_vec_int_remove` |
+| | `remove_option` | `canon_vec_T_remove_option` | `canon_vec_int_remove_option` |
+| Bulk | `append_array` | `canon_vec_T_append_array` | `canon_vec_int_append_array` |
+| | `extend` | `canon_vec_T_extend` | `canon_vec_int_extend` |
+| | `fill` | `canon_vec_T_fill` | `canon_vec_int_fill` |
+| | `swap` | `canon_vec_T_swap` | `canon_vec_int_swap` |
+| Iterator | `iter_init` | `canon_vec_T_iter_init` | `canon_vec_int_iter_init` |
+| | `iter_next` | `canon_vec_T_iter_next` | `canon_vec_int_iter_next` |
+| Slice | `slice_init` | `canon_vec_T_slice_init` | `canon_vec_int_slice_init` |
+| | `slice_get` | `canon_vec_T_slice_get` | `canon_vec_int_slice_get` |
+
+#### Customization
+
+Define overrides **before** including any vec header:
+```c
+// Project namespace prefix
+#define MANGLE_VEC_TYPE(type)       myproject_vec_##type
+#define MANGLE_VEC_ITER_TYPE(type)  myproject_vec_##type##_iter
+#define MANGLE_VEC_SLICE_TYPE(type) myproject_vec_##type##_slice
+#include "data/vec/vec.h"
+DEFINE_VEC(static inline, int)
+
+myproject_vec_int v = myproject_vec_int_init(buf, 64);
+
+// Rename a single function
+#define MANGLE_VEC_PUSH(type) myproject_vec_##type##_push
+```
+
+Individual function macros can be overridden selectively — only the macros you define before including are affected. The rest fall back to their `#ifndef`-guarded defaults.
+
+> **Known Limitations:**
+> - All macros are guarded with `#ifndef` — overrides must be defined before the first include of any vec header in that translation unit.
+> - Overrides apply to all types instantiated after them, not selectively per type — use separate translation units if per-type naming is needed.
+> - `MANGLE_VEC_TYPE` and `MANGLE_VEC_STRUCT_TAG` are independent — overriding the type name does not automatically update the struct tag, and vice versa.
+> - `vec_mangle.h` has no includes of its own — it is safe to include from any layer.
+> - The `fmt` and `range` extension files (`vec_fmt.h`, `vec_range.h`) define their own mangle macros (`MANGLE_VEC_TO_STRINGBUF`, `MANGLE_VEC_EXTEND_FROM_RANGE`) separately — these are not declared in `vec_mangle.h`.
+
+### `vec_fmt.h`
+> Optional StringBuf formatting extension for the Canon-C vec module. Adds `to_stringbuf` and `to_stringbuf_cb` to any typed vector instantiated via `DEFINE_VEC`. Not included by `vec.h` by default — only include when you need vector-to-string formatting.
+
+#### Setup
+
+Requires `data/stringbuf.h`. Call `DEFINE_VEC_FMT` after `DEFINE_VEC` for the same type:
+```c
+#include "data/vec/vec.h"
+#include "data/vec/vec_fmt.h"
+
+DEFINE_VEC(static inline, int)
+DEFINE_VEC_FMT(static inline, int)
+```
+
+#### `canon_vec_T_to_stringbuf` — printf-style formatting
+
+**`void canon_vec_T_to_stringbuf(const canon_vec_T* v, StringBuf* sb, const char* fmt)`**
+Iterates all elements and writes each via `stringbuf_printf(sb, fmt, element)`. Output is appended to whatever is already in `sb` — it is NOT cleared first. Does nothing if v, sb, or fmt is NULL.
+```c
+char out[256];
+StringBuf sb = stringbuf_init(out, sizeof(out));
+
+canon_vec_int_to_stringbuf(&v, &sb, "%d ");
+// sb now contains "1 2 3 4 "
+```
+
+`fmt` must be a valid printf format string for the element type. Mismatched format strings produce undefined behavior — same as printf.
+
+#### `canon_vec_T_to_stringbuf_cb` — callback-style formatting
+
+**`void canon_vec_T_to_stringbuf_cb(const canon_vec_T* v, StringBuf* sb, void (*cb)(StringBuf*, T))`**
+Iterates all elements and calls `cb(sb, element)` for each. Callback is responsible for writing to `sb`. Does nothing if v, sb, or cb is NULL.
+```c
+void fmt_int(StringBuf* sb, int val) {
+    stringbuf_printf(sb, "[%d]", val);
+}
+
+canon_vec_int_to_stringbuf_cb(&v, &sb, fmt_int);
+// sb now contains "[1][2][3][4]"
+```
+
+Use the callback variant for custom types, complex formatting, or when a printf format string is insufficient.
+
+#### Choosing Between the Two
+
+| | `to_stringbuf` | `to_stringbuf_cb` |
+|---|---|---|
+| Format control | printf format string | arbitrary callback |
+| Element type | primitive / printf-compatible | any |
+| Overhead | `stringbuf_printf` per element | function call per element |
+| NULL safety | fmt == NULL → no-op | cb == NULL → no-op |
+
+#### Performance
+
+- Time: O(n) where n = v->len
+- Space: O(1) — writes into caller-owned StringBuf, no allocation
+
+#### Name Mangling
+
+Both functions follow the same `#ifndef`-guarded override pattern as the rest of the vec module:
+```c
+// Override before including vec_fmt.h:
+#define MANGLE_VEC_TO_STRINGBUF(type)    myproject_vec_##type##_to_str
+#define MANGLE_VEC_TO_STRINGBUF_CB(type) myproject_vec_##type##_to_str_cb
+```
+
+> **Known Limitations:**
+> - Not included by `vec.h` — must be included explicitly after `vec.h`.
+> - `DEFINE_VEC_FMT` must be called after `DEFINE_VEC(linkage, type)` for the same type — calling it before produces undefined references.
+> - `to_stringbuf` output is appended to `sb` — clear it manually before calling if a fresh output is needed.
+> - `StringBuf` silently truncates if capacity is exceeded — check `stringbuf_remaining()` before calling if overflow matters.
+> - `to_stringbuf` accesses `v->items` directly (field name `items`) — if `vec_mangle.h` struct layout is overridden, this file may need updating.
+> - The callback in `to_stringbuf_cb` receives elements by value — for large structs, consider a pointer-based wrapper callback.
+> - `MANGLE_VEC_TO_STRINGBUF` and `MANGLE_VEC_TO_STRINGBUF_CB` are defined in `vec_fmt.h` itself, not in `vec_mangle.h` — they must be overridden before including `vec_fmt.h` specifically.
+> - Depends on `data/stringbuf.h` — not suitable for targets without that layer available.
+
+
+### `vec_range.h`
+> Optional range-fill extension for the Canon-C vec module. Adds `extend_from_range` to any typed vector instantiated via `DEFINE_VEC`. Fills a vec from an `IntRange` — ascending or descending. Not included by `vec.h` by default — only include when you need range-to-vector filling.
+
+#### Setup
+
+Requires `data/range.h`. Call `DEFINE_VEC_RANGE` after `DEFINE_VEC` for the same type:
+```c
+#include "data/vec/vec.h"
+#include "data/vec/vec_range.h"
+
+DEFINE_VEC(static inline, int)
+DEFINE_VEC_RANGE(static inline, int)
+```
+
+#### Usage
+
+**`result_bool_Error canon_vec_T_extend_from_range(canon_vec_T* v, IntRange r)`**
+Iterates the range and appends each value into `v`. Values are cast from `isize` to `T`. Supports ascending and descending ranges.
+```c
+int buf[16];
+canon_vec_int v = canon_vec_int_init(buf, 16);
+
+IntRange asc = range_make(0, 10);   // 0..10 ascending
+canon_vec_int_extend_from_range(&v, asc);
+// v now contains [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+IntRange desc = range_make(5, 0);   // 5..0 descending
+canon_vec_int_extend_from_range(&v, desc);
+// appends [5, 4, 3, 2, 1]
+```
+
+#### Return Values
+- `Ok(true)` — all range values appended successfully
+- `Err(ERR_INVALID_ARG)` — v or v->items is NULL
+- `Err(ERR_OVERFLOW)` — v->len + range count overflows `usize`
+- `Err(ERR_CAPACITY_EXCEEDED)` — insufficient space in v
+
+#### Range Direction
+
+Direction is inferred automatically from `r.start` and `r.end`:
+```c
+r.end >= r.start  →  step = +1  (ascending)
+r.end <  r.start  →  step = -1  (descending)
+```
+
+An empty range (`r.start == r.end`) appends nothing and returns `Ok(true)`.
+
+#### Key-Value Correspondence with Hashmap
+
+When using `hashmap_range.h` and `vec_range.h` together, `extend_from_range` can pre-fill key vecs for batch lookup:
+```c
+IntRange keys = range_make(0, 100);
+canon_vec_int_extend_from_range(&key_vec, keys);
+// then use key_vec with hashmap_collect_keys / HASHMAP_FOR_EACH
+```
+
+#### Performance
+
+- Time: O(count) where count = abs(r.end - r.start)
+- Space: O(1) — no allocation, fills into existing buffer
+
+#### Name Mangling
+
+Follows the same `#ifndef`-guarded override pattern as the rest of the vec module:
+```c
+// Override before including vec_range.h:
+#define MANGLE_VEC_EXTEND_FROM_RANGE(type) myproject_vec_##type##_fill_range
+```
+
+Defined in `vec_range.h` itself, not in `vec_mangle.h` — must be overridden before including `vec_range.h` specifically.
+
+> **Known Limitations:**
+> - Not included by `vec.h` — must be included explicitly after `vec.h`.
+> - `DEFINE_VEC_RANGE` must be called after `DEFINE_VEC(linkage, type)` for the same type.
+> - Range values are cast from `isize` to `T` — for unsigned element types, negative range values will wrap. Caller is responsible for ensuring the range fits the element type.
+> - Only makes semantic sense for numeric element types (`int`, `u32`, `i64`, etc.) — using with struct types will produce a compile error on the cast.
+> - Element count is computed as `abs(r.end - r.start)` via `isize` arithmetic — very large ranges may overflow `isize` before the `checked_add` guard fires.
+> - `MANGLE_VEC_EXTEND_FROM_RANGE` is defined in `vec_range.h` itself, not in `vec_mangle.h` — override it before including `vec_range.h`.
+> - Depends on `data/range.h` — not suitable for targets without that module available.
+
 
