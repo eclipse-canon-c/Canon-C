@@ -73,6 +73,15 @@
 - [`vec_fmt.h`](#vec_fmth) — Optional: StringBuf formatting
 - [`vec_range.h`](#vec_rangeh) — Optional: range-fill extension
 
+### `data/`
+- [`array.h`](#arrayh) — Fixed-size typed array with compile-time capacity
+- [`bitset.h`](#bitseth) — Fixed-capacity bitset with O(1) bit ops
+- [`priority_queue.h`](#priority_queueh) — Fixed-capacity binary heap (min/max)
+- [`queue.h`](#queueh) — Bounded FIFO queue (thin wrapper over deque)
+- [`range.h`](#rangeh) — Explicit bounded integer range generator
+- [`stack.h`](#stackh) — Bounded LIFO stack (thin wrapper over vec)
+- [`stringbuf.h`](#stringbufh) — Fixed-capacity incremental string builder
+
 ---
 
 ## `core/primitives/`
@@ -4426,5 +4435,939 @@ Defined in `vec_range.h` itself, not in `vec_mangle.h` — must be overridden be
 > - Element count is computed as `abs(r.end - r.start)` via `isize` arithmetic — very large ranges may overflow `isize` before the `checked_add` guard fires.
 > - `MANGLE_VEC_EXTEND_FROM_RANGE` is defined in `vec_range.h` itself, not in `vec_mangle.h` — override it before including `vec_range.h`.
 > - Depends on `data/range.h` — not suitable for targets without that module available.
+
+
+### `array.h`
+> Fixed-size typed array with compile-time capacity. Buffer lives inside the struct — no heap allocation. Always fully initialized — no length tracking. Generated per `(type, N)` pair via `DEFINE_ARRAY(type, N)`.
+
+#### Setup
+```c
+DEFINE_ARRAY(int, 8)
+
+// Pointer types — typedef first:
+typedef void* voidptr;
+DEFINE_ARRAY(voidptr, 4)
+
+// Requires DEFINE_SLICE(type) before using as_slice
+// Requires CANON_OPTION(type) before using get_option / first_option / last_option
+```
+
+Must be used at file/global scope. Use once per `(type, N)` pair.
+
+#### Constructors
+
+**`array_T_N array_T_N_zero(void)`**
+Returns an array with all bytes zeroed. O(N).
+
+**`array_T_N array_T_N_fill(type val)`**
+Returns an array with every element set to `val`. O(N).
+
+**`array_T_N array_T_N_from_ptr(const type* src, usize count)`**
+Returns an array populated by copying `count` elements from `src`. If `count < N`, remaining elements are zeroed. If `count > N`, only first N are copied. Uses `checked_mul()` for overflow-safe byte size. O(N).
+
+#### Queries
+
+**`usize array_T_N_len(void)`**
+Returns N — always. Compile-time constant. O(1).
+
+**`usize array_T_N_size_bytes(void)`**
+Returns `N * sizeof(type)`. Uses `checked_mul()` — returns `CANON_USIZE_MAX` on overflow. O(1).
+
+#### Element Access
+
+**`bool array_T_N_get(const array_T_N* a, usize i, type* out)`**
+Bounds-checked copy into `*out`. Returns false if `a == NULL`, `out == NULL`, or `i >= N`. O(1).
+
+**`option_T array_T_N_get_option(const array_T_N* a, usize i)`**
+Returns `Some(element)` or `None` if OOB or `a == NULL`. O(1).
+
+**`type array_T_N_get_unchecked(const array_T_N* a, usize i)`**
+No bounds check — `ensure_msg()` in debug only. UB in release if violated. O(1).
+
+**`bool array_T_N_set(array_T_N* a, usize i, type val)`**
+Bounds-checked write. Returns false if `a == NULL` or `i >= N`. O(1).
+
+**`type* array_T_N_at(array_T_N* a, usize i)`**
+Returns pointer to element, or `NULL` if OOB. O(1).
+
+**`type* array_T_N_first(array_T_N* a)`**
+Returns pointer to first element. `require_msg` if `a == NULL`. O(1).
+
+**`type* array_T_N_last(array_T_N* a)`**
+Returns pointer to last element. `require_msg` if `a == NULL`. O(1).
+
+**`option_T array_T_N_first_option(const array_T_N* a)`**
+Returns `Some(first)` or `None` if `a == NULL`. O(1).
+
+**`option_T array_T_N_last_option(const array_T_N* a)`**
+Returns `Some(last)` or `None` if `a == NULL`. O(1).
+
+#### Mutation
+
+**`void array_T_N_fill_all(array_T_N* a, type val)`**
+Sets every element to `val`. NULL-safe. O(N).
+
+**`void array_T_N_copy_from(array_T_N* dst, const array_T_N* src)`**
+Copies all N elements from `src` into `dst` via `memcpy`. Both must be non-NULL (`require_msg`). O(N).
+
+#### Comparison
+
+**`bool array_T_N_equal(const array_T_N* a, const array_T_N* b)`**
+Returns true if all N elements are byte-equal (`memcmp`). Returns false if either is NULL. O(N).
+
+#### Views (zero-copy)
+
+**`slice_T array_T_N_as_slice(array_T_N* a)`**
+Returns a typed `slice_T` view over all N elements. Requires `DEFINE_SLICE(type)`. `require_msg` if `a == NULL`. O(1).
+
+**`slice_T array_T_N_as_slice_const(const array_T_N* a)`**
+Const variant of `as_slice`. O(1).
+
+**`bytes_t array_T_N_as_bytes(array_T_N* a)`**
+Returns mutable byte view over all `N * sizeof(type)` bytes. Returns empty `bytes_t` on overflow. O(1).
+
+**`cbytes_t array_T_N_as_cbytes(const array_T_N* a)`**
+Read-only byte view. Returns empty `cbytes_t` on overflow. O(1).
+
+#### Iteration Macros
+
+**`ARRAY_FOR(type, N, arr_ptr, idx_var)`**
+Iterates over all elements by index. Declares `usize idx_var` from 0 to N-1.
+```c
+ARRAY_FOR(int, 8, &a, i) {
+    a.items[i] = (int)i * 2;
+}
+```
+
+**`ARRAY_FOR_PTR(type, N, arr_ptr, elem_ptr)`**
+Iterates over all elements by pointer. Declares `type* elem_ptr`.
+```c
+ARRAY_FOR_PTR(int, 8, &a, p) {
+    *p *= 2;
+}
+```
+
+#### Struct Layout
+```c
+typedef struct {
+    type items[N];  // N elements, always initialized
+} array_T_N;
+// sizeof(array_T_N) == N * sizeof(type) (plus compiler alignment padding)
+```
+
+#### Quick Start
+```c
+DEFINE_ARRAY(int, 8)
+
+array_int_8 a = array_int_8_zero();
+
+array_int_8_set(&a, 3, 42);
+
+int val;
+array_int_8_get(&a, 3, &val);        // val = 42
+
+option_int opt = array_int_8_get_option(&a, 3);   // Some(42)
+option_int oob = array_int_8_get_option(&a, 99);  // None
+
+slice_int sv = array_int_8_as_slice(&a);           // zero-copy view
+
+array_int_8_fill_all(&a, 0);                       // reset all to 0
+```
+
+> **Known Limitations:**
+> - `equal()` uses `memcmp` — not suitable for types with padding bytes or pointer members. Compare element-by-element for those.
+> - `get_unchecked()`, `first()`, `last()` have no release-build bounds protection.
+> - `as_slice()` requires `DEFINE_SLICE(type)` to have been called first.
+> - `get_option()`, `first_option()`, `last_option()` require `CANON_OPTION(type)` to have been called first.
+> - `from_ptr()` does not overflow-check `sizeof(type) * count` beyond `checked_mul()` — returns zeroed array on overflow.
+> - Not thread-safe — concurrent modifications require external synchronization. Concurrent reads are safe.
+
+
+### `bitset.h`
+> Fixed-capacity bitset backed by a caller-owned `u64` buffer. O(1) single-bit operations, O(n/64) bulk ops. No allocation inside any function. Bits beyond capacity are always kept zero.
+
+#### Constants & Sizing
+
+**`BITSET_BITS_PER_WORD`** — 64 (bits per backing word)
+
+**`BITSET_WORD_COUNT(n)`** — Number of `u64` words needed to hold `n` bits.
+```c
+BITSET_WORD_COUNT(64)   // → 1
+BITSET_WORD_COUNT(65)   // → 2
+BITSET_WORD_COUNT(200)  // → 4
+```
+
+**`BITSET_NPOS`** — Sentinel (`CANON_USIZE_MAX`) returned by find functions when no bit is found.
+
+#### Initialization
+
+**`void bitset_init(Bitset* bs, u64* words, usize capacity)`**
+Initializes bitset with caller-provided buffer. Clears all bits. O(n/64).
+```c
+u64 words[BITSET_WORD_COUNT(200)];
+Bitset bs;
+bitset_init(&bs, words, 200);
+```
+
+#### Single-Bit Operations — O(1)
+
+**`void bitset_set(Bitset* bs, usize i)`** — Sets bit `i` to 1.
+
+**`void bitset_clear(Bitset* bs, usize i)`** — Clears bit `i` to 0.
+
+**`void bitset_toggle(Bitset* bs, usize i)`** — Flips bit `i`.
+
+**`bool bitset_test(const Bitset* bs, usize i)`** — Returns true if bit `i` is set. Returns false if `bs == NULL` or `i >= capacity`.
+
+**`void bitset_assign(Bitset* bs, usize i, bool value)`** — Sets bit `i` to `value`.
+
+All single-bit ops use `require_msg` if index is out of range. NULL-safe via early return.
+
+#### Bulk Operations — O(n/64)
+
+**`void bitset_clear_all(Bitset* bs)`** — Clears all bits. NULL-safe.
+
+**`void bitset_set_all(Bitset* bs)`** — Sets all bits within capacity. Padding bits stay zero. NULL-safe.
+
+**`void bitset_not(Bitset* bs)`** — Inverts all bits within capacity. Padding bits stay zero. NULL-safe.
+
+**`void bitset_and(Bitset* bs, const Bitset* other)`** — `bs &= other` in-place. Operates on `min(word_count)` words. Words beyond `other`'s range become 0.
+
+**`void bitset_or(Bitset* bs, const Bitset* other)`** — `bs |= other` in-place. Operates on `min(word_count)` words.
+
+**`void bitset_xor(Bitset* bs, const Bitset* other)`** — `bs ^= other` in-place. Operates on `min(word_count)` words. Padding bits stay zero.
+
+#### Query — O(n/64)
+
+**`usize bitset_count(const Bitset* bs)`** — Returns number of set bits (popcount). Uses `popcount64` per word.
+
+**`bool bitset_is_empty(const Bitset* bs)`** — Returns true if no bits are set.
+
+**`bool bitset_is_full(const Bitset* bs)`** — Returns true if all bits within capacity are set.
+
+**`bool bitset_is_disjoint(const Bitset* bs, const Bitset* other)`** — Returns true if no bits are shared.
+
+**`usize bitset_capacity(const Bitset* bs)`** — Returns total usable bits. NULL-safe — returns 0. O(1).
+
+#### Search — O(n/64)
+
+**`usize bitset_find_first(const Bitset* bs)`** — Index of first set bit, or `BITSET_NPOS`. Uses `ctz64`.
+
+**`usize bitset_find_next(const Bitset* bs, usize prev)`** — Index of next set bit after `prev`, or `BITSET_NPOS`.
+
+**`usize bitset_find_last(const Bitset* bs)`** — Index of last set bit, or `BITSET_NPOS`. Uses `clz64`.
+
+#### View — O(1)
+
+**`bytes_t bitset_as_bytes(const Bitset* bs)`**
+Returns a `bytes_t` view over the raw backing words (including padding — always zero). Useful for serialization and hashing. Non-owning — do not free.
+
+#### Iteration Macro
+
+**`BITSET_FOR_EACH(bs_ptr, idx_var)`**
+Iterates over all set bit indices.
+```c
+BITSET_FOR_EACH(&bs, i) {
+    printf("bit %zu is set\n", i);
+}
+```
+
+#### Struct Layout
+```c
+typedef struct {
+    u64*  words;       // caller-owned backing buffer
+    usize capacity;    // number of usable bits
+    usize word_count;  // number of u64 words
+} Bitset;
+```
+
+#### Quick Start
+```c
+u64 words[BITSET_WORD_COUNT(200)];
+Bitset bs;
+bitset_init(&bs, words, 200);
+
+bitset_set(&bs, 42);
+bitset_set(&bs, 199);
+
+bool v = bitset_test(&bs, 42);    // true
+usize n = bitset_count(&bs);      // 2
+usize f = bitset_find_first(&bs); // 42
+
+BITSET_FOR_EACH(&bs, i) {
+    printf("%zu\n", i);  // 42, 199
+}
+```
+
+> **Known Limitations:**
+> - Not thread-safe — caller must synchronize if shared across threads.
+> - `and` / `or` / `xor` operate on `min(word_count)` words — results are undefined if capacities differ significantly and you rely on the full range of the larger bitset.
+> - `bitset_clear_all` and `bitset_set_all` do not zero frame contents beyond capacity — padding invariant is maintained by `bitset_clear_padding()` internally.
+> - All single-bit ops use `require_msg` — they always fire in release builds if index is out of range.
+> - `bitset_as_bytes` covers the entire word array including padding bits — always zero by invariant but present in the view.
+
+
+### `priority_queue.h`
+> Fixed-capacity binary min-heap with caller-owned buffer. O(log n) push/pop, O(1) peek. Use a descending comparator for max-heap behavior. Returns `option_type` / `result_bool_Error` for idiomatic Canon-C style.
+
+#### Initialization
+
+**`void pq_init(PriorityQueue* pq, void* buffer, usize capacity, usize elem_size, algo_cmp_fn cmp, void* ctx)`**
+Initializes the priority queue with a caller-owned buffer. All fields required — no NULL allowed except `ctx`. O(1).
+```c
+int buf[64];
+PriorityQueue pq;
+pq_init(&pq, buf, 64, sizeof(int), algo_cmp_int, NULL);
+```
+
+**`void pq_heapify(PriorityQueue* pq, usize len)`**
+Builds a valid heap from the first `len` elements already in the buffer. Clamps to `capacity` if `len` exceeds it. O(n log n).
+
+#### Typed Macro Wrapper
+```c
+DEFINE_PRIORITY_QUEUE(int)
+
+int buf[64];
+pq_int h;
+pq_int_init(&h, buf, 64, algo_cmp_int, NULL);
+```
+
+`DEFINE_PRIORITY_QUEUE(type)` generates a `pq_##type` struct wrapping `PriorityQueue` and typed versions of all functions below.
+
+#### Core Operations (preferred)
+
+**`result_bool_Error pq_push_result(PriorityQueue* pq, const void* elem)`**
+**`result_bool_Error pq_T_push_result(pq_T* h, type val)`**
+Inserts an element. O(log n).
+- `Ok(true)` — inserted
+- `Err(ERR_INVALID_ARG)` — `pq` or `elem` is NULL
+- `Err(ERR_CAPACITY_EXCEEDED)` — heap is full
+
+**`option_type pq_pop_option(PriorityQueue* pq)`**
+**`option_T pq_T_pop_option(pq_T* h)`**
+Removes and returns the top element. O(log n).
+- `Some(value)` — element removed
+- `None` — heap is empty or `pq == NULL`
+
+**`option_type pq_peek_option(const PriorityQueue* pq)`**
+**`option_T pq_T_peek_option(const pq_T* h)`**
+Returns the top element without removing it. O(1).
+- `Some(value)` — top element
+- `None` — heap is empty or `pq == NULL`
+
+**`result_bool_Error pq_remove_at_result(PriorityQueue* pq, usize i)`**
+**`result_bool_Error pq_T_remove_at_result(pq_T* h, usize i)`**
+Removes element at heap index `i`. Runs sift-up then sift-down to restore invariant. O(log n).
+- `Ok(true)` — removed
+- `Err(ERR_OUT_OF_RANGE)` — `i >= len` or `pq == NULL`
+
+#### Legacy / Compatibility Variants
+```c
+bool pq_push(PriorityQueue* pq, const void* elem)
+bool pq_pop(PriorityQueue* pq, void* out)
+bool pq_peek(const PriorityQueue* pq, void* out)
+bool pq_remove_at(PriorityQueue* pq, usize i)
+
+// Typed:
+bool pq_T_push(pq_T* h, type val)
+bool pq_T_pop(pq_T* h, type* out)
+bool pq_T_peek(const pq_T* h, type* out)
+bool pq_T_remove_at(pq_T* h, usize i)
+```
+Plain bool variants — delegate to the `result`/`option` versions above.
+
+#### Queries
+```c
+pq_len(&pq)        // usize — current element count
+pq_capacity(&pq)   // usize — fixed maximum
+pq_remaining(&pq)  // usize — free slots
+pq_is_empty(&pq)   // bool
+pq_is_full(&pq)    // bool
+```
+All NULL-safe — return 0 or true if `pq == NULL`. Typed variants follow the same pattern (`pq_T_len`, etc.).
+
+#### View
+
+**`bytes_t pq_as_bytes(const PriorityQueue* pq)`**
+Returns a `bytes_t` view over current heap contents `[data, data + len * elem_size)`. Returns empty `bytes_t` if empty or NULL.
+
+#### Min-heap vs Max-heap
+```c
+// Min-heap (default) — smallest value at top
+pq_init(&pq, buf, 64, sizeof(int), algo_cmp_int, NULL);
+
+// Max-heap — largest value at top
+pq_init(&pq, buf, 64, sizeof(int), algo_cmp_int_desc, NULL);
+```
+
+#### Struct Layout
+```c
+typedef struct {
+    void*       data;       // caller-owned buffer
+    usize       len;        // current element count
+    usize       capacity;   // fixed maximum
+    usize       elem_size;  // size of each element in bytes
+    algo_cmp_fn cmp;        // three-way comparator
+    void*       ctx;        // optional context passed to cmp (may be NULL)
+} PriorityQueue;
+
+// Typed wrapper:
+typedef struct { PriorityQueue _pq; } pq_##type;
+```
+
+#### Quick Start
+```c
+DEFINE_PRIORITY_QUEUE(int)
+
+int buf[16];
+pq_int h;
+pq_int_init(&h, buf, 16, algo_cmp_int, NULL);
+
+pq_int_push_result(&h, 30);
+pq_int_push_result(&h, 10);
+pq_int_push_result(&h, 20);
+
+option_int top = pq_int_peek_option(&h);  // Some(10) — min at top
+option_int val = pq_int_pop_option(&h);   // Some(10)
+```
+
+> **Known Limitations:**
+> - No type safety in the untyped `PriorityQueue` API — passing wrong `elem_size` or mismatched types is UB.
+> - `pq_swap` falls back to a byte-by-byte loop for elements larger than `CANON_MEM_SWAP_MAX` (default 256 bytes) — avoid very large element types.
+> - `pq_heapify` clamps `len` to `capacity` silently — no error returned.
+> - Not thread-safe — concurrent modifications require external synchronization.
+> - `pq_as_bytes` view is invalidated by any push, pop, or remove operation.
+> - The typed `DEFINE_PRIORITY_QUEUE(type)` macro uses `option_type` and `result_bool_Error` internally — `CANON_OPTION(type)` and `CANON_RESULT(bool, Error)` must be instantiated before use.
+
+
+### `queue.h`
+> Bounded FIFO queue — thin zero-overhead wrapper over `canon_deque_##type`. enqueue = push_back, dequeue = pop_front, peek = peek_front. Fixed capacity, no automatic growth.
+
+#### Setup
+```c
+// Deque must be instantiated first
+DEFINE_DEQUE(static inline, int)
+DEFINE_QUEUE(static inline, int)
+
+// Pointer types — typedef first:
+typedef void* voidptr;
+DEFINE_DEQUE(static inline, voidptr)
+DEFINE_QUEUE(static inline, voidptr)
+```
+
+Must be used at file/global scope. `DEFINE_DEQUE(linkage, type)` must be called before `DEFINE_QUEUE(linkage, type)`.
+
+#### Separate Compilation
+```c
+// In tasks.h:
+#include "data/deque/deque_decl.h"
+#include "data/queue.h"
+DECLARE_DEQUE(Task)
+DECLARE_QUEUE(Task)
+
+// In tasks.c:
+#include "data/deque/deque_defn.h"
+#include "data/queue.h"
+DEFINE_DEQUE(, Task)
+DEFINE_QUEUE(, Task)
+```
+
+#### Constructor
+
+**`void canon_queue_T_init(canon_queue_T* q, type* buffer, usize capacity)`**
+Initializes queue with caller-owned buffer. `require_msg` if `q == NULL`. O(1).
+```c
+int buf[128];
+canon_queue_int q;
+canon_queue_int_init(&q, buf, 128);
+```
+
+#### Enqueue / Dequeue (Result variants)
+
+**`result_bool_Error canon_queue_T_enqueue(canon_queue_T* q, type item)`**
+Adds item to the back of the queue. O(1).
+- `Ok(true)` — enqueued
+- `Err(ERR_INVALID_ARG)` — `q == NULL` or buffer is NULL
+- `Err(ERR_CAPACITY_EXCEEDED)` — queue is full
+
+**`result_bool_Error canon_queue_T_dequeue(canon_queue_T* q, type* out)`**
+Removes and returns front item (oldest). O(1).
+- `Ok(true)` — dequeued into `*out`
+- `Err(ERR_INVALID_ARG)` — `q == NULL`, `out == NULL`, or buffer is NULL
+- `Err(ERR_INVALID_STATE)` — queue is empty
+
+#### Dequeue (Option variant)
+
+**`option_T canon_queue_T_dequeue_option(canon_queue_T* q)`**
+Removes and returns front item as `Option<T>`. O(1).
+- `Some(item)` — dequeued
+- `None` — empty or invalid
+
+#### Peek
+
+**`bool canon_queue_T_peek(const canon_queue_T* q, type* out)`**
+Returns front item without removing it. Returns false if empty or invalid. Queue unchanged. O(1).
+
+**`option_T canon_queue_T_peek_option(const canon_queue_T* q)`**
+Returns front item as `Option<T>` without removing. Queue unchanged. O(1).
+
+#### Queries
+```c
+canon_queue_T_len(&q)        // usize — current element count
+canon_queue_T_capacity(&q)   // usize — fixed maximum
+canon_queue_T_remaining(&q)  // usize — free slots
+canon_queue_T_is_empty(&q)   // bool
+canon_queue_T_is_full(&q)    // bool
+```
+All NULL-safe — return 0 or true if `q == NULL`.
+
+#### Misc
+
+**`void canon_queue_T_clear(canon_queue_T* q)`**
+Resets queue to empty. O(1). Does NOT zero buffer contents. NULL-safe.
+
+#### Type Layout
+
+`canon_queue_T` is a typedef alias for `canon_deque_T` — no new struct. All `canon_deque_T` functions remain usable. `DEFINE_QUEUE` only adds FIFO-named wrappers for clarity.
+
+#### Quick Start
+```c
+DEFINE_DEQUE(static inline, int)
+DEFINE_QUEUE(static inline, int)
+
+int buf[128];
+canon_queue_int q;
+canon_queue_int_init(&q, buf, 128);
+
+canon_queue_int_enqueue(&q, 10);
+canon_queue_int_enqueue(&q, 20);
+
+int val;
+canon_queue_int_dequeue(&q, &val);         // val = 10 (FIFO)
+
+option_int next = canon_queue_int_dequeue_option(&q);  // Some(20)
+option_int front = canon_queue_int_peek_option(&q);    // None — now empty
+```
+
+> **Known Limitations:**
+> - `DEFINE_DEQUE(linkage, type)` must be called before `DEFINE_QUEUE(linkage, type)` — missing this causes compile errors.
+> - `option_##type` must be instantiated via `CANON_OPTION(type)` before calling `DEFINE_DEQUE` — not enforced automatically.
+> - Fixed capacity — no growth. For auto-growing queues, wrap `dynvec.h`.
+> - `clear()` does not zero buffer contents — stale data remains readable until overwritten. Zero manually for sensitive data.
+> - Not thread-safe — concurrent modifications require external synchronization.
+> - Not suitable for double-ended access (use deque directly) or random access by index (use vec).
+
+
+### `range.h`
+> Explicit bounded integer range generator with `[start, end)` semantics. Supports ascending, descending, and stepped iteration. Overflow-safe via `checked_add_isize()`. All operations O(1) except iteration itself.
+
+#### Setup
+```c
+#include "data/range.h"
+
+// Requires CANON_OPTION(isize) for peek_option / current_option
+```
+
+#### Construction
+
+**`range range_make(isize start, isize end, isize step)`**
+Creates a range `[start, end)` with given step. `step == 0` is normalized to `+1`. O(1).
+```c
+range_make(0, 10, 1)   // 0, 1, 2, ..., 9
+range_make(10, 0, -1)  // 10, 9, 8, ..., 1
+range_make(0, 20, 5)   // 0, 5, 10, 15
+range_make(5, 5, 1)    // empty
+```
+
+**`range range_upto(isize end)`**
+Ascending `[0, end)` with step 1.
+```c
+range_upto(5)  // 0, 1, 2, 3, 4
+```
+
+**`range range_from_to(isize start, isize end)`**
+Ascending `[start, end)` with step 1.
+```c
+range_from_to(5, 10)  // 5, 6, 7, 8, 9
+```
+
+**`range range_downfrom(isize start)`**
+Descending `[start, 0)` with step -1.
+```c
+range_downfrom(5)  // 5, 4, 3, 2, 1
+```
+
+**`range range_downto(isize start, isize end)`**
+Descending `[start, end)` with step -1.
+```c
+range_downto(10, 5)  // 10, 9, 8, 7, 6
+```
+
+#### Queries
+
+**`bool range_is_empty(const range* r)`** — True if exhausted or `r == NULL`. O(1).
+
+**`bool range_has_next(const range* r)`** — True if at least one element remains. Equivalent to `!range_is_empty(r)`. O(1).
+
+**`bool range_is_valid(const range* r)`** — True if `r != NULL` and has remaining elements. O(1).
+
+**`usize range_len(const range* r)`**
+Returns exact remaining element count. Pure arithmetic — does NOT consume the range. Returns `CANON_USIZE_MAX` if count overflows `usize`. O(1).
+```c
+range_len(&range_make(0, 10, 1))   // → 10
+range_len(&range_make(0, 10, 2))   // → 5
+range_len(&range_make(10, 0, -1))  // → 10
+range_len(&range_make(5, 5, 1))    // → 0
+```
+
+**`usize range_remaining(const range* r)`** — Alias for `range_len`. O(1).
+
+**`bool range_peek(const range* r, isize* out)`**
+Peeks at next value without advancing. Returns false if empty or invalid. Range unchanged. O(1).
+
+**`option_isize range_peek_option(const range* r)`**
+Returns `Some(next)` or `None`. Range unchanged. O(1).
+
+**`range_current_option`** — Alias macro for `range_peek_option`.
+
+#### Iteration
+
+**`isize range_next(range* r)`**
+Returns next value and advances the iterator. Uses `checked_add_isize()` — saturates to `end` on overflow. O(1).
+
+⚠️ Always check `range_has_next()` before calling, or use `RANGE_FOR`.
+```c
+range r = range_make(0, 5, 1);
+while (range_has_next(&r)) {
+    isize val = range_next(&r);  // 0, 1, 2, 3, 4
+}
+```
+
+**`void range_reset(range* r, isize new_start)`**
+Resets `current` to `new_start`. `end` and `step` unchanged. NULL-safe. O(1).
+
+**`void range_skip(range* r, usize n)`**
+Skips `n` elements forward via direct arithmetic — O(1), not O(n). Saturates to `end` on overflow or boundary crossing. NULL-safe.
+```c
+range r = range_make(0, 10, 1);
+range_skip(&r, 5);
+isize val = range_next(&r);  // val == 5
+```
+
+**`range_advance`** — Alias macro for `range_skip`.
+
+#### `RANGE_FOR` Macro
+```c
+RANGE_FOR(var, r_expr)
+```
+Clean for-loop syntax. `r_expr` is evaluated exactly once. `var` must be declared before the loop.
+```c
+int i;
+RANGE_FOR(i, range_make(0, 10, 1)) {
+    printf("%d ", i);  // 0 1 2 3 4 5 6 7 8 9
+}
+
+// Descending
+RANGE_FOR(i, range_make(10, 0, -1)) {
+    printf("%d ", i);  // 10 9 8 7 6 5 4 3 2 1
+}
+
+// Stepped
+RANGE_FOR(i, range_make(0, 20, 3)) {
+    printf("%d ", i);  // 0 3 6 9 12 15 18
+}
+
+// Nested
+int j;
+RANGE_FOR(i, range_upto(3)) {
+    RANGE_FOR(j, range_upto(3)) {
+        printf("(%d,%d) ", i, j);
+    }
+}
+```
+
+`break` and `continue` work normally inside the loop body.
+
+#### Struct Layout
+```c
+typedef struct {
+    isize current;  // next value to be returned by range_next()
+    isize end;      // exclusive bound
+    isize step;     // positive = ascending, negative = descending, never 0
+} range;
+```
+
+> **Known Limitations:**
+> - `range_next()` has a `require_msg` (always-on) for `r == NULL` and an `ensure_msg` (debug-only) for exhausted range — calling on an exhausted range is a logic error.
+> - `RANGE_FOR` uses `typeof(var)` for the cast — requires GCC/Clang or C23. Not valid in strict C99.
+> - `range_len()` returns `CANON_USIZE_MAX` on overflow — caller must check before using as allocation size.
+> - `range_skip()` uses `checked_mul_isize` for the jump — saturates to `end` silently on overflow rather than returning an error.
+> - Do not modify `_r` inside a `RANGE_FOR` loop body — behavior is undefined.
+> - Empty ranges (`start == end`, or wrong direction for given step) are valid and safe — `range_has_next()` returns false immediately.
+
+
+### `stack.h`
+> Bounded LIFO stack — thin zero-overhead wrapper over `canon_vec_##type`. push = vec_push, pop = vec_pop, peek = vec_last. Fixed capacity, no automatic growth.
+
+#### Setup
+```c
+// Vec must be instantiated first
+DEFINE_VEC(static inline, int)
+DEFINE_STACK(static inline, int)
+
+// Pointer types — typedef first:
+typedef void* voidptr;
+DEFINE_VEC(static inline, voidptr)
+DEFINE_STACK(static inline, voidptr)
+```
+
+Must be used at file/global scope. `DEFINE_VEC(linkage, type)` must be called before `DEFINE_STACK(linkage, type)`.
+
+#### Separate Compilation
+```c
+// In tasks.h:
+#include "data/vec/vec_decl.h"
+#include "data/stack.h"
+DECLARE_VEC(Task)
+DECLARE_STACK(Task)
+
+// In tasks.c:
+#include "data/vec/vec_defn.h"
+#include "data/stack.h"
+DEFINE_VEC(, Task)
+DEFINE_STACK(, Task)
+```
+
+#### Constructor
+
+**`void canon_stack_T_init(canon_stack_T* s, type* buffer, usize capacity)`**
+Initializes stack with caller-owned buffer. `require_msg` if `s == NULL`. O(1).
+```c
+int buf[128];
+canon_stack_int s;
+canon_stack_int_init(&s, buf, 128);
+```
+
+#### Push / Pop (Result variants)
+
+**`result_bool_Error canon_stack_T_push(canon_stack_T* s, type item)`**
+Pushes item onto the top of the stack. O(1).
+- `Ok(true)` — pushed
+- `Err(ERR_INVALID_ARG)` — `s == NULL` or buffer is NULL
+- `Err(ERR_CAPACITY_EXCEEDED)` — stack is full
+
+**`result_bool_Error canon_stack_T_pop(canon_stack_T* s, type* out)`**
+Removes and returns top item (most recently pushed). O(1).
+- `Ok(true)` — popped into `*out`
+- `Err(ERR_INVALID_ARG)` — `s == NULL`, `out == NULL`, or buffer is NULL
+- `Err(ERR_INVALID_STATE)` — stack is empty
+
+#### Pop (Option variant)
+
+**`option_T canon_stack_T_pop_option(canon_stack_T* s)`**
+Removes and returns top item as `Option<T>`. O(1).
+- `Some(item)` — popped
+- `None` — empty or invalid
+
+#### Peek
+
+**`bool canon_stack_T_peek(const canon_stack_T* s, type* out)`**
+Returns top item without removing it. Returns false if empty or invalid. Stack unchanged. O(1).
+
+**`option_T canon_stack_T_peek_option(const canon_stack_T* s)`**
+Returns top item as `Option<T>` without removing. Stack unchanged. O(1).
+
+#### Queries
+```c
+canon_stack_T_len(&s)        // usize — current element count
+canon_stack_T_capacity(&s)   // usize — fixed maximum
+canon_stack_T_remaining(&s)  // usize — free slots
+canon_stack_T_is_empty(&s)   // bool
+canon_stack_T_is_full(&s)    // bool
+```
+All NULL-safe — return 0 or true if `s == NULL`.
+
+#### Misc
+
+**`void canon_stack_T_clear(canon_stack_T* s)`**
+Resets stack to empty. O(1). Does NOT zero buffer contents. NULL-safe.
+
+#### Type Layout
+
+`canon_stack_T` is a typedef alias for `canon_vec_T` — no new struct. All `canon_vec_T` functions remain usable. `DEFINE_STACK` only adds LIFO-named wrappers for clarity.
+
+#### Quick Start
+```c
+DEFINE_VEC(static inline, int)
+DEFINE_STACK(static inline, int)
+
+int buf[128];
+canon_stack_int s;
+canon_stack_int_init(&s, buf, 128);
+
+canon_stack_int_push(&s, 10);
+canon_stack_int_push(&s, 20);
+
+int val;
+canon_stack_int_pop(&s, &val);              // val = 20 (LIFO)
+
+option_int top = canon_stack_int_pop_option(&s);   // Some(10)
+option_int peek = canon_stack_int_peek_option(&s); // None — now empty
+```
+
+> **Known Limitations:**
+> - `DEFINE_VEC(linkage, type)` must be called before `DEFINE_STACK(linkage, type)` — missing this causes compile errors.
+> - `option_##type` must be instantiated via `CANON_OPTION(type)` before calling `DEFINE_VEC` — not enforced automatically.
+> - Fixed capacity — no growth. For auto-growing stacks, wrap `dynvec.h`.
+> - `clear()` does not zero buffer contents — stale data remains readable until overwritten. Zero manually for sensitive data.
+> - Not thread-safe — concurrent modifications require external synchronization.
+> - Not suitable for FIFO access (use queue.h), double-ended access (use deque.h), or random access by index (use vec directly).
+
+
+### `stringbuf.h`
+> Fixed-capacity incremental string builder. Always null-terminated. Arena-backed or caller-owned buffer. No automatic growth — all appends return `bool` and fail gracefully. Zero hidden state, no global variables.
+
+#### Setup
+```c
+#include "data/stringbuf.h"
+```
+
+No macro instantiation required — `StringBuf` is a concrete struct, not a generated type.
+
+#### Constructors
+
+**`bool stringbuf_init_arena(StringBuf* sb, Arena* arena, usize initial_cap)`**
+Allocates buffer from arena. Returns false on failure. `initial_cap` must be > 1 (includes null terminator). O(1).
+```c
+StringBuf sb;
+if (!stringbuf_init_arena(&sb, &arena, 1024)) { /* handle failure */ }
+```
+
+**`void stringbuf_init_buffer(StringBuf* sb, char* buffer, usize cap)`**
+Wraps a caller-owned buffer. No allocation. `cap` must be > 1. O(1).
+```c
+char buf[256];
+StringBuf path;
+stringbuf_init_buffer(&path, buf, sizeof(buf));
+```
+
+#### Append Operations
+
+All append functions return `false` on failure and leave the buffer unchanged. NULL-safe on `sb`.
+
+**`bool stringbuf_append(StringBuf* sb, const char* s)`**
+Appends a null-terminated C string. NULL `s` is a no-op — returns true. O(strlen(s)).
+
+**`bool stringbuf_append_str(StringBuf* sb, str_t s)`**
+Appends a `str_t` view directly — no `strlen` scan needed. O(s.len).
+
+**`bool stringbuf_append_char(StringBuf* sb, char c)`**
+Appends a single character. O(1).
+
+**`bool stringbuf_append_fmt(StringBuf* sb, const char* fmt, ...)`**
+printf-style formatted append. Two `vsnprintf` passes — measure then write. Returns false on format error or insufficient space. O(n).
+```c
+stringbuf_append_fmt(&sb, "value=%d", 42);
+```
+
+**`bool stringbuf_append_fmt_va(StringBuf* sb, const char* fmt, va_list args)`**
+Same as `append_fmt` but accepts an existing `va_list`. Caller manages `va_start`/`va_end`. O(n).
+
+**`bool stringbuf_append_n(StringBuf* sb, const char* s, usize n)`**
+Appends at most `n` characters. Stops early at null terminator. NULL `s` is a no-op. O(min(n, strlen(s))).
+```c
+stringbuf_append_n(&sb, "hello world", 5);  // appends "hello"
+```
+
+**`stringbuf_printf`** — Alias macro for `stringbuf_append_fmt`.
+
+#### Access & Views
+
+**`const char* stringbuf_str(const StringBuf* sb)`**
+Returns null-terminated C string pointer. Never returns NULL — returns `""` if `sb == NULL` or uninitialized. Do NOT free. O(1).
+
+**`str_t stringbuf_as_str(const StringBuf* sb)`**
+Returns a `str_t` non-owning view over current contents `[data, data+len)`. Do NOT free `ptr`. O(1).
+
+**`bytes_t stringbuf_as_bytes(const StringBuf* sb)`**
+Returns `bytes_t` view over `[data, data+len)` — does NOT include the null terminator. O(1).
+
+**`bytes_t stringbuf_buffer_bytes(const StringBuf* sb)`**
+Returns `bytes_t` view over entire buffer `[data, data+capacity)` — includes used, null terminator, and free space. O(1).
+
+#### Queries
+```c
+stringbuf_len(&sb)              // usize — current string length (excluding '\0')
+stringbuf_capacity(&sb)         // usize — total buffer size (including '\0')
+stringbuf_remaining(&sb)        // usize — characters still appendable
+stringbuf_is_empty(&sb)         // bool  — true if len == 0
+stringbuf_is_full(&sb)          // bool  — true if no more chars can be appended
+stringbuf_is_arena_backed(&sb)  // bool  — true if allocated from an arena
+```
+All NULL-safe — return 0 or false if `sb == NULL`.
+
+#### Mutation
+
+**`void stringbuf_clear(StringBuf* sb)`**
+Resets to empty. Sets `len = 0` and writes `'\0'` at index 0. Does NOT free or zero buffer. O(1).
+
+**`void stringbuf_truncate(StringBuf* sb, usize new_len)`**
+Truncates to `new_len` characters. No-op if `new_len >= len`. O(1).
+
+#### Struct Layout
+```c
+typedef struct {
+    Arena* arena;    // backing arena (NULL = caller-owned buffer)
+    char*  data;     // buffer pointer (always null-terminated when valid)
+    usize  len;      // current string length (excluding '\0')
+    usize  capacity; // total buffer size including space for '\0'
+} StringBuf;
+// Invariant: data[len] == '\0' always
+// Invariant: len < capacity always
+```
+
+#### Performance
+
+| Operation | Time | Notes |
+|---|---|---|
+| `append` | O(strlen(s)) | |
+| `append_str` | O(s.len) | No strlen scan |
+| `append_char` | O(1) | |
+| `append_fmt` | O(n) | Two vsnprintf passes |
+| `append_n` | O(min(n, strlen(s))) | |
+| All views | O(1) | Zero-copy |
+| All queries | O(1) | |
+| `clear` / `truncate` | O(1) | |
+
+#### Quick Start
+```c
+// Arena-backed (recommended)
+StringBuf sb;
+stringbuf_init_arena(&sb, &arena, 1024);
+stringbuf_append(&sb, "Hello, ");
+stringbuf_append_fmt(&sb, "%s!", name);
+printf("%s\n", stringbuf_str(&sb));
+
+// Stack-backed (zero allocation)
+char buf[256];
+StringBuf path;
+stringbuf_init_buffer(&path, buf, sizeof(buf));
+stringbuf_append(&path, "/home/user/");
+stringbuf_append(&path, filename);
+
+// Views
+str_t   sv = stringbuf_as_str(&sb);   // borrowed, no copy
+bytes_t bv = stringbuf_as_bytes(&sb); // raw byte view
+```
+
+> **Known Limitations:**
+> - Capacity is fixed — once full, all appends fail. No reserve, grow, or realloc. By design.
+> - `capacity` includes the null terminator — usable characters = `capacity - 1`.
+> - Arena-backed buffers become invalid after `arena_reset()`.
+> - `stringbuf_clear()` does NOT zero buffer contents — stale data remains readable until overwritten.
+> - `append_fmt` makes two `vsnprintf` passes — for tight loops prefer `append_str` or `append_n` with pre-formatted strings.
+> - `stringbuf_str()` returns `""` for NULL or uninitialized — callers cannot distinguish the two.
+> - `as_str` / `as_bytes` views are invalidated by any append, clear, or truncate operation.
+> - Not thread-safe — concurrent modifications require external synchronization.
 
 
