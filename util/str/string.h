@@ -4,7 +4,7 @@
 #include "core/primitives/types.h"       // usize, bool
 #include "core/primitives/contract.h"    // require_msg, ensure_msg
 #include "core/memory.h"                 // mem_alloc, mem_free, mem_copy, str_len, str_compare, str_ncompare
-#include "../../semantics/option/option.h"  // CANON_OPTION
+#include "semantics/option/option.h"  // CANON_OPTION
 
 /**
  * @file util/str/string.h
