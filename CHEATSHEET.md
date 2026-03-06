@@ -3306,7 +3306,7 @@ static u64 hash_ptr(const void** p, void* ctx) {
 ```
 
 > **Known Limitations:**
-> - The hashmap never rehashes — capacity is fixed at init. For auto-growth, a `dynhashmap.h` wrapper is planned.
+> - The hashmap never rehashes — capacity is fixed at init. For auto-growth, you should create your own `dynhashmap.h` wrapper.
 > - Hash function must return non-zero; the impl normalizes 0 to 1 but callers should not rely on this.
 > - `hashmap_get_or_null()` pointer is invalidated by any insert or remove.
 > - Not thread-safe — concurrent access requires external synchronization per map.
