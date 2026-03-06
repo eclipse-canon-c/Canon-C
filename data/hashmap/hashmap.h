@@ -257,7 +257,7 @@
  *
  * No rehashing:
  *   The hashmap never rehashes. Fixed capacity is a feature, not a limitation.
- *   If you need auto-growth, see data/convenience/ (planned: dynhashmap.h).
+ *   If you need auto-growth, create your own (dynhashmap.h).
  *
  * No global state:
  *   All state lives in the hashmap struct. Multiple hashmaps are fully
