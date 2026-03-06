@@ -17,7 +17,7 @@
  *
  * Portability:
  * - Requires C99 or later
- * - Depends only on Canon-C core modules (types, memory, option, string)
+ * - Depends only on Canon-C core, semantic and util modules (types, memory, option, string)
  * - No direct standard library string functions used
  * - No platform-specific features
  * - Works on any architecture
