@@ -3,7 +3,7 @@
 
 #include "core/primitives/types.h"       // usize, bool
 #include "core/memory.h"                 // str_len, mem_copy
-#include "../../semantics/option/option.h"  // option_charp (adjust path if needed)
+#include "semantics/option/option.h"  // option_charp (adjust path if needed)
 
 /**
  * @file util/str_join.h
