@@ -82,6 +82,18 @@
 - [`stack.h`](#stackh) — Bounded LIFO stack (thin wrapper over vec)
 - [`stringbuf.h`](#stringbufh) — Fixed-capacity incremental string builder
 
+### `algo/`
+- [`any_all.h`](#any_allh) — Existential and universal predicate testing
+- [`filter.h`](#filterh) — Select elements matching a predicate
+- [`find.h`](#findh) — Locate first element matching a predicate
+- [`fold.h`](#foldh) — Functional reduction of sequences to single values
+- [`map.h`](#maph) — Element-wise transformations over sequences
+- [`reverse.h`](#reverseh) — In-place sequence reversal
+- [`search.h`](#searchh) — Binary search utilities for sorted sequences
+- [`sort.h`](#sorth) — Stable in-place hybrid insertion/merge sort
+- [`unique.h`](#uniqueh) — Remove consecutive duplicate elements
+
+
 ---
 
 ## `core/primitives/`
@@ -5369,5 +5381,665 @@ bytes_t bv = stringbuf_as_bytes(&sb); // raw byte view
 > - `stringbuf_str()` returns `""` for NULL or uninitialized — callers cannot distinguish the two.
 > - `as_str` / `as_bytes` views are invalidated by any append, clear, or truncate operation.
 > - Not thread-safe — concurrent modifications require external synchronization.
+
+
+### `any_all.h`
+> Predicate testing over sequences — existential and universal quantification. Short-circuits on first match or failure. No allocation, O(1) space.
+
+#### Generic Interface
+
+**`bool algo_any(const void* base, usize len, usize elem_size, algo_pred_fn pred, void* ctx)`**
+Returns `true` if any element satisfies the predicate. Short-circuits on first match.
+```c
+algo_any(arr, 6, sizeof(int), is_negative, NULL)  // → true if any < 0
+```
+
+**`bool algo_all(const void* base, usize len, usize elem_size, algo_pred_fn pred, void* ctx)`**
+Returns `true` if all elements satisfy the predicate. Short-circuits on first failure.
+```c
+algo_all(arr, 6, sizeof(int), is_positive, NULL)  // → false if any <= 0
+```
+
+Both return `false` immediately if `base == NULL`, `pred == NULL`, `len == 0`, or `elem_size == 0`.
+
+#### Typed Macros
+
+**`ALGO_ANY_TYPED(items, len, Type, pred, ctx)`**
+Type-safe ANY — automatically passes `sizeof(Type)`.
+
+**`ALGO_ALL_TYPED(items, len, Type, pred, ctx)`**
+Type-safe ALL — automatically passes `sizeof(Type)`.
+```c
+ALGO_ANY_TYPED(arr, 6, int, is_negative, NULL)
+ALGO_ALL_TYPED(arr, 6, int, is_positive, NULL)
+```
+
+#### Slice Variants — `DEFINE_ALGO_ANY_ALL(type)`
+
+Requires `DEFINE_SLICE(type)`. Generates:
+```c
+bool algo_any_slice_##type(slice_##type sv, algo_pred_fn pred, void* ctx)
+bool algo_all_slice_##type(slice_##type sv, algo_pred_fn pred, void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+DEFINE_ALGO_ANY_ALL(int)
+
+slice_int sv = slice_int_from(arr, 6);
+algo_any_slice_int(sv, is_negative, NULL)
+algo_all_slice_int(sv, is_positive, NULL)
+```
+
+> **Known Limitations:**
+> - Both return `false` for empty sequences — no vacuous truth for `algo_all`.
+> - `elem_size == 0` triggers `require_msg` — always-on panic.
+> - Predicates receive a `const void*` — cast inside the predicate.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+### `filter.h`
+> Copies elements matching a predicate into a caller-provided output buffer. Preserves relative order (stable). Truncates safely when output is full. No allocation, O(n) time.
+
+#### Generic Interface
+
+**`usize algo_filter(const void* base, usize len, usize elem_size, algo_pred_fn pred, void* ctx, void* out, usize out_cap)`**
+Iterates all input elements. Copies matching ones into `out`. Stops writing when `out_cap` is reached but continues iterating input.
+```c
+int in[] = {-1, 2, -3, 4, 0, 5};
+int out[6];
+usize n = algo_filter(in, 6, sizeof(int), is_positive, NULL, out, 6);
+// n = 3, out = {2, 4, 5}
+```
+
+Returns `0` if `base == NULL`, `pred == NULL`, `out == NULL`, `len == 0`, `elem_size == 0`, or `out_cap == 0`.
+
+#### Typed Macro
+
+**`ALGO_FILTER_TYPED(out, out_cap, in, in_len, Type, pred, ctx)`**
+Type-safe filter — automatically passes `sizeof(Type)`. `out_cap` is explicit to avoid the `sizeof(array)/sizeof(array[0])` trap.
+```c
+usize n = ALGO_FILTER_TYPED(out, 6, in, 6, int, is_positive, NULL);
+// n = 3, out = {2, 4, 5}
+```
+
+#### Slice Variant — `DEFINE_ALGO_FILTER(type)`
+
+Requires `DEFINE_SLICE(type)`. Generates:
+```c
+usize algo_filter_slice_##type(slice_##type sv, type* out, usize out_cap, algo_pred_fn pred, void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+DEFINE_ALGO_FILTER(int)
+
+slice_int sv = slice_int_from(in, 6);
+usize n = algo_filter_slice_int(sv, out, 6, is_positive, NULL);
+// n = 3, out = {2, 4, 5}
+```
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `algo_filter` | O(n) — all elements checked | O(1) |
+
+> **Known Limitations:**
+> - Output is truncated silently when `out_cap` is reached — no error returned.
+> - `elem_size == 0` triggers `require_msg` — always-on panic.
+> - Input and output buffers must not overlap.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+### `find.h`
+> Locate the first element in a sequence matching a predicate. Short-circuits on first match. Returns index and/or pointer to match. Slice variants return `option_##type`.
+
+#### Generic Interface
+
+**`bool algo_find(const void* base, usize len, usize elem_size, algo_pred_fn pred, void* ctx, usize* out_index, const void** out_elem)`**
+Linear search with short-circuit on first match. Both `out_index` and `out_elem` are optional — pass `NULL` to ignore either.
+```c
+usize idx;
+const void* elem;
+bool found = algo_find(arr, 4, sizeof(int), is_negative, NULL, &idx, &elem);
+if (found) printf("Found at index %zu: %d\n", idx, *(const int*)elem);
+```
+
+Returns `false` immediately if `base == NULL`, `pred == NULL`, `len == 0`, or `elem_size == 0`.
+
+#### Typed Macro
+
+**`ALGO_FIND_TYPED(base, len, Type, pred, ctx, out_index, out_elem_ptr)`**
+Type-safe find — avoids `void**` cast at call site. `out_elem_ptr` is `const Type**`.
+```c
+const int* p = NULL;
+usize idx;
+if (ALGO_FIND_TYPED(arr, 4, int, is_negative, NULL, &idx, &p)) {
+    printf("Found at index %zu: %d\n", idx, *p);
+}
+```
+
+#### Slice Variants — `DEFINE_ALGO_FIND(type)`
+
+Requires `DEFINE_SLICE(type)` and `CANON_OPTION(type)`. Generates:
+```c
+option_##type algo_find_slice_##type(slice_##type sv, algo_pred_fn pred, void* ctx)
+usize         algo_find_index_slice_##type(slice_##type sv, algo_pred_fn pred, void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+CANON_OPTION(int)
+DEFINE_ALGO_FIND(int)
+
+slice_int sv = slice_int_from(arr, 4);
+
+option_int opt = algo_find_slice_int(sv, is_negative, NULL);
+if (opt.has_value) printf("Found: %d\n", opt.value);
+
+usize idx = algo_find_index_slice_int(sv, is_negative, NULL);
+if (idx != CANON_USIZE_MAX) printf("Found at index: %zu\n", idx);
+```
+
+#### Performance
+
+| Operation | Time | Short-circuit |
+|---|---|---|
+| `algo_find` | O(k) best, O(n) worst | ✅ stops at first match |
+
+> **Known Limitations:**
+> - `algo_find_index_slice_##type` returns `CANON_USIZE_MAX` when not found — check before use.
+> - `out_index` and `out_elem` are not modified on failure.
+> - `elem_size == 0` triggers `require_msg` — always-on panic.
+> - `CANON_OPTION(type)` must be instantiated before `DEFINE_ALGO_FIND` — missing it produces cryptic compile errors.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+### `fold.h`
+> Functional reduction of sequences to single values (fold/reduce). Supports infallible and fallible variants. Accumulator is caller-owned and caller-initialized. No allocation, O(n) time.
+
+#### Typed Macros
+
+**`ALGO_FOLD(acc_ptr, array, len, Type, fold_fn, ctx)`**
+Infallible fold — applies `fold_fn` to each element, accumulating into `*acc_ptr`. No-op if any pointer is NULL.
+```c
+void sum_ints(int* acc, const int* elem, void* ctx) { *acc += *elem; }
+
+int numbers[] = {1, 2, 3, 4, 5};
+int total = 0;
+ALGO_FOLD(&total, numbers, 5, int, sum_ints, NULL);
+// total = 15
+```
+
+**`ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx)`** *(GNU C / C23 only)*
+Fallible fold — stops immediately on first error. Returns `result_bool_Error`.
+Disable with `#define CANON_NO_GNU_EXTENSIONS` to use C99 fallback.
+```c
+result_bool_Error sum_positive(int* acc, const int* elem, void* ctx) {
+    if (*elem < 0) return result_bool_Error_err(ERR_INVALID_ARG);
+    *acc += *elem;
+    return result_bool_Error_ok(true);
+}
+
+int vals[] = {1, 2, -3, 4};
+int sum = 0;
+result_bool_Error r = ALGO_FOLD_RESULT(&sum, vals, 4, int, sum_positive, NULL);
+// stopped at index 2, sum = 3
+```
+
+#### Vec Convenience Macros
+
+**`ALGO_FOLD_VEC(acc_ptr, vec, Type, fold_fn, ctx)`**
+Infallible fold over any container with `.items` and `.len` fields.
+
+**`ALGO_FOLD_RESULT_VEC(acc_ptr, vec, Type, fold_fn, ctx)`**
+Fallible fold over any container with `.items` and `.len` fields.
+```c
+ALGO_FOLD_VEC(&total, my_vec, int, sum_ints, NULL);
+```
+
+#### Slice Variants — `DEFINE_ALGO_FOLD(type)`
+
+Requires `DEFINE_SLICE(type)`. Generates:
+```c
+void             algo_fold_slice_##type(void* acc_ptr, slice_##type sv, void (*fn)(void*, const type*, void*), void* ctx)
+result_bool_Error algo_fold_result_slice_##type(void* acc_ptr, slice_##type sv, result_bool_Error (*fn)(void*, const type*, void*), void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+DEFINE_ALGO_FOLD(int)
+
+int arr[] = {1, 2, 3, 4, 5};
+slice_int sv = slice_int_from(arr, 5);
+int total = 0;
+algo_fold_slice_int(&total, sv, sum_ints, NULL);
+// total = 15
+```
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `ALGO_FOLD` | O(n) | O(1) |
+| `ALGO_FOLD_RESULT` | O(k) best, O(n) worst | O(1) |
+
+> **Known Limitations:**
+> - `ALGO_FOLD_RESULT` requires GNU C statement expressions or C23 — use `#define CANON_NO_GNU_EXTENSIONS` for C99 fallback.
+> - Accumulator may contain a partial result on error — always check the `Result` before using it.
+> - Caller must initialize `*acc_ptr` before calling — functions do not reset it.
+> - `CANON_RESULT(bool, Error)` is instantiated automatically inside `fold.h` — do not instantiate it again in the same translation unit.
+> - Not thread-safe if the array or accumulator is being modified concurrently.
+
+
+### `map.h`
+> Element-wise transformations over sequences. Supports same-type and cross-type mapping. Output buffer is caller-provided. No allocation, O(n) time.
+
+#### Typed Macros
+
+**`ALGO_MAP_TYPED(out_array, in_array, len, OutType, InType, fn)`**
+Maps each element of `in_array` through `fn` into `out_array`. Input and output types may differ. No-op if any pointer is NULL.
+```c
+void to_double(double* out, const int* in) { *out = (double)(*in); }
+
+int input[] = {1, 2, 3, 4, 5};
+double output[5];
+ALGO_MAP_TYPED(output, input, 5, double, int, to_double);
+// output = {1.0, 2.0, 3.0, 4.0, 5.0}
+```
+
+**`ALGO_MAP_INPLACE(array, len, Type, fn)`**
+Transforms each element of `array` in place. Original values are overwritten.
+```c
+void increment(int* elem) { (*elem)++; }
+
+int arr[] = {10, 20, 30};
+ALGO_MAP_INPLACE(arr, 3, int, increment);
+// arr = {11, 21, 31}
+```
+
+#### Vec Convenience Macros
+
+**`ALGO_MAP_VEC(out_vec, in_vec, OutType, InType, fn)`**
+Maps between two containers with `.items` and `.len` fields. Processes `min(out_vec.len, in_vec.len)` elements.
+
+**`ALGO_MAP_INPLACE_VEC(vec, Type, fn)`**
+In-place map over a container with `.items` and `.len` fields.
+```c
+ALGO_MAP_VEC(output_vec, input_vec, double, int, to_double);
+ALGO_MAP_INPLACE_VEC(my_vec, int, increment);
+```
+
+#### Slice Variants — `DEFINE_ALGO_MAP(in_type, out_type)`
+
+Requires `DEFINE_SLICE(in_type)` and `DEFINE_SLICE(out_type)`. Generates:
+```c
+void algo_map_slice_##in_type##_##out_type(slice_##out_type out_sv, slice_##in_type in_sv, void (*fn)(out_type*, const in_type*))
+void algo_map_inplace_slice_##in_type(slice_##in_type sv, void (*fn)(in_type*))
+```
+```c
+DEFINE_SLICE(int)
+DEFINE_SLICE(double)
+DEFINE_ALGO_MAP(int, double)
+
+int arr[] = {1, 2, 3, 4, 5};
+double result[5];
+slice_int sv_in = slice_int_from(arr, 5);
+slice_double sv_out = slice_double_from(result, 5);
+
+algo_map_slice_int_double(sv_out, sv_in, to_double);
+// result = {1.0, 2.0, 3.0, 4.0, 5.0}
+
+// In-place (same type)
+DEFINE_ALGO_MAP(int, int)
+algo_map_inplace_slice_int(sv_in, increment);
+```
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `ALGO_MAP_TYPED` | O(n) | O(1) |
+| `ALGO_MAP_INPLACE` | O(n) | O(1) |
+
+> **Known Limitations:**
+> - `ALGO_MAP_TYPED` does not check if `out_array` has sufficient capacity — caller must ensure it.
+> - `ALGO_MAP_INPLACE` overwrites original data — use `ALGO_MAP_TYPED` if the original must be preserved.
+> - `ALGO_MAP_VEC` uses `min(out_vec.len, in_vec.len)` — set `out_vec.len` before calling to control how many elements are processed.
+> - `DEFINE_ALGO_MAP(in_type, out_type)` generates `algo_map_inplace_slice_##in_type` regardless of `out_type` — calling it twice with the same `in_type` causes duplicate definition errors.
+> - Not thread-safe if arrays are being modified concurrently.
+
+
+### `reverse.h`
+> In-place sequence reversal using two-pointer technique. Supports palindrome checking. No allocation, O(n) time, O(1) space.
+
+#### Generic Interface
+
+**`void algo_reverse(void* array, usize len, usize elem_size)`**
+Reverses elements in-place. Uses a fixed 256-byte stack buffer for swapping — no heap allocation.
+```c
+int scores[] = {10, 20, 30, 40, 50};
+algo_reverse(scores, 5, sizeof(int));
+// scores = {50, 40, 30, 20, 10}
+```
+
+Does nothing if `array == NULL` or `len < 2`.
+
+**`bool algo_is_palindrome(const void* array, usize len, usize elem_size, algo_cmp_fn cmp, void* ctx)`**
+Returns `true` if the array reads the same forwards and backwards. Non-destructive.
+```c
+int arr[] = {1, 2, 3, 2, 1};
+bool is_pal = algo_is_palindrome(arr, 5, sizeof(int), algo_cmp_int, NULL);
+// is_pal = true
+```
+
+Returns `true` for `NULL`, empty, or single-element arrays.
+
+#### Typed Macros
+
+**`ALGO_REVERSE_TYPED(array, len, Type)`**
+Type-safe in-place reverse — automatically passes `sizeof(Type)`.
+```c
+ALGO_REVERSE_TYPED(scores, 5, int);
+```
+
+**`ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx)`** *(GNU C / C23 — evaluates to `bool`)*
+Type-safe palindrome check. C99 fallback available when `CANON_NO_GNU_EXTENSIONS` is defined.
+```c
+bool result = ALGO_IS_PALINDROME_TYPED(arr, 5, int, algo_cmp_int, NULL);
+```
+
+#### Slice Variants — `DEFINE_ALGO_REVERSE(type)`
+
+Requires `DEFINE_SLICE(type)`. Generates:
+```c
+void algo_reverse_slice_##type(slice_##type sv)
+bool algo_is_palindrome_slice_##type(slice_##type sv, algo_cmp_fn cmp, void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+DEFINE_ALGO_REVERSE(int)
+
+int arr[] = {1, 2, 3, 4, 5};
+slice_int sv = slice_int_from(arr, 5);
+
+algo_reverse_slice_int(sv);
+// arr = {5, 4, 3, 2, 1}
+
+bool is_pal = algo_is_palindrome_slice_int(sv, algo_cmp_int, NULL);
+```
+
+#### Swap Buffer
+```c
+// Default: 256 bytes — handles most types
+// Override before including:
+#define ALGO_REVERSE_SWAP_BUF_SIZE 512
+#include "algo/reverse.h"
+```
+
+`elem_size > ALGO_REVERSE_SWAP_BUF_SIZE` triggers `require_msg` — always-on panic.
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `algo_reverse` | O(n) — ⌊n/2⌋ swaps | O(1) stack buffer |
+| `algo_is_palindrome` | O(n/2) | O(1) |
+
+> **Known Limitations:**
+> - `elem_size` must not exceed `ALGO_REVERSE_SWAP_BUF_SIZE` — triggers `require_msg` if violated.
+> - `ALGO_IS_PALINDROME_TYPED` uses GNU C statement expressions in its expression form — use `#define CANON_NO_GNU_EXTENSIONS` for C99 fallback.
+> - Slice reversal modifies the underlying array — the slice is a non-owning view, not a copy.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+### `search.h`
+> Binary search utilities for sorted sequences. O(log n) lookup. Requires input to be sorted with the same comparator used for searching.
+
+#### Generic Interface
+
+**`usize algo_lower_bound(const void* array, usize len, usize elem_size, const void* key, algo_cmp_fn cmp, void* ctx)`**
+Returns the index of the first exact match, or `CANON_USIZE_MAX` if not found. Array must be sorted.
+```c
+int numbers[] = {1, 3, 5, 7, 9, 11};
+int key = 7;
+usize idx = algo_lower_bound(numbers, 6, sizeof(int), &key, algo_cmp_int, NULL);
+// idx = 3
+```
+
+Returns `CANON_USIZE_MAX` if `array == NULL`, `key == NULL`, `cmp == NULL`, or `len == 0`.
+
+#### Typed Macro
+
+**`ALGO_LOWER_BOUND_TYPED(array, len, Type, key, cmp, ctx)`**
+Type-safe lower bound — automatically passes `sizeof(Type)`.
+```c
+usize idx = ALGO_LOWER_BOUND_TYPED(numbers, 6, int, &key, algo_cmp_int, NULL);
+```
+
+#### Slice Variant — `DEFINE_ALGO_SEARCH(type)`
+
+Requires `DEFINE_SLICE(type)` and `CANON_OPTION(type)`. Generates:
+```c
+usize      algo_lower_bound_slice_##type(slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
+bool       algo_binary_search_slice_##type(slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+CANON_OPTION(int)
+DEFINE_ALGO_SEARCH(int)
+
+slice_int sv = slice_int_from(numbers, 6);
+usize idx = algo_lower_bound_slice_int(sv, &key, algo_cmp_int, NULL);
+bool found = algo_binary_search_slice_int(sv, &key, algo_cmp_int, NULL);
+```
+
+#### Search Variants Explained
+```
+Array: [1, 2, 2, 2, 5, 7, 9]  searching for key=2
+        0  1  2  3  4  5  6
+
+lower_bound(2) = 1  — first index where array[i] >= key
+upper_bound(2) = 4  — first index where array[i] > key
+equal_range(2) = [1, 4)  — all elements equal to key
+binary_search(2) = true  — exact match exists
+```
+
+#### Important: Arrays Must Be Sorted
+
+Always use the **same comparator** for sorting and searching:
+```c
+// ✓ Correct
+algo_sort(arr, len, sizeof(int), algo_cmp_int, NULL, tmp);
+algo_lower_bound(arr, len, sizeof(int), &key, algo_cmp_int, NULL);
+
+// ✗ Wrong — different comparators produce incorrect results
+algo_sort(arr, len, sizeof(int), algo_cmp_int, NULL, tmp);
+algo_lower_bound(arr, len, sizeof(int), &key, algo_cmp_int_desc, NULL);
+```
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `algo_lower_bound` | O(log n) | O(1) |
+
+> **Known Limitations:**
+> - Array must be sorted with the same comparator — unsorted input produces incorrect results, not crashes.
+> - Returns `CANON_USIZE_MAX` for both "not found" and invalid input — callers cannot distinguish the two.
+> - `elem_size == 0` triggers `require_msg` — always-on panic.
+> - `cmp == NULL` triggers `require_msg` — always-on panic.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+### `sort.h`
+> Stable in-place hybrid sort — insertion sort for small arrays (len < 16), merge sort for large ones (len ≥ 16). Caller provides temp buffer for merge sort. No internal allocation.
+
+#### Generic Interface
+
+**`void algo_sort(void* base, usize len, usize elem_size, algo_cmp_fn cmp, void* ctx, void* temp_buffer)`**
+Sorts array in-place. Pass `temp_buffer` of `len * elem_size` bytes for merge sort. Pass `NULL` to fall back to O(n²) insertion sort for any length.
+```c
+int arr[] = {64, 34, 25, 12, 22, 11, 90};
+int tmp[7];
+algo_sort(arr, 7, sizeof(int), algo_cmp_int, NULL, tmp);
+// arr = {11, 12, 22, 25, 34, 64, 90}
+```
+
+Does nothing if `base == NULL`, `len < 2`, `cmp == NULL`, or `elem_size == 0`.
+
+**`bool algo_is_sorted(const void* base, usize len, usize elem_size, algo_cmp_fn cmp, void* ctx)`**
+Returns `true` if array is sorted according to `cmp`. Non-destructive.
+```c
+bool sorted = algo_is_sorted(arr, 7, sizeof(int), algo_cmp_int, NULL);
+// sorted = true
+```
+
+Returns `true` for `NULL`, empty, or single-element arrays.
+
+#### Typed Macros
+
+**`ALGO_SORT_TYPED(base, len, Type, cmp, ctx)`**
+Type-safe sort with automatic stack temp buffer. Uses merge sort for `len <= ALGO_SORT_STACK_TEMP_MAX` (default 128), falls back to insertion sort for larger arrays.
+```c
+ALGO_SORT_TYPED(arr, 7, int, algo_cmp_int, NULL);
+```
+
+**`ALGO_IS_SORTED_TYPED(base, len, Type, cmp, ctx)`**
+Type-safe sorted check — evaluates to `bool`. C99-portable.
+```c
+bool sorted = ALGO_IS_SORTED_TYPED(arr, 7, int, algo_cmp_int, NULL);
+```
+
+#### Stack Temp Buffer Limit
+```c
+// Default: 128 elements
+// Override before including:
+#define ALGO_SORT_STACK_TEMP_MAX 256
+#include "algo/sort.h"
+```
+
+For arrays larger than `ALGO_SORT_STACK_TEMP_MAX`, call `algo_sort()` directly with a heap or arena buffer.
+
+#### Slice Variants — `DEFINE_ALGO_SORT(type)`
+
+Requires `DEFINE_SLICE(type)`. Generates:
+```c
+void algo_sort_slice_##type(slice_##type sv, algo_cmp_fn cmp, void* ctx, type* temp, usize temp_cap)
+bool algo_is_sorted_slice_##type(slice_##type sv, algo_cmp_fn cmp, void* ctx)
+```
+
+If `temp == NULL` or `temp_cap < sv.len`, falls back to insertion sort.
+```c
+DEFINE_SLICE(int)
+DEFINE_ALGO_SORT(int)
+
+int arr[] = {64, 34, 25, 12, 22, 11, 90};
+int tmp[7];
+slice_int sv = slice_int_from(arr, 7);
+
+algo_sort_slice_int(sv, algo_cmp_int, NULL, tmp, 7);
+// arr = {11, 12, 22, 25, 34, 64, 90}
+
+bool sorted = algo_is_sorted_slice_int(sv, algo_cmp_int, NULL);
+```
+
+#### Algorithm Selection
+
+| Condition | Algorithm | Time | Stable |
+|---|---|---|---|
+| `len < 2` | no-op | O(1) | — |
+| `len < 16` | insertion sort | O(n²) worst, O(n) best | ✅ |
+| `len ≥ 16`, `temp != NULL` | merge sort | O(n log n) | ✅ |
+| `len ≥ 16`, `temp == NULL` | insertion sort fallback | O(n²) | ✅ |
+
+> **Known Limitations:**
+> - `ALGO_SORT_TYPED` falls back to insertion sort for arrays larger than `ALGO_SORT_STACK_TEMP_MAX` — call `algo_sort()` directly with a caller-managed buffer for large arrays.
+> - `temp_buffer` and `base` must not overlap — undefined behavior if they do.
+> - Inner swap uses a fixed 256-byte stack buffer — elements larger than 256 bytes fall back to a byte-by-byte loop.
+> - Recursion depth is O(log n) — not suitable for extremely deep recursion-constrained environments.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+### `unique.h`
+> Removes consecutive duplicate elements in-place. Single linear pass, O(n) time, O(1) space. Most powerful after sorting — enables full deduplication.
+
+#### Generic Interface
+
+**`usize algo_unique(void* array, usize len, usize elem_size, algo_cmp_fn cmp, void* ctx)`**
+Collapses consecutive equal elements into one. Returns the new logical length of the unique prefix. Elements beyond the returned length contain stale data.
+```c
+int arr[] = {1, 1, 2, 2, 3, 3, 5, 5};
+usize new_len = algo_unique(arr, 8, sizeof(int), algo_cmp_int, NULL);
+// arr[0..new_len-1] = {1, 2, 3, 5}, new_len = 4
+```
+
+Returns `len` immediately if `array == NULL` or `len <= 1`.
+
+#### Full Deduplication Pattern
+
+Sort first, then unique — always use the same comparator:
+```c
+int arr[] = {5, 2, 3, 2, 1, 3, 5, 5};
+int tmp[8];
+
+// Step 1: sort
+algo_sort(arr, 8, sizeof(int), algo_cmp_int, NULL, tmp);
+// arr = {1, 1, 2, 2, 3, 3, 5, 5, 5}
+
+// Step 2: unique
+usize new_len = algo_unique(arr, 8, sizeof(int), algo_cmp_int, NULL);
+// arr[0..new_len-1] = {1, 2, 3, 5}, new_len = 4
+```
+
+#### Typed Macros
+
+**`ALGO_UNIQUE_TYPED(array, len, Type, cmp, ctx)`** *(GNU C / C23 — returns new length)*
+Type-safe unique — automatically passes `sizeof(Type)`.
+```c
+usize new_len = ALGO_UNIQUE_TYPED(arr, 5, int, algo_cmp_int, NULL);
+```
+
+C99 fallback when `CANON_NO_GNU_EXTENSIONS` is defined — updates length via pointer:
+```c
+usize len = 5;
+ALGO_UNIQUE_TYPED(arr, &len, int, algo_cmp_int, NULL);
+// len updated in place
+```
+
+#### Slice Variant — `DEFINE_ALGO_UNIQUE(type)`
+
+Requires `DEFINE_SLICE(type)`. Generates:
+```c
+usize algo_unique_slice_##type(slice_##type sv, algo_cmp_fn cmp, void* ctx)
+```
+```c
+DEFINE_SLICE(int)
+DEFINE_ALGO_UNIQUE(int)
+
+slice_int sv = slice_int_from(arr, 8);
+usize new_len = algo_unique_slice_int(sv, algo_cmp_int, NULL);
+// use sv.ptr[0..new_len-1]
+```
+
+#### Performance
+
+| Operation | Time | Space |
+|---|---|---|
+| `algo_unique` | O(n) — single pass | O(1) |
+
+> **Known Limitations:**
+> - Removes **consecutive** duplicates only — sort first for full deduplication.
+> - Elements beyond the returned length contain stale data — do not read them.
+> - `cmp == NULL` triggers `require_msg` — always-on panic.
+> - `elem_size == 0` triggers `require_msg` — always-on panic.
+> - `ALGO_UNIQUE_TYPED` requires GNU C statement expressions or C23 for the return-value form — use `#define CANON_NO_GNU_EXTENSIONS` for C99 fallback.
+> - Not thread-safe if the array is being modified concurrently.
+
+
+
+
+
+
+
+
+
 
 
