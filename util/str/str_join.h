@@ -4,6 +4,7 @@
 #include "core/primitives/types.h"       // usize, bool
 #include "core/memory.h"                 // str_len, mem_copy
 #include "semantics/option/option.h"  // option_charp (adjust path if needed)
+#include "util/str/string.h"
 
 /**
  * @file util/str_join.h
