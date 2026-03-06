@@ -1,13 +1,13 @@
 #ifndef CANON_UTIL_STR_JOIN_H
 #define CANON_UTIL_STR_JOIN_H
 
-#include "core/primitives/types.h"       // usize, bool
-#include "core/memory.h"                 // str_len, mem_copy
-#include "semantics/option/option.h"  // option_charp (adjust path if needed)
+#include "core/primitives/types.h"
+#include "core/memory.h"
+#include "semantics/option/option.h"
 #include "util/str/string.h"
 
 /**
- * @file util/str_join.h
+ * @file util/str/str_join.h
  * @brief Safe, explicit and flexible string joining utilities
  *
  * Provides efficient string concatenation operations with multiple allocation
@@ -17,7 +17,7 @@
  *
  * Portability:
  * - Requires C99 or later
- * - Depends only on Canon-C core modules (types, memory, option)
+ * - Depends only on Canon-C core modules (types, memory, option, string)
  * - No direct standard library string functions used
  * - No platform-specific features
  * - Works on any architecture
@@ -31,7 +31,6 @@
  * - Space complexity: O(1) for buffer-based, O(n) for allocating variants
  * - Single-pass concatenation (no redundant copying)
  * - Allocation variants: one mem_alloc, one length calculation pass
- * - Split operations: O(n) single pass through input
  * - No hidden allocations in non-allocating functions
  *
  * Core ideas:
@@ -60,7 +59,7 @@
  *    - Function: str_alloc_join()
  *    - Allocates exact size needed
  *    - Returns: option_charp (Some or None)
- *    - Success: caller MUST free with str_free() or mem_free()
+ *    - Success: caller MUST free with str_free()
  *
  * Joining behavior:
  * ────────────────────────────────────────────────────────────────────────────
@@ -76,14 +75,19 @@
  * - NULL in parts[] array → error (returns false/None)
  * - NULL separator → treated as empty string ""
  *
- * Buffer sizing and truncation:
+ * Buffer sizing:
  * ────────────────────────────────────────────────────────────────────────────
- * Buffer-based functions (str_join) require accurate size calculation:
- *
  * Required size = sum(str_len(parts[i])) + (count-1) * str_len(sep) + 1
  *
  * The "+1" is for the null terminator. If buffer too small, function returns
  * false and sets dest[0] = '\0'. NO partial results.
+ *
+ * str_rejoin constraint:
+ * ────────────────────────────────────────────────────────────────────────────
+ * str_rejoin requires null-terminated parts. It must NOT be used with raw
+ * borrowed views from str_split() — those are not null-terminated. Only
+ * pass null-terminated string arrays to str_rejoin. See str_split.h for
+ * the borrowed view pattern and its constraints.
  *
  * Error handling:
  * ────────────────────────────────────────────────────────────────────────────
@@ -104,56 +108,55 @@
  * - NULL element in parts[] array
  * - Buffer too small (buffer-based)
  * - Allocation failure (heap-based)
+ *
+ * @sa util/str/string.h  — option_charp, str_alloc_copy, str_free
+ * @sa util/str/str_split.h — splitting utilities (borrowed views)
  */
+
 /* ────────────────────────────────────────────────────────────────────────────
    Zero-allocation join — caller provides buffer
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Joins array of strings into caller-provided buffer (no allocation)
+ * @brief Joins array of null-terminated strings into caller-provided buffer
  *
  * Concatenates strings with separator between elements, writing into
- * caller-provided buffer. Never allocates memory.
+ * caller-provided buffer. Never allocates memory. All-or-nothing —
+ * on failure sets dest[0] = '\0' and returns false.
  *
- * @param dest Writable destination buffer
+ * @param dest      Writable destination buffer
  * @param dest_size Size of dest buffer in bytes (including '\0')
- * @param parts Array of null-terminated input strings
- * @param count Number of strings in parts (0 is valid)
- * @param sep Separator string (NULL = empty "")
+ * @param parts     Array of null-terminated input strings — must not be NULL
+ * @param count     Number of strings in parts (0 is valid → empty string)
+ * @param sep       Separator string (NULL treated as empty "")
  * @return true if join succeeded and fit in buffer
- *         false if buffer too small, invalid input, or NULL parts
+ *         false if buffer too small, invalid input, or NULL element in parts
  */
 static inline bool str_join(
-    char* dest,
-    usize dest_size,
+    char*        dest,
+    usize        dest_size,
     const char** parts,
-    usize count,
-    const char* sep
+    usize        count,
+    const char*  sep
 ) {
-    // Validate destination buffer
-    if (!dest || dest_size == 0) {
-        return false;
-    }
+    if (!dest || dest_size == 0) return false;
 
-    // Handle empty array → empty string
     if (count == 0) {
         dest[0] = '\0';
         return true;
     }
 
-    // Validate parts array
     if (!parts) {
         dest[0] = '\0';
         return false;
     }
 
-    // Treat NULL separator as empty
     sep = sep ? sep : "";
     const usize sep_len = str_len(sep);
 
     usize pos = 0;
 
     for (usize i = 0; i < count; ++i) {
-        // Check for NULL part
         if (!parts[i]) {
             dest[0] = '\0';
             return false;
@@ -161,30 +164,23 @@ static inline bool str_join(
 
         const usize part_len = str_len(parts[i]);
 
-        // Space needed: part + separator (if not last) + null terminator
         usize needed = part_len + 1;
-        if (i + 1 < count && sep_len > 0) {
-            needed += sep_len;
-        }
+        if (i + 1 < count && sep_len > 0) needed += sep_len;
 
-        // Check remaining space
         if (pos + needed > dest_size) {
             dest[0] = '\0';
             return false;
         }
 
-        // Copy part
         mem_copy(dest + pos, parts[i], part_len);
         pos += part_len;
 
-        // Add separator if not last
         if (i + 1 < count && sep_len > 0) {
             mem_copy(dest + pos, sep, sep_len);
             pos += sep_len;
         }
     }
 
-    // Null-terminate
     dest[pos] = '\0';
     return true;
 }
@@ -192,138 +188,145 @@ static inline bool str_join(
 /* ────────────────────────────────────────────────────────────────────────────
    Allocating join — heap allocated result
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Allocates and joins strings — caller owns the result
+ * @brief Allocates and joins null-terminated strings — caller owns the result
  *
  * Allocates exact size needed and joins strings into it.
+ * Caller MUST free the result with str_free().
  *
  * @param parts Array of null-terminated input strings
  * @param count Number of strings to join (0 returns empty string)
- * @param sep Separator string (NULL = empty "")
+ * @param sep   Separator string (NULL treated as empty "")
  * @return Some(heap-allocated joined string) on success
- *         None on invalid input or allocation failure
+ *         None on NULL element in parts, or allocation failure
  */
 static inline option_charp str_alloc_join(
     const char** parts,
-    usize count,
-    const char* sep
+    usize        count,
+    const char*  sep
 ) {
-    // Handle empty array → empty string
-    if (!parts || count == 0) {
-        return str_alloc_copy("");
-    }
+    if (!parts || count == 0) return str_alloc_copy("");
 
-    // Treat NULL separator as empty
     sep = sep ? sep : "";
     const usize sep_len = str_len(sep);
 
-    // First pass: calculate exact size needed
-    usize total_len = 1;  // null terminator
+    usize total_len = 1; /* null terminator */
     for (usize i = 0; i < count; ++i) {
-        // Check for NULL part
-        if (!parts[i]) {
-            return option_charp_none();
-        }
+        if (!parts[i]) return option_charp_none();
         total_len += str_len(parts[i]);
-        if (i + 1 < count && sep_len > 0) {
-            total_len += sep_len;
-        }
+        if (i + 1 < count && sep_len > 0) total_len += sep_len;
     }
 
-    // Allocate exact size
     char* buffer = (char*)mem_alloc(total_len);
-    if (!buffer) {
-        return option_charp_none();
-    }
+    if (!buffer) return option_charp_none();
 
-    // Perform join
     if (str_join(buffer, total_len, parts, count, sep)) {
         return option_charp_some(buffer);
     }
 
-    // Should never reach here with correct size, but safety first
     mem_free(buffer);
     return option_charp_none();
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Split + join helpers (non-destructive transformations)
+   Split + rejoin helper
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Splits string by single character delimiter (non-allocating, borrowed views)
+ * @brief Splits a null-terminated string by delimiter into null-terminated parts
  *
- * Splits a string into an array of borrowed pointers (views) at delimiter
- * boundaries. Does not allocate or modify input.
+ * Unlike str_split() in str_split.h which returns borrowed (non-null-terminated)
+ * views, this function writes null-terminated copies into a caller-provided
+ * scratch buffer. This makes the parts safe to pass to str_join() and str_len().
  *
- * @param s Null-terminated input string
- * @param delim Single character delimiter
- * @param out_parts Buffer to store const char* pointers (views into s)
- * @param max_parts Size of out_parts
- * @return Actual number of parts found (may exceed max_parts)
+ * The scratch buffer holds all copied part data contiguously. Parts in
+ * out_parts point into scratch_buf — they are valid only as long as
+ * scratch_buf is valid and unmodified.
+ *
+ * @param s           Null-terminated input string
+ * @param delim       Single character delimiter
+ * @param out_parts   Buffer to store pointers to null-terminated parts
+ * @param max_parts   Capacity of out_parts
+ * @param scratch_buf Writable buffer to hold copied part data
+ * @param scratch_size Size of scratch_buf in bytes
+ * @return Number of parts found and written, or 0 on invalid input or
+ *         insufficient scratch space
  */
 static inline usize str_split_to_parts(
-    const char* s,
-    char delim,
+    const char*  s,
+    char         delim,
     const char** out_parts,
-    usize max_parts
+    usize        max_parts,
+    char*        scratch_buf,
+    usize        scratch_size
 ) {
-    if (!s || !out_parts || max_parts == 0) {
+    if (!s || !out_parts || max_parts == 0 || !scratch_buf || scratch_size == 0)
         return 0;
-    }
 
-    usize count = 0;
-    const char* current = s;
+    usize count     = 0;
+    usize scratch_pos = 0;
+    const char* p   = s;
 
-    while (*current) {
-        // Skip leading delimiters
-        while (*current == delim) {
-            ++current;
-        }
+    while (*p) {
+        while (*p == delim) ++p;
+        if (!*p) break;
 
-        // End after skipping delimiters
-        if (*current == '\0') {
-            break;
-        }
+        const char* start = p;
+        while (*p && *p != delim) ++p;
+        usize part_len = (usize)(p - start);
 
-        // Store pointer if space available
-        if (count < max_parts) {
-            out_parts[count] = current;
-        }
+        /* need part_len + 1 for null terminator in scratch */
+        if (scratch_pos + part_len + 1 > scratch_size) return 0;
+        if (count >= max_parts) return 0;
+
+        mem_copy(scratch_buf + scratch_pos, start, part_len);
+        scratch_buf[scratch_pos + part_len] = '\0';
+        out_parts[count] = scratch_buf + scratch_pos;
+        scratch_pos += part_len + 1;
         count++;
-
-        // Skip until next delimiter or end
-        while (*current && *current != delim) {
-            ++current;
-        }
     }
 
     return count;
 }
 
 /**
- * @brief Split string by delimiter and rejoin with new separator
+ * @brief Splits string by delimiter and rejoins with a new separator
  *
- * Combines splitting and joining in one operation.
+ * Combines splitting and joining in one operation. Parts are null-terminated
+ * copies written into scratch_buf before being joined — safe to pass to
+ * str_join() internally.
  *
- * @param s Input string
- * @param delim Original delimiter
- * @param parts_buf Temporary buffer for split parts
- * @param max_parts Size of parts_buf
- * @param dest Output buffer
- * @param dest_size Size of dest
- * @param new_sep New separator (NULL = empty)
- * @return true if rejoin succeeded, false on truncation or invalid input
+ * @param s           Null-terminated input string
+ * @param delim       Original delimiter character
+ * @param parts_buf   Temporary buffer for split part pointers
+ * @param max_parts   Capacity of parts_buf
+ * @param scratch_buf Writable buffer to hold null-terminated part copies
+ * @param scratch_size Size of scratch_buf in bytes
+ * @param dest        Output buffer for joined result
+ * @param dest_size   Size of dest in bytes
+ * @param new_sep     New separator string (NULL treated as empty "")
+ * @return true if rejoin succeeded and fit in dest
+ *         false on invalid input, insufficient scratch, or dest overflow
  */
 static inline bool str_rejoin(
-    const char* s,
-    char delim,
+    const char*  s,
+    char         delim,
     const char** parts_buf,
-    usize max_parts,
-    char* dest,
-    usize dest_size,
-    const char* new_sep
+    usize        max_parts,
+    char*        scratch_buf,
+    usize        scratch_size,
+    char*        dest,
+    usize        dest_size,
+    const char*  new_sep
 ) {
-    usize count = str_split_to_parts(s, delim, parts_buf, max_parts);
+    usize count = str_split_to_parts(
+        s, delim, parts_buf, max_parts, scratch_buf, scratch_size
+    );
+    if (count == 0) {
+        if (dest && dest_size > 0) dest[0] = '\0';
+        return false;
+    }
     return str_join(dest, dest_size, parts_buf, count, new_sep);
 }
 
