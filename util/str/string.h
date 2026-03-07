@@ -43,9 +43,9 @@
  *    - Returns bool (success/failure)
  *    - Zero allocations
  *
- * @sa util/str/split.h  — non-mutating string splitting
- * @sa util/str/join.h   — string joining
- * @sa util/str/view.h   — immutable borrowed string view
+ * @sa util/str/str_split.h  — non-mutating string splitting
+ * @sa util/str/str_join.h   — string joining
+ * @sa util/str/str_view.h   — immutable borrowed string view
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
