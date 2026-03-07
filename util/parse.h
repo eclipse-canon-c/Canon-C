@@ -1,22 +1,26 @@
 #ifndef CANON_UTIL_PARSE_H
 #define CANON_UTIL_PARSE_H
 
-#include "core/primitives/types.h"       // usize, bool, int64_t, uint64_t, double
-#include "../../semantics/result/result.h"   // result_*_Error (adjust path if needed)
-#include "../../semantics/error.h"           // ERR_PARSE_FAILED
+#include "core/primitives/types.h"
+#include "semantics/result/result.h"
+#include "semantics/error.h"
+#include <errno.h>
+#include <stdlib.h>
 
 /**
  * @file util/parse.h
  * @brief Safe, explicit and composable string-to-value parsing
  *
  * Provides robust string parsing functions for common numeric types with
- * modern Result-based error handling. Implements zero-allocation, const-correct
+ * Result-based error handling. Implements zero-allocation, const-correct
  * parsing with explicit error propagation and composable design patterns.
  *
  * Portability:
+ * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
- * - Depends only on Canon-C core modules (types, memory, result, error)
- * - Uses standard strto* functions (strtoll, strtoull, strtod) for correctness
+ * - Depends on Canon-C core modules (types, result, error)
+ * - Uses standard strto* functions (strtoll, strtoull, strtod) via <stdlib.h>
+ * - errno via <errno.h> — thread-local in C11/POSIX environments
  * - No platform-specific features
  * - Works on any architecture
  *
@@ -24,16 +28,16 @@
  * errno is thread-local in modern C (C11/POSIX).
  *
  * Performance:
+ * ────────────────────────────────────────────────────────────────────────────
  * - Time complexity: O(n) where n = number of digits/characters parsed
- * - Space complexity: O(1) - zero allocations, stack-only operation
- * - Parse operations: Single pass through input string
- * - No dynamic memory - all work done on stack
+ * - Space complexity: O(1) — zero allocations, stack-only operation
+ * - Single pass through input string
  * - Minimal overhead over raw strto* functions (thin wrapper)
  *
  * Core ideas:
  * ────────────────────────────────────────────────────────────────────────────
  * - Explicit over implicit — all errors returned as values (Result pattern)
- * - No errno checking required — failures encoded in Result type
+ * - No errno checking required by caller — failures encoded in Result type
  * - Zero allocations — purely computational, no heap involvement
  * - Const-correct — input strings never modified
  * - Prefix parsing — consume only what's valid, leave rest untouched
@@ -46,12 +50,12 @@
  * Result-based error handling:
  * ────────────────────────────────────────────────────────────────────────────
  * All functions return Result<T, Error>:
- * - Ok(value): Parsing succeeded, value is valid
- * - Err(ERR_PARSE_FAILED): Parsing failed (invalid format, overflow, etc.)
+ * - Ok(value):              parsing succeeded, value is valid
+ * - Err(ERR_PARSE_FAILED):  invalid format, overflow, or empty input
  *
  * Prefix parsing and endptr pattern:
  * ────────────────────────────────────────────────────────────────────────────
- * All parsing functions implement "prefix parsing" — they consume characters
+ * All parsing functions implement prefix parsing — they consume characters
  * from the beginning until they hit something invalid, then stop.
  *
  * The optional endptr parameter gets updated to point to the first character
@@ -61,52 +65,80 @@
  * ```c
  * const char* p = "123 456 789";
  * p = parse_skip_ws(p);
- * result_int64_t_Error r1 = parse_int64(p, &p);
+ * result_i64_Error r1 = parse_i64(p, &p);
  * p = parse_skip_ws(p);
- * result_int64_t_Error r2 = parse_int64(p, &p);
+ * result_i64_Error r2 = parse_i64(p, &p);
  * ```
  *
- * 2. VALIDATION (entire string consumed):
+ * 2. FULL STRING VALIDATION:
  * ```c
  * const char* end;
- * result_int64_t_Error r = parse_int64(str, &end);
- * if (result_is_ok(r) && *parse_skip_ws(end) == '\0') {
- *     // Entire string was valid number
+ * result_i64_Error r = parse_i64(str, &end);
+ * if (result_i64_Error_is_ok(r) && *parse_skip_ws(end) == '\0') {
+ *     // entire string was a valid number
  * }
  * ```
  *
- * Whitespace handling philosophy:
+ * Whitespace handling:
  * ────────────────────────────────────────────────────────────────────────────
  * Functions do NOT automatically skip leading whitespace.
  * Use parse_skip_ws() explicitly when needed.
  *
  * Number format support:
  * ────────────────────────────────────────────────────────────────────────────
- * Integer parsing (parse_int64, parse_uint64):
- * - Decimal, hexadecimal (0x), octal (0)
- * - Signs: + and - for signed (unsigned rejects -)
+ * Integer parsing (parse_i64, parse_u64):
+ * - Decimal, hexadecimal (0x), octal (0) via base-0 auto-detection
+ * - Signs: + and - accepted for signed; unsigned rejects leading -
  *
- * Floating-point parsing (parse_double):
+ * Floating-point parsing (parse_f64):
  * - Decimal, scientific notation, hex floats (C99)
  * - Special values: inf, -inf, nan
  * - Overflow → ±HUGE_VAL (still Ok), underflow → ±0.0 (still Ok)
+ *
+ * Canon-C type aliases used:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - i64  (int64_t)   — signed 64-bit integer
+ * - u64  (uint64_t)  — unsigned 64-bit integer
+ * - f64  (double)    — 64-bit floating point
+ *
+ * These aliases are defined in core/primitives/types.h and are used here
+ * instead of int64_t/uint64_t/double to satisfy CANON_RESULT name mangling
+ * requirements — type names must be valid C identifiers.
+ *
+ * NOT suitable for:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - Locale-aware parsing (uses C locale only)
+ * - Arbitrary-precision arithmetic
+ * - Signal handlers (strtoll/strtod not async-signal-safe)
  */
-/* ────────────────────────────────────────────────────────────────────────────
-   Result type aliases
-   ──────────────────────────────────────────────────────────────────────────── */
-CANON_C_DEFINE_RESULT(int64_t, Error)
-CANON_C_DEFINE_RESULT(uint64_t, Error)
-CANON_C_DEFINE_RESULT(double, Error)
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Internal helper — whitespace check (replaces isspace)
+   Result type instantiations
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Checks if a character is whitespace (C locale equivalent)
+ * i64, u64, f64 are Canon-C type aliases from core/primitives/types.h.
+ * They are used instead of int64_t/uint64_t/double because CANON_RESULT
+ * uses the type name for name mangling — the names must be valid C identifiers
+ * with no spaces or special characters.
+ */
+CANON_RESULT(i64, Error)
+CANON_RESULT(u64, Error)
+CANON_RESULT(f64, Error)
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Internal helper — whitespace check
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Checks if a character is ASCII whitespace
  *
  * Avoids <ctype.h> and locale dependency.
+ * Recognizes: space, tab, newline, carriage return, form feed, vertical tab.
+ *
+ * @remark Internal — use parse_skip_ws() at call sites.
  */
-static inline bool is_whitespace_char(char c) {
+static inline bool _parse_is_whitespace(char c) {
     switch (c) {
         case ' ': case '\t': case '\n': case '\r':
         case '\f': case '\v':
@@ -116,127 +148,136 @@ static inline bool is_whitespace_char(char c) {
     }
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   Whitespace utility
+   ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Skips leading whitespace characters
+ * @brief Advances pointer past leading whitespace characters
  *
- * Advances pointer until non-whitespace or end of string.
+ * Does not modify the string — returns a pointer into the original.
+ * NULL-safe — returns NULL if input is NULL.
  *
  * @param s Input string (may be NULL)
- * @return Pointer to first non-whitespace or '\0'
+ * @return Pointer to first non-whitespace character, or to '\0' at end
  */
 static inline const char* parse_skip_ws(const char* s) {
     if (!s) return s;
-    while (*s && is_whitespace_char(*s)) {
-        ++s;
-    }
+    while (*s && _parse_is_whitespace(*s)) ++s;
     return s;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
    Signed 64-bit integer parsing
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Parses signed 64-bit integer from string prefix
+ * @brief Parses a signed 64-bit integer from the start of a string
  *
- * Supports decimal, hex (0x), octal (0). Does NOT skip leading whitespace.
+ * Supports decimal, hexadecimal (0x/0X), and octal (0) via base-0
+ * auto-detection. Does NOT skip leading whitespace — use parse_skip_ws()
+ * first if needed.
  *
- * @param s Input string
- * @param endptr Optional: set to first unparsed character
- * @return Ok(parsed value) or Err(ERR_PARSE_FAILED)
+ * @param s       Null-terminated input string — must not be NULL
+ * @param endptr  Optional — set to first unparsed character on return;
+ *                set to s on failure
+ * @return Ok(i64)              on success
+ *         Err(ERR_PARSE_FAILED) on NULL/empty input, invalid format, or overflow
  */
-static inline result_int64_t_Error parse_int64(
-    const char* s,
-    const char** endptr
-) {
+static inline result_i64_Error parse_i64(const char* s, const char** endptr) {
     if (!s || !*s) {
         if (endptr) *endptr = s;
-        return RESULT_ERR(int64_t, ERR_PARSE_FAILED);
+        return result_i64_Error_err(ERR_PARSE_FAILED);
     }
 
     char* eptr;
     errno = 0;
-    int64_t val = strtoll(s, &eptr, 0);  // base 0 = auto-detect
+    i64 val = (i64)strtoll(s, &eptr, 0);
 
     if (eptr == s || errno == ERANGE) {
         if (endptr) *endptr = s;
-        return RESULT_ERR(int64_t, ERR_PARSE_FAILED);
+        return result_i64_Error_err(ERR_PARSE_FAILED);
     }
 
     if (endptr) *endptr = eptr;
-    return RESULT_OK(int64_t, val);
+    return result_i64_Error_ok(val);
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
    Unsigned 64-bit integer parsing
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Parses unsigned 64-bit integer from string prefix
+ * @brief Parses an unsigned 64-bit integer from the start of a string
  *
- * Rejects negative values.
+ * Supports decimal, hexadecimal (0x/0X), and octal (0) via base-0
+ * auto-detection. Explicitly rejects a leading '-' sign — negative values
+ * are never silently wrapped.
  *
- * @param s Input string
- * @param endptr Optional: set to first unparsed character
- * @return Ok(parsed value) or Err(ERR_PARSE_FAILED)
+ * @param s       Null-terminated input string — must not be NULL
+ * @param endptr  Optional — set to first unparsed character on return;
+ *                set to s on failure
+ * @return Ok(u64)              on success
+ *         Err(ERR_PARSE_FAILED) on NULL/empty input, negative sign,
+ *                               invalid format, or overflow
  */
-static inline result_uint64_t_Error parse_uint64(
-    const char* s,
-    const char** endptr
-) {
+static inline result_u64_Error parse_u64(const char* s, const char** endptr) {
     if (!s || !*s) {
         if (endptr) *endptr = s;
-        return RESULT_ERR(uint64_t, ERR_PARSE_FAILED);
+        return result_u64_Error_err(ERR_PARSE_FAILED);
     }
 
-    // Reject negative sign immediately
     if (*s == '-') {
         if (endptr) *endptr = s;
-        return RESULT_ERR(uint64_t, ERR_PARSE_FAILED);
+        return result_u64_Error_err(ERR_PARSE_FAILED);
     }
 
     char* eptr;
     errno = 0;
-    uint64_t val = strtoull(s, &eptr, 0);
+    u64 val = (u64)strtoull(s, &eptr, 0);
 
     if (eptr == s || errno == ERANGE) {
         if (endptr) *endptr = s;
-        return RESULT_ERR(uint64_t, ERR_PARSE_FAILED);
+        return result_u64_Error_err(ERR_PARSE_FAILED);
     }
 
     if (endptr) *endptr = eptr;
-    return RESULT_OK(uint64_t, val);
+    return result_u64_Error_ok(val);
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
    Double-precision floating-point parsing
    ──────────────────────────────────────────────────────────────────────────── */
+
 /**
- * @brief Parses double from string prefix
+ * @brief Parses a double-precision float from the start of a string
  *
- * Supports decimal, scientific, hex floats. Overflow → ±inf (still Ok).
+ * Supports decimal notation, scientific notation (e/E), hex floats (0x, C99),
+ * and special values (inf, -inf, nan). Overflow → ±HUGE_VAL (still Ok).
+ * Underflow → ±0.0 (still Ok). Only returns Err if no valid prefix found.
  *
- * @param s Input string
- * @param endptr Optional: set to first unparsed character
- * @return Ok(parsed value) or Err(ERR_PARSE_FAILED)
+ * @param s       Null-terminated input string — must not be NULL
+ * @param endptr  Optional — set to first unparsed character on return;
+ *                set to s on failure
+ * @return Ok(f64)              on success
+ *         Err(ERR_PARSE_FAILED) on NULL/empty input or no valid prefix
  */
-static inline result_double_Error parse_double(
-    const char* s,
-    const char** endptr
-) {
+static inline result_f64_Error parse_f64(const char* s, const char** endptr) {
     if (!s || !*s) {
         if (endptr) *endptr = s;
-        return RESULT_ERR(double, ERR_PARSE_FAILED);
+        return result_f64_Error_err(ERR_PARSE_FAILED);
     }
 
     char* eptr;
-    double val = strtod(s, &eptr);
+    f64 val = (f64)strtod(s, &eptr);
 
     if (eptr == s) {
         if (endptr) *endptr = s;
-        return RESULT_ERR(double, ERR_PARSE_FAILED);
+        return result_f64_Error_err(ERR_PARSE_FAILED);
     }
 
     if (endptr) *endptr = eptr;
-    return RESULT_OK(double, val);
+    return result_f64_Error_ok(val);
 }
 
 #endif /* CANON_UTIL_PARSE_H */
