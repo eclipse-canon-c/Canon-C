@@ -28,6 +28,7 @@
  * - Macros themselves are thread-safe (no shared state)
  * - Panic handler must be thread-safe if used in multithreaded context
  * - Default panic handler uses fprintf (not guaranteed thread-safe on all platforms)
+ * - contract_set_handler() is NOT thread-safe — call once during init only
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
@@ -35,6 +36,14 @@
  * - Uses standard abort() for termination
  * - No platform-specific code
  * - NDEBUG macro follows standard convention (same as assert.h)
+ *
+ * Handler storage:
+ * ────────────────────────────────────────────────────────────────────────────
+ * The handler is stored as a function-local static inside
+ * canon_contract_handler_ptr(). This guarantees a single instance across
+ * all translation units (unlike a static variable in a header, which would
+ * produce one copy per TU). contract_set_handler() is therefore truly global
+ * and affects all Canon-C contract checks program-wide.
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -74,11 +83,11 @@
  * @param line Line number of violation
  * @param func Function name where violation occurred
  * @param expr Expression that failed (stringified condition)
- * @param msg Optional custom message (may be NULL)
+ * @param msg  Optional custom message (may be NULL)
  */
 typedef void (*contract_handler_fn)(
     const char* file,
-    int line,
+    int         line,
     const char* func,
     const char* expr,
     const char* msg
@@ -95,7 +104,7 @@ typedef void (*contract_handler_fn)(
  */
 static inline void contract_default_handler(
     const char* file,
-    int line,
+    int         line,
     const char* func,
     const char* expr,
     const char* msg
@@ -105,8 +114,8 @@ static inline void contract_default_handler(
     fprintf(stderr, "CONTRACT VIOLATION\n");
     fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
     fprintf(stderr, "Location:   %s:%d\n", file, line);
-    fprintf(stderr, "Function:   %s\n", func);
-    fprintf(stderr, "Condition:  %s\n", expr);
+    fprintf(stderr, "Function:   %s\n",    func);
+    fprintf(stderr, "Condition:  %s\n",    expr);
     if (msg) {
         fprintf(stderr, "Message:    %s\n", msg);
     }
@@ -116,20 +125,47 @@ static inline void contract_default_handler(
     abort();
 }
 
-/**
- * @brief Global contract violation handler (customizable)
+/* ============================================================================
+ * Handler accessor — single instance across all translation units
+ * ============================================================================
  *
- * Users can override this by defining their own handler before including
- * contract.h, or by setting it at runtime.
- */
-#ifndef CANON_CONTRACT_HANDLER
-    static contract_handler_fn canon_contract_handler = contract_default_handler;
-#endif
+ * A file-scope `static` variable in a header produces one independent copy
+ * per translation unit. Calling contract_set_handler() in one .c file would
+ * have no effect on any other .c file — the program-wide handler claim would
+ * be silently broken.
+ *
+ * Storing the handler inside a function-local `static` variable fixes this:
+ * the C standard guarantees exactly one instance of a function-local static
+ * across the entire program, regardless of how many translation units include
+ * this header. All reads and writes go through the same memory location.
+ *
+ * contract_set_handler() is NOT thread-safe. Call it once during program
+ * initialization, before any concurrent code runs.
+ * ========================================================================= */
 
 /**
- * @brief Set custom contract violation handler
+ * @brief Returns a pointer to the single global contract handler slot
  *
- * @param handler Function to call on contract violations (must not return)
+ * Internal use only. All contract macros and contract_set_handler() go
+ * through this accessor to guarantee a single handler instance across
+ * all translation units.
+ *
+ * @return Pointer to the handler function pointer (never NULL)
+ */
+static inline contract_handler_fn* canon_contract_handler_ptr(void) {
+    static contract_handler_fn handler = contract_default_handler;
+    return &handler;
+}
+
+/**
+ * @brief Set a custom contract violation handler (program-wide)
+ *
+ * Replaces the default handler for all subsequent contract violations
+ * across all translation units. Call once during program initialization,
+ * before spawning threads.
+ *
+ * @param handler Function to call on contract violations (must not return).
+ *                Passing NULL restores the default handler.
  *
  * Example:
  * ```c
@@ -138,12 +174,17 @@ static inline void contract_default_handler(
  *     log_fatal("Contract failed: %s at %s:%d", expr, file, line);
  *     cleanup_and_exit(1);
  * }
- * 
- * contract_set_handler(my_handler);
+ *
+ * int main(void) {
+ *     contract_set_handler(my_handler);
+ *     // ...
+ * }
  * ```
  */
 static inline void contract_set_handler(contract_handler_fn handler) {
-    canon_contract_handler = handler;
+    *canon_contract_handler_ptr() = handler
+        ? handler
+        : contract_default_handler;
 }
 
 /* ============================================================================
@@ -167,6 +208,15 @@ static inline void contract_set_handler(contract_handler_fn handler) {
         #define __func__ "<unknown>"
     #endif
 #endif
+
+/**
+ * @brief Internal macro: invoke the current contract handler
+ *
+ * Goes through canon_contract_handler_ptr() to ensure the correct
+ * program-wide handler is always called, regardless of TU.
+ */
+#define _CANON_INVOKE_HANDLER(expr_str, msg) \
+    (*canon_contract_handler_ptr())(__FILE__, __LINE__, __func__, expr_str, msg)
 
 /* ============================================================================
  * Core Contract Macros
@@ -194,7 +244,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #define require(cond) \
     do { \
         if (!(cond)) { \
-            canon_contract_handler(__FILE__, __LINE__, __func__, #cond, NULL); \
+            _CANON_INVOKE_HANDLER(#cond, NULL); \
         } \
     } while (0)
 
@@ -204,7 +254,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Like require(), but includes a custom error message.
  *
  * @param cond Condition that must be true
- * @param msg Custom error message (string literal)
+ * @param msg  Custom error message (string literal)
  *
  * Example:
  * ```c
@@ -216,7 +266,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #define require_msg(cond, msg) \
     do { \
         if (!(cond)) { \
-            canon_contract_handler(__FILE__, __LINE__, __func__, #cond, msg); \
+            _CANON_INVOKE_HANDLER(#cond, msg); \
         } \
     } while (0)
 
@@ -253,7 +303,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Compiled out when NDEBUG is defined.
  *
  * @param cond Condition that should be true
- * @param msg Custom error message (string literal)
+ * @param msg  Custom error message (string literal)
  *
  * @sa ensure(), require_msg()
  */
@@ -275,7 +325,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Example:
  * ```c
  * switch (state) {
- *     case STATE_INIT: return init_handler();
+ *     case STATE_INIT:    return init_handler();
  *     case STATE_RUNNING: return run_handler();
  *     case STATE_STOPPED: return stop_handler();
  *     default: unreachable();
@@ -289,8 +339,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #else
     #define unreachable() \
         do { \
-            canon_contract_handler(__FILE__, __LINE__, __func__, \
-                                  "unreachable code path", NULL); \
+            _CANON_INVOKE_HANDLER("unreachable code path", NULL); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #endif
@@ -309,8 +358,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #else
     #define unreachable_msg(msg) \
         do { \
-            canon_contract_handler(__FILE__, __LINE__, __func__, \
-                                  "unreachable code path", msg); \
+            _CANON_INVOKE_HANDLER("unreachable code path", msg); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #endif
@@ -318,7 +366,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 /**
  * @brief Unconditional panic with message
  *
- * Immediately triggers contract violation handler with custom message.
+ * Immediately triggers the contract violation handler with a custom message.
  * Use for fatal errors that cannot be recovered from.
  *
  * @param msg Error message (string literal)
@@ -334,7 +382,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  */
 #define panic(msg) \
     do { \
-        canon_contract_handler(__FILE__, __LINE__, __func__, "panic", msg); \
+        _CANON_INVOKE_HANDLER("panic", msg); \
     } while (0)
 
 /* ============================================================================
@@ -348,7 +396,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * or configuration values.
  *
  * @param cond Compile-time constant expression
- * @param msg Identifier-safe message (no spaces, will appear in error)
+ * @param msg  Identifier-safe message (no spaces, will appear in error)
  *
  * Example:
  * ```c
@@ -370,63 +418,67 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * ========================================================================= */
 
 /*
-// Arena allocator with contracts
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 1: Arena allocator with contracts
+// ─────────────────────────────────────────────────────────────────────────────
 void* arena_alloc(Arena* arena, usize size) {
     require(arena != NULL);
     require(size > 0);
-    
+
     usize new_offset;
     if (!checked_add(arena->offset, size, &new_offset)) {
         panic("arena allocation overflow");
     }
-    
+
     require_msg(new_offset <= arena->capacity, "arena out of memory");
-    
+
     void* ptr = arena->base + arena->offset;
     arena->offset = new_offset;
-    
+
     ensure(is_aligned(ptr, 8));  // debug-only invariant check
     return ptr;
 }
 
-// Pool with exhaustive enum check
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 2: Pool with exhaustive enum check
+// ─────────────────────────────────────────────────────────────────────────────
 typedef enum { BLOCK_FREE, BLOCK_USED } BlockState;
 
 void pool_process(Pool* pool, usize index) {
     BlockState state = pool->states[index];
-    
+
     switch (state) {
-        case BLOCK_FREE:
-            handle_free_block(pool, index);
-            break;
-        case BLOCK_USED:
-            handle_used_block(pool, index);
-            break;
-        default:
-            unreachable_msg("invalid block state");
+        case BLOCK_FREE: handle_free_block(pool, index); break;
+        case BLOCK_USED: handle_used_block(pool, index); break;
+        default: unreachable_msg("invalid block state");
     }
 }
 
-// Compile-time checks
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 3: Compile-time checks
+// ─────────────────────────────────────────────────────────────────────────────
 static_require(sizeof(Header) == 64, header_size_mismatch);
 static_require(MAX_POOL_SIZE <= USIZE_MAX / sizeof(Block), pool_size_overflow);
 
-// Custom panic handler for embedded systems
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 4: Custom panic handler — embedded systems
+// ─────────────────────────────────────────────────────────────────────────────
 void embedded_panic_handler(const char* file, int line, const char* func,
-                           const char* expr, const char* msg) {
-    // Log to UART
+                            const char* expr, const char* msg) {
     uart_printf("PANIC: %s at %s:%d\n", expr, file, line);
-    
-    // Flash LED pattern
     signal_fatal_error();
-    
-    // Halt system
     while (1) { __WFI(); }
 }
 
 void embedded_init(void) {
     contract_set_handler(embedded_panic_handler);
+    // From this point on, ALL translation units use embedded_panic_handler.
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 5: Restore default handler
+// ─────────────────────────────────────────────────────────────────────────────
+contract_set_handler(NULL);  // NULL → restores contract_default_handler
 */
 
 #endif /* CANON_CORE_PRIMITIVES_CONTRACT_H */
