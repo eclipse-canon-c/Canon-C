@@ -1,401 +1,251 @@
-#ifndef CANON_UTIL_FILE_H
-#define CANON_UTIL_FILE_H
+#ifndef CANON_UTIL_STRING_H
+#define CANON_UTIL_STRING_H
 
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
 #include "core/memory.h"
-#include "core/arena.h"
-#include "semantics/result/result.h"
-#include "semantics/error.h"
-#include "util/str/string.h"
-#include <stdio.h>
+#include "semantics/option/option.h"
 
 /**
- * @file util/file.h
- * @brief Safe, explicit file I/O with Result/Option error handling and arena support
+ * @file util/str/string.h
+ * @brief Safe, explicit and ownership-aware string utilities
  *
- * High-level file utilities emphasizing:
- * - Observable failures via Result<T,Error> and Option<T>
- * - Deterministic memory usage via arena allocation (preferred)
- * - Binary mode by default for cross-platform consistency
- * - No silent failures or hidden errno usage
+ * Provides modern string manipulation utilities with clear ownership semantics
+ * and explicit allocation boundaries. Implements both heap-allocating and
+ * buffer-based operations, along with pure predicate functions for string
+ * comparison and checking.
  *
- * Runtime dependency:
+ * Portability:
  * ────────────────────────────────────────────────────────────────────────────
- * This module depends on <stdio.h> (FILE*, fopen, fclose, fseek, ftell,
- * fread, fwrite, fflush, rename, remove). This is an intentional and
- * acknowledged coupling to the C runtime. All Canon-C layers below util/
- * remain stdio-free.
+ * - Requires C99 or later
+ * - Depends only on Canon-C core modules (types, contract, memory, option)
+ * - No direct standard library string functions used
+ * - No platform-specific features
+ * - Works on any architecture
  *
- * Reading strategy:
+ * Thread-safety: Functions are reentrant and thread-safe. No shared state.
+ *
+ * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * file_read_all_arena() uses a two-phase approach:
+ * - Time complexity: O(n) where n = string length for most operations
+ * - Space complexity: O(1) for borrowed operations, O(n) for owned
+ * - Owned operations: one mem_alloc per allocation
+ * - Borrowed operations: zero allocations
  *
- * Phase 1 — seek-based (fast path):
- *   Uses fseek/ftell to determine file size upfront, allocates once,
- *   reads in a single fread call. Works for regular files on all
- *   common platforms.
- *
- * Phase 2 — streaming fallback (portability path):
- *   If fseek fails (pipes, sockets, exotic filesystems), falls back to
- *   incremental fread using all remaining arena space as a single contiguous
- *   buffer. Unused tail is reclaimed via arena_mark/arena_reset_to.
- *
- * Allocation strategies:
+ * Ownership model:
  * ────────────────────────────────────────────────────────────────────────────
- * | Strategy | Use when                | Lifetime          | Cleanup   | Functions             |
- * |----------|-------------------------|-------------------|-----------|-----------------------|
- * | Arena    | Temporary data, configs | Until arena reset | Automatic | file_read_all_arena() |
- * | Heap     | Persistent strings      | Until caller frees| Caller    | file_read_all()       |
+ * 1. OWNED STRINGS (str_alloc_* functions):
+ *    - Allocates on heap via mem_alloc
+ *    - Returns option_charp
+ *    - Caller OWNS the result
+ *    - Caller MUST free with str_free()
  *
- * Binary mode rationale:
- * - Avoids Windows CR/LF translation
- * - ftell() returns correct byte count on seekable files
- * - Works for both text and binary files
+ * 2. BORROWED STRINGS (str_*_into functions):
+ *    - Caller provides buffer
+ *    - Returns bool (success/failure)
+ *    - Zero allocations
  *
- * Resource cleanup:
- * ────────────────────────────────────────────────────────────────────────────
- * All functions use __attribute__((cleanup)) when GNU extensions are available
- * (i.e. when CANON_NO_GNU_EXTENSIONS is NOT defined). This ensures FILE*
- * handles are always closed on every return path including early returns.
- *
- * When CANON_NO_GNU_EXTENSIONS IS defined, all functions fall back to
- * explicit fclose() before every return. This is verbose but correct.
- *
- * Error handling:
- * - Option<T> for may-fail-without-details
- * - Result<T,Error> for operations needing error reason
- *
- * @sa file_read_all_arena() — preferred zero-heap path (auto-selects strategy)
- * @sa file_read_all()       — persistent heap path (caller provides scratch arena)
+ * @sa util/str/str_split.h  — non-mutating string splitting
+ * @sa util/str/str_join.h   — string joining
+ * @sa util/str/str_view.h   — immutable borrowed string view
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Result type for write operations
-   ──────────────────────────────────────────────────────────────────────────── */
-CANON_RESULT(usize, Error)
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Internal: automatic FILE* cleanup
+   option_charp — canonical owned string Option type
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Cleanup function for __attribute__((cleanup)) on FILE* variables
+ * @brief Typedef for heap-owned char pointer — enables CANON_OPTION instantiation
  *
- * Called automatically when a FILE* variable goes out of scope.
- * NULL-safe — safe to call even if fopen() failed.
- *
- * @remark Internal — do not call directly.
+ * option_charp is the canonical return type for all str_alloc_* functions.
+ * It makes non-ownership and allocation explicit at every call site.
  */
-static inline void _file_auto_close(FILE** f) {
-    if (f && *f) {
-        fclose(*f);
-        *f = NULL;
-    }
+typedef char* charp;
+CANON_OPTION(charp)
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Owned strings — heap allocation (caller must free with str_free)
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Allocates a new heap copy of a null-terminated string
+ *
+ * @param s Source null-terminated string (may be NULL)
+ * @return Some(owned heap-allocated copy) on success
+ *         None on NULL input or allocation failure
+ *
+ * @remark Caller MUST free with str_free()
+ *
+ * Performance: O(n)
+ */
+static inline option_charp str_alloc_copy(const char* s) {
+    if (!s) return option_charp_none();
+    const usize len = str_len(s);
+    char* copy = (char*)mem_alloc(len + 1);
+    if (!copy) return option_charp_none();
+    mem_copy(copy, s, len + 1);
+    return option_charp_some(copy);
 }
 
 /**
- * @def FILE_AUTOCLOSE(name, path, mode)
- * @brief Declares a FILE* that is automatically closed on scope exit
+ * @brief Allocates concatenation of two null-terminated strings
  *
- * Uses __attribute__((cleanup)) when GNU extensions are available.
- * Falls back to a plain declaration when CANON_NO_GNU_EXTENSIONS is defined —
- * in that case, callers MUST fclose() manually before every return.
+ * @param a First string (must not be NULL)
+ * @param b Second string (must not be NULL)
+ * @return Some(owned concatenated string) on success
+ *         None on NULL input or allocation failure
  *
- * Usage:
- * ```c
- * FILE_AUTOCLOSE(f, path, "rb");
- * if (!f) return option_charp_none();
- * // f is closed automatically on any return (GNU) or manually (no-GNU)
- * ```
+ * @remark Caller MUST free with str_free()
+ *
+ * Performance: O(n)
  */
-#ifndef CANON_NO_GNU_EXTENSIONS
-    #define FILE_AUTOCLOSE(name, path, mode) \
-        FILE* name __attribute__((cleanup(_file_auto_close))) = fopen(path, mode)
-#else
-    #define FILE_AUTOCLOSE(name, path, mode) \
-        FILE* name = fopen(path, mode)
-#endif
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Internal: streaming fread fallback for non-seekable streams
-   ──────────────────────────────────────────────────────────────────────────── */
-
-/**
- * @brief Chunk size for streaming fread iterations
- *
- * Does NOT control allocation size — the entire remaining arena space is
- * allocated upfront as one contiguous buffer. This constant only controls
- * how many bytes are requested per fread() call within that buffer.
- *
- * Override by defining FILE_READ_CHUNK_SIZE before including this header.
- * Default: 4096 bytes (one typical page).
- */
-#ifndef FILE_READ_CHUNK_SIZE
-    #define FILE_READ_CHUNK_SIZE ((usize)4096)
-#endif
-
-/**
- * @brief Reads a non-seekable stream into arena using a single contiguous allocation
- *
- * Allocates all remaining arena space upfront as one buffer, reads into it
- * in FILE_READ_CHUNK_SIZE increments, then reclaims unused tail via
- * arena_mark/arena_reset_to.
- *
- * Contiguity guarantee: safe because a single arena_alloc() call always
- * returns one contiguous block. No multi-alloc chunk stitching is performed.
- *
- * Tail reclaim note: arena_reset_to() does not zero memory. The immediately
- * following arena_alloc() on a bump allocator returns the same base address.
- * This is documented behavior of Canon-C's arena — see arena.h.
- *
- * @param f     Open FILE* in binary read mode (non-seekable)
- * @param arena Arena with sufficient remaining space
- * @return Some(char*) pointing to null-terminated buffer on success
- *         None if arena has < 2 bytes remaining, or on read error
- *
- * @remark Internal — do not call directly. Use file_read_all_arena().
- */
-static inline option_charp _file_read_stream(FILE* f, Arena* arena) {
-    usize available = arena_remaining(arena);
-    if (available < 2) return option_charp_none();
-
-    ArenaMark mark = arena_mark(arena);
-    char* base = (char*)arena_alloc(arena, available);
-    if (!base) return option_charp_none();
-
-    usize usable = available - 1;
-    usize total  = 0;
-
-    while (total < usable) {
-        usize chunk = usable - total;
-        if (chunk > FILE_READ_CHUNK_SIZE) chunk = FILE_READ_CHUNK_SIZE;
-
-        usize n = fread(base + total, 1, chunk, f);
-        total += n;
-
-        if (n < chunk) {
-            if (ferror(f)) {
-                arena_reset_to(arena, mark);
-                return option_charp_none();
-            }
-            break;
-        }
-    }
-
-    base[total] = '\0';
-
-    arena_reset_to(arena, mark);
-    char* result = (char*)arena_alloc(arena, total + 1);
+static inline option_charp str_alloc_concat(const char* a, const char* b) {
+    if (!a || !b) return option_charp_none();
+    const usize len_a = str_len(a);
+    const usize len_b = str_len(b);
+    char* result = (char*)mem_alloc(len_a + len_b + 1);
     if (!result) return option_charp_none();
-
-    result[total] = '\0';
+    mem_copy(result, a, len_a);
+    mem_copy(result + len_a, b, len_b + 1);
     return option_charp_some(result);
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Reading — arena-backed (preferred, zero-heap)
-   ──────────────────────────────────────────────────────────────────────────── */
-
 /**
- * @brief Reads entire file into arena-allocated, null-terminated buffer
+ * @brief Allocates a substring from source string
  *
- * Preferred method — zero heap allocation, deterministic lifetime.
+ * @param s     Source null-terminated string (must not be NULL)
+ * @param start Starting index (0-based, inclusive)
+ * @param len   Desired length (clamped if exceeds remaining string)
+ * @return Some(owned substring) on success
+ *         None on NULL input, invalid range, or allocation failure
  *
- * Strategy selection is automatic:
- * - Seekable files: fseek/ftell for size, single fread (fast)
- * - Non-seekable streams: single large arena alloc with incremental fread
+ * @remark Caller MUST free with str_free()
  *
- * FILE* is automatically closed on all return paths when GNU extensions
- * are available. See FILE_AUTOCLOSE for fallback behavior.
- *
- * @param path  Null-terminated file path
- * @param arena Valid initialized arena with sufficient space for file + 1 byte
- * @return Some(arena-owned char*) on success — null-terminated buffer
- *         None on any failure (file not found, arena exhausted, read error)
- *
- * @remark Returned pointer MUST NOT be freed
- * @remark Binary mode ("rb") — no line-ending translation
- * @remark Buffer is valid until arena is reset or destroyed
+ * Performance: O(n)
  */
-static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
-    if (!path || !arena) return option_charp_none();
-
-    FILE_AUTOCLOSE(f, path, "rb");
-    if (!f) return option_charp_none();
-
-    if (fseek(f, 0, SEEK_END) == 0) {
-        long len = ftell(f);
-
-        if (len >= 0) {
-            if ((usize)len + 1 < (usize)len) return option_charp_none();
-
-            if (fseek(f, 0, SEEK_SET) != 0) return option_charp_none();
-
-            usize size = (usize)len + 1;
-            char* buf  = (char*)arena_alloc(arena, size);
-            if (!buf) return option_charp_none();
-
-            if (fread(buf, 1, (usize)len, f) != (usize)len) return option_charp_none();
-
-            buf[len] = '\0';
-            return option_charp_some(buf);
-        }
-    }
-
-    return _file_read_stream(f, arena);
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Reading — heap-backed (persistent data)
-   ──────────────────────────────────────────────────────────────────────────── */
-
-/**
- * @brief Reads entire file into heap-allocated, null-terminated buffer
- *
- * Uses file_read_all_arena() internally with a caller-provided scratch arena,
- * then copies the result to the heap for a persistent lifetime.
- *
- * The scratch arena is used only during this call and can be reset immediately
- * after. Its required size is: file size + 1 byte (null) + alignment padding.
- *
- * Caller must free result with str_free().
- *
- * Example:
- * ```c
- * uint8_t scratch_buf[8192];
- * Arena scratch;
- * arena_init(&scratch, scratch_buf, sizeof(scratch_buf));
- *
- * option_charp result = file_read_all("config.txt", &scratch);
- * arena_reset(&scratch);
- *
- * if (option_charp_is_some(result)) {
- *     char* s = option_charp_unwrap(result);
- *     // use s...
- *     str_free(s);
- * }
- * ```
- *
- * @param path    Null-terminated file path
- * @param scratch Initialized arena sized for at least (file_size + 1 + alignment)
- * @return Some(heap-owned char*) on success — null-terminated buffer
- *         None on any failure (file not found, arena too small, read error)
- *
- * @remark Caller MUST free returned string with str_free()
- * @remark scratch arena content is unspecified after this call — reset or reuse freely
- * @remark Binary mode ("rb")
- */
-static inline option_charp file_read_all(const char* path, Arena* scratch) {
-    if (!path || !scratch) return option_charp_none();
-
-    option_charp tmp = file_read_all_arena(path, scratch);
-    if (option_charp_is_none(tmp)) return option_charp_none();
-
-    return str_alloc_copy(option_charp_unwrap(tmp));
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Writing
-   ──────────────────────────────────────────────────────────────────────────── */
-
-/**
- * @brief Writes entire content to file (binary mode)
- *
- * FILE* is automatically closed on all return paths when GNU extensions
- * are available. See FILE_AUTOCLOSE for fallback behavior.
- *
- * @param path    Null-terminated file path
- * @param content Null-terminated content to write
- * @return Ok(bytes written) on success
- *         Err(ERR_INVALID_ARG) if path or content is NULL
- *         Err(ERR_IO_FAILED) on file open or write failure
- */
-static inline result_usize_Error file_write_all(const char* path, const char* content) {
-    if (!path || !content) return RESULT_ERR(usize, ERR_INVALID_ARG);
-
-    FILE_AUTOCLOSE(f, path, "wb");
-    if (!f) return RESULT_ERR(usize, ERR_IO_FAILED);
-
-    usize len = str_len(content);
-    if (fwrite(content, 1, len, f) != len) return RESULT_ERR(usize, ERR_IO_FAILED);
-
-    return RESULT_OK(usize, len);
+static inline option_charp str_alloc_sub(const char* s, usize start, usize len) {
+    if (!s) return option_charp_none();
+    const usize s_len = str_len(s);
+    if (start >= s_len) return option_charp_none();
+    if (start + len > s_len) len = s_len - start;
+    char* result = (char*)mem_alloc(len + 1);
+    if (!result) return option_charp_none();
+    mem_copy(result, s + start, len);
+    result[len] = '\0';
+    return option_charp_some(result);
 }
 
 /**
- * @brief Maximum supported file path length for atomic writes
+ * @brief Frees a string allocated by any str_alloc_* function
  *
- * 512 bytes covers the vast majority of real-world paths. POSIX PATH_MAX
- * is typically 4096, but that would require stack or heap allocation.
- * Override by defining FILE_MAX_PATH before including this header.
+ * NULL-safe — calling with NULL is a no-op.
  *
- * @remark Paths longer than this return Err(ERR_BUFFER_TOO_SMALL).
+ * @param s Pointer to owned string (NULL-safe)
+ *
+ * Performance: O(1)
  */
-#ifndef FILE_MAX_PATH
-    #define FILE_MAX_PATH ((usize)512)
-#endif
-
-/**
- * @brief Atomic write: writes to temp file then renames
- *
- * Safer for critical files — a crash between write and rename leaves
- * the original file intact. On success, original is atomically replaced.
- *
- * FILE* is automatically closed on all return paths when GNU extensions
- * are available. See FILE_AUTOCLOSE for fallback behavior.
- *
- * @param path    Final file path
- * @param content Null-terminated content to write
- * @return Ok(bytes written) on success
- *         Err(ERR_INVALID_ARG) if path or content is NULL
- *         Err(ERR_BUFFER_TOO_SMALL) if path is too long for temp buffer
- *         Err(ERR_IO_FAILED) on write or rename failure
- */
-static inline result_usize_Error file_write_all_atomic(const char* path, const char* content) {
-    if (!path || !content) return RESULT_ERR(usize, ERR_INVALID_ARG);
-
-    char tmp[FILE_MAX_PATH];
-    usize path_len = str_len(path);
-
-    if (path_len + 5 > FILE_MAX_PATH) return RESULT_ERR(usize, ERR_BUFFER_TOO_SMALL);
-
-    mem_copy(tmp, path, path_len);
-    mem_copy(tmp + path_len, ".tmp", 5);
-
-    result_usize_Error r = file_write_all(tmp, content);
-    if (result_usize_Error_is_err(r)) {
-        remove(tmp);
-        return r;
-    }
-
-    if (rename(tmp, path) != 0) {
-        remove(tmp);
-        return RESULT_ERR(usize, ERR_IO_FAILED);
-    }
-
-    return r;
+static inline void str_free(char* s) {
+    mem_free(s);
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Helpers
+   Borrowed strings — zero-allocation, caller provides buffer
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Checks if file exists and is readable
+ * @brief Safely copies source string into fixed-size buffer
  *
- * @param path Null-terminated file path
- * @return true if file exists and can be opened for reading, false otherwise
+ * All-or-nothing — copies only if source fits completely (including null
+ * terminator).
  *
- * @remark Result is advisory — file may be deleted between this check and use (TOCTOU).
- *         Do not use as a security gate; use only for diagnostic or optional logic.
+ * @param dest      Writable destination buffer
+ * @param dest_size Size of buffer in bytes (including null terminator)
+ * @param src       Null-terminated source string
+ * @return true on successful full copy, false if would overflow or invalid input
+ *
+ * Performance: O(n)
  */
-static inline bool file_exists(const char* path) {
-    if (!path) return false;
-    FILE* f = fopen(path, "rb");
-    if (!f) return false;
-    fclose(f);
+static inline bool str_copy_into(char* dest, usize dest_size, const char* src) {
+    if (!dest || dest_size == 0 || !src) return false;
+    const usize src_len = str_len(src);
+    if (src_len + 1 > dest_size) return false;
+    mem_copy(dest, src, src_len + 1);
     return true;
 }
 
-#endif /* CANON_UTIL_FILE_H */
+/**
+ * @brief Safely concatenates two strings into fixed-size buffer
+ *
+ * All-or-nothing — concatenates only if result fits completely.
+ *
+ * @param dest      Writable destination buffer
+ * @param dest_size Size of buffer in bytes (including null terminator)
+ * @param a         First null-terminated string
+ * @param b         Second null-terminated string
+ * @return true on successful full concatenation, false if would overflow
+ *
+ * Performance: O(n)
+ */
+static inline bool str_concat_into(char* dest, usize dest_size, const char* a, const char* b) {
+    if (!dest || dest_size == 0 || !a || !b) return false;
+    const usize len_a = str_len(a);
+    const usize len_b = str_len(b);
+    if (len_a + len_b + 1 > dest_size) return false;
+    mem_copy(dest, a, len_a);
+    mem_copy(dest + len_a, b, len_b + 1);
+    return true;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Pure predicates — fast, const-correct string checks
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Checks if two null-terminated strings are equal
+ *
+ * @param a First string (may be NULL)
+ * @param b Second string (may be NULL)
+ * @return true if strings are identical (including both NULL), false otherwise
+ *
+ * Performance: O(n)
+ */
+static inline bool str_equals(const char* a, const char* b) {
+    if (a == b) return true;
+    if (!a || !b) return false;
+    return str_compare(a, b) == 0;
+}
+
+/**
+ * @brief Checks if string starts with given prefix
+ *
+ * @param s      String to check (may be NULL)
+ * @param prefix Prefix to look for (may be NULL)
+ * @return true if s begins with prefix (empty prefix → always true)
+ *
+ * Performance: O(n)
+ */
+static inline bool str_starts_with(const char* s, const char* prefix) {
+    if (!s || !prefix) return false;
+    const usize prefix_len = str_len(prefix);
+    if (prefix_len == 0) return true;
+    return str_ncompare(s, prefix, prefix_len) == 0;
+}
+
+/**
+ * @brief Checks if string ends with given suffix
+ *
+ * @param s      String to check (may be NULL)
+ * @param suffix Suffix to look for (may be NULL)
+ * @return true if s ends with suffix, false otherwise
+ *
+ * Performance: O(n)
+ */
+static inline bool str_ends_with(const char* s, const char* suffix) {
+    if (!s || !suffix) return false;
+    const usize s_len = str_len(s);
+    const usize suffix_len = str_len(suffix);
+    if (suffix_len > s_len) return false;
+    return str_compare(s + s_len - suffix_len, suffix) == 0;
+}
+
+#endif /* CANON_UTIL_STRING_H */
