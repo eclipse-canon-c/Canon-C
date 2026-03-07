@@ -1,14 +1,14 @@
 #ifndef CANON_UTIL_FILE_H
 #define CANON_UTIL_FILE_H
 
-#include "core/primitives/types.h"       // usize, bool, uint8_t
-#include "core/primitives/contract.h"    // require_msg
-#include "core/memory.h"                 // mem_copy
-#include "core/arena.h"                  // Arena, arena_alloc, arena_init, arena_reset,
-                                         // arena_remaining, arena_mark, arena_reset_to
-#include "util/str/string.h"             // option_charp, str_alloc_copy, str_free, str_len
-#include "../../semantics/result/result.h"   // CANON_RESULT
-#include "../../semantics/error.h"           // Error, ERR_*, RESULT_OK, RESULT_ERR
+#include "core/primitives/types.h"
+#include "core/primitives/contract.h"
+#include "core/memory.h"
+#include "core/arena.h"
+#include "semantics/result/result.h"
+#include "semantics/error.h"
+#include "util/str/string.h"
+#include <stdio.h>
 
 /**
  * @file util/file.h
@@ -19,6 +19,13 @@
  * - Deterministic memory usage via arena allocation (preferred)
  * - Binary mode by default for cross-platform consistency
  * - No silent failures or hidden errno usage
+ *
+ * Runtime dependency:
+ * ────────────────────────────────────────────────────────────────────────────
+ * This module depends on <stdio.h> (FILE*, fopen, fclose, fseek, ftell,
+ * fread, fwrite, fflush, rename, remove). This is an intentional and
+ * acknowledged coupling to the C runtime. All Canon-C layers below util/
+ * remain stdio-free.
  *
  * Reading strategy:
  * ────────────────────────────────────────────────────────────────────────────
@@ -36,10 +43,10 @@
  *
  * Allocation strategies:
  * ────────────────────────────────────────────────────────────────────────────
- * | Strategy | Use when                  | Lifetime          | Cleanup        | Functions                  |
- * |----------|---------------------------|-------------------|----------------|----------------------------|
- * | Arena    | Temporary data, configs   | Until arena reset | Automatic      | file_read_all_arena()      |
- * | Heap     | Persistent strings        | Until caller frees| Caller         | file_read_all()            |
+ * | Strategy | Use when                | Lifetime          | Cleanup   | Functions             |
+ * |----------|-------------------------|-------------------|-----------|-----------------------|
+ * | Arena    | Temporary data, configs | Until arena reset | Automatic | file_read_all_arena() |
+ * | Heap     | Persistent strings      | Until caller frees| Caller    | file_read_all()       |
  *
  * Binary mode rationale:
  * - Avoids Windows CR/LF translation
@@ -106,7 +113,6 @@ static inline void _file_auto_close(FILE** f) {
     #define FILE_AUTOCLOSE(name, path, mode) \
         FILE* name __attribute__((cleanup(_file_auto_close))) = fopen(path, mode)
 #else
-    /* Without GNU extensions: plain declaration, caller must fclose manually */
     #define FILE_AUTOCLOSE(name, path, mode) \
         FILE* name = fopen(path, mode)
 #endif
@@ -152,14 +158,13 @@ static inline void _file_auto_close(FILE** f) {
  */
 static inline option_charp _file_read_stream(FILE* f, Arena* arena) {
     usize available = arena_remaining(arena);
-    if (available < 2) return option_charp_none(); /* need ≥ 1 byte content + null */
+    if (available < 2) return option_charp_none();
 
-    /* Single contiguous allocation — no chunk-stitching, no gap risk */
     ArenaMark mark = arena_mark(arena);
     char* base = (char*)arena_alloc(arena, available);
     if (!base) return option_charp_none();
 
-    usize usable = available - 1; /* reserve last byte for null terminator */
+    usize usable = available - 1;
     usize total  = 0;
 
     while (total < usable) {
@@ -174,24 +179,17 @@ static inline option_charp _file_read_stream(FILE* f, Arena* arena) {
                 arena_reset_to(arena, mark);
                 return option_charp_none();
             }
-            break; /* EOF */
+            break;
         }
     }
 
     base[total] = '\0';
 
-    /*
-     * Reclaim unused tail:
-     * Reset to mark, re-alloc exactly (total + 1) bytes.
-     * arena_reset_to() does not zero memory, and a bump allocator always
-     * returns the same address for the same offset — so base remains valid
-     * and result == base. See arena.h for bump allocation guarantees.
-     */
     arena_reset_to(arena, mark);
     char* result = (char*)arena_alloc(arena, total + 1);
-    if (!result) return option_charp_none(); /* should not happen */
+    if (!result) return option_charp_none();
 
-    result[total] = '\0'; /* re-terminate after re-alloc */
+    result[total] = '\0';
     return option_charp_some(result);
 }
 
@@ -226,12 +224,10 @@ static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
     FILE_AUTOCLOSE(f, path, "rb");
     if (!f) return option_charp_none();
 
-    /* Phase 1: seek-based fast path */
     if (fseek(f, 0, SEEK_END) == 0) {
         long len = ftell(f);
 
         if (len >= 0) {
-            /* Overflow check for very large files */
             if ((usize)len + 1 < (usize)len) return option_charp_none();
 
             if (fseek(f, 0, SEEK_SET) != 0) return option_charp_none();
@@ -247,7 +243,6 @@ static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
         }
     }
 
-    /* Phase 2: streaming fallback for non-seekable streams */
     return _file_read_stream(f, arena);
 }
 
@@ -273,7 +268,7 @@ static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
  * arena_init(&scratch, scratch_buf, sizeof(scratch_buf));
  *
  * option_charp result = file_read_all("config.txt", &scratch);
- * arena_reset(&scratch); // scratch is no longer needed
+ * arena_reset(&scratch);
  *
  * if (option_charp_is_some(result)) {
  *     char* s = option_charp_unwrap(result);
@@ -329,6 +324,19 @@ static inline result_usize_Error file_write_all(const char* path, const char* co
 }
 
 /**
+ * @brief Maximum supported file path length for atomic writes
+ *
+ * 512 bytes covers the vast majority of real-world paths. POSIX PATH_MAX
+ * is typically 4096, but that would require stack or heap allocation.
+ * Override by defining FILE_MAX_PATH before including this header.
+ *
+ * @remark Paths longer than this return Err(ERR_BUFFER_TOO_SMALL).
+ */
+#ifndef FILE_MAX_PATH
+    #define FILE_MAX_PATH ((usize)512)
+#endif
+
+/**
  * @brief Atomic write: writes to temp file then renames
  *
  * Safer for critical files — a crash between write and rename leaves
@@ -344,27 +352,12 @@ static inline result_usize_Error file_write_all(const char* path, const char* co
  *         Err(ERR_BUFFER_TOO_SMALL) if path is too long for temp buffer
  *         Err(ERR_IO_FAILED) on write or rename failure
  */
-
-/**
- * @brief Maximum supported file path length for atomic writes
- *
- * 512 bytes covers the vast majority of real-world paths. POSIX PATH_MAX
- * is typically 4096, but that would require stack or heap allocation.
- * Override by defining FILE_MAX_PATH before including this header.
- *
- * @remark Paths longer than this return Err(ERR_BUFFER_TOO_SMALL).
- */
-#ifndef FILE_MAX_PATH
-    #define FILE_MAX_PATH ((usize)512)
-#endif
-
 static inline result_usize_Error file_write_all_atomic(const char* path, const char* content) {
     if (!path || !content) return RESULT_ERR(usize, ERR_INVALID_ARG);
 
     char tmp[FILE_MAX_PATH];
     usize path_len = str_len(path);
 
-    /* +5 for ".tmp\0" */
     if (path_len + 5 > FILE_MAX_PATH) return RESULT_ERR(usize, ERR_BUFFER_TOO_SMALL);
 
     mem_copy(tmp, path, path_len);
