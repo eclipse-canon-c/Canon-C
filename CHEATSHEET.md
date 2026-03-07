@@ -405,6 +405,10 @@ static_require(sizeof(Header) == 64, header_must_be_64_bytes);
 
 **`void contract_set_handler(contract_handler_fn handler)`**
 Replaces the default panic handler (which prints to stderr and calls `abort()`).
+The handler is **program-wide** — setting it once affects all translation units.
+Passing `NULL` restores the default handler.
+Call once during program initialization, before spawning threads.
+
 ```c
 void my_handler(const char* file, int line, const char* func,
                 const char* expr, const char* msg) {
@@ -412,13 +416,17 @@ void my_handler(const char* file, int line, const char* func,
     exit(1);
 }
 
+// Install custom handler
 contract_set_handler(my_handler);
+
+// Restore default handler
+contract_set_handler(NULL);
 ```
 
 > **Note:** The custom handler must never return.
+> **Note:** `contract_set_handler()` is not thread-safe. Call it before spawning threads.
 
 #### Quick Reference
-
 | Macro | Always on | Has `_msg` variant | Release behavior |
 |---|---|---|---|
 | `require` | ✅ | ✅ | Panics |
