@@ -467,9 +467,14 @@ static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
 /**
  * @brief Resets the string to empty without freeing the heap buffer
  *
+ * If data != NULL: resets len to 0 and writes '\0' at index 0.
+ * If data == NULL (never appended to): this is a no-op — safe to call.
+ * dynstring_str() returns "" in either case.
+ *
  * @param s DynString to clear (NULL-safe)
  *
- * @post s->len == 0, s->data[0] == '\0' (if data != NULL)
+ * @post If s->data != NULL: s->len == 0 and s->data[0] == '\0'
+ * @post If s->data == NULL: s is unchanged (no-op)
  * @note Buffer is NOT zeroed — only logical state is reset.
  * Use dynstring_shrink_to_fit() afterward to release excess memory.
  *
