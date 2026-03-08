@@ -23,6 +23,24 @@
  * - Predicates receive a const pointer to each element and an optional context
  * - Explicit ownership: all borrowed parameters marked with borrowed macro
  *
+ * ⚠️  EMPTY SEQUENCE BEHAVIOR — READ BEFORE USE:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Both algo_any() and algo_all() return FALSE for empty sequences (len == 0).
+ *
+ * This departs from standard mathematical convention, where:
+ *   - ∃x. P(x) over {} = false   ← matches this implementation
+ *   - ∀x. P(x) over {} = true    ← does NOT match (vacuous truth)
+ *
+ * Rationale: returning true from algo_all() on an empty input is a common
+ * source of bugs in defensive code (e.g. "all inputs are valid" passing when
+ * there were no inputs). The non-vacuous behavior forces callers to be
+ * explicit about empty-sequence intent.
+ *
+ * If vacuous truth is required, guard the call site:
+ * ```c
+ * bool result = (len == 0) ? true : algo_all(base, len, elem_size, pred, ctx);
+ * ```
+ *
  * Algorithm explanation:
  * ────────────────────────────────────────────────────────────────────────────
  * ANY (existential quantification):
@@ -146,13 +164,18 @@ static inline bool algo_any(
  * Implements universal quantification (∀): checks if every element
  * satisfies the predicate. Short-circuits on first failure.
  *
+ * ⚠️  EMPTY SEQUENCE: returns false when len == 0.
+ * This deliberately does NOT implement vacuous truth (unlike mathematics,
+ * where ∀x.P(x) over an empty set is true). If you need vacuous truth,
+ * guard explicitly: (len == 0) ? true : algo_all(...)
+ *
  * @param base Pointer to first element (borrowed, read-only)
  * @param len Number of elements
  * @param elem_size Size of each element in bytes (> 0)
  * @param pred Predicate function (borrowed)
  * @param ctx Optional context (borrowed, may be NULL)
  *
- * @return true if ∀i: pred(&base[i]) == true, false otherwise
+ * @return true if ∀i: pred(&base[i]) == true AND len > 0, false otherwise
  *
  * @pre elem_size > 0
  * @pre If base != NULL, base points to valid array of len elements
@@ -170,7 +193,7 @@ static inline bool algo_any(
  * Returns false if:
  * - base == NULL
  * - pred == NULL
- * - len == 0 (empty sequences return false - no vacuous truth)
+ * - len == 0 (empty sequences return false — no vacuous truth; see note above)
  * - elem_size == 0
  * - Any element fails the predicate
  */
@@ -218,13 +241,15 @@ static inline bool algo_all(
  *
  * Provides compile-time type safety by automatically calculating sizeof(Type).
  *
+ * ⚠️  Returns false for empty arrays (len == 0). See algo_all() for details.
+ *
  * @param items Array of Type (borrowed, read-only)
  * @param len Number of elements
  * @param Type Element type
  * @param pred Predicate: bool (*)(const Type*, void*) (borrowed)
  * @param ctx Optional context (borrowed, may be NULL)
  *
- * @return bool — true if all elements satisfy pred
+ * @return bool — true if all elements satisfy pred AND len > 0
  */
 #define ALGO_ALL_TYPED(items, len, Type, pred, ctx) \
     algo_all((items), (len), sizeof(Type), \
@@ -245,6 +270,9 @@ static inline bool algo_all(
  * - algo_any_slice_##type(sv, pred, ctx) → bool
  * - algo_all_slice_##type(sv, pred, ctx) → bool
  *
+ * ⚠️  Both generated functions return false for empty slices (sv.len == 0).
+ * See the ⚠️ EMPTY SEQUENCE note in the file header for details.
+ *
  * The predicate receives a const type* pointer to each element.
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
@@ -258,7 +286,7 @@ static inline bool algo_all(
  * @param pred Predicate function (algo_pred_fn) \
  * @param ctx Optional context (borrowed, may be NULL) \
  * \
- * @return true if ∃ element satisfying pred \
+ * @return true if ∃ element satisfying pred, false if empty or none match \
  */ \
 static inline bool algo_any_slice_##type( \
     borrowed slice_##type sv, \
@@ -275,11 +303,14 @@ static inline bool algo_any_slice_##type( \
 /** \
  * @brief Returns true if all elements in slice_##type satisfy predicate \
  * \
+ * ⚠️  Returns false for empty slices (sv.len == 0) — no vacuous truth. \
+ * Guard explicitly if needed: (sv.len == 0) ? true : algo_all_slice_##type(...) \
+ * \
  * @param sv Typed slice view (borrowed, read-only) \
  * @param pred Predicate function (algo_pred_fn) \
  * @param ctx Optional context (borrowed, may be NULL) \
  * \
- * @return true if ∀ elements satisfy pred (false if empty) \
+ * @return true if ∀ elements satisfy pred AND sv.len > 0 \
  */ \
 static inline bool algo_all_slice_##type( \
     borrowed slice_##type sv, \
