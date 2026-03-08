@@ -112,7 +112,7 @@ typedef HASHMAP_VAL_TYPE hm_val_t;
  * ========================================================================= */
 
 /*
- * option_hm_val_t  — returned by hashmap_get() for lookups
+ * option_hm_val_t       — returned by hashmap_get() for lookups
  * result_bool_Error     — returned by insert
  * result_hm_val_t_Error — returned by remove (returns old value)
  */
@@ -172,7 +172,7 @@ typedef struct {
  * hashmap map;
  * hashmap_init(&map, bytes_from(buf, sizeof(buf)), 64, NULL);
  * hashmap_insert(&map, &my_key, &my_val);
- * option__hm_val_t found = hashmap_get(&map, &my_key);
+ * option_hm_val_t found = hashmap_get(&map, &my_key);
  * ```
  */
 typedef struct {
@@ -439,13 +439,20 @@ HASHMAP_LINKAGE result_bool_Error _HM_INSERT(
             return RESULT_OK(bool, false);
         }
 
-        /* Robin Hood: steal from the rich (low PSL) */
+        /*
+         * Robin Hood: steal from the rich (low PSL).
+         *
+         * If the resident slot has probed less than we have, swap it out.
+         * After the swap, psl continues from its current value — it tracks
+         * how far we have traveled in this probe sequence, not the displaced
+         * element's old PSL. Resetting psl here would corrupt subsequent
+         * Robin Hood comparisons and incoming.psl assignments.
+         */
         if (slot->psl < psl) {
-            /* Swap incoming with current slot occupant */
             HASHMAP_SLOT_NAME tmp = *slot;
-            *slot = incoming;
+            *slot    = incoming;
             incoming = tmp;
-            psl = incoming.psl;
+            /* psl intentionally NOT reset — continues from current probe distance */
         }
 
         psl++;
@@ -469,7 +476,7 @@ HASHMAP_LINKAGE result_bool_Error _HM_INSERT(
  *
  * @param map Pointer to initialized hashmap
  * @param key Pointer to key to look up
- * @return    option__hm_val_t — Some(value) or None
+ * @return    option_hm_val_t — Some(value) or None
  *
  * Performance:
  * - Time:  O(1) expected — terminates as soon as PSL of a slot is less than
@@ -575,7 +582,7 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) _HM_GET_OR_NULL(
  */
 HASHMAP_LINKAGE bool _HM_CONTAINS_KEY(
     const HASHMAP_TYPE_NAME* map,
-    const _hm_key_t*         key
+    const hm_key_t*          key   /* FIX: was _hm_key_t — reserved identifier */
 ) {
     require_msg(map != NULL, "hashmap_contains_key: map cannot be NULL");
     require_msg(key != NULL, "hashmap_contains_key: key cannot be NULL");
@@ -595,7 +602,7 @@ HASHMAP_LINKAGE bool _HM_CONTAINS_KEY(
  *
  * @param map Pointer to initialized hashmap
  * @param key Pointer to key to remove
- * @return    result__hm_val_t_Error — Ok(old_value) if removed,
+ * @return    result_hm_val_t_Error — Ok(old_value) if removed,
  *            Err(ERR_NOT_FOUND) if key does not exist,
  *            Err(ERR_INVALID_ARG) if any pointer is NULL
  *
@@ -678,8 +685,8 @@ HASHMAP_LINKAGE result_hm_val_t_Error _HM_REMOVE(
  * Usage:
  * ```c
  * usize iter = 0;
- * const _hm_key_t* k;
- * const _hm_val_t* v;
+ * const hm_key_t* k;   // FIX: was _hm_key_t — reserved identifier
+ * const hm_val_t* v;   // FIX: was _hm_val_t — reserved identifier
  * while (hashmap_iter_next(&map, &iter, &k, &v)) {
  *     printf("key/value pair found\n");
  * }
