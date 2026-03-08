@@ -180,15 +180,23 @@ bits_fls(0b10100000)  // → 8
 #### Rotation
 
 **`u64 bits_rotl(u64 value, u32 shift)`**
-Rotates bits left by `shift` positions. Bits that fall off wrap to the right.
+Rotates all 64 bits left by `shift` positions. Bits that fall off the MSB end wrap to the LSB end. For narrow rotation (e.g. 8-bit), mask the result: `bits_rotl(val, 2) & 0xFF`.
 ```c
-bits_rotl(0b10110001, 2)  // → 0b11000110  (8-bit context)
+// Full u64 rotation (upper 62 bits zero, so nothing wraps from MSB):
+bits_rotl(0x00000000000000B1ULL, 2)  // → 0x00000000000002C4ULL
+
+// Illustrative 8-bit result (mask yourself):
+bits_rotl(0b10110001, 2) & 0xFF     // → 0b11000110
 ```
 
 **`u64 bits_rotr(u64 value, u32 shift)`**
-Rotates bits right by `shift` positions. Bits that fall off wrap to the left.
+Rotates all 64 bits right by `shift` positions. Bits that fall off the LSB end wrap to the MSB end. For narrow rotation (e.g. 8-bit), use `((val >> n) | (val << (8-n))) & 0xFF`.
 ```c
-bits_rotr(0b10110001, 2)  // → 0b01101110  (8-bit context)
+// Full u64 rotation (low 2 bits of 0xB1 wrap to the top of the u64):
+bits_rotr(0x00000000000000B1ULL, 2)  // → 0x400000000000002CULL
+
+// Illustrative 8-bit result (mask yourself):
+((u8)0b10110001 >> 2) | ((u8)0b10110001 << 6)  // → 0b01101100
 ```
 
 #### Power of Two
@@ -227,7 +235,7 @@ Reverses bytes in a 64-bit value.
 bits_bswap64(0x0102030405060708)  // → 0x0807060504030201
 ```
 
-> **Known Limitations:** All bit positions are 0-indexed (0 = LSB, 63 = MSB). Passing `bit >= 64` is undefined behavior — not checked at runtime.
+> **Known Limitations:** All bit positions are 0-indexed (0 = LSB, 63 = MSB). Passing `bit >= 64` is undefined behavior — not checked at runtime. Rotation functions always operate on the full 64-bit width — mask input/output yourself for narrower types.
 
 ---
 
