@@ -396,22 +396,34 @@ static inline u32 bits_fls(u64 value) {
  * ========================================================================= */
 
 /**
- * @brief Rotate left (circular shift)
+ * @brief Rotate left (circular shift) on a full u64 value
  *
- * Rotates bits to the left by `shift` positions. Bits that fall off
- * the left end wrap around to the right end.
+ * Rotates all 64 bits to the left by `shift` positions. Bits that fall off
+ * the left (MSB) end wrap around to the right (LSB) end.
  *
- * @param value Value to rotate
- * @param shift Number of positions to rotate (0-63)
+ * @param value u64 value to rotate
+ * @param shift Number of positions to rotate (automatically masked to 0-63)
  *
- * @return Rotated value
+ * @return Rotated u64 value
  *
- * @remark shift >= 64 is automatically masked to shift % 64
+ * @remark shift >= 64 is automatically masked to shift % 64 (shift &= 63)
+ * @remark These functions always operate on the full 64-bit width.
+ *         If you need rotation on a narrower type (e.g. 8-bit), mask
+ *         the result: bits_rotl(val, 2) & 0xFF
  *
- * Example:
+ * Example (full u64):
  * ```c
- * u8 val = 0b10110001;
- * u8 rot = bits_rotl(val, 2);  // → 0b11000110 (in 8-bit context)
+ * u64 val = 0x00000000000000B1ULL;  // 0b10110001
+ * u64 rot = bits_rotl(val, 2);
+ * // → 0x00000000000002C4ULL  (bits shifted left by 2, nothing wraps from MSB
+ * //                           because upper 62 bits were all zero)
+ * ```
+ *
+ * Example (illustrative 8-bit behavior — mask result yourself):
+ * ```c
+ * u64 val = 0b10110001;
+ * u64 rot = bits_rotl(val, 2) & 0xFF;  // → 0b11000110
+ * //   high bits 10 wrap to low end → 0b11000110
  * ```
  *
  * @sa bits_rotr()
@@ -423,22 +435,34 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
 }
 
 /**
- * @brief Rotate right (circular shift)
+ * @brief Rotate right (circular shift) on a full u64 value
  *
- * Rotates bits to the right by `shift` positions. Bits that fall off
- * the right end wrap around to the left end.
+ * Rotates all 64 bits to the right by `shift` positions. Bits that fall off
+ * the right (LSB) end wrap around to the left (MSB) end.
  *
- * @param value Value to rotate
- * @param shift Number of positions to rotate (0-63)
+ * @param value u64 value to rotate
+ * @param shift Number of positions to rotate (automatically masked to 0-63)
  *
- * @return Rotated value
+ * @return Rotated u64 value
  *
- * @remark shift >= 64 is automatically masked to shift % 64
+ * @remark shift >= 64 is automatically masked to shift % 64 (shift &= 63)
+ * @remark These functions always operate on the full 64-bit width.
+ *         If you need rotation on a narrower type (e.g. 8-bit), mask
+ *         the input first: bits_rotr(val & 0xFF | (val & 0xFF) << 8, 2) & 0xFF
+ *         or use a dedicated narrow-rotation helper.
  *
- * Example:
+ * Example (full u64):
  * ```c
- * u8 val = 0b10110001;
- * u8 rot = bits_rotr(val, 2);  // → 0b01101100 (in 8-bit context)
+ * u64 val = 0x00000000000000B1ULL;  // 0b10110001
+ * u64 rot = bits_rotr(val, 2);
+ * // → 0x40000000000000002CULL  (low 2 bits 01 wrap to the top of the u64)
+ * ```
+ *
+ * Example (illustrative 8-bit behavior — mask input and result yourself):
+ * ```c
+ * u8 narrow = 0b10110001;
+ * // For true 8-bit rotr: ((narrow >> 2) | (narrow << 6)) & 0xFF
+ * // → 0b01101100
  * ```
  *
  * @sa bits_rotl()
