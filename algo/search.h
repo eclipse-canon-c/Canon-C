@@ -39,7 +39,24 @@
  *
  * - algo_lower_bound_insert(): Returns first index where array[i] >= key.
  *                              Returns this position even when key is absent.
+ *                              Returns 0 for empty arrays (correct insertion
+ *                              point). Never returns CANON_USIZE_MAX.
  *                              Use for insertion point / range queries.
+ *
+ * Precondition handling:
+ * ────────────────────────────────────────────────────────────────────────────
+ * All functions treat NULL pointers and elem_size == 0 as programmer errors
+ * and fire require_msg (always-on panic). This is consistent throughout:
+ * there is no silent sentinel return for invalid input in any function except
+ * algo_lower_bound (which returns CANON_USIZE_MAX for "not found", a valid
+ * and expected outcome).
+ *
+ * len == 0 is valid input for all functions:
+ * - algo_lower_bound():        returns CANON_USIZE_MAX (key not found)
+ * - algo_lower_bound_insert(): returns 0 (insert at beginning)
+ * - algo_upper_bound():        returns 0 (insert at beginning)
+ * - algo_binary_search():      returns false (not found)
+ * - algo_equal_range():        writes [0, 0) (empty range)
  *
  * Important: Arrays MUST be sorted!
  * ────────────────────────────────────────────────────────────────────────────
@@ -92,19 +109,19 @@
  * Indices: 0  1  2  3  4  5  6
  * Values: [1, 2, 2, 2, 5, 7, 9]
  *
- * lower_bound(2)        = 1    (first exact match)
- * lower_bound_insert(2) = 1    (first index where array[i] >= 2)
- * lower_bound_insert(3) = 4    (insertion point even when absent)
- * upper_bound(2)        = 4    (first index where array[i] > 2)
- * equal_range(2)        = [1, 4) (all elements equal to 2)
- * binary_search(2)      = true (exists)
+ * lower_bound(2)        = 1              (first exact match)
+ * lower_bound_insert(2) = 1              (first index where array[i] >= 2)
+ * lower_bound_insert(3) = 4              (insertion point even when absent)
+ * upper_bound(2)        = 4              (first index where array[i] > 2)
+ * equal_range(2)        = [1, 4)         (all elements equal to 2)
+ * binary_search(2)      = true           (exists)
  *
  * Searching for key=3 (not present):
- * lower_bound(3)        = CANON_USIZE_MAX (not found)
- * lower_bound_insert(3) = 4    (insertion point to maintain order)
- * upper_bound(3)        = 4    (same as lower_bound_insert when not found)
- * equal_range(3)        = [4, 4) (empty range)
- * binary_search(3)      = false (does not exist)
+ * lower_bound(3)        = CANON_USIZE_MAX  (not found)
+ * lower_bound_insert(3) = 4              (insertion point to maintain order)
+ * upper_bound(3)        = 4              (same as lower_bound_insert when absent)
+ * equal_range(3)        = [4, 4)         (empty range)
+ * binary_search(3)      = false          (does not exist)
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -139,11 +156,19 @@
  *     printf("Found!\n");
  * }
  *
- * // Finding insertion point (works even when key is absent)
+ * // Finding insertion point (works even when key is absent, even for len==0)
  * int new_val = 6;
  * usize pos = algo_lower_bound_insert(numbers, 8, sizeof(int), &new_val,
  *                                     algo_cmp_int, NULL);
  * // pos = 3 (insert between 5 and 7)
+ *
+ * // Inserting into an empty array — returns 0, not CANON_USIZE_MAX
+ * usize pos2 = algo_lower_bound_insert(NULL, 0, sizeof(int), &new_val,  // ✗ NULL!
+ *                                      algo_cmp_int, NULL);
+ * int empty[8];
+ * usize pos3 = algo_lower_bound_insert(empty, 0, sizeof(int), &new_val,
+ *                                      algo_cmp_int, NULL);
+ * // pos3 = 0 — correct insertion point for empty array
  *
  * // Equal range
  * int arr[] = {1, 2, 2, 2, 5, 7, 9};
@@ -211,15 +236,19 @@ static inline usize algo_lower_bound_pos(
  * @param cmp Comparison function (borrowed — must match sort order)
  * @param ctx Optional context passed to comparator (borrowed, may be NULL)
  *
- * @return Index of first exact match, or CANON_USIZE_MAX if not found
+ * @return Index of first exact match, or CANON_USIZE_MAX if not found.
+ *         Also returns CANON_USIZE_MAX if array == NULL, key == NULL,
+ *         or len == 0 — callers cannot distinguish these from "not found".
  *
- * @pre elem_size > 0 — triggers require_msg if violated (always-on)
- * @pre cmp != NULL   — triggers require_msg if violated (always-on)
+ * @pre elem_size > 0 — triggers require_msg (always-on panic)
+ * @pre cmp != NULL   — triggers require_msg (always-on panic)
+ * @pre array != NULL — returns CANON_USIZE_MAX if violated
+ * @pre key != NULL   — returns CANON_USIZE_MAX if violated
  * @pre array is sorted according to cmp
  * @pre same cmp was used to sort the array
  *
  * @post If return != CANON_USIZE_MAX: array[return] == key (exact match)
- * @post If return == CANON_USIZE_MAX: key not found in array
+ * @post If return == CANON_USIZE_MAX: key not found, or invalid input
  * @post Array is unchanged (read-only operation)
  *
  * Ownership:
@@ -245,9 +274,11 @@ static inline usize algo_lower_bound(
 {
     require_msg(elem_size > 0, "algo_lower_bound: elem_size must be > 0");
     require_msg(cmp != NULL,   "algo_lower_bound: cmp function cannot be NULL");
+    require_msg(array != NULL, "algo_lower_bound: array cannot be NULL");
+    require_msg(key != NULL,   "algo_lower_bound: key cannot be NULL");
 
-    if (!array || !key || len == 0) {
-        return CANON_USIZE_MAX;
+    if (len == 0) {
+        return CANON_USIZE_MAX; /* empty array — key not found */
     }
 
     usize pos = algo_lower_bound_pos(array, len, elem_size, key, cmp, ctx);
@@ -269,12 +300,15 @@ static inline usize algo_lower_bound(
  * position to insert key to maintain sorted order. Returns this position
  * even when key is not present in the array.
  *
+ * len == 0 is valid — returns 0 (correct insertion point for empty array).
+ * Never returns CANON_USIZE_MAX.
+ *
  * Equivalent to C++ std::lower_bound.
  *
  * The array MUST be sorted according to the comparison function.
  *
  * @param array Pointer to first element of sorted array (borrowed, read-only)
- * @param len Number of elements in array
+ * @param len Number of elements in array (0 is valid)
  * @param elem_size Size of each element in bytes (> 0)
  * @param key Pointer to the search key (borrowed, read-only)
  * @param cmp Comparison function (borrowed — must match sort order)
@@ -282,14 +316,18 @@ static inline usize algo_lower_bound(
  *
  * @return First index where array[i] >= key, in range [0, len].
  *         Returns len if all elements are < key.
- *         Returns CANON_USIZE_MAX only on invalid input (NULL / elem_size == 0).
+ *         Returns 0 if len == 0 (empty array).
+ *         Never returns CANON_USIZE_MAX.
  *
- * @pre elem_size > 0 — triggers require_msg if violated (always-on)
- * @pre cmp != NULL   — triggers require_msg if violated (always-on)
+ * @pre elem_size > 0 — triggers require_msg (always-on panic)
+ * @pre cmp != NULL   — triggers require_msg (always-on panic)
+ * @pre array != NULL — triggers require_msg (always-on panic)
+ * @pre key != NULL   — triggers require_msg (always-on panic)
  * @pre array is sorted according to cmp
  *
- * @post array[return] >= key for all valid return values < len
- * @post array[return - 1] < key for all return > 0
+ * @post return value is in [0, len]
+ * @post If return < len: array[return] >= key
+ * @post If return > 0:   array[return - 1] < key
  * @post Array is unchanged (read-only operation)
  *
  * Ownership:
@@ -315,9 +353,11 @@ static inline usize algo_lower_bound_insert(
 {
     require_msg(elem_size > 0, "algo_lower_bound_insert: elem_size must be > 0");
     require_msg(cmp != NULL,   "algo_lower_bound_insert: cmp function cannot be NULL");
+    require_msg(array != NULL, "algo_lower_bound_insert: array cannot be NULL");
+    require_msg(key != NULL,   "algo_lower_bound_insert: key cannot be NULL");
 
-    if (!array || !key || len == 0) {
-        return CANON_USIZE_MAX;
+    if (len == 0) {
+        return 0; /* empty array — insert at beginning */
     }
 
     return algo_lower_bound_pos(array, len, elem_size, key, cmp, ctx);
@@ -330,10 +370,13 @@ static inline usize algo_lower_bound_insert(
  * algo_lower_bound_insert(), gives the half-open range [lower, upper)
  * of all elements equal to key.
  *
+ * len == 0 is valid — returns 0.
+ * Never returns CANON_USIZE_MAX.
+ *
  * Equivalent to C++ std::upper_bound.
  *
  * @param array Pointer to first element of sorted array (borrowed, read-only)
- * @param len Number of elements in array
+ * @param len Number of elements in array (0 is valid)
  * @param elem_size Size of each element in bytes (> 0)
  * @param key Pointer to the search key (borrowed, read-only)
  * @param cmp Comparison function (borrowed)
@@ -341,15 +384,26 @@ static inline usize algo_lower_bound_insert(
  *
  * @return First index where array[i] > key, in range [0, len].
  *         Returns len if all elements are <= key.
- *         Returns CANON_USIZE_MAX only on invalid input.
+ *         Returns 0 if len == 0 (empty array).
+ *         Never returns CANON_USIZE_MAX.
  *
- * @pre elem_size > 0 — triggers require_msg if violated (always-on)
- * @pre cmp != NULL   — triggers require_msg if violated (always-on)
+ * @pre elem_size > 0 — triggers require_msg (always-on panic)
+ * @pre cmp != NULL   — triggers require_msg (always-on panic)
+ * @pre array != NULL — triggers require_msg (always-on panic)
+ * @pre key != NULL   — triggers require_msg (always-on panic)
  * @pre array is sorted according to cmp
+ *
+ * @post return value is in [0, len]
+ * @post If return < len: array[return] > key
+ * @post If return > 0:   array[return - 1] <= key
+ * @post Array is unchanged (read-only operation)
  *
  * Performance:
  * - Time:  O(log n)
  * - Space: O(1)
+ *
+ * Thread-safety:
+ * - Safe to call concurrently as long as array is not being modified
  */
 static inline usize algo_upper_bound(
     borrowed const void* array,
@@ -361,9 +415,11 @@ static inline usize algo_upper_bound(
 {
     require_msg(elem_size > 0, "algo_upper_bound: elem_size must be > 0");
     require_msg(cmp != NULL,   "algo_upper_bound: cmp function cannot be NULL");
+    require_msg(array != NULL, "algo_upper_bound: array cannot be NULL");
+    require_msg(key != NULL,   "algo_upper_bound: key cannot be NULL");
 
-    if (!array || !key || len == 0) {
-        return CANON_USIZE_MAX;
+    if (len == 0) {
+        return 0; /* empty array */
     }
 
     const u8* bytes = (const u8*)array;
@@ -389,21 +445,26 @@ static inline usize algo_upper_bound(
  * Delegates to algo_lower_bound() internally.
  *
  * @param array Pointer to first element of sorted array (borrowed, read-only)
- * @param len Number of elements in array
+ * @param len Number of elements in array (0 is valid — returns false)
  * @param elem_size Size of each element in bytes (> 0)
  * @param key Pointer to the search key (borrowed, read-only)
  * @param cmp Comparison function (borrowed)
  * @param ctx Optional context (borrowed, may be NULL)
  *
- * @return true if key is found, false otherwise (including invalid input)
+ * @return true if key is found, false otherwise
  *
- * @pre elem_size > 0 — triggers require_msg if violated (always-on)
- * @pre cmp != NULL   — triggers require_msg if violated (always-on)
+ * @pre elem_size > 0 — triggers require_msg (always-on panic)
+ * @pre cmp != NULL   — triggers require_msg (always-on panic)
+ * @pre array != NULL — triggers require_msg (always-on panic)
+ * @pre key != NULL   — triggers require_msg (always-on panic)
  * @pre array is sorted according to cmp
  *
  * Performance:
  * - Time:  O(log n)
  * - Space: O(1)
+ *
+ * Thread-safety:
+ * - Safe to call concurrently as long as array is not being modified
  */
 static inline bool algo_binary_search(
     borrowed const void* array,
@@ -426,28 +487,35 @@ static inline bool algo_binary_search(
  *
  * The range [out_range[0], out_range[1]) contains all elements equal to key.
  * If key is not present, out_range[0] == out_range[1] (empty range).
+ * If len == 0, writes [0, 0).
  *
  * @param array Pointer to first element of sorted array (borrowed, read-only)
- * @param len Number of elements in array
+ * @param len Number of elements in array (0 is valid — writes [0, 0))
  * @param elem_size Size of each element in bytes (> 0)
  * @param key Pointer to the search key (borrowed, read-only)
  * @param cmp Comparison function (borrowed)
  * @param ctx Optional context (borrowed, may be NULL)
  * @param out_range Output array of exactly 2 usize values (owned by caller)
  *
- * @pre elem_size > 0   — triggers require_msg if violated (always-on)
- * @pre cmp != NULL     — triggers require_msg if violated (always-on)
- * @pre out_range != NULL
+ * @pre elem_size > 0   — triggers require_msg (always-on panic)
+ * @pre cmp != NULL     — triggers require_msg (always-on panic)
+ * @pre array != NULL   — triggers require_msg (always-on panic)
+ * @pre key != NULL     — triggers require_msg (always-on panic)
+ * @pre out_range != NULL — triggers require_msg (always-on panic)
  * @pre array is sorted according to cmp
  *
  * @post out_range[0] <= out_range[1]
+ * @post out_range[0] and out_range[1] are both in [0, len]
  * @post All elements in [out_range[0], out_range[1]) are equal to key
- * @post If out_range[0] == out_range[1]: key not present
- * @post On invalid input: out_range[0] = out_range[1] = CANON_USIZE_MAX
+ * @post If out_range[0] == out_range[1]: key not present in array
+ * @post Array is unchanged (read-only operation)
  *
  * Performance:
  * - Time:  O(log n) — two independent binary searches
  * - Space: O(1)
+ *
+ * Thread-safety:
+ * - Safe to call concurrently as long as array is not being modified
  */
 static inline void algo_equal_range(
     borrowed const void* array,
@@ -458,13 +526,15 @@ static inline void algo_equal_range(
     borrowed void* ctx,
     usize out_range[2])
 {
-    require_msg(elem_size > 0,   "algo_equal_range: elem_size must be > 0");
-    require_msg(cmp != NULL,     "algo_equal_range: cmp function cannot be NULL");
+    require_msg(elem_size > 0,     "algo_equal_range: elem_size must be > 0");
+    require_msg(cmp != NULL,       "algo_equal_range: cmp function cannot be NULL");
+    require_msg(array != NULL,     "algo_equal_range: array cannot be NULL");
+    require_msg(key != NULL,       "algo_equal_range: key cannot be NULL");
     require_msg(out_range != NULL, "algo_equal_range: out_range cannot be NULL");
 
-    if (!array || !key || len == 0) {
-        out_range[0] = CANON_USIZE_MAX;
-        out_range[1] = CANON_USIZE_MAX;
+    if (len == 0) {
+        out_range[0] = 0;
+        out_range[1] = 0;
         return;
     }
 
@@ -503,7 +573,7 @@ static inline void algo_equal_range(
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_ALGO_SEARCH — typed slice variants per element type
    ════════════════════════════════════════════════════════════════════════════
-   Requires DEFINE_SLICE(type) and CANON_OPTION(type).
+   Requires DEFINE_SLICE(type).
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -511,13 +581,12 @@ static inline void algo_equal_range(
  *
  * Prerequisites:
  * - DEFINE_SLICE(type) must have been called
- * - CANON_OPTION(type) must have been called
  *
  * Generated functions:
  * - algo_lower_bound_slice_##type(sv, key, cmp, ctx)
  *     → usize: first exact match index, or CANON_USIZE_MAX if not found
  * - algo_lower_bound_insert_slice_##type(sv, key, cmp, ctx)
- *     → usize: insertion point in [0, sv.len], or CANON_USIZE_MAX on invalid input
+ *     → usize: insertion point in [0, sv.len] — never CANON_USIZE_MAX
  * - algo_binary_search_slice_##type(sv, key, cmp, ctx)
  *     → bool: true if exact match exists
  *
