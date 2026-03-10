@@ -47,6 +47,7 @@
  * - pq_pop_option / pq_pop:              O(log n)
  * - pq_peek_option / pq_peek:            O(1)
  * - pq_remove_at_result / pq_remove_at:  O(log n)
+ * - pq_heapify:                          O(n)   — Floyd's algorithm
  * - pq_as_bytes:                         O(1)
  *
  * @sa core/primitives/compare.h — algo_cmp_fn and built-in comparators
@@ -85,7 +86,7 @@ static inline void pq_swap(PriorityQueue* pq, usize a, usize b) {
     usize es = pq->elem_size;
     void* pa = ptr_elem(pq->data, a, es);
     void* pb = ptr_elem(pq->data, b, es);
-    
+
     if (es <= CANON_MEM_SWAP_MAX) {
         mem_swap(pa, pb, es);
     } else {
@@ -133,6 +134,34 @@ static inline void pq_sift_down(PriorityQueue* pq, usize i) {
 /* ───────────────────────────────────────────────────────────────────────────
    Initialization
    ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Initializes a PriorityQueue over a caller-owned buffer
+ *
+ * @param pq       Pointer to the PriorityQueue to initialize (non-NULL)
+ * @param buffer   Caller-owned element buffer — must hold at least
+ *                 capacity * elem_size bytes and remain valid for the
+ *                 lifetime of the queue
+ * @param capacity Maximum number of elements the queue can hold (> 0)
+ * @param elem_size Size of each element in bytes (> 0)
+ * @param cmp      Three-way comparator — must not be NULL
+ * @param ctx      Optional context forwarded to cmp on every comparison
+ *                 (may be NULL)
+ *
+ * @pre pq != NULL       — triggers require_msg (always-on)
+ * @pre buffer != NULL   — triggers require_msg (always-on)
+ * @pre capacity > 0     — triggers require_msg (always-on)
+ * @pre elem_size > 0    — triggers require_msg (always-on)
+ * @pre cmp != NULL      — triggers require_msg (always-on)
+ *
+ * @post pq->len == 0
+ * @post pq->capacity == capacity
+ * @post pq->data == buffer
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
+ */
 static inline void pq_init(
     PriorityQueue* pq,
     void* buffer,
@@ -141,20 +170,50 @@ static inline void pq_init(
     algo_cmp_fn cmp,
     void* ctx)
 {
-    require_msg(pq != NULL, "pq_init: pq cannot be NULL");
-    require_msg(buffer != NULL, "pq_init: buffer cannot be NULL");
-    require_msg(capacity > 0, "pq_init: capacity must be > 0");
-    require_msg(elem_size > 0, "pq_init: elem_size must be > 0");
-    require_msg(cmp != NULL, "pq_init: cmp cannot be NULL");
+    require_msg(pq != NULL,      "pq_init: pq cannot be NULL");
+    require_msg(buffer != NULL,  "pq_init: buffer cannot be NULL");
+    require_msg(capacity > 0,    "pq_init: capacity must be > 0");
+    require_msg(elem_size > 0,   "pq_init: elem_size must be > 0");
+    require_msg(cmp != NULL,     "pq_init: cmp cannot be NULL");
 
-    pq->data     = buffer;
-    pq->len      = 0;
-    pq->capacity = capacity;
+    pq->data      = buffer;
+    pq->len       = 0;
+    pq->capacity  = capacity;
     pq->elem_size = elem_size;
-    pq->cmp      = cmp;
-    pq->ctx      = ctx;
+    pq->cmp       = cmp;
+    pq->ctx       = ctx;
 }
 
+/**
+ * @brief Builds a valid heap from len pre-existing elements in the buffer
+ *
+ * Uses Floyd's algorithm — sifts down from the last internal node toward
+ * the root. This is O(n), not O(n log n). Prefer this over pushing
+ * elements one at a time when bulk-initializing from an existing array.
+ *
+ * The first `len` elements of pq->data must already be populated by the
+ * caller before calling this function. pq_heapify rearranges them
+ * in-place to satisfy the heap invariant.
+ *
+ * If len > pq->capacity, it is silently clamped to pq->capacity.
+ *
+ * @param pq  Initialized PriorityQueue (pq_init must have been called first)
+ * @param len Number of elements already in pq->data to heapify
+ *
+ * @pre pq != NULL     — triggers require_msg (always-on)
+ * @pre pq_init() has been called on pq
+ * @pre pq->data contains len valid elements of size pq->elem_size
+ *
+ * @post pq->len == min(len, pq->capacity)
+ * @post Heap invariant holds: pq->data[parent] <= pq->data[child] for all nodes
+ *
+ * Performance:
+ * - Time:  O(n) — Floyd's algorithm, not O(n log n)
+ * - Space: O(1) — in-place, no allocation
+ *
+ * Note: building a heap by calling pq_push n times is O(n log n).
+ *       Use pq_heapify when all elements are known upfront.
+ */
 static inline void pq_heapify(PriorityQueue* pq, usize len) {
     require_msg(pq != NULL, "pq_heapify: pq cannot be NULL");
     if (!pq || len == 0) return;
@@ -229,6 +288,11 @@ static inline option_type pq_peek_option(const PriorityQueue* pq) {
 
 /**
  * @brief Removes element at given heap index (fallible)
+ *
+ * Replaces the removed slot with the last element, then runs both
+ * pq_sift_up and pq_sift_down to restore the heap invariant regardless
+ * of whether the replacement is smaller or larger than its neighbors.
+ *
  * @return result_bool_Error — Ok(true) on success, Err on invalid index
  */
 static inline result_bool_Error pq_remove_at_result(
@@ -241,6 +305,7 @@ static inline result_bool_Error pq_remove_at_result(
 
     pq->len--;
     if (i == pq->len) {
+        /* Removed the last element — no fixup needed */
         return result_bool_Error_ok(true);
     }
 
@@ -283,11 +348,11 @@ static inline bool pq_remove_at(PriorityQueue* pq, usize i) {
 /* ───────────────────────────────────────────────────────────────────────────
    Queries
    ─────────────────────────────────────────────────────────────────────────── */
-static inline usize pq_len(const PriorityQueue* pq)          { return pq ? pq->len : 0; }
-static inline usize pq_capacity(const PriorityQueue* pq)     { return pq ? pq->capacity : 0; }
-static inline usize pq_remaining(const PriorityQueue* pq)    { return pq ? (pq->capacity - pq->len) : 0; }
-static inline bool  pq_is_empty(const PriorityQueue* pq)     { return !pq || pq->len == 0; }
-static inline bool  pq_is_full(const PriorityQueue* pq)      { return !pq || pq->len >= pq->capacity; }
+static inline usize pq_len(const PriorityQueue* pq)       { return pq ? pq->len : 0; }
+static inline usize pq_capacity(const PriorityQueue* pq)  { return pq ? pq->capacity : 0; }
+static inline usize pq_remaining(const PriorityQueue* pq) { return pq ? (pq->capacity - pq->len) : 0; }
+static inline bool  pq_is_empty(const PriorityQueue* pq)  { return !pq || pq->len == 0; }
+static inline bool  pq_is_full(const PriorityQueue* pq)   { return !pq || pq->len >= pq->capacity; }
 
 static inline bytes_t pq_as_bytes(const PriorityQueue* pq) {
     if (!pq || !pq->data || pq->len == 0) return bytes_empty();
@@ -340,10 +405,10 @@ static inline bool pq_##type##_remove_at(pq_##type* h, usize i) { \
     return pq_remove_at(&h->_pq, i); \
 } \
 \
-static inline usize pq_##type##_len(const pq_##type* h)          { return pq_len(&h->_pq); } \
-static inline usize pq_##type##_capacity(const pq_##type* h)     { return pq_capacity(&h->_pq); } \
-static inline bool  pq_##type##_is_empty(const pq_##type* h)     { return pq_is_empty(&h->_pq); } \
-static inline bool  pq_##type##_is_full(const pq_##type* h)      { return pq_is_full(&h->_pq); } \
-static inline bytes_t pq_##type##_as_bytes(const pq_##type* h)   { return pq_as_bytes(&h->_pq); }
+static inline usize   pq_##type##_len(const pq_##type* h)      { return pq_len(&h->_pq); } \
+static inline usize   pq_##type##_capacity(const pq_##type* h) { return pq_capacity(&h->_pq); } \
+static inline bool    pq_##type##_is_empty(const pq_##type* h) { return pq_is_empty(&h->_pq); } \
+static inline bool    pq_##type##_is_full(const pq_##type* h)  { return pq_is_full(&h->_pq); } \
+static inline bytes_t pq_##type##_as_bytes(const pq_##type* h) { return pq_as_bytes(&h->_pq); }
 
 #endif /* CANON_DATA_PRIORITY_QUEUE_H */
