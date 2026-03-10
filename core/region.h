@@ -112,9 +112,11 @@
  * @sa core/slice.h — bytes_t, str_t, slice_##type used with region lifetime
  * @sa core/scope.h — RAII-style cleanup for simpler single-resource cases
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    Configuration
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Maximum number of cleanup hooks per Region
  *
@@ -132,6 +134,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Region ID
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Unique monotonic identifier for a Region lifetime
  *
@@ -151,9 +154,14 @@ typedef u64 region_id_t;
 #define REGION_ID_STATIC ((region_id_t)0)
 
 /**
- * @brief Returns the next unique region ID (not thread-safe)
+ * @brief Returns the next unique region ID
  *
- * @warning Not thread-safe — use per-thread regions in multi-threaded code
+ * Uses a static counter — monotonically increasing per process.
+ *
+ * @warning Not thread-safe. The counter is a plain static increment with no
+ *          atomic operation. Concurrent calls from multiple threads will race.
+ *          Use one region per thread and never call this from multiple threads
+ *          simultaneously. See file-level thread-safety note.
  */
 static inline region_id_t region_next_id(void) {
     static region_id_t counter = 0;
@@ -163,6 +171,7 @@ static inline region_id_t region_next_id(void) {
 /* ════════════════════════════════════════════════════════════════════════════
    RegionCleanup — a single registered cleanup hook
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief A cleanup function and its context, registered with a Region
  *
@@ -180,6 +189,7 @@ typedef struct {
 /* ════════════════════════════════════════════════════════════════════════════
    Region — the lifetime token
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief A named lifetime boundary — stack-allocated, never heap-allocated
  *
@@ -215,6 +225,7 @@ struct Region {
 /* ════════════════════════════════════════════════════════════════════════════
    Lifecycle
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Opens a new Region and assigns it a unique ID
  *
@@ -228,12 +239,16 @@ struct Region {
  * @post result.arena == NULL
  * @post result.num_hooks == 0
  *
+ * @warning Calls region_next_id() which is not thread-safe.
+ *          Do not call region_begin() concurrently from multiple threads.
+ *          Use one region per thread.
+ *
  * Performance:
  * - Time: O(1)
  * - Space: sizeof(Region) on the stack — no heap allocation
  */
 static inline Region region_begin(void) {
-    Region r = {0};                     // zero-initialize everything
+    Region r = {0};
     r.id    = region_next_id();
     r.open  = true;
     return r;
@@ -262,14 +277,14 @@ static inline Region region_begin(void) {
  */
 static inline void region_end(Region* r) {
     require_msg(r != NULL, "region_end: r cannot be NULL");
-    require_msg(r->open, "region_end: region is already closed");
+    require_msg(r->open,   "region_end: region is already closed");
 
     /* Call cleanup hooks LIFO */
     for (usize i = r->num_hooks; i > 0; i--) {
         RegionCleanup* hook = &r->cleanups[i - 1];
         if (hook->fn) {
             hook->fn(hook->ctx);
-            hook->fn = NULL;
+            hook->fn  = NULL;
             hook->ctx = NULL;
         }
     }
@@ -287,6 +302,7 @@ static inline void region_end(Region* r) {
 /* ════════════════════════════════════════════════════════════════════════════
    Configuration
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Attaches an arena to this region
  *
@@ -294,7 +310,7 @@ static inline void region_end(Region* r) {
  * Only one arena can be attached per region. Attaching a second arena
  * replaces the first (the first is NOT reset at replacement time).
  *
- * @param r Region to attach arena to (must not be NULL, must be open)
+ * @param r     Region to attach arena to (must not be NULL, must be open)
  * @param arena Arena to attach (must not be NULL)
  *
  * @pre r != NULL && r->open
@@ -307,8 +323,8 @@ static inline void region_end(Region* r) {
  * - Space: O(1)
  */
 static inline void region_attach_arena(Region* r, Arena* arena) {
-    require_msg(r != NULL, "region_attach_arena: r cannot be NULL");
-    require_msg(r->open, "region_attach_arena: region is not open");
+    require_msg(r != NULL,     "region_attach_arena: r cannot be NULL");
+    require_msg(r->open,       "region_attach_arena: region is not open");
     require_msg(arena != NULL, "region_attach_arena: arena cannot be NULL");
     r->arena = arena;
 }
@@ -320,7 +336,7 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
  * by region.h for automatic propagation — that is always the caller's job.
  * Useful for debugging and diagnostic tools that want to walk the region tree.
  *
- * @param r Child region (must not be NULL, must be open)
+ * @param r      Child region (must not be NULL, must be open)
  * @param parent Parent region (must not be NULL, must be open)
  *
  * @pre r != NULL && r->open
@@ -331,10 +347,10 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
  * - Space: O(1)
  */
 static inline void region_set_parent(Region* r, Region* parent) {
-    require_msg(r != NULL, "region_set_parent: r cannot be NULL");
-    require_msg(r->open, "region_set_parent: region is not open");
-    require_msg(parent != NULL, "region_set_parent: parent cannot be NULL");
-    require_msg(parent->open, "region_set_parent: parent region is not open");
+    require_msg(r != NULL,       "region_set_parent: r cannot be NULL");
+    require_msg(r->open,         "region_set_parent: region is not open");
+    require_msg(parent != NULL,  "region_set_parent: parent cannot be NULL");
+    require_msg(parent->open,    "region_set_parent: parent region is not open");
     r->parent = parent;
 }
 
@@ -345,8 +361,8 @@ static inline void region_set_parent(Region* r, Region* parent) {
  * If the hook table is full (num_hooks == REGION_MAX_CLEANUP), registration
  * fails and returns false. Increase REGION_MAX_CLEANUP if needed.
  *
- * @param r Region to register with (must not be NULL, must be open)
- * @param fn Cleanup function — void fn(void* ctx) (must not be NULL)
+ * @param r   Region to register with (must not be NULL, must be open)
+ * @param fn  Cleanup function — void fn(void* ctx) (must not be NULL)
  * @param ctx Context passed to fn (may be NULL)
  * @return true on success, false if hook table is full
  *
@@ -359,7 +375,7 @@ static inline void region_set_parent(Region* r, Region* parent) {
  */
 static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) {
     require_msg(r != NULL, "region_register: r cannot be NULL");
-    require_msg(r->open, "region_register: region is not open");
+    require_msg(r->open,   "region_register: region is not open");
     require_msg(fn != NULL, "region_register: fn cannot be NULL");
 
     if (r->num_hooks >= REGION_MAX_CLEANUP) {
@@ -375,6 +391,7 @@ static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) 
 /* ════════════════════════════════════════════════════════════════════════════
    Inspection
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Returns the unique ID of this region
  *
@@ -427,6 +444,7 @@ static inline usize region_hook_count(const Region* r) {
 /* ════════════════════════════════════════════════════════════════════════════
    Lifetime assertions — debug builds only
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Asserts that a region is still open (debug builds only)
  *
@@ -437,7 +455,7 @@ static inline usize region_hook_count(const Region* r) {
  */
 static inline void region_assert_open(const Region* r) {
     ensure_msg(r != NULL, "region_assert_open: r cannot be NULL");
-    ensure_msg(r->open, "region_assert_open: region is closed — borrow may be invalid");
+    ensure_msg(r->open,   "region_assert_open: region is closed — borrow may be invalid");
 }
 
 /**
@@ -446,16 +464,18 @@ static inline void region_assert_open(const Region* r) {
  * A borrow is valid if its region is still open OR it has the static lifetime
  * (REGION_ID_STATIC). Passes silently for static borrows.
  *
- * @param r The region that owns the borrowed data
+ * @param r                The region that owns the borrowed data
  * @param borrow_region_id The ID stamped on the borrow at creation time
  */
-static inline void region_assert_borrow_valid(const Region* r, region_id_t borrow_region_id) {
+static inline void region_assert_borrow_valid(
+    const Region* r, region_id_t borrow_region_id)
+{
     if (borrow_region_id == REGION_ID_STATIC) {
         return; /* static lifetime — always valid */
     }
 
-    ensure_msg(r != NULL, "region_assert_borrow_valid: r cannot be NULL");
-    ensure_msg(r->open, "region_assert_borrow_valid: region is closed");
+    ensure_msg(r != NULL,  "region_assert_borrow_valid: r cannot be NULL");
+    ensure_msg(r->open,    "region_assert_borrow_valid: region is closed");
     ensure_msg(r->id == borrow_region_id,
                "region_assert_borrow_valid: borrow region ID does not match current region");
 }
@@ -463,6 +483,7 @@ static inline void region_assert_borrow_valid(const Region* r, region_id_t borro
 /* ════════════════════════════════════════════════════════════════════════════
    REGION_SCOPE — automatic region_end via scope.h convention (optional)
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @def REGION_SCOPE(name)
  * @brief Declares a Region that is automatically ended at scope exit
@@ -472,13 +493,19 @@ static inline void region_assert_borrow_valid(const Region* r, region_id_t borro
  *
  * @param name Variable name for the Region
  *
+ * @warning Not thread-safe. REGION_SCOPE calls region_begin() which calls
+ *          region_next_id() — a plain static increment with no atomic
+ *          operation. Do not use REGION_SCOPE from multiple threads
+ *          simultaneously. Use one region per thread and never share
+ *          Region pointers across thread boundaries.
+ *
  * Example:
  * ```c
  * #include "core/scope.h"
  * #include "core/region.h"
  *
  * void my_function(void) {
- *     REGION_SCOPE(r);
+ *     REGION_SCOPE(r);               // single-threaded use only
  *     region_attach_arena(&r, &scratch);
  *     // ... work ...
  * } // region_end(&r) called automatically
