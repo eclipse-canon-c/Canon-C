@@ -1197,6 +1197,8 @@ borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb);
 
 **`bool pool_init(Pool* pool, Arena* arena, usize object_size, usize max_objects)`**
 Initializes the pool using space from `arena`. Object sizes are aligned up automatically. Returns `false` if the arena has insufficient space or arguments are invalid.
+
+> ⚠️ The pool assumes exclusive use of the arena from this point forward. Do not make other allocations from the same arena while the pool is active — see interleaving warning below.
 ```c
 Pool pool;
 pool_init(&pool, &arena, sizeof(MyStruct), 128);
@@ -1222,10 +1224,36 @@ pool_init_type(&pool, &arena, MyStruct, 128);
 **`void* pool_get(const Pool* pool, usize i)`**
 Returns a pointer to the object at index `i`. Bounds-checked against `pool->used`. Returns `NULL` if out of bounds.
 
+In debug builds, fires `ensure_msg` if the arena's current offset does not match the expected pool layout — detects interleaved allocations that would corrupt address calculations. Compiled away in release.
+
 **`const void* pool_get_const(const Pool* pool, usize i)`**
-Same, returning a `const` pointer.
+Same, returning a `const` pointer. Same debug-mode interleaving check.
+
+#### Interleaving Warning
+
+`pool_get()` calculates object addresses as `base_mark + i * object_size`. This is only correct if the pool has exclusive use of the arena since `pool_init()`. Any other allocation from the same arena shifts subsequent objects, making all index calculations wrong — silently, with no crash.
+
+```c
+// ✓ Safe — dedicated arena
+Arena pool_arena;
+arena_init(&pool_arena, buf, sizeof(buf));
+pool_init(&pool, &pool_arena, sizeof(Node), 64);
+pool_alloc(&pool);                              // fine
+
+// ✗ Unsafe — interleaved allocation corrupts layout
+pool_init(&pool, &shared_arena, sizeof(Node), 64);
+arena_alloc(&shared_arena, 32);                 // shifts all pool objects!
+pool_get(&pool, 0);                             // wrong address — silent corruption
+                                                // (detected by ensure_msg in debug builds)
+
+// ✓ Safe — allocate non-pool data before pool_init
+void* other = arena_alloc(&shared_arena, 32);   // fine — before pool_init
+pool_init(&pool, &shared_arena, sizeof(Node), 64);
+pool_alloc(&pool);                              // fine — pool owns from here
+```
 
 #### Query
+
 ```c
 pool_used(pool)             // number of allocated objects
 pool_capacity(pool)         // maximum objects
@@ -1254,6 +1282,7 @@ View over `[base, base + used * object_size)`. Non-owning — invalid after rese
 View over the entire reserved region including unallocated slots.
 
 #### Type-Safe Macros
+
 ```c
 pool_alloc_type(pool, Type)              // (Type*) pool_alloc
 pool_alloc_type_zero(pool, Type)         // (Type*) pool_alloc_zero
@@ -1263,7 +1292,7 @@ pool_get_type_const(pool, i, Type)       // (const Type*) pool_get_const
 
 > **Known Limitations:**
 > - No individual deallocation — `pool_reset()` resets the entire pool at once.
-> - `pool_get()` requires objects to be contiguous from `base_mark` — do not interleave other arena allocations between pool objects after `pool_init()`.
+> - Interleaved arena allocations silently corrupt `pool_get()` address calculations — detected by `ensure_msg` in debug builds only. In release builds there is no protection. Use a dedicated arena or allocate all non-pool data before `pool_init()`.
 > - `pool_init()` does not overflow-check `aligned_size * max_objects` beyond a basic guard — use `checked_mul` if counts are untrusted.
 > - Not thread-safe — inherits arena's single-threaded constraint.
 
@@ -1276,6 +1305,8 @@ pool_get_type_const(pool, i, Type)       // (const Type*) pool_get_const
 
 **`Region region_begin(void)`**
 Opens a new region with a unique monotonic ID. Returns a fully initialized stack-allocated `Region`.
+
+> ⚠️ Not thread-safe — calls `region_next_id()` which uses a plain static increment with no atomic operation. Do not call `region_begin()` concurrently from multiple threads. Use one region per thread.
 ```c
 Region r = region_begin();
 ```
@@ -1330,19 +1361,21 @@ Asserts the borrow's stamped ID matches this region and the region is still open
 #### `REGION_SCOPE` Macro
 
 If `scope.h` is included, `REGION_SCOPE(name)` declares a region that is automatically ended at scope exit via `SCOPE_DEFER`. Without `scope.h`, it expands to `region_begin()` only — `region_end()` must be called manually.
+
+> ⚠️ Not thread-safe — `REGION_SCOPE` calls `region_begin()` which uses a plain static counter with no atomic operation. Do not use `REGION_SCOPE` from multiple threads simultaneously. Use one region per thread and never share `Region` pointers across thread boundaries.
 ```c
 #include "core/scope.h"
 #include "core/region.h"
 
 void my_function(void) {
-    REGION_SCOPE(r);
+    REGION_SCOPE(r);                      // single-threaded use only
     region_attach_arena(&r, &scratch);
     // ... region_end(&r) called automatically at scope exit
 }
 ```
 
 > **Known Limitations:**
-> - `region_next_id()` uses a static counter — not thread-safe. Use one region per thread in multi-threaded code.
+> - `region_next_id()` uses a static counter — not thread-safe. Do not call `region_begin()` or `REGION_SCOPE` concurrently from multiple threads. Use one region per thread.
 > - `REGION_MAX_CLEANUP` defaults to 8 hooks; override by defining it before including the header.
 > - Parent regions are never auto-ended — nesting order is always the caller's responsibility.
 > - Lifetime assertions are `ensure_msg` — compiled out in release (`NDEBUG`). No runtime protection in production builds.
