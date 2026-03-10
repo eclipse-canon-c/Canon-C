@@ -5834,12 +5834,12 @@ bool is_pal = algo_is_palindrome_slice_int(sv, algo_cmp_int, NULL);
 
 
 ### `search.h`
-> Binary search utilities for sorted sequences. O(log n) lookup. Requires input to be sorted with the same comparator used for searching.
+> Binary search utilities for sorted sequences. O(log n) for all operations. Requires input to be sorted with the same comparator used for searching.
 
 #### Generic Interface
 
 **`usize algo_lower_bound(const void* array, usize len, usize elem_size, const void* key, algo_cmp_fn cmp, void* ctx)`**
-Returns the index of the first exact match if found, or `CANON_USIZE_MAX` if not found. Internally finds the first position where `array[i] >= key`, then verifies an exact match. Array must be sorted.
+Returns the index of the first exact match, or `CANON_USIZE_MAX` if not found. Internally finds the first position where `array[i] >= key`, then verifies an exact match.
 
 > ⚠️ This is **not** a standard lower_bound — it returns `CANON_USIZE_MAX` when there is no exact match. For the true insertion-point variant (returns position even when key is absent), use `algo_lower_bound_insert()`.
 ```c
@@ -5855,50 +5855,132 @@ usize idx2 = algo_lower_bound(numbers, 6, sizeof(int), &missing, algo_cmp_int, N
 
 Returns `CANON_USIZE_MAX` if `array == NULL`, `key == NULL`, `cmp == NULL`, `len == 0`, or key not found.
 
+---
+
 **`usize algo_lower_bound_insert(const void* array, usize len, usize elem_size, const void* key, algo_cmp_fn cmp, void* ctx)`**
-Returns the first index where `array[i] >= key` — the correct insertion point to maintain sorted order. Returns this position even when the key is not present.
+Returns the first index where `array[i] >= key` — the correct insertion point to maintain sorted order. Returns this position even when the key is not present. Equivalent to C++ `std::lower_bound`. Returns `len` if all elements are less than key.
 ```c
 int numbers[] = {1, 3, 5, 7, 9, 11};
 int new_val = 6;
 usize pos = algo_lower_bound_insert(numbers, 6, sizeof(int), &new_val, algo_cmp_int, NULL);
 // pos = 3 — insert between 5 and 7
+
+int new_val2 = 99;
+usize pos2 = algo_lower_bound_insert(numbers, 6, sizeof(int), &new_val2, algo_cmp_int, NULL);
+// pos2 = 6 — insert at end (all elements < key)
 ```
 
-#### Typed Macro
+Returns `CANON_USIZE_MAX` only on invalid input (`array == NULL`, `key == NULL`, `len == 0`).
+
+---
+
+**`usize algo_upper_bound(const void* array, usize len, usize elem_size, const void* key, algo_cmp_fn cmp, void* ctx)`**
+Returns the first index where `array[i] > key`. Equivalent to C++ `std::upper_bound`. Returns `len` if all elements are less than or equal to key. Combined with `algo_lower_bound_insert()`, gives the half-open range `[lower, upper)` of all elements equal to key.
+```c
+int arr[] = {1, 2, 2, 2, 5, 7, 9};
+int key = 2;
+usize upper = algo_upper_bound(arr, 7, sizeof(int), &key, algo_cmp_int, NULL);
+// upper = 4 — first index where array[i] > 2
+
+// Range of all 2's: [lower_bound_insert, upper_bound) = [1, 4)
+usize lower = algo_lower_bound_insert(arr, 7, sizeof(int), &key, algo_cmp_int, NULL);
+// lower = 1, upper = 4 → indices 1, 2, 3 are all 2
+```
+
+Returns `CANON_USIZE_MAX` only on invalid input.
+
+---
+
+**`void algo_equal_range(const void* array, usize len, usize elem_size, const void* key, algo_cmp_fn cmp, void* ctx, usize out_range[2])`**
+Writes the half-open range `[lower, upper)` of all elements equal to key into `out_range[2]`. Combines `algo_lower_bound_insert()` and `algo_upper_bound()` in a single call. If key is not present, `out_range[0] == out_range[1]` (empty range).
+```c
+int arr[] = {1, 2, 2, 2, 5, 7, 9};
+int key = 2;
+usize range[2];
+algo_equal_range(arr, 7, sizeof(int), &key, algo_cmp_int, NULL, range);
+// range[0] = 1, range[1] = 4 — all 2's are at indices [1, 4)
+
+int missing = 3;
+algo_equal_range(arr, 7, sizeof(int), &missing, algo_cmp_int, NULL, range);
+// range[0] = 4, range[1] = 4 — empty range, key not present
+```
+
+On invalid input: `out_range[0] = out_range[1] = CANON_USIZE_MAX`.
+
+---
+
+**`bool algo_binary_search(const void* array, usize len, usize elem_size, const void* key, algo_cmp_fn cmp, void* ctx)`**
+Boolean existence check — returns `true` if at least one element compares equal to key. Delegates to `algo_lower_bound()` internally.
+```c
+int numbers[] = {1, 3, 5, 7, 9, 11};
+int key = 7;
+bool found = algo_binary_search(numbers, 6, sizeof(int), &key, algo_cmp_int, NULL);
+// found = true
+
+int missing = 6;
+bool found2 = algo_binary_search(numbers, 6, sizeof(int), &missing, algo_cmp_int, NULL);
+// found2 = false
+```
+
+Returns `false` on invalid input.
+
+#### Typed Macros
 
 **`ALGO_LOWER_BOUND_TYPED(array, len, Type, key, cmp, ctx)`**
-Type-safe lower bound — automatically passes `sizeof(Type)`. Returns `CANON_USIZE_MAX` if not found.
+Type-safe exact-match lookup. Returns `CANON_USIZE_MAX` if not found.
+
+**`ALGO_LOWER_BOUND_INSERT_TYPED(array, len, Type, key, cmp, ctx)`**
+Type-safe insertion-point lookup. Always returns a position in `[0, len]`.
+
+**`ALGO_BINARY_SEARCH_TYPED(array, len, Type, key, cmp, ctx)`**
+Type-safe boolean existence check.
 ```c
-usize idx = ALGO_LOWER_BOUND_TYPED(numbers, 6, int, &key, algo_cmp_int, NULL);
+int numbers[] = {1, 3, 5, 7, 9, 11};
+int key = 7;
+
+usize idx  = ALGO_LOWER_BOUND_TYPED(numbers, 6, int, &key, algo_cmp_int, NULL);  // 3
+usize pos  = ALGO_LOWER_BOUND_INSERT_TYPED(numbers, 6, int, &key, algo_cmp_int, NULL);  // 3
+bool found = ALGO_BINARY_SEARCH_TYPED(numbers, 6, int, &key, algo_cmp_int, NULL);  // true
 ```
 
 #### Slice Variant — `DEFINE_ALGO_SEARCH(type)`
 
-Requires `DEFINE_SLICE(type)` and `CANON_OPTION(type)`. Generates:
+Requires `DEFINE_SLICE(type)`. Generates three functions:
 ```c
-usize algo_lower_bound_slice_##type(slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
-bool  algo_binary_search_slice_##type(slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
+usize algo_lower_bound_slice_##type       (slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
+usize algo_lower_bound_insert_slice_##type(slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
+bool  algo_binary_search_slice_##type     (slice_##type sv, const type* key, algo_cmp_fn cmp, void* ctx)
 ```
 ```c
 DEFINE_SLICE(int)
-CANON_OPTION(int)
 DEFINE_ALGO_SEARCH(int)
 
+int numbers[] = {1, 3, 5, 7, 9, 11};
 slice_int sv = slice_int_from(numbers, 6);
-usize idx = algo_lower_bound_slice_int(sv, &key, algo_cmp_int, NULL);
-bool found = algo_binary_search_slice_int(sv, &key, algo_cmp_int, NULL);
+int key = 7;
+
+usize idx    = algo_lower_bound_slice_int(sv, &key, algo_cmp_int, NULL);         // 3
+usize pos    = algo_lower_bound_insert_slice_int(sv, &key, algo_cmp_int, NULL);  // 3
+bool  found  = algo_binary_search_slice_int(sv, &key, algo_cmp_int, NULL);       // true
 ```
 
 #### Search Variants Explained
 ```
-Array: [1, 2, 2, 2, 5, 7, 9]  searching for key=2
+Array: [1, 2, 2, 2, 5, 7, 9]   searching for key=2
         0  1  2  3  4  5  6
 
-algo_lower_bound(2)        = 1       — first exact match (or CANON_USIZE_MAX if absent)
-algo_lower_bound_insert(2) = 1       — first index where array[i] >= key
-algo_lower_bound_insert(3) = 4       — insertion point even when key is absent
-algo_binary_search(2)      = true    — exact match exists
-algo_binary_search(3)      = false   — does not exist
+algo_lower_bound(2)         = 1              — first exact match
+algo_lower_bound_insert(2)  = 1              — first index where array[i] >= 2
+algo_upper_bound(2)         = 4              — first index where array[i] > 2
+algo_equal_range(2)         = [1, 4)         — all indices where array[i] == 2
+algo_binary_search(2)       = true           — exact match exists
+
+Searching for key=3 (not present):
+algo_lower_bound(3)         = CANON_USIZE_MAX  — not found
+algo_lower_bound_insert(3)  = 4              — insertion point to maintain order
+algo_upper_bound(3)         = 4              — same as lower_bound_insert when absent
+algo_equal_range(3)         = [4, 4)         — empty range, key not present
+algo_binary_search(3)       = false          — does not exist
 ```
 
 #### Important: Arrays Must Be Sorted
@@ -5920,13 +6002,18 @@ algo_lower_bound(arr, len, sizeof(int), &key, algo_cmp_int_desc, NULL);
 |---|---|---|
 | `algo_lower_bound` | O(log n) | O(1) |
 | `algo_lower_bound_insert` | O(log n) | O(1) |
+| `algo_upper_bound` | O(log n) | O(1) |
+| `algo_equal_range` | O(log n) | O(1) — two binary searches |
+| `algo_binary_search` | O(log n) | O(1) |
 
 > **Known Limitations:**
 > - `algo_lower_bound` returns `CANON_USIZE_MAX` for both "not found" and invalid input — callers cannot distinguish the two.
 > - `algo_lower_bound` is not a standard lower_bound — use `algo_lower_bound_insert` for insertion-point semantics.
+> - `algo_lower_bound_insert` and `algo_upper_bound` return `CANON_USIZE_MAX` on invalid input but a valid index `[0, len]` otherwise — check for `CANON_USIZE_MAX` before using the result.
 > - Array must be sorted with the same comparator — unsorted input produces incorrect results, not crashes.
 > - `elem_size == 0` triggers `require_msg` — always-on panic.
 > - `cmp == NULL` triggers `require_msg` — always-on panic.
+> - `DEFINE_ALGO_SEARCH` does not generate an `algo_equal_range` slice variant — call `algo_equal_range` directly with `sv.ptr` and `sv.len`.
 > - Not thread-safe if the array is being modified concurrently.
 
 
