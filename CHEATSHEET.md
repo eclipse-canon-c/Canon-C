@@ -2503,7 +2503,7 @@ dynstring_append_n(&s, "hello world", 5);  // appends "hello"
 #### Mutation
 
 **`void dynstring_clear(DynString* s)`**
-Resets len to 0 and writes `'\0'` at index 0. No-op if data == NULL (e.g. after `dynstring_init()` with no appends). Does NOT free or zero the buffer. NULL-safe.
+If `data != NULL`: resets len to 0 and writes `'\0'` at index 0. If `data == NULL` (never appended to): no-op — safe to call. `dynstring_str()` returns `""` in either case. Does NOT free or zero the buffer. NULL-safe.
 
 **`void dynstring_truncate(DynString* s, usize new_len)`**
 Truncates to `new_len` characters. No-op if `new_len >= current len` or data == NULL. NULL-safe.
@@ -2550,7 +2550,7 @@ Returns a heap-allocated copy as a plain C string. The returned pointer is indep
 
 > **Known Limitations:**
 > - No arena support — use `data/stringbuf.h` for arena-backed strings.
-> - `dynstring_clear()` is a no-op if data == NULL — calling it on a freshly `dynstring_init()`-ed string with no appends does nothing.
+> - `dynstring_clear()` is a no-op if `data == NULL` — calling it on a freshly `dynstring_init()`-ed string with no appends does nothing.
 > - `dynstring_clear()` does NOT zero buffer contents — stale data remains readable until overwritten.
 > - `dynstring_with_capacity()` and `dynstring_from()` silently return an empty `DynString` on OOM — check `dynstring_capacity()` if pre-allocation is required.
 > - `dynstring_append_fmt()` makes two `vsnprintf` passes — for tight loops prefer `append_n` or `append` with pre-formatted strings.
@@ -3479,7 +3479,7 @@ typedef struct {
 | `_HM_CAPACITY(map)` | Returns `map->capacity` |
 | `_HM_IS_EMPTY(map)` | Returns `map->len == 0` |
 | `_HM_LOAD_FACTOR(map)` | Returns `(f64)len / (f64)capacity` |
-| `_HM_INSERT(map, key, val)` | Robin Hood insertion with 75% load cap |
+| `_HM_INSERT(map, key, val)` | Robin Hood insertion with 75% load cap; PSL continues incrementing after a Robin Hood swap — it is not reset to the displaced element's old PSL |
 | `_HM_GET(map, key)` | Robin Hood lookup — returns `option_VAL` |
 | `_HM_GET_OR_NULL(map, key)` | Robin Hood lookup — returns borrowed `VAL*` or NULL |
 | `_HM_CONTAINS_KEY(map, key)` | Delegates to `_HM_GET`, checks `is_some` |
@@ -3520,7 +3520,7 @@ hashmap_mangle.h
 > - Do not include directly — `HASHMAP_LINKAGE` guard will produce a compile error.
 > - Internal helpers (`_hm_home`, `_hm_wrap`, `_hm_normalize_hash`) are `static inline` regardless of `HASHMAP_LINKAGE` — they are never exposed in the public API.
 > - `hm_key_t` / `hm_val_t` aliases are cleaned up with `#undef` at end of file — do not rely on them outside this file.
-> - `_HM_CONTAINS_KEY` has a typo in the source (`_hm_key_t` instead of `hm_key_t`) — may cause a compile error on some compilers; use `hashmap_get_or_null` as a workaround if needed.
+
 
 ### `hashmap_mangle.h`
 > Name mangling conventions for the Canon-C hashmap. Single source of truth for all generated type and function names. Override any macro before including to rename the entire API globally.
@@ -5402,6 +5402,8 @@ bytes_t bv = stringbuf_as_bytes(&sb); // raw byte view
 ### `any_all.h`
 > Predicate testing over sequences — existential and universal quantification. Short-circuits on first match or failure. No allocation, O(1) space.
 
+> ⚠️ **`algo_all` returns `false` for empty sequences** — this deliberately departs from mathematical vacuous truth (∀x.P(x) over {} = true). If you need vacuous truth, guard explicitly: `(len == 0) ? true : algo_all(...)`
+
 #### Generic Interface
 
 **`bool algo_any(const void* base, usize len, usize elem_size, algo_pred_fn pred, void* ctx)`**
@@ -5411,7 +5413,7 @@ algo_any(arr, 6, sizeof(int), is_negative, NULL)  // → true if any < 0
 ```
 
 **`bool algo_all(const void* base, usize len, usize elem_size, algo_pred_fn pred, void* ctx)`**
-Returns `true` if all elements satisfy the predicate. Short-circuits on first failure.
+Returns `true` if all elements satisfy the predicate AND `len > 0`. Short-circuits on first failure.
 ```c
 algo_all(arr, 6, sizeof(int), is_positive, NULL)  // → false if any <= 0
 ```
@@ -5424,7 +5426,7 @@ Both return `false` immediately if `base == NULL`, `pred == NULL`, `len == 0`, o
 Type-safe ANY — automatically passes `sizeof(Type)`.
 
 **`ALGO_ALL_TYPED(items, len, Type, pred, ctx)`**
-Type-safe ALL — automatically passes `sizeof(Type)`.
+Type-safe ALL — automatically passes `sizeof(Type)`. Returns `false` for empty arrays.
 ```c
 ALGO_ANY_TYPED(arr, 6, int, is_negative, NULL)
 ALGO_ALL_TYPED(arr, 6, int, is_positive, NULL)
@@ -5443,11 +5445,11 @@ DEFINE_ALGO_ANY_ALL(int)
 
 slice_int sv = slice_int_from(arr, 6);
 algo_any_slice_int(sv, is_negative, NULL)
-algo_all_slice_int(sv, is_positive, NULL)
+algo_all_slice_int(sv, is_positive, NULL)  // false if sv.len == 0
 ```
 
 > **Known Limitations:**
-> - Both return `false` for empty sequences — no vacuous truth for `algo_all`.
+> - Both return `false` for empty sequences — no vacuous truth for `algo_all`. Guard with `(len == 0) ? true : algo_all(...)` if needed.
 > - `elem_size == 0` triggers `require_msg` — always-on panic.
 > - Predicates receive a `const void*` — cast inside the predicate.
 > - Not thread-safe if the array is being modified concurrently.
