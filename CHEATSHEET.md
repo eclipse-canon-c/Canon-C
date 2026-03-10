@@ -4736,7 +4736,7 @@ BITSET_FOR_EACH(&bs, i) {
 
 
 ### `priority_queue.h`
-> Fixed-capacity binary min-heap with caller-owned buffer. O(log n) push/pop, O(1) peek. Use a descending comparator for max-heap behavior. Returns `option_type` / `result_bool_Error` for idiomatic Canon-C style.
+> Fixed-capacity binary min-heap with caller-owned buffer. O(log n) push/pop, O(1) peek, O(n) heapify. Use a descending comparator for max-heap behavior. Returns `option_type` / `result_bool_Error` for idiomatic Canon-C style.
 
 #### Initialization
 
@@ -4749,7 +4749,14 @@ pq_init(&pq, buf, 64, sizeof(int), algo_cmp_int, NULL);
 ```
 
 **`void pq_heapify(PriorityQueue* pq, usize len)`**
-Builds a valid heap from the first `len` elements already in the buffer. Clamps to `capacity` if `len` exceeds it. O(n log n).
+Builds a valid heap from the first `len` elements already in the buffer using Floyd's algorithm. O(n) — significantly faster than pushing n elements one at a time (which would be O(n log n)). Clamps to `capacity` if `len` exceeds it.
+```c
+int buf[] = {5, 3, 8, 1, 9, 2};
+PriorityQueue pq;
+pq_init(&pq, buf, 6, sizeof(int), algo_cmp_int, NULL);
+pq_heapify(&pq, 6);
+// heap invariant now holds — smallest element at top
+```
 
 #### Typed Macro Wrapper
 ```c
@@ -4785,7 +4792,7 @@ Returns the top element without removing it. O(1).
 
 **`result_bool_Error pq_remove_at_result(PriorityQueue* pq, usize i)`**
 **`result_bool_Error pq_T_remove_at_result(pq_T* h, usize i)`**
-Removes element at heap index `i`. Runs sift-up then sift-down to restore invariant. O(log n).
+Removes element at heap index `i`. Replaces the slot with the last element then runs both sift-up and sift-down to restore the invariant regardless of whether the replacement is smaller or larger than its neighbors. O(log n).
 - `Ok(true)` — removed
 - `Err(ERR_OUT_OF_RANGE)` — `i >= len` or `pq == NULL`
 
@@ -4857,7 +4864,25 @@ pq_int_push_result(&h, 20);
 
 option_int top = pq_int_peek_option(&h);  // Some(10) — min at top
 option_int val = pq_int_pop_option(&h);   // Some(10)
+
+// Bulk init from existing array — O(n) via Floyd's algorithm
+int data[] = {5, 3, 8, 1, 9, 2};
+pq_int h2;
+pq_int_init(&h2, data, 6, algo_cmp_int, NULL);
+pq_int_heapify(&h2, 6);
+option_int min = pq_int_peek_option(&h2);  // Some(1)
 ```
+
+#### Performance
+
+| Operation | Time | Notes |
+|---|---|---|
+| `push` | O(log n) | |
+| `pop` | O(log n) | |
+| `peek` | O(1) | |
+| `remove_at` | O(log n) | sift-up then sift-down |
+| `heapify` | O(n) | Floyd's algorithm — not O(n log n) |
+| `as_bytes` | O(1) | |
 
 > **Known Limitations:**
 > - No type safety in the untyped `PriorityQueue` API — passing wrong `elem_size` or mismatched types is UB.
