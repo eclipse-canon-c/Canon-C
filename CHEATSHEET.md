@@ -6040,7 +6040,6 @@ int tmp[7];
 algo_sort(arr, 7, sizeof(int), algo_cmp_int, NULL, tmp);
 // arr = {11, 12, 22, 25, 34, 64, 90}
 ```
-
 Does nothing if `base == NULL`, `len < 2`, `cmp == NULL`, or `elem_size == 0`.
 
 **`bool algo_is_sorted(const void* base, usize len, usize elem_size, algo_cmp_fn cmp, void* ctx)`**
@@ -6049,13 +6048,12 @@ Returns `true` if array is sorted according to `cmp`. Non-destructive.
 bool sorted = algo_is_sorted(arr, 7, sizeof(int), algo_cmp_int, NULL);
 // sorted = true
 ```
-
 Returns `true` for `NULL`, empty, or single-element arrays.
 
 #### Typed Macros
 
 **`ALGO_SORT_TYPED(base, len, Type, cmp, ctx)`**
-Type-safe sort with automatic stack temp buffer. Uses merge sort for `len <= ALGO_SORT_STACK_TEMP_MAX` (default 128), falls back to insertion sort for larger arrays.
+Type-safe sort with automatic stack temp buffer. Uses merge sort for `len <= ALGO_SORT_STACK_TEMP_MAX` (default 128). Falls back to **O(n²) insertion sort** for arrays larger than `ALGO_SORT_STACK_TEMP_MAX` — call `algo_sort()` directly with a heap or arena buffer for large inputs.
 ```c
 ALGO_SORT_TYPED(arr, 7, int, algo_cmp_int, NULL);
 ```
@@ -6073,7 +6071,6 @@ bool sorted = ALGO_IS_SORTED_TYPED(arr, 7, int, algo_cmp_int, NULL);
 #define ALGO_SORT_STACK_TEMP_MAX 256
 #include "algo/sort.h"
 ```
-
 For arrays larger than `ALGO_SORT_STACK_TEMP_MAX`, call `algo_sort()` directly with a heap or arena buffer.
 
 #### Slice Variants — `DEFINE_ALGO_SORT(type)`
@@ -6083,8 +6080,7 @@ Requires `DEFINE_SLICE(type)`. Generates:
 void algo_sort_slice_##type(slice_##type sv, algo_cmp_fn cmp, void* ctx, type* temp, usize temp_cap)
 bool algo_is_sorted_slice_##type(slice_##type sv, algo_cmp_fn cmp, void* ctx)
 ```
-
-If `temp == NULL` or `temp_cap < sv.len`, falls back to insertion sort.
+If `temp == NULL` or `temp_cap < sv.len`, falls back to **O(n²) insertion sort**.
 ```c
 DEFINE_SLICE(int)
 DEFINE_ALGO_SORT(int)
@@ -6092,7 +6088,6 @@ DEFINE_ALGO_SORT(int)
 int arr[] = {64, 34, 25, 12, 22, 11, 90};
 int tmp[7];
 slice_int sv = slice_int_from(arr, 7);
-
 algo_sort_slice_int(sv, algo_cmp_int, NULL, tmp, 7);
 // arr = {11, 12, 22, 25, 34, 64, 90}
 
@@ -6109,7 +6104,8 @@ bool sorted = algo_is_sorted_slice_int(sv, algo_cmp_int, NULL);
 | `len ≥ 16`, `temp == NULL` | insertion sort fallback | O(n²) | ✅ |
 
 > **Known Limitations:**
-> - `ALGO_SORT_TYPED` falls back to insertion sort for arrays larger than `ALGO_SORT_STACK_TEMP_MAX` — call `algo_sort()` directly with a caller-managed buffer for large arrays.
+> - `ALGO_SORT_TYPED` silently falls back to **O(n²) insertion sort** for arrays larger than `ALGO_SORT_STACK_TEMP_MAX` — call `algo_sort()` directly with a caller-managed buffer for large arrays.
+> - `algo_sort_slice_##type` also falls back to **O(n²) insertion sort** if `temp == NULL` or `temp_cap < sv.len`.
 > - `temp_buffer` and `base` must not overlap — undefined behavior if they do.
 > - Inner swap uses a fixed 256-byte stack buffer — elements larger than 256 bytes fall back to a byte-by-byte loop.
 > - Recursion depth is O(log n) — not suitable for extremely deep recursion-constrained environments.
