@@ -52,6 +52,7 @@
  * - Avoid longjmp across SCOPE_DEFER boundaries
  * - Keep cleanup blocks extremely simple (free, fclose, unlock, reset_to…)
  * - SCOPE_DEFER can be safely nested in loops/conditionals
+ * - Never nest SCOPE_DEFER directly inside another SCOPE_DEFER block ( _scope_once and _scope_done will collide silently ) 
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
