@@ -1265,7 +1265,7 @@ pool_init_type(&pool, &arena, MyStruct, 128);
 **`void* pool_get(const Pool* pool, usize i)`**
 Returns a pointer to the object at index `i`. Bounds-checked against `pool->used`. Returns `NULL` if out of bounds.
 
-In debug builds, fires `ensure_msg` if the arena's current offset does not match the expected pool layout — detects interleaved allocations that would corrupt address calculations. Compiled away in release.
+Always fires require_msg if the arena's current offset does not match the expected pool layout — detects interleaved allocations in all builds including release.
 
 **`const void* pool_get_const(const Pool* pool, usize i)`**
 Same, returning a `const` pointer. Same debug-mode interleaving check.
@@ -1285,7 +1285,7 @@ pool_alloc(&pool);                              // fine
 pool_init(&pool, &shared_arena, sizeof(Node), 64);
 arena_alloc(&shared_arena, 32);                 // shifts all pool objects!
 pool_get(&pool, 0);                             // wrong address — silent corruption
-                                                // (detected by ensure_msg in debug builds)
+                                                // (detected by require_msg in debug builds)
 
 // ✓ Safe — allocate non-pool data before pool_init
 void* other = arena_alloc(&shared_arena, 32);   // fine — before pool_init
@@ -1333,7 +1333,7 @@ pool_get_type_const(pool, i, Type)       // (const Type*) pool_get_const
 
 > **Known Limitations:**
 > - No individual deallocation — `pool_reset()` resets the entire pool at once.
-> - Interleaved arena allocations silently corrupt `pool_get()` address calculations — detected by `ensure_msg` in debug builds only. In release builds there is no protection. Use a dedicated arena or allocate all non-pool data before `pool_init()`.
+> - Interleaved arena allocations corrupt `pool_get()` address calculations — always detected by require_msg in all builds. Use a dedicated arena or allocate all non-pool data before `pool_init()`.
 > - `pool_init()` does not overflow-check `aligned_size * max_objects` beyond a basic guard — use `checked_mul` if counts are untrusted.
 > - Not thread-safe — inherits arena's single-threaded constraint.
 
