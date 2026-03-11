@@ -85,18 +85,17 @@ This ensures **explicitness** and prevents hidden behaviors or fragile dependenc
 
 - Everything is optional
 - Everything is explicit
-- No hidden allocation
+- No forced hidden allocation
 - No implicit ownership
-- No global state
+- No forced global state
 - No framework coupling
 - No required runtime
-- No language extensions
-- Works in **plain C99**, with optional GNU C extensions for macros (disable with `#define CANON_NO_GNU_EXTENSIONS`)
+- Core functionality works in **plain C99**
+- Convenience macros requiring GNU C or C23 are optional (disable with `#define CANON_NO_GNU_EXTENSIONS`)
 - No clever tricks
 
 > If behavior cannot be understood by reading the header, it does not belong.
-
-Abstractions must **clarify behavior, not conceal it**.
+> Abstractions must **clarify behavior, not conceal it**.
 
 ---
 
