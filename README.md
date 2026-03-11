@@ -128,11 +128,11 @@ This ensures **explicitness** and prevents hidden behaviors or fragile dependenc
 - Everything is optional
 - Everything is explicit
 - No forced hidden allocation
-- No implicit ownership
+- No forced implicit ownership
 - No forced global state
-- No framework coupling
-- No required runtime
-- Core functionality works in **plain C99**
+- No forced framework coupling
+- No forced require runtime
+- Works in **plain C99**
 - Convenience macros requiring GNU C or C23 are optional (disable with `#define CANON_NO_GNU_EXTENSIONS`)
 - No clever tricks
 
