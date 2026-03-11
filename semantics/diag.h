@@ -1,10 +1,14 @@
 #ifndef CANON_SEMANTICS_DIAG_H
 #define CANON_SEMANTICS_DIAG_H
 
-#include "core/primitives/types.h"      // usize, bool
-#include "core/primitives/contract.h"   // require_msg, ensure_msg
-#include "core/slice.h"                 // str_t
-#include "semantics/error.h"            // Error enum
+#include "core/primitives/types.h"   // usize, bool
+#include "core/primitives/contract.h" // require_msg, ensure_msg
+#include "core/slice.h"              // str_t
+#include "semantics/error.h"         // Error enum
+
+/* Standard library headers required by this file */
+#include <string.h>  // memmove, strncpy
+#include <stdio.h>   // FILE, fprintf, snprintf
 
 /**
  * @file semantics/diag.h
@@ -64,7 +68,6 @@
 #ifndef DIAG_MAX_FRAMES
     #define DIAG_MAX_FRAMES ((usize)8)
 #endif
-
 /**
  * @brief Maximum length of inline message in a DiagFrame
  *
@@ -73,7 +76,6 @@
 #ifndef DIAG_MAX_MSG_LEN
     #define DIAG_MAX_MSG_LEN ((usize)128)
 #endif
-
 /* ════════════════════════════════════════════════════════════════════════════
    DiagFrame — single context record
    ════════════════════════════════════════════════════════════════════════════ */
@@ -85,13 +87,12 @@
  * message is inline char array (null-terminated).
  */
 typedef struct {
-    const char* file;               ///< __FILE__ (literal)
-    usize       line;               ///< __LINE__
-    const char* func;               ///< __func__ (literal)
-    Error       code;               ///< Error code at this level
-    char        message[DIAG_MAX_MSG_LEN]; ///< Inline context message
+    const char* file; ///< __FILE__ (literal)
+    usize line; ///< __LINE__
+    const char* func; ///< __func__ (literal)
+    Error code; ///< Error code at this level
+    char message[DIAG_MAX_MSG_LEN]; ///< Inline context message
 } DiagFrame;
-
 /* ════════════════════════════════════════════════════════════════════════════
    Diag — the chain itself
    ════════════════════════════════════════════════════════════════════════════ */
@@ -104,9 +105,8 @@ typedef struct {
  */
 typedef struct {
     DiagFrame frames[DIAG_MAX_FRAMES];
-    usize     depth;                ///< Current number of frames (0..DIAG_MAX_FRAMES)
+    usize depth; ///< Current number of frames (0..DIAG_MAX_FRAMES)
 } Diag;
-
 /* ════════════════════════════════════════════════════════════════════════════
    Construction & reset
    ════════════════════════════════════════════════════════════════════════════ */
@@ -116,10 +116,9 @@ typedef struct {
  * @return Zero-initialized Diag (depth == 0)
  */
 static inline Diag diag_init(void) {
-    Diag d = {0};                   // zeros depth and all frames
+    Diag d = {0}; // zeros depth and all frames
     return d;
 }
-
 /**
  * @brief Clears the chain (sets depth = 0)
  *
@@ -129,7 +128,6 @@ static inline Diag diag_init(void) {
 static inline void diag_clear(Diag* d) {
     if (d) d->depth = 0;
 }
-
 /* ════════════════════════════════════════════════════════════════════════════
    Pushing frames
    ════════════════════════════════════════════════════════════════════════════ */
@@ -138,43 +136,46 @@ static inline void diag_clear(Diag* d) {
  *
  * If d == NULL → no-op (safe).
  * If chain full → drops oldest frame (shifts), keeps newest context.
+ * Returns true if the oldest frame was dropped.
  *
- * @param d     Diag chain (NULL-safe)
- * @param file  __FILE__
- * @param line  __LINE__
- * @param func  __func__
- * @param code  Error code
- * @param msg   Short message (copied inline, truncated if too long)
+ * @return true if the oldest frame was dropped (chain was full)
+ * @param d Diag chain (NULL-safe)
+ * @param file __FILE__
+ * @param line __LINE__
+ * @param func __func__
+ * @param code Error code
+ * @param msg Short message (copied inline, truncated if too long)
  */
-static inline void diag_push(Diag* d,
+static inline bool diag_push(Diag* d,
                              const char* file,
                              usize line,
                              const char* func,
                              Error code,
                              const char* msg) {
-    if (!d) return;
+    if (!d) return false;
 
+    bool dropped = false;
     if (d->depth == DIAG_MAX_FRAMES) {
         // Chain full → drop oldest frame, shift down
         memmove(&d->frames[0], &d->frames[1],
                 (DIAG_MAX_FRAMES - 1) * sizeof(DiagFrame));
         d->depth--;
+        dropped = true;
     }
-
     DiagFrame* f = &d->frames[d->depth++];
     f->file = file;
     f->line = line;
     f->func = func;
     f->code = code;
-
     if (msg) {
         strncpy(f->message, msg, DIAG_MAX_MSG_LEN - 1);
         f->message[DIAG_MAX_MSG_LEN - 1] = '\0';
     } else {
         f->message[0] = '\0';
     }
-}
 
+    return dropped;
+}
 /**
  * @def DIAG_PUSH(diag, code, msg)
  * @brief Pushes frame with automatic __FILE__/__LINE__/__func__
@@ -182,23 +183,25 @@ static inline void diag_push(Diag* d,
  * Primary macro for adding context.
  * @param diag Diag* (NULL-safe)
  * @param code Error code
- * @param msg  String literal or const char*
+ * @param msg String literal or const char*
  */
 #define DIAG_PUSH(diag, code, msg) \
-    diag_push((diag), __FILE__, (usize)__LINE__, __func__, (code), (msg))
-
+    ((void)diag_push((diag), __FILE__, (usize)__LINE__, __func__, (code), (msg)))
 /**
  * @def DIAG_PUSH_FMT(diag, code, buf, buf_size, fmt, ...)
  * @brief Pushes frame with formatted message (stack buffer only)
  *
  * Uses snprintf into caller-provided buffer, then copies inline.
+ *
+ * Note: Uses the GNU ##__VA_ARGS__ extension (very widely supported on all
+ * modern compilers). On a strict ISO C99 compiler without GNU extensions
+ * simply do the snprintf yourself and then call DIAG_PUSH.
  */
 #define DIAG_PUSH_FMT(diag, code, buf, buf_size, fmt, ...) \
     do { \
         snprintf((buf), (buf_size), (fmt), ##__VA_ARGS__); \
         DIAG_PUSH((diag), (code), (buf)); \
     } while (0)
-
 /* ════════════════════════════════════════════════════════════════════════════
    Inspection
    ════════════════════════════════════════════════════════════════════════════ */
@@ -206,41 +209,34 @@ static inline void diag_push(Diag* d,
 static inline usize diag_depth(const Diag* d) {
     return d ? d->depth : 0;
 }
-
 /** @brief True if chain contains any frames */
 static inline bool diag_has_error(const Diag* d) {
     return d && d->depth > 0;
 }
-
 /** @brief Frame at index i (0 = root cause) */
 static inline const DiagFrame* diag_frame_at(const Diag* d, usize i) {
     if (!d || i >= d->depth) return NULL;
     return &d->frames[i];
 }
-
 /** @brief Root cause frame (deepest) */
 static inline const DiagFrame* diag_root(const Diag* d) {
     return diag_frame_at(d, 0);
 }
-
 /** @brief Most recent frame (surface error) */
 static inline const DiagFrame* diag_latest(const Diag* d) {
     if (!d || d->depth == 0) return NULL;
     return &d->frames[d->depth - 1];
 }
-
 /** @brief Root cause error code (ERR_OK if empty) */
 static inline Error diag_root_code(const Diag* d) {
     const DiagFrame* f = diag_root(d);
     return f ? f->code : ERR_OK;
 }
-
 /** @brief Latest error code (ERR_OK if empty) */
 static inline Error diag_latest_code(const Diag* d) {
     const DiagFrame* f = diag_latest(d);
     return f ? f->code : ERR_OK;
 }
-
 /* ════════════════════════════════════════════════════════════════════════════
    Output (basic printing)
    ════════════════════════════════════════════════════════════════════════════ */
@@ -251,7 +247,6 @@ static inline Error diag_latest_code(const Diag* d) {
  */
 static inline void diag_print(const Diag* d, FILE* stream) {
     if (!d || !stream || d->depth == 0) return;
-
     for (usize i = 0; i < d->depth; i++) {
         const DiagFrame* f = &d->frames[i];
         fprintf(stream,
@@ -264,7 +259,6 @@ static inline void diag_print(const Diag* d, FILE* stream) {
                 f->message[0] ? f->message : "(no message)");
     }
 }
-
 /* ════════════════════════════════════════════════════════════════════════════
    Propagation helpers
    ════════════════════════════════════════════════════════════════════════════ */
@@ -279,7 +273,6 @@ static inline void diag_print(const Diag* d, FILE* stream) {
             return (retval); \
         } \
     } while (0)
-
 /**
  * @def DIAG_PROPAGATE(call, diag, code, msg, retval)
  * @brief Call expression; if false → push context and return
