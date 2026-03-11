@@ -15,11 +15,62 @@
  * - Clarity: Different macros signal different contract types
  * - Customizable: Single panic handler for all contract violations
  *
+ * Build configuration flags:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Three independent flags control enforcement levels:
+ *
+ * CANON_STRICT (define to enable)
+ *   Promotes ensure() and ensure_msg() to always-on — identical to
+ *   require() and require_msg(). Use for certified builds (DO-178C,
+ *   ISO 26262) where debug-only checks must survive into production.
+ *   Takes precedence over NDEBUG for ensure variants.
+ *
+ *   #define CANON_STRICT
+ *   #include "core/primitives/contract.h"
+ *
+ * NDEBUG (standard — define to disable debug checks)
+ *   Disables ensure() and ensure_msg() in release builds.
+ *   Has no effect when CANON_STRICT is defined.
+ *   Standard convention — same as assert.h.
+ *
+ * CANON_NO_REQUIRE (define to disable — use with extreme caution)
+ *   Disables require() and require_msg() — the always-on precondition
+ *   checks. Only for environments where the contract violations have
+ *   been proved impossible by formal verification (Frama-C, SPARK)
+ *   and the panic handler overhead is unacceptable (bare metal, ISR).
+ *
+ *   WARNING: Disabling require() removes Canon-C's last line of defense
+ *   against null pointer dereference, overflow, and invariant violations.
+ *   Do not use unless formal proof covers every call site.
+ *
+ *   #define CANON_NO_REQUIRE
+ *   #include "core/primitives/contract.h"
+ *
+ * Enforcement matrix:
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ *   Flag combination                  require()   ensure()
+ *   ──────────────────────────────────────────────────────
+ *   default (nothing defined)         ON          debug only
+ *   NDEBUG                            ON          OFF
+ *   CANON_STRICT                      ON          ON (always)
+ *   CANON_STRICT + NDEBUG             ON          ON (STRICT wins)
+ *   CANON_NO_REQUIRE                  OFF         debug only
+ *   CANON_NO_REQUIRE + NDEBUG         OFF         OFF
+ *   CANON_NO_REQUIRE + CANON_STRICT   OFF         ON
+ *
+ * Recommended build configurations:
+ * ────────────────────────────────────────────────────────────────────────────
+ *   Development:       default — require ON, ensure debug-only
+ *   Release:           NDEBUG  — require ON, ensure OFF
+ *   Certified build:   CANON_STRICT — require ON, ensure ON (always)
+ *   Formal proof done: CANON_NO_REQUIRE — require OFF (proved impossible)
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - All checks: O(1) — simple boolean expression evaluation
- * - require(): Always enabled, 1 branch + function call on failure
- * - ensure(): Zero cost in release builds (NDEBUG defined)
+ * - require(): Always enabled by default, 1 branch + handler call on failure
+ * - ensure(): Zero cost in release builds (NDEBUG defined, CANON_STRICT not)
  * - unreachable(): Zero cost hint in release, abort in debug
  * - Panic handler: User-defined, typically prints message + aborts
  *
@@ -223,10 +274,18 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * ========================================================================= */
 
 /**
- * @brief Always-on contract check (precondition/invariant)
+ * @brief Always-on precondition check (disabled only with CANON_NO_REQUIRE)
  *
- * Use for critical invariants that must hold even in release builds.
+ * Use for critical invariants that must hold in production builds.
  * Never disabled by NDEBUG.
+ *
+ * Can be disabled by defining CANON_NO_REQUIRE — only appropriate when
+ * formal verification (Frama-C, SPARK) has proved all call sites safe
+ * and the panic handler overhead is unacceptable (bare metal, ISR context).
+ *
+ * @warning Disabling via CANON_NO_REQUIRE removes Canon-C's primary defense
+ *          against null pointer dereference and invariant violations.
+ *          Only use when formal proof covers every call site.
  *
  * @param cond Condition that must be true
  *
@@ -241,17 +300,22 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * @sa ensure(), require_msg()
  */
-#define require(cond) \
-    do { \
-        if (!(cond)) { \
-            _CANON_INVOKE_HANDLER(#cond, NULL); \
-        } \
-    } while (0)
+#ifdef CANON_NO_REQUIRE
+    #define require(cond) ((void)0)
+#else
+    #define require(cond) \
+        do { \
+            if (!(cond)) { \
+                _CANON_INVOKE_HANDLER(#cond, NULL); \
+            } \
+        } while (0)
+#endif
 
 /**
- * @brief Always-on contract check with custom message
+ * @brief Always-on precondition check with custom message
  *
  * Like require(), but includes a custom error message.
+ * Disabled by CANON_NO_REQUIRE — see require() for full warning.
  *
  * @param cond Condition that must be true
  * @param msg  Custom error message (string literal)
@@ -263,18 +327,28 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * @sa require()
  */
-#define require_msg(cond, msg) \
-    do { \
-        if (!(cond)) { \
-            _CANON_INVOKE_HANDLER(#cond, msg); \
-        } \
-    } while (0)
+#ifdef CANON_NO_REQUIRE
+    #define require_msg(cond, msg) ((void)0)
+#else
+    #define require_msg(cond, msg) \
+        do { \
+            if (!(cond)) { \
+                _CANON_INVOKE_HANDLER(#cond, msg); \
+            } \
+        } while (0)
+#endif
 
 /**
- * @brief Debug-only contract check (disabled in release builds)
+ * @brief Debug-only contract check — always-on with CANON_STRICT
  *
- * Use for checks that are helpful during development but too expensive
- * for production. Compiled out when NDEBUG is defined.
+ * Default behavior:
+ * - Debug builds (NDEBUG not defined): ON
+ * - Release builds (NDEBUG defined):   OFF
+ *
+ * With CANON_STRICT defined:
+ * - Always ON regardless of NDEBUG — identical to require()
+ * - Use for certified builds (DO-178C, ISO 26262) where debug
+ *   assertions must survive into production
  *
  * @param cond Condition that should be true
  *
@@ -284,30 +358,47 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *     ensure(pool != NULL);
  *     ensure(ptr != NULL);
  *     ensure(pool->used > 0);  // internal invariant
- *     // ... release logic
  * }
  * ```
  *
- * @sa require()
+ * @sa require(), ensure_msg()
  */
-#ifdef NDEBUG
+#ifdef CANON_STRICT
+    /* Certified build — ensure is always-on, identical to require */
+    #define ensure(cond) \
+        do { \
+            if (!(cond)) { \
+                _CANON_INVOKE_HANDLER(#cond, NULL); \
+            } \
+        } while (0)
+#elif defined(NDEBUG)
     #define ensure(cond) ((void)0)
 #else
     #define ensure(cond) require(cond)
 #endif
 
 /**
- * @brief Debug-only contract check with custom message
+ * @brief Debug-only contract check with custom message — always-on with CANON_STRICT
  *
  * Like ensure(), but includes a custom error message.
- * Compiled out when NDEBUG is defined.
+ *
+ * With CANON_STRICT: always-on regardless of NDEBUG.
+ * Without CANON_STRICT: compiled out when NDEBUG is defined.
  *
  * @param cond Condition that should be true
  * @param msg  Custom error message (string literal)
  *
  * @sa ensure(), require_msg()
  */
-#ifdef NDEBUG
+#ifdef CANON_STRICT
+    /* Certified build — ensure_msg is always-on, identical to require_msg */
+    #define ensure_msg(cond, msg) \
+        do { \
+            if (!(cond)) { \
+                _CANON_INVOKE_HANDLER(#cond, msg); \
+            } \
+        } while (0)
+#elif defined(NDEBUG)
     #define ensure_msg(cond, msg) ((void)0)
 #else
     #define ensure_msg(cond, msg) require_msg(cond, msg)
@@ -319,6 +410,8 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Use in code that should never execute (e.g., switch default cases for
  * exhaustive enums). In debug builds, triggers panic. In release builds,
  * provides optimization hint to compiler.
+ *
+ * With CANON_STRICT: always triggers panic (never just a hint).
  *
  * @remark Never returns
  *
@@ -334,7 +427,14 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * @sa unreachable_msg()
  */
-#ifdef NDEBUG
+#if defined(CANON_STRICT)
+    /* Certified build — unreachable always panics, never silently optimized */
+    #define unreachable() \
+        do { \
+            _CANON_INVOKE_HANDLER("unreachable code path", NULL); \
+            CANON_UNREACHABLE_HINT(); \
+        } while (0)
+#elif defined(NDEBUG)
     #define unreachable() CANON_UNREACHABLE_HINT()
 #else
     #define unreachable() \
@@ -348,12 +448,19 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * @brief Mark code path as unreachable with custom message
  *
  * Like unreachable(), but includes a custom error message.
+ * With CANON_STRICT: always panics.
  *
  * @param msg Custom error message explaining why code is unreachable
  *
  * @sa unreachable()
  */
-#ifdef NDEBUG
+#if defined(CANON_STRICT)
+    #define unreachable_msg(msg) \
+        do { \
+            _CANON_INVOKE_HANDLER("unreachable code path", msg); \
+            CANON_UNREACHABLE_HINT(); \
+        } while (0)
+#elif defined(NDEBUG)
     #define unreachable_msg(msg) CANON_UNREACHABLE_HINT()
 #else
     #define unreachable_msg(msg) \
@@ -368,6 +475,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * Immediately triggers the contract violation handler with a custom message.
  * Use for fatal errors that cannot be recovered from.
+ * Never disabled by any flag — panic is always unconditional.
  *
  * @param msg Error message (string literal)
  *
@@ -393,7 +501,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * @brief Compile-time assertion (fails at compile time if condition is false)
  *
  * Use for checking compile-time constants like struct sizes, alignments,
- * or configuration values.
+ * or configuration values. Never disabled by any flag.
  *
  * @param cond Compile-time constant expression
  * @param msg  Identifier-safe message (no spaces, will appear in error)
@@ -411,6 +519,26 @@ static inline void contract_set_handler(contract_handler_fn handler) {
     /* C99 fallback using array typedef trick */
     #define static_require(cond, msg) \
         typedef char static_assert_##msg[(cond) ? 1 : -1]
+#endif
+
+/* ============================================================================
+ * Build configuration sanity checks
+ * ========================================================================= */
+
+/*
+ * Warn if CANON_NO_REQUIRE is combined with CANON_STRICT — this is almost
+ * certainly a misconfiguration. CANON_STRICT promotes ensure to always-on
+ * but CANON_NO_REQUIRE silences require entirely, leaving no enforcement
+ * for preconditions. The combination is legal but likely unintentional.
+ */
+#if defined(CANON_NO_REQUIRE) && defined(CANON_STRICT)
+    /* Use GCC/Clang pragma warning if available, otherwise rely on comment */
+    #ifdef __GNUC__
+        #pragma message \
+            "WARNING: CANON_NO_REQUIRE + CANON_STRICT: require() is disabled " \
+            "but ensure() is always-on. Preconditions are unprotected. " \
+            "Only use this combination if formal proof covers all require() sites."
+    #endif
 #endif
 
 /* ============================================================================
@@ -435,7 +563,7 @@ void* arena_alloc(Arena* arena, usize size) {
     void* ptr = arena->base + arena->offset;
     arena->offset = new_offset;
 
-    ensure(is_aligned(ptr, 8));  // debug-only invariant check
+    ensure(is_aligned(ptr, 8));  // debug-only, always-on with CANON_STRICT
     return ptr;
 }
 
@@ -472,11 +600,30 @@ void embedded_panic_handler(const char* file, int line, const char* func,
 
 void embedded_init(void) {
     contract_set_handler(embedded_panic_handler);
-    // From this point on, ALL translation units use embedded_panic_handler.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 5: Restore default handler
+// Example 5: Build configurations
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Development build (default):
+//   require ON, ensure debug-only
+//   gcc -o myapp main.c
+
+// Release build:
+//   require ON, ensure OFF
+//   gcc -DNDEBUG -o myapp main.c
+
+// Certified build (DO-178C / ISO 26262):
+//   require ON, ensure always-on
+//   gcc -DCANON_STRICT -o myapp main.c
+
+// Formally verified build (Frama-C proved all sites):
+//   require OFF, ensure OFF
+//   gcc -DCANON_NO_REQUIRE -DNDEBUG -o myapp main.c
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 6: Restore default handler
 // ─────────────────────────────────────────────────────────────────────────────
 contract_set_handler(NULL);  // NULL → restores contract_default_handler
 */
