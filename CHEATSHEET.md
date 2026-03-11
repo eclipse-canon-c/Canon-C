@@ -366,13 +366,53 @@ int my_cmp(const void* a, const void* b, void* ctx) {
 ---
 
 ### `contract.h`
-> `require`, `ensure`, `unreachable`, `panic`, `static_require`. Replaces `assert()` with semantic intent.
+> `require`, `ensure`, `unreachable`, `panic`, `static_require`. Replaces `assert()` with semantic intent. Configurable enforcement levels for development, release, and certified builds.
+
+#### Build Configuration Flags
+
+Three independent flags control enforcement. Define before including the header.
+
+**`CANON_STRICT`** — promotes `ensure`/`ensure_msg`/`unreachable` to always-on, identical to `require`. Use for certified builds (DO-178C, ISO 26262). Takes precedence over `NDEBUG`.
+
+**`NDEBUG`** — standard release flag. Disables `ensure`/`ensure_msg`/`unreachable`. Has no effect when `CANON_STRICT` is defined.
+
+**`CANON_NO_REQUIRE`** — disables `require`/`require_msg`. Only for builds where formal verification (Frama-C, SPARK) has proved all preconditions impossible to violate and panic handler overhead is unacceptable (bare metal, ISR). `panic()` is never affected.
+
+> ⚠️ `CANON_NO_REQUIRE` removes Canon-C's primary defense against null pointer dereference and invariant violations. Do not use unless formal proof covers every call site.
+
+#### Enforcement Matrix
+
+| Flag combination | `require` | `ensure` | `unreachable` |
+|---|---|---|---|
+| default | ON | debug only | debug only |
+| `NDEBUG` | ON | OFF | compiler hint |
+| `CANON_STRICT` | ON | **always ON** | **always panics** |
+| `CANON_STRICT` + `NDEBUG` | ON | **always ON** | **always panics** |
+| `CANON_NO_REQUIRE` | OFF ⚠️ | debug only | debug only |
+| `CANON_NO_REQUIRE` + `NDEBUG` | OFF ⚠️ | OFF | compiler hint |
+| `CANON_NO_REQUIRE` + `CANON_STRICT` | OFF ⚠️ | **always ON** | **always panics** |
+
+#### Recommended Build Configurations
+
+```c
+// Development — require ON, ensure debug-only
+gcc -o myapp main.c
+
+// Release — require ON, ensure OFF
+gcc -DNDEBUG -o myapp main.c
+
+// Certified (DO-178C / ISO 26262) — all checks always-on
+gcc -DCANON_STRICT -o myapp main.c
+
+// Formally verified — require OFF (proved impossible at all sites)
+gcc -DCANON_NO_REQUIRE -DNDEBUG -o myapp main.c
+```
 
 #### Core Macros
 
 **`require(cond)`**
 **`require_msg(cond, msg)`**
-Always-on precondition check. Triggers panic if `cond` is false. Never disabled, even in release builds.
+Always-on precondition check. Triggers panic if `cond` is false. Never disabled by `NDEBUG`. Disabled only by `CANON_NO_REQUIRE` — see warning above.
 ```c
 require(ptr != NULL);
 require_msg(index < len, "index out of bounds");
@@ -380,7 +420,7 @@ require_msg(index < len, "index out of bounds");
 
 **`ensure(cond)`**
 **`ensure_msg(cond, msg)`**
-Debug-only check. Same as `require` but compiled out when `NDEBUG` is defined. Use for internal invariants.
+Debug-only by default. Compiled out with `NDEBUG`. Always-on with `CANON_STRICT`. Use for internal invariants that are too expensive or verbose for production — unless `CANON_STRICT` is defined, in which case they survive into production unchanged.
 ```c
 ensure(pool->used <= pool->capacity);
 ensure_msg(is_aligned(ptr, 8), "pointer must be 8-byte aligned");
@@ -388,7 +428,7 @@ ensure_msg(is_aligned(ptr, 8), "pointer must be 8-byte aligned");
 
 **`unreachable()`**
 **`unreachable_msg(msg)`**
-Marks a code path that should never execute. In debug: triggers panic. In release: compiler optimization hint.
+Marks a code path that should never execute. Debug / `CANON_STRICT`: triggers panic. Release (`NDEBUG` only): compiler optimization hint — silently undefined if reached.
 ```c
 switch (state) {
     case STATE_A: return handle_a();
@@ -398,13 +438,13 @@ switch (state) {
 ```
 
 **`panic(msg)`**
-Unconditional panic with a message. Use for fatal errors with no recovery.
+Unconditional panic with a message. Use for fatal errors with no recovery. Never disabled by any flag — not by `NDEBUG`, not by `CANON_NO_REQUIRE`.
 ```c
 panic("failed to parse configuration file");
 ```
 
 **`static_require(cond, msg)`**
-Compile-time assertion. Fails at compile time if `cond` is false. `msg` must be an identifier (no spaces).
+Compile-time assertion. Fails at compile time if `cond` is false. `msg` must be an identifier (no spaces). Never disabled by any flag.
 ```c
 static_require(sizeof(Header) == 64, header_must_be_64_bytes);
 ```
@@ -416,17 +456,14 @@ Replaces the default panic handler (which prints to stderr and calls `abort()`).
 The handler is **program-wide** — setting it once affects all translation units.
 Passing `NULL` restores the default handler.
 Call once during program initialization, before spawning threads.
-
 ```c
 void my_handler(const char* file, int line, const char* func,
                 const char* expr, const char* msg) {
     log_fatal("%s at %s:%d", expr, file, line);
     exit(1);
 }
-
 // Install custom handler
 contract_set_handler(my_handler);
-
 // Restore default handler
 contract_set_handler(NULL);
 ```
@@ -435,15 +472,19 @@ contract_set_handler(NULL);
 > **Note:** `contract_set_handler()` is not thread-safe. Call it before spawning threads.
 
 #### Quick Reference
-| Macro | Always on | Has `_msg` variant | Release behavior |
-|---|---|---|---|
-| `require` | ✅ | ✅ | Panics |
-| `ensure` | ❌ | ✅ | No-op |
-| `unreachable` | ❌ | ✅ | Compiler hint |
-| `panic` | ✅ | — | Panics |
-| `static_require` | ✅ | — | Compile error |
 
-> **Known Limitations:** Contracts are for catching bugs, not handling expected errors. For recoverable failures, use the `Result` type instead.
+| Macro | Default | `NDEBUG` | `CANON_STRICT` | `CANON_NO_REQUIRE` | Has `_msg` |
+|---|---|---|---|---|---|
+| `require` | ON | ON | ON | **OFF** ⚠️ | ✅ |
+| `ensure` | debug only | OFF | **always ON** | debug only | ✅ |
+| `unreachable` | debug only | hint | **always panics** | debug only | ✅ |
+| `panic` | ON | ON | ON | ON | — |
+| `static_require` | ON | ON | ON | ON | — |
+
+> **Known Limitations:**
+> - Contracts are for catching bugs, not handling expected errors. For recoverable failures, use the `Result` type instead.
+> - `CANON_NO_REQUIRE` + `CANON_STRICT` triggers a compile-time `#pragma message` warning — this combination leaves preconditions unprotected while promoting postconditions to always-on, which is almost certainly a misconfiguration.
+> - The default panic handler uses `fprintf` — not guaranteed thread-safe on all platforms. Install a thread-safe custom handler for multithreaded use.
 
 ---
 
@@ -1299,14 +1340,50 @@ pool_get_type_const(pool, i, Type)       // (const Type*) pool_get_const
 ---
 
 ### `region.h`
-> Named lifetime boundaries for borrow validity. A Region token represents a scope — borrowed views can be stamped with its ID and validated against it in debug builds. Stack-allocated only, zero heap use.
+> Named lifetime boundaries for borrow validity. A Region token represents a scope — borrowed views can be stamped with its ID and validated against it in debug builds. Stack-allocated only, zero heap use, no global state.
+
+#### Build Configuration Flags
+
+**`REGION_MAX_CLEANUP`** (define before include, default 8)
+Maximum cleanup hooks per Region. `sizeof(Region)` grows with this value. Override for builds where stack size must be minimized:
+```c
+#define REGION_MAX_CLEANUP 4
+#include "core/region.h"
+```
+
+**`CANON_NO_REGION_PARENT`** — strips the `parent` pointer field from the `Region` struct and disables `region_set_parent()`. `region_has_parent()` remains available but always returns `false`. Use for certified builds where the parent pointer serves no mechanical purpose and struct size must be minimal and fully provable.
+
+**`CANON_STRICT`** (defined in `contract.h` — propagates automatically)
+Promotes `ensure_msg()` to always-on. `region_assert_open()` and `region_assert_borrow_valid()` become always-on in certified builds without any changes here.
+
+#### Recommended Build Configurations
+
+```c
+// Development — assertions debug-only, parent tracking enabled
+gcc -o myapp main.c
+
+// Release — assertions compiled away, parent tracking enabled
+gcc -DNDEBUG -o myapp main.c
+
+// Certified (DO-178C / ISO 26262) — assertions always-on, struct minimal
+gcc -DCANON_STRICT -DCANON_NO_REGION_PARENT -o myapp main.c
+```
+
+#### Region ID Design
+
+Region IDs are derived from the Region's own stack address:
+```c
+r.id = (region_id_t)(uintptr_t)&r
+```
+- Unique for all simultaneously live regions
+- No global counter — no global state, fully thread-safe
+- Not monotonic — IDs are addresses, not sequence numbers
+- IDs may alias across sequential (non-overlapping) lifetimes at the same stack address — safe because `region_assert_borrow_valid()` checks `r->open` in addition to the ID
 
 #### Lifecycle
 
 **`Region region_begin(void)`**
-Opens a new region with a unique monotonic ID. Returns a fully initialized stack-allocated `Region`.
-
-> ⚠️ Not thread-safe — calls `region_next_id()` which uses a plain static increment with no atomic operation. Do not call `region_begin()` concurrently from multiple threads. Use one region per thread.
+Opens a new region. ID derived from stack address — no global state, thread-safe.
 ```c
 Region r = region_begin();
 ```
@@ -1329,7 +1406,7 @@ region_end(&r);                          // arena_reset called automatically
 ```
 
 **`void region_set_parent(Region* r, Region* parent)`**
-Records a parent region for nesting intent. Informational only — the parent is never auto-ended.
+Records a parent region for nesting intent. Informational only — the parent is never auto-ended. Not available when `CANON_NO_REGION_PARENT` is defined.
 
 **`bool region_register(Region* r, void (*fn)(void* ctx), void* ctx)`**
 Registers a cleanup hook. Hooks are called LIFO on `region_end()`. Returns `false` if the hook table is full (`REGION_MAX_CLEANUP`, default 8).
@@ -1340,13 +1417,16 @@ region_register(&r, release_lock, &my_mutex);
 
 #### Inspection
 ```c
-region_id(&r)           // unique region_id_t (0 if r == NULL)
+region_id(&r)           // unique region_id_t (REGION_ID_STATIC if r == NULL)
 region_is_open(&r)      // true between begin and end
-region_has_parent(&r)   // true if parent was set
+region_has_parent(&r)   // true if parent was set (always false with CANON_NO_REGION_PARENT)
 region_hook_count(&r)   // number of registered hooks
 ```
 
-#### Lifetime Assertions (debug only, no-op in release)
+#### Lifetime Assertions
+
+Default: debug builds only — compiled away with `NDEBUG`.
+With `CANON_STRICT`: always-on.
 
 **`void region_assert_open(const Region* r)`**
 Fires `ensure_msg` if the region is closed. Call before using a borrowed value tied to this region.
@@ -1356,30 +1436,29 @@ Asserts the borrow's stamped ID matches this region and the region is still open
 
 #### Special IDs
 
-**`REGION_ID_STATIC`** — reserved ID `0`. Borrows stamped with this are considered permanently valid (string literals, static buffers).
+**`REGION_ID_STATIC`** — reserved ID `0`. Borrows stamped with this are considered permanently valid (string literals, static buffers). A valid Region will never have ID 0 — no object has address 0 on a conforming C implementation.
 
 #### `REGION_SCOPE` Macro
 
-If `scope.h` is included, `REGION_SCOPE(name)` declares a region that is automatically ended at scope exit via `SCOPE_DEFER`. Without `scope.h`, it expands to `region_begin()` only — `region_end()` must be called manually.
-
-> ⚠️ Not thread-safe — `REGION_SCOPE` calls `region_begin()` which uses a plain static counter with no atomic operation. Do not use `REGION_SCOPE` from multiple threads simultaneously. Use one region per thread and never share `Region` pointers across thread boundaries.
+If `scope.h` is included, `REGION_SCOPE(name)` declares a region that is automatically ended at scope exit via `SCOPE_DEFER`. Without `scope.h`, it expands to `region_begin()` only — `region_end()` must be called manually. Thread-safe — no global counter.
 ```c
 #include "core/scope.h"
 #include "core/region.h"
 
 void my_function(void) {
-    REGION_SCOPE(r);                      // single-threaded use only
+    REGION_SCOPE(r);
     region_attach_arena(&r, &scratch);
     // ... region_end(&r) called automatically at scope exit
 }
 ```
 
 > **Known Limitations:**
-> - `region_next_id()` uses a static counter — not thread-safe. Do not call `region_begin()` or `REGION_SCOPE` concurrently from multiple threads. Use one region per thread.
 > - `REGION_MAX_CLEANUP` defaults to 8 hooks; override by defining it before including the header.
 > - Parent regions are never auto-ended — nesting order is always the caller's responsibility.
-> - Lifetime assertions are `ensure_msg` — compiled out in release (`NDEBUG`). No runtime protection in production builds.
+> - Lifetime assertions use `ensure_msg` — debug only by default, always-on with `CANON_STRICT`, compiled out in standard release (`NDEBUG`). No runtime protection in production unless `CANON_STRICT` is defined.
 > - Attaching a second arena silently replaces the first without resetting it.
+> - Region IDs are stack addresses — not monotonic. Do not use for logging or ordering purposes.
+> - `region_set_parent()` is not available when `CANON_NO_REGION_PARENT` is defined.
 
 ---
 
