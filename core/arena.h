@@ -1,6 +1,8 @@
 #ifndef CANON_CORE_ARENA_H
 #define CANON_CORE_ARENA_H
+
 #include <stdint.h> // uintptr_t (via ptr.h, explicit for clarity)
+
 #include "core/primitives/types.h" // u8, usize
 #include "core/primitives/limits.h" // CANON_ARENA_MAX_SIZE, CANON_USIZE_MAX, CANON_MAX_ALIGN
 #include "core/primitives/contract.h" // require_msg, ensure_msg
