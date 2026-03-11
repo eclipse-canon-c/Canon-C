@@ -1514,6 +1514,7 @@ defer { pthread_mutex_unlock(&mtx); }
 - Never put `return`, `break`, `continue`, or outward `goto` **inside** a defer block
 - Never use `longjmp` across a defer boundary — cleanup will be skipped
 - Keep defer blocks simple: `free`, `fclose`, `unlock`, `arena_reset_to`, etc.
+- Never nest SCOPE_DEFER directly inside another SCOPE_DEFER block ( _scope_once and _scope_done will collide silently )
 
 > **Known Limitations:** `goto` jumping **out** of the enclosing block silently skips all defers in that block — this is the most common footgun. `longjmp` bypasses all defers completely. Not a substitute for exception handling in large codebases with complex control flow.
 
