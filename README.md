@@ -1,5 +1,37 @@
 # Canon-C
 
+<!-- Platforms -->
+![Windows](https://img.shields.io/badge/Platform-Windows-blue?logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/Platform-Linux-green?logo=linux&logoColor=white)
+![macOS](https://img.shields.io/badge/Platform-macOS-black?logo=apple&logoColor=white)
+
+<!-- License -->
+![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-yellow?logo=mozilla&logoColor=white)
+
+<!-- Development / Testing Compilers -->
+![GCC](https://img.shields.io/badge/GCC-Dev%2FTest-orange)
+![Clang](https://img.shields.io/badge/Clang-Dev%2FTest-orange)
+![MSVC](https://img.shields.io/badge/MSVC-Dev%2FTest-orange)
+
+<!-- Runtime / Memory Checking -->
+![ASan+UBSan](https://img.shields.io/badge/ASan%2BUBSan-Configurable-lightgrey)
+![Valgrind](https://img.shields.io/badge/Valgrind-Configurable-lightgrey)
+![Fuzzing](https://img.shields.io/badge/Fuzzing-Configurable-lightgrey)
+
+<!-- Static Analysis -->
+![clang-tidy](https://img.shields.io/badge/clang--tidy-Configurable-lightgrey)
+![Cppcheck](https://img.shields.io/badge/Cppcheck-Configurable-lightgrey)
+![Polyspace/LDRA](https://img.shields.io/badge/Polyspace%2FLDRA-Configurable-lightgrey)
+
+<!-- Formal Verification -->
+![Frama-C](https://img.shields.io/badge/Frama--C-Configurable-lightgrey)
+![MC/DC](https://img.shields.io/badge/MC--DC-Configurable-lightgrey)
+
+<!-- Production / Certification -->
+![CompCert](https://img.shields.io/badge/CompCert-Configurable-lightgrey)
+![DO-178C Level C/D](https://img.shields.io/badge/DO--178C-Configurable-lightblue)
+![ISO26262 ASIL C/B](https://img.shields.io/badge/ISO26262-Configurable-lightblue)
+
 Canon-C — Treating C as an execution backend, not a semantic authority.  
 A semantic standard library built from explicit, composable C modules.
 
