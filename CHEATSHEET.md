@@ -2345,82 +2345,88 @@ Pass `&owning_struct` as `source` for debugger visibility. Pass `NULL` if no own
 > - `DEFINE_BORROWED_SLICE(type)` must be called at file scope after `DEFINE_SLICE(type)`.
 
 ---
-
 ### `diag.h`
-> Structured diagnostic frames — stack-allocated, allocation-free context chain for error propagation. Answers "why and where" to complement `error.h` (what failed) and `result.h` (propagation). Chain reads bottom-up: `frame[0]` = root cause, last frame = surface error.
+> Structured diagnostic frames — stack-allocated, allocation-free context chain for error propagation.  
+> Answers **"why and where"** to complement `error.h` (what failed) and `result.h` (propagation).  
+> Chain reads **bottom-up**: `frame[0]` = root cause, last frame = surface error.
 
 #### Configuration
 ```c
-#define DIAG_MAX_FRAMES  8    // max frames before oldest is dropped
+#define DIAG_MAX_FRAMES 8     // max frames before oldest is dropped
 #define DIAG_MAX_MSG_LEN 128  // inline message length per frame (truncated if exceeded)
 ```
-
-Override before including. `sizeof(Diag)` ≈ 640 bytes — stack-safe.
+Override before including the header. `sizeof(Diag) ≈ 640 bytes` — stack-safe.
 
 #### Types
 ```c
 // Single context record
 typedef struct {
-    const char* file;                      // __FILE__ literal
-    usize       line;                      // __LINE__
-    const char* func;                      // __func__ literal
-    Error       code;                      // error code at this level
-    char        message[DIAG_MAX_MSG_LEN]; // inline, null-terminated
+    const char* file;               // __FILE__ literal
+    usize line;                     // __LINE__
+    const char* func;               // __func__ literal
+    Error code;                     // error code at this level
+    char message[DIAG_MAX_MSG_LEN]; // inline, null-terminated
 } DiagFrame;
 
 // The chain itself — pass by pointer, NULL is always safe
 typedef struct {
     DiagFrame frames[DIAG_MAX_FRAMES];
-    usize     depth;  // 0 = empty
+    usize depth; // 0 = empty
 } Diag;
 ```
 
 #### Construction & Reset
 ```c
-Diag diag_init(void)       // zero-initialized, depth == 0
-void diag_clear(Diag* d)   // sets depth = 0, NULL-safe, does not zero frames
+Diag diag_init(void);     // zero-initialized, depth == 0
+void diag_clear(Diag* d); // sets depth = 0, NULL-safe, does NOT zero frames
 ```
 
-#### Pushing Frames
+#### Pushing Frames (UPDATED)
 ```c
-// Manual push (rarely needed directly)
-void diag_push(Diag* d, const char* file, usize line,
-               const char* func, Error code, const char* msg);
+// Manual push — now returns bool (true = oldest frame was dropped)
+bool diag_push(Diag* d,
+               const char* file,
+               usize line,
+               const char* func,
+               Error code,
+               const char* msg);
 
 // Primary macro — captures __FILE__, __LINE__, __func__ automatically
-DIAG_PUSH(diag, code, msg)
+// (return value is safely discarded so old code works unchanged)
+DIAG_PUSH(diag, code, msg);
 
 // Formatted message into caller-provided stack buffer
 DIAG_PUSH_FMT(diag, code, buf, buf_size, fmt, ...)
 ```
 
-If the chain is full, the oldest frame is dropped (shifted out) and the new frame is appended — newest context is always preserved.
+Behaviour on full chain: oldest frame is dropped (shifted out) and the new frame is appended — newest context is always preserved.  
+`diag_push` now signals drops (the macro discards the bool for backward compatibility).
 
 #### Inspection
 ```c
-usize            diag_depth(const Diag* d)           // NULL-safe
-bool             diag_has_error(const Diag* d)        // depth > 0
-const DiagFrame* diag_frame_at(const Diag* d, usize i) // NULL if OOB
-const DiagFrame* diag_root(const Diag* d)             // frame[0], root cause
-const DiagFrame* diag_latest(const Diag* d)           // frame[depth-1], surface error
-Error            diag_root_code(const Diag* d)         // ERR_OK if empty
-Error            diag_latest_code(const Diag* d)       // ERR_OK if empty
+usize diag_depth(const Diag* d);                        // NULL-safe
+bool diag_has_error(const Diag* d);                     // depth > 0
+const DiagFrame* diag_frame_at(const Diag* d, usize i); // NULL if OOB
+const DiagFrame* diag_root(const Diag* d);              // frame[0]
+const DiagFrame* diag_latest(const Diag* d);            // frame[depth-1]
+Error diag_root_code(const Diag* d);                    // ERR_OK if empty
+Error diag_latest_code(const Diag* d);                  // ERR_OK if empty
 ```
 
 #### Output
 ```c
-// Prints full chain root → latest to FILE*
+// Prints full chain (root → latest) to FILE*
 // Format: [0] file.c:42 in func() — error N: "message"
-void diag_print(const Diag* d, FILE* stream)
+void diag_print(const Diag* d, FILE* stream);
 ```
 
 #### Propagation Macros
 ```c
 // Push frame and return retval if condition is true
-DIAG_RETURN_IF(cond, diag, code, msg, retval)
+DIAG_RETURN_IF(cond, diag, code, msg, retval);
 
 // Call expression; if it returns false → push frame and return retval
-DIAG_PROPAGATE(call, diag, code, msg, retval)
+DIAG_PROPAGATE(call, diag, code, msg, retval);
 ```
 
 #### Typical usage
@@ -2433,18 +2439,22 @@ if (!parse_int(str, &val, &diag)) {
     return false;
 }
 
-// With DIAG_PROPAGATE:
-DIAG_PROPAGATE(open_file(path, &diag), &diag, ERR_IO_FAILED, "could not open config", false);
+// One-liner propagation
+DIAG_PROPAGATE(open_file(path, &diag),
+               &diag,
+               ERR_IO_FAILED,
+               "could not open config",
+               false);
 ```
 
-> **Known Limitations:**
-> - No runtime enforcement — caller must pass `&diag` explicitly at every level.
-> - On overflow, oldest frame is silently dropped — deep chains lose root context if they exceed `DIAG_MAX_FRAMES`.
-> - `DIAG_PUSH_FMT` requires a caller-provided stack buffer — no internal formatting buffer.
-> - `diag_print` depends on `FILE*` / `fprintf` — not suitable for embedded targets without stdio.
-> - `diag_clear` does not zero frame contents — stale data remains in unused slots (depth is the authority).
-> - `file` and `func` are string literal pointers — never copied, never freed, but also never safe to store beyond program lifetime if pointing to dynamically loaded code.
-
+#### Known Limitations
+- No runtime enforcement — caller must pass `&diag` explicitly at every level.
+- On overflow, oldest frame is dropped (now detectable via `diag_push` return value).
+- `DIAG_PUSH_FMT` requires a caller-provided stack buffer — no internal formatting buffer.
+- `diag_print` depends on `FILE*` / `fprintf` — not suitable for embedded targets without `stdio`.
+- `diag_clear` does not zero frame contents — stale data remains in unused slots (depth is the authority).
+- `file` and `func` are string literal pointers — never copied, never freed, but also never safe to store beyond program lifetime if pointing to dynamically loaded code.
+- `DIAG_PUSH_FMT` uses GNU `##__VA_ARGS__` extension (widely supported).
 ---
 
 ### `error.h`
