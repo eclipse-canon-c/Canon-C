@@ -951,9 +951,9 @@ MyItem* item = PTR_CONTAINER_OF(node_ptr, MyItem, node);
 > Linear bump allocator. Allocates sequentially from a fixed caller-owned buffer. No individual deallocation — reset or rollback only.
 
 #### Initialization
-
-**`void arena_init(Arena* arena, void* buffer, usize capacity)`**
+**`void arena_init(Arena* arena, void* buffer, usize capacity)`**  
 Initializes arena using caller-provided memory. Buffer must remain valid for the arena's lifetime.
+
 ```c
 u8 buf[4096];
 Arena arena;
@@ -961,79 +961,96 @@ arena_init(&arena, buf, sizeof(buf));
 ```
 
 #### Allocation
-
-**`void* arena_alloc(Arena* arena, usize size)`**
+```c
+void* arena_alloc(Arena* arena, usize size)
+```
 Allocates `size` bytes with natural alignment. Returns `NULL` on failure.
+
 ```c
 MyStruct* s = arena_alloc(&arena, sizeof(MyStruct));
 ```
 
-**`void* arena_alloc_aligned(Arena* arena, usize size, usize alignment)`**
+```c
+void* arena_alloc_aligned(Arena* arena, usize size, usize alignment)
+```
 Same as `arena_alloc` but with explicit power-of-2 alignment.
 
-**`void* arena_alloc_zero(Arena* arena, usize size)`**
-Allocates and zero-initializes. O(size).
-
-**`void* arena_alloc_aligned_zero(Arena* arena, usize size, usize alignment)`**
-Allocates with explicit alignment and zero-initializes. O(size).
+```c
+void* arena_alloc_zero(Arena* arena, usize size)
+void* arena_alloc_aligned_zero(Arena* arena, usize size, usize alignment)
+```
+Allocates and zero-initializes. **O(size)**.
 
 #### Try Variants
-
-**`bool arena_try_alloc(Arena* arena, usize size, void** out)`**
-**`bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out)`**
+```c
+bool arena_try_alloc(Arena* arena, usize size, void** out)
+bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out)
+```
 Same as above but returns `false` instead of `NULL` on failure. Writes pointer to `out`.
 
 #### Typed Macros
-
 ```c
 arena_alloc_type(arena, Type)              // allocates one Type
-arena_alloc_array(arena, Type, count)      // allocates count Types
-arena_alloc_type_zero(arena, Type)         // allocates and zero-initializes one Type
+arena_alloc_array(arena, Type, count)     // allocates count Types
+arena_alloc_type_zero(arena, Type)        // allocates and zero-initializes one Type
 arena_alloc_array_zero(arena, Type, count) // allocates and zero-initializes count Types
 ```
+
 ```c
-MyStruct* s   = arena_alloc_type(&arena, MyStruct);
+MyStruct* s = arena_alloc_type(&arena, MyStruct);
 MyStruct* arr = arena_alloc_array(&arena, MyStruct, 16);
 ```
 
 #### Reset
+```c
+void arena_reset(Arena* arena)
+```
+Resets offset to `0`. Fast — **O(1)**. Does **NOT** clear memory.
 
-**`void arena_reset(Arena* arena)`**
-Resets offset to 0. Fast — O(1). Does NOT clear memory.
-
-**`void arena_reset_secure(Arena* arena)`**
-Resets and wipes previously allocated memory. Use for sensitive data. O(used bytes).
+```c
+void arena_reset_secure(Arena* arena)
+```
+Resets and wipes previously allocated memory. Use for sensitive data. **O(used bytes)**.
 
 #### Checkpoint / Rollback
-
-**`ArenaMark arena_mark(const Arena* arena)`**
+```c
+ArenaMark arena_mark(const Arena* arena)
+```
 Saves current allocation position.
 
-**`void arena_reset_to(Arena* arena, ArenaMark mark)`**
-Rolls back to a previous mark. Invalidates all allocations made after the mark.
+```c
+void arena_reset_to(Arena* arena, ArenaMark mark)
+```
+Rolls back to a previous mark. Invalidates all allocations made after the mark.  
+Precondition: `mark <= current offset` (contract violation in debug via `require_msg`).
+
 ```c
 ArenaMark mark = arena_mark(&arena);
+
 // ... temporary allocations ...
-arena_reset_to(&arena, mark);  // rolled back
+
+arena_reset_to(&arena, mark); // rolled back
 ```
 
 #### Query
+```c
+usize arena_capacity(const Arena* arena)   // total bytes in buffer
+usize arena_remaining(const Arena* arena)  // bytes still available
+usize arena_used(const Arena* arena)       // bytes currently allocated
+bool arena_is_empty(const Arena* arena)    // true if offset == 0
+bool arena_is_full(const Arena* arena)     // true if no space remains
+```
 
-**`usize arena_capacity(const Arena* arena)`** — total bytes in buffer.
-**`usize arena_remaining(const Arena* arena)`** — bytes still available.
-**`usize arena_used(const Arena* arena)`** — bytes currently allocated.
-**`bool arena_is_empty(const Arena* arena)`** — true if offset == 0.
-**`bool arena_is_full(const Arena* arena)`** — true if no space remains.
-
-#### Byte Views (slice.h integration)
-
-**`bytes_t arena_as_bytes(const Arena* arena)`** — view over allocated region `[buffer, buffer+offset)`.
-**`bytes_t arena_buffer_bytes(const Arena* arena)`** — view over entire buffer including free space.
-**`bytes_t arena_free_bytes(const Arena* arena)`** — view over unallocated region only.
+#### Byte Views (`slice.h` integration)
+```c
+bytes_t arena_as_bytes(const Arena* arena)      // view over allocated region [buffer, buffer+offset)
+bytes_t arena_buffer_bytes(const Arena* arena)  // view over entire buffer including free space
+bytes_t arena_free_bytes(const Arena* arena)    // view over unallocated region only
+```
 
 #### Debug Mode (`CANON_ARENA_DEBUG`)
+Define before including to enable tracking fields.
 
-Define `CANON_ARENA_DEBUG` before including to enable tracking fields:
 ```c
 #define CANON_ARENA_DEBUG
 #include "core/arena.h"
@@ -1042,11 +1059,11 @@ ArenaStats s = arena_stats(&arena);
 // s.used, s.remaining, s.capacity, s.peak, s.alloc_count
 ```
 
-> **Known Limitations:**
-> - Not thread-safe — caller must synchronize if sharing across threads.
-> - `arena_alloc_array` and `arena_alloc_array_zero` do not overflow-check `sizeof(Type) * count` — use `checked_mul` first for untrusted counts.
-> - `arena_reset_to` does not roll back debug counters (`alloc_count`, `peak`) — they reflect cumulative activity since last full reset.
-> - Memory is not cleared on `arena_reset` — old data remains readable until overwritten.
+#### Known Limitations
+- Not thread-safe — caller must synchronize if sharing across threads.
+- `arena_alloc_array` and `arena_alloc_array_zero` do not overflow-check `sizeof(Type) * count` — use `checked_mul` first for untrusted counts.
+- `arena_reset_to` does not roll back debug counters (`alloc_count`, `peak`) — they reflect cumulative activity since last full reset.
+- Memory is not cleared on `arena_reset` — old data remains readable until overwritten.
 
 ---
 
