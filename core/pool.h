@@ -36,9 +36,9 @@
  * and pool_reset(), this calculation produces wrong addresses — pointing
  * into foreign memory with no warning.
  *
- * pool_get() and pool_get_const() detect this in debug builds via ensure_msg:
+ * pool_get() and pool_get_const() always detect this via require_msg —
  * they verify that the arena's current offset matches the expected layout.
- * In release builds this check is compiled away — do not rely on it.
+ * This check is always-on in all builds (require, not ensure).
  *
  * Safe patterns:
  * ✓ Use a dedicated arena exclusively for the pool
@@ -58,7 +58,7 @@
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - pool_alloc(): O(1)
- * - pool_get(): O(1) — ptr_elem index calculation
+ * - pool_get(): O(1) — ptr_elem index calculation + one pointer comparison
  * - pool_reset(): O(1)
  * - pool_as_bytes(): O(1)
  * - All queries: O(1)
@@ -67,6 +67,17 @@
  * @sa core/primitives/ptr.h — ptr_offset, ptr_elem for safe index/offset calculation
  * @sa core/slice.h — bytes_t / bytes_from used for contiguous object views
  */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Pool struct
+   ════════════════════════════════════════════════════════════════════════════ */
+typedef struct {
+    Arena* arena;           ///< Backing arena (caller-owned, must outlive pool)
+    usize object_size;      ///< Aligned size of each individual object in bytes
+    usize capacity;         ///< Maximum number of objects that can be allocated
+    usize used;             ///< Current number of allocated objects
+    ArenaMark base_mark;    ///< Arena position when pool was initialized
+} Pool;
 
 /* ════════════════════════════════════════════════════════════════════════════
    Internal helper — expected arena offset given current pool state
@@ -81,22 +92,11 @@
  *
  * Used by pool_get() / pool_get_const() to detect interleaved allocations.
  *
- * Internal — do not call directly.
+ * @internal Do not call directly.
  */
 static inline usize _pool_expected_offset(const Pool* pool) {
     return pool->base_mark + pool->used * pool->object_size;
 }
-
-/* ════════════════════════════════════════════════════════════════════════════
-   Pool struct
-   ════════════════════════════════════════════════════════════════════════════ */
-typedef struct {
-    Arena* arena;           ///< Backing arena (caller-owned, must outlive pool)
-    usize object_size;      ///< Aligned size of each individual object in bytes
-    usize capacity;         ///< Maximum number of objects that can be allocated
-    usize used;             ///< Current number of allocated objects
-    ArenaMark base_mark;    ///< Arena position when pool was initialized
-} Pool;
 
 /* ════════════════════════════════════════════════════════════════════════════
    Initialization
@@ -115,6 +115,8 @@ typedef struct {
  * @param max_objects Maximum number of objects the pool can hold
  * @return true on success, false on failure (insufficient space, overflow, etc.)
  *
+ * @pre pool != NULL
+ * @pre arena != NULL
  * @pre object_size > 0 && max_objects > 0
  * @post On success: pool is ready, objects can be allocated until capacity
  * @post arena offset is advanced by capacity * aligned(object_size) bytes
@@ -125,10 +127,6 @@ static inline bool pool_init(
     require_msg(arena != NULL,       "pool_init: arena cannot be NULL");
     require_msg(object_size > 0,     "pool_init: object_size must be > 0");
     require_msg(max_objects > 0,     "pool_init: max_objects must be > 0");
-
-    if (!pool || !arena || object_size == 0 || max_objects == 0) {
-        return false;
-    }
 
     usize aligned_size = mem_align(object_size);
     if (aligned_size == 0 || max_objects > CANON_USIZE_MAX / aligned_size) {
@@ -158,7 +156,7 @@ static inline bool pool_init(
 
 static inline void* pool_alloc(Pool* pool) {
     require_msg(pool != NULL, "pool_alloc: pool cannot be NULL");
-    if (!pool || pool->used >= pool->capacity) return NULL;
+    if (pool->used >= pool->capacity) return NULL;
 
     void* p = arena_alloc(pool->arena, pool->object_size);
     if (p) pool->used++;
@@ -193,21 +191,21 @@ static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
  * Objects are stored contiguously starting at base_mark. Address is
  * calculated as: arena->buffer + base_mark + i * object_size.
  *
- * In debug builds, verifies that the arena's current offset matches the
- * expected layout — detects interleaved allocations that would corrupt
- * the pool's address calculation. This check is compiled away in release.
+ * Always verifies that the arena's current offset matches the expected
+ * layout — detects interleaved allocations that would corrupt the pool's
+ * address calculation. This check is always-on in all builds (require_msg).
  *
  * @param pool  Valid initialized Pool
  * @param i     Object index (must be < pool->used)
  * @return Pointer to object at index i, or NULL if out of bounds
  *
  * @pre No arena allocations have been made from pool->arena since pool_init()
- *      other than through pool_alloc() — verified by ensure_msg in debug builds
+ *      other than through pool_alloc() — enforced by require_msg always
  */
 static inline void* pool_get(const Pool* pool, usize i) {
     if (!pool || !pool->arena || i >= pool->used) return NULL;
 
-    ensure_msg(
+    require_msg(
         pool->arena->offset == _pool_expected_offset(pool),
         "pool_get: arena offset mismatch — interleaved allocations have corrupted pool layout"
     );
@@ -219,7 +217,7 @@ static inline void* pool_get(const Pool* pool, usize i) {
 static inline const void* pool_get_const(const Pool* pool, usize i) {
     if (!pool || !pool->arena || i >= pool->used) return NULL;
 
-    ensure_msg(
+    require_msg(
         pool->arena->offset == _pool_expected_offset(pool),
         "pool_get_const: arena offset mismatch — interleaved allocations have corrupted pool layout"
     );
