@@ -1,5 +1,10 @@
 # Canon-C
 
+
+<!-- Language -->
+### Language
+![C99](https://img.shields.io/badge/standard-C99-green.svg)
+
 <!-- Platforms -->
 ### Platforms
 ![Windows](https://img.shields.io/badge/Platform-Windows-blue?logo=windows&logoColor=white)
