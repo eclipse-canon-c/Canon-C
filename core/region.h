@@ -20,17 +20,18 @@
  * - A Region token represents a lifetime scope
  * - Borrowed views can be stamped with a region ID
  * - At region_end(), all borrows stamped with that region become invalid
- * - debug builds can assert that a borrow's region is still open
+ * - Debug builds can assert that a borrow's region is still open
  *
  * Core ideas:
  * ────────────────────────────────────────────────────────────────────────────
  * - A Region is a stack-allocated struct — never heap-allocated
- * - Regions are identified by a unique monotonic ID (u64)
+ * - Regions are identified by their stack address cast to region_id_t
  * - Region tokens are independent of arenas by default
  * - An arena can be attached to a region — arena_reset() is called on region_end()
  * - Up to REGION_MAX_CLEANUP hooks can be registered per region
  * - Nesting is explicit — parent/child regions are tracked by the caller
  * - No automatic propagation, no thread-local state, no global registry
+ * - No global state anywhere in this file
  *
  * What region is NOT:
  * ────────────────────────────────────────────────────────────────────────────
@@ -39,6 +40,45 @@
  * - Not enforced by the compiler (C99 — semantic, not structural)
  * - Not thread-local (each region lives on its owner's stack)
  * - Not a garbage collector
+ *
+ * Region ID design:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Region IDs are derived from the Region's own stack address:
+ *
+ *   r.id = (region_id_t)(uintptr_t)&r
+ *
+ * This eliminates the global static counter that was previously used,
+ * removing the last source of global state in region.h and making
+ * region_begin() fully thread-safe with no atomic operations needed.
+ *
+ * Properties of address-based IDs:
+ * - Unique for all simultaneously live regions (different stack frames)
+ * - Not monotonic — IDs are addresses, not sequence numbers
+ * - May alias across sequential (non-overlapping) region lifetimes if the
+ *   stack allocates them at the same address — this is safe because
+ *   region_assert_borrow_valid() checks r->open in addition to the ID,
+ *   so a reused address on a closed region will correctly fail the open check
+ * - No race conditions — each thread's stack is independent
+ * - No global state — fully compatible with DO-178C / ISO 26262
+ *
+ * Build configuration flags:
+ * ────────────────────────────────────────────────────────────────────────────
+ * REGION_MAX_CLEANUP (define before include, default 8)
+ *   Maximum cleanup hooks per Region. sizeof(Region) grows with this value.
+ *   Override for builds where stack size must be minimized:
+ *   #define REGION_MAX_CLEANUP 4
+ *
+ * CANON_NO_REGION_PARENT (define to strip parent tracking)
+ *   Removes the parent pointer field from the Region struct and disables
+ *   region_set_parent() and region_has_parent() returns false always.
+ *   Use for certified builds where the parent pointer serves no mechanical
+ *   purpose and struct size must be minimal and fully provable.
+ *   #define CANON_NO_REGION_PARENT
+ *
+ * CANON_STRICT (defined in contract.h — propagates automatically)
+ *   Promotes ensure_msg() to always-on. region_assert_open() and
+ *   region_assert_borrow_valid() become always-on in certified builds
+ *   without any changes here.
  *
  * Relationship to other modules:
  * ────────────────────────────────────────────────────────────────────────────
@@ -54,25 +94,32 @@
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
+ * - uintptr_t requires <stdint.h> via types.h
  * - No platform-specific code
  * - No dynamic allocation anywhere in this file
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
- * Regions are stack-local and not thread-safe by design.
- * Do not share Region pointers across threads without external synchronization.
- * The global region ID counter uses a simple increment — not atomic.
- * For multi-threaded code, use one region per thread.
+ * Regions are stack-local. region_begin() derives the ID from the stack
+ * address — no global counter, no shared state, no atomic operations needed.
+ * Each thread's stack is independent so concurrent region_begin() calls
+ * are safe without synchronization.
+ *
+ * Do not share Region pointers across threads. A Region lives on its
+ * owner's stack and must not be accessed after its owner's stack frame
+ * is gone.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - region_begin: O(1)
- * - region_end: O(k) where k = number of registered cleanup hooks
+ * - region_begin:        O(1) — address cast, struct zero-init
+ * - region_end:          O(k) where k = number of registered cleanup hooks
  * - region_attach_arena: O(1)
- * - region_register: O(1)
- * - region_is_open: O(1)
- * - region_assert_valid: O(1) — debug only, no-op in release
- * - sizeof(Region): fixed — REGION_MAX_CLEANUP * sizeof(hook) + metadata
+ * - region_register:     O(1)
+ * - region_is_open:      O(1)
+ * - region_assert_*:     O(1) — debug only by default
+ *                               always-on with CANON_STRICT
+ * - sizeof(Region):      fixed — REGION_MAX_CLEANUP * sizeof(hook)
+ *                               + metadata (- pointer if CANON_NO_REGION_PARENT)
  *
  * Quick start:
  * ```c
@@ -95,13 +142,12 @@
  * // ... pass name around ...
  * region_assert_borrow_valid(&r, rid); // debug: still open?
  *
- * // Nested regions
+ * // Nested regions (parent tracking — disabled with CANON_NO_REGION_PARENT)
  * Region outer = region_begin();
  * Region inner = region_begin();
  * region_set_parent(&inner, &outer);
- * // ...
- * region_end(&inner); // inner ends first
- * region_end(&outer); // outer ends last
+ * region_end(&inner);
+ * region_end(&outer);
  *
  * // Cleanup hook — called on region_end
  * void release_lock(void* ctx) { mutex_unlock((Mutex*)ctx); }
@@ -136,12 +182,19 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Unique monotonic identifier for a Region lifetime
+ * @brief Unique identifier for a Region lifetime
  *
- * Assigned at region_begin(). Monotonically increasing per process.
- * Used to stamp borrowed views and validate their lifetime in debug builds.
+ * Derived from the Region's own stack address at region_begin().
+ * Unique for all simultaneously live regions. Not monotonic.
  *
  * ID 0 is reserved — represents "no region" / "static lifetime".
+ * A valid Region will never have ID 0 because no object has address 0
+ * on any conforming C implementation.
+ *
+ * @note IDs may alias across sequential (non-overlapping) region lifetimes
+ *       if the compiler places them at the same stack address. This is safe —
+ *       region_assert_borrow_valid() checks r->open in addition to the ID,
+ *       so a reused address on a closed region correctly fails the open check.
  */
 typedef u64 region_id_t;
 
@@ -153,21 +206,6 @@ typedef u64 region_id_t;
  */
 #define REGION_ID_STATIC ((region_id_t)0)
 
-/**
- * @brief Returns the next unique region ID
- *
- * Uses a static counter — monotonically increasing per process.
- *
- * @warning Not thread-safe. The counter is a plain static increment with no
- *          atomic operation. Concurrent calls from multiple threads will race.
- *          Use one region per thread and never call this from multiple threads
- *          simultaneously. See file-level thread-safety note.
- */
-static inline region_id_t region_next_id(void) {
-    static region_id_t counter = 0;
-    return ++counter;
-}
-
 /* ════════════════════════════════════════════════════════════════════════════
    RegionCleanup — a single registered cleanup hook
    ════════════════════════════════════════════════════════════════════════════ */
@@ -178,7 +216,7 @@ static inline region_id_t region_next_id(void) {
  * Called on region_end() in reverse registration order (LIFO).
  *
  * Fields:
- * - fn: Cleanup function — receives ctx, must not call region_end
+ * - fn:  Cleanup function — receives ctx, must not call region_end
  * - ctx: Caller-provided context pointer (may be NULL)
  */
 typedef struct {
@@ -197,29 +235,35 @@ typedef struct {
  * can be stamped with a region_id to express "valid until this region ends."
  *
  * Fields:
- * - id: Unique monotonic ID assigned at region_begin()
- * - open: true between region_begin() and region_end()
- * - arena: Optional attached arena (reset on region_end if non-NULL)
- * - parent: Optional parent region (informational — not auto-ended)
- * - cleanups: Registered cleanup hooks (called LIFO on region_end)
+ * - id:        Stack-address-derived ID assigned at region_begin()
+ * - open:      true between region_begin() and region_end()
+ * - arena:     Optional attached arena (reset on region_end if non-NULL)
+ * - parent:    Optional parent region (absent with CANON_NO_REGION_PARENT)
+ * - cleanups:  Registered cleanup hooks (called LIFO on region_end)
  * - num_hooks: Number of registered hooks
  *
  * Invariants:
- * - id > 0 after region_begin()
+ * - id != REGION_ID_STATIC (0) after region_begin()
  * - open == true between begin and end
  * - open == false after region_end()
  * - num_hooks <= REGION_MAX_CLEANUP
+ *
+ * sizeof(Region):
+ * - Default:                 includes parent pointer
+ * - CANON_NO_REGION_PARENT:  parent pointer stripped — smaller struct
  *
  * Do not access fields directly — use the provided functions.
  */
 typedef struct Region Region;
 struct Region {
-    region_id_t id;                 ///< Unique ID assigned at begin
-    bool open;                      ///< true between begin and end
-    Arena* arena;                   ///< Optional attached arena (may be NULL)
-    Region* parent;                 ///< Optional parent region (may be NULL)
-    RegionCleanup cleanups[REGION_MAX_CLEANUP]; ///< Registered cleanup hooks
-    usize num_hooks;                ///< Number of registered hooks
+    region_id_t   id;                            ///< ID derived from stack address at begin
+    bool          open;                          ///< true between begin and end
+    Arena*        arena;                         ///< Optional attached arena (may be NULL)
+#ifndef CANON_NO_REGION_PARENT
+    Region*       parent;                        ///< Optional parent region (may be NULL)
+#endif
+    RegionCleanup cleanups[REGION_MAX_CLEANUP];  ///< Registered cleanup hooks
+    usize         num_hooks;                     ///< Number of registered hooks
 };
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -229,28 +273,27 @@ struct Region {
 /**
  * @brief Opens a new Region and assigns it a unique ID
  *
+ * The Region's ID is derived from its own stack address — no global counter,
+ * no shared state, fully thread-safe. No global state is touched.
+ *
  * The returned Region is fully initialized and open.
  * It must be closed with region_end() before going out of scope.
  *
  * @return Initialized open Region with unique ID, no arena, no hooks
  *
  * @post result.open == true
- * @post result.id > 0
+ * @post result.id != REGION_ID_STATIC
  * @post result.arena == NULL
  * @post result.num_hooks == 0
  *
- * @warning Calls region_next_id() which is not thread-safe.
- *          Do not call region_begin() concurrently from multiple threads.
- *          Use one region per thread.
- *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1) — address cast, struct zero-init
  * - Space: sizeof(Region) on the stack — no heap allocation
  */
 static inline Region region_begin(void) {
     Region r = {0};
-    r.id    = region_next_id();
-    r.open  = true;
+    r.id     = (region_id_t)(uintptr_t)&r;
+    r.open   = true;
     return r;
 }
 
@@ -263,8 +306,8 @@ static inline Region region_begin(void) {
  *
  * @param r Region to close (must not be NULL, must be open)
  *
- * @pre r != NULL
- * @pre r->open == true
+ * @pre  r != NULL
+ * @pre  r->open == true
  *
  * @post r->open == false
  * @post All hooks have been called
@@ -272,7 +315,7 @@ static inline Region region_begin(void) {
  * @post r->num_hooks == 0
  *
  * Performance:
- * - Time: O(num_hooks)
+ * - Time:  O(num_hooks)
  * - Space: O(1)
  */
 static inline void region_end(Region* r) {
@@ -300,7 +343,7 @@ static inline void region_end(Region* r) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Configuration
+   Arena attachment and cleanup registration
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -313,13 +356,13 @@ static inline void region_end(Region* r) {
  * @param r     Region to attach arena to (must not be NULL, must be open)
  * @param arena Arena to attach (must not be NULL)
  *
- * @pre r != NULL && r->open
- * @pre arena != NULL
+ * @pre  r != NULL && r->open
+ * @pre  arena != NULL
  *
  * @post r->arena == arena
  *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline void region_attach_arena(Region* r, Arena* arena) {
@@ -327,31 +370,6 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
     require_msg(r->open,       "region_attach_arena: region is not open");
     require_msg(arena != NULL, "region_attach_arena: arena cannot be NULL");
     r->arena = arena;
-}
-
-/**
- * @brief Sets the parent region (informational — parent is NOT auto-ended)
- *
- * Parent is used to express nesting intent. It is never dereferenced
- * by region.h for automatic propagation — that is always the caller's job.
- * Useful for debugging and diagnostic tools that want to walk the region tree.
- *
- * @param r      Child region (must not be NULL, must be open)
- * @param parent Parent region (must not be NULL, must be open)
- *
- * @pre r != NULL && r->open
- * @pre parent != NULL && parent->open
- *
- * Performance:
- * - Time: O(1)
- * - Space: O(1)
- */
-static inline void region_set_parent(Region* r, Region* parent) {
-    require_msg(r != NULL,       "region_set_parent: r cannot be NULL");
-    require_msg(r->open,         "region_set_parent: region is not open");
-    require_msg(parent != NULL,  "region_set_parent: parent cannot be NULL");
-    require_msg(parent->open,    "region_set_parent: parent region is not open");
-    r->parent = parent;
 }
 
 /**
@@ -364,18 +382,18 @@ static inline void region_set_parent(Region* r, Region* parent) {
  * @param r   Region to register with (must not be NULL, must be open)
  * @param fn  Cleanup function — void fn(void* ctx) (must not be NULL)
  * @param ctx Context passed to fn (may be NULL)
- * @return true on success, false if hook table is full
+ * @return    true on success, false if hook table is full
  *
- * @pre r != NULL && r->open
- * @pre fn != NULL
+ * @pre  r != NULL && r->open
+ * @pre  fn != NULL
  *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) {
-    require_msg(r != NULL, "region_register: r cannot be NULL");
-    require_msg(r->open,   "region_register: region is not open");
+    require_msg(r != NULL,  "region_register: r cannot be NULL");
+    require_msg(r->open,    "region_register: region is not open");
     require_msg(fn != NULL, "region_register: fn cannot be NULL");
 
     if (r->num_hooks >= REGION_MAX_CLEANUP) {
@@ -389,6 +407,43 @@ static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) 
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   Parent region — disabled with CANON_NO_REGION_PARENT
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifndef CANON_NO_REGION_PARENT
+
+/**
+ * @brief Sets the parent region (informational — parent is NOT auto-ended)
+ *
+ * Parent is used to express nesting intent. It is never dereferenced
+ * by region.h for automatic propagation — that is always the caller's job.
+ * Useful for debugging and diagnostic tools that want to walk the region tree.
+ *
+ * Not available when CANON_NO_REGION_PARENT is defined. Use for certified
+ * builds where the parent pointer serves no mechanical purpose and struct
+ * size must be minimal and fully provable.
+ *
+ * @param r      Child region (must not be NULL, must be open)
+ * @param parent Parent region (must not be NULL, must be open)
+ *
+ * @pre  r != NULL && r->open
+ * @pre  parent != NULL && parent->open
+ *
+ * Performance:
+ * - Time:  O(1)
+ * - Space: O(1)
+ */
+static inline void region_set_parent(Region* r, Region* parent) {
+    require_msg(r != NULL,      "region_set_parent: r cannot be NULL");
+    require_msg(r->open,        "region_set_parent: region is not open");
+    require_msg(parent != NULL, "region_set_parent: parent cannot be NULL");
+    require_msg(parent->open,   "region_set_parent: parent region is not open");
+    r->parent = parent;
+}
+
+#endif /* CANON_NO_REGION_PARENT */
+
+/* ════════════════════════════════════════════════════════════════════════════
    Inspection
    ════════════════════════════════════════════════════════════════════════════ */
 
@@ -396,10 +451,10 @@ static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) 
  * @brief Returns the unique ID of this region
  *
  * @param r Region to query (NULL returns REGION_ID_STATIC)
- * @return region_id_t — 0 if r == NULL
+ * @return  region_id_t — REGION_ID_STATIC (0) if r == NULL
  *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline region_id_t region_id(const Region* r) {
@@ -412,7 +467,7 @@ static inline region_id_t region_id(const Region* r) {
  * @param r Region to check (NULL returns false)
  *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline bool region_is_open(const Region* r) {
@@ -422,19 +477,27 @@ static inline bool region_is_open(const Region* r) {
 /**
  * @brief Returns true if the region has a parent
  *
+ * Always returns false when CANON_NO_REGION_PARENT is defined —
+ * the parent field does not exist in that configuration.
+ *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline bool region_has_parent(const Region* r) {
+#ifdef CANON_NO_REGION_PARENT
+    (void)r;
+    return false;
+#else
     return r && r->parent != NULL;
+#endif
 }
 
 /**
  * @brief Returns the number of registered cleanup hooks
  *
  * Performance:
- * - Time: O(1)
+ * - Time:  O(1)
  * - Space: O(1)
  */
 static inline usize region_hook_count(const Region* r) {
@@ -442,14 +505,19 @@ static inline usize region_hook_count(const Region* r) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Lifetime assertions — debug builds only
+   Lifetime assertions
+   ════════════════════════════════════════════════════════════════════════════
+   Default:      debug builds only — compiled away with NDEBUG
+   CANON_STRICT: always-on — propagates automatically from contract.h
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Asserts that a region is still open (debug builds only)
+ * @brief Asserts that a region is still open
  *
- * Call this before using a borrowed value that was stamped with this region.
- * In release builds, expands to nothing — zero overhead.
+ * Default:      debug builds only — compiled away with NDEBUG
+ * CANON_STRICT: always-on
+ *
+ * Call before using a borrowed value that was stamped with this region.
  *
  * @param r Region to check (must be non-NULL and open)
  */
@@ -464,6 +532,9 @@ static inline void region_assert_open(const Region* r) {
  * A borrow is valid if its region is still open OR it has the static lifetime
  * (REGION_ID_STATIC). Passes silently for static borrows.
  *
+ * Default:      debug builds only — compiled away with NDEBUG
+ * CANON_STRICT: always-on
+ *
  * @param r                The region that owns the borrowed data
  * @param borrow_region_id The ID stamped on the borrow at creation time
  */
@@ -474,8 +545,8 @@ static inline void region_assert_borrow_valid(
         return; /* static lifetime — always valid */
     }
 
-    ensure_msg(r != NULL,  "region_assert_borrow_valid: r cannot be NULL");
-    ensure_msg(r->open,    "region_assert_borrow_valid: region is closed");
+    ensure_msg(r != NULL, "region_assert_borrow_valid: r cannot be NULL");
+    ensure_msg(r->open,   "region_assert_borrow_valid: region is closed");
     ensure_msg(r->id == borrow_region_id,
                "region_assert_borrow_valid: borrow region ID does not match current region");
 }
@@ -489,15 +560,13 @@ static inline void region_assert_borrow_valid(
  * @brief Declares a Region that is automatically ended at scope exit
  *
  * Requires scope.h (SCOPE_DEFER or equivalent) to be available.
- * If scope.h is not included, use region_begin() / region_end() manually.
+ * If scope.h is not included, expands to region_begin() only —
+ * region_end() must be called manually.
+ *
+ * Thread-safe — region_begin() uses the stack address as ID,
+ * no global counter, no shared state.
  *
  * @param name Variable name for the Region
- *
- * @warning Not thread-safe. REGION_SCOPE calls region_begin() which calls
- *          region_next_id() — a plain static increment with no atomic
- *          operation. Do not use REGION_SCOPE from multiple threads
- *          simultaneously. Use one region per thread and never share
- *          Region pointers across thread boundaries.
  *
  * Example:
  * ```c
@@ -505,7 +574,7 @@ static inline void region_assert_borrow_valid(
  * #include "core/region.h"
  *
  * void my_function(void) {
- *     REGION_SCOPE(r);               // single-threaded use only
+ *     REGION_SCOPE(r);
  *     region_attach_arena(&r, &scratch);
  *     // ... work ...
  * } // region_end(&r) called automatically
@@ -516,9 +585,30 @@ static inline void region_assert_borrow_valid(
         Region name = region_begin(); \
         SCOPE_DEFER(region_end(&name))
 #else
-    /* scope.h not included — define as manual open only, remind caller to close */
     #define REGION_SCOPE(name) \
         Region name = region_begin() /* remember to call region_end(&name) */
 #endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Build configuration summary
+   ════════════════════════════════════════════════════════════════════════════
+
+   Development (default):
+     region_assert_*  debug only
+     parent tracking  enabled
+     gcc -o myapp main.c
+
+   Release:
+     region_assert_*  compiled away
+     parent tracking  enabled
+     gcc -DNDEBUG -o myapp main.c
+
+   Certified (DO-178C / ISO 26262):
+     region_assert_*  always-on via CANON_STRICT
+     parent tracking  stripped via CANON_NO_REGION_PARENT
+     struct size      minimal and fully provable
+     gcc -DCANON_STRICT -DCANON_NO_REGION_PARENT -o myapp main.c
+
+   ════════════════════════════════════════════════════════════════════════════ */
 
 #endif /* CANON_CORE_REGION_H */
