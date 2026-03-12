@@ -2,65 +2,26 @@
  * @file limits.h
  * @brief Common constants and limits for Canon-C
  *
- * Provides frequently-used numeric limits, alignment constants, and
- * platform-specific values. Centralizes magic numbers to improve
+ * Provides numeric limits, alignment constants, capacity thresholds,
+ * and platform-specific values. Centralizes magic numbers to improve
  * readability and maintainability.
  *
- * Core ideas:
+ * Design:
  * ────────────────────────────────────────────────────────────────────────────
- * - Explicitness: Named constants replace magic numbers
- * - Readability: CANON_USIZE_MAX is clearer than ((usize)-1)
- * - Portability: Platform-specific values are computed correctly
- * - Convenience: Commonly-used values available in one place
- * - Type-safety: Constants have appropriate types for their use
+ * - Explicit: named constants replace magic numbers
+ * - Portable: works on 16/32/64-bit, C99 and later
+ * - Overridable: define any CANON_* constant before including to override
+ * - Zero overhead: all constants are compile-time, no code generated
  *
- * Performance:
+ * Override pattern (define BEFORE including this header):
  * ────────────────────────────────────────────────────────────────────────────
- * - O(1): All constants are compile-time (no runtime cost)
- * - Zero overhead: Constants fold into immediate values
- * - No code generation: Pure compile-time computation
+ *   #define CANON_PAGE_SIZE          16384   // Android 15+, some ARM64 servers
+ *   #define CANON_CACHE_LINE         128     // Apple M-series L2+
+ *   #define CANON_VEC_MAX_CAPACITY   (CANON_GB * 4)
+ *   #include "core/primitives/limits.h"
  *
- * Thread-safety:
- * ────────────────────────────────────────────────────────────────────────────
- * N/A — pure compile-time constants, no runtime behavior.
- *
- * Portability:
- * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (stdint.h, limits.h)
- * - All constants computed from standard C macros
- * - Works on all platforms (16-bit, 32-bit, 64-bit)
- * - Alignment constants adapt to platform max_align_t
- *
- * Typical use cases:
- * ────────────────────────────────────────────────────────────────────────────
- * - Overflow checks: if (offset > CANON_USIZE_MAX - size)
- * - Alignment: align_up(size, CANON_DEFAULT_ALIGN)
- * - Capacity limits: if (len > CANON_VEC_MAX_CAPACITY)
- * - Cache optimization: align_to(ptr, CANON_CACHE_LINE)
- * - Page alignment: align_to(size, CANON_PAGE_SIZE)
- *
- * NOT suitable for:
- * ────────────────────────────────────────────────────────────────────────────
- * - Runtime configuration (use variables instead)
- * - User-tunable parameters (define separately)
- * - Platform detection (use proper feature macros)
- *
- * @sa types.h, checked.h
+ * @sa types.h
  */
-
-/* NEW: How to override defaults
-   ────────────────────────────────────────────────────────────────────────────
-   Most values can be customized by #defining them BEFORE including this header:
-
-       #define CANON_PAGE_SIZE     16384          // For 16 KiB page systems (Android 15+, some ARM64 servers)
-       #define CANON_VEC_MAX_CAPACITY (1ULL << 40) // 1 TiB example
-       #define CANON_CACHE_LINE    128            // For Apple M-series L2+
-       #define CANON_GROWTH_FACTOR 2.0f
-
-       #include "core/primitives/limits.h"
-
-   This is the recommended way to tune Canon-C for your project/platform.
-*/
 
 #ifndef CANON_CORE_PRIMITIVES_LIMITS_H
 #define CANON_CORE_PRIMITIVES_LIMITS_H
@@ -69,379 +30,319 @@
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
+
 /* ============================================================================
  * Integer Type Limits
  * ========================================================================= */
-/**
- * @brief Maximum value for unsigned 8-bit integer
- *
- * @remark 255
- */
-#define CANON_U8_MAX UINT8_MAX
-/**
- * @brief Maximum value for unsigned 16-bit integer
- *
- * @remark 65,535
- */
-#define CANON_U16_MAX UINT16_MAX
-/**
- * @brief Maximum value for unsigned 32-bit integer
- *
- * @remark 4,294,967,295
- */
-#define CANON_U32_MAX UINT32_MAX
-/**
- * @brief Maximum value for unsigned 64-bit integer
- *
- * @remark 18,446,744,073,709,551,615
- */
-#define CANON_U64_MAX UINT64_MAX
-/**
- * @brief Minimum value for signed 8-bit integer
- *
- * @remark -128
- */
-#define CANON_I8_MIN INT8_MIN
-/**
- * @brief Maximum value for signed 8-bit integer
- *
- * @remark 127
- */
-#define CANON_I8_MAX INT8_MAX
-/**
- * @brief Minimum value for signed 16-bit integer
- *
- * @remark -32,768
- */
-#define CANON_I16_MIN INT16_MIN
-/**
- * @brief Maximum value for signed 16-bit integer
- *
- * @remark 32,767
- */
-#define CANON_I16_MAX INT16_MAX
-/**
- * @brief Minimum value for signed 32-bit integer
- *
- * @remark -2,147,483,648
- */
-#define CANON_I32_MIN INT32_MIN
-/**
- * @brief Maximum value for signed 32-bit integer
- *
- * @remark 2,147,483,647
- */
-#define CANON_I32_MAX INT32_MAX
-/**
- * @brief Minimum value for signed 64-bit integer
- *
- * @remark -9,223,372,036,854,775,808
- */
-#define CANON_I64_MIN INT64_MIN
-/**
- * @brief Maximum value for signed 64-bit integer
- *
- * @remark 9,223,372,036,854,775,807
- */
-#define CANON_I64_MAX INT64_MAX
+
+/** @brief Max value of u8  — 255 */
+#define CANON_U8_MAX   UINT8_MAX
+/** @brief Max value of u16 — 65,535 */
+#define CANON_U16_MAX  UINT16_MAX
+/** @brief Max value of u32 — 4,294,967,295 */
+#define CANON_U32_MAX  UINT32_MAX
+/** @brief Max value of u64 — 18,446,744,073,709,551,615 */
+#define CANON_U64_MAX  UINT64_MAX
+
+/** @brief Min value of i8  — -128 */
+#define CANON_I8_MIN   INT8_MIN
+/** @brief Max value of i8  — 127 */
+#define CANON_I8_MAX   INT8_MAX
+/** @brief Min value of i16 — -32,768 */
+#define CANON_I16_MIN  INT16_MIN
+/** @brief Max value of i16 — 32,767 */
+#define CANON_I16_MAX  INT16_MAX
+/** @brief Min value of i32 — -2,147,483,648 */
+#define CANON_I32_MIN  INT32_MIN
+/** @brief Max value of i32 — 2,147,483,647 */
+#define CANON_I32_MAX  INT32_MAX
+/** @brief Min value of i64 — -9,223,372,036,854,775,808 */
+#define CANON_I64_MIN  INT64_MIN
+/** @brief Max value of i64 — 9,223,372,036,854,775,807 */
+#define CANON_I64_MAX  INT64_MAX
+
 /* ============================================================================
  * Size Type Limits (Platform-Dependent)
  * ========================================================================= */
+
 /**
- * @brief Maximum value for usize (platform-dependent)
+ * @brief Max value of usize — SIZE_MAX (2^32-1 or 2^64-1)
  *
- * @remark 2^32-1 on 32-bit platforms, 2^64-1 on 64-bit platforms
- *
- * Example:
+ * Example — overflow guard:
  * ```c
- * if (offset > CANON_USIZE_MAX - size) {
- * return ERROR_OVERFLOW;
- * }
+ * if (size > CANON_USIZE_MAX - arena->offset) { return ERROR_OVERFLOW; }
  * ```
  */
-#define CANON_USIZE_MAX SIZE_MAX
-/**
- * @brief Maximum value for isize (platform-dependent)
- *
- * @remark 2^31-1 on 32-bit platforms, 2^63-1 on 64-bit platforms
- */
-#define CANON_ISIZE_MAX PTRDIFF_MAX
-/**
- * @brief Minimum value for isize (platform-dependent)
- *
- * @remark -2^31 on 32-bit platforms, -2^63 on 64-bit platforms
- */
-#define CANON_ISIZE_MIN PTRDIFF_MIN
-/* ============================================================================
- * Alignment Constants
- * ========================================================================= */
+#define CANON_USIZE_MAX  SIZE_MAX
 
-/* NEW: C99 fallback for default alignment */
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-    /**
-     * @brief Default alignment for most types
-     *
-     * Uses the platform's natural alignment for max_align_t.
-     * Typically 8 bytes on 64-bit systems, 4 bytes on 32-bit.
-     *
-     * @remark Use this for general-purpose allocations
-     *
-     * Example:
-     * ```c
-     * usize aligned = align_up(size, CANON_DEFAULT_ALIGN);
-     * ```
-     */
-    #define CANON_DEFAULT_ALIGN _Alignof(max_align_t)
-#else
-    /* C99 safe fallback — conservative value for most platforms */
-    #define CANON_DEFAULT_ALIGN 16   /* Adjust to 8 for 32-bit embedded if needed */
-#endif
+/** @brief Max value of isize — PTRDIFF_MAX */
+#define CANON_ISIZE_MAX  PTRDIFF_MAX
 
-/**
- * @brief Cache line size for performance optimization
- *
- * Most modern CPUs use 64-byte cache lines. Aligning to this
- * prevents false sharing in multithreaded code.
- *
- * @remark 64 bytes on most x86/x86_64/ARM64 platforms
- *
- * Example:
- * ```c
- * // Prevent false sharing between threads
- * struct alignas(CANON_CACHE_LINE) PerThreadData {
- * u64 counter;
- * // ... pad to 64 bytes
- * };
- * ```
- */
-#define CANON_CACHE_LINE 64
-/**
- * @brief SIMD alignment for vectorized operations
- *
- * 16 bytes is sufficient for SSE (128-bit) operations.
- * AVX requires 32-byte alignment (use CANON_SIMD_ALIGN_AVX).
- *
- * @remark 16 bytes for SSE/NEON
- */
-#define CANON_SIMD_ALIGN 16
-/**
- * @brief AVX SIMD alignment
- *
- * Required for AVX (256-bit) operations on x86_64.
- *
- * @remark 32 bytes for AVX
- */
-#define CANON_SIMD_ALIGN_AVX 32
-/**
- * @brief AVX-512 SIMD alignment
- *
- * Required for AVX-512 (512-bit) operations.
- *
- * @remark 64 bytes for AVX-512
- */
-#define CANON_SIMD_ALIGN_AVX512 64
-
-/* NEW: Page size with override support + modern note */
-#ifndef CANON_PAGE_SIZE
-    /**
-     * @brief Typical memory page size
-     *
-     * Most systems use 4KB pages. Some systems support larger pages
-     * (2MB, 1GB) but 4KB is the common baseline.
-     *
-     * @remark 4096 bytes (4KB) on most systems
-     *
-     * Note (2026): Android 15+ (API 35+) and many ARM64 cloud/server systems
-     * use 16 KiB pages. Override to 16384 for page-aligned allocations on those
-     * platforms to avoid misalignment issues.
-     *
-     * Example:
-     * ```c
-     * // Allocate page-aligned memory
-     * void* mem = aligned_alloc(CANON_PAGE_SIZE, CANON_PAGE_SIZE);
-     * ```
-     */
-    #define CANON_PAGE_SIZE 4096
-#endif
-
-/* NEW: Helper for combining alignments (pairs well with ALIGN_OF from ptr.h) */
-#define CANON_ALIGN_MAX(a, b) ((a) > (b) ? (a) : (b))
-
-/* NEW: Safe alignment for _Atomic / lock-free structures */
-#define CANON_ATOMIC_ALIGN 16   /* Typical for pointers and primitives */
+/** @brief Min value of isize — PTRDIFF_MIN */
+#define CANON_ISIZE_MIN  PTRDIFF_MIN
 
 /* ============================================================================
- * Common Size Constants
+ * Size Literals
  * ========================================================================= */
+
 /**
- * @brief One kilobyte (1024 bytes)
+ * @brief 1 KiB — 1,024 bytes
+ *
+ * All size literals use usize casts on every factor to avoid signed integer
+ * overflow on 32-bit platforms where plain int arithmetic would overflow before
+ * the outer cast takes effect.
  */
 #define CANON_KB ((usize)1024)
+
+/** @brief 1 MiB — 1,048,576 bytes */
+#define CANON_MB ((usize)1024 * (usize)1024)
+
+/** @brief 1 GiB — 1,073,741,824 bytes */
+#define CANON_GB ((usize)1024 * (usize)1024 * (usize)1024)
+
+/* ============================================================================
+ * Alignment Constants
+ *
+ * All alignment constants are wrapped in #ifndef so callers can override
+ * any of them before including this header.
+ * ========================================================================= */
+
 /**
- * @brief One megabyte (1024 * 1024 bytes)
+ * @brief Default alignment for general-purpose allocations.
+ *
+ * Uses _Alignof(max_align_t) on C11+; falls back to 16 on C99 — a
+ * conservative value that satisfies SSE, double, and pointer alignment on
+ * virtually all platforms. Override to 8 for memory-constrained 32-bit
+ * embedded targets if needed.
  */
-#define CANON_MB ((usize)1024 * 1024)
+#ifndef CANON_DEFAULT_ALIGN
+#  if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#    define CANON_DEFAULT_ALIGN ((usize)_Alignof(max_align_t))
+#  else
+#    define CANON_DEFAULT_ALIGN ((usize)16)
+#  endif
+#endif
+
 /**
- * @brief One gigabyte (1024 * 1024 * 1024 bytes)
+ * @brief CPU cache line size for false-sharing prevention.
+ *
+ * 64 bytes on most x86-64 and ARM64 platforms.
+ * Override to 128 for Apple M-series or IBM POWER.
+ *
+ * Example — pad a per-thread counter to one cache line:
+ * ```c
+ * typedef struct { u64 value; u8 _pad[CANON_CACHE_LINE - sizeof(u64)]; } AlignedCounter;
+ * ```
  */
-#define CANON_GB ((usize)1024 * 1024 * 1024)
+#ifndef CANON_CACHE_LINE
+#  define CANON_CACHE_LINE ((usize)64)
+#endif
+
+/**
+ * @brief SSE / NEON SIMD alignment — 16 bytes.
+ * Override to 32 for AVX-only builds (see CANON_SIMD_ALIGN_AVX).
+ */
+#ifndef CANON_SIMD_ALIGN
+#  define CANON_SIMD_ALIGN ((usize)16)
+#endif
+
+/** @brief AVX (256-bit) SIMD alignment — 32 bytes. */
+#ifndef CANON_SIMD_ALIGN_AVX
+#  define CANON_SIMD_ALIGN_AVX ((usize)32)
+#endif
+
+/** @brief AVX-512 (512-bit) SIMD alignment — 64 bytes. */
+#ifndef CANON_SIMD_ALIGN_AVX512
+#  define CANON_SIMD_ALIGN_AVX512 ((usize)64)
+#endif
+
+/**
+ * @brief Typical memory page size — 4,096 bytes.
+ *
+ * Override to 16384 for Android 15+ (API 35+) and ARM64 cloud/server systems
+ * that use 16 KiB pages. Mismatching this value causes alignment faults on
+ * those platforms when using page-aligned allocations.
+ *
+ * Example:
+ * ```c
+ * void *page = aligned_alloc(CANON_PAGE_SIZE, CANON_PAGE_SIZE);
+ * ```
+ */
+#ifndef CANON_PAGE_SIZE
+#  define CANON_PAGE_SIZE ((usize)4096)
+#endif
+
+/**
+ * @brief Recommended alignment for lock-free _Atomic objects.
+ *
+ * 16 bytes covers pointers and primitive atomics on all supported platforms.
+ */
+#ifndef CANON_ATOMIC_ALIGN
+#  define CANON_ATOMIC_ALIGN ((usize)16)
+#endif
+
+/**
+ * @brief Compile-time maximum of two alignment values.
+ *
+ * Both arguments must be constant expressions with no side effects;
+ * macro arguments are evaluated twice.
+ *
+ * Example:
+ * ```c
+ * #define MY_ALIGN CANON_ALIGN_MAX(CANON_DEFAULT_ALIGN, CANON_SIMD_ALIGN)
+ * ```
+ */
+#define CANON_ALIGN_MAX(a, b) ((usize)((a) > (b) ? (a) : (b)))
+
 /* ============================================================================
  * Practical Capacity Limits
  * ========================================================================= */
+
 /**
- * @brief Reasonable maximum capacity for dynamic vectors
+ * @brief Soft maximum byte capacity for dynamic vectors — 1 GiB.
  *
- * Prevents excessive memory allocation. Set to 1GB by default.
- * Applications can override this if needed.
- *
- * @remark 1GB / sizeof(element) maximum elements
+ * Element count limit = CANON_VEC_MAX_CAPACITY / sizeof(T).
  *
  * Example:
  * ```c
- * if (new_capacity > CANON_VEC_MAX_CAPACITY / sizeof(Item)) {
- * return ERROR_CAPACITY_EXCEEDED;
+ * if (new_cap > CANON_VEC_MAX_CAPACITY / sizeof(Item)) {
+ *     return ERROR_CAPACITY_EXCEEDED;
  * }
  * ```
  */
 #ifndef CANON_VEC_MAX_CAPACITY
-    #define CANON_VEC_MAX_CAPACITY CANON_GB
+#  define CANON_VEC_MAX_CAPACITY CANON_GB
 #endif
+
 /**
- * @brief Reasonable maximum size for dynamic strings
+ * @brief Soft maximum byte length for dynamic strings — 16 MiB.
  *
- * Prevents excessive memory allocation for strings. Set to 16MB by default.
- *
- * @remark 16MB maximum string length
+ * Does not include the null terminator byte.
  */
 #ifndef CANON_STRING_MAX_SIZE
-    #define CANON_STRING_MAX_SIZE (16 * CANON_MB)
+#  define CANON_STRING_MAX_SIZE ((usize)16 * CANON_MB)
 #endif
+
 /**
- * @brief Maximum arena size (practical limit)
+ * @brief Soft maximum byte size for arenas — 1 GiB.
  *
- * Arenas larger than this are likely errors. Set to 1GB by default.
- *
- * @remark 1GB maximum arena capacity
+ * Arenas larger than this are almost certainly a bug in the caller.
  */
 #ifndef CANON_ARENA_MAX_SIZE
-    #define CANON_ARENA_MAX_SIZE CANON_GB
+#  define CANON_ARENA_MAX_SIZE CANON_GB
 #endif
+
 /* ============================================================================
  * Small Buffer Optimization Thresholds
  * ========================================================================= */
+
 /**
- * @brief Threshold for small string optimization
+ * @brief Small String Optimization (SSO) inline capacity — 23 bytes.
  *
- * Strings smaller than this can be stored inline without allocation.
- * Typically 15-23 bytes (leaving room for length + null terminator).
- *
- * @remark 23 bytes (fits in 24-byte struct with 1-byte length)
+ * Strings up to this many bytes (excluding null terminator) can be stored
+ * inline in a 24-byte struct: 23 bytes of data + 1 byte of length/tag.
  */
-#define CANON_SSO_THRESHOLD 23
+#ifndef CANON_SSO_THRESHOLD
+#  define CANON_SSO_THRESHOLD ((usize)23)
+#endif
+
 /**
- * @brief Threshold for small vector optimization
+ * @brief Small Vector Optimization (SVO) inline element count — 8 elements.
  *
- * Vectors with capacity below this can use inline storage.
- * Typically 4-16 elements depending on element size.
- *
- * @remark 8 elements (reasonable default for small types)
+ * Vectors with at most this many elements can use inline stack storage,
+ * avoiding a heap allocation for small collections.
  */
-#define CANON_SVO_THRESHOLD 8
+#ifndef CANON_SVO_THRESHOLD
+#  define CANON_SVO_THRESHOLD ((usize)8)
+#endif
+
 /* ============================================================================
  * Growth Factor Constants
  * ========================================================================= */
+
 /**
- * @brief Default growth factor for dynamic containers (multiplicative)
+ * @brief Numerator of the default 1.5× capacity growth factor.
  *
- * When growing capacity, multiply by this factor. 2.0 is aggressive
- * (doubles each time), 1.5 is more memory-efficient.
+ * New capacity = old_capacity * CANON_GROWTH_FACTOR_NUM
+ *                             / CANON_GROWTH_FACTOR_DENOM
  *
- * @remark 1.5x growth (balanced between speed and memory)
+ * 1.5× is more memory-efficient than 2× while still achieving amortised O(1)
+ * push. Override both NUM and DENOM together to change the ratio.
+ *
+ * Example:
+ * ```c
+ * usize new_cap = old_cap * CANON_GROWTH_FACTOR_NUM / CANON_GROWTH_FACTOR_DENOM;
+ * ```
  */
-#define CANON_GROWTH_FACTOR_NUM 3
-#define CANON_GROWTH_FACTOR_DENOM 2
+#ifndef CANON_GROWTH_FACTOR_NUM
+#  define CANON_GROWTH_FACTOR_NUM   ((usize)3)
+#endif
+
+/** @brief Denominator of the default 1.5× growth factor. */
+#ifndef CANON_GROWTH_FACTOR_DENOM
+#  define CANON_GROWTH_FACTOR_DENOM ((usize)2)
+#endif
+
 /**
- * @brief Minimum allocation size for dynamic containers
+ * @brief Minimum initial allocation for dynamic containers — 32 bytes.
  *
- * Start with at least this many bytes to avoid many small allocations.
- *
- * @remark 32 bytes (holds 4-8 pointers or 8-32 small elements)
+ * Avoids a flood of tiny reallocs when pushing into a freshly created
+ * container. Holds 4–8 pointers or 8–32 small elements.
  */
-#define CANON_MIN_ALLOCATION 32
+#ifndef CANON_MIN_ALLOCATION
+#  define CANON_MIN_ALLOCATION ((usize)32)
+#endif
+
 /* ============================================================================
- * Pointer Tagging Constants (Advanced Use)
+ * Pointer Tagging Constants
  * ========================================================================= */
+
 /**
- * @brief Number of low bits available for pointer tagging
+ * @brief Number of low-order bits available for pointer tagging.
  *
- * On most platforms, pointers to aligned data have low bits that are
- * always zero. These can be used to store metadata.
+ * Aligned pointers have low bits that are always zero and can carry metadata.
+ * This value reflects minimum pointer alignment on each platform width.
  *
- * @remark 3 bits on 64-bit (8-byte alignment = 2^3)
- * @remark 2 bits on 32-bit (4-byte alignment = 2^2)
+ * - 64-bit: 8-byte alignment → 3 tag bits
+ * - 32-bit: 4-byte alignment → 2 tag bits
+ * - other:  conservative 1 tag bit
  */
 #if UINTPTR_MAX == UINT64_MAX
-    #define CANON_PTR_TAG_BITS 3
+#  define CANON_PTR_TAG_BITS 3
 #elif UINTPTR_MAX == UINT32_MAX
-    #define CANON_PTR_TAG_BITS 2
+#  define CANON_PTR_TAG_BITS 2
 #else
-    #define CANON_PTR_TAG_BITS 1 /* Conservative fallback */
+#  define CANON_PTR_TAG_BITS 1
 #endif
+
 /**
- * @brief Mask for extracting pointer tag bits
+ * @brief Mask for extracting the tag stored in the low bits of a pointer.
+ *
+ * Always typed as uintptr_t to match pointer arithmetic.
+ *
+ * Example:
+ * ```c
+ * usize      tag     = (uintptr_t)ptr & CANON_PTR_TAG_MASK;
+ * void      *untagged = (void*)((uintptr_t)ptr & CANON_PTR_ADDR_MASK);
+ * uintptr_t  tagged   = ((uintptr_t)untagged & CANON_PTR_ADDR_MASK) | tag;
+ * ```
  */
-#define CANON_PTR_TAG_MASK ((1ULL << CANON_PTR_TAG_BITS) - 1)
-/**
- * @brief Mask for extracting pointer address (removing tag bits)
- */
-#define CANON_PTR_ADDR_MASK (~CANON_PTR_TAG_MASK)
+#define CANON_PTR_TAG_MASK  ((uintptr_t)((uintptr_t)1 << CANON_PTR_TAG_BITS) - (uintptr_t)1)
+
+/** @brief Mask for stripping tag bits and recovering the original address. */
+#define CANON_PTR_ADDR_MASK ((uintptr_t)(~CANON_PTR_TAG_MASK))
+
 /* ============================================================================
- * Platform Detection Helpers (Read-Only Information)
+ * Platform Read-Only Information
  * ========================================================================= */
-/**
- * @brief Size of a pointer in bytes (4 on 32-bit, 8 on 64-bit)
- */
-#define CANON_POINTER_SIZE sizeof(void*)
-/**
- * @brief Number of bits in a byte (always 8 on modern systems)
- */
-#define CANON_BITS_PER_BYTE CHAR_BIT
-/**
- * @brief Number of bits in a pointer (32 or 64)
- */
-#define CANON_POINTER_BITS (CANON_POINTER_SIZE * CANON_BITS_PER_BYTE)
-/* ============================================================================
- * Usage Examples (documentation only)
- * ========================================================================= */
-/*
-// Overflow detection using limits
-bool arena_can_alloc(Arena* arena, usize size) {
-    if (size > CANON_USIZE_MAX - arena->offset) {
-        return false; // Would overflow
-    }
-    return arena->offset + size <= arena->capacity;
-}
-// Alignment for performance
-typedef struct alignas(CANON_CACHE_LINE) PerCpuData {
-    u64 counter;
-    u64 timestamp;
-    // Padded to 64 bytes to prevent false sharing
-} PerCpuData;
-// Capacity limits
-Result_Vec vec_grow(Vec* vec) {
-    if (vec->capacity > CANON_VEC_MAX_CAPACITY / 2) {
-        return result_err(ERROR_CAPACITY_EXCEEDED);
-    }
-    usize new_cap = vec->capacity * CANON_GROWTH_FACTOR_NUM / CANON_GROWTH_FACTOR_DENOM;
-    // ... grow logic
-}
-// Size constants
-Arena arena = arena_create(malloc(2 * CANON_MB), 2 * CANON_MB);
-// SIMD alignment
-void* simd_buffer = aligned_alloc(CANON_SIMD_ALIGN, 1024);
-// Pointer tagging (advanced)
-uintptr_t tagged = ((uintptr_t)ptr & CANON_PTR_ADDR_MASK) | tag;
-void* untagged = (void*)(tagged & CANON_PTR_ADDR_MASK);
-usize tag = tagged & CANON_PTR_TAG_MASK;
-*/
+
+/** @brief Size of a pointer in bytes — 4 on 32-bit, 8 on 64-bit. */
+#define CANON_POINTER_SIZE  ((usize)sizeof(void*))
+
+/** @brief Number of bits in a byte — always 8 on supported platforms. */
+#define CANON_BITS_PER_BYTE ((usize)CHAR_BIT)
+
+/** @brief Number of bits in a pointer — 32 or 64. */
+#define CANON_POINTER_BITS  (CANON_POINTER_SIZE * CANON_BITS_PER_BYTE)
+
 #endif /* CANON_CORE_PRIMITIVES_LIMITS_H */
