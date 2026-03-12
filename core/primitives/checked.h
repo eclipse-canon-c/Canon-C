@@ -71,6 +71,25 @@
 #endif
 
 /* ============================================================================
+ * Debug NULL assertion
+ *
+ * In debug builds (NDEBUG not defined), CHECKED_ASSERT_RESULT fires if the
+ * caller passes a NULL output pointer. In release builds it compiles away
+ * completely. Uses contract.h's require_msg when available; falls back to
+ * a plain assert so the header stays self-contained.
+ * ========================================================================= */
+
+#if defined(CANON_CONTRACT_H)          /* contract.h already included */
+    #define CHECKED_ASSERT_RESULT(ptr) \
+        require_msg((ptr) != (void*)0, "checked: result pointer must not be NULL")
+#elif !defined(NDEBUG)
+    #include <assert.h>
+    #define CHECKED_ASSERT_RESULT(ptr) assert((ptr) != (void*)0)
+#else
+    #define CHECKED_ASSERT_RESULT(ptr) ((void)0)
+#endif
+
+/* ============================================================================
  * Checked Addition (Unsigned)
  * ========================================================================= */
 
@@ -79,7 +98,7 @@
  *
  * Performs `a + b` and stores the result in `*result` only if the addition
  * does not overflow. On overflow, `*result` is still written (with wrapped
- * value when using builtins), but function returns false.
+ * value when using builtins), but the function returns false.
  *
  * @param a First operand (any value)
  * @param b Second operand (any value)
@@ -87,7 +106,7 @@
  *
  * @return true if a + b fits in usize, false if overflow occurred
  *
- * @pre result must be non-NULL (not checked — UB if violated)
+ * @pre result != NULL (asserted in debug builds; UB in release if violated)
  *
  * @remark Uses __builtin_add_overflow on GCC/Clang (1 instruction)
  * @remark Fallback checks: overflow iff (a + b) < a
@@ -95,7 +114,7 @@
  * Example:
  * ```c
  * usize arena_offset = 1024;
- * usize alloc_size = 512;
+ * usize alloc_size   = 512;
  * usize new_offset;
  * if (!checked_add(arena_offset, alloc_size, &new_offset)) {
  *     return result_err(ERROR_OVERFLOW);
@@ -106,6 +125,7 @@
  * @sa checked_sub(), checked_mul()
  */
 static inline bool checked_add(usize a, usize b, usize* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
@@ -115,6 +135,7 @@ static inline bool checked_add(usize a, usize b, usize* result) {
 }
 
 static inline bool checked_add_u8(u8 a, u8 b, u8* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
@@ -125,6 +146,7 @@ static inline bool checked_add_u8(u8 a, u8 b, u8* result) {
 }
 
 static inline bool checked_add_u16(u16 a, u16 b, u16* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
@@ -135,6 +157,7 @@ static inline bool checked_add_u16(u16 a, u16 b, u16* result) {
 }
 
 static inline bool checked_add_u32(u32 a, u32 b, u32* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
@@ -145,6 +168,7 @@ static inline bool checked_add_u32(u32 a, u32 b, u32* result) {
 }
 
 static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
@@ -166,7 +190,7 @@ static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
  *
  * @return true if a >= b (no underflow), false if b > a
  *
- * @pre result must be non-NULL (not checked — UB if violated)
+ * @pre result != NULL (asserted in debug builds; UB in release if violated)
  *
  * Example:
  * ```c
@@ -177,6 +201,7 @@ static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
  * ```
  */
 static inline bool checked_sub(usize a, usize b, usize* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
@@ -186,6 +211,7 @@ static inline bool checked_sub(usize a, usize b, usize* result) {
 }
 
 static inline bool checked_sub_u8(u8 a, u8 b, u8* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
@@ -195,6 +221,7 @@ static inline bool checked_sub_u8(u8 a, u8 b, u8* result) {
 }
 
 static inline bool checked_sub_u16(u16 a, u16 b, u16* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
@@ -204,6 +231,7 @@ static inline bool checked_sub_u16(u16 a, u16 b, u16* result) {
 }
 
 static inline bool checked_sub_u32(u32 a, u32 b, u32* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
@@ -213,6 +241,7 @@ static inline bool checked_sub_u32(u32 a, u32 b, u32* result) {
 }
 
 static inline bool checked_sub_u64(u64 a, u64 b, u64* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
@@ -238,7 +267,7 @@ static inline bool checked_sub_u64(u64 a, u64 b, u64* result) {
  *
  * @return true if a * b fits in usize, false if overflow occurred
  *
- * @pre result must be non-NULL (not checked — UB if violated)
+ * @pre result != NULL (asserted in debug builds; UB in release if violated)
  *
  * @remark Uses __builtin_mul_overflow on GCC/Clang (1-2 instructions)
  * @remark Fallback: if a == 0 or b == 0, returns true with result = 0;
@@ -258,6 +287,7 @@ static inline bool checked_sub_u64(u64 a, u64 b, u64* result) {
  * @sa checked_add(), checked_sub()
  */
 static inline bool checked_mul(usize a, usize b, usize* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
@@ -271,6 +301,7 @@ static inline bool checked_mul(usize a, usize b, usize* result) {
 }
 
 static inline bool checked_mul_u8(u8 a, u8 b, u8* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
@@ -281,6 +312,7 @@ static inline bool checked_mul_u8(u8 a, u8 b, u8* result) {
 }
 
 static inline bool checked_mul_u16(u16 a, u16 b, u16* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
@@ -291,6 +323,7 @@ static inline bool checked_mul_u16(u16 a, u16 b, u16* result) {
 }
 
 static inline bool checked_mul_u32(u32 a, u32 b, u32* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
@@ -301,6 +334,7 @@ static inline bool checked_mul_u32(u32 a, u32 b, u32* result) {
 }
 
 static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
@@ -326,18 +360,21 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
  *
  * @return true if a + b does not overflow isize, false otherwise
  *
+ * @pre result != NULL (asserted in debug builds; UB in release if violated)
+ *
  * @remark Fallback checks bounds BEFORE adding to avoid signed overflow UB.
  *         Signed integer overflow is undefined behavior in C.
  */
 static inline bool checked_add_isize(isize a, isize b, isize* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_add_overflow(a, b, result);
 #else
     /*
      * Check BEFORE adding — signed overflow is UB in C.
      * Overflow only possible when both operands share the same sign:
-     *   (+, +): overflow if b > ISIZE_MAX - a  (both positive, sum too large)
-     *   (-, -): underflow if b < ISIZE_MIN - a (both negative, sum too small)
+     *   (+, +): overflow  if b > ISIZE_MAX - a  (both positive, sum too large)
+     *   (-, -): underflow if b < ISIZE_MIN - a  (both negative, sum too small)
      * Mixed signs can never overflow.
      */
     if (a > 0 && b > 0 && b > (CANON_ISIZE_MAX - a)) return false;
@@ -356,9 +393,12 @@ static inline bool checked_add_isize(isize a, isize b, isize* result) {
  *
  * @return true if a - b does not overflow isize, false otherwise
  *
+ * @pre result != NULL (asserted in debug builds; UB in release if violated)
+ *
  * @remark Fallback checks bounds BEFORE subtracting to avoid signed overflow UB.
  */
 static inline bool checked_sub_isize(isize a, isize b, isize* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_sub_overflow(a, b, result);
 #else
@@ -366,7 +406,7 @@ static inline bool checked_sub_isize(isize a, isize b, isize* result) {
      * Check BEFORE subtracting — signed overflow is UB in C.
      * a - b overflows when b and a have opposite signs and a is near a limit:
      *   subtracting positive from near-ISIZE_MIN: underflow if a < ISIZE_MIN + b
-     *   subtracting negative from near-ISIZE_MAX: overflow if a > ISIZE_MAX + b
+     *   subtracting negative from near-ISIZE_MAX: overflow  if a > ISIZE_MAX + b
      */
     if (b > 0 && a < (CANON_ISIZE_MIN + b)) return false;
     if (b < 0 && a > (CANON_ISIZE_MAX + b)) return false;
@@ -384,9 +424,14 @@ static inline bool checked_sub_isize(isize a, isize b, isize* result) {
  *
  * @return true if a * b does not overflow isize, false otherwise
  *
+ * @pre result != NULL (asserted in debug builds; UB in release if violated)
+ *
  * @remark Fallback checks bounds BEFORE multiplying to avoid signed overflow UB.
+ *         Signed integer overflow is undefined behavior in C — `a * b` must
+ *         never be evaluated if it would overflow.
  */
 static inline bool checked_mul_isize(isize a, isize b, isize* result) {
+    CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
@@ -396,21 +441,31 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
     }
     /*
      * Check BEFORE multiplying to avoid signed overflow UB.
-     * Signed integer overflow is undefined behavior in C —
-     * `a * b` must never be evaluated if it would overflow.
+     * All four sign combinations are handled explicitly.
+     * Division is safe here: both a != 0 and b != 0 are guaranteed above.
      *
-     * Four cases covering all sign combinations:
-     *   (+, +): overflow  if a > ISIZE_MAX / b
-     *   (-, -): overflow  if a < ISIZE_MAX / b  (both negative → positive result)
-     *   (+, -): underflow if b < ISIZE_MIN / a
-     *   (-, +): underflow if a < ISIZE_MIN / b
+     * (+, +) → positive result, cap at ISIZE_MAX:
+     *   overflow if a > ISIZE_MAX / b
      *
-     * Division is safe: a != 0 and b != 0 are both guaranteed above.
+     * (-, -) → positive result, cap at ISIZE_MAX:
+     *   The product (-a) * (-b) == a * b (positive). To avoid UB we compare
+     *   magnitudes using the fact that for two negatives, the product fits iff
+     *   (-a) <= ISIZE_MAX / (-b), i.e. the negated operands satisfy the (+,+)
+     *   check. We write this directly as: a >= ISIZE_MAX / b
+     *   (both sides of the division are negative; integer division truncates
+     *   toward zero, which is conservative — no overflow is missed).
+     *   overflow if a < ISIZE_MAX / b   (i.e. |a| > ISIZE_MAX / |b|)
+     *
+     * (+, -) → negative result, cap at ISIZE_MIN:
+     *   underflow if b < ISIZE_MIN / a
+     *
+     * (-, +) → negative result, cap at ISIZE_MIN:
+     *   underflow if a < ISIZE_MIN / b
      */
-    if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;
-    if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;
-    if (a > 0 && b < 0 && b < (CANON_ISIZE_MIN / a)) return false;
-    if (a < 0 && b > 0 && a < (CANON_ISIZE_MIN / b)) return false;
+    if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;   /* (+,+) */
+    if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;   /* (-,-) */
+    if (a > 0 && b < 0 && b < (CANON_ISIZE_MIN / a)) return false;   /* (+,-) */
+    if (a < 0 && b > 0 && a < (CANON_ISIZE_MIN / b)) return false;   /* (-,+) */
     *result = a * b;
     return true;
 #endif
