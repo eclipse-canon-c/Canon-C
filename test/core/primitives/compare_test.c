@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <math.h>    /* NAN, INFINITY */
-#include "core/primitives/compare.h"
+#include "compare.h"
 
 /* ============================================================================
  * Test Helpers
