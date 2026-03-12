@@ -5,215 +5,151 @@
  * @file scope.h
  * @brief RAII-style deferred cleanup for pure C using zero-overhead macros
  *
- * Provides automatic execution of cleanup code when leaving the current lexical scope,
- * regardless of exit reason (normal end, return, break, continue, goto *within* scope).
+ * Executes cleanup code automatically when leaving the current lexical scope,
+ * regardless of exit reason (normal end, return, break, continue, or goto
+ * targeting a label *inside* the same block).
  *
- * Core ideas:
+ * Design:
  * ────────────────────────────────────────────────────────────────────────────
- * - Zero runtime overhead: expands to nested for-loops optimized away by compiler
- * - LIFO execution order: last declared defer runs first (stack-like unwinding)
- * - Matches acquisition order: resources acquired first are released last
- * - Works with return, break, continue, normal block end, goto inside block
- * - No allocations, no function pointers, no vtables — pure macro expansion
- * - Simple, readable syntax inspired by Go, Zig, Swift defer
+ * - Zero runtime overhead: expands to two nested for-loops the compiler
+ *   eliminates entirely; no function pointers, no allocations, no vtables
+ * - LIFO execution order: last declared defer runs first (stack unwinding)
+ * - Multiple defers in the same scope are safe: unique names via __LINE__
+ * - Nesting defers inside loops or conditionals is safe
+ * - Pure C99 — no compiler extensions, no platform-specific code
+ * - Tested: GCC, Clang, MSVC, TCC
  *
- * Performance:
+ * Exit-method compatibility:
  * ────────────────────────────────────────────────────────────────────────────
- * - Compile-time only: zero added instructions beyond the cleanup code itself
- * - Compiler usually inlines and eliminates the for-loop structure
- * - No indirection or dynamic dispatch
+ * | Exit method                       | Cleanup runs? | Notes                              |
+ * |-----------------------------------|---------------|------------------------------------|
+ * | Normal end of block               | Yes           |                                    |
+ * | return                            | Yes           |                                    |
+ * | break / continue                  | Yes           | Exits enclosing loop/switch        |
+ * | goto — label inside block         | Yes           |                                    |
+ * | goto — label outside block        | No            | Skips all defers — avoid           |
+ * | goto — forward jump past a defer  | No            | That defer is never registered     |
+ * | longjmp out of scope              | No            | Bypasses completely — avoid        |
+ * | exit() / abort() / _Exit()        | No            | Process termination                |
  *
- * Thread-safety:
+ * Rules:
  * ────────────────────────────────────────────────────────────────────────────
- * Fully thread-safe — no shared state, each SCOPE_DEFER is local to its block
- *
- * Portability:
- * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (for loop variable declarations)
- * - Compatible with GCC, Clang, MSVC, ICC, TCC, etc.
- * - No compiler extensions required
- * - No platform-specific code
- *
- * Important limitations & semantics:
- * ──────────────────────────────────────────────────────────────────────────────
- * | Exit method                          | Cleanup executed? | Notes                                      |
- * |--------------------------------------|-------------------|--------------------------------------------|
- * | Normal end of block                  | Yes               |                                            |
- * | return from function                 | Yes               |                                            |
- * | break / continue                     | Yes               | Only current loop/block                    |
- * | goto label **inside** block          | Yes               |                                            |
- * | goto label **outside** block         | **No**            | Skips all defers — avoid!                  |
- * | longjmp / _longjmp out               | **No**            | Bypasses completely — avoid!               |
- * | exit(), abort(), _Exit()             | **No**            | Process termination                        |
- *
- * Critical rules:
- * - Never place break/continue/return/goto *inside* a SCOPE_DEFER block
- * - Avoid goto that jumps *out* of the SCOPE_DEFER scope
- * - Avoid longjmp across SCOPE_DEFER boundaries
- * - Keep cleanup blocks extremely simple (free, fclose, unlock, reset_to…)
- * - SCOPE_DEFER can be safely nested in loops/conditionals
- * - Never nest SCOPE_DEFER directly inside another SCOPE_DEFER block ( _scope_once and _scope_done will collide silently ) 
- *
- * Typical use cases:
- * ────────────────────────────────────────────────────────────────────────────
- * - File / socket / handle cleanup
- * - Memory allocation / arena checkpoint release
- * - Mutex / lock / semaphore unlocking
- * - Resource acquisition in error-prone code
- * - Temporary allocations in parsers / serializers
- * - Transaction-style scoped state changes
- *
- * NOT suitable for:
- * ────────────────────────────────────────────────────────────────────────────
- * - Code that must survive longjmp or abnormal termination
- * - Cleanup that requires complex control flow inside defer block
- * - Situations where goto jumps frequently escape scopes
- * - Replacing proper exception / unwind mechanisms in very large codebases
+ * - Do NOT place return / break / continue / goto inside a defer block
+ * - Do NOT goto a label outside the block that contains the defer
+ * - Do NOT nest one defer directly inside another defer block
+ *   (inner and outer each declare their own loop variables; nesting them
+ *   causes the inner block's loop to interfere with the outer block's exit
+ *   condition, which may silently prevent the outer cleanup from running)
+ * - Keep defer blocks simple: free, fclose, unlock, reset — nothing more
  *
  * @sa SCOPE_DEFER
  */
 
+/* ────────────────────────────────────────────────────────────────────────────
+   Internal helpers — unique variable names per call site via __LINE__
+   ──────────────────────────────────────────────────────────────────────────── */
+#define _SCOPE_CAT2(a, b)      a##b
+#define _SCOPE_CAT(a, b)       _SCOPE_CAT2(a, b)
+#define _SCOPE_VAR(base)       _SCOPE_CAT(base, __LINE__)
+
 /**
  * @def SCOPE_DEFER
- * @brief Executes cleanup code automatically on scope exit
+ * @brief Execute a cleanup block automatically on scope exit (LIFO order).
  *
- * The cleanup block is guaranteed to run exactly once when control leaves
- * the enclosing block — whether by reaching the end, returning, breaking,
- * continuing, or jumping to a label inside the same block.
- *
- * Multiple SCOPE_DEFER statements in the same block execute in **reverse**
- * declaration order (LIFO — like stack unwinding).
- *
- * @remark Zero runtime cost — macro expands to nested for-loops that
- * modern compilers eliminate completely (especially with -O2 or higher).
- *
- * @remark The defer block must **not** contain:
- * - return
- * - break / continue that exits the defer itself
- * - goto that jumps out of the defer block
+ * Expands to two nested for-loops that modern compilers eliminate at -O1
+ * or higher. Variable names are unique per call site via __LINE__, so
+ * multiple defers in the same scope work correctly without collision.
  *
  * Basic pattern:
  * ```c
  * FILE* f = fopen("data.txt", "r");
  * if (!f) return ERR_OPEN;
+ * SCOPE_DEFER { fclose(f); }
  *
- * SCOPE_DEFER {
- *     if (f) fclose(f);
- * }
- *
- * // use f safely — guaranteed closed on any normal exit
+ * // f is guaranteed closed on any normal exit from this block
  * ```
  *
- * Multiple resources (LIFO order):
+ * Multiple resources (LIFO — second defer runs first):
  * ```c
- * void* mem = malloc(4096);
- * if (!mem) return ERR_ALLOC;
+ * void* buf = malloc(4096);
+ * if (!buf) return ERR_ALLOC;
+ * SCOPE_DEFER { free(buf); }                 // runs second
  *
- * SCOPE_DEFER { free(mem); } // runs first
- *
- * FILE* log = fopen("log.txt", "a");
+ * FILE* log = fopen("run.log", "a");
  * if (!log) return ERR_LOG;
- *
- * SCOPE_DEFER { if (log) fclose(log); } // runs second
- *
- * // both cleaned up automatically in reverse order
+ * SCOPE_DEFER { fclose(log); }               // runs first
  * ```
  *
- * Arena checkpoint example:
- * ```c
- * ArenaMark mark = arena_mark(&arena);
- * SCOPE_DEFER {
- *     arena_reset_to(&arena, mark);
- * }
- *
- * // all allocations from here are auto-freed on scope exit
- * ```
- *
- * Lock guard pattern:
+ * Mutex guard:
  * ```c
  * pthread_mutex_lock(&mtx);
  * SCOPE_DEFER { pthread_mutex_unlock(&mtx); }
- *
  * // critical section — mutex always released
  * ```
  *
- * @note Avoid combining with goto that jumps **outside** the current block —
- * such jumps bypass all SCOPE_DEFER statements in that block.
+ * Arena checkpoint:
+ * ```c
+ * ArenaMark mark = arena_mark(&arena);
+ * SCOPE_DEFER { arena_reset_to(&arena, mark); }
+ * // all scratch allocations freed on exit
+ * ```
  *
- * @note longjmp / setjmp will also bypass deferred cleanups completely.
- * If longjmp is required, perform cleanup manually before jumping.
+ * @warning Do NOT use return, break, continue, or outward goto inside
+ *          a defer block. Do NOT nest one defer directly inside another.
  *
- * @see defer (recommended short alias)
+ * @warning A forward goto that jumps *past* a defer statement means that
+ *          defer is never reached and its cleanup will not run.
+ *
+ * @note longjmp across a defer boundary bypasses cleanup entirely.
+ *       Perform manual cleanup before longjmp if required.
  */
 #define SCOPE_DEFER \
-    for (int _scope_once = 1; _scope_once; _scope_once = 0) \
-        for (; _scope_once; ) \
-            for (int _scope_done = 0; !_scope_done; _scope_done = 1, _scope_once = 0)
+    for (int _SCOPE_VAR(_sc_once_) = 1; \
+             _SCOPE_VAR(_sc_once_); \
+             _SCOPE_VAR(_sc_once_) = 0) \
+        for (int _SCOPE_VAR(_sc_done_) = 0; \
+                 !_SCOPE_VAR(_sc_done_); \
+                 _SCOPE_VAR(_sc_done_) = 1)
 
 /**
  * @def defer
- * @brief Recommended short alias for SCOPE_DEFER
+ * @brief Short alias for SCOPE_DEFER (Go / Zig style).
  *
- * Many developers prefer this shorter, Go/Zig-like name.
- * Enabled by default — disable with #define CANON_NO_DEFER_ALIAS
+ * Enabled by default. Disable with: #define CANON_NO_DEFER_ALIAS
  *
- * Usage:
  * ```c
  * defer { free(ptr); }
  * ```
  */
 #ifndef CANON_NO_DEFER_ALIAS
-#define defer SCOPE_DEFER
+#   define defer SCOPE_DEFER
 #endif
 
-/**
- * @def DEFER
- * @brief Alternative uppercase alias (uncomment to enable)
- */
-// #define DEFER SCOPE_DEFER
-
 /* ────────────────────────────────────────────────────────────────────────────
-   Comparison with other languages
+   Full example
    ────────────────────────────────────────────────────────────────────────────
-   Language | Syntax                       | Notes
-   ---------|--------------------------------|--------------------------------------
-   Go       | defer file.Close()            | Built-in, LIFO, simple
-   Zig      | defer file.close();           | Compile-time, very similar
-   Swift    | defer { file.close() }        | Very close syntax
-   Rust     | (via Drop trait)              | Automatic, type-based
-   C++      | (via RAII destructors)        | Most powerful, but requires classes
-   C        | defer { fclose(file); }       | Macro-based, zero-cost, pure C
-   ──────────────────────────────────────────────────────────────────────────── */
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Complete realistic example
-   ────────────────────────────────────────────────────────────────────────────
-Result process_config(const char* path) {
+Result process_config(const char* path)
+{
     FILE* f = fopen(path, "r");
-    if (!f) return ERR_IO_FAILED;          // ← changed
-    defer {
-        if (f) fclose(f);
-    }
+    if (!f) return ERR_IO_FAILED;
+    defer { fclose(f); }
 
-    char* buffer = malloc(8192);
-    if (!buffer) return ERR_OUT_OF_MEMORY; // ← changed
-    defer {
-        free(buffer);
-    }
+    char* buf = malloc(8192);
+    if (!buf) return ERR_OUT_OF_MEMORY;
+    defer { free(buf); }
 
-    // Read file into buffer safely
-    size_t n = fread(buffer, 1, 8192, f);
-    if (n == 0 && ferror(f)) return ERR_IO_FAILED; // ← changed
+    size_t n = fread(buf, 1, 8192, f);
+    if (n == 0 && ferror(f)) return ERR_IO_FAILED;
 
-    ArenaMark mark = arena_mark(&scratch_arena);
-    defer {
-        arena_reset_to(&scratch_arena, mark);
-    }
+    ArenaMark mark = arena_mark(&scratch);
+    defer { arena_reset_to(&scratch, mark); }
 
-    // Parse using temporary arena allocations
-    Config cfg = parse_config(buffer, n, &scratch_arena);
+    Config cfg = parse_config(buf, n, &scratch);
     return validate_and_apply(&cfg);
+    // All three defers run here in reverse order, on any exit path above.
 }
+
    ──────────────────────────────────────────────────────────────────────────── */
 
 #endif /* CANON_CORE_SCOPE_H */
