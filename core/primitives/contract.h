@@ -15,6 +15,22 @@
  * - Clarity: Different macros signal different contract types
  * - Customizable: Single panic handler for all contract violations
  *
+ * Companion translation unit:
+ * ────────────────────────────────────────────────────────────────────────────
+ * This header declares the handler storage as extern. You must compile
+ * exactly one contract.c into your project to provide the definition:
+ *
+ *   #include "core/primitives/contract.c"   // or add to your build system
+ *
+ * contract.c defines:
+ *   contract_handler_fn canon_contract_handler;   // the global handler slot
+ *
+ * This is intentional. A file-scope static in a header produces one
+ * independent copy per translation unit — contract_set_handler() in one
+ * .c file would be invisible to all others. Using a plain extern variable
+ * in a single .c file is explicit, requires no knowledge of C linkage
+ * subtleties, and is readable by anyone who knows C99.
+ *
  * Build configuration flags:
  * ────────────────────────────────────────────────────────────────────────────
  * Three independent flags control enforcement levels:
@@ -45,6 +61,12 @@
  *
  *   #define CANON_NO_REQUIRE
  *   #include "core/primitives/contract.h"
+ *
+ * CANON_NO_GNU_EXTENSIONS (define to disable GNU/compiler-specific extensions)
+ *   Disables __builtin_unreachable(), __assume(0), and #pragma message.
+ *   Use when targeting strictly conforming C99 or compilers that do not
+ *   support these extensions. The unreachable() macro degrades to a
+ *   no-op hint (safe fallback — the panic call still fires in debug).
  *
  * Enforcement matrix:
  * ────────────────────────────────────────────────────────────────────────────
@@ -83,18 +105,19 @@
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (__FILE__, __LINE__, __func__)
+ * - Requires C99 or later (__FILE__, __LINE__, __func__ are C99 guaranteed)
  * - Uses standard abort() for termination
- * - No platform-specific code
+ * - Compiler-specific hints (__builtin_unreachable, __assume) are used where
+ *   available and guarded by CANON_NO_GNU_EXTENSIONS for strict builds
  * - NDEBUG macro follows standard convention (same as assert.h)
  *
  * Handler storage:
  * ────────────────────────────────────────────────────────────────────────────
- * The handler is stored as a function-local static inside
- * canon_contract_handler_ptr(). This guarantees a single instance across
- * all translation units (unlike a static variable in a header, which would
- * produce one copy per TU). contract_set_handler() is therefore truly global
- * and affects all Canon-C contract checks program-wide.
+ * The handler is stored as a plain extern variable defined in contract.c.
+ * This is the simplest correct approach: one definition, visible to all
+ * translation units through the extern declaration in this header.
+ * contract_set_handler() writes directly to that variable — no indirection,
+ * no tricks, no TU-local copies.
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -111,7 +134,7 @@
  * - Performance-critical hot loops (check once outside loop)
  * - Expected failure conditions (contracts are for bugs, not expected errors)
  *
- * @sa types.h, result.h
+ * @sa types.h, result.h, contract.c
  */
 
 #ifndef CANON_CORE_PRIMITIVES_CONTRACT_H
@@ -128,7 +151,7 @@
 /**
  * @brief Contract violation handler function type
  *
- * Called when a contract is violated. Should not return.
+ * Called when a contract is violated. Must not return.
  *
  * @param file Source file where violation occurred
  * @param line Line number of violation
@@ -150,8 +173,8 @@ typedef void (*contract_handler_fn)(
  * Prints diagnostic information to stderr and calls abort().
  * This is the default handler used if no custom handler is installed.
  *
- * @remark Not thread-safe (uses fprintf)
- * @remark Never returns
+ * @note Not thread-safe (uses fprintf)
+ * @note Never returns
  */
 static inline void contract_default_handler(
     const char* file,
@@ -177,36 +200,25 @@ static inline void contract_default_handler(
 }
 
 /* ============================================================================
- * Handler accessor — single instance across all translation units
+ * Handler storage — single extern definition in contract.c
  * ============================================================================
  *
- * A file-scope `static` variable in a header produces one independent copy
- * per translation unit. Calling contract_set_handler() in one .c file would
- * have no effect on any other .c file — the program-wide handler claim would
- * be silently broken.
+ * canon_contract_handler is defined once in contract.c and declared here
+ * as extern. Every translation unit that includes this header shares the
+ * same handler variable through normal C extern linkage — no tricks required.
  *
- * Storing the handler inside a function-local `static` variable fixes this:
- * the C standard guarantees exactly one instance of a function-local static
- * across the entire program, regardless of how many translation units include
- * this header. All reads and writes go through the same memory location.
- *
- * contract_set_handler() is NOT thread-safe. Call it once during program
- * initialization, before any concurrent code runs.
+ * contract_set_handler() writes directly to this variable.
+ * It is NOT thread-safe. Call it once during program initialization,
+ * before any concurrent code runs.
  * ========================================================================= */
 
 /**
- * @brief Returns a pointer to the single global contract handler slot
+ * @brief The global contract violation handler (defined in contract.c)
  *
- * Internal use only. All contract macros and contract_set_handler() go
- * through this accessor to guarantee a single handler instance across
- * all translation units.
- *
- * @return Pointer to the handler function pointer (never NULL)
+ * Initialized to contract_default_handler in contract.c.
+ * Write through contract_set_handler() only.
  */
-static inline contract_handler_fn* canon_contract_handler_ptr(void) {
-    static contract_handler_fn handler = contract_default_handler;
-    return &handler;
-}
+extern contract_handler_fn canon_contract_handler;
 
 /**
  * @brief Set a custom contract violation handler (program-wide)
@@ -233,7 +245,7 @@ static inline contract_handler_fn* canon_contract_handler_ptr(void) {
  * ```
  */
 static inline void contract_set_handler(contract_handler_fn handler) {
-    *canon_contract_handler_ptr() = handler
+    canon_contract_handler = handler
         ? handler
         : contract_default_handler;
 }
@@ -242,32 +254,35 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Internal Helper Macros
  * ========================================================================= */
 
-#ifdef __GNUC__
+/**
+ * @brief Compiler hint for unreachable code paths
+ *
+ * Provides an optimization hint to the compiler when a code path is
+ * provably unreachable. This is a hint only — the panic call in
+ * unreachable() fires before this is ever reached in debug builds.
+ *
+ * Disabled entirely when CANON_NO_GNU_EXTENSIONS is defined, falling
+ * back to a safe no-op.
+ *
+ * @note This is a code-generation hint, not a safety mechanism.
+ *       Safety is provided by the panic call that precedes it.
+ */
+#if !defined(CANON_NO_GNU_EXTENSIONS) && defined(__GNUC__)
     #define CANON_UNREACHABLE_HINT() __builtin_unreachable()
-#elif defined(_MSC_VER)
+#elif !defined(CANON_NO_GNU_EXTENSIONS) && defined(_MSC_VER)
     #define CANON_UNREACHABLE_HINT() __assume(0)
 #else
     #define CANON_UNREACHABLE_HINT() ((void)0)
 #endif
 
-#ifndef __func__
-    #if __STDC_VERSION__ >= 199901L
-        /* C99 provides __func__ */
-    #elif defined(__GNUC__)
-        #define __func__ __FUNCTION__
-    #else
-        #define __func__ "<unknown>"
-    #endif
-#endif
-
 /**
  * @brief Internal macro: invoke the current contract handler
  *
- * Goes through canon_contract_handler_ptr() to ensure the correct
- * program-wide handler is always called, regardless of TU.
+ * Reads canon_contract_handler directly — the same variable in all
+ * translation units through standard extern linkage.
  */
 #define _CANON_INVOKE_HANDLER(expr_str, msg) \
-    (*canon_contract_handler_ptr())(__FILE__, __LINE__, __func__, expr_str, msg)
+    canon_contract_handler(__FILE__, __LINE__, __func__, expr_str, msg)
 
 /* ============================================================================
  * Core Contract Macros
@@ -364,7 +379,6 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * @sa require(), ensure_msg()
  */
 #ifdef CANON_STRICT
-    /* Certified build — ensure is always-on, identical to require */
     #define ensure(cond) \
         do { \
             if (!(cond)) { \
@@ -391,7 +405,6 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * @sa ensure(), require_msg()
  */
 #ifdef CANON_STRICT
-    /* Certified build — ensure_msg is always-on, identical to require_msg */
     #define ensure_msg(cond, msg) \
         do { \
             if (!(cond)) { \
@@ -409,11 +422,11 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * Use in code that should never execute (e.g., switch default cases for
  * exhaustive enums). In debug builds, triggers panic. In release builds,
- * provides optimization hint to compiler.
+ * provides an optimization hint to the compiler (see CANON_UNREACHABLE_HINT).
  *
- * With CANON_STRICT: always triggers panic (never just a hint).
+ * With CANON_STRICT: always triggers panic (never silently optimized away).
  *
- * @remark Never returns
+ * @note Never returns
  *
  * Example:
  * ```c
@@ -428,7 +441,6 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * @sa unreachable_msg()
  */
 #if defined(CANON_STRICT)
-    /* Certified build — unreachable always panics, never silently optimized */
     #define unreachable() \
         do { \
             _CANON_INVOKE_HANDLER("unreachable code path", NULL); \
@@ -479,7 +491,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * @param msg Error message (string literal)
  *
- * @remark Never returns
+ * @note Never returns
  *
  * Example:
  * ```c
@@ -503,8 +515,11 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Use for checking compile-time constants like struct sizes, alignments,
  * or configuration values. Never disabled by any flag.
  *
+ * In C11 and later, expands to _Static_assert.
+ * In C99, expands to a typedef trick that produces a compile error on failure.
+ *
  * @param cond Compile-time constant expression
- * @param msg  Identifier-safe message (no spaces, will appear in error)
+ * @param msg  Identifier-safe message (no spaces — appears in compiler error)
  *
  * Example:
  * ```c
@@ -512,11 +527,10 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * static_require(BUFFER_SIZE >= 1024, buffer_too_small);
  * ```
  */
-#if __STDC_VERSION__ >= 201112L
-    /* C11 has _Static_assert */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
     #define static_require(cond, msg) _Static_assert(cond, #msg)
 #else
-    /* C99 fallback using array typedef trick */
+    /* C99 fallback: negative-size array produces a compile error */
     #define static_require(cond, msg) \
         typedef char static_assert_##msg[(cond) ? 1 : -1]
 #endif
@@ -526,13 +540,13 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * ========================================================================= */
 
 /*
- * Warn if CANON_NO_REQUIRE is combined with CANON_STRICT — this is almost
- * certainly a misconfiguration. CANON_STRICT promotes ensure to always-on
- * but CANON_NO_REQUIRE silences require entirely, leaving no enforcement
- * for preconditions. The combination is legal but likely unintentional.
+ * Warn if CANON_NO_REQUIRE is combined with CANON_STRICT.
+ * CANON_STRICT promotes ensure() to always-on, but CANON_NO_REQUIRE
+ * silences require() entirely, leaving preconditions unprotected.
+ * The combination is legal (require OFF, ensure ON) but almost certainly
+ * a misconfiguration — warn unless GNU extensions are suppressed.
  */
-#if defined(CANON_NO_REQUIRE) && defined(CANON_STRICT)
-    /* Use GCC/Clang pragma warning if available, otherwise rely on comment */
+#if defined(CANON_NO_REQUIRE) && defined(CANON_STRICT) && !defined(CANON_NO_GNU_EXTENSIONS)
     #ifdef __GNUC__
         #pragma message \
             "WARNING: CANON_NO_REQUIRE + CANON_STRICT: require() is disabled " \
@@ -608,24 +622,27 @@ void embedded_init(void) {
 
 // Development build (default):
 //   require ON, ensure debug-only
-//   gcc -o myapp main.c
+//   gcc -o myapp main.c contract.c
 
 // Release build:
 //   require ON, ensure OFF
-//   gcc -DNDEBUG -o myapp main.c
+//   gcc -DNDEBUG -o myapp main.c contract.c
 
 // Certified build (DO-178C / ISO 26262):
 //   require ON, ensure always-on
-//   gcc -DCANON_STRICT -o myapp main.c
+//   gcc -DCANON_STRICT -o myapp main.c contract.c
 
 // Formally verified build (Frama-C proved all sites):
 //   require OFF, ensure OFF
-//   gcc -DCANON_NO_REQUIRE -DNDEBUG -o myapp main.c
+//   gcc -DCANON_NO_REQUIRE -DNDEBUG -o myapp main.c contract.c
+
+// Strictly conforming C99 (no compiler extensions):
+//   gcc -DCANON_NO_GNU_EXTENSIONS -o myapp main.c contract.c
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Example 6: Restore default handler
 // ─────────────────────────────────────────────────────────────────────────────
-contract_set_handler(NULL);  // NULL → restores contract_default_handler
+contract_set_handler(NULL);  // NULL restores contract_default_handler
 */
 
 #endif /* CANON_CORE_PRIMITIVES_CONTRACT_H */
