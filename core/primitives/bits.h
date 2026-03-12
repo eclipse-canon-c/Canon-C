@@ -29,7 +29,8 @@
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later (inline functions, stdint.h)
- * - Compiler builtins detected via __GNUC__, __clang__, _MSC_VER
+ * - GCC/Clang builtins: detected via __GNUC__ (covers both compilers)
+ * - MSVC builtins: detected via _MSC_VER, requires <intrin.h>
  * - Fallback implementations use only standard C bitwise operations
  * - No platform-specific assembly or intrinsics in fallbacks
  * - Undefined behavior avoided (no shifts >= type width)
@@ -50,7 +51,7 @@
  * - Bit arrays larger than 64 bits (use dedicated bitset library)
  * - Endianness conversion (use dedicated byte-swap functions)
  *
- * @sa types.h, checked.h
+ * @sa types.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_BITS_H
@@ -60,15 +61,24 @@
 
 /* ============================================================================
  * Compiler Builtin Detection
+ *
+ * Two independent guards — one per compiler family.
+ * Usage sites branch directly on these macros, so there is no combined
+ * CANON_HAS_BUILTIN_BITS umbrella that would obscure which builtin is used.
  * ========================================================================= */
 
 #if defined(__GNUC__) || defined(__clang__)
-    #define CANON_HAS_BUILTIN_BITS 1
-#elif defined(_MSC_VER)
-    #define CANON_HAS_BUILTIN_BITS 1
+    /* Clang also defines __GNUC__, so this covers both. */
+    #define CANON_BITS_GNUC 1
+#else
+    #define CANON_BITS_GNUC 0
+#endif
+
+#if defined(_MSC_VER)
+    #define CANON_BITS_MSVC 1
     #include <intrin.h>
 #else
-    #define CANON_HAS_BUILTIN_BITS 0
+    #define CANON_BITS_MSVC 0
 #endif
 
 /* ============================================================================
@@ -83,7 +93,7 @@
  *
  * @return true if bit is set (1), false if clear (0)
  *
- * @pre bit must be < 64 for u64 (not checked — UB if violated)
+ * @pre bit must be < 64 (not checked — UB if violated)
  *
  * @remark Compiles to: (value >> bit) & 1
  *
@@ -108,7 +118,7 @@ static inline bool bits_test(u64 value, u32 bit) {
  *
  * @return Value with bit set
  *
- * @pre bit must be < 64 for u64 (not checked — UB if violated)
+ * @pre bit must be < 64 (not checked — UB if violated)
  *
  * @remark Compiles to: value | (1ULL << bit)
  *
@@ -132,7 +142,7 @@ static inline u64 bits_set(u64 value, u32 bit) {
  *
  * @return Value with bit cleared
  *
- * @pre bit must be < 64 for u64 (not checked — UB if violated)
+ * @pre bit must be < 64 (not checked — UB if violated)
  *
  * @remark Compiles to: value & ~(1ULL << bit)
  *
@@ -155,6 +165,8 @@ static inline u64 bits_clear(u64 value, u32 bit) {
  * @param bit Bit position to toggle
  *
  * @return Value with bit flipped
+ *
+ * @pre bit must be < 64 (not checked — UB if violated)
  *
  * @remark Compiles to: value ^ (1ULL << bit)
  *
@@ -213,7 +225,10 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
  * @param start Starting bit position in dst
  * @param count Number of bits to insert
  *
- * @return dst with inserted bits
+ * @return dst with the specified bits replaced by the low `count` bits of src
+ *
+ * @pre start must be < 64 (not checked — UB if violated)
+ * @pre count must be > 0 and <= 64 (not checked — UB if violated)
  *
  * Example:
  * ```c
@@ -226,7 +241,11 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
  */
 static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
     if (count == 0) return dst;
-    if (count >= 64) return (src << start);
+    if (count >= 64) {
+        /* All 64 bits are replaced; shift src into position.
+         * dst is fully overwritten — no bits of dst are preserved. */
+        return src << start;
+    }
     u64 mask = ((1ULL << count) - 1) << start;
     return (dst & ~mask) | ((src << start) & mask);
 }
@@ -244,7 +263,8 @@ static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
  *
  * @return Number of set bits (0-64)
  *
- * @remark With builtins: 1 instruction (popcnt)
+ * @remark With GCC/Clang builtins: 1 instruction (popcnt)
+ * @remark With MSVC builtins: 1 instruction (__popcnt64)
  * @remark Without builtins: ~20 instructions (parallel bit counting)
  *
  * Example:
@@ -256,9 +276,9 @@ static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
  * @sa bits_clz(), bits_ctz()
  */
 static inline u32 bits_popcount(u64 value) {
-#if CANON_HAS_BUILTIN_BITS && defined(__GNUC__)
+#if CANON_BITS_GNUC
     return (u32)__builtin_popcountll(value);
-#elif CANON_HAS_BUILTIN_BITS && defined(_MSC_VER)
+#elif CANON_BITS_MSVC
     return (u32)__popcnt64(value);
 #else
     /* Parallel bit counting (SWAR algorithm) */
@@ -277,29 +297,32 @@ static inline u32 bits_popcount(u64 value) {
  *
  * @param value Value to count leading zeros in
  *
- * @return Number of leading zeros (0-64), or 64 if value == 0
+ * @return Number of leading zeros (0-63), or 64 if value == 0
  *
- * @remark With builtins: 1 instruction (bsr/lzcnt)
- * @remark Returns 64 for value == 0 (differs from some builtin behavior)
+ * @remark With GCC/Clang builtins: 1 instruction (lzcnt/bsr)
+ * @remark With MSVC builtins: 1 instruction (_BitScanReverse64)
+ * @remark Returns 64 for value == 0 (differs from raw builtin behavior,
+ *         which is undefined for 0 on some platforms)
  *
  * Example:
  * ```c
  * u64 val = 0b00001010;
- * u32 lz = bits_clz(val);  // → 60 (on 64-bit)
+ * u32 lz = bits_clz(val);  // → 60
  * ```
  *
  * @sa bits_ctz(), bits_fls()
  */
 static inline u32 bits_clz(u64 value) {
     if (value == 0) return 64;
-#if CANON_HAS_BUILTIN_BITS && defined(__GNUC__)
+#if CANON_BITS_GNUC
     return (u32)__builtin_clzll(value);
-#elif CANON_HAS_BUILTIN_BITS && defined(_MSC_VER)
+#elif CANON_BITS_MSVC
     unsigned long index;
     _BitScanReverse64(&index, value);
     return 63 - (u32)index;
 #else
-    /* Binary search for highest set bit */
+    /* Binary search for highest set bit.
+     * Each step halves the remaining search range. */
     u32 count = 0;
     if ((value & 0xFFFFFFFF00000000ULL) == 0) { count += 32; value <<= 32; }
     if ((value & 0xFFFF000000000000ULL) == 0) { count += 16; value <<= 16; }
@@ -319,10 +342,12 @@ static inline u32 bits_clz(u64 value) {
  *
  * @param value Value to count trailing zeros in
  *
- * @return Number of trailing zeros (0-64), or 64 if value == 0
+ * @return Number of trailing zeros (0-63), or 64 if value == 0
  *
- * @remark With builtins: 1 instruction (bsf/tzcnt)
- * @remark Returns 64 for value == 0 (differs from some builtin behavior)
+ * @remark With GCC/Clang builtins: 1 instruction (tzcnt/bsf)
+ * @remark With MSVC builtins: 1 instruction (_BitScanForward64)
+ * @remark Returns 64 for value == 0 (differs from raw builtin behavior,
+ *         which is undefined for 0 on some platforms)
  *
  * Example:
  * ```c
@@ -334,14 +359,14 @@ static inline u32 bits_clz(u64 value) {
  */
 static inline u32 bits_ctz(u64 value) {
     if (value == 0) return 64;
-#if CANON_HAS_BUILTIN_BITS && defined(__GNUC__)
+#if CANON_BITS_GNUC
     return (u32)__builtin_ctzll(value);
-#elif CANON_HAS_BUILTIN_BITS && defined(_MSC_VER)
+#elif CANON_BITS_MSVC
     unsigned long index;
     _BitScanForward64(&index, value);
     return (u32)index;
 #else
-    /* Binary search for lowest set bit */
+    /* Binary search for lowest set bit. */
     u32 count = 0;
     if ((value & 0x00000000FFFFFFFFULL) == 0) { count += 32; value >>= 32; }
     if ((value & 0x000000000000FFFFULL) == 0) { count += 16; value >>= 16; }
@@ -354,18 +379,22 @@ static inline u32 bits_ctz(u64 value) {
 }
 
 /**
- * @brief Find first set bit (FFS) - 1-indexed
+ * @brief Find first set bit (FFS) — 1-indexed
  *
  * Returns the position of the lowest set bit, 1-indexed.
  * Returns 0 if no bits are set.
+ *
+ * @param value Value to search
  *
  * @return Bit position (1-64), or 0 if value == 0
  *
  * Example:
  * ```c
- * u32 val = 0b10100000;
- * u32 first = bits_ffs(val);  // → 6 (1-indexed)
+ * u64 val = 0b10100000;
+ * u32 first = bits_ffs(val);  // → 6  (bit 5 zero-indexed, +1)
  * ```
+ *
+ * @sa bits_ctz(), bits_fls()
  */
 static inline u32 bits_ffs(u64 value) {
     if (value == 0) return 0;
@@ -373,18 +402,22 @@ static inline u32 bits_ffs(u64 value) {
 }
 
 /**
- * @brief Find last set bit (FLS) - 1-indexed
+ * @brief Find last set bit (FLS) — 1-indexed
  *
  * Returns the position of the highest set bit, 1-indexed.
  * Returns 0 if no bits are set.
+ *
+ * @param value Value to search
  *
  * @return Bit position (1-64), or 0 if value == 0
  *
  * Example:
  * ```c
- * u32 val = 0b10100000;
- * u32 last = bits_fls(val);  // → 8 (1-indexed)
+ * u64 val = 0b10100000;
+ * u32 last = bits_fls(val);  // → 8  (bit 7 zero-indexed, +1)
  * ```
+ *
+ * @sa bits_clz(), bits_ffs()
  */
 static inline u32 bits_fls(u64 value) {
     if (value == 0) return 0;
@@ -406,17 +439,18 @@ static inline u32 bits_fls(u64 value) {
  *
  * @return Rotated u64 value
  *
- * @remark shift >= 64 is automatically masked to shift % 64 (shift &= 63)
+ * @remark shift >= 64 is automatically masked: effective shift = shift & 63
  * @remark These functions always operate on the full 64-bit width.
- *         If you need rotation on a narrower type (e.g. 8-bit), mask
- *         the result: bits_rotl(val, 2) & 0xFF
+ *         For narrower rotations (e.g. 8-bit), mask the result yourself:
+ *         bits_rotl(val, 2) & 0xFF  — but note this is not a true 8-bit
+ *         rotation (high bits from the upper 56 bits may bleed in).
+ *         Use a dedicated narrow helper for correct narrow rotations.
  *
  * Example (full u64):
  * ```c
- * u64 val = 0x00000000000000B1ULL;  // 0b10110001
- * u64 rot = bits_rotl(val, 2);
- * // → 0x00000000000002C4ULL  (bits shifted left by 2, nothing wraps from MSB
- * //                           because upper 62 bits were all zero)
+ * u64 val = 0x8000000000000001ULL;  // MSB and LSB set
+ * u64 rot = bits_rotl(val, 1);
+ * // → 0x0000000000000003ULL  (MSB wraps to bit 0, bit 0 shifts to bit 1)
  * ```
  *
  * Example (illustrative 8-bit behavior — mask result yourself):
@@ -429,7 +463,7 @@ static inline u32 bits_fls(u64 value) {
  * @sa bits_rotr()
  */
 static inline u64 bits_rotl(u64 value, u32 shift) {
-    shift &= 63;  /* Ensure shift is in valid range */
+    shift &= 63;
     if (shift == 0) return value;
     return (value << shift) | (value >> (64 - shift));
 }
@@ -445,30 +479,29 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
  *
  * @return Rotated u64 value
  *
- * @remark shift >= 64 is automatically masked to shift % 64 (shift &= 63)
+ * @remark shift >= 64 is automatically masked: effective shift = shift & 63
  * @remark These functions always operate on the full 64-bit width.
- *         If you need rotation on a narrower type (e.g. 8-bit), mask
- *         the input first: bits_rotr(val & 0xFF | (val & 0xFF) << 8, 2) & 0xFF
- *         or use a dedicated narrow-rotation helper.
+ *         For a true narrow rotation (e.g. 8-bit rotr by 2):
+ *         ((narrow >> 2) | (narrow << 6)) & 0xFF
  *
  * Example (full u64):
  * ```c
- * u64 val = 0x00000000000000B1ULL;  // 0b10110001
- * u64 rot = bits_rotr(val, 2);
- * // → 0x40000000000000002CULL  (low 2 bits 01 wrap to the top of the u64)
+ * u64 val = 0x8000000000000001ULL;  // MSB and LSB set
+ * u64 rot = bits_rotr(val, 1);
+ * // → 0xC000000000000000ULL  (LSB wraps to MSB, MSB shifts to bit 62)
  * ```
  *
- * Example (illustrative 8-bit behavior — mask input and result yourself):
+ * Example (illustrative 8-bit behavior — use narrow formula above for
+ * correct results):
  * ```c
  * u8 narrow = 0b10110001;
- * // For true 8-bit rotr: ((narrow >> 2) | (narrow << 6)) & 0xFF
- * // → 0b01101100
+ * u8 rot = ((narrow >> 2) | (narrow << 6)) & 0xFF;  // → 0b01101100
  * ```
  *
  * @sa bits_rotl()
  */
 static inline u64 bits_rotr(u64 value, u32 shift) {
-    shift &= 63;  /* Ensure shift is in valid range */
+    shift &= 63;
     if (shift == 0) return value;
     return (value >> shift) | (value << (64 - shift));
 }
@@ -510,23 +543,25 @@ static inline bool bits_is_power_of_two(u64 value) {
  *
  * @param value Value to round up
  *
- * @return Next power of 2, or 0 on overflow
+ * @return Next power of 2 >= value, or 0 if value == 0 or would overflow u64
  *
  * @remark Useful for hash table sizing, buffer allocation
+ * @remark Values that are already a power of two are returned unchanged
  *
  * Example:
  * ```c
  * bits_next_power_of_two(17)   // → 32
  * bits_next_power_of_two(32)   // → 32
  * bits_next_power_of_two(1000) // → 1024
+ * bits_next_power_of_two(0)    // → 0
  * ```
  *
  * @sa bits_is_power_of_two()
  */
 static inline u64 bits_next_power_of_two(u64 value) {
     if (value == 0) return 0;
-    if (value > (1ULL << 63)) return 0;  /* Overflow */
-    
+    if (value > (1ULL << 63)) return 0;  /* Would overflow */
+
     value--;
     value |= value >> 1;
     value |= value >> 2;
@@ -538,14 +573,18 @@ static inline u64 bits_next_power_of_two(u64 value) {
 }
 
 /* ============================================================================
- * Byte Reversal (for endianness handling)
+ * Byte Reversal
  * ========================================================================= */
 
 /**
  * @brief Reverse bytes in a 16-bit value
  *
- * @param value Value to reverse
+ * @param value Value to byte-swap
+ *
  * @return Value with bytes swapped
+ *
+ * @remark With GCC/Clang builtins: 1 instruction (__builtin_bswap16)
+ * @remark With MSVC builtins: 1 instruction (_byteswap_ushort)
  *
  * Example:
  * ```c
@@ -554,16 +593,35 @@ static inline u64 bits_next_power_of_two(u64 value) {
  * ```
  */
 static inline u16 bits_bswap16(u16 value) {
-    return (value >> 8) | (value << 8);
+#if CANON_BITS_GNUC
+    return __builtin_bswap16(value);
+#elif CANON_BITS_MSVC
+    return _byteswap_ushort(value);
+#else
+    return (u16)((value >> 8) | (value << 8));
+#endif
 }
 
 /**
  * @brief Reverse bytes in a 32-bit value
+ *
+ * @param value Value to byte-swap
+ *
+ * @return Value with bytes reversed
+ *
+ * @remark With GCC/Clang builtins: 1 instruction (__builtin_bswap32)
+ * @remark With MSVC builtins: 1 instruction (_byteswap_ulong)
+ *
+ * Example:
+ * ```c
+ * u32 val = 0x12345678;
+ * u32 rev = bits_bswap32(val);  // → 0x78563412
+ * ```
  */
 static inline u32 bits_bswap32(u32 value) {
-#if CANON_HAS_BUILTIN_BITS && defined(__GNUC__)
+#if CANON_BITS_GNUC
     return __builtin_bswap32(value);
-#elif CANON_HAS_BUILTIN_BITS && defined(_MSC_VER)
+#elif CANON_BITS_MSVC
     return _byteswap_ulong(value);
 #else
     return ((value & 0x000000FFU) << 24) |
@@ -575,11 +633,24 @@ static inline u32 bits_bswap32(u32 value) {
 
 /**
  * @brief Reverse bytes in a 64-bit value
+ *
+ * @param value Value to byte-swap
+ *
+ * @return Value with bytes reversed
+ *
+ * @remark With GCC/Clang builtins: 1 instruction (__builtin_bswap64)
+ * @remark With MSVC builtins: 1 instruction (_byteswap_uint64)
+ *
+ * Example:
+ * ```c
+ * u64 val = 0x0102030405060708ULL;
+ * u64 rev = bits_bswap64(val);  // → 0x0807060504030201ULL
+ * ```
  */
 static inline u64 bits_bswap64(u64 value) {
-#if CANON_HAS_BUILTIN_BITS && defined(__GNUC__)
+#if CANON_BITS_GNUC
     return __builtin_bswap64(value);
-#elif CANON_HAS_BUILTIN_BITS && defined(_MSC_VER)
+#elif CANON_BITS_MSVC
     return _byteswap_uint64(value);
 #else
     return ((value & 0x00000000000000FFULL) << 56) |
