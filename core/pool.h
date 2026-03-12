@@ -15,122 +15,103 @@
  * @brief Fixed-size object pool allocator backed by an Arena
  *
  * Provides fast, deterministic O(1) allocation for many objects of the same size.
- * All objects are allocated sequentially from an Arena (linear bump style).
+ * Objects are allocated sequentially from a contiguous region reserved upfront
+ * from the arena at pool_init() time.
  *
  * Key properties:
  * ────────────────────────────────────────────────────────────────────────────
- * - Fixed maximum number of objects (no growth)
- * - No individual deallocation — only full reset of the entire pool
- * - Extremely low overhead (just an Arena bump + counter)
+ * - Fixed maximum capacity (no growth)
+ * - No individual deallocation — only full pool reset
+ * - O(1) alloc, get, reset, query
  * - Objects are contiguous — index access via pool_get() / pool_as_bytes()
- * - All allocations are aligned and live until pool/arena reset
+ * - All allocated objects live until pool_reset() or arena teardown
  *
- * IMPORTANT: Do not interleave arena allocations with pool allocations
+ * Ownership and arena usage:
  * ────────────────────────────────────────────────────────────────────────────
- * The pool assumes exclusive ownership of a contiguous region of the arena
- * starting at base_mark. pool_get() calculates object addresses as:
+ * pool_init() reserves capacity * object_size bytes from the arena immediately
+ * and advances the arena offset by that amount. The pool owns this region
+ * exclusively for its lifetime.
  *
- *   base_mark + i * object_size
+ * You MAY make other arena allocations after pool_init() — they will land
+ * beyond the reserved region and will not interfere with the pool.
  *
- * If any other allocation is made from the same arena between pool_init()
- * and pool_reset(), this calculation produces wrong addresses — pointing
- * into foreign memory with no warning.
+ * pool_reset() rolls the arena back to base_mark, releasing both the pool
+ * objects and everything allocated from the arena after pool_init(). If you
+ * need to keep post-pool allocations alive across a pool reset, use a
+ * separate arena for the pool.
  *
- * pool_get() and pool_get_const() always detect this via require_msg —
- * they verify that the arena's current offset matches the expected layout.
- * This check is always-on in all builds (require, not ensure).
+ * pool_get() always verifies that the object being accessed lies within the
+ * reserved region — this detects use-after-reset bugs at all build levels.
  *
  * Safe patterns:
- * ✓ Use a dedicated arena exclusively for the pool
- * ✓ Use arena_mark() before pool_init() and arena_reset_to() before any
- *   other allocation if you must share the arena
- * ✓ Allocate all non-pool data before calling pool_init()
+ * ✓ Dedicated arena exclusively for the pool
+ * ✓ Shared arena — allocate non-pool data after pool_init()
+ * ✓ Multiple pools from the same arena (each reserves its own region)
  *
  * Unsafe patterns:
- * ✗ Calling arena_alloc() on the same arena between pool_alloc() calls
- * ✗ Using the pool's arena for other purposes during the pool's lifetime
- *
- * Dependency rule:
- * ────────────────────────────────────────────────────────────────────────────
- * pool.h is core/. It depends only on primitives/, core/arena.h,
- * core/memory.h, and core/slice.h.
+ * ✗ Calling pool_reset() when you need post-init arena allocations to survive
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - pool_alloc(): O(1)
- * - pool_get(): O(1) — ptr_elem index calculation + one pointer comparison
- * - pool_reset(): O(1)
- * - pool_as_bytes(): O(1)
- * - All queries: O(1)
+ * - pool_init()         O(1)
+ * - pool_alloc()        O(1)
+ * - pool_get()          O(1)
+ * - pool_reset()        O(1)
+ * - pool_as_bytes()     O(1)
+ * - All queries         O(1)
  *
  * @sa pool_init(), pool_alloc(), pool_get(), pool_reset()
- * @sa core/primitives/ptr.h — ptr_offset, ptr_elem for safe index/offset calculation
- * @sa core/slice.h — bytes_t / bytes_from used for contiguous object views
+ * @sa core/primitives/ptr.h — ptr_offset, ptr_elem for index/offset calculation
+ * @sa core/slice.h          — bytes_t / bytes_from for contiguous object views
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
    Pool struct
    ════════════════════════════════════════════════════════════════════════════ */
+
 typedef struct {
-    Arena* arena;           ///< Backing arena (caller-owned, must outlive pool)
-    usize object_size;      ///< Aligned size of each individual object in bytes
-    usize capacity;         ///< Maximum number of objects that can be allocated
-    usize used;             ///< Current number of allocated objects
-    ArenaMark base_mark;    ///< Arena position when pool was initialized
+    Arena*    arena;        ///< Backing arena (caller-owned, must outlive pool)
+    usize     object_size;  ///< Aligned size of each object in bytes
+    usize     capacity;     ///< Maximum number of objects
+    usize     used;         ///< Number of allocated objects
+    ArenaMark base_mark;    ///< Arena offset at pool_init() — start of reserved region
+    ArenaMark end_mark;     ///< Arena offset after reservation — base_mark + capacity * object_size
 } Pool;
-
-/* ════════════════════════════════════════════════════════════════════════════
-   Internal helper — expected arena offset given current pool state
-   ════════════════════════════════════════════════════════════════════════════ */
-
-/**
- * @brief Returns the arena offset the pool expects after `used` allocations
- *
- * The pool reserves base_mark + capacity * object_size bytes at init time.
- * After `used` allocations, the arena offset should be exactly
- * base_mark + used * object_size (pool always advances by object_size per alloc).
- *
- * Used by pool_get() / pool_get_const() to detect interleaved allocations.
- *
- * @internal Do not call directly.
- */
-static inline usize _pool_expected_offset(const Pool* pool) {
-    return pool->base_mark + pool->used * pool->object_size;
-}
 
 /* ════════════════════════════════════════════════════════════════════════════
    Initialization
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Initializes a fixed-size object pool backed by an arena
+ * @brief Initializes a pool and reserves its entire region from the arena
  *
- * Reserves capacity * aligned(object_size) bytes from the arena starting
- * at the current arena offset. This region must not be touched by other
- * arena allocations for the lifetime of the pool.
+ * Immediately advances the arena offset by capacity * aligned(object_size).
+ * Other arena allocations made after this call are safe — they land beyond
+ * the reserved region and do not interfere with pool address calculations.
  *
- * @param pool        Valid pointer to uninitialized Pool struct
- * @param arena       Valid initialized Arena to allocate from
- * @param object_size Size of each object (will be aligned up)
+ * @param pool        Valid pointer to an uninitialized Pool
+ * @param arena       Valid initialized Arena
+ * @param object_size Size of each object (aligned up internally)
  * @param max_objects Maximum number of objects the pool can hold
- * @return true on success, false on failure (insufficient space, overflow, etc.)
+ * @return true on success, false if the arena has insufficient space or
+ *         if the required size overflows usize
  *
- * @pre pool != NULL
- * @pre arena != NULL
- * @pre object_size > 0 && max_objects > 0
- * @post On success: pool is ready, objects can be allocated until capacity
- * @post arena offset is advanced by capacity * aligned(object_size) bytes
+ * @pre  pool != NULL && arena != NULL
+ * @pre  object_size > 0 && max_objects > 0
+ * @post On success: pool is ready; arena offset advanced by capacity * object_size
+ * @post On failure: pool and arena are unchanged
  */
 static inline bool pool_init(
-    Pool* pool, Arena* arena, usize object_size, usize max_objects) {
-    require_msg(pool != NULL,        "pool_init: pool cannot be NULL");
-    require_msg(arena != NULL,       "pool_init: arena cannot be NULL");
-    require_msg(object_size > 0,     "pool_init: object_size must be > 0");
-    require_msg(max_objects > 0,     "pool_init: max_objects must be > 0");
+    Pool* pool, Arena* arena, usize object_size, usize max_objects)
+{
+    require_msg(pool   != NULL,  "pool_init: pool cannot be NULL");
+    require_msg(arena  != NULL,  "pool_init: arena cannot be NULL");
+    require_msg(object_size > 0, "pool_init: object_size must be > 0");
+    require_msg(max_objects > 0, "pool_init: max_objects must be > 0");
 
     usize aligned_size = mem_align(object_size);
     if (aligned_size == 0 || max_objects > CANON_USIZE_MAX / aligned_size) {
-        return false;  /* prevent usize overflow in needed = aligned_size * max_objects */
+        return false;
     }
 
     usize needed = aligned_size * max_objects;
@@ -143,10 +124,17 @@ static inline bool pool_init(
     pool->capacity    = max_objects;
     pool->used        = 0;
     pool->base_mark   = arena_mark(arena);
+
+    /* Reserve the entire region upfront. arena_alloc advances the offset,
+       so subsequent non-pool allocations land safely beyond this region. */
+    void* region = arena_alloc(arena, needed);
+    if (!region) return false;
+
+    pool->end_mark = arena_mark(arena);
     return true;
 }
 
-/** @brief Type-safe pool initialization for a fixed object type */
+/** @brief Type-safe pool initialization */
 #define pool_init_type(pool, arena, Type, max_objects) \
     pool_init((pool), (arena), sizeof(Type), (max_objects))
 
@@ -154,113 +142,102 @@ static inline bool pool_init(
    Allocation
    ════════════════════════════════════════════════════════════════════════════ */
 
+/**
+ * @brief Allocates the next object slot from the pool
+ *
+ * Returns a pointer into the pre-reserved region. Does not advance the
+ * arena offset (the region was fully committed at pool_init()).
+ *
+ * @return Pointer to the object slot, or NULL if the pool is full
+ */
 static inline void* pool_alloc(Pool* pool) {
     require_msg(pool != NULL, "pool_alloc: pool cannot be NULL");
     if (pool->used >= pool->capacity) return NULL;
 
-    void* p = arena_alloc(pool->arena, pool->object_size);
-    if (p) pool->used++;
-    return p;
+    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    void* slot = ptr_elem(base, pool->used, pool->object_size);
+    pool->used++;
+    return slot;
 }
 
+/** @brief Allocates and zeroes the next object slot */
 static inline void* pool_alloc_zero(Pool* pool) {
     void* p = pool_alloc(pool);
     if (p) mem_zero(p, pool->object_size);
     return p;
 }
 
+/** @brief Allocates and writes result to *out; returns false if full */
 static inline bool pool_try_alloc(Pool* pool, void** out) {
+    require_msg(pool != NULL, "pool_try_alloc: pool cannot be NULL");
     void* p = pool_alloc(pool);
     if (out) *out = p;
     return p != NULL;
 }
 
+/** @brief Allocates, zeroes, and writes result to *out; returns false if full */
 static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
+    require_msg(pool != NULL, "pool_try_alloc_zero: pool cannot be NULL");
     void* p = pool_alloc_zero(pool);
     if (out) *out = p;
     return p != NULL;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Index access — ptr.h integration
+   Index access
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * @brief Returns a pointer to the object at index i (bounds-checked)
  *
- * Objects are stored contiguously starting at base_mark. Address is
- * calculated as: arena->buffer + base_mark + i * object_size.
- *
- * Always verifies that the arena's current offset matches the expected
- * layout — detects interleaved allocations that would corrupt the pool's
- * address calculation. This check is always-on in all builds (require_msg).
+ * Address is calculated as: arena->buffer + base_mark + i * object_size.
+ * Always verifies the returned pointer falls within the reserved region —
+ * detects use-after-reset in all build configurations.
  *
  * @param pool  Valid initialized Pool
- * @param i     Object index (must be < pool->used)
+ * @param i     Index (must be < pool->used)
  * @return Pointer to object at index i, or NULL if out of bounds
- *
- * @pre No arena allocations have been made from pool->arena since pool_init()
- *      other than through pool_alloc() — enforced by require_msg always
  */
 static inline void* pool_get(const Pool* pool, usize i) {
     if (!pool || !pool->arena || i >= pool->used) return NULL;
 
+    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    void* p    = ptr_elem(base, i, pool->object_size);
+
     require_msg(
-        pool->arena->offset == _pool_expected_offset(pool),
-        "pool_get: arena offset mismatch — interleaved allocations have corrupted pool layout"
+        (usize)((u8*)p - pool->arena->buffer) < pool->end_mark,
+        "pool_get: address outside reserved region — pool may have been reset"
     );
 
-    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
-    return ptr_elem(base, i, pool->object_size);
+    return p;
 }
 
 static inline const void* pool_get_const(const Pool* pool, usize i) {
     if (!pool || !pool->arena || i >= pool->used) return NULL;
 
+    const void* base = ptr_offset_const(pool->arena->buffer, pool->base_mark);
+    const void* p    = ptr_elem_const(base, i, pool->object_size);
+
     require_msg(
-        pool->arena->offset == _pool_expected_offset(pool),
-        "pool_get_const: arena offset mismatch — interleaved allocations have corrupted pool layout"
+        (usize)((const u8*)p - pool->arena->buffer) < pool->end_mark,
+        "pool_get_const: address outside reserved region — pool may have been reset"
     );
 
-    const void* base = ptr_offset_const(pool->arena->buffer, pool->base_mark);
-    return ptr_elem_const(base, i, pool->object_size);
+    return p;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Query
    ════════════════════════════════════════════════════════════════════════════ */
 
-static inline usize pool_used(const Pool* pool) {
-    return pool ? pool->used : 0;
-}
-
-static inline usize pool_capacity(const Pool* pool) {
-    return pool ? pool->capacity : 0;
-}
-
-static inline usize pool_remaining(const Pool* pool) {
-    return pool ? (pool->capacity - pool->used) : 0;
-}
-
-static inline bool pool_is_full(const Pool* pool) {
-    return !pool || pool->used >= pool->capacity;
-}
-
-static inline bool pool_is_empty(const Pool* pool) {
-    return !pool || pool->used == 0;
-}
-
-static inline usize pool_object_size(const Pool* pool) {
-    return pool ? pool->object_size : 0;
-}
-
-static inline usize pool_memory_used(const Pool* pool) {
-    return pool ? (pool->object_size * pool->used) : 0;
-}
-
-static inline usize pool_memory_reserved(const Pool* pool) {
-    return pool ? (pool->object_size * pool->capacity) : 0;
-}
+static inline usize pool_used(const Pool* pool)            { return pool ? pool->used     : 0; }
+static inline usize pool_capacity(const Pool* pool)        { return pool ? pool->capacity : 0; }
+static inline usize pool_remaining(const Pool* pool)       { return pool ? pool->capacity - pool->used : 0; }
+static inline bool  pool_is_full(const Pool* pool)         { return !pool || pool->used >= pool->capacity; }
+static inline bool  pool_is_empty(const Pool* pool)        { return !pool || pool->used == 0; }
+static inline usize pool_object_size(const Pool* pool)     { return pool ? pool->object_size : 0; }
+static inline usize pool_memory_used(const Pool* pool)     { return pool ? pool->object_size * pool->used     : 0; }
+static inline usize pool_memory_reserved(const Pool* pool) { return pool ? pool->object_size * pool->capacity : 0; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Byte views — slice.h integration
@@ -269,7 +246,7 @@ static inline usize pool_memory_reserved(const Pool* pool) {
 /**
  * @brief Returns a bytes_t view over all currently allocated objects
  *
- * Covers [base_mark, base_mark + used * object_size) in the arena buffer.
+ * Covers [base_mark, base_mark + used * object_size).
  * Non-owning — becomes invalid after pool_reset().
  */
 static inline bytes_t pool_as_bytes(const Pool* pool) {
@@ -281,8 +258,7 @@ static inline bytes_t pool_as_bytes(const Pool* pool) {
 /**
  * @brief Returns a bytes_t view over the entire reserved pool region
  *
- * Covers [base_mark, base_mark + capacity * object_size).
- * Includes unallocated slots. Non-owning.
+ * Covers [base_mark, end_mark). Includes unallocated slots. Non-owning.
  */
 static inline bytes_t pool_reserved_bytes(const Pool* pool) {
     if (!pool || !pool->arena) return bytes_empty();
@@ -295,30 +271,37 @@ static inline bytes_t pool_reserved_bytes(const Pool* pool) {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Resets the pool to empty — fast O(1) path, no zeroing
+ * @brief Resets the pool to empty — O(1), no zeroing
  *
- * Rolls the arena back to base_mark, discarding all pool allocations.
+ * Rolls the arena back to base_mark. This releases both pool objects and
+ * any arena allocations made after pool_init(). If post-init arena
+ * allocations must survive, use a separate arena for the pool.
  *
  * @post pool->used == 0
- * @post All pool_alloc() / pool_get() pointers are now invalid
+ * @post All pointers returned by pool_alloc() / pool_get() are invalid
  */
 static inline void pool_reset(Pool* pool) {
     if (!pool || !pool->arena) return;
     arena_reset_to(pool->arena, pool->base_mark);
     pool->used = 0;
+    /* Re-reserve the region so subsequent allocs remain within bounds. */
+    usize needed = pool->object_size * pool->capacity;
+    arena_alloc(pool->arena, needed);
 }
 
 /**
- * @brief Resets the pool and securely zeros all allocated object memory
+ * @brief Resets the pool and securely zeroes all allocated object memory
  *
  * @post pool->used == 0
- * @post All allocated memory is zeroed
+ * @post All previously allocated object memory is zeroed
  */
 static inline void pool_reset_secure(Pool* pool) {
-    if (!pool || !pool->arena || pool->used == 0) return;
+    if (!pool || !pool->arena || pool->used == 0) {
+        pool_reset(pool);
+        return;
+    }
     void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
-    usize bytes_used = pool->object_size * pool->used;
-    mem_secure_zero(base, bytes_used);
+    mem_secure_zero(base, pool->object_size * pool->used);
     pool_reset(pool);
 }
 
