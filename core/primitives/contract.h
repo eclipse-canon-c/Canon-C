@@ -15,25 +15,35 @@
  * - Clarity: Different macros signal different contract types
  * - Customizable: Single panic handler for all contract violations
  *
- * Companion translation unit:
+ * Header-only usage:
  * ────────────────────────────────────────────────────────────────────────────
- * This header declares the handler storage as extern. You must compile
- * exactly one contract.c into your project to provide the definition:
+ * This header is self-contained — no separate .c file is required.
+ * However, exactly one translation unit must provide the handler definition
+ * by defining CANON_CONTRACT_IMPL before including this header:
  *
- *   #include "core/primitives/contract.c"   // or add to your build system
+ *   // In exactly one .c file (e.g. main.c):
+ *   #define CANON_CONTRACT_IMPL
+ *   #include "core/primitives/contract.h"
  *
- * contract.c defines:
- *   contract_handler_fn canon_contract_handler;   // the global handler slot
+ *   // In all other .c files:
+ *   #include "core/primitives/contract.h"
  *
- * This is intentional. A file-scope static in a header produces one
- * independent copy per translation unit — contract_set_handler() in one
- * .c file would be invisible to all others. Using a plain extern variable
- * in a single .c file is explicit, requires no knowledge of C linkage
- * subtleties, and is readable by anyone who knows C99.
+ * If CANON_CONTRACT_IMPL is defined in zero translation units:
+ *   → linker error: undefined reference to canon_contract_handler
+ *
+ * If CANON_CONTRACT_IMPL is defined in two or more translation units:
+ *   → linker error: duplicate symbol canon_contract_handler
+ *
+ * Both failure modes are loud and immediate at link time.
+ * The contract is self-enforcing — no runtime behavior is silently wrong.
  *
  * Build configuration flags:
  * ────────────────────────────────────────────────────────────────────────────
- * Three independent flags control enforcement levels:
+ * Four independent flags control enforcement levels:
+ *
+ * CANON_CONTRACT_IMPL (define in exactly one translation unit)
+ *   Emits the definition of canon_contract_handler. Required once per
+ *   program. All other TUs see the extern declaration and link against it.
  *
  * CANON_STRICT (define to enable)
  *   Promotes ensure() and ensure_msg() to always-on — identical to
@@ -51,9 +61,9 @@
  *
  * CANON_NO_REQUIRE (define to disable — use with extreme caution)
  *   Disables require() and require_msg() — the always-on precondition
- *   checks. Only for environments where the contract violations have
- *   been proved impossible by formal verification (Frama-C, SPARK)
- *   and the panic handler overhead is unacceptable (bare metal, ISR).
+ *   checks. Only for environments where contract violations have been
+ *   proved impossible by formal verification (Frama-C, SPARK) and the
+ *   panic handler overhead is unacceptable (bare metal, ISR).
  *
  *   WARNING: Disabling require() removes Canon-C's last line of defense
  *   against null pointer dereference, overflow, and invariant violations.
@@ -62,11 +72,11 @@
  *   #define CANON_NO_REQUIRE
  *   #include "core/primitives/contract.h"
  *
- * CANON_NO_GNU_EXTENSIONS (define to disable GNU/compiler-specific extensions)
+ * CANON_NO_GNU_EXTENSIONS (define to disable compiler-specific extensions)
  *   Disables __builtin_unreachable(), __assume(0), and #pragma message.
  *   Use when targeting strictly conforming C99 or compilers that do not
- *   support these extensions. The unreachable() macro degrades to a
- *   no-op hint (safe fallback — the panic call still fires in debug).
+ *   support these extensions. The unreachable() macro degrades gracefully
+ *   to a safe no-op hint (the panic call still fires in debug builds).
  *
  * Enforcement matrix:
  * ────────────────────────────────────────────────────────────────────────────
@@ -87,6 +97,7 @@
  *   Release:           NDEBUG  — require ON, ensure OFF
  *   Certified build:   CANON_STRICT — require ON, ensure ON (always)
  *   Formal proof done: CANON_NO_REQUIRE — require OFF (proved impossible)
+ *   Strict C99:        CANON_NO_GNU_EXTENSIONS — no compiler extensions
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -113,11 +124,11 @@
  *
  * Handler storage:
  * ────────────────────────────────────────────────────────────────────────────
- * The handler is stored as a plain extern variable defined in contract.c.
- * This is the simplest correct approach: one definition, visible to all
- * translation units through the extern declaration in this header.
- * contract_set_handler() writes directly to that variable — no indirection,
- * no tricks, no TU-local copies.
+ * canon_contract_handler is a plain extern variable. The TU that defines
+ * CANON_CONTRACT_IMPL emits the definition; all other TUs see the extern
+ * declaration. contract_set_handler() writes directly to that variable —
+ * no indirection, no tricks. All TUs share the same handler through
+ * standard C extern linkage.
  *
  * Typical use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -134,7 +145,7 @@
  * - Performance-critical hot loops (check once outside loop)
  * - Expected failure conditions (contracts are for bugs, not expected errors)
  *
- * @sa types.h, result.h, contract.c
+ * @sa types.h, result.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_CONTRACT_H
@@ -200,25 +211,33 @@ static inline void contract_default_handler(
 }
 
 /* ============================================================================
- * Handler storage — single extern definition in contract.c
+ * Handler storage
  * ============================================================================
  *
- * canon_contract_handler is defined once in contract.c and declared here
- * as extern. Every translation unit that includes this header shares the
- * same handler variable through normal C extern linkage — no tricks required.
+ * canon_contract_handler is a plain extern variable shared across all
+ * translation units through standard C extern linkage.
  *
- * contract_set_handler() writes directly to this variable.
- * It is NOT thread-safe. Call it once during program initialization,
- * before any concurrent code runs.
+ * Exactly one translation unit must define CANON_CONTRACT_IMPL before
+ * including this header. That TU emits the variable definition. All
+ * other TUs see the extern declaration and link against the same slot.
+ *
+ * contract_set_handler() writes directly to this variable — no indirection.
+ * It is NOT thread-safe. Call once during program initialization, before
+ * any concurrent code runs.
  * ========================================================================= */
 
-/**
- * @brief The global contract violation handler (defined in contract.c)
- *
- * Initialized to contract_default_handler in contract.c.
- * Write through contract_set_handler() only.
- */
-extern contract_handler_fn canon_contract_handler;
+#ifdef CANON_CONTRACT_IMPL
+    /**
+     * @brief The global contract violation handler
+     *
+     * Defined in the translation unit that sets CANON_CONTRACT_IMPL.
+     * Initialized to contract_default_handler.
+     * Write through contract_set_handler() only.
+     */
+    contract_handler_fn canon_contract_handler = contract_default_handler;
+#else
+    extern contract_handler_fn canon_contract_handler;
+#endif
 
 /**
  * @brief Set a custom contract violation handler (program-wide)
@@ -516,7 +535,8 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * or configuration values. Never disabled by any flag.
  *
  * In C11 and later, expands to _Static_assert.
- * In C99, expands to a typedef trick that produces a compile error on failure.
+ * In C99, expands to a negative-size array typedef that produces a
+ * compile error on failure.
  *
  * @param cond Compile-time constant expression
  * @param msg  Identifier-safe message (no spaces — appears in compiler error)
@@ -561,7 +581,18 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 
 /*
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 1: Arena allocator with contracts
+// Example 1: Project setup — define CANON_CONTRACT_IMPL in exactly one TU
+// ─────────────────────────────────────────────────────────────────────────────
+
+// main.c — the one TU that owns the handler definition
+#define CANON_CONTRACT_IMPL
+#include "core/primitives/contract.h"
+
+// arena.c, pool.c, etc. — all other TUs just include normally
+#include "core/primitives/contract.h"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Example 2: Arena allocator with contracts
 // ─────────────────────────────────────────────────────────────────────────────
 void* arena_alloc(Arena* arena, usize size) {
     require(arena != NULL);
@@ -582,7 +613,7 @@ void* arena_alloc(Arena* arena, usize size) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 2: Pool with exhaustive enum check
+// Example 3: Pool with exhaustive enum check
 // ─────────────────────────────────────────────────────────────────────────────
 typedef enum { BLOCK_FREE, BLOCK_USED } BlockState;
 
@@ -597,13 +628,13 @@ void pool_process(Pool* pool, usize index) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 3: Compile-time checks
+// Example 4: Compile-time checks
 // ─────────────────────────────────────────────────────────────────────────────
 static_require(sizeof(Header) == 64, header_size_mismatch);
 static_require(MAX_POOL_SIZE <= USIZE_MAX / sizeof(Block), pool_size_overflow);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 4: Custom panic handler — embedded systems
+// Example 5: Custom panic handler — embedded systems
 // ─────────────────────────────────────────────────────────────────────────────
 void embedded_panic_handler(const char* file, int line, const char* func,
                             const char* expr, const char* msg) {
@@ -617,30 +648,30 @@ void embedded_init(void) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 5: Build configurations
+// Example 6: Build configurations
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Development build (default):
 //   require ON, ensure debug-only
-//   gcc -o myapp main.c contract.c
+//   gcc -o myapp main.c
 
 // Release build:
 //   require ON, ensure OFF
-//   gcc -DNDEBUG -o myapp main.c contract.c
+//   gcc -DNDEBUG -o myapp main.c
 
 // Certified build (DO-178C / ISO 26262):
 //   require ON, ensure always-on
-//   gcc -DCANON_STRICT -o myapp main.c contract.c
+//   gcc -DCANON_STRICT -o myapp main.c
 
 // Formally verified build (Frama-C proved all sites):
 //   require OFF, ensure OFF
-//   gcc -DCANON_NO_REQUIRE -DNDEBUG -o myapp main.c contract.c
+//   gcc -DCANON_NO_REQUIRE -DNDEBUG -o myapp main.c
 
 // Strictly conforming C99 (no compiler extensions):
-//   gcc -DCANON_NO_GNU_EXTENSIONS -o myapp main.c contract.c
+//   gcc -DCANON_NO_GNU_EXTENSIONS -o myapp main.c
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Example 6: Restore default handler
+// Example 7: Restore default handler
 // ─────────────────────────────────────────────────────────────────────────────
 contract_set_handler(NULL);  // NULL restores contract_default_handler
 */
