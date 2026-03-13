@@ -346,10 +346,20 @@
     }
 
 /**
- * @brief Combines two Options with a function
+ * @brief Combines two Options of the same type with a function
  *
  * Returns Some(_combine(a, b)) if both Options are Some.
  * Returns None if either Option is None.
+ *
+ * Both operands and the result share the same type T.  For combining two
+ * different Option types into a third, write a bespoke combinator.
+ *
+ * Naming rationale:
+ *   combine_with() accurately describes what this function does: it combines
+ *   two Option<T> values using a provided function, producing another Option<T>.
+ *   The name zip() was not used because zip() in functional programming
+ *   combines Option<A> and Option<B> into Option<(A,B)>, requiring two
+ *   distinct types — a different operation to what is implemented here.
  *
  * Calling convention for _some_fn / _none_fn: see IMPL_OPTION_MAP.
  *
@@ -363,7 +373,7 @@
  * @param _some_fn Function to construct Some (from option_mangle.h)
  * @param _none_fn Function to construct None (from option_mangle.h)
  */
-#define IMPL_OPTION_ZIP(_t, _topt, _o1, _o2, _combine, _some_fn, _none_fn) \
+#define IMPL_OPTION_COMBINE_WITH(_t, _topt, _o1, _o2, _combine, _some_fn, _none_fn) \
     { \
         if ((_o1).has_value && (_o2).has_value) { \
             return _some_fn((_combine)((_o1).value, (_o2).value)); \
