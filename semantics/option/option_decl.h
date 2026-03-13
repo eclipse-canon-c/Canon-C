@@ -188,7 +188,7 @@
  *
  * Contract: out must not be NULL. Passing NULL is a caller bug and will
  * trigger a contract violation. Use is_some() + unwrap() if you do not
- * need an out-parameter pattern.
+ * need an out-parameter pattern, or unwrap_or() for a safe default.
  *
  * Performance: O(1) runtime when defined (conditional assignment)
  *
@@ -318,23 +318,22 @@
         MANGLE_OPTION_TYPE(_t) o, bool (*pred)(_t));
 
 /**
- * @brief Declare zip() combining function
+ * @brief Declare combine_with() same-type combining function
  *
  * Returns Some(combine(a, b)) if both o1 and o2 are Some.
  * Returns None if either o1 or o2 is None. combine is not called
  * unless both Options are Some.
  *
- * Note: Both operands and the result share the same type _t. For
- * heterogeneous zip across different types, instantiate a dedicated
- * Option type for the result and write a bespoke combinator.
+ * Both operands and the result share the same type T.  For combining two
+ * different Option types into a third, write a bespoke combinator.
  *
  * Performance: O(combine) runtime where combine is the combining function
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
-#define DECLARE_OPTION_ZIP(_linkage, _t) \
-    _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_ZIP(_t)( \
+#define DECLARE_OPTION_COMBINE_WITH(_linkage, _t) \
+    _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_COMBINE_WITH(_t)( \
         MANGLE_OPTION_TYPE(_t) o1, MANGLE_OPTION_TYPE(_t) o2, \
         _t (*combine)(_t, _t));
 
@@ -427,7 +426,7 @@
     DECLARE_OPTION_AND_THEN(_linkage, _t)      \
     DECLARE_OPTION_OR_ELSE(_linkage, _t)       \
     DECLARE_OPTION_FILTER(_linkage, _t)        \
-    DECLARE_OPTION_ZIP(_linkage, _t)           \
+    DECLARE_OPTION_COMBINE_WITH(_linkage, _t)  \
     DECLARE_OPTION_REPLACE(_linkage, _t)       \
     DECLARE_OPTION_TAKE(_linkage, _t)          \
     DECLARE_OPTION_EQ(_linkage, _t)
@@ -490,7 +489,7 @@ DEFINE_OPTION_ALL(, float)
 int main(void) {
     option_int x = option_int_some(42);
     int v;
-    if (option_int_get(x, &v)) {
+    if (option_int_get(x, &v)) {  // &v must not be NULL
         // use v
     }
     return 0;
@@ -525,7 +524,7 @@ DECLARE_OPTION_SOME(extern, int)
 DECLARE_OPTION_NONE(extern, int)
 DECLARE_OPTION_IS_SOME(extern, int)
 DECLARE_OPTION_GET(extern, int)
-// Unsafe extraction, map, zip, etc. not exposed from this API surface.
+// combine_with, map, filter, etc. not exposed from this API surface.
 */
 
 #endif /* CANON_OPTION_DECL_H */
