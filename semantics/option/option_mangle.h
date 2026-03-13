@@ -1,294 +1,450 @@
-// semantics/option/option_mangle.h
+/* semantics/option/option_mangle.h
+ * ============================================================================
+ * Name mangling conventions for Option<T>
+ * ============================================================================
+ *
+ * Single source of truth for every identifier the Option<T> machinery emits.
+ * All other Option headers consume these macros; none hard-code names.
+ *
+ * Philosophy (Canon-C)
+ * ----------------------------------------------------------------------------
+ *   - Everything is explicit.  No name is generated without a visible macro.
+ *   - Everything is optional.  Every macro is guarded with #ifndef so the
+ *     caller may override any — or all — names before inclusion.
+ *   - No hidden behaviour.  If a name cannot be found by reading this file,
+ *     it does not exist.
+ *   - Abstractions clarify, not conceal.
+ *
+ * Default naming scheme
+ * ----------------------------------------------------------------------------
+ *   Given a type token T the defaults produce:
+ *
+ *     Type alias  : option_T          (e.g. option_int)
+ *     Struct tag  : option_T_s        (e.g. option_int_s)
+ *     Functions   : option_T_<verb>   (e.g. option_int_some,
+ *                                           option_int_unwrap_or)
+ *
+ *   The type token T must be a single preprocessor token that is also a
+ *   valid C identifier fragment.  Avoid tokens that begin with an underscore
+ *   or that contain two consecutive underscores; the resulting identifiers
+ *   would be reserved by the C standard (C99 §7.1.3).
+ *
+ * Customisation
+ * ----------------------------------------------------------------------------
+ *   Define any subset of MANGLE_OPTION_* before including this header.
+ *   Undefined macros receive their defaults; defined macros are left alone.
+ *
+ *   Example — Haskell-style Maybe/Just/Nothing naming:
+ *
+ *     #define MANGLE_OPTION_TYPE(T)      Maybe##T
+ *     #define MANGLE_OPTION_STRUCT_TAG(T) Maybe##T##_s
+ *     #define MANGLE_OPTION_SOME(T)      Maybe##T##_Just
+ *     #define MANGLE_OPTION_NONE(T)      Maybe##T##_Nothing
+ *     #define MANGLE_OPTION_IS_SOME(T)   Maybe##T##_isJust
+ *     #define MANGLE_OPTION_IS_NONE(T)   Maybe##T##_isNothing
+ *     #include "option.h"
+ *
+ *     CANON_OPTION(Int)               /* note: capital I, not 'int' */
+ *
+ *     MaybeInt x = MaybeInt_Just(42);
+ *     bool present = MaybeInt_isJust(x);
+ *
+ *   IMPORTANT: The token you pass to CANON_OPTION must be the same token you
+ *   embed in your MANGLE_* overrides.  If you write Maybe##Int then you must
+ *   write CANON_OPTION(Int), not CANON_OPTION(int).
+ *
+ *   Example — project-scoped prefix to avoid link-time collisions:
+ *
+ *     #define MANGLE_OPTION_TYPE(T)  myproject_opt_##T
+ *     #include "option.h"
+ *
+ *     CANON_OPTION(int)
+ *
+ *     myproject_opt_int x = myproject_opt_int_some(42);
+ *
+ * Token constraints
+ * ----------------------------------------------------------------------------
+ *   The type token T (argument to CANON_OPTION and all MANGLE_* macros) must:
+ *     - Be a single preprocessor token.
+ *     - Form a valid C identifier when pasted after "option_" (default) or
+ *       after whatever prefix your override uses.
+ *     - NOT begin with an underscore.
+ *     - NOT contain two consecutive underscores.
+ *
+ *   Violating these constraints produces reserved identifiers (C99 §7.1.3)
+ *   or ill-formed token pastes; behaviour is undefined.
+ *
+ * zip — output-type mangling
+ * ----------------------------------------------------------------------------
+ *   zip combines option_A and option_B into a third option type option_C.
+ *   Because three distinct type tokens are involved, zip is declared and
+ *   defined via a separate macro:
+ *
+ *     CANON_OPTION_ZIP(A, B, C)
+ *
+ *   MANGLE_OPTION_ZIP(A, B, C) generates the function name for that triple.
+ *   See option_decl.h and option_defn.h for the full signature.
+ *
+ * Performance
+ * ----------------------------------------------------------------------------
+ *   Time  : O(1) — pure compile-time token pasting.
+ *   Space : O(1) — no runtime storage; all names resolved by the preprocessor.
+ *
+ * Thread safety
+ * ----------------------------------------------------------------------------
+ *   N/A — this file contains no runtime behaviour whatsoever.
+ *
+ * Portability
+ * ----------------------------------------------------------------------------
+ *   Requires C99 or later.  Token pasting (##) is defined in C99 §6.10.3.3.
+ *   No compiler extensions are used or required.
+ *   Tested with GCC, Clang, and MSVC in C99 mode.
+ *
+ * Consumed by
+ * ----------------------------------------------------------------------------
+ *   option_decl.h  — struct layout and function declarations
+ *   option_defn.h  — inline / static function definitions
+ *   option_impl.h  — non-inline implementation stubs (optional)
+ *
+ * ============================================================================
+ * SPDX-License-Identifier: MPL-2.0
+ * ============================================================================
+ */
+
 #ifndef CANON_OPTION_MANGLE_H
 #define CANON_OPTION_MANGLE_H
 
-/**
- * @file option_mangle.h
- * @brief Name mangling conventions for Option<T> type
- *
- * This file defines the naming scheme for all Option-related types and functions.
- * It serves as the single source of truth for names - all other files reference
- * these macros instead of hardcoding names.
- *
- * Philosophy:
- * ────────────────────────────────────────────────────────────────────────────
- * - Single source of truth: All names defined in one place
- * - Customizable: Users can override before including to change naming
- * - Namespace-safe: Default names use canon_ prefix to avoid collisions
- * - Consistent: Uniform naming pattern across all functions
- * - Explicit: No hidden name generation
- *
- * Default naming scheme:
- * ────────────────────────────────────────────────────────────────────────────
- * Type T produces:
- * - Type name: option_T (e.g., option_int, option_float)
- * - Struct tag: option_T_s (for separate compilation if needed)
- * - Functions: option_T_<operation> (e.g., option_int_some, option_int_unwrap)
- *
- * Customization example:
- * ────────────────────────────────────────────────────────────────────────────
- * // Use Maybe<T> naming instead of Option<T>
- * #define MANGLE_OPTION_TYPE(t)      Maybe##t
- * #define MANGLE_OPTION_SOME(t)      Maybe##t##_Just
- * #define MANGLE_OPTION_NONE(t)      Maybe##t##_Nothing
- * #include "option.h"
- * 
- * CANON_OPTION(int)
- * MaybeInt x = MaybeInt_Just(42);  // Custom naming!
- *
- * Performance:
- * ────────────────────────────────────────────────────────────────────────────
- * - Time: O(1) — pure compile-time token pasting
- * - Space: O(1) — no runtime cost, pure preprocessor
- * - Zero overhead: Names resolved at compile time
- *
- * Thread-safety:
- * ────────────────────────────────────────────────────────────────────────────
- * N/A — pure compile-time macros, no runtime behavior
- *
- * Portability:
- * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (token pasting with ##)
- * - Works with all C99+ compilers
- * - No platform-specific code
- *
- * @sa option_impl.h, option_decl.h, option_defn.h
- */
-
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    TYPE NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h (typedef, struct tag)
+   ============================================================================ */
 
 /**
- * @brief Main Option type name
+ * MANGLE_OPTION_TYPE(T)
  *
- * Default: option_T (e.g., option_int, option_float, option_ptr)
- * Override to customize type naming across entire codebase
+ * The public typedef name for Option<T>.
+ *
+ * Default : option_T   (e.g. option_int, option_float, option_myptr)
+ *
+ * Override example:
+ *   #define MANGLE_OPTION_TYPE(T)  Maybe##T
+ *   → MaybeInt, MaybeFloat, …
  */
 #ifndef MANGLE_OPTION_TYPE
-#  define MANGLE_OPTION_TYPE(_t)          option_##_t
+#  define MANGLE_OPTION_TYPE(T)            option_##T
 #endif
 
 /**
- * @brief Option struct tag name (for separate compilation)
+ * MANGLE_OPTION_STRUCT_TAG(T)
  *
- * Default: option_T_s
- * Used when forward-declaring struct types
+ * The struct tag (struct <tag>) used inside the typedef.  Required when a
+ * forward declaration of the struct is needed in a separate translation unit.
+ *
+ * Default : option_T_s   (e.g. option_int_s)
+ *
+ * Consumed by: option_decl.h — the struct definition reads:
+ *   typedef struct MANGLE_OPTION_STRUCT_TAG(T) { … } MANGLE_OPTION_TYPE(T);
  */
 #ifndef MANGLE_OPTION_STRUCT_TAG
-#  define MANGLE_OPTION_STRUCT_TAG(_t)    option_##_t##_s
+#  define MANGLE_OPTION_STRUCT_TAG(T)      option_##T##_s
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    CONSTRUCTOR FUNCTION NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h (declarations), option_defn.h (definitions)
+   ============================================================================ */
 
 /**
- * @brief Some(value) constructor function name
+ * MANGLE_OPTION_SOME(T)
  *
- * Default: option_T_some (e.g., option_int_some(42))
+ * Constructor that wraps a value: Some(value).
+ *
+ * Default : option_T_some   (e.g. option_int_some(42))
+ *
+ * Signature (generated by option_defn.h):
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_SOME(T)(T value);
  */
 #ifndef MANGLE_OPTION_SOME
-#  define MANGLE_OPTION_SOME(_t)          option_##_t##_some
+#  define MANGLE_OPTION_SOME(T)            option_##T##_some
 #endif
 
 /**
- * @brief None constructor function name
+ * MANGLE_OPTION_NONE(T)
  *
- * Default: option_T_none (e.g., option_int_none())
+ * Constructor that represents the absent value: None.
+ *
+ * Default : option_T_none   (e.g. option_int_none())
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_NONE(T)(void);
  */
 #ifndef MANGLE_OPTION_NONE
-#  define MANGLE_OPTION_NONE(_t)          option_##_t##_none
+#  define MANGLE_OPTION_NONE(T)            option_##T##_none
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    QUERY FUNCTION NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h, option_defn.h
+   ============================================================================ */
 
 /**
- * @brief is_some() query function name
+ * MANGLE_OPTION_IS_SOME(T)
  *
- * Default: option_T_is_some (e.g., option_int_is_some(opt))
+ * Returns non-zero when the option holds a value.
+ *
+ * Default : option_T_is_some   (e.g. option_int_is_some(opt))
+ *
+ * Signature:
+ *   static inline int
+ *   MANGLE_OPTION_IS_SOME(T)(MANGLE_OPTION_TYPE(T) opt);
  */
 #ifndef MANGLE_OPTION_IS_SOME
-#  define MANGLE_OPTION_IS_SOME(_t)       option_##_t##_is_some
+#  define MANGLE_OPTION_IS_SOME(T)         option_##T##_is_some
 #endif
 
 /**
- * @brief is_none() query function name
+ * MANGLE_OPTION_IS_NONE(T)
  *
- * Default: option_T_is_none (e.g., option_int_is_none(opt))
+ * Returns non-zero when the option is absent.
+ *
+ * Default : option_T_is_none   (e.g. option_int_is_none(opt))
+ *
+ * Signature:
+ *   static inline int
+ *   MANGLE_OPTION_IS_NONE(T)(MANGLE_OPTION_TYPE(T) opt);
  */
 #ifndef MANGLE_OPTION_IS_NONE
-#  define MANGLE_OPTION_IS_NONE(_t)       option_##_t##_is_none
+#  define MANGLE_OPTION_IS_NONE(T)         option_##T##_is_none
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    SAFE EXTRACTION FUNCTION NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h, option_defn.h
+   ============================================================================ */
 
 /**
- * @brief get() safe extraction function name
+ * MANGLE_OPTION_GET(T)
  *
- * Default: option_T_get (e.g., option_int_get(opt, &out))
+ * Writes the contained value into *out and returns non-zero on success.
+ * Returns zero without modifying *out when the option is None.
+ *
+ * Default : option_T_get   (e.g. option_int_get(opt, &out))
+ *
+ * Signature:
+ *   static inline int
+ *   MANGLE_OPTION_GET(T)(MANGLE_OPTION_TYPE(T) opt, T *out);
  */
 #ifndef MANGLE_OPTION_GET
-#  define MANGLE_OPTION_GET(_t)           option_##_t##_get
+#  define MANGLE_OPTION_GET(T)             option_##T##_get
 #endif
 
 /**
- * @brief unwrap_or() with fallback function name
+ * MANGLE_OPTION_UNWRAP_OR(T)
  *
- * Default: option_T_unwrap_or (e.g., option_int_unwrap_or(opt, 0))
+ * Returns the contained value, or fallback when the option is None.
+ *
+ * Default : option_T_unwrap_or   (e.g. option_int_unwrap_or(opt, 0))
+ *
+ * Signature:
+ *   static inline T
+ *   MANGLE_OPTION_UNWRAP_OR(T)(MANGLE_OPTION_TYPE(T) opt, T fallback);
  */
 #ifndef MANGLE_OPTION_UNWRAP_OR
-#  define MANGLE_OPTION_UNWRAP_OR(_t)     option_##_t##_unwrap_or
+#  define MANGLE_OPTION_UNWRAP_OR(T)       option_##T##_unwrap_or
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    UNSAFE EXTRACTION FUNCTION NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h, option_defn.h
+   These functions abort / invoke a panic handler on None.
+   ============================================================================ */
 
 /**
- * @brief unwrap() unsafe extraction function name
+ * MANGLE_OPTION_UNWRAP(T)
  *
- * Default: option_T_unwrap (e.g., option_int_unwrap(opt))
+ * Returns the contained value.  Panics (implementation-defined) on None.
+ * Prefer MANGLE_OPTION_GET or MANGLE_OPTION_UNWRAP_OR in production code.
+ *
+ * Default : option_T_unwrap   (e.g. option_int_unwrap(opt))
+ *
+ * Signature:
+ *   static inline T
+ *   MANGLE_OPTION_UNWRAP(T)(MANGLE_OPTION_TYPE(T) opt);
  */
 #ifndef MANGLE_OPTION_UNWRAP
-#  define MANGLE_OPTION_UNWRAP(_t)        option_##_t##_unwrap
+#  define MANGLE_OPTION_UNWRAP(T)          option_##T##_unwrap
 #endif
 
 /**
- * @brief expect() with message function name
+ * MANGLE_OPTION_EXPECT(T)
  *
- * Default: option_T_expect (e.g., option_int_expect(opt, "msg"))
+ * Returns the contained value.  Panics with msg on None.
+ *
+ * Default : option_T_expect   (e.g. option_int_expect(opt, "non-null"))
+ *
+ * Signature:
+ *   static inline T
+ *   MANGLE_OPTION_EXPECT(T)(MANGLE_OPTION_TYPE(T) opt, const char *msg);
  */
 #ifndef MANGLE_OPTION_EXPECT
-#  define MANGLE_OPTION_EXPECT(_t)        option_##_t##_expect
+#  define MANGLE_OPTION_EXPECT(T)          option_##T##_expect
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    TRANSFORMATION FUNCTION NAMES (COMBINATORS)
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h, option_defn.h
+   ============================================================================ */
 
 /**
- * @brief map() transformation function name
+ * MANGLE_OPTION_MAP(T)
  *
- * Default: option_T_map (e.g., option_int_map(opt, fn))
+ * Applies f to the contained value and returns Some(f(value)), or None.
+ * The return type is the same Option<T>; for cross-type mapping use a
+ * manual combination of unwrap_or / some / none.
+ *
+ * Default : option_T_map   (e.g. option_int_map(opt, fn))
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_MAP(T)(MANGLE_OPTION_TYPE(T) opt, T (*f)(T));
  */
 #ifndef MANGLE_OPTION_MAP
-#  define MANGLE_OPTION_MAP(_t)           option_##_t##_map
+#  define MANGLE_OPTION_MAP(T)             option_##T##_map
 #endif
 
 /**
- * @brief and_then() chaining function name
+ * MANGLE_OPTION_AND_THEN(T)
  *
- * Default: option_T_and_then (e.g., option_int_and_then(opt, fn))
+ * Monadic bind: applies f (which itself returns Option<T>) to the contained
+ * value.  Returns None when the option is None.
+ *
+ * Default : option_T_and_then   (e.g. option_int_and_then(opt, fn))
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_AND_THEN(T)(MANGLE_OPTION_TYPE(T) opt,
+ *                              MANGLE_OPTION_TYPE(T) (*f)(T));
  */
 #ifndef MANGLE_OPTION_AND_THEN
-#  define MANGLE_OPTION_AND_THEN(_t)      option_##_t##_and_then
+#  define MANGLE_OPTION_AND_THEN(T)        option_##T##_and_then
 #endif
 
 /**
- * @brief or_else() alternative provider function name
+ * MANGLE_OPTION_OR_ELSE(T)
  *
- * Default: option_T_or_else (e.g., option_int_or_else(opt, fn))
+ * Returns the option unchanged when Some; calls f() and returns its result
+ * when None.
+ *
+ * Default : option_T_or_else   (e.g. option_int_or_else(opt, fn))
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_OR_ELSE(T)(MANGLE_OPTION_TYPE(T) opt,
+ *                             MANGLE_OPTION_TYPE(T) (*f)(void));
  */
 #ifndef MANGLE_OPTION_OR_ELSE
-#  define MANGLE_OPTION_OR_ELSE(_t)       option_##_t##_or_else
+#  define MANGLE_OPTION_OR_ELSE(T)         option_##T##_or_else
 #endif
 
 /**
- * @brief filter() conditional keeping function name
+ * MANGLE_OPTION_FILTER(T)
  *
- * Default: option_T_filter (e.g., option_int_filter(opt, pred))
+ * Returns Some(value) when pred(value) is non-zero, otherwise None.
+ *
+ * Default : option_T_filter   (e.g. option_int_filter(opt, pred))
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_FILTER(T)(MANGLE_OPTION_TYPE(T) opt, int (*pred)(T));
  */
 #ifndef MANGLE_OPTION_FILTER
-#  define MANGLE_OPTION_FILTER(_t)        option_##_t##_filter
+#  define MANGLE_OPTION_FILTER(T)          option_##T##_filter
 #endif
 
 /**
- * @brief zip() combining function name
+ * MANGLE_OPTION_ZIP(A, B, C)
  *
- * Default: option_T_zip (e.g., option_int_zip(opt1, opt2, combine))
+ * Combines Option<A> and Option<B> into Option<C> using a user-supplied
+ * combine function.  Returns None when either input is None.
+ *
+ * This macro takes THREE type tokens because zip is inherently a
+ * cross-type operation; a single-token variant would be insufficient.
+ * Use CANON_OPTION_ZIP(A, B, C) to instantiate the function; see
+ * option_decl.h for the full declaration pattern.
+ *
+ * Default : option_A_zip_B_to_C
+ *   (e.g. option_int_zip_float_to_double(opt_a, opt_b, combine))
+ *
+ * Signature (generated by option_defn.h for CANON_OPTION_ZIP(A,B,C)):
+ *   static inline MANGLE_OPTION_TYPE(C)
+ *   MANGLE_OPTION_ZIP(A,B,C)(MANGLE_OPTION_TYPE(A) opt_a,
+ *                             MANGLE_OPTION_TYPE(B) opt_b,
+ *                             C (*combine)(A, B));
  */
 #ifndef MANGLE_OPTION_ZIP
-#  define MANGLE_OPTION_ZIP(_t)           option_##_t##_zip
+#  define MANGLE_OPTION_ZIP(A, B, C)       option_##A##_zip_##B##_to_##C
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    MUTATION FUNCTION NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h, option_defn.h
+   ============================================================================ */
 
 /**
- * @brief replace() mutation function name
+ * MANGLE_OPTION_REPLACE(T)
  *
- * Default: option_T_replace (e.g., option_int_replace(&opt, new_val))
+ * Stores new_val into *opt (making it Some), and returns the previous option.
+ * The caller owns the returned value.
+ *
+ * Default : option_T_replace   (e.g. option_int_replace(&opt, 7))
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_REPLACE(T)(MANGLE_OPTION_TYPE(T) *opt, T new_val);
  */
 #ifndef MANGLE_OPTION_REPLACE
-#  define MANGLE_OPTION_REPLACE(_t)       option_##_t##_replace
+#  define MANGLE_OPTION_REPLACE(T)         option_##T##_replace
 #endif
 
 /**
- * @brief take() extraction function name
+ * MANGLE_OPTION_TAKE(T)
  *
- * Default: option_T_take (e.g., option_int_take(&opt))
+ * Moves the value out of *opt, leaving it as None, and returns the previous
+ * option.  Equivalent to replace with None but without needing a sentinel.
+ *
+ * Default : option_T_take   (e.g. option_int_take(&opt))
+ *
+ * Signature:
+ *   static inline MANGLE_OPTION_TYPE(T)
+ *   MANGLE_OPTION_TAKE(T)(MANGLE_OPTION_TYPE(T) *opt);
  */
 #ifndef MANGLE_OPTION_TAKE
-#  define MANGLE_OPTION_TAKE(_t)          option_##_t##_take
+#  define MANGLE_OPTION_TAKE(T)            option_##T##_take
 #endif
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    COMPARISON FUNCTION NAMES
-   ════════════════════════════════════════════════════════════════════════════ */
+   Consumed by: option_decl.h, option_defn.h
+   ============================================================================ */
 
 /**
- * @brief eq() equality comparison function name
+ * MANGLE_OPTION_EQ(T)
  *
- * Default: option_T_eq (e.g., option_int_eq(opt1, opt2, eq_fn))
+ * Returns non-zero when both options are None, or both are Some and
+ * eq_fn(a_value, b_value) returns non-zero.
+ *
+ * Default : option_T_eq   (e.g. option_int_eq(opt1, opt2, int_eq))
+ *
+ * Signature:
+ *   static inline int
+ *   MANGLE_OPTION_EQ(T)(MANGLE_OPTION_TYPE(T) a,
+ *                        MANGLE_OPTION_TYPE(T) b,
+ *                        int (*eq_fn)(T, T));
  */
 #ifndef MANGLE_OPTION_EQ
-#  define MANGLE_OPTION_EQ(_t)            option_##_t##_eq
+#  define MANGLE_OPTION_EQ(T)              option_##T##_eq
 #endif
-
-/* ════════════════════════════════════════════════════════════════════════════
-   USAGE EXAMPLES
-   ════════════════════════════════════════════════════════════════════════════ */
-
-/*
-// ────────────────────────────────────────────────────────────────────────────
-// Example 1: Default naming (no customization needed)
-// ────────────────────────────────────────────────────────────────────────────
-#include "option.h"
-CANON_OPTION(int)
-
-option_int x = option_int_some(42);      // Uses default names
-bool present = option_int_is_some(x);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Example 2: Custom naming (Rust-style Maybe/Just/Nothing)
-// ────────────────────────────────────────────────────────────────────────────
-#define MANGLE_OPTION_TYPE(t)      Maybe##t
-#define MANGLE_OPTION_SOME(t)      Maybe##t##_Just
-#define MANGLE_OPTION_NONE(t)      Maybe##t##_Nothing
-#define MANGLE_OPTION_IS_SOME(t)   Maybe##t##_isJust
-#define MANGLE_OPTION_IS_NONE(t)   Maybe##t##_isNothing
-
-#include "option.h"
-CANON_OPTION(int)
-
-MaybeInt x = MaybeInt_Just(42);          // Custom names!
-bool present = MaybeInt_isJust(x);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Example 3: Project-specific prefix (avoid name collisions)
-// ────────────────────────────────────────────────────────────────────────────
-#define MANGLE_OPTION_TYPE(t)      myproject_opt_##t
-
-#include "option.h"
-CANON_OPTION(int)
-
-myproject_opt_int x = myproject_opt_int_some(42);  // Namespaced!
-*/
 
 #endif /* CANON_OPTION_MANGLE_H */
