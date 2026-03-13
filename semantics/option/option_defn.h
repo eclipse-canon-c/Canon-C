@@ -58,7 +58,7 @@
  * // Header-only style (traditional Canon-C)
  * #include "option_defn.h"
  * DEFINE_OPTION_ALL(static inline, int)
- * 
+ *
  * // Separate compilation style
  * // In .h: DECLARE_OPTION_ALL(extern, int)
  * // In .c: DEFINE_OPTION_ALL(, int)  // No linkage keyword for extern
@@ -71,22 +71,30 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Define Option<T> struct
+ * @brief Define Option<T> struct and its typedef
  *
- * Generates the actual struct definition with memory layout.
- * Must be defined exactly once per type (unless static inline).
+ * Generates both the struct definition and the typedef alias.
+ * The struct tag (option_T_s) is available for forward declarations.
+ * The typedef (option_T) is the name used in all function signatures.
  *
- * Performance: O(1) compile time
- * Memory layout: sizeof(bool) + sizeof(_t) + alignment padding
+ * Must be defined exactly once per type per translation unit.
+ * With static inline functions, place this in the shared header so every
+ * translation unit sees the same layout.
+ *
+ * Memory layout: { bool has_value; T value; } + alignment padding
+ * The bool field is placed first to allow consistent access regardless of T.
  *
  * Example:
- * DEFINE_OPTION_STRUCT(int)
- * // Generates: struct option_int_s { bool has_value; int value; };
+ *   DEFINE_OPTION_STRUCT(int)
+ *   // Generates:
+ *   //   typedef struct option_int_s { bool has_value; int value; } option_int;
  *
  * @param _t The value type
  */
 #define DEFINE_OPTION_STRUCT(_t) \
-    struct MANGLE_OPTION_STRUCT_TAG(_t) IMPL_OPTION_STRUCT(_t);
+    typedef struct MANGLE_OPTION_STRUCT_TAG(_t) \
+        IMPL_OPTION_STRUCT(_t) \
+        MANGLE_OPTION_TYPE(_t);
 
 /* ════════════════════════════════════════════════════════════════════════════
    CONSTRUCTOR FUNCTION DEFINITIONS
@@ -101,7 +109,7 @@
  * Returns: Option containing the value
  *
  * @param _linkage Linkage specifier (e.g., static inline, empty for extern)
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_SOME(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -114,10 +122,12 @@
  * Generates function that creates an empty Option<T>.
  *
  * Performance: O(1) time, O(1) space (stack allocation via compound literal)
+ * Note: The value field is zero-initialized per C99 compound literal rules.
+ *       This is well-defined and does not expose indeterminate memory.
  * Returns: Empty Option
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_NONE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -137,7 +147,7 @@
  * Returns: true if Some(value), false if None
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_IS_SOME(_linkage, _t) \
     _linkage bool \
@@ -153,7 +163,7 @@
  * Returns: true if None, false if Some(value)
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_IS_NONE(_linkage, _t) \
     _linkage bool \
@@ -167,14 +177,24 @@
 /**
  * @brief Define get() safe extraction function
  *
- * Generates function that safely extracts value via pointer.
- * Permissive: NULL pointer is allowed, returns false.
+ * Generates function that safely extracts a value via output pointer.
+ *
+ * Permissive: A NULL output pointer is allowed and returns false.
+ * This design trades strictness for caller convenience — callers who
+ * only want to test presence without extracting can pass NULL.
+ *
+ * ⚠️ NOTE for safety-critical targets (DO-178C, ISO 26262, IEC 61508):
+ * get() conflates two distinct failure modes under a single false return:
+ *   (a) The Option is None.
+ *   (b) The caller passed a NULL output pointer.
+ * If your certification context requires distinguishing these, prefer
+ * is_some() + unwrap_or() or is_some() + unwrap() with an explicit check.
  *
  * Performance: O(1) time, O(1) space (conditional assignment)
- * Returns: true if value extracted, false if None or NULL pointer
+ * Returns: true if value extracted, false if None or out is NULL
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_GET(_linkage, _t) \
     _linkage bool \
@@ -185,13 +205,13 @@
  * @brief Define unwrap_or() with fallback function
  *
  * Generates function that extracts value or returns fallback.
- * Safe alternative to unwrap() - never panics.
+ * Safe alternative to unwrap() — never panics.
  *
  * Performance: O(1) time, O(1) space (conditional return)
  * Returns: Contained value if Some, fallback if None
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_UNWRAP_OR(_linkage, _t) \
     _linkage _t \
@@ -213,7 +233,7 @@
  * Returns: Contained value
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_UNWRAP(_linkage, _t) \
     _linkage _t \
@@ -231,7 +251,7 @@
  * Returns: Contained value
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_EXPECT(_linkage, _t) \
     _linkage _t \
@@ -248,12 +268,16 @@
  * Generates function that transforms contained value if present.
  * If None, returns None without calling transformation function.
  *
+ * Note: f is called by value (T -> T). For large structs this is intentional —
+ * Canon-C does not hide pointer indirection. If T is large, consider whether
+ * Option<T> or a pointer-based approach better suits your use case.
+ *
  * Performance: O(f) time where f is the transformation function
  *              O(1) space (stack allocation only)
  * Returns: Some(f(value)) if Some(value), None if None
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_MAP(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -273,7 +297,7 @@
  * Returns: f(value) if Some(value), None if None
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_AND_THEN(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -294,7 +318,7 @@
  * Returns: o if Some, fallback() if None
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_OR_ELSE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -314,7 +338,7 @@
  * Returns: o if Some(v) and pred(v), None otherwise
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_FILTER(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -324,27 +348,40 @@
                            MANGLE_OPTION_NONE(_t))
 
 /**
- * @brief Define zip() combining function
+ * @brief Define combine_with() same-type combining function
  *
- * Generates function that combines two Options with a function.
+ * Generates function that combines two Options of the same type T
+ * using a caller-supplied (T, T) -> T function.
  * Returns Some(combine(a, b)) if both are Some.
  * Returns None if either is None.
+ *
+ * Naming rationale:
+ * ────────────────────────────────────────────────────────────────────────────
+ * This function was previously named zip(). That name has been corrected.
+ *
+ * zip() in functional programming combines Option<A> and Option<B> into
+ * Option<(A, B)>, requiring two distinct types — impossible in single-type
+ * C generics without a second type parameter.
+ *
+ * combine_with() accurately describes what this function does:
+ * it combines two Option<T> values using a provided function, producing
+ * another Option<T>. No hidden behavior, no misleading analogy.
  *
  * Performance: O(combine) time where combine is the combining function
  *              O(1) space
  * Returns: Some(combine(v1, v2)) if both Some, None otherwise
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
-#define DEFINE_OPTION_ZIP(_linkage, _t) \
+#define DEFINE_OPTION_COMBINE_WITH(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
-    MANGLE_OPTION_ZIP(_t)( \
+    MANGLE_OPTION_COMBINE_WITH(_t)( \
         MANGLE_OPTION_TYPE(_t) o1, \
         MANGLE_OPTION_TYPE(_t) o2, \
         _t (*combine)(_t, _t)) \
-        IMPL_OPTION_ZIP(_t, MANGLE_OPTION_TYPE(_t), o1, o2, combine, \
-                        MANGLE_OPTION_SOME(_t), MANGLE_OPTION_NONE(_t))
+        IMPL_OPTION_COMBINE_WITH(_t, MANGLE_OPTION_TYPE(_t), o1, o2, combine, \
+                                 MANGLE_OPTION_SOME(_t), MANGLE_OPTION_NONE(_t))
 
 /* ════════════════════════════════════════════════════════════════════════════
    MUTATION FUNCTION DEFINITIONS
@@ -361,7 +398,7 @@
  * Returns: Previous Option state
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_REPLACE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -381,7 +418,7 @@
  * Returns: Previous Option state
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_TAKE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) \
@@ -405,7 +442,7 @@
  * Returns: true if equal, false otherwise
  *
  * @param _linkage Linkage specifier
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_EQ(_linkage, _t) \
     _linkage bool \
@@ -423,12 +460,12 @@
  * @brief Define all Option functions (no type/struct)
  *
  * Generates implementations for all Option<T> functions.
- * Does not define the struct itself - use with DEFINE_OPTION_STRUCT.
+ * Does not define the struct or typedef — use with DEFINE_OPTION_STRUCT.
  *
  * Performance: All functions are O(1) except combinators which are O(f)
  *
  * @param _linkage Linkage specifier (e.g., static inline for header-only)
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_FUNCTIONS(_linkage, _t) \
     DEFINE_OPTION_SOME(_linkage, _t) \
@@ -443,7 +480,7 @@
     DEFINE_OPTION_AND_THEN(_linkage, _t) \
     DEFINE_OPTION_OR_ELSE(_linkage, _t) \
     DEFINE_OPTION_FILTER(_linkage, _t) \
-    DEFINE_OPTION_ZIP(_linkage, _t) \
+    DEFINE_OPTION_COMBINE_WITH(_linkage, _t) \
     DEFINE_OPTION_REPLACE(_linkage, _t) \
     DEFINE_OPTION_TAKE(_linkage, _t) \
     DEFINE_OPTION_EQ(_linkage, _t)
@@ -452,8 +489,11 @@
  * @brief Define complete Option<T> type and all functions
  *
  * One-shot macro to define everything needed for Option<T>:
- * - Struct definition
+ * - Struct definition and typedef
  * - All function implementations
+ *
+ * The typedef makes MANGLE_OPTION_TYPE(_t) a usable type name in all
+ * function signatures. Without it, callers would need the struct keyword.
  *
  * Performance: All operations O(1) except combinators
  * Space: sizeof(bool) + sizeof(T) + padding per instance
@@ -462,19 +502,23 @@
  * ```c
  * #include "option_defn.h"
  * DEFINE_OPTION_ALL(static inline, int)
- * 
+ *
  * option_int x = option_int_some(42);
  * ```
  *
  * Example usage (separate compilation):
  * ```c
- * // In .c file only
+ * // In .h file:
+ * #include "option_decl.h"
+ * DECLARE_OPTION_ALL(extern, int)
+ *
+ * // In .c file only:
  * #include "option_defn.h"
  * DEFINE_OPTION_ALL(, int)  // No linkage keyword for extern
  * ```
  *
  * @param _linkage Linkage specifier (static inline for header-only, empty for extern)
- * @param _t The value type
+ * @param _t       The value type
  */
 #define DEFINE_OPTION_ALL(_linkage, _t) \
     DEFINE_OPTION_STRUCT(_t) \
@@ -495,7 +539,8 @@
 
 #include "option_defn.h"
 
-// Define with static inline - each translation unit gets own copy
+// Define with static inline — each translation unit gets its own copy.
+// The typedef from DEFINE_OPTION_STRUCT is shared via the header.
 DEFINE_OPTION_ALL(static inline, int)
 DEFINE_OPTION_ALL(static inline, float)
 
@@ -505,38 +550,41 @@ DEFINE_OPTION_ALL(static inline, float)
 // Example 2: Separate compilation for faster builds
 // ────────────────────────────────────────────────────────────────────────────
 
-// my_options.h - Header file
+// my_options.h — Header file
 #ifndef MY_OPTIONS_H
 #define MY_OPTIONS_H
 
 #include "option_decl.h"
 
-// Declare only (no definitions)
-DECLARE_OPTION_ALL(extern, int)
-DECLARE_OPTION_ALL(extern, float)
+// Struct + typedef visible to all translation units
+DEFINE_OPTION_STRUCT(int)
+DEFINE_OPTION_STRUCT(float)
+
+// Function declarations only (no definitions)
+DECLARE_OPTION_FUNCTIONS(extern, int)
+DECLARE_OPTION_FUNCTIONS(extern, float)
 
 #endif
 
-// my_options.c - Source file
+// my_options.c — Source file
 #include "my_options.h"
 #include "option_defn.h"
 
-// Define once (empty linkage for extern)
-DEFINE_OPTION_ALL(, int)
-DEFINE_OPTION_ALL(, float)
+// Define once — empty linkage means external linkage (matches extern decl)
+DEFINE_OPTION_FUNCTIONS(, int)
+DEFINE_OPTION_FUNCTIONS(, float)
 
 // ────────────────────────────────────────────────────────────────────────────
 // Example 3: Custom implementation for pointer types
 // ────────────────────────────────────────────────────────────────────────────
 
-#include "option_impl.h"
-
-// Override Some() to assert non-NULL
+// Override Some() to assert non-NULL before wrapping.
+// require() is provided by contract.h (included transitively via option_impl.h).
 #undef IMPL_OPTION_SOME
-#define IMPL_OPTION_SOME(t, topt, param) \
+#define IMPL_OPTION_SOME(_t, _topt, _param) \
     { \
-        require((param) != NULL, "option_some: NULL pointer not allowed"); \
-        return (topt){ .has_value = true, .value = (param) }; \
+        require((_param) != NULL, "option_some: NULL pointer not allowed"); \
+        return (_topt){ .has_value = true, .value = (_param) }; \
     }
 
 #include "option_defn.h"
@@ -544,7 +592,8 @@ DEFINE_OPTION_ALL(, float)
 typedef void* void_ptr;
 DEFINE_OPTION_ALL(static inline, void_ptr)
 
-// Now option_void_ptr_some(NULL) will panic at runtime
+// Now option_void_ptr_some(NULL) panics at runtime instead of silently
+// wrapping NULL as a Some value.
 */
 
 #endif /* CANON_OPTION_DEFN_H */
