@@ -81,11 +81,11 @@
  * The following table shows exactly what signature `fn` must have for each
  * combinator on option_T:
  *
- *   option_T_map(o, fn)        fn : T  → T          returns option_T
- *   option_T_and_then(o, fn)   fn : T  → option_T   returns option_T
- *   option_T_or_else(o, fn)    fn : void → option_T returns option_T
- *   option_T_filter(o, pred)   pred: T  → bool      returns option_T
- *   option_T_zip(o1, o2, fn)   fn : T, T → T        returns option_T
+ *   option_T_map(o, fn)             fn : T  → T          returns option_T
+ *   option_T_and_then(o, fn)        fn : T  → option_T   returns option_T
+ *   option_T_or_else(o, fn)         fn : void → option_T returns option_T
+ *   option_T_filter(o, pred)        pred: T  → bool      returns option_T
+ *   option_T_combine_with(o1,o2,fn) fn : T, T → T        returns option_T
  *
  * "Strict" mutation semantics (replace / take):
  * ────────────────────────────────────────────────────────────────────────────
@@ -192,7 +192,8 @@
  * ── Safe extraction ─────────────────────────────────────────────────────────
  *   option_T_get(o, &out) → bool
  *     Writes the value into *out if Some; leaves *out unchanged if None.
- *     out may be NULL (query-only mode).  Returns true iff Some.
+ *     out MUST NOT be NULL — passing NULL is a caller bug and triggers a
+ *     contract violation.  Returns true iff Some.
  *
  *   option_T_unwrap_or(o, def) → T
  *     Returns the contained value if Some, otherwise returns def.
@@ -233,10 +234,12 @@
  *     If Some and pred(value) is false, returns None.
  *     If None, returns None without calling pred.
  *
- *   option_T_zip(o1, o2, fn) → option_T
+ *   option_T_combine_with(o1, o2, fn) → option_T
  *     fn signature: T, T → T
  *     If both o1 and o2 are Some, calls fn(val1, val2) and returns Some(result).
  *     If either is None, returns None without calling fn.
+ *     Both operands and the result share the same type T.  For combining two
+ *     different Option types into a third, write a bespoke combinator.
  *
  * ── Strict mutation ─────────────────────────────────────────────────────────
  * These operate unconditionally and never panic.  See "Strict mutation
@@ -441,7 +444,7 @@
             printf("No value\n");
         }
 
-        // Pattern 2: safe extraction via pointer
+        // Pattern 2: safe extraction via pointer (out must not be NULL)
         int extracted;
         if (option_int_get(result, &extracted)) {
             printf("Extracted: %d\n", extracted);
@@ -493,20 +496,21 @@
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Example 6: zip – combining two Options
+    // Example 6: combine_with – combining two Options of the same type
     //   fn signature: T, T → T
     //   Returns Some(fn(a,b)) iff both inputs are Some; else None.
+    //   Both operands and the result share the same type T.
     // ────────────────────────────────────────────────────────────────────────
     int add(int a, int b) { return a + b; }
 
-    void example_zip(void) {
+    void example_combine_with(void) {
         option_int a = option_int_some(10);
         option_int b = option_int_some(32);
-        option_int c = option_int_zip(a, b, add); // Some(42)
+        option_int c = option_int_combine_with(a, b, add); // Some(42)
 
         option_int d = option_int_some(10);
         option_int e = option_int_none();
-        option_int f = option_int_zip(d, e, add); // None – b is absent
+        option_int f = option_int_combine_with(d, e, add); // None – b is absent
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -544,7 +548,7 @@
     void use_point(void) {
         option_Point opt = find_point(5);
         Point p;
-        if (option_Point_get(opt, &p)) {
+        if (option_Point_get(opt, &p)) {  // &p must not be NULL
             printf("Point: (%d, %d)\n", p.x, p.y);
         }
     }
