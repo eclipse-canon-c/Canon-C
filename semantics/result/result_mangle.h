@@ -1,296 +1,468 @@
-// semantics/result/result_mangle.h
-#ifndef CANON_RESULT_MANGLE_H
-#define CANON_RESULT_MANGLE_H
+/* semantics/result/result_mangle.h */
+#ifndef CANON_SEMANTICS_RESULT_RESULT_MANGLE_H
+#define CANON_SEMANTICS_RESULT_RESULT_MANGLE_H
 
 /**
  * @file result_mangle.h
  * @brief Name mangling conventions for Result<T, E> type
  *
- * This file defines the naming scheme for all Result-related types and functions.
- * It serves as the single source of truth for names - all other files reference
- * these macros instead of hardcoding names.
+ * This file defines the naming scheme for all Result-related types and
+ * functions.  It is the single source of truth for names — all other files
+ * reference these macros instead of hard-coding identifiers.
  *
- * Philosophy:
+ * Philosophy (Canon-C)
  * ────────────────────────────────────────────────────────────────────────────
- * - Single source of truth: All names defined in one place
- * - Customizable: Users can override before including to change naming
- * - Namespace-safe: Default names use result_ prefix to avoid collisions
- * - Consistent: Uniform naming pattern across all functions
- * - Explicit: No hidden name generation
- * - Two type parameters: Handles both value type (T) and error type (E)
+ * - Everything is optional   — every name can be overridden before inclusion
+ * - Everything is explicit   — no hidden name generation; read the header,
+ *                              know every identifier that will be produced
+ * - No runtime cost          — pure preprocessor token-pasting; O(1)
+ *                              compile-time, zero object-code footprint
+ * - No global state          — macros carry no side-effects
+ * - No framework coupling    — nothing in this file requires any other header
+ * - Plain C99                — ## token-pasting is standard C99 (§6.10.3.3);
+ *                              no GNU extensions, no C11/C23 features
+ * - Namespace-safe defaults  — default prefix result_ avoids collisions
+ * - Consistent               — uniform pattern across all generated names
  *
- * Default naming scheme:
- * ────────────────────────────────────────────────────────────────────────────
- * Types T and E produce:
- * - Type name: result_T_E (e.g., result_int_error, result_float_constcharptr)
- * - Struct tag: result_T_E_s (for separate compilation if needed)
- * - Functions: result_T_E_<operation> (e.g., result_int_error_ok, result_int_error_unwrap)
+ * > If behavior cannot be understood by reading the header, it does not belong.
+ * > Abstractions must clarify behavior, not conceal it.
  *
- * Customization example:
  * ────────────────────────────────────────────────────────────────────────────
- * // Use Either<T,E> naming instead of Result<T,E>
- * #define MANGLE_RESULT_TYPE(t, e)      Either_##t##_##e
- * #define MANGLE_RESULT_OK(t, e)        Either_##t##_##e##_Right
- * #define MANGLE_RESULT_ERR(t, e)       Either_##t##_##e##_Left
- * #include "result.h"
- * 
- * CANON_RESULT(int, error)
- * Either_int_error x = Either_int_error_Right(42);  // Custom naming!
+ * IMPORTANT — Token constraints (C99 §6.10.3.3)
+ * ────────────────────────────────────────────────────────────────────────────
+ * @warning Both _t and _e MUST be single, valid C preprocessing tokens.
+ *          They must contain NO spaces and NO punctuation characters
+ *          (including '*', '(', '[', etc.).
  *
- * Performance:
- * ────────────────────────────────────────────────────────────────────────────
- * - Time: O(1) — pure compile-time token pasting
- * - Space: O(1) — no runtime cost, pure preprocessor
- * - Zero overhead: Names resolved at compile time
+ *          For pointer or qualified types use a typedef BEFORE invoking
+ *          CANON_RESULT:
  *
- * Thread-safety:
- * ────────────────────────────────────────────────────────────────────────────
- * N/A — pure compile-time macros, no runtime behavior
+ *            typedef const char *  cstr_t;
+ *            typedef void       *  vptr_t;
+ *            typedef int        *  intp_t;
  *
- * Portability:
+ *            CANON_RESULT(int,   cstr_t)   /* ok  * /
+ *            CANON_RESULT(vptr_t, int)     /* ok  * /
+ *
+ *          Passing raw pointer syntax will produce a hard compiler error or,
+ *          worse, a silently malformed identifier with no diagnostic:
+ *
+ *            CANON_RESULT(int, const char *)   /* WRONG — do not do this * /
+ *
  * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (token pasting with ##)
- * - Works with all C99+ compilers
- * - No platform-specific code
+ * Override / customization
+ * ────────────────────────────────────────────────────────────────────────────
+ * Define any subset of the macros below BEFORE including this header.
+ * Overrides are per-translation-unit; different TUs may use different naming
+ * schemes without conflict.
+ *
+ * Rule: if you override MANGLE_RESULT_TYPE you MUST also override
+ *       MANGLE_RESULT_STRUCT_TAG (or rely on the default derivation below
+ *       which appends _s to whatever MANGLE_RESULT_TYPE produces).
+ *       Mismatching the two causes a struct-tag / typedef mismatch that the
+ *       compiler will catch but the diagnostic may be confusing.
+ *
+ * Customization example — Haskell-style Either / Right / Left:
+ *
+ *   #define MANGLE_RESULT_TYPE(t, e)     Either_##t##_##e
+ *   #define MANGLE_RESULT_IS_OK(t, e)   Either_##t##_##e##_isRight
+ *   #define MANGLE_RESULT_IS_ERR(t, e)  Either_##t##_##e##_isLeft
+ *   #define MANGLE_RESULT_OK(t, e)      Either_##t##_##e##_Right
+ *   #define MANGLE_RESULT_ERR(t, e)     Either_##t##_##e##_Left
+ *   #include "result.h"
+ *
+ *   CANON_RESULT(int, error_t)
+ *   Either_int_error_t x = Either_int_error_t_Right(42);
+ *
+ * Customization example — project-scoped prefix:
+ *
+ *   #define MANGLE_RESULT_TYPE(t, e)    myproj_res_##t##_##e
+ *   #include "result.h"
+ *
+ *   CANON_RESULT(int, error_t)
+ *   myproj_res_int_error_t x = myproj_res_int_error_t_ok(42);
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * Default naming scheme
+ * ────────────────────────────────────────────────────────────────────────────
+ * For types T and E the defaults produce:
+ *
+ *   Type / tag
+ *     result_T_E              — typedef'd struct name
+ *     result_T_E_s            — underlying struct tag  (derived from type)
+ *
+ *   Constructors
+ *     result_T_E_ok(val)      — construct Ok(val)
+ *     result_T_E_err(err)     — construct Err(err)
+ *
+ *   Queries
+ *     result_T_E_is_ok(r)     — true iff Ok
+ *     result_T_E_is_err(r)    — true iff Err
+ *
+ *   Safe extraction
+ *     result_T_E_get_ok(r, out)    — copy Ok value into *out; return bool
+ *     result_T_E_get_err(r, out)   — copy Err value into *out; return bool
+ *     result_T_E_unwrap_or(r, def) — return Ok value or fallback def
+ *
+ *   Unsafe extraction  (abort / assert on wrong variant)
+ *     result_T_E_unwrap(r)         — return Ok value or abort
+ *     result_T_E_unwrap_err(r)     — return Err value or abort
+ *     result_T_E_expect(r, msg)    — return Ok value or abort with msg
+ *
+ *   Combinators
+ *     result_T_E_map(r, fn)        — apply fn to Ok value; pass Err through
+ *     result_T_E_map_err(r, fn)    — apply fn to Err value; pass Ok through
+ *     result_T_E_and_then(r, fn)   — flatMap over Ok; short-circuit on Err
+ *     result_T_E_or_else(r, fn)    — flatMap over Err; short-circuit on Ok
+ *     result_T_E_and(r, other)     — return other if Ok, else propagate Err
+ *     result_T_E_or(r, other)      — return r if Ok, else return other
+ *
+ *   Comparison
+ *     result_T_E_eq(r1, r2, eq_ok, eq_err)
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * Performance
+ * ────────────────────────────────────────────────────────────────────────────
+ * Time:  O(1) — pure compile-time token pasting
+ * Space: O(1) — no runtime cost; zero object-code footprint
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * Thread-safety
+ * ────────────────────────────────────────────────────────────────────────────
+ * N/A — pure compile-time macros; no runtime behavior whatsoever.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * Portability
+ * ────────────────────────────────────────────────────────────────────────────
+ * Requires C99 or later.  ## token-pasting is defined in C99 §6.10.3.3.
+ * Tested with GCC, Clang, and MSVC (/std:c11 or later).
+ * No platform-specific code; no compiler extensions.
  *
  * @sa result_impl.h, result_decl.h, result_defn.h
  */
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    TYPE NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Main Result type name
+ * @brief Main Result type name (typedef).
  *
- * Default: result_T_E (e.g., result_int_error, result_float_constcharptr)
- * Override to customize type naming across entire codebase
+ * Default:  result_##_t##_##_e
+ * Example:  result_int_error_t
+ *
+ * Override to change the naming across your entire translation unit.
+ *
+ * @warning _t and _e must each be a single C preprocessing token (no spaces,
+ *          no punctuation).  See file-level note on token constraints.
  */
 #ifndef MANGLE_RESULT_TYPE
-#  define MANGLE_RESULT_TYPE(_t, _e)          result_##_t##_##_e
+#  define MANGLE_RESULT_TYPE(t, e)          result_##t##_##e
 #endif
 
 /**
- * @brief Result struct tag name (for separate compilation)
+ * @brief Underlying struct tag for the Result type.
  *
- * Default: result_T_E_s
- * Used when forward-declaring struct types
+ * Default:  derived from MANGLE_RESULT_TYPE by appending _s
+ * Example:  result_int_error_t_s
+ *
+ * The default intentionally derives from MANGLE_RESULT_TYPE so that
+ * overriding the type name automatically keeps the struct tag consistent.
+ * Override this separately ONLY when you need explicit control over the
+ * struct tag (e.g. forward declarations in another header).
+ *
+ * Invariant: MANGLE_RESULT_STRUCT_TAG must always refer to the same
+ *            underlying struct as MANGLE_RESULT_TYPE.  Violating this
+ *            produces a typedef / struct-tag mismatch diagnosed by the
+ *            compiler.
  */
 #ifndef MANGLE_RESULT_STRUCT_TAG
-#  define MANGLE_RESULT_STRUCT_TAG(_t, _e)    result_##_t##_##_e##_s
+#  define MANGLE_RESULT_STRUCT_TAG(t, e)    MANGLE_RESULT_TYPE(t, e)##_s
 #endif
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    CONSTRUCTOR FUNCTION NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Ok(value) constructor function name
+ * @brief Ok(value) constructor.
  *
- * Default: result_T_E_ok (e.g., result_int_error_ok(42))
+ * Default:  result_##t##_##e##_ok
+ * Example:  result_int_error_t_ok(42)
  */
 #ifndef MANGLE_RESULT_OK
-#  define MANGLE_RESULT_OK(_t, _e)            result_##_t##_##_e##_ok
+#  define MANGLE_RESULT_OK(t, e)            MANGLE_RESULT_TYPE(t, e)##_ok
 #endif
 
 /**
- * @brief Err(error) constructor function name
+ * @brief Err(error) constructor.
  *
- * Default: result_T_E_err (e.g., result_int_error_err(ERR_NOT_FOUND))
+ * Default:  result_##t##_##e##_err
+ * Example:  result_int_error_t_err(ERR_NOT_FOUND)
  */
 #ifndef MANGLE_RESULT_ERR
-#  define MANGLE_RESULT_ERR(_t, _e)           result_##_t##_##_e##_err
+#  define MANGLE_RESULT_ERR(t, e)           MANGLE_RESULT_TYPE(t, e)##_err
 #endif
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    QUERY FUNCTION NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief is_ok() query function name
+ * @brief is_ok() — returns true (non-zero) iff the result holds an Ok value.
  *
- * Default: result_T_E_is_ok (e.g., result_int_error_is_ok(res))
+ * Default:  result_##t##_##e##_is_ok
+ * Example:  result_int_error_t_is_ok(res)
  */
 #ifndef MANGLE_RESULT_IS_OK
-#  define MANGLE_RESULT_IS_OK(_t, _e)         result_##_t##_##_e##_is_ok
+#  define MANGLE_RESULT_IS_OK(t, e)         MANGLE_RESULT_TYPE(t, e)##_is_ok
 #endif
 
 /**
- * @brief is_err() query function name
+ * @brief is_err() — returns true (non-zero) iff the result holds an Err value.
  *
- * Default: result_T_E_is_err (e.g., result_int_error_is_err(res))
+ * Default:  result_##t##_##e##_is_err
+ * Example:  result_int_error_t_is_err(res)
  */
 #ifndef MANGLE_RESULT_IS_ERR
-#  define MANGLE_RESULT_IS_ERR(_t, _e)        result_##_t##_##_e##_is_err
+#  define MANGLE_RESULT_IS_ERR(t, e)        MANGLE_RESULT_TYPE(t, e)##_is_err
 #endif
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    SAFE EXTRACTION FUNCTION NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief get_ok() safe extraction function name
+ * @brief get_ok() — copy Ok value into *out; return true on success.
  *
- * Default: result_T_E_get_ok (e.g., result_int_error_get_ok(res, &out))
+ * Safe: returns false and leaves *out unmodified when the result is Err.
+ *
+ * Default:  result_##t##_##e##_get_ok
+ * Example:  result_int_error_t_get_ok(res, &out_val)
  */
 #ifndef MANGLE_RESULT_GET_OK
-#  define MANGLE_RESULT_GET_OK(_t, _e)        result_##_t##_##_e##_get_ok
+#  define MANGLE_RESULT_GET_OK(t, e)        MANGLE_RESULT_TYPE(t, e)##_get_ok
 #endif
 
 /**
- * @brief get_err() safe extraction function name
+ * @brief get_err() — copy Err value into *out; return true on success.
  *
- * Default: result_T_E_get_err (e.g., result_int_error_get_err(res, &out))
+ * Safe: returns false and leaves *out unmodified when the result is Ok.
+ *
+ * Default:  result_##t##_##e##_get_err
+ * Example:  result_int_error_t_get_err(res, &out_err)
  */
 #ifndef MANGLE_RESULT_GET_ERR
-#  define MANGLE_RESULT_GET_ERR(_t, _e)       result_##_t##_##_e##_get_err
+#  define MANGLE_RESULT_GET_ERR(t, e)       MANGLE_RESULT_TYPE(t, e)##_get_err
 #endif
 
 /**
- * @brief unwrap_or() with fallback function name
+ * @brief unwrap_or() — return Ok value, or fallback if Err.
  *
- * Default: result_T_E_unwrap_or (e.g., result_int_error_unwrap_or(res, 0))
+ * The fallback expression is always evaluated (C has no lazy evaluation).
+ * Use and_then / or_else for deferred computation.
+ *
+ * Default:  result_##t##_##e##_unwrap_or
+ * Example:  result_int_error_t_unwrap_or(res, 0)
  */
 #ifndef MANGLE_RESULT_UNWRAP_OR
-#  define MANGLE_RESULT_UNWRAP_OR(_t, _e)     result_##_t##_##_e##_unwrap_or
+#  define MANGLE_RESULT_UNWRAP_OR(t, e)     MANGLE_RESULT_TYPE(t, e)##_unwrap_or
 #endif
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    UNSAFE EXTRACTION FUNCTION NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief unwrap() unsafe extraction function name
+ * @brief unwrap() — return Ok value; abort / assert on Err.
  *
- * Default: result_T_E_unwrap (e.g., result_int_error_unwrap(res))
+ * Unsafe: only call when you have already verified is_ok().
+ * The implementation aborts (or invokes the configured panic handler) when
+ * called on an Err result.
+ *
+ * Default:  result_##t##_##e##_unwrap
+ * Example:  result_int_error_t_unwrap(res)
  */
 #ifndef MANGLE_RESULT_UNWRAP
-#  define MANGLE_RESULT_UNWRAP(_t, _e)        result_##_t##_##_e##_unwrap
+#  define MANGLE_RESULT_UNWRAP(t, e)        MANGLE_RESULT_TYPE(t, e)##_unwrap
 #endif
 
 /**
- * @brief unwrap_err() error extraction function name
+ * @brief unwrap_err() — return Err value; abort / assert on Ok.
  *
- * Default: result_T_E_unwrap_err (e.g., result_int_error_unwrap_err(res))
+ * Unsafe: only call when you have already verified is_err().
+ *
+ * Default:  result_##t##_##e##_unwrap_err
+ * Example:  result_int_error_t_unwrap_err(res)
  */
 #ifndef MANGLE_RESULT_UNWRAP_ERR
-#  define MANGLE_RESULT_UNWRAP_ERR(_t, _e)    result_##_t##_##_e##_unwrap_err
+#  define MANGLE_RESULT_UNWRAP_ERR(t, e)    MANGLE_RESULT_TYPE(t, e)##_unwrap_err
 #endif
 
 /**
- * @brief expect() with message function name
+ * @brief expect() — return Ok value; abort with diagnostic message on Err.
  *
- * Default: result_T_E_expect (e.g., result_int_error_expect(res, "msg"))
+ * Unsafe: prefer over plain unwrap() when a failure message aids debugging.
+ *
+ * Default:  result_##t##_##e##_expect
+ * Example:  result_int_error_t_expect(res, "parse_int must succeed here")
  */
 #ifndef MANGLE_RESULT_EXPECT
-#  define MANGLE_RESULT_EXPECT(_t, _e)        result_##_t##_##_e##_expect
+#  define MANGLE_RESULT_EXPECT(t, e)        MANGLE_RESULT_TYPE(t, e)##_expect
 #endif
 
+
 /* ════════════════════════════════════════════════════════════════════════════
-   TRANSFORMATION FUNCTION NAMES (COMBINATORS)
+   COMBINATOR FUNCTION NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief map() transformation function name
+ * @brief map() — apply fn to Ok value; propagate Err unchanged.
  *
- * Default: result_T_E_map (e.g., result_int_error_map(res, fn))
+ *   Ok(v)  -> Ok(fn(v))
+ *   Err(e) -> Err(e)
+ *
+ * Default:  result_##t##_##e##_map
+ * Example:  result_int_error_t_map(res, double_it)
  */
 #ifndef MANGLE_RESULT_MAP
-#  define MANGLE_RESULT_MAP(_t, _e)           result_##_t##_##_e##_map
+#  define MANGLE_RESULT_MAP(t, e)           MANGLE_RESULT_TYPE(t, e)##_map
 #endif
 
 /**
- * @brief map_err() error transformation function name
+ * @brief map_err() — apply fn to Err value; propagate Ok unchanged.
  *
- * Default: result_T_E_map_err (e.g., result_int_error_map_err(res, fn))
+ *   Ok(v)  -> Ok(v)
+ *   Err(e) -> Err(fn(e))
+ *
+ * Default:  result_##t##_##e##_map_err
+ * Example:  result_int_error_t_map_err(res, enrich_error)
  */
 #ifndef MANGLE_RESULT_MAP_ERR
-#  define MANGLE_RESULT_MAP_ERR(_t, _e)       result_##_t##_##_e##_map_err
+#  define MANGLE_RESULT_MAP_ERR(t, e)       MANGLE_RESULT_TYPE(t, e)##_map_err
 #endif
 
 /**
- * @brief and_then() chaining function name
+ * @brief and_then() — flatMap over Ok; short-circuit on Err.
  *
- * Default: result_T_E_and_then (e.g., result_int_error_and_then(res, fn))
+ *   Ok(v)  -> fn(v)   (fn returns a Result)
+ *   Err(e) -> Err(e)
+ *
+ * Use to chain fallible operations without nested error checks.
+ *
+ * Default:  result_##t##_##e##_and_then
+ * Example:  result_int_error_t_and_then(res, next_step)
  */
 #ifndef MANGLE_RESULT_AND_THEN
-#  define MANGLE_RESULT_AND_THEN(_t, _e)      result_##_t##_##_e##_and_then
+#  define MANGLE_RESULT_AND_THEN(t, e)      MANGLE_RESULT_TYPE(t, e)##_and_then
 #endif
 
 /**
- * @brief or_else() alternative provider function name
+ * @brief or_else() — flatMap over Err; short-circuit on Ok.
  *
- * Default: result_T_E_or_else (e.g., result_int_error_or_else(res, fn))
+ *   Ok(v)  -> Ok(v)
+ *   Err(e) -> fn(e)   (fn returns a Result)
+ *
+ * Use to provide a recovery / retry path without explicit branching.
+ *
+ * Default:  result_##t##_##e##_or_else
+ * Example:  result_int_error_t_or_else(res, try_fallback)
  */
 #ifndef MANGLE_RESULT_OR_ELSE
-#  define MANGLE_RESULT_OR_ELSE(_t, _e)       result_##_t##_##_e##_or_else
+#  define MANGLE_RESULT_OR_ELSE(t, e)       MANGLE_RESULT_TYPE(t, e)##_or_else
 #endif
+
+/**
+ * @brief and() — return `other` if Ok, otherwise propagate Err.
+ *
+ *   Ok(_)  -> other
+ *   Err(e) -> Err(e)
+ *
+ * Short-circuit AND for Results.  `other` is always evaluated (eager).
+ * Use and_then() when you need lazy / deferred construction of `other`.
+ *
+ * Default:  result_##t##_##e##_and
+ * Example:  result_int_error_t_and(res, second_result)
+ */
+#ifndef MANGLE_RESULT_AND
+#  define MANGLE_RESULT_AND(t, e)           MANGLE_RESULT_TYPE(t, e)##_and
+#endif
+
+/**
+ * @brief or() — return `res` if Ok, otherwise return `other`.
+ *
+ *   Ok(v)  -> Ok(v)
+ *   Err(_) -> other
+ *
+ * Short-circuit OR for Results.  `other` is always evaluated (eager).
+ * Use or_else() when you need lazy / deferred construction of `other`.
+ *
+ * Default:  result_##t##_##e##_or
+ * Example:  result_int_error_t_or(res, fallback_result)
+ */
+#ifndef MANGLE_RESULT_OR
+#  define MANGLE_RESULT_OR(t, e)            MANGLE_RESULT_TYPE(t, e)##_or
+#endif
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    COMPARISON FUNCTION NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief eq() equality comparison function name
+ * @brief eq() — structural equality over two Results.
  *
- * Default: result_T_E_eq (e.g., result_int_error_eq(r1, r2, eq_ok, eq_err))
+ * Signature:
+ *   bool result_T_E_eq(result_T_E r1, result_T_E r2,
+ *                      bool (*eq_ok)(T, T),
+ *                      bool (*eq_err)(E, E));
+ *
+ * Returns true iff both are Ok with equal values, or both are Err with
+ * equal errors.  Comparators are caller-supplied; no hidden magic.
+ *
+ * Default:  result_##t##_##e##_eq
+ * Example:  result_int_error_t_eq(r1, r2, int_eq, error_eq)
  */
 #ifndef MANGLE_RESULT_EQ
-#  define MANGLE_RESULT_EQ(_t, _e)            result_##_t##_##_e##_eq
+#  define MANGLE_RESULT_EQ(t, e)            MANGLE_RESULT_TYPE(t, e)##_eq
 #endif
 
+
 /* ════════════════════════════════════════════════════════════════════════════
-   USAGE EXAMPLES
+   CONSISTENCY SELF-CHECK  (compile-time, debug builds only)
+   ════════════════════════════════════════════════════════════════════════════
+   If CANON_RESULT_MANGLE_CHECK is defined before inclusion, a small inline
+   helper verifies that MANGLE_RESULT_STRUCT_TAG is still derived from
+   MANGLE_RESULT_TYPE (i.e. the user has not overridden one without the
+   other).  This produces a compile error — not a silent mismatch — when
+   the invariant is violated.
+
+   Usage:
+     #define CANON_RESULT_MANGLE_CHECK
+     #include "result_mangle.h"
    ════════════════════════════════════════════════════════════════════════════ */
-
+#ifdef CANON_RESULT_MANGLE_CHECK
 /*
-// ────────────────────────────────────────────────────────────────────────────
-// Example 1: Default naming (no customization needed)
-// ────────────────────────────────────────────────────────────────────────────
-#include "result.h"
+ * We cannot compare macro expansions directly in the preprocessor, but we
+ * can force the implementer to acknowledge the pairing by requiring both
+ * overrides to be present whenever either is customized.
+ */
+#  if defined(MANGLE_RESULT_TYPE) && !defined(MANGLE_RESULT_STRUCT_TAG)
+#    error "Canon-C: MANGLE_RESULT_TYPE was overridden but " \
+           "MANGLE_RESULT_STRUCT_TAG was not.  Either override both, " \
+           "or remove CANON_RESULT_MANGLE_CHECK to suppress this check."
+#  endif
+#  if !defined(MANGLE_RESULT_TYPE) && defined(MANGLE_RESULT_STRUCT_TAG)
+#    error "Canon-C: MANGLE_RESULT_STRUCT_TAG was overridden but " \
+           "MANGLE_RESULT_TYPE was not.  Either override both, " \
+           "or remove CANON_RESULT_MANGLE_CHECK to suppress this check."
+#  endif
+#endif /* CANON_RESULT_MANGLE_CHECK */
 
-typedef enum { ERR_NONE, ERR_NOT_FOUND, ERR_INVALID } error;
-CANON_RESULT(int, error)
 
-result_int_error x = result_int_error_ok(42);      // Uses default names
-bool success = result_int_error_is_ok(x);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Example 2: Custom naming (Haskell-style Either/Right/Left)
-// ────────────────────────────────────────────────────────────────────────────
-#define MANGLE_RESULT_TYPE(t, e)      Either_##t##_##e
-#define MANGLE_RESULT_OK(t, e)        Either_##t##_##e##_Right
-#define MANGLE_RESULT_ERR(t, e)       Either_##t##_##e##_Left
-#define MANGLE_RESULT_IS_OK(t, e)     Either_##t##_##e##_isRight
-#define MANGLE_RESULT_IS_ERR(t, e)    Either_##t##_##e##_isLeft
-
-#include "result.h"
-CANON_RESULT(int, error)
-
-Either_int_error x = Either_int_error_Right(42);   // Custom names!
-bool success = Either_int_error_isRight(x);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Example 3: Project-specific prefix (avoid name collisions)
-// ────────────────────────────────────────────────────────────────────────────
-#define MANGLE_RESULT_TYPE(t, e)      myproject_res_##t##_##e
-
-#include "result.h"
-CANON_RESULT(int, error)
-
-myproject_res_int_error x = myproject_res_int_error_ok(42);  // Namespaced!
-
-// ────────────────────────────────────────────────────────────────────────────
-// Example 4: Handling pointer types with typedefs
-// ────────────────────────────────────────────────────────────────────────────
-typedef const char* constcharptr;
-typedef void* voidptr;
-
-CANON_RESULT(int, constcharptr)
-CANON_RESULT(voidptr, int)
-
-result_int_constcharptr parse_result = result_int_constcharptr_ok(123);
-result_voidptr_int alloc_result = result_voidptr_int_ok(malloc(100));
-*/
-
-#endif /* CANON_RESULT_MANGLE_H */
+#endif /* CANON_SEMANTICS_RESULT_RESULT_MANGLE_H */
