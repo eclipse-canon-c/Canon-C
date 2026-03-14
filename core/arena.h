@@ -4,10 +4,9 @@
 #include <stdbool.h>             /* bool, true, false (C99) */
 
 #include "core/primitives/types.h"    /* u8, usize */
-#include "core/primitives/limits.h"   /* CANON_ARENA_MAX_SIZE, CANON_USIZE_MAX, CANON_MAX_ALIGN */
+#include "core/primitives/limits.h"   /* CANON_ARENA_MAX_SIZE, CANON_USIZE_MAX, CANON_DEFAULT_ALIGN */
 #include "core/primitives/contract.h" /* require_msg */
-#include "core/primitives/ptr.h"      /* ptr_offset, ptr_align_up, ptr_span */
-#include "core/primitives/bits.h"     /* is_power_of_two */
+#include "core/primitives/ptr.h"      /* ptr_offset, ptr_align_up, ptr_span, is_power_of_two */
 #include "core/memory.h"              /* mem_zero, mem_secure_zero */
 #include "core/slice.h"               /* bytes_t, bytes_from, bytes_empty */
 
@@ -150,9 +149,9 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     require_msg(capacity <= CANON_ARENA_MAX_SIZE,
                 "arena_init: capacity exceeds CANON_ARENA_MAX_SIZE");
 
-    arena->buffer       = (u8*)buffer;
-    arena->capacity     = capacity;
-    arena->offset       = 0;
+    arena->buffer        = (u8*)buffer;
+    arena->capacity      = capacity;
+    arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
 }
@@ -169,7 +168,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
  */
 static inline void arena_reset(Arena* arena) {
     if (!arena) return;
-    arena->offset       = 0;
+    arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
 }
@@ -199,7 +198,7 @@ static inline void arena_reset_secure(Arena* arena) {
    ============================================================================ */
 
 /**
- * @brief Allocates size bytes with natural alignment (CANON_MAX_ALIGN).
+ * @brief Allocates size bytes with natural alignment (CANON_DEFAULT_ALIGN).
  *
  * @param arena Valid initialized arena
  * @param size  Bytes to allocate (> 0; returns NULL for size == 0)
@@ -209,12 +208,17 @@ static inline void arena_reset_secure(Arena* arena) {
  * Performance: O(1)
  */
 static inline void* arena_alloc(Arena* arena, usize size) {
+    void* current;
+    void* aligned_ptr;
+    void* result;
+    usize pad;
+
     require_msg(arena != NULL, "arena_alloc: arena cannot be NULL");
     if (size == 0) return NULL;
 
-    void* current     = ptr_offset(arena->buffer, arena->offset);
-    void* aligned_ptr = ptr_align_up(current, CANON_MAX_ALIGN);
-    usize pad         = ptr_span(aligned_ptr, current);
+    current     = ptr_offset(arena->buffer, arena->offset);
+    aligned_ptr = ptr_align_up(current, CANON_DEFAULT_ALIGN);
+    pad         = ptr_span(aligned_ptr, current);
 
     if (arena->offset > CANON_USIZE_MAX - pad ||
         arena->offset + pad > CANON_USIZE_MAX - size ||
@@ -224,7 +228,7 @@ static inline void* arena_alloc(Arena* arena, usize size) {
 
     arena->offset        += pad;
     arena->padding_accum += pad;
-    void* result          = ptr_offset(arena->buffer, arena->offset);
+    result                = ptr_offset(arena->buffer, arena->offset);
     arena->offset        += size;
     _arena_debug_update(arena);
     return result;
@@ -244,14 +248,19 @@ static inline void* arena_alloc(Arena* arena, usize size) {
  * Performance: O(1)
  */
 static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignment) {
+    void* current;
+    void* aligned_ptr;
+    void* result;
+    usize pad;
+
     require_msg(arena != NULL, "arena_alloc_aligned: arena cannot be NULL");
     require_msg(is_power_of_two(alignment),
                 "arena_alloc_aligned: alignment must be a power of 2");
     if (size == 0) return NULL;
 
-    void* current     = ptr_offset(arena->buffer, arena->offset);
-    void* aligned_ptr = ptr_align_up(current, alignment);
-    usize pad         = ptr_span(aligned_ptr, current);
+    current     = ptr_offset(arena->buffer, arena->offset);
+    aligned_ptr = ptr_align_up(current, alignment);
+    pad         = ptr_span(aligned_ptr, current);
 
     if (arena->offset > CANON_USIZE_MAX - pad ||
         arena->offset + pad > CANON_USIZE_MAX - size ||
@@ -261,7 +270,7 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
 
     arena->offset        += pad;
     arena->padding_accum += pad;
-    void* result          = ptr_offset(arena->buffer, arena->offset);
+    result                = ptr_offset(arena->buffer, arena->offset);
     arena->offset        += size;
     _arena_debug_update(arena);
     return result;
