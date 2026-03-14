@@ -1,333 +1,581 @@
 #ifndef CANON_SEMANTICS_BORROW_H
 #define CANON_SEMANTICS_BORROW_H
 
-#include "core/primitives/types.h"      // usize, bool
-#include "core/primitives/contract.h"   // require_msg
-#include "core/slice.h"                 // str_t, cbytes_t, slice_##type
-#include "core/ownership.h"             // borrowed(T) annotation style
+#include "core/primitives/types.h"      /* usize, bool, u8 */
+#include "core/primitives/contract.h"   /* require_msg     */
+#include "core/slice.h"                 /* str_t, cbytes_t, slice_##type */
+#include "core/ownership.h"             /* borrowed(T) annotation style  */
 
 /**
  * @file semantics/borrow.h
  * @brief Semantic borrowing types — non-owning views with explicit lifetime intent
  *
  * Completes the ownership vocabulary from core/ownership.h.
- * ownership.h gives you annotation macros (borrowed(T)).
- * borrow.h gives you concrete, reusable types for common borrow patterns.
+ * ownership.h provides annotation macros (borrowed(T)).
+ * borrow.h provides concrete, reusable types for common borrow patterns.
  *
  * Core ideas:
- * ────────────────────────────────────────────────────────────────────────────
- * - All types are non-owning views — never free the .ptr / .str / .bytes
- * - Explicit source tag (const void*) for debugging and assertions
- * - Lifetime rule: borrowed value is valid only as long as source is alive
- * - No runtime enforcement — documentation + discipline
+ * --------------------------------------------------------------------------
+ * - All types are non-owning views. Never free the .ptr / .str / .bytes.
+ * - An optional source tag (const void *) is carried for debugging and
+ *   assertions. It is never dereferenced by this header.
+ * - Lifetime rule: a borrowed value is valid only as long as its source
+ *   is alive and the pointed-to memory is unmodified.
+ * - No runtime enforcement — documentation + discipline.
  *
  * Types provided:
- * - borrowed_ptr<T>   — generic non-owning pointer to any T
- * - borrowed_str      — non-owning string view (wraps str_t)
- * - borrowed_bytes    — non-owning byte view (wraps cbytes_t)
- * - borrowed_slice<T> — non-owning typed slice (wraps slice_##type)
+ *   borrowed_ptr         — generic non-owning pointer to any T
+ *   borrowed_str         — non-owning string view  (wraps str_t)
+ *   borrowed_bytes       — non-owning byte view    (wraps cbytes_t)
+ *   borrowed_slice_<T>   — non-owning typed slice  (wraps slice_<T>)
+ *                          (instantiated via DEFINE_BORROWED_SLICE(type))
  *
  * Why separate from slice.h?
- * ────────────────────────────────────────────────────────────────────────────
- * slice_t / str_t / bytes_t are pure {ptr, len} data structures.
- * They carry no ownership intent — a returned slice might be owned or borrowed.
+ * --------------------------------------------------------------------------
+ * slice_t / str_t / cbytes_t are pure {ptr, len} data structures.
+ * They carry no ownership intent — a returned slice might be owned or
+ * borrowed.
  *
  * borrowed_* types make non-ownership explicit at the type level.
- * When you see borrowed_str in a signature, you immediately know:
- *   - Do NOT free it
- *   - Do NOT outlive its source
+ * When you see borrowed_str in a signature, the reader immediately knows:
+ *   - Do NOT free it.
+ *   - Do NOT outlive its source.
  *
  * Lifetime model (documentation convention):
- * ────────────────────────────────────────────────────────────────────────────
- * borrowed_str s = stringbuf_borrow_str(&sb);
- * // s is valid as long as sb is alive and unmodified
- * // s becomes invalid after: stringbuf_clear(&sb), arena_reset(sb.arena), free(sb)
+ * --------------------------------------------------------------------------
+ *   borrowed_str s = stringbuf_borrow_str(&sb);
+ *   // s is valid as long as sb is alive and unmodified.
+ *   // s becomes invalid after: stringbuf_clear(&sb),
+ *   //   arena_reset(sb.arena), free(sb), etc.
  *
- * The source field is a debug tag — pass &owning_struct as source.
- * It is never dereferenced by borrow.h — only for human/debugger inspection.
+ * The source field is a debug tag. Pass &owning_struct as source.
+ * It is never dereferenced by this header — for human / debugger inspection
+ * only.
+ *
+ * NULL-safety contract:
+ * --------------------------------------------------------------------------
+ * All functions that receive a pointer-to-borrowed-X (const borrowed_X *b)
+ * treat b == NULL as "absent borrow" and return a safe empty/null value,
+ * EXCEPT where noted with require_msg. Functions that fire require_msg on
+ * NULL are marked with @pre b != NULL in their documentation.
+ *
+ * The goal is: callers that do not check for NULL still get deterministic,
+ * non-crashing behaviour in release builds where require_msg is a no-op,
+ * while debug builds catch misuse early.
  *
  * Dependency rule:
- * ────────────────────────────────────────────────────────────────────────────
+ * --------------------------------------------------------------------------
  * borrow.h lives in semantics/ and may include core/ only.
  * No data/, util/, or other semantics/ headers.
  *
  * Portability:
- * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later
- * - No allocations, no platform-specific code
+ * --------------------------------------------------------------------------
+ * - Requires C99 or later (no GCC/Clang extensions used).
+ * - No allocations, no platform-specific code.
  *
  * Performance:
- * ────────────────────────────────────────────────────────────────────────────
- * - All types ≈ sizeof(ptr) + sizeof(usize) + sizeof(void*)
- * - All functions static inline — zero call overhead
+ * --------------------------------------------------------------------------
+ * - All types are approximately sizeof(ptr) + sizeof(usize) + sizeof(void *).
+ * - All functions are static inline — zero call overhead.
  *
  * Quick start:
- * ```c
- * borrowed_str name = borrowed_str_from_cstr("Alice", NULL);
- * printf("%.*s\n", (int)name.str.len, name.str.ptr);
+ * --------------------------------------------------------------------------
+ *   borrowed_str name = borrowed_str_from_cstr("Alice", NULL);
+ *   printf("%.*s\n", (int)name.str.len, name.str.ptr);
  *
- * u8 buf[256];
- * borrowed_bytes region = borrowed_bytes_from(buf, 256, buf);
+ *   u8 buf[256];
+ *   borrowed_bytes region = borrowed_bytes_from(buf, 256u, buf);
  *
- * MyStruct obj = {0};
- * borrowed_ptr ref = borrowed_ptr_from(&obj, &obj);
- * MyStruct* p = (MyStruct*)borrowed_ptr_get(&ref);
+ *   MyStruct obj = {0};
+ *   borrowed_ptr ref = borrowed_ptr_from(&obj, &obj);
+ *   const MyStruct *p = (const MyStruct *)borrowed_ptr_get(&ref);
  *
- * // Typed slice borrow
- * DEFINE_SLICE(int)
- * DEFINE_BORROWED_SLICE(int)
- * int arr[4] = {1, 2, 3, 4};
- * borrowed_slice_int view = borrowed_slice_int_from(slice_int_from(arr, 4), arr);
- * ```
+ *   DEFINE_SLICE(int)
+ *   DEFINE_BORROWED_SLICE(int)
+ *   int arr[4] = {1, 2, 3, 4};
+ *   borrowed_slice_int view =
+ *       borrowed_slice_int_from(slice_int_from(arr, 4u), arr);
  *
- * @sa core/slice.h — underlying str_t, cbytes_t, slice_##type
+ * @sa core/slice.h     — underlying str_t, cbytes_t, slice_##type
  * @sa core/ownership.h — borrowed(T) annotation macros
  */
-/* ════════════════════════════════════════════════════════════════════════════
+
+/* ============================================================================
    borrowed_ptr — generic non-owning pointer
-   ════════════════════════════════════════════════════════════════════════════ */
+   ============================================================================ */
+
 /**
- * @brief Generic non-owning pointer with optional source tag
+ * @brief Generic non-owning pointer with optional source tag.
  *
- * Use when type is unknown or erased.
- * Prefer typed borrowed wrappers when type is known.
+ * Use when the pointee type is unknown or erased at the call site.
+ * Prefer typed borrowed wrappers when the type is known.
  *
  * Invariants:
- * - ptr may be NULL (absent borrow)
- * - source is debug-only tag — never dereferenced
- * - ptr must outlive this struct
+ *   - ptr may be NULL (absent borrow).
+ *   - source is a debug-only tag; it is never dereferenced.
+ *   - The object at ptr must outlive this struct.
  */
 typedef struct {
-    const void* ptr;    ///< Borrowed pointer (do not free)
-    const void* source; ///< Owning object's address (debug tag)
+    const void *ptr;    /**< Borrowed pointer — do NOT free. */
+    const void *source; /**< Owning object's address (debug tag only). */
 } borrowed_ptr;
 
-/** @brief Creates borrowed_ptr from raw pointer and owner */
-static inline borrowed_ptr borrowed_ptr_from(const void* ptr, const void* source) {
-    return (borrowed_ptr){ .ptr = ptr, .source = source };
+/**
+ * @brief Constructs a borrowed_ptr from a raw pointer and an owner tag.
+ * @param ptr    Non-owning pointer (may be NULL).
+ * @param source Address of the owning object (debug tag; may be NULL).
+ * @return       A borrowed_ptr wrapping ptr.
+ */
+static inline borrowed_ptr borrowed_ptr_from(const void *ptr,
+                                              const void *source)
+{
+    borrowed_ptr b;
+    b.ptr    = ptr;
+    b.source = source;
+    return b;
 }
 
-/** @brief Empty (NULL) borrowed_ptr — represents absent borrow */
-static inline borrowed_ptr borrowed_ptr_null(void) {
-    return (borrowed_ptr){ .ptr = NULL, .source = NULL };
+/**
+ * @brief Constructs a NULL / absent borrowed_ptr.
+ * @return A borrowed_ptr with ptr == NULL and source == NULL.
+ */
+static inline borrowed_ptr borrowed_ptr_null(void)
+{
+    borrowed_ptr b;
+    b.ptr    = NULL;
+    b.source = NULL;
+    return b;
 }
 
-/** @brief Returns raw pointer (cast to correct type, do not free) */
-static inline const void* borrowed_ptr_get(const borrowed_ptr* b) {
-    require_msg(b != NULL, "borrowed_ptr_get: b cannot be NULL");
+/**
+ * @brief Returns the raw pointer stored in b.
+ *
+ * The caller is responsible for casting to the correct type.
+ * Do NOT free the returned pointer.
+ *
+ * @pre  b != NULL  (checked with require_msg in debug builds).
+ * @note Returns NULL when b == NULL in release builds so that callers
+ *       that do not check remain crash-safe if require_msg is a no-op.
+ * @param b Pointer to borrowed_ptr; must not be NULL.
+ * @return  Stored const void * (may itself be NULL).
+ */
+static inline const void *borrowed_ptr_get(const borrowed_ptr *b)
+{
+    require_msg(b != NULL, "borrowed_ptr_get: b must not be NULL");
+    if (b == NULL) { return NULL; }
     return b->ptr;
 }
 
-/** @brief True if ptr != NULL */
-static inline bool borrowed_ptr_is_valid(const borrowed_ptr* b) {
-    return b != NULL && b->ptr != NULL;
+/**
+ * @brief Returns non-zero (true) if b is non-NULL and b->ptr is non-NULL.
+ * @param b Pointer to borrowed_ptr (may be NULL).
+ * @return  1 if valid, 0 otherwise.
+ */
+static inline bool borrowed_ptr_is_valid(const borrowed_ptr *b)
+{
+    return (b != NULL) && (b->ptr != NULL);
 }
 
-/** @brief True if two borrowed_ptrs point to same address */
-static inline bool borrowed_ptr_eq(borrowed_ptr a, borrowed_ptr b) {
+/**
+ * @brief Returns non-zero (true) if a and b point to the same address.
+ *
+ * Source tags are intentionally ignored — equality is based on the
+ * pointed-to address alone.
+ *
+ * @param a First borrowed_ptr (by value).
+ * @param b Second borrowed_ptr (by value).
+ * @return  1 if a.ptr == b.ptr, 0 otherwise.
+ */
+static inline bool borrowed_ptr_eq(borrowed_ptr a, borrowed_ptr b)
+{
     return a.ptr == b.ptr;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    borrowed_str — non-owning string view
-   ════════════════════════════════════════════════════════════════════════════ */
+   ============================================================================ */
+
 /**
- * @brief Non-owning string view with explicit borrowing intent
+ * @brief Non-owning string view with explicit borrowing intent.
  *
- * Wraps str_t — characters not null-terminated.
- * Do NOT free str.ptr — owned by source.
+ * Wraps str_t. The character data is NOT null-terminated in general.
+ * Do NOT free str.ptr — it is owned by source.
  */
 typedef struct {
-    str_t       str;    ///< Borrowed view (do not free str.ptr)
-    const void* source; ///< Owning object's address (debug tag)
+    str_t        str;    /**< Borrowed string view — do NOT free str.ptr. */
+    const void  *source; /**< Owning object's address (debug tag only). */
 } borrowed_str;
 
-/** @brief Creates from str_t and owner */
-static inline borrowed_str borrowed_str_from(str_t s, const void* source) {
-    return (borrowed_str){ .str = s, .source = source };
+/**
+ * @brief Constructs a borrowed_str from a str_t and an owner tag.
+ * @param s      The str_t to wrap.
+ * @param source Address of the owning object (debug tag; may be NULL).
+ * @return       A borrowed_str wrapping s.
+ */
+static inline borrowed_str borrowed_str_from(str_t s, const void *source)
+{
+    borrowed_str b;
+    b.str    = s;
+    b.source = source;
+    return b;
 }
 
-/** @brief Creates from null-terminated C string */
-static inline borrowed_str borrowed_str_from_cstr(const char* cstr, const void* source) {
-    return (borrowed_str){ .str = str_from_cstr(cstr), .source = source };
+/**
+ * @brief Constructs a borrowed_str from a null-terminated C string.
+ * @param cstr   Null-terminated string (may be NULL, yielding empty view).
+ * @param source Address of the owning object (debug tag; may be NULL).
+ * @return       A borrowed_str wrapping cstr via str_from_cstr.
+ */
+static inline borrowed_str borrowed_str_from_cstr(const char *cstr,
+                                                   const void *source)
+{
+    borrowed_str b;
+    b.str    = str_from_cstr(cstr);
+    b.source = source;
+    return b;
 }
 
-/** @brief Empty borrowed_str */
-static inline borrowed_str borrowed_str_empty(void) {
-    return (borrowed_str){ .str = str_empty(), .source = NULL };
+/**
+ * @brief Constructs an empty (zero-length, NULL ptr) borrowed_str.
+ * @return A borrowed_str with str == str_empty() and source == NULL.
+ */
+static inline borrowed_str borrowed_str_empty(void)
+{
+    borrowed_str b;
+    b.str    = str_empty();
+    b.source = NULL;
+    return b;
 }
 
-/** @brief Returns underlying str_t (do not free ptr) */
-static inline str_t borrowed_str_get(const borrowed_str* b) {
-    require_msg(b != NULL, "borrowed_str_get: b cannot be NULL");
+/**
+ * @brief Returns the underlying str_t.
+ *
+ * Do NOT free the returned ptr field.
+ *
+ * @pre  b != NULL  (checked with require_msg in debug builds).
+ * @note Returns str_empty() when b == NULL in release builds.
+ * @param b Pointer to borrowed_str; must not be NULL.
+ * @return  The wrapped str_t.
+ */
+static inline str_t borrowed_str_get(const borrowed_str *b)
+{
+    require_msg(b != NULL, "borrowed_str_get: b must not be NULL");
+    if (b == NULL) { return str_empty(); }
     return b->str;
 }
 
-/** @brief True if str.ptr != NULL */
-static inline bool borrowed_str_is_valid(const borrowed_str* b) {
-    return b != NULL && b->str.ptr != NULL;
+/**
+ * @brief Returns non-zero (true) if b is non-NULL and b->str.ptr is non-NULL.
+ * @param b Pointer to borrowed_str (may be NULL).
+ * @return  1 if valid, 0 otherwise.
+ */
+static inline bool borrowed_str_is_valid(const borrowed_str *b)
+{
+    return (b != NULL) && (b->str.ptr != NULL);
 }
 
-/** @brief Length of borrowed string */
-static inline usize borrowed_str_len(const borrowed_str* b) {
-    return b ? b->str.len : 0;
+/**
+ * @brief Returns the byte length of the borrowed string.
+ * @param b Pointer to borrowed_str (may be NULL, returns 0).
+ * @return  b->str.len, or 0 if b is NULL.
+ */
+static inline usize borrowed_str_len(const borrowed_str *b)
+{
+    return (b != NULL) ? b->str.len : (usize)0;
 }
 
-/** @brief True if content is equal (ignores source) */
-static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b) {
+/**
+ * @brief Returns non-zero (true) if both strings have equal content.
+ *
+ * Source tags are intentionally ignored — equality is content-only.
+ *
+ * @param a First borrowed_str (by value).
+ * @param b Second borrowed_str (by value).
+ * @return  1 if str_equal(a.str, b.str), 0 otherwise.
+ */
+static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b)
+{
     return str_equal(a.str, b.str);
 }
 
-/** @brief Sub-borrow [start, end) — inherits source */
-static inline borrowed_str borrowed_str_slice(borrowed_str b, usize start, usize end) {
-    return (borrowed_str){ .str = str_slice(b.str, start, end), .source = b.source };
+/**
+ * @brief Returns a sub-borrow covering bytes [start, end).
+ *
+ * The returned view inherits the source tag of b.
+ * If start >= end or the range is out of bounds, behaviour is defined by
+ * str_slice (typically returns an empty view).
+ *
+ * @param b     The original borrowed_str (by value).
+ * @param start First byte index (inclusive).
+ * @param end   One-past-last byte index (exclusive).
+ * @return      A new borrowed_str covering [start, end).
+ */
+static inline borrowed_str borrowed_str_slice(borrowed_str b,
+                                               usize start, usize end)
+{
+    borrowed_str r;
+    r.str    = str_slice(b.str, start, end);
+    r.source = b.source;
+    return r;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    borrowed_bytes — non-owning byte view
-   ════════════════════════════════════════════════════════════════════════════ */
+   ============================================================================ */
+
 /**
- * @brief Non-owning byte region view with explicit borrowing intent
+ * @brief Non-owning read-only byte region with explicit borrowing intent.
  *
- * Wraps cbytes_t — read-only bytes.
- * Do NOT free bytes.ptr — owned by source.
+ * Wraps cbytes_t. Do NOT free bytes.ptr — it is owned by source.
  */
 typedef struct {
-    cbytes_t    bytes;  ///< Borrowed bytes (do not free bytes.ptr)
-    const void* source; ///< Owning object's address (debug tag)
+    cbytes_t     bytes;  /**< Borrowed byte view — do NOT free bytes.ptr. */
+    const void  *source; /**< Owning object's address (debug tag only). */
 } borrowed_bytes;
 
-/** @brief Creates from raw pointer/len and owner */
-static inline borrowed_bytes borrowed_bytes_from(const void* ptr, usize len,
-                                                  const void* source) {
-    return (borrowed_bytes){ .bytes = cbytes_from(ptr, len), .source = source };
-}
-
-/** @brief Creates from existing cbytes_t and owner */
-static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t b, const void* source) {
-    return (borrowed_bytes){ .bytes = b, .source = source };
-}
-
-/** @brief Empty borrowed_bytes */
-static inline borrowed_bytes borrowed_bytes_empty(void) {
-    return (borrowed_bytes){ .bytes = { .ptr = NULL, .len = 0 }, .source = NULL };
-}
-
-/** @brief Returns underlying cbytes_t (do not free ptr) */
-static inline cbytes_t borrowed_bytes_get(const borrowed_bytes* b) {
-    require_msg(b != NULL, "borrowed_bytes_get: b cannot be NULL");
-    return b->bytes;
-}
-
-/** @brief Byte count */
-static inline usize borrowed_bytes_len(const borrowed_bytes* b) {
-    return b ? b->bytes.len : 0;
-}
-
-/** @brief True if bytes.ptr != NULL */
-static inline bool borrowed_bytes_is_valid(const borrowed_bytes* b) {
-    return b != NULL && b->bytes.ptr != NULL;
-}
-
-/** @brief Sub-borrow [start, end) — inherits source */
-static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b, usize start, usize end) {
-    cbytes_t full = b.bytes;
-    if (!full.ptr || start >= full.len) return borrowed_bytes_empty();
-    if (end > full.len) end = full.len;
-    if (start >= end) return borrowed_bytes_empty();
-    return (borrowed_bytes){
-        .bytes = { .ptr = full.ptr + start, .len = end - start },
-        .source = b.source
-    };
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   DEFINE_BORROWED_SLICE — typed borrowed slice
-   ════════════════════════════════════════════════════════════════════════════ */
 /**
- * @brief Generates typed borrowed_slice wrapper for element type `type`
+ * @brief Constructs a borrowed_bytes from a raw pointer, length, and owner.
  *
- * Requires prior DEFINE_SLICE(type).
+ * ptr is cast to const u8 * internally via cbytes_from. The caller must
+ * ensure ptr points to at least len readable bytes.
  *
- * Generated type: borrowed_slice_##type
- * Generated helpers: from, empty, get, len, is_valid, at, slice, as_bytes
- *
- * Example usage:
- * ```c
- * DEFINE_SLICE(int)
- * DEFINE_BORROWED_SLICE(int)
- *
- * int arr[4] = {1,2,3,4};
- * borrowed_slice_int view = borrowed_slice_int_from(slice_int_from(arr,4), arr);
- * ```
+ * @param ptr    Start of the byte region (may be NULL if len == 0).
+ * @param len    Number of bytes in the region.
+ * @param source Address of the owning object (debug tag; may be NULL).
+ * @return       A borrowed_bytes wrapping the region.
  */
-#define DEFINE_BORROWED_SLICE(type) \
-\
-/** \
- * @brief Non-owning typed slice borrow for type \
- * \
- * Wraps slice_##type with borrowing intent. \
- * Do NOT free slice.ptr — owned by source. \
- */ \
-typedef struct { \
-    slice_##type slice; /**< Borrowed view (do not free slice.ptr) */ \
-    const void*  source; /**< Owning object's address (debug tag) */ \
-} borrowed_slice_##type; \
-\
-/** @brief Creates from slice_##type and owner */ \
-static inline borrowed_slice_##type borrowed_slice_##type##_from( \
-    slice_##type s, const void* source) { \
-    return (borrowed_slice_##type){ .slice = s, .source = source }; \
-} \
-\
-/** @brief Empty borrowed_slice_##type */ \
-static inline borrowed_slice_##type borrowed_slice_##type##_empty(void) { \
-    return (borrowed_slice_##type){ .slice = slice_##type##_empty(), .source = NULL }; \
-} \
-\
-/** @brief Underlying slice_##type (do not free ptr) */ \
-static inline slice_##type borrowed_slice_##type##_get( \
-    const borrowed_slice_##type* b) { \
-    require_msg(b != NULL, "borrowed_slice_" #type "_get: b cannot be NULL"); \
-    return b->slice; \
-} \
-\
-/** @brief Element count */ \
-static inline usize borrowed_slice_##type##_len( \
-    const borrowed_slice_##type* b) { \
-    return b ? b->slice.len : 0; \
-} \
-\
-/** @brief True if slice.ptr != NULL */ \
-static inline bool borrowed_slice_##type##_is_valid( \
-    const borrowed_slice_##type* b) { \
-    return b != NULL && b->slice.ptr != NULL; \
-} \
-\
-/** @brief Const pointer to element i (bounds-checked, NULL if OOB) */ \
-static inline const type* borrowed_slice_##type##_at( \
-    const borrowed_slice_##type* b, usize i) { \
-    if (!b || !b->slice.ptr || i >= b->slice.len) return NULL; \
-    return &b->slice.ptr[i]; \
-} \
-\
-/** @brief Sub-borrow [start, end) — inherits source */ \
-static inline borrowed_slice_##type borrowed_slice_##type##_slice( \
-    borrowed_slice_##type b, usize start, usize end) { \
-    return (borrowed_slice_##type){ \
-        .slice = slice_##type##_slice(b.slice, start, end), \
-        .source = b.source \
-    }; \
-} \
-\
-/** @brief Raw borrowed_bytes view over slice memory — inherits source */ \
-static inline borrowed_bytes borrowed_slice_##type##_as_bytes( \
-    const borrowed_slice_##type* b) { \
-    if (!b || !b->slice.ptr) return borrowed_bytes_empty(); \
-    return (borrowed_bytes){ \
-        .bytes = cbytes_from((const u8*)b->slice.ptr, b->slice.len * sizeof(type)), \
-        .source = b.source \
-    }; \
+static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
+                                                  const void *source)
+{
+    borrowed_bytes b;
+    b.bytes  = cbytes_from(ptr, len);
+    b.source = source;
+    return b;
+}
+
+/**
+ * @brief Constructs a borrowed_bytes from an existing cbytes_t and an owner.
+ * @param cb     The cbytes_t to wrap.
+ * @param source Address of the owning object (debug tag; may be NULL).
+ * @return       A borrowed_bytes wrapping cb.
+ */
+static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
+                                                         const void *source)
+{
+    borrowed_bytes b;
+    b.bytes  = cb;
+    b.source = source;
+    return b;
+}
+
+/**
+ * @brief Constructs an empty (zero-length, NULL ptr) borrowed_bytes.
+ * @return A borrowed_bytes with bytes.ptr == NULL, bytes.len == 0,
+ *         and source == NULL.
+ */
+static inline borrowed_bytes borrowed_bytes_empty(void)
+{
+    borrowed_bytes b;
+    b.bytes.ptr = NULL;
+    b.bytes.len = (usize)0;
+    b.source    = NULL;
+    return b;
+}
+
+/**
+ * @brief Returns the underlying cbytes_t.
+ *
+ * Do NOT free the returned ptr field.
+ *
+ * @pre  b != NULL  (checked with require_msg in debug builds).
+ * @note Returns an empty cbytes_t when b == NULL in release builds.
+ * @param b Pointer to borrowed_bytes; must not be NULL.
+ * @return  The wrapped cbytes_t.
+ */
+static inline cbytes_t borrowed_bytes_get(const borrowed_bytes *b)
+{
+    require_msg(b != NULL, "borrowed_bytes_get: b must not be NULL");
+    if (b != NULL) { return b->bytes; }
+    {
+        cbytes_t empty;
+        empty.ptr = NULL;
+        empty.len = (usize)0;
+        return empty;
+    }
+}
+
+/**
+ * @brief Returns the number of bytes in the view.
+ * @param b Pointer to borrowed_bytes (may be NULL, returns 0).
+ * @return  b->bytes.len, or 0 if b is NULL.
+ */
+static inline usize borrowed_bytes_len(const borrowed_bytes *b)
+{
+    return (b != NULL) ? b->bytes.len : (usize)0;
+}
+
+/**
+ * @brief Returns non-zero (true) if b is non-NULL and b->bytes.ptr is non-NULL.
+ * @param b Pointer to borrowed_bytes (may be NULL).
+ * @return  1 if valid, 0 otherwise.
+ */
+static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
+{
+    return (b != NULL) && (b->bytes.ptr != NULL);
+}
+
+/**
+ * @brief Returns a sub-borrow covering bytes [start, end).
+ *
+ * The returned view inherits the source tag of b.
+ * Returns borrowed_bytes_empty() when:
+ *   - b.bytes.ptr is NULL, or
+ *   - start >= b.bytes.len, or
+ *   - start >= end (after clamping end to len).
+ *
+ * end is silently clamped to b.bytes.len if it exceeds it.
+ *
+ * Pointer arithmetic is performed on const u8 * (not const void *)
+ * to remain strictly conformant to C99.
+ *
+ * @param b     The original borrowed_bytes (by value).
+ * @param start First byte index (inclusive).
+ * @param end   One-past-last byte index (exclusive).
+ * @return      A new borrowed_bytes covering [start, end).
+ */
+static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
+                                                   usize start, usize end)
+{
+    const u8 *base = (const u8 *)b.bytes.ptr; /* C99: cast void* -> u8* OK */
+    usize     len  = b.bytes.len;
+    borrowed_bytes r;
+
+    if ((base == NULL) || (start >= len)) {
+        return borrowed_bytes_empty();
+    }
+    if (end > len) {
+        end = len;
+    }
+    if (start >= end) {
+        return borrowed_bytes_empty();
+    }
+
+    r.bytes.ptr = base + start;   /* arithmetic on u8 *, not void * */
+    r.bytes.len = end - start;
+    r.source    = b.source;
+    return r;
+}
+
+/* ============================================================================
+   DEFINE_BORROWED_SLICE — typed borrowed slice instantiation macro
+   ============================================================================
+ *
+ * Generates a typed borrowed_slice_<type> wrapper for element type `type`.
+ *
+ * Requires a prior DEFINE_SLICE(type) in the same translation unit or
+ * an included header.
+ *
+ * Generated type:
+ *   borrowed_slice_<type>
+ *
+ * Generated functions (all static inline):
+ *   borrowed_slice_<type>_from      — construct from slice_<type> + source
+ *   borrowed_slice_<type>_empty     — construct empty view
+ *   borrowed_slice_<type>_get       — return inner slice_<type>
+ *   borrowed_slice_<type>_len       — element count
+ *   borrowed_slice_<type>_is_valid  — non-null check
+ *   borrowed_slice_<type>_at        — bounds-checked const element pointer
+ *   borrowed_slice_<type>_slice     — sub-borrow [start, end)
+ *   borrowed_slice_<type>_as_bytes  — raw borrowed_bytes view over slice
+ *
+ * No block comments are used inside the macro body to ensure compatibility
+ * with all C99-conforming preprocessors.
+ *
+ * Example:
+ *   DEFINE_SLICE(int)
+ *   DEFINE_BORROWED_SLICE(int)
+ *
+ *   int arr[4] = {1, 2, 3, 4};
+ *   borrowed_slice_int view =
+ *       borrowed_slice_int_from(slice_int_from(arr, 4u), arr);
+ *   const int *third = borrowed_slice_int_at(&view, 2u);
+ */
+#define DEFINE_BORROWED_SLICE(type)                                            \
+                                                                               \
+typedef struct {                                                               \
+    slice_##type  slice;                                                       \
+    const void   *source;                                                      \
+} borrowed_slice_##type;                                                       \
+                                                                               \
+static inline borrowed_slice_##type                                            \
+borrowed_slice_##type##_from(slice_##type s, const void *source)               \
+{                                                                              \
+    borrowed_slice_##type b;                                                   \
+    b.slice  = s;                                                              \
+    b.source = source;                                                         \
+    return b;                                                                  \
+}                                                                              \
+                                                                               \
+static inline borrowed_slice_##type                                            \
+borrowed_slice_##type##_empty(void)                                            \
+{                                                                              \
+    borrowed_slice_##type b;                                                   \
+    b.slice  = slice_##type##_empty();                                         \
+    b.source = NULL;                                                           \
+    return b;                                                                  \
+}                                                                              \
+                                                                               \
+static inline slice_##type                                                     \
+borrowed_slice_##type##_get(const borrowed_slice_##type *b)                    \
+{                                                                              \
+    require_msg(b != NULL,                                                     \
+                "borrowed_slice_" #type "_get: b must not be NULL");           \
+    if (b == NULL) { return slice_##type##_empty(); }                          \
+    return b->slice;                                                           \
+}                                                                              \
+                                                                               \
+static inline usize                                                            \
+borrowed_slice_##type##_len(const borrowed_slice_##type *b)                    \
+{                                                                              \
+    return (b != NULL) ? b->slice.len : (usize)0;                             \
+}                                                                              \
+                                                                               \
+static inline bool                                                             \
+borrowed_slice_##type##_is_valid(const borrowed_slice_##type *b)               \
+{                                                                              \
+    return (b != NULL) && (b->slice.ptr != NULL);                              \
+}                                                                              \
+                                                                               \
+static inline const type *                                                     \
+borrowed_slice_##type##_at(const borrowed_slice_##type *b, usize i)            \
+{                                                                              \
+    if ((b == NULL) || (b->slice.ptr == NULL) || (i >= b->slice.len)) {       \
+        return NULL;                                                           \
+    }                                                                          \
+    return &b->slice.ptr[i];                                                  \
+}                                                                              \
+                                                                               \
+static inline borrowed_slice_##type                                            \
+borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
+                               usize start, usize end)                         \
+{                                                                              \
+    borrowed_slice_##type r;                                                   \
+    r.slice  = slice_##type##_slice(b.slice, start, end);                     \
+    r.source = b.source;                                                       \
+    return r;                                                                  \
+}                                                                              \
+                                                                               \
+static inline borrowed_bytes                                                   \
+borrowed_slice_##type##_as_bytes(const borrowed_slice_##type *b)               \
+{                                                                              \
+    borrowed_bytes r;                                                          \
+    if ((b == NULL) || (b->slice.ptr == NULL)) {                              \
+        return borrowed_bytes_empty();                                         \
+    }                                                                          \
+    r.bytes.ptr = (const u8 *)b->slice.ptr;                                   \
+    r.bytes.len = b->slice.len * sizeof(type);                                 \
+    r.source    = b.source;                                                    \
+    return r;                                                                  \
 }
 
 #endif /* CANON_SEMANTICS_BORROW_H */
