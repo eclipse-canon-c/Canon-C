@@ -10,7 +10,6 @@
 #  include "result_impl.h"
 #endif
 
-
 /**
  * @file result_defn.h
  * @brief Definition macros for Result<T, E> type (implementation generation)
@@ -35,32 +34,48 @@
  *
  * Example of a conforming IMPL macro:
  *   #define IMPL_RESULT_OK(t, e, tres, param) \
- *       { return (tres){ .is_ok = true, .ok = (param) }; }
+ *       { return (tres){ .is_ok = true, .val.ok = (param) }; }
  *
  * Rationale: DEFINE_RESULT_FUNCTIONS concatenates multiple macro expansions
  * without inserting semicolons between them. If an IMPL macro ends with ';'
- * rather than '}', the resulting token stream is malformed C. This contract
- * is enforced by convention and should be verified by the author of any
- * custom IMPL override (see Example 3 in the usage section below).
+ * rather than '}', the resulting token stream is malformed C.
+ *
+ * Separate compilation — ODR and struct redefinition:
+ * ────────────────────────────────────────────────────────────────────────────
+ * The recommended separate-compilation pattern is:
+ *
+ *   // my_types.h — declare the type and function signatures
+ *   #include "result_decl.h"
+ *   DECLARE_RESULT_ALL(extern, int, error)   // emits typedef + struct + decls
+ *
+ *   // my_types.c — define the function bodies only (struct already declared)
+ *   #include "my_types.h"
+ *   #include "result_defn.h"
+ *   DEFINE_RESULT_FUNCTIONS(, int, error)    // bodies only — NO struct re-emit
+ *
+ * Do NOT call DEFINE_RESULT_ALL in a .c file that already included a header
+ * containing DECLARE_RESULT_ALL for the same type pair: DEFINE_RESULT_ALL
+ * emits the struct body again and C does not permit struct redefinition within
+ * the same translation unit, even with identical bodies.
+ *
+ * Use DEFINE_RESULT_FUNCTIONS (not DEFINE_RESULT_ALL) when the struct and
+ * typedef have already been declared by DECLARE_RESULT_ALL.
+ *
+ * Header-only pattern (safe for multiple translation units):
+ *
+ *   #include "result_defn.h"
+ *   typedef enum { ERR_NONE, ERR_IO } error;
+ *   DEFINE_RESULT_ALL(static inline, int, error)
+ *
+ * static inline gives each translation unit its own copy — no ODR violation.
  *
  * Use cases:
  * ────────────────────────────────────────────────────────────────────────────
  * 1. Header-only: Define with static inline in .h files
- * 2. Separate compilation: Define once in .c files (no linkage keyword)
+ * 2. Separate compilation: DECLARE_RESULT_ALL in .h, DEFINE_RESULT_FUNCTIONS
+ *    (NOT DEFINE_RESULT_ALL) in the single .c file
  * 3. Shared libraries: Define with __declspec or __attribute__ for export
  * 4. Custom implementations: Override specific IMPL_* macros before including
- *
- * Duplicate definition guard:
- * ────────────────────────────────────────────────────────────────────────────
- * DEFINE_RESULT_ALL (and DEFINE_RESULT_STRUCT) emit a struct definition.
- * If two translation units both include a header that calls DEFINE_RESULT_ALL
- * without static inline, you will get a duplicate struct definition error
- * at link time. To avoid this:
- *   - Use static inline (header-only, safe for multiple TUs), OR
- *   - Use DECLARE_RESULT_ALL in the .h and DEFINE_RESULT_ALL in exactly
- *     one .c file (separate compilation model).
- * DEFINE_RESULT_STRUCT itself is not idempotent; wrapping your header in a
- * per-type include guard is the caller's responsibility.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -77,21 +92,9 @@
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later (inline, compound literals, designated initializers,
- *   anonymous unions)
+ * - Requires C99 or later (inline, compound literals, designated initializers)
  * - Works with GCC, Clang, and MSVC in C99 mode
  * - Linkage attributes are compiler-specific (use _linkage parameter)
- *
- * Typical workflow:
- * ────────────────────────────────────────────────────────────────────────────
- * // Header-only style (traditional Canon-C)
- * #include "result_defn.h"
- * typedef enum { ERR_NONE, ERR_IO } error;
- * DEFINE_RESULT_ALL(static inline, int, error)
- *
- * // Separate compilation style
- * // In .h: DECLARE_RESULT_ALL(extern, int, error)
- * // In .c: DEFINE_RESULT_ALL(, int, error)  // No linkage keyword for extern
  *
  * @sa result_decl.h, result_mangle.h, result_impl.h
  */
@@ -101,28 +104,31 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Define Result<T, E> struct
+ * @brief Define the Result<T, E> typedef alias.
  *
- * Generates the actual struct definition with memory layout.
- * Must be defined exactly once per type pair per program
- * (or use static inline / separate-compilation guards — see file-level docs).
+ * Emits: typedef struct result_T_E_s result_T_E;
  *
- * NOTE: IMPL_RESULT_STRUCT must NOT include a trailing semicolon.
- *       This macro appends exactly one ';' after the expansion so that the
- *       struct declaration is well-formed regardless of whether IMPL expands
- *       to "{ ... }" or "{ ... };". If IMPL already has a trailing ';' the
- *       result is a harmless extra null-declaration in most compilers, but
- *       clang/gcc -Wpedantic may warn. The canonical IMPL must therefore
- *       expand to a body without a trailing semicolon.
+ * Must appear before any use of the type name in declarations or definitions.
+ * DEFINE_RESULT_ALL calls this automatically. When using DEFINE_RESULT_STRUCT
+ * and DEFINE_RESULT_FUNCTIONS individually, call this first.
+ *
+ * Performance: O(1) compile time
+ *
+ * @param _t The value type
+ * @param _e The error type
+ */
+#define DEFINE_RESULT_TYPEDEF(_t, _e) \
+    typedef struct MANGLE_RESULT_STRUCT_TAG(_t, _e) MANGLE_RESULT_TYPE(_t, _e);
+
+/**
+ * @brief Define Result<T, E> struct body.
+ *
+ * Emits the struct definition. Must not be emitted more than once per
+ * (T, E) pair in the same translation unit — C does not allow struct
+ * redefinition. See file-level note on the separate-compilation pattern.
  *
  * Performance: O(1) compile time
  * Memory layout: sizeof(bool) + max(sizeof(_t), sizeof(_e)) + alignment padding
- *                Union saves space compared to separate fields
- *
- * Example:
- *   DEFINE_RESULT_STRUCT(int, error)
- *   // Expands to:
- *   //   struct result_int_error_s { bool is_ok; union { int ok; error err; }; };
  *
  * @param _t The value type
  * @param _e The error type
@@ -137,13 +143,8 @@
 /**
  * @brief Define Ok(value) constructor function
  *
- * Generates function that wraps a value in Result<T, E>.
- *
  * Performance: O(1) time, O(1) space (stack allocation via compound literal)
  * Returns: Result containing the success value
- *
- * Expansion contract: IMPL_RESULT_OK must expand to a brace-enclosed function
- * body { ... } with no trailing semicolon. See file-level contract note.
  *
  * @param _linkage Linkage specifier (e.g., static inline, empty for extern)
  * @param _t       The value type
@@ -157,13 +158,8 @@
 /**
  * @brief Define Err(error) constructor function
  *
- * Generates function that wraps an error in Result<T, E>.
- *
  * Performance: O(1) time, O(1) space (stack allocation via compound literal)
  * Returns: Result containing the error value
- *
- * Expansion contract: IMPL_RESULT_ERR must expand to a brace-enclosed function
- * body { ... } with no trailing semicolon. See file-level contract note.
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -181,8 +177,6 @@
 /**
  * @brief Define is_ok() query function
  *
- * Generates function that checks if Result is Ok.
- *
  * Performance: O(1) time, O(1) space (single boolean read)
  * Returns: true if Ok(value), false if Err(error)
  *
@@ -197,8 +191,6 @@
 
 /**
  * @brief Define is_err() query function
- *
- * Generates function that checks if Result is Err.
  *
  * Performance: O(1) time, O(1) space (single boolean negation)
  * Returns: true if Err(error), false if Ok(value)
@@ -219,11 +211,11 @@
 /**
  * @brief Define get_ok() safe extraction function
  *
- * Generates function that safely extracts success value via pointer.
- * Permissive: NULL pointer is allowed; returns false without dereferencing.
+ * Extracts the success value into *out if the Result is Ok.
+ * Contract: out must not be NULL — caught by require() in the implementation.
+ * Returns: true if Ok (and *out written), false if Err.
  *
  * Performance: O(1) time, O(1) space (conditional assignment)
- * Returns: true if value extracted, false if Err or NULL pointer
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -237,11 +229,11 @@
 /**
  * @brief Define get_err() safe extraction function
  *
- * Generates function that safely extracts error value via pointer.
- * Permissive: NULL pointer is allowed; returns false without dereferencing.
+ * Extracts the error value into *out if the Result is Err.
+ * Contract: out must not be NULL — caught by require() in the implementation.
+ * Returns: true if Err (and *out written), false if Ok.
  *
  * Performance: O(1) time, O(1) space (conditional assignment)
- * Returns: true if error extracted, false if Ok or NULL pointer
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -255,11 +247,10 @@
 /**
  * @brief Define unwrap_or() with fallback function
  *
- * Generates function that extracts value or returns fallback.
- * Safe alternative to unwrap() — never panics.
+ * Returns the contained value if Ok, otherwise returns fallback.
+ * Never panics. Safe alternative to unwrap() for all call sites.
  *
  * Performance: O(1) time, O(1) space (conditional return)
- * Returns: Contained value if Ok, fallback if Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -277,13 +268,12 @@
 /**
  * @brief Define unwrap() unsafe extraction function
  *
- * Generates function that extracts value, panicking if Err.
- * ⚠️  WARNING: Only use when certain result is Ok.
+ * Extracts the success value. Crashes via require() if the Result is Err.
+ * Only use when the caller has already verified is_ok(), or when an Err
+ * here is an unrecoverable invariant violation.
  *
  * Performance: O(1) time, O(1) space (assertion + union access)
- * Contract: Terminates with a diagnostic message if Result is Err.
- *           The termination mechanism is defined by CANON_PANIC in result_impl.h.
- * Returns: Contained value
+ * Contract: require(r.is_ok) — aborts with message if Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -297,13 +287,10 @@
 /**
  * @brief Define unwrap_err() error extraction function
  *
- * Generates function that extracts error, panicking if Ok.
- * The opposite of unwrap() — extracts error from Err.
+ * Extracts the error value. Crashes via require() if the Result is Ok.
  *
  * Performance: O(1) time, O(1) space (assertion + union access)
- * Contract: Terminates with a diagnostic message if Result is Ok.
- *           The termination mechanism is defined by CANON_PANIC in result_impl.h.
- * Returns: Contained error
+ * Contract: require(!r.is_ok) — aborts with message if Ok
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -315,15 +302,12 @@
         IMPL_RESULT_UNWRAP_ERR(_t, _e, r)
 
 /**
- * @brief Define expect() with message function
+ * @brief Define expect() with custom message function
  *
- * Generates function that extracts value with a caller-supplied panic message.
- * Like unwrap(), but the diagnostic message is provided by the caller.
+ * Like unwrap(), but crashes with a caller-supplied message.
  *
  * Performance: O(1) time, O(1) space (assertion + union access)
- * Contract: Terminates printing msg if Result is Err.
- *           The termination mechanism is defined by CANON_PANIC in result_impl.h.
- * Returns: Contained value
+ * Contract: require(r.is_ok, msg) — aborts with msg if Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -341,22 +325,14 @@
 /**
  * @brief Define map() same-type transformation function
  *
- * Generates a function that applies f to the contained value if Ok,
- * leaving the type unchanged (T → T).
+ * Applies f to the contained value if Ok (T → T only).
  * If Err, returns Err unchanged without calling f.
  *
- * Limitation — same-type only:
- *   The transformation function f must have the signature _t(*)(_t), meaning
- *   it cannot change the value type. This is intentional: C's macro system
- *   cannot express a generic Result<U, E> return type without a second type
- *   parameter. To map to a different value type, define a second Result type
- *   for the target type and write a plain conversion function instead.
- *   A two-type-parameter variant (DEFINE_RESULT_MAP_INTO) is not provided
- *   here to keep the API surface minimal and explicit.
+ * Limitation — same-type only: f must have signature _t(*)(_t).
+ * For T → U transforms, use and_then() with a function returning the
+ * target Result type.
  *
- * Performance: O(f) time where f is the transformation function
- *              O(1) space (stack allocation only)
- * Returns: Ok(f(value)) if Ok(value), Err unchanged if Err
+ * Performance: O(f) time, O(1) space
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type (both input and output of f)
@@ -371,16 +347,10 @@
 /**
  * @brief Define map_err() error transformation function
  *
- * Generates function that transforms the contained error if Err.
+ * Applies f to the contained error if Err (E → E only).
  * If Ok, returns Ok unchanged without calling f.
  *
- * Limitation — same-type only:
- *   f must have signature _e(*)(_e); the error type cannot change.
- *   See DEFINE_RESULT_MAP for the rationale.
- *
- * Performance: O(f) time where f is the transformation function
- *              O(1) space (stack allocation only)
- * Returns: Ok unchanged if Ok, Err(f(error)) if Err(error)
+ * Performance: O(f) time, O(1) space
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -395,13 +365,11 @@
 /**
  * @brief Define and_then() chaining function
  *
- * Generates function that chains Result-returning operations.
- * Like map(), but f itself returns a Result instead of a plain value,
- * preventing Result<Result<T,E>,E> nesting.
+ * If Ok, calls f with the contained value and returns f's Result.
+ * If Err, returns Err unchanged without calling f.
+ * Prevents Result<Result<T,E>,E> nesting.
  *
- * Performance: O(f) time where f is the chained function
- *              O(1) space (no nesting)
- * Returns: f(value) if Ok(value), Err unchanged if Err
+ * Performance: O(f) time, O(1) space
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -417,12 +385,10 @@
 /**
  * @brief Define or_else() alternative provider function
  *
- * Generates function that provides an alternative if Err.
- * Returns r unchanged if Ok; calls f(error) to produce an alternative if Err.
+ * If Ok, returns Ok unchanged without calling f.
+ * If Err, calls f with the contained error and returns f's Result.
  *
- * Performance: O(1) if Ok, O(f) if Err
- *              O(1) space
- * Returns: r if Ok, f(error) if Err
+ * Performance: O(1) if Ok, O(f) if Err, O(1) space
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -435,6 +401,50 @@
         MANGLE_RESULT_TYPE(_t, _e) (*f)(_e)) \
         IMPL_RESULT_OR_ELSE(_t, _e, MANGLE_RESULT_TYPE(_t, _e), r, f)
 
+/**
+ * @brief Define and() eager short-circuit AND function
+ *
+ * Returns other if Ok, otherwise returns Err unchanged.
+ * other is always evaluated (eager). Use and_then() for lazy evaluation.
+ *
+ *   Ok(_)  -> other
+ *   Err(e) -> Err(e)
+ *
+ * Performance: O(1) time, O(1) space
+ *
+ * @param _linkage Linkage specifier
+ * @param _t       The value type
+ * @param _e       The error type
+ */
+#define DEFINE_RESULT_AND(_linkage, _t, _e) \
+    _linkage MANGLE_RESULT_TYPE(_t, _e) \
+    MANGLE_RESULT_AND(_t, _e)( \
+        MANGLE_RESULT_TYPE(_t, _e) r, \
+        MANGLE_RESULT_TYPE(_t, _e) other) \
+        IMPL_RESULT_AND(_t, _e, MANGLE_RESULT_TYPE(_t, _e), r, other)
+
+/**
+ * @brief Define or() eager short-circuit OR function
+ *
+ * Returns r if Ok, otherwise returns other.
+ * other is always evaluated (eager). Use or_else() for lazy evaluation.
+ *
+ *   Ok(v)  -> Ok(v)
+ *   Err(_) -> other
+ *
+ * Performance: O(1) time, O(1) space
+ *
+ * @param _linkage Linkage specifier
+ * @param _t       The value type
+ * @param _e       The error type
+ */
+#define DEFINE_RESULT_OR(_linkage, _t, _e) \
+    _linkage MANGLE_RESULT_TYPE(_t, _e) \
+    MANGLE_RESULT_OR(_t, _e)( \
+        MANGLE_RESULT_TYPE(_t, _e) r, \
+        MANGLE_RESULT_TYPE(_t, _e) other) \
+        IMPL_RESULT_OR(_t, _e, MANGLE_RESULT_TYPE(_t, _e), r, other)
+
 /* ════════════════════════════════════════════════════════════════════════════
    COMPARISON FUNCTION DEFINITIONS
    ════════════════════════════════════════════════════════════════════════════ */
@@ -442,17 +452,13 @@
 /**
  * @brief Define eq() equality comparison function
  *
- * Generates function that checks equality of two Results.
- * Two Results are equal if:
- *   - both are Ok   with values   that satisfy eq_ok(a, b), OR
- *   - both are Err  with errors   that satisfy eq_err(a, b).
- * An Ok and an Err are never equal regardless of their contents.
+ * Two Results are equal when:
+ *   - Both are Ok  and eq_ok(r1.val.ok,  r2.val.ok)  returns true, OR
+ *   - Both are Err and eq_err(r1.val.err, r2.val.err) returns true.
+ * An Ok and an Err are never equal.
  *
- * Performance: O(1)       for Ok-Err or Err-Ok comparison (short-circuit)
- *              O(eq_ok)   for Ok-Ok   where eq_ok  is the equality function
- *              O(eq_err)  for Err-Err where eq_err is the equality function
- *              O(1) space
- * Returns: true if equal, false otherwise
+ * Performance: O(1) for Ok-Err, O(eq_ok) for Ok-Ok, O(eq_err) for Err-Err
+ * Contract: eq_ok and eq_err must not be NULL.
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -468,21 +474,27 @@
         IMPL_RESULT_EQ(_t, _e, r1, r2, eq_ok, eq_err)
 
 /* ════════════════════════════════════════════════════════════════════════════
-   CONVENIENCE MACROS (DEFINE MULTIPLE AT ONCE)
+   CONVENIENCE MACROS — DEFINE MULTIPLE AT ONCE
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Define all Result functions (struct excluded)
+ * @brief Define all Result<T, E> function bodies (no typedef, no struct).
  *
- * Generates implementations for all Result<T, E> functions without emitting
- * the struct definition. Use together with DEFINE_RESULT_STRUCT when you need
- * to separate the type definition from the function definitions, or when you
- * have already emitted the struct via DEFINE_RESULT_ALL in another TU.
+ * Generates implementations for every Result<T, E> function without emitting
+ * the typedef or struct definition. Use this in the separate-compilation
+ * pattern when the struct and typedef have already been declared by
+ * DECLARE_RESULT_ALL in an included header.
  *
- * All functions O(1) except combinators which are O(f) where f is the
- * caller-supplied function pointer.
+ * Typical .c file pattern:
+ * @code
+ *   #include "my_types.h"     // contains DECLARE_RESULT_ALL(extern, int, error)
+ *   #include "result_defn.h"
+ *   DEFINE_RESULT_FUNCTIONS(, int, error)   // empty linkage = extern bodies
+ * @endcode
  *
- * @param _linkage Linkage specifier (e.g., static inline for header-only)
+ * All functions O(1) except combinators which are O(f).
+ *
+ * @param _linkage Linkage specifier
  * @param _t       The value type
  * @param _e       The error type
  */
@@ -501,47 +513,39 @@
     DEFINE_RESULT_MAP_ERR(_linkage, _t, _e) \
     DEFINE_RESULT_AND_THEN(_linkage, _t, _e) \
     DEFINE_RESULT_OR_ELSE(_linkage, _t, _e) \
+    DEFINE_RESULT_AND(_linkage, _t, _e) \
+    DEFINE_RESULT_OR(_linkage, _t, _e) \
     DEFINE_RESULT_EQ(_linkage, _t, _e)
 
 /**
- * @brief Define complete Result<T, E> type and all functions
+ * @brief Define a complete Result<T, E> type and all functions.
  *
- * One-shot macro to define everything needed for Result<T, E>:
- *   - Struct definition  (via DEFINE_RESULT_STRUCT)
- *   - All function implementations (via DEFINE_RESULT_FUNCTIONS)
+ * One-shot macro that emits, in order:
+ *   1. typedef  (DEFINE_RESULT_TYPEDEF)
+ *   2. struct   (DEFINE_RESULT_STRUCT)
+ *   3. all function bodies (DEFINE_RESULT_FUNCTIONS)
  *
- * ⚠️  Duplicate-definition hazard:
- *   This macro emits a struct definition. Calling it more than once for the
- *   same (_t, _e) pair within the same program — except with static inline —
- *   violates the One Definition Rule and produces a link-time error.
- *   Preferred patterns to avoid this:
- *     a) static inline (header-only): safe to include from multiple TUs.
- *     b) Separate compilation: use DECLARE_RESULT_ALL(extern, T, E) in the
- *        shared header, and DEFINE_RESULT_ALL(, T, E) in exactly one .c file.
+ * Use this for header-only libraries (with static inline) or in a single
+ * standalone .c file that does not include a header with DECLARE_RESULT_ALL
+ * for the same type pair.
  *
- * Performance: All operations O(1) except combinators which are O(f)
- * Space per instance: sizeof(bool) + max(sizeof(T), sizeof(E)) + padding
+ * ⚠️  Do NOT call DEFINE_RESULT_ALL in a .c file that already included a
+ * header containing DECLARE_RESULT_ALL for the same (T, E) pair. Doing so
+ * emits the struct body a second time in the same translation unit, which
+ * is a C error. Use DEFINE_RESULT_FUNCTIONS instead (see above).
  *
- * Example (header-only):
+ * Header-only example (safe for multiple TUs):
  * @code
  *   #include "result_defn.h"
  *   typedef enum { ERR_NONE, ERR_IO } error;
  *   DEFINE_RESULT_ALL(static inline, int, error)
- *
- *   result_int_error x = result_int_error_ok(42);
  * @endcode
  *
- * Example (separate compilation):
+ * Standalone .c example (no shared header for this type):
  * @code
- *   // my_results.h
- *   #include "result_decl.h"
- *   typedef enum { ERR_NONE, ERR_IO } error;
- *   DECLARE_RESULT_ALL(extern, int, error)
- *
- *   // my_results.c
- *   #include "my_results.h"
  *   #include "result_defn.h"
- *   DEFINE_RESULT_ALL(, int, error)   /* empty linkage = extern by default */
+ *   typedef enum { ERR_NONE, ERR_IO } error;
+ *   DEFINE_RESULT_ALL(, int, error)   // empty linkage = extern
  * @endcode
  *
  * @param _linkage Linkage specifier (static inline for header-only, empty for extern)
@@ -549,6 +553,7 @@
  * @param _e       The error type
  */
 #define DEFINE_RESULT_ALL(_linkage, _t, _e) \
+    DEFINE_RESULT_TYPEDEF(_t, _e) \
     DEFINE_RESULT_STRUCT(_t, _e) \
     DEFINE_RESULT_FUNCTIONS(_linkage, _t, _e)
 
@@ -588,52 +593,40 @@ DEFINE_RESULT_ALL(static inline, float, error)
 
 typedef enum { ERR_NONE, ERR_IO } error;
 
-DECLARE_RESULT_ALL(extern, int, error)
+DECLARE_RESULT_ALL(extern, int, error)     // typedef + struct + fn decls
 DECLARE_RESULT_ALL(extern, float, error)
 
 #endif
 
-// my_results.c — definitions in exactly one translation unit
+// my_results.c — function bodies only (struct already declared by header)
 #include "my_results.h"
 #include "result_defn.h"
 
-DEFINE_RESULT_ALL(, int, error)      // empty _linkage = extern
-DEFINE_RESULT_ALL(, float, error)
+DEFINE_RESULT_FUNCTIONS(, int, error)     // bodies only — no struct re-emit
+DEFINE_RESULT_FUNCTIONS(, float, error)   // NOTE: NOT DEFINE_RESULT_ALL
 
 
 // ────────────────────────────────────────────────────────────────────────────
-// Example 3: Custom IMPL override for pointer types
+// Example 3: Custom IMPL override (NULL-rejecting Ok constructor)
 // ────────────────────────────────────────────────────────────────────────────
-//
-// Prerequisites visible to this translation unit before including result_defn.h:
-//   - #include <assert.h>   (or a Canon-C equivalent that provides assert/panic)
-//   - The CANON_PANIC macro defined in result_impl.h (or the host project)
-//     which is the mechanism used by unwrap/expect/unwrap_err to terminate.
-//
-// IMPL contract reminder: the replacement macro must expand to a
-// brace-enclosed function body { ... } with NO trailing semicolon.
 
-#include <assert.h>
-#include "result_impl.h"    // pulls in CANON_PANIC and default IMPL_* macros
+// IMPL contract: replacement must expand to { ... } with NO trailing semicolon.
+
+#include "result_impl.h"   // pulls in CANON_PANIC and default IMPL_* macros
 
 typedef enum { ERR_NONE, ERR_NULL } ptr_error;
+typedef void* void_ptr;
 
-// Override Ok() to reject NULL at construction time.
-// The canonical CANON_PANIC(msg) is used so the panic mechanism is
-// consistent with the rest of the Result API.
 #undef IMPL_RESULT_OK
 #define IMPL_RESULT_OK(_t, _e, _tres, _param) \
     { \
-        if ((_param) == NULL) { CANON_PANIC("result_ok: NULL pointer"); } \
-        return (_tres){ .is_ok = true, .ok = (_param) }; \
+        require((_param) != NULL, "result_ok: NULL pointer not allowed"); \
+        return (_tres){ .is_ok = true, .val.ok = (_param) }; \
     }
 
 #include "result_defn.h"
-
-typedef void* void_ptr;
 DEFINE_RESULT_ALL(static inline, void_ptr, ptr_error)
-
-// result_void_ptr_ptr_error_ok(NULL) now panics via CANON_PANIC.
+// result_void_ptr_ptr_error_ok(NULL) now panics via require().
 */
 
 #endif /* CANON_RESULT_DEFN_H */
