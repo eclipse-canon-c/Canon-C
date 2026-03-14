@@ -336,11 +336,42 @@ For what Canon-C intentionally omits, established C libraries exist:
   more structure.
 
 **WebAssembly**
-- `Emscripten` — compiles C and C++ to WebAssembly using LLVM and Clang as a
-  drop-in replacement for gcc/clang. Output runs in browsers, Node.js, and
-  standalone Wasm runtimes. Canon-C's C99 code compiles cleanly through
-  Emscripten without modification.
+- `Emscripten` — compiles C and C++ to WebAssembly using LLVM as a drop-in
+  replacement for gcc/clang. Output runs in browsers, Node.js, and standalone
+  Wasm runtimes. Canon-C's C99 code compiles cleanly through Emscripten
+  without modification.
 
+---
+
+> **Integrating external libraries with Canon-C**
+>
+> These libraries use traditional C API conventions — raw pointers, integer
+> error codes, implicit ownership, and occasional global state. They cannot
+> be made fully Canon-C-idiomatic, but a thin adapter layer can keep the
+> rest of your codebase consistent. How cleanly they integrate depends on
+> the library:
+>
+> **Wrap cleanly** — monocypher, LMDB, mpack, miniz, xxHash, SipHash.
+> Flat API, no global state, buffer-based. Maps directly to Canon-C
+> conventions with a thin adapter.
+>
+> **Wrap partially** — SQLite, cJSON, yyjson, libsodium, TinyCThread.
+> Core operations wrap well into `Result<T, Error>` and `owned()`/`borrowed()`.
+> Callbacks, domain-specific error codes, or global initialization create
+> contained mismatches that cannot be eliminated, only documented.
+>
+> **Isolate only** — libuv, FreeRTOS, Zephyr, lwIP.
+> Callback-driven or RTOS task models are architecturally incompatible with
+> Canon-C's explicit control flow. Contain the mismatch behind a single
+> adapter file. Canon-C's lower layers (arena, slice, result) remain usable
+> inside these environments — just not as wrappers around them.
+>
+> The pattern is always the same: one thin adapter file per external library,
+> using the tools above at the boundary. Everything above the adapter stays
+> pure Canon-C. Callback-driven APIs (libuv, FreeRTOS tasks) and libraries
+> requiring global initialization (libsodium's `sodium_init()`) cannot be
+> fully wrapped — isolate them behind the adapter and contain the convention
+> mismatch there.
 ---
 
 > Note: most of these libraries use traditional C API conventions — raw pointers,
