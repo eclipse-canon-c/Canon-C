@@ -407,44 +407,43 @@ For what Canon-C intentionally omits, established C libraries exist:
 
 > **Bare-metal and embedded use**
 >
-> Not all Canon-C layers have equal platform requirements. stdio enters
-> Canon-C in exactly four isolated, well-documented places:
+> Canon-C has two platform dependencies that require attention on
+> bare-metal or RTOS targets: stdio and malloc.
 >
-> **Replaceable — stdio never called after mitigation:**
-> `core/primitives/contract.h` uses `fprintf` only in its default panic
-> handler. Call `contract_set_handler()` at startup with your own UART
-> or fault handler — stdio is never reached after that. All `core/`
-> headers except `scope.h` pull in `contract.h`, so this one replacement
-> covers the entire core layer.
+> **stdio**
+> stdio enters Canon-C in exactly two ways. The default contract panic
+> handler in `core/primitives/contract.h` uses `fprintf` — replace it
+> once at startup with `contract_set_handler()` pointing to your UART
+> or fault handler, and stdio is never reached again from the entire
+> core layer. The second entry point is rendering functions like
+> `diag_print()` and `log.h` — avoid these entirely on bare-metal and
+> write directly to your platform output instead. Everything else in
+> Canon-C that includes `<stdio.h>` does so only for `vsnprintf` in
+> optional formatting functions — skip those call sites and the
+> dependency is inert on toolchains with stub stdio support (newlib,
+> picolibc).
 >
-> **Avoidable — specific functions only:**
-> `semantics/diag.h` uses `fprintf` only in `diag_print()`. Every other
-> diag function (`DIAG_PUSH`, `DIAG_PROPAGATE`, all inspection helpers)
-> is stdio-free. On bare-metal, use diag for error propagation and
-> render frames yourself via UART.
-> `data/stringbuf.h` uses `vsnprintf` only in `stringbuf_append_fmt()`
-> and `stringbuf_append_fmt_va()`. All other stringbuf operations are
-> stdio-free. There is no C99-portable alternative to `vsnprintf` for
-> formatted string building — this dependency is intentional and
-> documented in the header.
+> **malloc / free**
+> Any Canon-C header that performs dynamic allocation — `core/memory.h`,
+> `core/arena.h`, `core/pool.h`, and everything in `data/convenience/`
+> — includes `<stdlib.h>` for `malloc`, `realloc`, and `free`. The fix
+> is architectural: `#define malloc`, `realloc`, and `free` to your RTOS
+> allocator (e.g. FreeRTOS's `pvPortMalloc`/`pvPortReAlloc`/`vPortFree`)
+> before including any Canon-C header. This single redefinition propagates
+> through the entire dependency chain automatically — every layer built
+> on `memory.h` inherits the fix without further changes.
 >
-> **Avoid entirely on bare-metal:**
-> `util/log/log.h` is fundamentally `FILE*`-based. There is no
-> mitigation path — exclude it and write directly to your platform's
-> UART or trace output instead.
+> Alternatively, avoid `data/convenience/` entirely on bare-metal and use
+> the fixed-capacity `data/` collections instead, passing your own
+> stack or arena-backed buffers. These have no hidden allocation and no
+> stdlib dependency beyond what `core/memory.h` already requires.
 >
-> **No stdio anywhere:**
+> **What requires no mitigation at all**
 > `core/primitives/` (types, limits, bits, checked, ptr, compare),
-> `core/slice.h`, `core/ownership.h`, `core/region.h`, `core/scope.h`.
-> These pull in only freestanding headers (`<stdint.h>`, `<stddef.h>`,
-> `<limits.h>`, `<stdbool.h>`) and are safe on any target.
->
-> **malloc dependency:**
-> `core/memory.h` includes `<stdlib.h>` for `malloc` and `free`.
-> `core/arena.h` and `core/pool.h` depend on `memory.h`. On bare-metal,
-> `#define malloc` and `free` to your RTOS allocator (e.g. FreeRTOS's
-> `pvPortMalloc`/`vPortFree`) before including `memory.h`, or avoid
-> `memory.h` entirely and pass your own buffers directly to arena and pool.
+> `core/slice.h`, `core/ownership.h`, `core/region.h`, and `core/scope.h`
+> pull in only freestanding headers (`<stdint.h>`, `<stddef.h>`,
+> `<limits.h>`, `<stdbool.h>`) and are safe on any target without
+> modification.
 
 ---
 
