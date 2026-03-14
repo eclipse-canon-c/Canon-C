@@ -41,13 +41,13 @@
  *            typedef void       *  vptr_t;
  *            typedef int        *  intp_t;
  *
- *            CANON_RESULT(int,   cstr_t)   /* ok  * /
- *            CANON_RESULT(vptr_t, int)     /* ok  * /
+ *            CANON_RESULT(int,   cstr_t)   // ok
+ *            CANON_RESULT(vptr_t, int)     // ok
  *
  *          Passing raw pointer syntax will produce a hard compiler error or,
  *          worse, a silently malformed identifier with no diagnostic:
  *
- *            CANON_RESULT(int, const char *)   /* WRONG — do not do this * /
+ *            CANON_RESULT(int, const char *)   // WRONG — do not do this
  *
  * ────────────────────────────────────────────────────────────────────────────
  * Override / customization
@@ -57,18 +57,36 @@
  * schemes without conflict.
  *
  * Rule: if you override MANGLE_RESULT_TYPE you MUST also override
- *       MANGLE_RESULT_STRUCT_TAG (or rely on the default derivation below
- *       which appends _s to whatever MANGLE_RESULT_TYPE produces).
- *       Mismatching the two causes a struct-tag / typedef mismatch that the
- *       compiler will catch but the diagnostic may be confusing.
+ *       MANGLE_RESULT_STRUCT_TAG so that the struct tag and typedef remain
+ *       consistent.  Mismatching the two causes a struct-tag / typedef
+ *       mismatch that the compiler will catch, but the diagnostic may be
+ *       confusing.
+ *
+ * IMPORTANT — Why each macro expands t and e directly
+ * ────────────────────────────────────────────────────────────────────────────
+ * The C preprocessor's ## operator pastes preprocessing tokens, not the
+ * results of macro expansions.  Constructs such as
+ *
+ *   MANGLE_RESULT_TYPE(t, e)##_suffix
+ *
+ * are ill-formed: ## sees the closing ')' of the macro call, not the
+ * expanded identifier, and the compiler emits a hard error:
+ *
+ *   error: pasting ")" and "_suffix" does not give a valid preprocessing token
+ *
+ * Every macro in this file therefore expands t and e directly with ##,
+ * never nesting another macro invocation inside a ## expression.
+ * MANGLE_RESULT_STRUCT_TAG is NOT derived from MANGLE_RESULT_TYPE for this
+ * reason — it expands t and e independently and appends _s itself.
  *
  * Customization example — Haskell-style Either / Right / Left:
  *
- *   #define MANGLE_RESULT_TYPE(t, e)     Either_##t##_##e
- *   #define MANGLE_RESULT_IS_OK(t, e)   Either_##t##_##e##_isRight
- *   #define MANGLE_RESULT_IS_ERR(t, e)  Either_##t##_##e##_isLeft
- *   #define MANGLE_RESULT_OK(t, e)      Either_##t##_##e##_Right
- *   #define MANGLE_RESULT_ERR(t, e)     Either_##t##_##e##_Left
+ *   #define MANGLE_RESULT_TYPE(t, e)       Either_##t##_##e
+ *   #define MANGLE_RESULT_STRUCT_TAG(t, e) Either_##t##_##e##_s
+ *   #define MANGLE_RESULT_IS_OK(t, e)      Either_##t##_##e##_isRight
+ *   #define MANGLE_RESULT_IS_ERR(t, e)     Either_##t##_##e##_isLeft
+ *   #define MANGLE_RESULT_OK(t, e)         Either_##t##_##e##_Right
+ *   #define MANGLE_RESULT_ERR(t, e)        Either_##t##_##e##_Left
  *   #include "result.h"
  *
  *   CANON_RESULT(int, error_t)
@@ -76,7 +94,8 @@
  *
  * Customization example — project-scoped prefix:
  *
- *   #define MANGLE_RESULT_TYPE(t, e)    myproj_res_##t##_##e
+ *   #define MANGLE_RESULT_TYPE(t, e)       myproj_res_##t##_##e
+ *   #define MANGLE_RESULT_STRUCT_TAG(t, e) myproj_res_##t##_##e##_s
  *   #include "result.h"
  *
  *   CANON_RESULT(int, error_t)
@@ -89,7 +108,7 @@
  *
  *   Type / tag
  *     result_T_E              — typedef'd struct name
- *     result_T_E_s            — underlying struct tag  (derived from type)
+ *     result_T_E_s            — underlying struct tag
  *
  *   Constructors
  *     result_T_E_ok(val)      — construct Ok(val)
@@ -149,12 +168,14 @@
 /**
  * @brief Main Result type name (typedef).
  *
- * Default:  result_##_t##_##_e
- * Example:  result_int_error_t
+ * Default:  result_##t##_##e
+ * Example:  result_int_error
  *
  * Override to change the naming across your entire translation unit.
+ * If you override this, you MUST also override MANGLE_RESULT_STRUCT_TAG
+ * so the struct tag and typedef stay consistent.
  *
- * @warning _t and _e must each be a single C preprocessing token (no spaces,
+ * @warning t and e must each be a single C preprocessing token (no spaces,
  *          no punctuation).  See file-level note on token constraints.
  */
 #ifndef MANGLE_RESULT_TYPE
@@ -164,21 +185,22 @@
 /**
  * @brief Underlying struct tag for the Result type.
  *
- * Default:  derived from MANGLE_RESULT_TYPE by appending _s
- * Example:  result_int_error_t_s
+ * Default:  result_##t##_##e##_s
+ * Example:  result_int_error_s
  *
- * The default intentionally derives from MANGLE_RESULT_TYPE so that
- * overriding the type name automatically keeps the struct tag consistent.
+ * This macro expands t and e directly — it does NOT derive from
+ * MANGLE_RESULT_TYPE via ##.  Chaining ## onto a macro invocation is
+ * ill-formed in C99 (the preprocessor sees ')' not the expanded token).
+ * Both macros independently paste t and e, which guarantees the struct tag
+ * is always result_##t##_##e##_s and the typedef is result_##t##_##e,
+ * keeping them consistent by construction.
+ *
  * Override this separately ONLY when you need explicit control over the
- * struct tag (e.g. forward declarations in another header).
- *
- * Invariant: MANGLE_RESULT_STRUCT_TAG must always refer to the same
- *            underlying struct as MANGLE_RESULT_TYPE.  Violating this
- *            produces a typedef / struct-tag mismatch diagnosed by the
- *            compiler.
+ * struct tag (e.g. forward declarations in another header).  Whenever
+ * MANGLE_RESULT_TYPE is overridden, this macro MUST be overridden too.
  */
 #ifndef MANGLE_RESULT_STRUCT_TAG
-#  define MANGLE_RESULT_STRUCT_TAG(t, e)    MANGLE_RESULT_TYPE(t, e)##_s
+#  define MANGLE_RESULT_STRUCT_TAG(t, e)    result_##t##_##e##_s
 #endif
 
 
@@ -190,20 +212,20 @@
  * @brief Ok(value) constructor.
  *
  * Default:  result_##t##_##e##_ok
- * Example:  result_int_error_t_ok(42)
+ * Example:  result_int_error_ok(42)
  */
 #ifndef MANGLE_RESULT_OK
-#  define MANGLE_RESULT_OK(t, e)            MANGLE_RESULT_TYPE(t, e)##_ok
+#  define MANGLE_RESULT_OK(t, e)            result_##t##_##e##_ok
 #endif
 
 /**
  * @brief Err(error) constructor.
  *
  * Default:  result_##t##_##e##_err
- * Example:  result_int_error_t_err(ERR_NOT_FOUND)
+ * Example:  result_int_error_err(ERR_NOT_FOUND)
  */
 #ifndef MANGLE_RESULT_ERR
-#  define MANGLE_RESULT_ERR(t, e)           MANGLE_RESULT_TYPE(t, e)##_err
+#  define MANGLE_RESULT_ERR(t, e)           result_##t##_##e##_err
 #endif
 
 
@@ -215,20 +237,20 @@
  * @brief is_ok() — returns true (non-zero) iff the result holds an Ok value.
  *
  * Default:  result_##t##_##e##_is_ok
- * Example:  result_int_error_t_is_ok(res)
+ * Example:  result_int_error_is_ok(res)
  */
 #ifndef MANGLE_RESULT_IS_OK
-#  define MANGLE_RESULT_IS_OK(t, e)         MANGLE_RESULT_TYPE(t, e)##_is_ok
+#  define MANGLE_RESULT_IS_OK(t, e)         result_##t##_##e##_is_ok
 #endif
 
 /**
  * @brief is_err() — returns true (non-zero) iff the result holds an Err value.
  *
  * Default:  result_##t##_##e##_is_err
- * Example:  result_int_error_t_is_err(res)
+ * Example:  result_int_error_is_err(res)
  */
 #ifndef MANGLE_RESULT_IS_ERR
-#  define MANGLE_RESULT_IS_ERR(t, e)        MANGLE_RESULT_TYPE(t, e)##_is_err
+#  define MANGLE_RESULT_IS_ERR(t, e)        result_##t##_##e##_is_err
 #endif
 
 
@@ -239,25 +261,27 @@
 /**
  * @brief get_ok() — copy Ok value into *out; return true on success.
  *
- * Safe: returns false and leaves *out unmodified when the result is Err.
+ * Safe: returns false when the result is Err.
+ * Contract: out must not be NULL — caught by require() in the definition.
  *
  * Default:  result_##t##_##e##_get_ok
- * Example:  result_int_error_t_get_ok(res, &out_val)
+ * Example:  result_int_error_get_ok(res, &out_val)
  */
 #ifndef MANGLE_RESULT_GET_OK
-#  define MANGLE_RESULT_GET_OK(t, e)        MANGLE_RESULT_TYPE(t, e)##_get_ok
+#  define MANGLE_RESULT_GET_OK(t, e)        result_##t##_##e##_get_ok
 #endif
 
 /**
  * @brief get_err() — copy Err value into *out; return true on success.
  *
- * Safe: returns false and leaves *out unmodified when the result is Ok.
+ * Safe: returns false when the result is Ok.
+ * Contract: out must not be NULL — caught by require() in the definition.
  *
  * Default:  result_##t##_##e##_get_err
- * Example:  result_int_error_t_get_err(res, &out_err)
+ * Example:  result_int_error_get_err(res, &out_err)
  */
 #ifndef MANGLE_RESULT_GET_ERR
-#  define MANGLE_RESULT_GET_ERR(t, e)       MANGLE_RESULT_TYPE(t, e)##_get_err
+#  define MANGLE_RESULT_GET_ERR(t, e)       result_##t##_##e##_get_err
 #endif
 
 /**
@@ -267,10 +291,10 @@
  * Use and_then / or_else for deferred computation.
  *
  * Default:  result_##t##_##e##_unwrap_or
- * Example:  result_int_error_t_unwrap_or(res, 0)
+ * Example:  result_int_error_unwrap_or(res, 0)
  */
 #ifndef MANGLE_RESULT_UNWRAP_OR
-#  define MANGLE_RESULT_UNWRAP_OR(t, e)     MANGLE_RESULT_TYPE(t, e)##_unwrap_or
+#  define MANGLE_RESULT_UNWRAP_OR(t, e)     result_##t##_##e##_unwrap_or
 #endif
 
 
@@ -286,10 +310,10 @@
  * called on an Err result.
  *
  * Default:  result_##t##_##e##_unwrap
- * Example:  result_int_error_t_unwrap(res)
+ * Example:  result_int_error_unwrap(res)
  */
 #ifndef MANGLE_RESULT_UNWRAP
-#  define MANGLE_RESULT_UNWRAP(t, e)        MANGLE_RESULT_TYPE(t, e)##_unwrap
+#  define MANGLE_RESULT_UNWRAP(t, e)        result_##t##_##e##_unwrap
 #endif
 
 /**
@@ -298,10 +322,10 @@
  * Unsafe: only call when you have already verified is_err().
  *
  * Default:  result_##t##_##e##_unwrap_err
- * Example:  result_int_error_t_unwrap_err(res)
+ * Example:  result_int_error_unwrap_err(res)
  */
 #ifndef MANGLE_RESULT_UNWRAP_ERR
-#  define MANGLE_RESULT_UNWRAP_ERR(t, e)    MANGLE_RESULT_TYPE(t, e)##_unwrap_err
+#  define MANGLE_RESULT_UNWRAP_ERR(t, e)    result_##t##_##e##_unwrap_err
 #endif
 
 /**
@@ -310,10 +334,10 @@
  * Unsafe: prefer over plain unwrap() when a failure message aids debugging.
  *
  * Default:  result_##t##_##e##_expect
- * Example:  result_int_error_t_expect(res, "parse_int must succeed here")
+ * Example:  result_int_error_expect(res, "parse_int must succeed here")
  */
 #ifndef MANGLE_RESULT_EXPECT
-#  define MANGLE_RESULT_EXPECT(t, e)        MANGLE_RESULT_TYPE(t, e)##_expect
+#  define MANGLE_RESULT_EXPECT(t, e)        result_##t##_##e##_expect
 #endif
 
 
@@ -328,10 +352,10 @@
  *   Err(e) -> Err(e)
  *
  * Default:  result_##t##_##e##_map
- * Example:  result_int_error_t_map(res, double_it)
+ * Example:  result_int_error_map(res, double_it)
  */
 #ifndef MANGLE_RESULT_MAP
-#  define MANGLE_RESULT_MAP(t, e)           MANGLE_RESULT_TYPE(t, e)##_map
+#  define MANGLE_RESULT_MAP(t, e)           result_##t##_##e##_map
 #endif
 
 /**
@@ -341,10 +365,10 @@
  *   Err(e) -> Err(fn(e))
  *
  * Default:  result_##t##_##e##_map_err
- * Example:  result_int_error_t_map_err(res, enrich_error)
+ * Example:  result_int_error_map_err(res, enrich_error)
  */
 #ifndef MANGLE_RESULT_MAP_ERR
-#  define MANGLE_RESULT_MAP_ERR(t, e)       MANGLE_RESULT_TYPE(t, e)##_map_err
+#  define MANGLE_RESULT_MAP_ERR(t, e)       result_##t##_##e##_map_err
 #endif
 
 /**
@@ -356,10 +380,10 @@
  * Use to chain fallible operations without nested error checks.
  *
  * Default:  result_##t##_##e##_and_then
- * Example:  result_int_error_t_and_then(res, next_step)
+ * Example:  result_int_error_and_then(res, next_step)
  */
 #ifndef MANGLE_RESULT_AND_THEN
-#  define MANGLE_RESULT_AND_THEN(t, e)      MANGLE_RESULT_TYPE(t, e)##_and_then
+#  define MANGLE_RESULT_AND_THEN(t, e)      result_##t##_##e##_and_then
 #endif
 
 /**
@@ -371,10 +395,10 @@
  * Use to provide a recovery / retry path without explicit branching.
  *
  * Default:  result_##t##_##e##_or_else
- * Example:  result_int_error_t_or_else(res, try_fallback)
+ * Example:  result_int_error_or_else(res, try_fallback)
  */
 #ifndef MANGLE_RESULT_OR_ELSE
-#  define MANGLE_RESULT_OR_ELSE(t, e)       MANGLE_RESULT_TYPE(t, e)##_or_else
+#  define MANGLE_RESULT_OR_ELSE(t, e)       result_##t##_##e##_or_else
 #endif
 
 /**
@@ -387,10 +411,10 @@
  * Use and_then() when you need lazy / deferred construction of `other`.
  *
  * Default:  result_##t##_##e##_and
- * Example:  result_int_error_t_and(res, second_result)
+ * Example:  result_int_error_and(res, second_result)
  */
 #ifndef MANGLE_RESULT_AND
-#  define MANGLE_RESULT_AND(t, e)           MANGLE_RESULT_TYPE(t, e)##_and
+#  define MANGLE_RESULT_AND(t, e)           result_##t##_##e##_and
 #endif
 
 /**
@@ -403,10 +427,10 @@
  * Use or_else() when you need lazy / deferred construction of `other`.
  *
  * Default:  result_##t##_##e##_or
- * Example:  result_int_error_t_or(res, fallback_result)
+ * Example:  result_int_error_or(res, fallback_result)
  */
 #ifndef MANGLE_RESULT_OR
-#  define MANGLE_RESULT_OR(t, e)            MANGLE_RESULT_TYPE(t, e)##_or
+#  define MANGLE_RESULT_OR(t, e)            result_##t##_##e##_or
 #endif
 
 
@@ -426,41 +450,35 @@
  * equal errors.  Comparators are caller-supplied; no hidden magic.
  *
  * Default:  result_##t##_##e##_eq
- * Example:  result_int_error_t_eq(r1, r2, int_eq, error_eq)
+ * Example:  result_int_error_eq(r1, r2, int_eq, error_eq)
  */
 #ifndef MANGLE_RESULT_EQ
-#  define MANGLE_RESULT_EQ(t, e)            MANGLE_RESULT_TYPE(t, e)##_eq
+#  define MANGLE_RESULT_EQ(t, e)            result_##t##_##e##_eq
 #endif
 
 
 /* ════════════════════════════════════════════════════════════════════════════
-   CONSISTENCY SELF-CHECK  (compile-time, debug builds only)
+   CONSISTENCY SELF-CHECK  (compile-time, opt-in)
    ════════════════════════════════════════════════════════════════════════════
-   If CANON_RESULT_MANGLE_CHECK is defined before inclusion, a small inline
-   helper verifies that MANGLE_RESULT_STRUCT_TAG is still derived from
-   MANGLE_RESULT_TYPE (i.e. the user has not overridden one without the
-   other).  This produces a compile error — not a silent mismatch — when
-   the invariant is violated.
+   If CANON_RESULT_MANGLE_CHECK is defined before inclusion, the preprocessor
+   verifies that MANGLE_RESULT_TYPE and MANGLE_RESULT_STRUCT_TAG are either
+   both overridden or both left at their defaults.  Overriding one without
+   the other produces a compile error rather than a silent mismatch.
 
    Usage:
      #define CANON_RESULT_MANGLE_CHECK
      #include "result_mangle.h"
    ════════════════════════════════════════════════════════════════════════════ */
 #ifdef CANON_RESULT_MANGLE_CHECK
-/*
- * We cannot compare macro expansions directly in the preprocessor, but we
- * can force the implementer to acknowledge the pairing by requiring both
- * overrides to be present whenever either is customized.
- */
 #  if defined(MANGLE_RESULT_TYPE) && !defined(MANGLE_RESULT_STRUCT_TAG)
 #    error "Canon-C: MANGLE_RESULT_TYPE was overridden but " \
-           "MANGLE_RESULT_STRUCT_TAG was not.  Either override both, " \
-           "or remove CANON_RESULT_MANGLE_CHECK to suppress this check."
+           "MANGLE_RESULT_STRUCT_TAG was not.  Override both or " \
+           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
 #  endif
 #  if !defined(MANGLE_RESULT_TYPE) && defined(MANGLE_RESULT_STRUCT_TAG)
 #    error "Canon-C: MANGLE_RESULT_STRUCT_TAG was overridden but " \
-           "MANGLE_RESULT_TYPE was not.  Either override both, " \
-           "or remove CANON_RESULT_MANGLE_CHECK to suppress this check."
+           "MANGLE_RESULT_TYPE was not.  Override both or " \
+           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
 #  endif
 #endif /* CANON_RESULT_MANGLE_CHECK */
 
