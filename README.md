@@ -265,6 +265,25 @@ For what Canon-C intentionally omits, established C libraries exist:
 - `lwIP` — lightweight TCP/IP stack for embedded systems with constrained memory.
   Use when libuv's hosted runtime assumptions are too heavy for your target.
 
+**GUI / graphics**
+- `raylib` — immediate mode graphics, input, audio, and windowing in a single
+  library. Zero external dependencies, builds on Windows, Linux, macOS, and
+  compiles through Emscripten for WebAssembly. The closest in philosophy to
+  Canon-C among GUI libraries — explicit, minimal, no hidden framework.
+  Use for games, simulations, tools, and visualizers.
+- `nuklear` — single-header immediate mode GUI in pure C99. No dependencies,
+  no state machine, no heap allocation by default. Renders through a backend
+  you provide (raylib, SDL2, OpenGL). Use when you need a lightweight debug
+  or tool UI without pulling in a full GUI framework.
+- `SDL2` — cross-platform window creation, input, audio, and 2D rendering.
+  Lower level than raylib — you bring your own rendering pipeline. Use when
+  you need fine-grained control over the graphics stack or are integrating
+  with an existing renderer.
+- `lvgl` — embedded GUI library designed for microcontrollers and displays
+  with constrained memory. Runs on bare-metal, FreeRTOS, and Zephyr. No
+  operating system required. Use for industrial HMIs, IoT devices, and any
+  embedded target with a display.
+
 **Threading / concurrency**
 - `pthreads` — POSIX standard threading API. Available natively on Linux and macOS.
   No external dependency needed on Unix-like systems.
