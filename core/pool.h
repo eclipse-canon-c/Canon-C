@@ -5,7 +5,6 @@
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
-#include "core/primitives/bits.h"
 #include "core/arena.h"
 #include "core/memory.h"
 #include "core/slice.h"
@@ -70,12 +69,12 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 typedef struct {
-    Arena*    arena;        ///< Backing arena (caller-owned, must outlive pool)
-    usize     object_size;  ///< Aligned size of each object in bytes
-    usize     capacity;     ///< Maximum number of objects
-    usize     used;         ///< Number of allocated objects
-    ArenaMark base_mark;    ///< Arena offset at pool_init() — start of reserved region
-    ArenaMark end_mark;     ///< Arena offset after reservation — base_mark + capacity * object_size
+    Arena*    arena;        /**< Backing arena (caller-owned, must outlive pool)    */
+    usize     object_size;  /**< Aligned size of each object in bytes               */
+    usize     capacity;     /**< Maximum number of objects                          */
+    usize     used;         /**< Number of allocated objects                        */
+    ArenaMark base_mark;    /**< Arena offset at pool_init() — start of reserved region */
+    ArenaMark end_mark;     /**< Arena offset after reservation — base_mark + capacity * object_size */
 } Pool;
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -104,17 +103,21 @@ typedef struct {
 static inline bool pool_init(
     Pool* pool, Arena* arena, usize object_size, usize max_objects)
 {
-    require_msg(pool   != NULL,  "pool_init: pool cannot be NULL");
-    require_msg(arena  != NULL,  "pool_init: arena cannot be NULL");
-    require_msg(object_size > 0, "pool_init: object_size must be > 0");
-    require_msg(max_objects > 0, "pool_init: max_objects must be > 0");
+    usize  aligned_size;
+    usize  needed;
+    void*  region;
 
-    usize aligned_size = mem_align(object_size);
+    require_msg(pool        != NULL, "pool_init: pool cannot be NULL");
+    require_msg(arena       != NULL, "pool_init: arena cannot be NULL");
+    require_msg(object_size  > 0,    "pool_init: object_size must be > 0");
+    require_msg(max_objects  > 0,    "pool_init: max_objects must be > 0");
+
+    aligned_size = mem_align(object_size);
     if (aligned_size == 0 || max_objects > CANON_USIZE_MAX / aligned_size) {
         return false;
     }
 
-    usize needed = aligned_size * max_objects;
+    needed = aligned_size * max_objects;
     if (needed > arena_remaining(arena)) {
         return false;
     }
@@ -127,7 +130,7 @@ static inline bool pool_init(
 
     /* Reserve the entire region upfront. arena_alloc advances the offset,
        so subsequent non-pool allocations land safely beyond this region. */
-    void* region = arena_alloc(arena, needed);
+    region = arena_alloc(arena, needed);
     if (!region) return false;
 
     pool->end_mark = arena_mark(arena);
@@ -151,34 +154,40 @@ static inline bool pool_init(
  * @return Pointer to the object slot, or NULL if the pool is full
  */
 static inline void* pool_alloc(Pool* pool) {
+    void* base;
+    void* slot;
+
     require_msg(pool != NULL, "pool_alloc: pool cannot be NULL");
     if (pool->used >= pool->capacity) return NULL;
 
-    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
-    void* slot = ptr_elem(base, pool->used, pool->object_size);
+    base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    slot = ptr_elem(base, pool->used, pool->object_size);
     pool->used++;
     return slot;
 }
 
 /** @brief Allocates and zeroes the next object slot */
 static inline void* pool_alloc_zero(Pool* pool) {
-    void* p = pool_alloc(pool);
+    void* p;
+    p = pool_alloc(pool);
     if (p) mem_zero(p, pool->object_size);
     return p;
 }
 
 /** @brief Allocates and writes result to *out; returns false if full */
 static inline bool pool_try_alloc(Pool* pool, void** out) {
+    void* p;
     require_msg(pool != NULL, "pool_try_alloc: pool cannot be NULL");
-    void* p = pool_alloc(pool);
+    p = pool_alloc(pool);
     if (out) *out = p;
     return p != NULL;
 }
 
 /** @brief Allocates, zeroes, and writes result to *out; returns false if full */
 static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
+    void* p;
     require_msg(pool != NULL, "pool_try_alloc_zero: pool cannot be NULL");
-    void* p = pool_alloc_zero(pool);
+    p = pool_alloc_zero(pool);
     if (out) *out = p;
     return p != NULL;
 }
@@ -199,10 +208,13 @@ static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
  * @return Pointer to object at index i, or NULL if out of bounds
  */
 static inline void* pool_get(const Pool* pool, usize i) {
+    void* base;
+    void* p;
+
     if (!pool || !pool->arena || i >= pool->used) return NULL;
 
-    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
-    void* p    = ptr_elem(base, i, pool->object_size);
+    base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    p    = ptr_elem(base, i, pool->object_size);
 
     require_msg(
         (usize)((u8*)p - pool->arena->buffer) < pool->end_mark,
@@ -213,10 +225,13 @@ static inline void* pool_get(const Pool* pool, usize i) {
 }
 
 static inline const void* pool_get_const(const Pool* pool, usize i) {
+    const void* base;
+    const void* p;
+
     if (!pool || !pool->arena || i >= pool->used) return NULL;
 
-    const void* base = ptr_offset_const(pool->arena->buffer, pool->base_mark);
-    const void* p    = ptr_elem_const(base, i, pool->object_size);
+    base = ptr_offset_const(pool->arena->buffer, pool->base_mark);
+    p    = ptr_elem_const(base, i, pool->object_size);
 
     require_msg(
         (usize)((const u8*)p - pool->arena->buffer) < pool->end_mark,
@@ -250,8 +265,9 @@ static inline usize pool_memory_reserved(const Pool* pool) { return pool ? pool-
  * Non-owning — becomes invalid after pool_reset().
  */
 static inline bytes_t pool_as_bytes(const Pool* pool) {
+    void* base;
     if (!pool || !pool->arena || pool->used == 0) return bytes_empty();
-    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    base = ptr_offset(pool->arena->buffer, pool->base_mark);
     return bytes_from(base, pool->object_size * pool->used);
 }
 
@@ -261,8 +277,9 @@ static inline bytes_t pool_as_bytes(const Pool* pool) {
  * Covers [base_mark, end_mark). Includes unallocated slots. Non-owning.
  */
 static inline bytes_t pool_reserved_bytes(const Pool* pool) {
+    void* base;
     if (!pool || !pool->arena) return bytes_empty();
-    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    base = ptr_offset(pool->arena->buffer, pool->base_mark);
     return bytes_from(base, pool->object_size * pool->capacity);
 }
 
@@ -281,12 +298,18 @@ static inline bytes_t pool_reserved_bytes(const Pool* pool) {
  * @post All pointers returned by pool_alloc() / pool_get() are invalid
  */
 static inline void pool_reset(Pool* pool) {
+    void*  region;
+    usize  needed;
+
     if (!pool || !pool->arena) return;
     arena_reset_to(pool->arena, pool->base_mark);
     pool->used = 0;
+
     /* Re-reserve the region so subsequent allocs remain within bounds. */
-    usize needed = pool->object_size * pool->capacity;
-    arena_alloc(pool->arena, needed);
+    needed = pool->object_size * pool->capacity;
+    region = arena_alloc(pool->arena, needed);
+    ensure_msg(region != NULL,
+               "pool_reset: failed to re-reserve pool region after rollback");
 }
 
 /**
@@ -296,11 +319,13 @@ static inline void pool_reset(Pool* pool) {
  * @post All previously allocated object memory is zeroed
  */
 static inline void pool_reset_secure(Pool* pool) {
+    void* base;
+
     if (!pool || !pool->arena || pool->used == 0) {
         pool_reset(pool);
         return;
     }
-    void* base = ptr_offset(pool->arena->buffer, pool->base_mark);
+    base = ptr_offset(pool->arena->buffer, pool->base_mark);
     mem_secure_zero(base, pool->object_size * pool->used);
     pool_reset(pool);
 }
