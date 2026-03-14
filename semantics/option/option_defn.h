@@ -179,19 +179,13 @@
  *
  * Generates function that safely extracts a value via output pointer.
  *
- * Permissive: A NULL output pointer is allowed and returns false.
- * This design trades strictness for caller convenience — callers who
- * only want to test presence without extracting can pass NULL.
- *
- * ⚠️ NOTE for safety-critical targets (DO-178C, ISO 26262, IEC 61508):
- * get() conflates two distinct failure modes under a single false return:
- *   (a) The Option is None.
- *   (b) The caller passed a NULL output pointer.
- * If your certification context requires distinguishing these, prefer
- * is_some() + unwrap_or() or is_some() + unwrap() with an explicit check.
+ * Strict: a NULL output pointer is always a caller bug and triggers a
+ * contract violation. Use unwrap_or() for a safe default when no output
+ * pointer is needed, or is_some() + unwrap() for an explicit presence check.
  *
  * Performance: O(1) time, O(1) space (conditional assignment)
- * Returns: true if value extracted, false if None or out is NULL
+ * Contract: out must not be NULL — passing NULL triggers a contract violation
+ * Returns: true if Some and value was written into *out, false if None
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
