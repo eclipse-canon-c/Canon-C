@@ -2,7 +2,6 @@
 #define CANON_SEMANTICS_ERROR_H
 
 /*
- * SPDX-License-Identifier: MPL-2.0
  *
  * Canon-C — error.h
  * Common error codes and human-readable messages.
