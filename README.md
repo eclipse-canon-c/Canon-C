@@ -61,7 +61,8 @@
     - [5. data/convenience/ — Ergonomic collections](#5-dataconvenience--ergonomic-collections)
     - [6. algo/ — Algorithms on collections](#6-algo--algorithms-on-collections)
     - [7. util/ — Utility modules](#7-util--utility-modules)
-6. [Usage](#usage)
+6. [Scope](#scope)
+7. [Usage](#usage)
 
 ---
 
@@ -235,6 +236,34 @@ Convenience utilities for **common tasks**:
 - File I/O, parsing, random number generation, timing
 
 **Goal:** Provide ergonomic helpers while relying on **lower layers**.
+
+## Scope
+
+Canon-C covers exactly what is needed to write explicit, ownership-aware C programs
+without reaching for a larger framework. Every module exists because the pattern
+it encodes recurs across real programs and has no good idiomatic C equivalent.
+
+Nothing was added speculatively. The cutoff rule is simple: if a module can be
+built cleanly from existing layers using Canon-C's own primitives, it doesn't
+need to live here — the user writes it. If the absence of a module forces every
+downstream user to re-invent the same unsafe boilerplate, it belongs.
+
+Canon-C stops at the boundary where general-purpose utility ends and
+application-specific concerns begin. Concretely: no networking, no threading,
+no serialization, no OS abstractions. These domains are large, platform-specific,
+and opinionated in ways that don't belong in a vocabulary library — and they're
+already covered by libraries that specialize in exactly that.
+
+For what Canon-C intentionally omits, established C libraries exist:
+
+- **Networking / async I/O** — libuv, lwIP (embedded)
+- **Threading / concurrency** — pthreads, TinyCThread, C11 `<threads.h>`
+- **Serialization** — cJSON, yyjson (JSON), mpack (MessagePack), miniz (compression)
+- **Crypto / hashing** — monocypher, libsodium, xxHash
+- **Testing** — Unity, Criterion, greatest
+- **Logging** — zlog (if Canon-C's `log.h` is insufficient)
+- **Database / storage** — SQLite, LMDB
+
 
 ---
 
