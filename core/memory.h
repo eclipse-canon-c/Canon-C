@@ -1,16 +1,15 @@
 #ifndef CANON_CORE_MEMORY_H
 #define CANON_CORE_MEMORY_H
 
-#include <string.h>                     // memcpy, memmove, memset, memcmp
-#include <stdint.h>                     // uintptr_t
-#include <stdlib.h>                     // malloc, free
+#include <string.h>                     /* memcpy, memmove, memset, memcmp */
+#include <stdint.h>                     /* uintptr_t */
+#include <stdlib.h>                     /* malloc, free */
 
-#include "core/primitives/types.h"      // u8, usize, bool
-#include "core/primitives/limits.h"     // CANON_USIZE_MAX, CANON_DEFAULT_ALIGN
-#include "core/primitives/contract.h"   // require_msg, ensure_msg
-#include "core/primitives/ptr.h"        // align_up, ptr_is_aligned
-#include "core/primitives/bits.h"       // is_power_of_two
-#include "core/slice.h"                 // bytes_t, cbytes_t
+#include "core/primitives/types.h"      /* u8, usize, bool */
+#include "core/primitives/limits.h"     /* CANON_USIZE_MAX, CANON_DEFAULT_ALIGN */
+#include "core/primitives/contract.h"   /* require_msg, ensure_msg */
+#include "core/primitives/ptr.h"        /* align_up, ptr_is_aligned, is_power_of_two */
+#include "core/slice.h"                 /* bytes_t, cbytes_t */
 
 /**
  * @file memory.h
@@ -143,8 +142,8 @@ static inline usize mem_align(usize size) {
  * @pre alignment > 0 && is_power_of_two(alignment)
  */
 static inline usize mem_align_to(usize size, usize alignment) {
-    require_msg(alignment > 0,             "mem_align_to: alignment must be > 0");
-    require_msg(is_power_of_two(alignment),"mem_align_to: alignment must be a power of 2");
+    require_msg(alignment > 0,              "mem_align_to: alignment must be > 0");
+    require_msg(is_power_of_two(alignment), "mem_align_to: alignment must be a power of 2");
     if (size == 0) return 0;
     if (size > CANON_USIZE_MAX - (alignment - 1u)) return CANON_USIZE_MAX;
     return align_up(size, alignment);
@@ -159,8 +158,8 @@ static inline usize mem_align_to(usize size, usize alignment) {
  * @pre alignment > 0 && is_power_of_two(alignment)
  */
 static inline bool mem_is_aligned(const void* ptr, usize alignment) {
-    require_msg(alignment > 0,             "mem_is_aligned: alignment must be > 0");
-    require_msg(is_power_of_two(alignment),"mem_is_aligned: alignment must be a power of 2");
+    require_msg(alignment > 0,              "mem_is_aligned: alignment must be > 0");
+    require_msg(is_power_of_two(alignment), "mem_is_aligned: alignment must be a power of 2");
     return ptr_is_aligned(ptr, alignment);
 }
 
@@ -174,8 +173,9 @@ static inline bool mem_is_aligned(const void* ptr, usize alignment) {
  * @return Power-of-2 alignment in bytes, or 0 if ptr is NULL
  */
 static inline usize mem_get_alignment(const void* ptr) {
+    uintptr_t addr;
     if (!ptr) return 0;
-    const uintptr_t addr = (uintptr_t)ptr;
+    addr = (uintptr_t)ptr;
     /* lowest set bit == largest power-of-2 that divides addr */
     return (usize)(addr & (uintptr_t)(-(intptr_t)addr));
 }
@@ -239,7 +239,8 @@ static inline void mem_secure_zero(void* ptr, usize size) {
     memset_s(ptr, size, 0, size);
 #else
     volatile u8* p = (volatile u8*)ptr;
-    for (usize i = 0; i < size; i++) p[i] = 0;
+    usize i;
+    for (i = 0; i < size; i++) p[i] = 0;
 #endif
 }
 
@@ -262,8 +263,8 @@ static inline void mem_set(void* ptr, int value, usize size) {
  * @note Not constant-time. Do not use to compare cryptographic secrets.
  */
 static inline int mem_compare(const void* a, const void* b, usize size) {
-    if (a == b)   return 0;      /* covers both-NULL and same-pointer */
-    if (!a || !b) return (!a) ? -1 : 1; /* NULL sorts before non-NULL */
+    if (a == b)    return 0;                    /* covers both-NULL and same-pointer */
+    if (!a || !b)  return (!a) ? -1 : 1;        /* NULL sorts before non-NULL */
     if (size == 0) return 0;
     return memcmp(a, b, size);
 }
@@ -274,8 +275,8 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
  * NULL contract: both NULL → true. One NULL → false. size == 0 → true.
  */
 static inline bool mem_equal(const void* a, const void* b, usize size) {
-    if (a == b)   return true;   /* covers both-NULL and same-pointer */
-    if (!a || !b) return false;
+    if (a == b)    return true;                 /* covers both-NULL and same-pointer */
+    if (!a || !b)  return false;
     if (size == 0) return true;
     return memcmp(a, b, size) == 0;
 }
@@ -286,10 +287,13 @@ static inline bool mem_equal(const void* a, const void* b, usize size) {
  * NULL or size == 0 → false.
  */
 static inline bool mem_is_all(const void* ptr, int value, usize size) {
+    const u8* p;
+    u8        v;
+    usize     i;
     if (!ptr || size == 0) return false;
-    const u8* p = (const u8*)ptr;
-    const u8  v = (u8)value;
-    for (usize i = 0; i < size; i++) {
+    p = (const u8*)ptr;
+    v = (u8)value;
+    for (i = 0; i < size; i++) {
         if (p[i] != v) return false;
     }
     return true;
@@ -314,12 +318,12 @@ static inline bool mem_is_zero(const void* ptr, usize size) {
  * @pre a and b must not overlap
  */
 static inline void mem_swap(void* a, void* b, usize size) {
+    u8 tmp[CANON_MEM_SWAP_MAX];
     if (!a || !b || size == 0) return;
     require_msg(size <= CANON_MEM_SWAP_MAX,
                 "mem_swap: size exceeds CANON_MEM_SWAP_MAX — use mem_swap_buf");
     require_msg(!mem_regions_overlap(a, b, size),
                 "mem_swap: regions overlap");
-    u8 tmp[CANON_MEM_SWAP_MAX];
     memcpy(tmp, a,   size);
     memcpy(a,   b,   size);
     memcpy(b,   tmp, size);
@@ -337,7 +341,7 @@ static inline void mem_swap(void* a, void* b, usize size) {
 static inline void mem_swap_buf(void* a, void* b, usize size,
                                 void* scratch, usize scratch_len) {
     if (!a || !b || !scratch || size == 0) return;
-    require_msg(scratch_len >= size, "mem_swap_buf: scratch buffer too small");
+    require_msg(scratch_len >= size,             "mem_swap_buf: scratch buffer too small");
     require_msg(!mem_regions_overlap(a, b,       size), "mem_swap_buf: a and b overlap");
     require_msg(!mem_regions_overlap(a, scratch, size), "mem_swap_buf: a and scratch overlap");
     require_msg(!mem_regions_overlap(b, scratch, size), "mem_swap_buf: b and scratch overlap");
@@ -403,7 +407,7 @@ static inline void mem_set_bytes(bytes_t b, int value) {
  */
 static inline bool mem_equal_bytes(cbytes_t a, cbytes_t b) {
     if (a.len != b.len) return false;
-    if (a.ptr == b.ptr) return true;   /* covers both-NULL with equal len */
+    if (a.ptr == b.ptr) return true;            /* covers both-NULL with equal len */
     if (!a.ptr || !b.ptr) return false;
     if (a.len == 0) return true;
     return memcmp(a.ptr, b.ptr, a.len) == 0;
