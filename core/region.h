@@ -241,9 +241,9 @@ static inline void region_begin(Region* r) {
     /* Zero-initialize all fields, then set id and open.
      * Casting through a char* loop is C99-portable and avoids
      * a memset dependency; compilers reduce this to a single instruction. */
-    *r        = (Region){0};
-    r->id     = (region_id_t)(uintptr_t)r;
-    r->open   = true;
+    *r      = (Region){0};
+    r->id   = (region_id_t)(uintptr_t)r;
+    r->open = true;
 }
 
 /**
@@ -264,12 +264,15 @@ static inline void region_begin(Region* r) {
  * Complexity: O(num_hooks)
  */
 static inline void region_end(Region* r) {
+    usize          i;
+    RegionCleanup* h;
+
     require_msg(r != NULL, "region_end: r cannot be NULL");
     require_msg(r->open,   "region_end: region is already closed");
 
     /* Hooks — LIFO */
-    for (usize i = r->num_hooks; i > 0; i--) {
-        RegionCleanup* h = &r->cleanups[i - 1];
+    for (i = r->num_hooks; i > 0; i--) {
+        h = &r->cleanups[i - 1];
         if (h->fn) {
             h->fn(h->ctx);
             h->fn  = NULL;
@@ -475,9 +478,9 @@ static inline void region_assert_borrow_valid(const Region* r, region_id_t borro
     if (borrow_rid == REGION_ID_STATIC) {
         return; /* static lifetime — always valid, no check needed */
     }
-    ensure_msg(r != NULL,             "region_assert_borrow_valid: r cannot be NULL");
-    ensure_msg(r->open,               "region_assert_borrow_valid: region is closed");
-    ensure_msg(r->id == borrow_rid,   "region_assert_borrow_valid: ID mismatch — wrong region");
+    ensure_msg(r != NULL,           "region_assert_borrow_valid: r cannot be NULL");
+    ensure_msg(r->open,             "region_assert_borrow_valid: region is closed");
+    ensure_msg(r->id == borrow_rid, "region_assert_borrow_valid: ID mismatch — wrong region");
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
