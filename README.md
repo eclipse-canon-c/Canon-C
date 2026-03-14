@@ -327,8 +327,7 @@ For what Canon-C intentionally omits, established C libraries exist:
 - `FreeRTOS` — the most widely adopted RTOS for constrained microcontrollers.
   Minimal footprint, simple task scheduler, direct hardware control. Use when
   your device has well-defined behavior and you want full architectural control
-  with minimal overhead. Canon-C's lower layers (no stdio, no malloc) are
-  designed to compose cleanly in this environment.
+  with minimal overhead.
 - `Zephyr` — full-featured, scalable RTOS managed by the Linux Foundation.
   Built-in drivers, networking, Bluetooth, and security. Use when your project
   needs to scale across hardware revisions, run multiple subsystems, or be
@@ -366,19 +365,86 @@ For what Canon-C intentionally omits, established C libraries exist:
 > adapter file. Canon-C's lower layers (arena, slice, result) remain usable
 > inside these environments — just not as wrappers around them.
 >
+> Canon-C provides the following tools for integration boundaries:
+>
+> - `core/ownership.h` — annotate adapter functions with `owned()`,
+>   `borrowed()`, and `DEFINE_OWNED` to make ownership explicit at the
+>   integration point. Wrap external handles like `sqlite3*`, `uv_loop_t*`,
+>   or `MDB_env*` with `CANON_DROP` to ensure cleanup is never missed.
+>
+> - `semantics/result/result.h` — convert integer return codes from SQLite,
+>   libsodium, or libuv into `Result<T, Error>` at the adapter boundary.
+>   Use `TRY` and `TRY_REMAP` to propagate failures up without boilerplate.
+>   For libraries with many domain-specific codes (SQLite has 30+), define
+>   a local error enum and instantiate `CANON_RESULT` with it.
+>
+> - `core/slice.h` / `semantics/borrow.h` — pass Canon-C `bytes_t`,
+>   `cbytes_t`, and `borrowed_bytes` directly into buffer-based APIs like
+>   mpack, miniz, and LMDB's `MDB_val`. The `{ptr, len}` layout is
+>   compatible with most C buffer conventions without copying.
+>
+> - `core/scope.h` — use RAII cleanup macros to ensure external handles
+>   are closed at scope exit. Prevents resource leaks when multiple
+>   early-return paths exist.
+>
+> - `semantics/diag.h` — attach context to external failures as they
+>   propagate. "SQLite failed → while writing record → during sync" with
+>   no allocation, using `DIAG_PUSH` and `DIAG_PROPAGATE`.
+>
+> - `core/arena.h` — some libraries accept custom allocator hooks
+>   (SQLite's `sqlite3_config(SQLITE_CONFIG_MALLOC)`, lwIP's `mem_malloc`).
+>   Canon-C's arena can back these if you write the adapter, giving you
+>   explicit lifetime control over the library's internal allocations.
+>
 > The pattern is always the same: one thin adapter file per external library,
 > using the tools above at the boundary. Everything above the adapter stays
 > pure Canon-C. Callback-driven APIs (libuv, FreeRTOS tasks) and libraries
 > requiring global initialization (libsodium's `sodium_init()`) cannot be
 > fully wrapped — isolate them behind the adapter and contain the convention
 > mismatch there.
+
 ---
 
-> Note: most of these libraries use traditional C API conventions — raw pointers,
-> integer error codes, implicit ownership, and occasional global state. Wrapping
-> their interfaces in Canon-C's Result, owned, and borrowed types at your
-> integration boundary is recommended to keep the rest of your codebase consistent.
-
+> **Bare-metal and embedded use**
+>
+> Not all Canon-C layers have equal platform requirements. stdio enters
+> Canon-C in exactly four isolated, well-documented places:
+>
+> **Replaceable — stdio never called after mitigation:**
+> `core/primitives/contract.h` uses `fprintf` only in its default panic
+> handler. Call `contract_set_handler()` at startup with your own UART
+> or fault handler — stdio is never reached after that. All `core/`
+> headers except `scope.h` pull in `contract.h`, so this one replacement
+> covers the entire core layer.
+>
+> **Avoidable — specific functions only:**
+> `semantics/diag.h` uses `fprintf` only in `diag_print()`. Every other
+> diag function (`DIAG_PUSH`, `DIAG_PROPAGATE`, all inspection helpers)
+> is stdio-free. On bare-metal, use diag for error propagation and
+> render frames yourself via UART.
+> `data/stringbuf.h` uses `vsnprintf` only in `stringbuf_append_fmt()`
+> and `stringbuf_append_fmt_va()`. All other stringbuf operations are
+> stdio-free. There is no C99-portable alternative to `vsnprintf` for
+> formatted string building — this dependency is intentional and
+> documented in the header.
+>
+> **Avoid entirely on bare-metal:**
+> `util/log/log.h` is fundamentally `FILE*`-based. There is no
+> mitigation path — exclude it and write directly to your platform's
+> UART or trace output instead.
+>
+> **No stdio anywhere:**
+> `core/primitives/` (types, limits, bits, checked, ptr, compare),
+> `core/slice.h`, `core/ownership.h`, `core/region.h`, `core/scope.h`.
+> These pull in only freestanding headers (`<stdint.h>`, `<stddef.h>`,
+> `<limits.h>`, `<stdbool.h>`) and are safe on any target.
+>
+> **malloc dependency:**
+> `core/memory.h` includes `<stdlib.h>` for `malloc` and `free`.
+> `core/arena.h` and `core/pool.h` depend on `memory.h`. On bare-metal,
+> `#define malloc` and `free` to your RTOS allocator (e.g. FreeRTOS's
+> `pvPortMalloc`/`vPortFree`) before including `memory.h`, or avoid
+> `memory.h` entirely and pass your own buffers directly to arena and pool.
 
 ---
 
