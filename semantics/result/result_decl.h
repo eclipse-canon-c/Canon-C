@@ -8,7 +8,14 @@
  * it belongs in result_defn.h, which is the file that actually emits code.
  * Keeping this boundary means including result_decl.h in a header costs zero
  * transitive headers beyond result_mangle.h itself.
+ *
+ * stdbool.h IS included here because the struct definition emitted by
+ * DECLARE_RESULT_STRUCT uses the bool type. Any translation unit that
+ * includes result_decl.h must have bool available; including stdbool.h
+ * here makes this self-contained and explicit.
  */
+#include <stdbool.h>
+
 #ifndef CANON_RESULT_MANGLE_H
 #  include "result_mangle.h"
 #endif
@@ -30,21 +37,53 @@
  * - Interface clarity: Headers show API without implementation details
  * - Two type parameters: Handles both value type (T) and error type (E)
  *
+ * Separate compilation — ODR and struct redefinition:
+ * ────────────────────────────────────────────────────────────────────────────
+ * DECLARE_RESULT_ALL emits the struct body in the header. The corresponding
+ * .c file must call DEFINE_RESULT_FUNCTIONS (NOT DEFINE_RESULT_ALL) to emit
+ * only the function bodies without re-emitting the struct. Calling
+ * DEFINE_RESULT_ALL in a .c file that already included a header with
+ * DECLARE_RESULT_ALL for the same type pair is a C error (struct
+ * redefinition within the same translation unit).
+ *
+ * Correct separate-compilation pattern:
+ *
+ *   // my_types.h
+ *   #include "result_decl.h"
+ *   typedef enum { ERR_NONE, ERR_IO } error;
+ *   DECLARE_RESULT_ALL(extern, int, error)   // typedef + struct + fn decls
+ *
+ *   // my_types.c
+ *   #include "my_types.h"
+ *   #include "result_defn.h"
+ *   DEFINE_RESULT_FUNCTIONS(, int, error)    // fn bodies only — no struct
+ *
  * C99 compliance note:
  * ────────────────────────────────────────────────────────────────────────────
- * The Result struct uses a NAMED union member (.val) to remain strictly C99
- * compliant. Anonymous unions inside structs are a C11 extension (ISO/IEC
- * 9899:2011 §6.7.2.1¶13) and are not portable to strict C99 compilers
- * (CompCert, MSVC /Za, Polyspace, LDRA toolchain).
+ * The Result struct uses a NAMED union member (.val) by default to remain
+ * strictly C99 compliant. Anonymous unions inside structs are a C11
+ * extension (ISO/IEC 9899:2011 §6.7.2.1¶13) and are not portable to strict
+ * C99 compilers (CompCert, MSVC /Za, Polyspace, LDRA toolchain).
  *
- * Access pattern:
- *   r.val.ok   (not r.ok)
- *   r.val.err  (not r.err)
+ * Default access pattern (C99):
+ *   r.val.ok   r.val.err
  *
- * If your toolchain supports C11 or accepts anonymous unions as an extension
- * and you want the shorter access syntax, define CANON_RESULT_ANON_UNION
- * before including this header. This opt-in makes the extension explicit
- * rather than silent.
+ * If your toolchain supports C11 or accepts anonymous unions as an extension,
+ * define CANON_RESULT_ANON_UNION before including this header to opt in:
+ *   r.ok   r.err
+ *
+ * CANON_RESULT_ANON_UNION — layout alignment requirement:
+ * ────────────────────────────────────────────────────────────────────────────
+ * result_decl.h (DECLARE_RESULT_STRUCT) and result_impl.h (IMPL_RESULT_STRUCT,
+ * used by DEFINE_RESULT_STRUCT) both branch on CANON_RESULT_ANON_UNION to
+ * select their union layout. Both files must be compiled with the same setting
+ * of this flag in every translation unit that uses a given Result type pair,
+ * or the struct layouts will differ between the declaration and the definition
+ * — a silent ABI break.
+ *
+ * The safest approach is to set (or not set) CANON_RESULT_ANON_UNION in a
+ * project-wide prefix header rather than per-file, so that all translation
+ * units always agree.
  *
  * Use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -62,7 +101,7 @@
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
- * N/A — pure compile-time declarations, no runtime behavior
+ * N/A — pure compile-time declarations, no runtime behaviour
  *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
@@ -83,22 +122,6 @@
  *     DECLARE_RESULT_ALL(extern, intp, cstr)  // OK
  *     DECLARE_RESULT_ALL(extern, int*, cstr)  // ERROR — * breaks ## pasting
  *
- * Typical workflow:
- * ────────────────────────────────────────────────────────────────────────────
- * // my_types.h — header file
- * #include "result_decl.h"
- * typedef enum { ERR_NONE, ERR_IO } error;
- * DECLARE_RESULT_ALL(extern, int, error)
- *
- * // my_types.c — source file
- * #include "my_types.h"
- * #include "result_defn.h"
- * DEFINE_RESULT_ALL(, int, error)   // define once; no linkage keyword for extern
- *
- * // main.c — usage
- * #include "my_types.h"
- * result_int_error x = result_int_error_ok(42);
- *
  * @sa result_defn.h, result_mangle.h, result_impl.h
  */
 
@@ -107,16 +130,17 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*
- * CANON_RESULT_ANON_UNION — opt-in to C11/extension anonymous union syntax.
+ * CANON_RESULT_UNION_BODY_ — selects named vs anonymous union layout.
  *
- * When defined: union member is unnamed → access as r.ok / r.err
- * When absent:  union member is named   → access as r.val.ok / r.val.err
+ * This macro mirrors IMPL_RESULT_UNION_ in result_impl.h. Both must select
+ * the same layout, which they do because both branch on the same flag
+ * (CANON_RESULT_ANON_UNION). See the "layout alignment requirement" note in
+ * the file-level documentation above.
  *
- * The named form is the default because it is the only form guaranteed by
- * ISO C99. Define this macro only if:
- *   (a) your compiler is C11 or later, OR
- *   (b) your compiler documents anonymous struct/union as a supported extension
- *       AND your certification baseline permits compiler extensions.
+ * When CANON_RESULT_ANON_UNION is defined:
+ *   union { _t ok; _e err; };         — anonymous, access as r.ok / r.err
+ * When absent (default):
+ *   union { _t ok; _e err; } val;     — named,     access as r.val.ok / r.val.err
  */
 #ifdef CANON_RESULT_ANON_UNION
 #  define CANON_RESULT_UNION_BODY_(_t, _e) \
@@ -133,13 +157,9 @@
 /**
  * @brief Forward-declare the Result<T, E> struct tag only (opaque pointer use)
  *
- * Emits only "struct result_T_E_s;" with no layout. Use this when you need to
- * pass Result<T, E>* across a translation-unit boundary without exposing the
- * struct layout (opaque pointer / information-hiding pattern).
- *
- * This is the lightest possible declaration — no typedef, no layout, no
- * functions. Combine with DECLARE_RESULT_TYPEDEF if you also need the
- * typedef alias.
+ * Emits only "struct result_T_E_s;" with no layout. Use this when you need
+ * to pass Result<T, E>* across a translation-unit boundary without exposing
+ * the struct layout (opaque pointer / information-hiding pattern).
  *
  * Performance: O(1) compile time
  *
@@ -180,10 +200,11 @@
  * Emits the complete struct definition. The union member is named (.val)
  * in strict C99 mode, or anonymous when CANON_RESULT_ANON_UNION is defined.
  *
+ * Must not be emitted more than once per (T, E) pair in the same translation
+ * unit. DECLARE_RESULT_ALL calls this; the corresponding .c file must use
+ * DEFINE_RESULT_FUNCTIONS (not DEFINE_RESULT_ALL) to avoid re-emitting it.
+ *
  * Memory layout: sizeof(bool) + padding + max(sizeof(_t), sizeof(_e))
- * The union saves space relative to storing both T and E independently.
- * Only one of val.ok / val.err is valid at any time (determined by is_ok).
- * Accessing the wrong member is undefined behavior.
  *
  * Performance: O(1) compile time
  *
@@ -220,7 +241,7 @@
  *
  * Performance: O(1) runtime when defined (stack allocation only)
  *
- * @param _linkage Linkage specifier (e.g., static inline, extern, or empty)
+ * @param _linkage Linkage specifier (e.g., extern, static inline)
  * @param _t       The value type
  * @param _e       The error type
  */
@@ -275,12 +296,7 @@
  * @brief Declare get_ok() safe extraction function
  *
  * Extracts the success value into *out if the Result is Ok.
- *
- * Contract: out must not be NULL. Passing NULL is a programming error and
- * will be caught by require() in the definition (result_defn.h). Returning
- * false unambiguously means the Result is Err — it never silently swallows a
- * NULL pointer.
- *
+ * Contract: out must not be NULL — caught by require() in the definition.
  * Returns: true if Ok (and *out written), false if Err.
  *
  * Performance: O(1) runtime when defined (conditional assignment)
@@ -296,12 +312,7 @@
  * @brief Declare get_err() safe extraction function
  *
  * Extracts the error value into *out if the Result is Err.
- *
- * Contract: out must not be NULL. Passing NULL is a programming error and
- * will be caught by require() in the definition (result_defn.h). Returning
- * false unambiguously means the Result is Ok — it never silently swallows a
- * NULL pointer.
- *
+ * Contract: out must not be NULL — caught by require() in the definition.
  * Returns: true if Err (and *out written), false if Ok.
  *
  * Performance: O(1) runtime when defined (conditional assignment)
@@ -336,13 +347,10 @@
  * @brief Declare unwrap() unsafe extraction function
  *
  * Extracts the success value. Crashes via require() if the Result is Err.
- *
- * ⚠ Only use when the caller has already verified is_ok(), or when an Err
- *   here is an unrecoverable invariant violation. Prefer get_ok(),
- *   unwrap_or(), or expect() for all other cases.
+ * Only use when the caller has already verified is_ok().
  *
  * Performance: O(1) runtime when defined (assertion + union access)
- * Contract:    require(r.is_ok) — aborts with message if Err
+ * Contract: require(r.is_ok) — aborts with message if Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -355,10 +363,9 @@
  * @brief Declare unwrap_err() error extraction function
  *
  * Extracts the error value. Crashes via require() if the Result is Ok.
- * Useful in tests or when failure is the only expected outcome.
  *
  * Performance: O(1) runtime when defined (assertion + union access)
- * Contract:    require(!r.is_ok) — aborts with message if Ok
+ * Contract: require(!r.is_ok) — aborts with message if Ok
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -371,11 +378,9 @@
  * @brief Declare expect() with custom message function
  *
  * Like unwrap(), but crashes with a caller-supplied message.
- * Use to document invariants at the call site:
- *   result_int_error_expect(r, "parse_int: input was validated upstream");
  *
  * Performance: O(1) runtime when defined (assertion + union access)
- * Contract:    require(r.is_ok, msg) — aborts with msg if Err
+ * Contract: require(r.is_ok, msg) — aborts with msg if Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -391,17 +396,12 @@
 /**
  * @brief Declare map() value transformation function
  *
- * Applies f to the contained value if Ok, wrapping the result in a new Ok.
- * If Err, returns the Err unchanged without calling f.
+ * Applies f to the contained value if Ok (T → T only).
+ * If Err, returns Err unchanged without calling f.
  *
- * Constraint: f must be an endomorphism (T -> T). It cannot change the type.
- * If you need T -> U transformation, use and_then() with a constructor.
- * This constraint exists because C's type system cannot express a generic
- * Result<U, E> return type without a second instantiation of the macro
- * family. The name "map" here means "map over the value within the same
- * instantiation."
+ * Constraint: f must be T → T. For T → U transforms use and_then().
  *
- * Performance: O(f) runtime where f is the transformation function
+ * Performance: O(f) runtime
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -414,12 +414,12 @@
 /**
  * @brief Declare map_err() error transformation function
  *
- * Applies f to the contained error if Err, wrapping the result in a new Err.
- * If Ok, returns the Ok unchanged without calling f.
+ * Applies f to the contained error if Err (E → E only).
+ * If Ok, returns Ok unchanged without calling f.
  *
- * Constraint: f must be an endomorphism (E -> E). Same rationale as map().
+ * Constraint: f must be E → E.
  *
- * Performance: O(f) runtime where f is the transformation function
+ * Performance: O(f) runtime
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -432,16 +432,11 @@
 /**
  * @brief Declare and_then() chaining function
  *
- * If Ok, calls f with the contained value and returns its Result.
- * If Err, returns the Err unchanged without calling f.
+ * If Ok, calls f with the contained value and returns f's Result.
+ * If Err, returns Err unchanged without calling f.
+ * Prevents Result<Result<T,E>,E> nesting.
  *
- * f returns Result<T, E>, so and_then() flat-maps — it prevents
- * nested Result<Result<T,E>, E> from accumulating in a chain.
- *
- * This is also the correct primitive for T -> U transformations: define a
- * second Result instantiation for U and pass a function that constructs it.
- *
- * Performance: O(f) runtime where f is the chained function
+ * Performance: O(f) runtime
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -454,11 +449,8 @@
 /**
  * @brief Declare or_else() alternative provider function
  *
- * If Ok, returns the Ok unchanged without calling f.
- * If Err, calls f with the contained error and returns its Result.
- *
- * Dual of and_then(): or_else() recovers from errors, and_then() chains
- * on success.
+ * If Ok, returns Ok unchanged without calling f.
+ * If Err, calls f with the contained error and returns f's Result.
  *
  * Performance: O(1) if Ok, O(f) if Err
  *
@@ -470,6 +462,44 @@
     _linkage MANGLE_RESULT_TYPE(_t, _e) MANGLE_RESULT_OR_ELSE(_t, _e)( \
         MANGLE_RESULT_TYPE(_t, _e) r, MANGLE_RESULT_TYPE(_t, _e) (*f)(_e));
 
+/**
+ * @brief Declare and() eager short-circuit AND function
+ *
+ * Returns other if Ok, otherwise returns Err unchanged.
+ * other is always evaluated (eager). Use and_then() for lazy evaluation.
+ *
+ *   Ok(_)  -> other
+ *   Err(e) -> Err(e)
+ *
+ * Performance: O(1) runtime
+ *
+ * @param _linkage Linkage specifier
+ * @param _t       The value type
+ * @param _e       The error type
+ */
+#define DECLARE_RESULT_AND(_linkage, _t, _e) \
+    _linkage MANGLE_RESULT_TYPE(_t, _e) MANGLE_RESULT_AND(_t, _e)( \
+        MANGLE_RESULT_TYPE(_t, _e) r, MANGLE_RESULT_TYPE(_t, _e) other);
+
+/**
+ * @brief Declare or() eager short-circuit OR function
+ *
+ * Returns r if Ok, otherwise returns other.
+ * other is always evaluated (eager). Use or_else() for lazy evaluation.
+ *
+ *   Ok(v)  -> Ok(v)
+ *   Err(_) -> other
+ *
+ * Performance: O(1) runtime
+ *
+ * @param _linkage Linkage specifier
+ * @param _t       The value type
+ * @param _e       The error type
+ */
+#define DECLARE_RESULT_OR(_linkage, _t, _e) \
+    _linkage MANGLE_RESULT_TYPE(_t, _e) MANGLE_RESULT_OR(_t, _e)( \
+        MANGLE_RESULT_TYPE(_t, _e) r, MANGLE_RESULT_TYPE(_t, _e) other);
+
 /* ════════════════════════════════════════════════════════════════════════════
    COMPARISON FUNCTION DECLARATIONS
    ════════════════════════════════════════════════════════════════════════════ */
@@ -480,23 +510,11 @@
  * Two Results are equal when:
  *   - Both are Ok  and eq_ok(r1.val.ok,  r2.val.ok)  returns true, OR
  *   - Both are Err and eq_err(r1.val.err, r2.val.err) returns true.
- * An Ok and an Err are never equal regardless of contained values.
+ * An Ok and an Err are never equal.
  *
  * Contract: eq_ok and eq_err must not be NULL.
- * Both comparator pointers are validated by require() in the definition
- * (result_defn.h) before they are called. Passing NULL is a programming
- * error that will be caught at the call site, not silently ignored.
  *
- * For scalar types (int, enum, …) you must supply thin wrappers:
- *   bool int_eq(int a, int b) { return a == b; }
- * There is no built-in "use == for scalars" path because C provides no
- * way to detect scalar types in a macro. A DECLARE_RESULT_EQ_SCALAR
- * convenience wrapper that does this is available in result_scalar.h
- * (if your build includes it).
- *
- * Performance: O(1)         for Ok-vs-Err or Err-vs-Ok
- *              O(eq_ok)     for Ok-vs-Ok
- *              O(eq_err)    for Err-vs-Err
+ * Performance: O(1) for Ok-Err, O(eq_ok) for Ok-Ok, O(eq_err) for Err-Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -514,7 +532,7 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Declare all Result<T, E> functions (no type or struct)
+ * @brief Declare all Result<T, E> function signatures (no type or struct)
  *
  * Declares every function signature for a Result<T, E> instantiation.
  * Does not declare the type itself — pair with DECLARE_RESULT_TYPEDEF and
@@ -541,25 +559,22 @@
     DECLARE_RESULT_MAP_ERR(_linkage, _t, _e) \
     DECLARE_RESULT_AND_THEN(_linkage, _t, _e) \
     DECLARE_RESULT_OR_ELSE(_linkage, _t, _e) \
+    DECLARE_RESULT_AND(_linkage, _t, _e) \
+    DECLARE_RESULT_OR(_linkage, _t, _e) \
     DECLARE_RESULT_EQ(_linkage, _t, _e)
 
 /**
- * @brief Declare a complete Result<T, E> type and all its functions
+ * @brief Declare a complete Result<T, E> type and all its function signatures
  *
  * One-shot macro that emits, in order:
- *   1. typedef  (DECLARE_RESULT_TYPEDEF)
- *   2. struct   (DECLARE_RESULT_STRUCT)
- *   3. functions (DECLARE_RESULT_FUNCTIONS)
+ *   1. typedef           (DECLARE_RESULT_TYPEDEF)
+ *   2. struct body       (DECLARE_RESULT_STRUCT)
+ *   3. function decls    (DECLARE_RESULT_FUNCTIONS)
  *
- * Use this in headers when you want to expose a full Result type to consumers.
- * Use it with _linkage = extern for the .h/.c separate-compilation model, or
- * with _linkage = static inline for header-only use.
- *
- * Note on struct redefinition: DECLARE_RESULT_ALL emits the struct body here.
- * DEFINE_RESULT_ALL (in result_defn.h) must NOT emit the struct body again in
- * the same translation unit, or a duplicate-definition diagnostic will be
- * issued. result_defn.h is responsible for honoring this — see its
- * DEFINE_RESULT_STRUCT guard.
+ * Use this in headers to expose a full Result type to consumers.
+ * The corresponding .c file must call DEFINE_RESULT_FUNCTIONS (NOT
+ * DEFINE_RESULT_ALL) to provide the function bodies without re-emitting
+ * the struct. See the file-level "Separate compilation" note.
  *
  * Performance: O(1) compile time
  *
@@ -573,21 +588,11 @@
  * // my_types.c
  * #include "my_types.h"
  * #include "result_defn.h"
- * DEFINE_RESULT_ALL(, int, error)
+ * DEFINE_RESULT_FUNCTIONS(, int, error)   // NOTE: not DEFINE_RESULT_ALL
  *
  * // main.c
  * #include "my_types.h"
  * result_int_error x = result_int_error_ok(42);
- * @endcode
- *
- * Example — header-only:
- * @code
- * // my_lib.h
- * #include "result_decl.h"
- * #include "result_defn.h"
- * typedef enum { ERR_NONE, ERR_FAIL } error;
- * DECLARE_RESULT_ALL(static inline, int, error)
- * DEFINE_RESULT_ALL(static inline, int, error)
  * @endcode
  *
  * @param _linkage Linkage specifier
@@ -620,8 +625,8 @@ DECLARE_RESULT_ALL(extern, float, error)
 // my_results.c
 #include "my_results.h"
 #include "result_defn.h"
-DEFINE_RESULT_ALL(, int, error)    // no linkage keyword: extern functions get
-DEFINE_RESULT_ALL(, float, error)  // their definition here, declared elsewhere
+DEFINE_RESULT_FUNCTIONS(, int, error)    // fn bodies only — struct already declared
+DEFINE_RESULT_FUNCTIONS(, float, error)  // NOTE: NOT DEFINE_RESULT_ALL
 
 // main.c
 #include "my_results.h"
@@ -638,11 +643,9 @@ int main(void) {
 // my_lib.h
 #ifndef MY_LIB_H
 #define MY_LIB_H
-#include "result_decl.h"
 #include "result_defn.h"
 typedef enum { ERR_NONE, ERR_FAIL } error;
-DECLARE_RESULT_ALL(static inline, int, error)
-DEFINE_RESULT_ALL(static inline, int, error)
+DEFINE_RESULT_ALL(static inline, int, error)   // typedef + struct + fn bodies
 #endif
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -653,7 +656,7 @@ DEFINE_RESULT_ALL(static inline, int, error)
 #include "result_decl.h"
 typedef enum { ERR_NONE } error;
 DECLARE_RESULT_FORWARD(int, error)   // struct result_int_error_s; — forward only
-DECLARE_RESULT_TYPEDEF(int, error)   // typedef → result_int_error
+DECLARE_RESULT_TYPEDEF(int, error)   // typedef -> result_int_error
 DECLARE_RESULT_OK(extern, int, error)
 DECLARE_RESULT_ERR(extern, int, error)
 DECLARE_RESULT_IS_OK(extern, int, error)
@@ -672,12 +675,14 @@ DECLARE_RESULT_ALL(extern, voidptr, int)
 // Example 5: C11 / anonymous union opt-in
 // ────────────────────────────────────────────────────────────────────────────
 
-// Only if your compiler supports anonymous unions (C11 or documented extension)
+// Only if your compiler supports anonymous unions (C11 or documented extension).
+// Set this flag in a project-wide prefix header so all TUs agree on the layout.
 #define CANON_RESULT_ANON_UNION
 #include "result_decl.h"
 typedef enum { ERR_NONE } error;
-DECLARE_RESULT_ALL(static inline, int, error)
-// Now r.ok and r.err work directly (no r.val.ok)
+DECLARE_RESULT_ALL(extern, int, error)
+// Now r.ok and r.err work directly (no r.val.ok) — but ONLY if result_impl.h
+// was also compiled with CANON_RESULT_ANON_UNION set in the same TU.
 */
 
 #endif /* CANON_RESULT_DECL_H */
