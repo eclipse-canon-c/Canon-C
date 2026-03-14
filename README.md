@@ -343,9 +343,10 @@ For what Canon-C intentionally omits, established C libraries exist:
 
 ---
 
-> Note: these libraries follow their own conventions and do not share Canon-C's
-> explicit ownership or allocation philosophy. They are listed as functional
-> references, not stylistic endorsements.
+> Note: most of these libraries use traditional C API conventions — raw pointers,
+> integer error codes, implicit ownership, and occasional global state. Wrapping
+> their interfaces in Canon-C's Result, owned, and borrowed types at your
+> integration boundary is recommended to keep the rest of your codebase consistent.
 
 
 ---
