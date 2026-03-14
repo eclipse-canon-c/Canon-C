@@ -1,129 +1,134 @@
 #ifndef CANON_SEMANTICS_ERROR_H
 #define CANON_SEMANTICS_ERROR_H
 
-#include "core/primitives/types.h"   // usize, bool
-#include "result/result.h"           // CANON_RESULT macro
-
-/**
- * @file error.h
- * @brief Common error codes and human-readable messages
+/*
+ * SPDX-License-Identifier: MPL-2.0
  *
- * Provides a small, extensible set of standard error codes intended for use
- * with Result<T, Error> throughout the library. Designed for zero-overhead
- * error handling with consistent, human-readable error messages.
+ * Canon-C — error.h
+ * Common error codes and human-readable messages.
  *
- * Portability:
- * ────────────────────────────────────────────────────────────────────────────
- * - Requires C99 or later
- * - Depends on result/result.h from this library
- * - No platform-specific code
- * - No external dependencies beyond standard C
+ * Requires C99 or later. No platform-specific code.
+ * Depends on core/primitives/types.h from this library.
  *
- * Thread-safety:
- * ────────────────────────────────────────────────────────────────────────────
- * All functions are thread-safe (pure/const, no shared mutable state)
+ * ── Portability ──────────────────────────────────────────────────────────────
+ * Tested with GCC, Clang, and MSVC on Windows, Linux, and macOS.
  *
- * Performance:
- * ────────────────────────────────────────────────────────────────────────────
- * - Time: O(1) — constant time for all operations
- * - Space: O(1) — static data only, no allocations
- * - Error representation: simple integer (enum)
- * - Message lookup: switch-based (usually jump table)
+ * ── Thread-safety ────────────────────────────────────────────────────────────
+ * All functions are thread-safe: pure/const, no shared mutable state.
  *
- * Core ideas:
- * ────────────────────────────────────────────────────────────────────────────
- * - Simple flat enum (no hierarchies)
- * - Zero runtime cost for error representation
- * - Consistent messages via error_message()
- * - Easy to extend (add before ERR_COUNT)
- * - Works seamlessly with result.h combinators
- * - Thread-safe pure functions
- * - Generic enough for cross-domain use
- * - Brief messages — add context at call sites
+ * ── Performance ──────────────────────────────────────────────────────────────
+ * Time:  O(1) for all operations.
+ * Space: O(1) — static data only, no allocations.
+ * Error representation: plain integer (enum).
+ * Message lookup: switch-based (typically compiled to a jump table).
  *
- * Error code ranges (for organization):
- * - 0:     Success (ERR_OK)
- * - 1-99:  Argument/input errors
- * - 100-199: Resource/memory errors
- * - 200-299: I/O and system errors
- * - 300-399: Arithmetic errors
- * - 400+:  Generic/miscellaneous
+ * ── Design ───────────────────────────────────────────────────────────────────
+ * - Simple flat enum (no hierarchies).
+ * - Zero runtime cost for error representation.
+ * - Consistent messages via error_message().
+ * - Easy to extend: add new codes before ERR_COUNT.
+ * - Thread-safe pure functions.
+ * - Generic enough for cross-domain use.
+ * - Brief messages — add context at call sites.
+ * - No result.h dependency in this file. For Result<T, Error> integration,
+ *   include "error_result.h" separately (opt-in).
  *
- * Extension guide:
- * 1. Add new code before ERR_COUNT in the enum
- * 2. Add case in error_message() switch
- * 3. (Optional) Add domain-specific enum (e.g. ErrorJson)
+ * ── Error code ranges ────────────────────────────────────────────────────────
+ *   0:       Success (ERR_OK)
+ *   1–99:    Argument / input errors
+ *   100–199: Resource / memory errors
+ *   200–299: I/O and system errors
+ *   300–399: Arithmetic errors
+ *   400+:    Generic / miscellaneous
  *
- * Typical use:
- * ```c
- * CANON_RESULT(int, Error)
+ * ── Extension guide ──────────────────────────────────────────────────────────
+ * 1. Add new code before ERR_COUNT in the enum below.
+ * 2. Add a matching case in error_message().
+ * 3. (Optional) Define a domain-specific enum (e.g. ErrorJson) for subsystems.
  *
- * result_int_Error parse_number(const char* s) {
- *     if (!s) return RESULT_ERR(int, ERR_INVALID_ARG);
- *     // ...
- *     return RESULT_OK(int, value);
- * }
- * ```
+ * ── Typical use ──────────────────────────────────────────────────────────────
+ *
+ *   Error validate_age(int age) {
+ *       if (age < 0 || age > 150) return ERR_OUT_OF_RANGE;
+ *       return ERR_OK;
+ *   }
+ *
+ *   Error e = validate_age(input);
+ *   if (e != ERR_OK) {
+ *       fprintf(stderr, "validation failed: %s\n", error_message(e));
+ *   }
  */
+
+#include "core/primitives/types.h" /* bool, usize, u8 … i64, f32, f64 — Canon-C base types */
+
 /* ════════════════════════════════════════════════════════════════════════════
    ERROR CODE ENUMERATION
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Common error codes used across the library
+ * @brief Common error codes used across the library.
  *
- * General-purpose error codes suitable for most applications.
- * Always use ERR_OK = 0 for success (rarely appears in Result::Err).
- * Add new specific errors before ERR_COUNT when needed.
- * Keep the list small and general-purpose.
+ * ERR_OK (0) represents success. It is rarely used as the error variant of a
+ * Result type; its primary use is as a direct return value or sentinel.
+ *
+ * Add new domain-specific codes before ERR_COUNT. Keep the list small and
+ * general-purpose; prefer a separate enum for highly domain-specific errors.
  */
 typedef enum {
-    /* Success (not typically used in Result::Err) */
+    /* Success */
     ERR_OK = 0,
 
-    /* Argument and input validation errors (1-99) */
-    ERR_INVALID_ARG,        // NULL pointer, invalid value, precondition failed
-    ERR_OUT_OF_RANGE,       // Index/value exceeds bounds
-    ERR_PARSE_FAILED,       // String/number parsing failed
-    ERR_INVALID_FORMAT,     // Data format corrupted/invalid
-    ERR_INVALID_STATE,      // Operation invalid in current state
+    /* Argument and input validation errors (1–99) */
+    ERR_INVALID_ARG,        /* NULL pointer, invalid value, precondition failed */
+    ERR_OUT_OF_RANGE,       /* Index or value exceeds valid bounds              */
+    ERR_PARSE_FAILED,       /* String or number parsing failed                  */
+    ERR_INVALID_FORMAT,     /* Data format is corrupted or unrecognised         */
+    ERR_INVALID_STATE,      /* Operation is invalid in the current state        */
 
-    /* Resource and memory errors (100-199) */
-    ERR_OUT_OF_MEMORY,      // Allocation failed
-    ERR_BUFFER_TOO_SMALL,   // Buffer too small for result
-    ERR_CAPACITY_EXCEEDED,  // Fixed container/resource full
-    ERR_NOT_FOUND,          // Key/resource not found
+    /* Resource and memory errors (100–199) */
+    ERR_OUT_OF_MEMORY  = 100, /* Allocation failed                              */
+    ERR_BUFFER_TOO_SMALL,     /* Provided buffer too small to hold the result   */
+    ERR_CAPACITY_EXCEEDED,    /* Fixed container or resource is full            */
+    ERR_NOT_FOUND,            /* Requested key, item, or resource not found     */
 
-    /* I/O and system errors (200-299) */
-    ERR_IO_FAILED,          // File/network/device I/O error
-    ERR_PERMISSION,         // Access denied
-    ERR_TIMEOUT,            // Operation timed out
-    ERR_NOT_SUPPORTED,      // Feature unavailable on platform
-    ERR_ALREADY_EXISTS,     // Resource/file already exists
+    /* I/O and system errors (200–299) */
+    ERR_IO_FAILED      = 200, /* File, network, or device I/O error             */
+    ERR_PERMISSION,           /* Access denied                                  */
+    ERR_TIMEOUT,              /* Operation timed out                            */
+    ERR_NOT_SUPPORTED,        /* Feature unavailable on this platform           */
+    ERR_ALREADY_EXISTS,       /* Resource or file already exists                */
 
-    /* Arithmetic errors (300-399) */
-    ERR_OVERFLOW,           // Numeric overflow
-    ERR_UNDERFLOW,          // Numeric underflow
-    ERR_DIVIDE_BY_ZERO,     // Division/modulo by zero
+    /* Arithmetic errors (300–399) */
+    ERR_OVERFLOW       = 300, /* Numeric overflow                               */
+    ERR_UNDERFLOW,            /* Numeric underflow                              */
+    ERR_DIVIDE_BY_ZERO,       /* Division or modulo by zero                     */
 
-    /* Generic/miscellaneous (400+) */
-    ERR_UNKNOWN,            // Catch-all / unspecified error
-    ERR_NOT_IMPLEMENTED,    // Feature stubbed / not complete
+    /* Generic / miscellaneous (400+) */
+    ERR_UNKNOWN        = 400, /* Catch-all / unspecified error                  */
+    ERR_NOT_IMPLEMENTED,      /* Feature is stubbed or not yet complete         */
 
-    /* Sentinel — tracks total count. Do not use as real error. */
+    /*
+     * Sentinel — do not use as a real error code.
+     * Tracks the total count of defined codes for validation.
+     */
     ERR_COUNT
 } Error;
 
 /* ════════════════════════════════════════════════════════════════════════════
    ERROR MESSAGE AND UTILITY FUNCTIONS
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * @brief Returns a brief, human-readable string for an error code
+ * @brief Returns a brief, human-readable string for an error code.
  *
- * Returns static string literal — thread-safe, never NULL, lifetime of program.
- * Strings are intentionally short — add context at call sites.
+ * Returns a static string literal. Never returns NULL. Lifetime is the entire
+ * program. Thread-safe. Strings are intentionally short — add context at the
+ * call site.
  *
- * @param e Error code
- * @return Static description string ("Unknown error" for invalid values)
+ * For codes outside the defined range, returns "Unknown error".
+ *
+ * @param e  Error code to describe.
+ * @return   Pointer to a static, null-terminated string. Never NULL.
  */
 static inline const char* error_message(Error e) {
     switch (e) {
@@ -153,38 +158,60 @@ static inline const char* error_message(Error e) {
 }
 
 /**
- * @brief Checks if error code represents success
+ * @brief Returns true if the error code represents success (ERR_OK).
+ *
+ * @param e  Error code to test.
+ * @return   true if e == ERR_OK, false otherwise.
  */
 static inline bool error_is_ok(Error e) {
     return e == ERR_OK;
 }
 
 /**
- * @brief Checks if error code is within valid range
+ * @brief Returns true if the error code is within the defined valid range.
+ *
+ * Valid codes are ERR_OK (0) through ERR_COUNT - 1. ERR_COUNT itself and any
+ * negative or out-of-range integer cast to Error are considered invalid.
+ *
+ * Note: Because Error is a signed enum in C99, negative values are possible
+ * via explicit cast. This function rejects them.
+ *
+ * @param e  Error code to validate.
+ * @return   true if e is a defined, usable error code.
  */
 static inline bool error_is_valid(Error e) {
-    return e >= ERR_OK && e < ERR_COUNT;
+    return (int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT;
 }
 
 /**
- * @brief Returns error code as plain integer
+ * @brief Returns the error code as a plain int.
+ *
+ * Useful for logging, protocol encoding, or interoperability with APIs that
+ * expect integer error codes.
+ *
+ * @param e  Error code.
+ * @return   Integer representation of e.
  */
 static inline int error_code(Error e) {
     return (int)e;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   CONVENIENCE MACROS FOR RESULT<T, Error>
-   ════════════════════════════════════════════════════════════════════════════ */
-/** @brief Shorthand for result_T_Error_ok(val) */
-#define RESULT_OK(T, val)   result_##T##_Error_ok(val)
-
-/** @brief Shorthand for result_T_Error_err(err_code) */
-#define RESULT_ERR(T, code) result_##T##_Error_err(code)
-
-/** @brief Returns error message if result is Err, NULL if Ok */
-#define RESULT_ERROR_MSG(T, res) \
-    (result_##T##_Error_is_err(res) ? \
-        error_message(result_##T##_Error_unwrap_err(res)) : NULL)
+/*
+ * ── Result<T, Error> integration ─────────────────────────────────────────────
+ *
+ * Convenience macros for use with result.h are intentionally NOT included here.
+ * Including them would couple this header to result.h and to the token-pasting
+ * naming convention used by CANON_RESULT, making this file's behavior depend
+ * on a separate abstraction that cannot be understood by reading this header
+ * alone.
+ *
+ * To use Error with result.h, include "error_result.h" (opt-in):
+ *
+ *   #include "result/result.h"
+ *   #include "semantics/error_result.h"
+ *
+ * error_result.h defines RESULT_OK, RESULT_ERR, and RESULT_ERROR_MSG in terms
+ * of both headers, keeping each file's responsibilities clear and separate.
+ */
 
 #endif /* CANON_SEMANTICS_ERROR_H */
