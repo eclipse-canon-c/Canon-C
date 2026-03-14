@@ -256,13 +256,96 @@ already covered by libraries that specialize in exactly that.
 
 For what Canon-C intentionally omits, established C libraries exist:
 
-- **Networking / async I/O** — libuv, lwIP (embedded)
-- **Threading / concurrency** — pthreads, TinyCThread, C11 `<threads.h>`
-- **Serialization** — cJSON, yyjson (JSON), mpack (MessagePack), miniz (compression)
-- **Crypto / hashing** — monocypher, libsodium, xxHash
-- **Testing** — Unity, Criterion, greatest
-- **Logging** — zlog (if Canon-C's `log.h` is insufficient)
-- **Database / storage** — SQLite, LMDB
+---
+
+**Networking / async I/O**
+- `libuv` — cross-platform async I/O and event loop, the industry standard for
+  non-blocking network programming in C. Battle-tested across Windows, Linux,
+  and macOS. Used as the runtime underneath Node.js.
+- `lwIP` — lightweight TCP/IP stack for embedded systems with constrained memory.
+  Use when libuv's hosted runtime assumptions are too heavy for your target.
+
+**Threading / concurrency**
+- `pthreads` — POSIX standard threading API. Available natively on Linux and macOS.
+  No external dependency needed on Unix-like systems.
+- `TinyCThread` — portable implementation of the C11 threads API in two files.
+  No external dependencies. Use when you need cross-platform threading including
+  Windows without pulling in a larger framework.
+- `C11 <threads.h>` — if your compiler fully supports C11, the standard threading
+  API is available directly with no library needed.
+
+**Serialization**
+- `cJSON` — ultralightweight JSON parser and emitter in ANSI C. Single file, MIT
+  license. Widely used in embedded and systems projects.
+- `yyjson` — fastest JSON library in C. Use when performance matters and cJSON
+  is the bottleneck.
+- `mpack` — MessagePack for C. Use when binary serialization is needed over JSON:
+  smaller payloads, faster parsing, schema-driven.
+- `miniz` — single-file deflate/inflate and ZIP compression. Use for compressing
+  serialized data or reading and writing ZIP archives.
+
+**Hashing (non-cryptographic)**
+- `xxHash` — extremely fast general-purpose hash. Use for checksums, data
+  fingerprinting, or hash tables where security is not a concern.
+- `SipHash` — hash-flooding resistant hash function. Recommended for string keys
+  in Canon-C's hashmap — prevents algorithmic complexity attacks when keys are
+  user-controlled input.
+
+**Cryptography**
+- `monocypher` — minimal cryptographic library, single C file, zero allocation,
+  no global state. Covers ChaCha20, Poly1305, Blake2, Argon2, Ed25519. The
+  closest in philosophy to Canon-C among crypto libraries.
+- `libsodium` — higher-level cryptographic API, widely known and battle-tested.
+  Heavier than monocypher and manages its own initialization, but more familiar
+  to most developers.
+
+**Testing**
+- `Unity` — the most widely used unit testing framework in embedded and C99
+  projects. Simple assertion macros, no dynamic allocation, minimal setup.
+- `Criterion` — modern testing framework with automatic test discovery and no
+  boilerplate. Better suited for desktop targets where a richer test runner
+  is acceptable.
+- `greatest` — single header, public domain. Use when you want zero friction
+  and no framework overhead at all.
+
+**Logging**
+- `zlog` — for production systems requiring async, multi-target, or
+  runtime-configurable logging. Canon-C's `log.h` covers the common case —
+  reach for zlog only when you need to write to multiple sinks simultaneously,
+  change log levels at runtime without recompiling, or need buffered async
+  writes in high-throughput systems.
+
+**Database / storage**
+- `SQLite` — the universal embedded relational database. Zero configuration,
+  single file, battle-tested. Use when your data has relational structure or
+  you need SQL query capability.
+- `LMDB` — memory-mapped key-value store. Extremely clean C API, no hidden
+  allocation, ACID transactions. Use when you need fast persistent storage
+  without the overhead of a full relational database.
+
+**Embedded / bare-metal**
+- `FreeRTOS` — the most widely adopted RTOS for constrained microcontrollers.
+  Minimal footprint, simple task scheduler, direct hardware control. Use when
+  your device has well-defined behavior and you want full architectural control
+  with minimal overhead. Canon-C's lower layers (no stdio, no malloc) are
+  designed to compose cleanly in this environment.
+- `Zephyr` — full-featured, scalable RTOS managed by the Linux Foundation.
+  Built-in drivers, networking, Bluetooth, and security. Use when your project
+  needs to scale across hardware revisions, run multiple subsystems, or be
+  maintained long-term. Higher learning curve than FreeRTOS but significantly
+  more structure.
+
+**WebAssembly**
+- `Emscripten` — compiles C and C++ to WebAssembly using LLVM and Clang as a
+  drop-in replacement for gcc/clang. Output runs in browsers, Node.js, and
+  standalone Wasm runtimes. Canon-C's C99 code compiles cleanly through
+  Emscripten without modification.
+
+---
+
+> Note: these libraries follow their own conventions and do not share Canon-C's
+> explicit ownership or allocation philosophy. They are listed as functional
+> references, not stylistic endorsements.
 
 
 ---
