@@ -59,16 +59,16 @@
  *
  * Quick start:
  * ```c
- * owned(Arena*)        arena_create(owned(u8*) buffer, usize size);
- * owned(void*)         arena_alloc(borrowed(Arena*) arena, usize size);
- * void                 arena_destroy(owned(Arena*) arena);
+ * owned(Arena*)         arena_create(owned(u8*) buffer, usize size);
+ * owned(void*)          arena_alloc(borrowed(Arena*) arena, usize size);
+ * void                  arena_destroy(owned(Arena*) arena);
  * borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb);
  * ```
  *
  * Optional: stronger type safety with wrappers
  * ─────────────────────────────────────────────────────────────────────────
- * Use DEFINE_OWNED / DEFINE_BORROWED when you want distinct types that
- * prevent accidental passing of raw pointers where owned/borrowed is expected.
+ * Use DEFINE_OWNED / DEFINE_BORROWED when you want a distinct type that
+ * cannot be accidentally passed where a raw pointer is expected.
  *
  * @sa semantics/borrow.h — borrowed_slice, borrowed_str built on top of this
  */
@@ -158,12 +158,12 @@
  * @param ptr     Owned pointer to release (must be a non-NULL lvalue)
  * @param free_fn Cleanup function compatible with void fn(T*); must be non-NULL
  */
-#define CANON_DROP(ptr, free_fn)                                        \
-    do {                                                                 \
-        require_msg((ptr) != NULL, "CANON_DROP: ptr cannot be NULL");   \
+#define CANON_DROP(ptr, free_fn)                                              \
+    do {                                                                       \
+        require_msg((ptr)     != NULL, "CANON_DROP: ptr cannot be NULL");     \
         require_msg((free_fn) != NULL, "CANON_DROP: free_fn cannot be NULL"); \
-        (free_fn)(ptr);                                                  \
-        (ptr) = NULL;                                                    \
+        (free_fn)(ptr);                                                        \
+        (ptr) = NULL;                                                          \
     } while (0)
 
 /**
@@ -176,13 +176,13 @@
  * @param ptr     Owned pointer to release (lvalue; may be NULL)
  * @param free_fn Cleanup function compatible with void fn(T*); must be non-NULL
  */
-#define CANON_DROP_IF(ptr, free_fn)                                          \
-    do {                                                                      \
-        require_msg((free_fn) != NULL, "CANON_DROP_IF: free_fn cannot be NULL"); \
-        if ((ptr) != NULL) {                                                  \
-            (free_fn)(ptr);                                                   \
-            (ptr) = NULL;                                                     \
-        }                                                                     \
+#define CANON_DROP_IF(ptr, free_fn)                                               \
+    do {                                                                           \
+        require_msg((free_fn) != NULL, "CANON_DROP_IF: free_fn cannot be NULL");  \
+        if ((ptr) != NULL) {                                                       \
+            (free_fn)(ptr);                                                        \
+            (ptr) = NULL;                                                          \
+        }                                                                          \
     } while (0)
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -223,9 +223,10 @@ static inline owned_##type owned_##type##_wrap(type* ptr) {                     
 }                                                                                   \
                                                                                     \
 static inline type* owned_##type##_unwrap(owned_##type* o) {                       \
-    require_msg(o != NULL,       "owned_" #type "_unwrap: o cannot be NULL");       \
-    require_msg(o->ptr != NULL,  "owned_" #type "_unwrap: already consumed");       \
-    type* raw = o->ptr;                                                             \
+    type* raw;                                                                      \
+    require_msg(o != NULL,      "owned_" #type "_unwrap: o cannot be NULL");        \
+    require_msg(o->ptr != NULL, "owned_" #type "_unwrap: already consumed");        \
+    raw    = o->ptr;                                                                \
     o->ptr = NULL;                                                                  \
     return raw;                                                                     \
 }                                                                                   \
@@ -241,8 +242,8 @@ static inline bool owned_##type##_is_valid(const owned_##type* o) {             
                                                                                     \
 static inline void owned_##type##_drop(                                             \
         owned_##type* o, void (*free_fn)(type*)) {                                  \
-    require_msg(o != NULL,        "owned_" #type "_drop: o cannot be NULL");        \
-    require_msg(free_fn != NULL,  "owned_" #type "_drop: free_fn cannot be NULL");  \
+    require_msg(o != NULL,       "owned_" #type "_drop: o cannot be NULL");         \
+    require_msg(free_fn != NULL, "owned_" #type "_drop: free_fn cannot be NULL");   \
     if (o->ptr != NULL) {                                                           \
         free_fn(o->ptr);                                                            \
         o->ptr = NULL;                                                              \
@@ -261,23 +262,23 @@ static inline void owned_##type##_drop(                                         
  *   borrowed_T_get(b)      — read the raw pointer
  *   borrowed_T_is_valid(b) — returns true if wrapper holds a non-NULL pointer
  */
-#define DEFINE_BORROWED(type)                                                             \
-                                                                                          \
-typedef struct {                                                                          \
-    const type* ptr; /**< Borrowed pointer — must NOT be freed by holder */              \
-} borrowed_##type;                                                                        \
-                                                                                          \
-static inline borrowed_##type borrowed_##type##_from(const type* ptr) {                  \
-    return (borrowed_##type){ .ptr = ptr };                                               \
-}                                                                                         \
-                                                                                          \
-static inline const type* borrowed_##type##_get(const borrowed_##type* b) {              \
-    require_msg(b != NULL, "borrowed_" #type "_get: b cannot be NULL");                   \
-    return b->ptr;                                                                        \
-}                                                                                         \
-                                                                                          \
-static inline bool borrowed_##type##_is_valid(const borrowed_##type* b) {                \
-    return b != NULL && b->ptr != NULL;                                                   \
+#define DEFINE_BORROWED(type)                                                            \
+                                                                                         \
+typedef struct {                                                                         \
+    const type* ptr; /**< Borrowed pointer — must NOT be freed by holder */             \
+} borrowed_##type;                                                                       \
+                                                                                         \
+static inline borrowed_##type borrowed_##type##_from(const type* ptr) {                 \
+    return (borrowed_##type){ .ptr = ptr };                                              \
+}                                                                                        \
+                                                                                         \
+static inline const type* borrowed_##type##_get(const borrowed_##type* b) {             \
+    require_msg(b != NULL, "borrowed_" #type "_get: b cannot be NULL");                  \
+    return b->ptr;                                                                       \
+}                                                                                        \
+                                                                                         \
+static inline bool borrowed_##type##_is_valid(const borrowed_##type* b) {               \
+    return b != NULL && b->ptr != NULL;                                                  \
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
