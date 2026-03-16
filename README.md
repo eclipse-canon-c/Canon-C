@@ -665,6 +665,62 @@ surface — allocation-free, framework-free, visible at every level.
 
 ---
 
+### Borrow lifetime — know when a borrowed value is still valid
+
+```c
+#include "core/region.h"
+#include "core/arena.h"
+#include "semantics/borrow.h"
+
+u8    backing[2048];
+Arena scratch;
+arena_init(&scratch, backing, sizeof(backing));
+
+Region r;
+region_begin(&r);
+region_attach_arena(&r, &scratch);  /* arena resets automatically on region_end */
+
+/* stamp the borrow with this region's lifetime */
+region_id_t  rid  = region_id(&r);
+borrowed_str name = borrowed_str_from_cstr("Alice", &r);
+
+/* ... pass name through several layers of the codebase ... */
+
+/* assert the region is still alive before using name */
+region_assert_borrow_valid(&r, rid);
+
+/* ... work with name ... */
+
+region_end(&r);
+/* arena reset automatically   */
+/* cleanup hooks fired LIFO    */
+/* name is now invalid — region is closed */
+
+/* ... 500 lines later ... */
+
+/* if someone tries to use name here: */
+region_assert_borrow_valid(&r, rid); /* fires — region is closed */
+
+/*
+ * Plain C: stale borrows are silent — undefined behavior, data corruption,
+ *          crashes that only appear in production under specific conditions.
+ *
+ * Canon-C: borrow validity is assertable at any point in the codebase.
+ *          The region carries the lifetime. The assertion catches misuse early.
+ */
+```
+
+Three enforcement levels — no code changes needed between them:
+
+- **Default** — assertions are debug-only, compiled away with `NDEBUG`
+- **`CANON_STRICT`** — assertions are always-on in every build including production
+- **Frama-C + `CANON_NO_REQUIRE`** — borrows proved statically, zero runtime cost
+
+The `...` represents real programs where borrowed values travel far
+from their source — exactly where stale borrows become invisible bugs.
+
+---
+
 ## Usage
 
 Canon-C is **header-only**. To use:
