@@ -62,7 +62,8 @@
     - [6. algo/ — Algorithms on collections](#6-algo--algorithms-on-collections)
     - [7. util/ — Utility modules](#7-util--utility-modules)
 6. [Scope](#scope)
-7. [Usage](#usage)
+7. [Examples](#examples)
+8. [Usage](#usage)
 
 ---
 
@@ -463,6 +464,129 @@ For what Canon-C intentionally omits, established C libraries exist:
 > pull in only freestanding headers (`<stdint.h>`, `<stddef.h>`,
 > `<limits.h>`, `<stdbool.h>`) and are safe on any target without
 > modification.
+
+---
+
+## Examples
+
+Canon-C is not about writing less code. It is about writing code that stays
+readable, explicit, and safe as the codebase grows. The `...` below represents
+real programs — the conventions you see in each snippet are the same ones
+you will find everywhere in a Canon-C codebase, whether it is 300 lines or
+30,000.
+
+---
+
+### Contracts — preconditions are visible at every function boundary
+```c
+#define CANON_CONTRACT_IMPL
+#include "core/primitives/contract.h"
+
+result_int_Error process(
+    borrowed(Arena*)  arena,
+    borrowed(Config*) cfg,
+    usize             count)
+{
+    require_msg(arena != NULL, "process: arena is NULL");
+    require_msg(cfg   != NULL, "process: cfg is NULL");
+    require_msg(count  > 0,    "process: count must be > 0");
+
+    /* ... */
+}
+```
+
+No silent failures. No NULL dereferences discovered at 3am.
+Every precondition is visible, grep-able, and self-documenting.
+
+---
+
+### Ownership — intent is visible at every call site
+```c
+#include "core/ownership.h"
+
+/* caller receives ownership — caller must free */
+owned(Config*)  config_create(owned(u8*) buffer, usize size);
+
+/* callee borrows — caller retains ownership */
+str_t           config_get_name(borrowed(const Config*) cfg);
+
+/* callee consumes — caller must not use after */
+void            config_destroy(dropped(Config*) cfg);
+
+/* ... 2000 lines later, still the same conventions ... */
+
+owned(Config*) cfg  = config_create(buf, sizeof(buf));
+str_t          name = config_get_name(cfg);
+config_destroy(cfg); /* cfg is now invalid — dropped() makes this obvious */
+```
+
+No convention drift. A new contributor reading any function signature
+immediately knows who owns what.
+
+---
+
+### Arena — lifetime is explicit and controlled
+```c
+#include "core/arena.h"
+#include "core/scope.h"
+
+u8    backing[4096];
+Arena arena;
+arena_init(&arena, backing, sizeof(backing));
+
+{
+    ArenaMark mark = arena_mark(&arena);
+    defer { arena_reset_to(&arena, mark); }
+
+    /* all allocations here are released at scope exit */
+    void* tmp = arena_alloc(&arena, 256);
+
+    /* ... */
+
+} /* arena_reset_to() called automatically — no manual free */
+
+/* ... 500 lines later, same arena, still predictable ... */
+```
+
+No hidden allocations. No malloc scattered across the codebase.
+Lifetime boundaries are visible at the site where they are declared.
+
+---
+
+### Error propagation — failures are values, not surprises
+```c
+#include "semantics/result/result.h"
+#include "semantics/error.h"
+
+result_int_Error parse_and_validate(
+    borrowed(Arena*)       arena,
+    borrowed(const char**) inputs,
+    usize                  count)
+{
+    require_msg(arena  != NULL, "arena is NULL");
+    require_msg(inputs != NULL, "inputs is NULL");
+
+    canon_vec_int vec;
+    TRY(int, Error, collect(arena, inputs, count, &vec));
+
+    /* ... */
+
+    TRY(int, Error, validate(&vec));
+
+    return sum(&vec);
+}
+
+/* ... caller, 1000 lines away ... */
+
+result_int_Error r = parse_and_validate(&arena, inputs, count);
+if (!result_int_Error_is_ok(r)) {
+    Error e = result_int_Error_unwrap_err(r);
+    printf("Failed: %s\n", error_message(e));
+}
+```
+
+No errno. No sentinel returns. No forgotten error checks.
+Failures propagate explicitly through the entire call chain.
 
 ---
 
