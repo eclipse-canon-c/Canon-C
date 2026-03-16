@@ -590,6 +590,81 @@ Failures propagate explicitly through the entire call chain.
 
 ---
 
+### Error context — the full chain, no allocation, no framework
+
+```c
+#include "semantics/diag.h"
+#include "semantics/result/result.h"
+#include "semantics/error.h"
+
+/* ... deep in the call chain ... */
+
+static bool parse_timeout(
+    borrowed(const char*) str,
+    int*                  out,
+    Diag*                 diag)
+{
+    require_msg(str != NULL, "parse_timeout: str is NULL");
+    require_msg(out != NULL, "parse_timeout: out is NULL");
+
+    result_i64_Error r = parse_i64(str, NULL);
+    if (!result_i64_Error_is_ok(r)) {
+        DIAG_PUSH(diag, ERR_PARSE_FAILED, "timeout value is not a valid integer");
+        return false;
+    }
+
+    *out = (int)result_i64_Error_unwrap(r);
+    return true;
+}
+
+/* ... one level up ... */
+
+static bool load_config(
+    borrowed(const char*) path,
+    int*                  out_timeout,
+    Diag*                 diag)
+{
+    require_msg(path        != NULL, "load_config: path is NULL");
+    require_msg(out_timeout != NULL, "load_config: out_timeout is NULL");
+
+    const char* raw_value = /* ... read from file ... */ "bad_value";
+
+    DIAG_PROPAGATE(
+        parse_timeout(raw_value, out_timeout, diag),
+        diag,
+        ERR_INVALID_FORMAT,
+        "failed to parse timeout field in config",
+        false
+    );
+
+    return true;
+}
+
+/* ... surface, 1000 lines away ... */
+
+Diag diag  = diag_init();
+int  timeout;
+
+if (!load_config("config.txt", &timeout, &diag)) {
+    diag_print(&diag, stderr);
+}
+
+/*
+ * Output:
+ * [0] parse.c:24 in parse_timeout() — error 3: "timeout value is not a valid integer"
+ * [1] config.c:51 in load_config()  — error 4: "failed to parse timeout field in config"
+ *
+ * No heap allocation. No logging framework. No lost context.
+ * The full chain survives from root cause to surface — stack allocated.
+ */
+```
+
+Without `diag.h`, the caller sees one error code and nothing else.
+With `diag.h`, the full context chain propagates from root cause to
+surface — allocation-free, framework-free, visible at every level.
+
+---
+
 ## Usage
 
 Canon-C is **header-only**. To use:
