@@ -33,6 +33,10 @@ add_executable(limits_test test/core/primitives/limits_test.c)
 target_include_directories(limits_test PRIVATE ${CMAKE_SOURCE_DIR}/core/primitives)
 add_test(NAME LimitsTest COMMAND limits_test)
 
+add_executable(types_test test/core/primitives/types_test.c)
+target_include_directories(types_test PRIVATE ${CMAKE_SOURCE_DIR}/core/primitives)
+add_test(NAME TypesTest COMMAND types_test)
+
 add_executable(ptr_test test/core/primitives/ptr_test.c)
 target_include_directories(ptr_test PRIVATE ${CMAKE_SOURCE_DIR})
 add_test(NAME PtrTest COMMAND ptr_test)
