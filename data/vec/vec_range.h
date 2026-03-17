@@ -10,7 +10,7 @@
  * @brief Optional range-fill extension for Canon-C typed vectors
  *
  * Adds extend_from_range to any typed vector instantiated via DEFINE_VEC.
- * Depends on data/range.h for the IntRange type and range iteration.
+ * Depends on data/range.h for the range type and range iteration API.
  *
  * This file is intentionally separate from vec_defn.h to keep the core
  * vec module free of data/range.h as a dependency. Only include it when
@@ -19,8 +19,8 @@
  * Core ideas:
  * ────────────────────────────────────────────────────────────────────────────
  * - No hidden allocation — fills into existing bounded buffer
- * - Supports ascending and descending ranges
- * - Overflow-protected element count calculation via checked.h
+ * - Supports ascending, descending, and stepped ranges (full range semantics)
+ * - Overflow-protected element count calculation via range_len() + checked.h
  * - Returns Result<bool, Error> on failure — never silently truncates
  *
  * Portability:
@@ -36,7 +36,7 @@
  * - data/range.h     (same layer, different module — explicit dependency)
  * - data/vec/        (same module)
  *
- * Usage — extend a vec_int with values from an IntRange:
+ * Usage — extend a vec_int with values from a range:
  * ```c
  * #include "data/vec/vec.h"
  * #include "data/vec/vec_range.h"
@@ -47,13 +47,17 @@
  * int buf[16];
  * canon_vec_int v = canon_vec_int_init(buf, 16);
  *
- * IntRange r = range_make(0, 10);  // 0..10
+ * range r = range_make(0, 10, 1);  // 0..9 ascending
  * result_bool_Error res = canon_vec_int_extend_from_range(&v, r);
  * // v now contains [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
  *
- * IntRange desc = range_make(5, 0);  // 5..0 descending
+ * range desc = range_make(5, 0, -1);  // 5..1 descending
  * canon_vec_int_extend_from_range(&v, desc);
  * // appends [5, 4, 3, 2, 1]
+ *
+ * range stepped = range_make(0, 20, 3);  // stepped by 3
+ * canon_vec_int_extend_from_range(&v, stepped);
+ * // appends [0, 3, 6, 9, 12, 15, 18]
  * ```
  *
  * @sa vec.h, vec_defn.h, data/range.h
@@ -73,12 +77,12 @@
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, IntRange r);
+ * result_bool_Error fn(VecType* v, range r);
  * ```
  *
  * @pre v != NULL
  * @pre v->items != NULL
- * @pre The range element count must not overflow usize (checked)
+ * @pre The range element count must not overflow usize (checked via range_len)
  * @pre v->len + count <= v->capacity (checked)
  *
  * @post On Ok: range values appended to v in iteration order
@@ -89,27 +93,24 @@
  * @note Element values are cast from isize to type.
  *       Ensure type can represent the range values without truncation.
  *       For signed ranges into unsigned types, caller is responsible for validation.
+ * @note Full range semantics are honoured — ascending, descending, and stepped
+ *       ranges all work correctly via range_len(), range_has_next(), range_next().
  *
  * Performance:
- * - Time:  O(count) where count = abs(r.end - r.start)
+ * - Time:  O(count) where count = range_len(&r)
  * - Space: O(1) — no allocation, fills into existing buffer
  */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, IntRange r) { \
+linkage result_bool_Error fn(VecType* v, range r) { \
     if (!v || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
-    isize diff = (r.end >= r.start) \
-        ? (isize)(r.end - r.start) \
-        : (isize)(r.start - r.end); \
-    usize count = (usize)diff; \
+    usize count = range_len(&r); \
     usize total; \
     if (!checked_add(v->len, count, &total)) \
         return result_bool_Error_err(ERR_OVERFLOW); \
     if (total > v->capacity) \
         return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
-    isize step = (r.end >= r.start) ? 1 : -1; \
-    isize val  = r.start; \
-    for (usize i = 0; i < count; i++, val += step) { \
-        v->items[v->len + i] = (type)val; \
+    for (usize i = 0; range_has_next(&r); i++) { \
+        v->items[v->len + i] = (type)range_next(&r); \
     } \
     v->len = total; \
     return result_bool_Error_ok(true); \
@@ -150,7 +151,7 @@ linkage result_bool_Error fn(VecType* v, IntRange r) { \
  * DEFINE_VEC_RANGE(static inline, int)
  *
  * // Now available:
- * // result_bool_Error canon_vec_int_extend_from_range(canon_vec_int* v, IntRange r);
+ * // result_bool_Error canon_vec_int_extend_from_range(canon_vec_int* v, range r);
  * ```
  *
  * @note Only makes semantic sense for numeric element types (int, float, i32, etc.)
