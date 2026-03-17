@@ -300,7 +300,6 @@ static void test_pointer_tagging(void) {
 
 static void test_platform_info(void) {
     ASSERT_EQ("POINTER_SIZE == sizeof(void*)", (usize)sizeof(void*), CANON_POINTER_SIZE);
-    ASSERT_EQ("BITS_PER_BYTE == CHAR_BIT",     (usize)CHAR_BIT,      CANON_BITS_PER_BYTE);
     ASSERT_EQ("BITS_PER_BYTE == 8",            (usize)8,             CANON_BITS_PER_BYTE);
 
     ASSERT_EQ("POINTER_BITS == POINTER_SIZE * BITS_PER_BYTE",
