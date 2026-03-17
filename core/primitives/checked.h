@@ -440,9 +440,22 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
         return true;
     }
     /*
+     * ISIZE_MIN is a special case: its negation is unrepresentable.
+     * The division-based checks below cannot catch ISIZE_MIN * -1 because
+     * -ISIZE_MIN overflows before the comparison is evaluated.
+     * Handle all ISIZE_MIN cases explicitly: ISIZE_MIN * 1 and 1 * ISIZE_MIN
+     * are the only non-zero multiplications that fit.
+     */
+    if (a == CANON_ISIZE_MIN || b == CANON_ISIZE_MIN) {
+        if (a == CANON_ISIZE_MIN && b ==  1) { *result = CANON_ISIZE_MIN; return true; }
+        if (a ==  1 && b == CANON_ISIZE_MIN) { *result = CANON_ISIZE_MIN; return true; }
+        return false;
+    }
+    /*
      * Check BEFORE multiplying to avoid signed overflow UB.
      * All four sign combinations are handled explicitly.
-     * Division is safe here: both a != 0 and b != 0 are guaranteed above.
+     * Division is safe here: both a != 0 and b != 0 are guaranteed above,
+     * and ISIZE_MIN has been eliminated, so -a and -b are always representable.
      *
      * (+, +) → positive result, cap at ISIZE_MAX:
      *   overflow if a > ISIZE_MAX / b
