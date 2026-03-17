@@ -19,3 +19,7 @@ if(LIBM)
     target_link_libraries(compare_test PRIVATE ${LIBM})
 endif()
 add_test(NAME CompareTest COMMAND compare_test)
+
+add_executable(contract_test test/core/primitives/contract_test.c)
+target_include_directories(contract_test PRIVATE ${CMAKE_SOURCE_DIR}/core/primitives)
+add_test(NAME ContractTest COMMAND contract_test)
