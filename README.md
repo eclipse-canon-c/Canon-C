@@ -250,8 +250,7 @@ need to live here — the user writes it. If the absence of a module forces ever
 downstream user to re-invent the same unsafe boilerplate, it belongs.
 
 Canon-C stops at the boundary where general-purpose utility ends and
-application-specific concerns begin. Concretely: no networking, no threading,
-no serialization, no OS abstractions. These domains are large, platform-specific,
+application-specific concerns begin. Concretely, all things that are not covered are listed below . These domains are large, platform-specific,
 and opinionated in ways that don't belong in a vocabulary library — and they're
 already covered by libraries that specialize in exactly that.
 
