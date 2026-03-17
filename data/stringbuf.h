@@ -141,8 +141,6 @@ static inline bool stringbuf_init_arena(StringBuf* sb, Arena* arena, usize initi
     require_msg(arena != NULL,   "stringbuf_init_arena: arena cannot be NULL");
     require_msg(initial_cap > 1, "stringbuf_init_arena: initial_cap must be > 1");
 
-    if (!sb || !arena || initial_cap == 0) return false;
-
     char* buf = (char*)arena_alloc(arena, initial_cap);
     if (!buf) return false;
 
@@ -176,8 +174,6 @@ static inline void stringbuf_init_buffer(StringBuf* sb, char* buffer, usize cap)
     require_msg(buffer != NULL, "stringbuf_init_buffer: buffer cannot be NULL");
     require_msg(cap > 1,        "stringbuf_init_buffer: cap must be > 1");
 
-    if (!sb || !buffer || cap == 0) return;
-
     buffer[0] = '\0';
     *sb = (StringBuf){
         .arena    = NULL,
@@ -208,7 +204,6 @@ static inline bool stringbuf_append(StringBuf* sb, const char* s) {
     if (add_len > CANON_USIZE_MAX - sb->len - 1) return false;
     if (sb->len + add_len + 1 > sb->capacity)    return false;
 
-    /* ptr_offset replaces: sb->data + sb->len */
     mem_copy(ptr_offset(sb->data, sb->len), s, add_len);
     sb->len += add_len;
     sb->data[sb->len] = '\0';
