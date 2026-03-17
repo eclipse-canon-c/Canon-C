@@ -75,6 +75,11 @@ static inline cbytes_t cbytes_from(const void* ptr, usize len) {
     return (cbytes_t){ .ptr = (const u8*)ptr, .len = len };
 }
 
+/** Returns an empty cbytes_t (ptr == NULL, len == 0). */
+static inline cbytes_t cbytes_empty(void) {
+    return (cbytes_t){ .ptr = NULL, .len = 0 };
+}
+
 /** Adds const: converts bytes_t to cbytes_t. */
 static inline cbytes_t bytes_as_const(bytes_t b) {
     return (cbytes_t){ .ptr = b.ptr, .len = b.len };
