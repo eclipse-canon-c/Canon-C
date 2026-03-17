@@ -7,6 +7,7 @@
 #include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/checked.h"
+#include "core/ownership.h"
 #include "core/slice.h"
 #include "semantics/option/option.h"
 
@@ -26,6 +27,27 @@
  * - Safe indexing -- bounds-checked get/set, option variants for out-of-bounds
  * - Iteration via slice -- array_as_slice() yields a typed non-owning view
  * - Suitable for embedded, real-time, and stack-critical code
+ *
+ * Ownership conventions (see core/ownership.h):
+ * ----------------------------------------------------------------------------
+ * The array struct is value-typed (buffer lives inside the struct, not on the
+ * heap), so owned/borrowed annotations apply to pointers-to-array passed
+ * across API boundaries. All functions in this header borrow their inputs:
+ *
+ * - _from_ptr(src, count)  -- src is borrowed(const type*)
+ * - _get(a, i, out)        -- a is borrowed(const array*), out is borrowed(type*)
+ * - _get_option(a, i)      -- a is borrowed(const array*)
+ * - _get_unchecked(a, i)   -- a is borrowed(const array*)
+ * - _set(a, i, val)        -- a is borrowed(array*)
+ * - _at(a, i)              -- a is borrowed(array*); returns borrowed(type*)
+ * - _first(a)              -- a is borrowed(array*); returns borrowed(type*)
+ * - _last(a)               -- a is borrowed(array*); returns borrowed(type*)
+ * - _fill_all(a, val)      -- a is borrowed(array*)
+ * - _copy_from(dst, src)   -- both borrowed
+ * - _equal(a, b)           -- both borrowed(const array*)
+ * - _as_slice(a)           -- a is borrowed(array*); returns borrowed(slice_##type)
+ * - _as_bytes(a)           -- a is borrowed(array*); returns borrowed(bytes_t)
+ * - _as_cbytes(a)          -- a is borrowed(const array*); returns borrowed(cbytes_t)
  *
  * Relationship to other containers:
  * ----------------------------------------------------------------------------
@@ -127,6 +149,7 @@
  *
  * @sa data/vec/vec.h             -- runtime-capacity companion
  * @sa core/slice.h               -- slice_##type used by array_as_slice
+ * @sa core/ownership.h           -- owned/borrowed/moved/dropped annotations
  * @sa core/primitives/checked.h  -- checked_mul() for overflow-safe arithmetic
  * @sa semantics/option/option.h  -- CANON_OPTION(type) must precede DEFINE_ARRAY
  */
@@ -154,34 +177,34 @@
  * Constructors:
  * - array_##type##_##N##_zero()                    -> array (all bytes zeroed)
  * - array_##type##_##N##_fill(val)                 -> array (all elements = val)
- * - array_##type##_##N##_from_ptr(src, count)      -> array (copy from pointer)
+ * - array_##type##_##N##_from_ptr(src, count)      -> array (copy from borrowed(const type*))
  *
  * Queries:
  * - array_##type##_##N##_len()                     -> usize (always N)
  * - array_##type##_##N##_size_bytes()              -> usize (N * sizeof(type))
  *
  * Element access:
- * - array_##type##_##N##_get(a, i, out)            -> bool (bounds-checked)
+ * - array_##type##_##N##_get(a, i, out)            -> bool   (borrowed params, bounds-checked)
  * - array_##type##_##N##_get_option(a, i)          -> option_##type
- * - array_##type##_##N##_get_unchecked(a, i)       -> type (debug-checked)
- * - array_##type##_##N##_set(a, i, val)            -> bool (bounds-checked)
- * - array_##type##_##N##_at(a, i)                  -> type* (NULL if OOB)
- * - array_##type##_##N##_first(a)                  -> type*
- * - array_##type##_##N##_last(a)                   -> type*
+ * - array_##type##_##N##_get_unchecked(a, i)       -> type   (debug-checked)
+ * - array_##type##_##N##_set(a, i, val)            -> bool   (bounds-checked)
+ * - array_##type##_##N##_at(a, i)                  -> borrowed(type*) or NULL if OOB
+ * - array_##type##_##N##_first(a)                  -> borrowed(type*)
+ * - array_##type##_##N##_last(a)                   -> borrowed(type*)
  * - array_##type##_##N##_first_option(a)           -> option_##type
  * - array_##type##_##N##_last_option(a)            -> option_##type
  *
  * Mutation:
- * - array_##type##_##N##_fill_all(a, val)          -> void (set every element)
- * - array_##type##_##N##_copy_from(dst, src)       -> void (copy all N elements)
+ * - array_##type##_##N##_fill_all(a, val)          -> void
+ * - array_##type##_##N##_copy_from(dst, src)       -> void (both borrowed)
  *
  * Comparison:
- * - array_##type##_##N##_equal(a, b)               -> bool (element-wise)
+ * - array_##type##_##N##_equal(a, b)               -> bool (both borrowed(const array*))
  *
- * Views (zero-copy):
- * - array_##type##_##N##_as_slice(a)               -> slice_##type
- * - array_##type##_##N##_as_bytes(a)               -> bytes_t
- * - array_##type##_##N##_as_cbytes(a)              -> cbytes_t
+ * Views (zero-copy, all return borrowed; valid while array is alive):
+ * - array_##type##_##N##_as_slice(a)               -> borrowed(slice_##type)
+ * - array_##type##_##N##_as_bytes(a)               -> borrowed(bytes_t)
+ * - array_##type##_##N##_as_cbytes(a)              -> borrowed(cbytes_t)
  *
  * Note: _as_slice_const has been removed. slice_##type carries a mutable
  * pointer and cannot safely represent a view into a const array. Pass a
@@ -220,17 +243,15 @@ static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
 /** \
  * @brief Returns an array populated by copying count elements from src. \
  * \
+ * @param src   borrowed(const type*) -- non-owning view; caller retains ownership \
+ * @param count number of elements to copy \
+ * \
  * If count < N, remaining elements are zeroed. \
  * If count > N, only the first N elements are copied. \
  * Returns a zeroed array if src == NULL or count == 0. \
- * Returns a zeroed array if the byte size calculation overflows (impossible \
- * in practice since N and sizeof(type) are compile-time constants, but \
- * checked for correctness). \
- * \
- * @pre src != NULL if count > 0 \
  */ \
 static inline array_##type##_##N array_##type##_##N##_from_ptr( \
-    const type *src, usize count) { \
+    borrowed(const type *) src, usize count) { \
     array_##type##_##N a; \
     usize copy_n; \
     usize byte_size; \
@@ -269,10 +290,12 @@ static inline usize array_##type##_##N##_size_bytes(void) { \
 \
 /** \
  * @brief Copies element at index i into *out. \
+ * @param a   borrowed(const array_##type##_##N*) \
+ * @param out borrowed(type*) -- written into caller's storage \
  * @return true on success, false if a == NULL, out == NULL, or i >= N. O(1) \
  */ \
 static inline bool array_##type##_##N##_get( \
-    const array_##type##_##N *a, usize i, type *out) { \
+    borrowed(const array_##type##_##N *) a, usize i, borrowed(type *) out) { \
     if (!a || !out || i >= (usize)(N)) { return false; } \
     *out = a->items[i]; \
     return true; \
@@ -280,23 +303,25 @@ static inline bool array_##type##_##N##_get( \
 \
 /** \
  * @brief Returns element at index i as option_##type. \
+ * @param a   borrowed(const array_##type##_##N*) \
  * @return Some(element) on success, None if a == NULL or i >= N. O(1) \
  * @pre CANON_OPTION(type) must have been called before DEFINE_ARRAY(type, N). \
  */ \
 static inline option_##type array_##type##_##N##_get_option( \
-    const array_##type##_##N *a, usize i) { \
+    borrowed(const array_##type##_##N *) a, usize i) { \
     if (!a || i >= (usize)(N)) { return option_##type##_none(); } \
     return option_##type##_some(a->items[i]); \
 } \
 \
 /** \
  * @brief Returns element at index i without bounds checking (fast path). \
+ * @param a   borrowed(const array_##type##_##N*) \
  * @pre a != NULL \
  * @pre i < N -- caller must guarantee this \
  * @note Checked via ensure_msg() in debug builds only. O(1) \
  */ \
 static inline type array_##type##_##N##_get_unchecked( \
-    const array_##type##_##N *a, usize i) { \
+    borrowed(const array_##type##_##N *) a, usize i) { \
     ensure_msg(a != NULL,       "array_" #type "_" #N "_get_unchecked: a cannot be NULL"); \
     ensure_msg(i < (usize)(N),  "array_" #type "_" #N "_get_unchecked: index out of bounds"); \
     return a->items[i]; \
@@ -304,52 +329,67 @@ static inline type array_##type##_##N##_get_unchecked( \
 \
 /** \
  * @brief Sets element at index i to val. \
+ * @param a   borrowed(array_##type##_##N*) \
  * @return true on success, false if a == NULL or i >= N. O(1) \
  */ \
 static inline bool array_##type##_##N##_set( \
-    array_##type##_##N *a, usize i, type val) { \
+    borrowed(array_##type##_##N *) a, usize i, type val) { \
     if (!a || i >= (usize)(N)) { return false; } \
     a->items[i] = val; \
     return true; \
 } \
 \
 /** \
- * @brief Returns a pointer to element at index i, or NULL if out of bounds. O(1) \
+ * @brief Returns a borrowed pointer to element at index i, or NULL if OOB. O(1) \
+ * @param a   borrowed(array_##type##_##N*) \
+ * @return borrowed(type*) -- view into a's storage; caller must NOT free \
  */ \
-static inline type *array_##type##_##N##_at( \
-    array_##type##_##N *a, usize i) { \
+static inline borrowed(type *) array_##type##_##N##_at( \
+    borrowed(array_##type##_##N *) a, usize i) { \
     if (!a || i >= (usize)(N)) { return NULL; } \
     return &a->items[i]; \
 } \
 \
-/** @brief Returns pointer to first element. Never NULL if a != NULL. O(1) */ \
-static inline type *array_##type##_##N##_first(array_##type##_##N *a) { \
+/** \
+ * @brief Returns a borrowed pointer to the first element. Never NULL if a != NULL. O(1) \
+ * @param a   borrowed(array_##type##_##N*) \
+ * @return borrowed(type*) -- view into a's storage; caller must NOT free \
+ */ \
+static inline borrowed(type *) array_##type##_##N##_first( \
+    borrowed(array_##type##_##N *) a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_first: a cannot be NULL"); \
     return &a->items[0]; \
 } \
 \
-/** @brief Returns pointer to last element. Never NULL if a != NULL. O(1) */ \
-static inline type *array_##type##_##N##_last(array_##type##_##N *a) { \
+/** \
+ * @brief Returns a borrowed pointer to the last element. Never NULL if a != NULL. O(1) \
+ * @param a   borrowed(array_##type##_##N*) \
+ * @return borrowed(type*) -- view into a's storage; caller must NOT free \
+ */ \
+static inline borrowed(type *) array_##type##_##N##_last( \
+    borrowed(array_##type##_##N *) a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_last: a cannot be NULL"); \
     return &a->items[(usize)(N) - 1u]; \
 } \
 \
 /** \
  * @brief Returns first element as option_##type. O(1) \
+ * @param a   borrowed(const array_##type##_##N*) \
  * @pre CANON_OPTION(type) must have been called before DEFINE_ARRAY(type, N). \
  */ \
 static inline option_##type array_##type##_##N##_first_option( \
-    const array_##type##_##N *a) { \
+    borrowed(const array_##type##_##N *) a) { \
     if (!a) { return option_##type##_none(); } \
     return option_##type##_some(a->items[0]); \
 } \
 \
 /** \
  * @brief Returns last element as option_##type. O(1) \
+ * @param a   borrowed(const array_##type##_##N*) \
  * @pre CANON_OPTION(type) must have been called before DEFINE_ARRAY(type, N). \
  */ \
 static inline option_##type array_##type##_##N##_last_option( \
-    const array_##type##_##N *a) { \
+    borrowed(const array_##type##_##N *) a) { \
     if (!a) { return option_##type##_none(); } \
     return option_##type##_some(a->items[(usize)(N) - 1u]); \
 } \
@@ -360,9 +400,10 @@ static inline option_##type array_##type##_##N##_last_option( \
 \
 /** \
  * @brief Sets every element to val. NULL-safe: no-op when a == NULL. O(N) \
+ * @param a   borrowed(array_##type##_##N*) \
  */ \
 static inline void array_##type##_##N##_fill_all( \
-    array_##type##_##N *a, type val) { \
+    borrowed(array_##type##_##N *) a, type val) { \
     usize _i; \
     if (!a) { return; } \
     for (_i = 0; _i < (usize)(N); _i++) { \
@@ -372,11 +413,14 @@ static inline void array_##type##_##N##_fill_all( \
 \
 /** \
  * @brief Copies all N elements from src into dst. O(N) \
+ * @param dst borrowed(array_##type##_##N*)       -- caller retains ownership \
+ * @param src borrowed(const array_##type##_##N*) -- caller retains ownership \
  * @pre dst != NULL \
  * @pre src != NULL \
  */ \
 static inline void array_##type##_##N##_copy_from( \
-    array_##type##_##N *dst, const array_##type##_##N *src) { \
+    borrowed(array_##type##_##N *)       dst, \
+    borrowed(const array_##type##_##N *) src) { \
     require_msg(dst != NULL, "array_" #type "_" #N "_copy_from: dst cannot be NULL"); \
     require_msg(src != NULL, "array_" #type "_" #N "_copy_from: src cannot be NULL"); \
     memcpy(dst->items, src->items, sizeof(dst->items)); \
@@ -388,6 +432,8 @@ static inline void array_##type##_##N##_copy_from( \
 \
 /** \
  * @brief Returns true if all N elements of a and b are byte-equal. O(N) \
+ * @param a   borrowed(const array_##type##_##N*) \
+ * @param b   borrowed(const array_##type##_##N*) \
  * \
  * Uses memcmp -- suitable for types with no padding and no pointer members. \
  * For types with padding or pointer semantics, compare element-by-element \
@@ -396,7 +442,8 @@ static inline void array_##type##_##N##_copy_from( \
  * @return false if a == NULL or b == NULL. \
  */ \
 static inline bool array_##type##_##N##_equal( \
-    const array_##type##_##N *a, const array_##type##_##N *b) { \
+    borrowed(const array_##type##_##N *) a, \
+    borrowed(const array_##type##_##N *) b) { \
     if (!a || !b) { return false; } \
     if (a == b)  { return true;  } \
     return memcmp(a->items, b->items, sizeof(a->items)) == 0; \
@@ -407,25 +454,31 @@ static inline bool array_##type##_##N##_equal( \
    ============================================================================ */ \
 \
 /** \
- * @brief Returns a typed slice_##type view over all N elements. O(1) \
+ * @brief Returns a borrowed slice_##type view over all N elements. O(1) \
+ * \
+ * @param a   borrowed(array_##type##_##N*) \
+ * @return borrowed(slice_##type) -- view into a's storage; \
+ *         caller must NOT free; valid only while a is alive and unmodified. \
  * \
  * @pre DEFINE_SLICE(type) must have been called before DEFINE_ARRAY(type, N). \
  * @pre a != NULL \
- * @return slice_##type -- non-owning, valid while a is alive and unmodified. \
  */ \
-static inline slice_##type array_##type##_##N##_as_slice( \
-    array_##type##_##N *a) { \
+static inline borrowed(slice_##type) array_##type##_##N##_as_slice( \
+    borrowed(array_##type##_##N *) a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_as_slice: a cannot be NULL"); \
     return slice_##type##_from(a->items, (usize)(N)); \
 } \
 \
 /** \
- * @brief Returns a mutable bytes_t view over all N * sizeof(type) bytes. O(1) \
+ * @brief Returns a borrowed bytes_t mutable view over all N * sizeof(type) bytes. O(1) \
  * \
+ * @param a   borrowed(array_##type##_##N*) \
+ * @return borrowed(bytes_t) -- caller must NOT free; valid only while a is alive. \
  * Returns bytes_empty() on overflow (unreachable in practice). \
  * @pre a != NULL \
  */ \
-static inline bytes_t array_##type##_##N##_as_bytes(array_##type##_##N *a) { \
+static inline borrowed(bytes_t) array_##type##_##N##_as_bytes( \
+    borrowed(array_##type##_##N *) a) { \
     usize byte_size; \
     require_msg(a != NULL, "array_" #type "_" #N "_as_bytes: a cannot be NULL"); \
     if (!checked_mul((usize)(N), sizeof(type), &byte_size)) { \
@@ -435,13 +488,15 @@ static inline bytes_t array_##type##_##N##_as_bytes(array_##type##_##N *a) { \
 } \
 \
 /** \
- * @brief Returns a read-only cbytes_t view over all N * sizeof(type) bytes. O(1) \
+ * @brief Returns a borrowed cbytes_t read-only view over all N * sizeof(type) bytes. O(1) \
  * \
+ * @param a   borrowed(const array_##type##_##N*) \
+ * @return borrowed(cbytes_t) -- caller must NOT free; valid only while a is alive. \
  * Returns cbytes_empty() on overflow (unreachable in practice). \
  * @pre a != NULL \
  */ \
-static inline cbytes_t array_##type##_##N##_as_cbytes( \
-    const array_##type##_##N *a) { \
+static inline borrowed(cbytes_t) array_##type##_##N##_as_cbytes( \
+    borrowed(const array_##type##_##N *) a) { \
     usize byte_size; \
     require_msg(a != NULL, "array_" #type "_" #N "_as_cbytes: a cannot be NULL"); \
     if (!checked_mul((usize)(N), sizeof(type), &byte_size)) { \
@@ -464,7 +519,7 @@ static inline cbytes_t array_##type##_##N##_as_cbytes( \
  *
  * @param type    Element type
  * @param N       Array capacity
- * @param arr_ptr Pointer to array_##type##_##N (NULL-safe: no iterations)
+ * @param arr_ptr borrowed(array_##type##_##N*) -- NULL-safe: no iterations if NULL
  * @param idx_var Name of the index variable to declare
  *
  * Example:
@@ -484,14 +539,14 @@ static inline cbytes_t array_##type##_##N##_as_cbytes( \
  * @def ARRAY_FOR_PTR(type, N, arr_ptr, elem_ptr)
  * @brief Iterates over all elements of an array by element pointer.
  *
- * Declares a `type*` loop variable `elem_ptr` pointing to each element.
+ * Declares a borrowed `type*` loop variable `elem_ptr` pointing to each element.
  * Suitable for in-place mutation without index arithmetic.
  * Loop body does not execute when arr_ptr == NULL.
  *
  * @param type     Element type
  * @param N        Array capacity
- * @param arr_ptr  Pointer to array_##type##_##N (NULL-safe: no iterations)
- * @param elem_ptr Name of the element pointer variable to declare
+ * @param arr_ptr  borrowed(array_##type##_##N*) -- NULL-safe: no iterations if NULL
+ * @param elem_ptr Name of the borrowed element pointer variable to declare
  *
  * Example:
  * ```c
