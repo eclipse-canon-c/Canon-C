@@ -361,9 +361,6 @@ typedef char _check_default_align[CANON_DEFAULT_ALIGN > 0 ? 1 : -1];
 typedef char _check_cache_line   [CANON_CACHE_LINE    > 0 ? 1 : -1];
 typedef char _check_page_size    [CANON_PAGE_SIZE     > 0 ? 1 : -1];
 
-/* BITS_PER_BYTE is 8 */
-typedef char _check_bits_per_byte[CANON_BITS_PER_BYTE == 8 ? 1 : -1];
-
 /* ============================================================================
  * Main
  * ========================================================================= */
