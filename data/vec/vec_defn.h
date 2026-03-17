@@ -135,7 +135,7 @@
  *       DEFINE_VEC(static inline, int_ptr)
  *
  * @note option_##type must be defined before calling DEFINE_VEC.
- *       Either include semantics/option.h and call CANON_OPTION(type, Error),
+ *       Either include semantics/option.h and call CANON_OPTION(type),
  *       or ensure the Option type is already instantiated.
  */
 #define DEFINE_VEC(linkage, type) \
@@ -163,7 +163,7 @@ IMPL_VEC_IS_EMPTY(linkage,  MANGLE_VEC_TYPE(type), MANGLE_VEC_IS_EMPTY(type)) \
 IMPL_VEC_IS_FULL(linkage,   MANGLE_VEC_TYPE(type), MANGLE_VEC_IS_FULL(type)) \
 \
 IMPL_VEC_GET(linkage,           MANGLE_VEC_TYPE(type), MANGLE_VEC_GET(type),           type) \
-IMPL_VEC_GET_OPTION(linkage,    MANGLE_VEC_TYPE(type), MANGLE_VEC_GET_OPTION(type),    option_##type, option_##type##_some, option_##type##_none, type) \
+IMPL_VEC_GET_OPTION(linkage,    MANGLE_VEC_TYPE(type), MANGLE_VEC_GET_OPTION(type),    MANGLE_VEC_OPTION_TYPE(type), MANGLE_VEC_OPTION_SOME(type), MANGLE_VEC_OPTION_NONE(type), type) \
 IMPL_VEC_GET_UNCHECKED(linkage, MANGLE_VEC_TYPE(type), MANGLE_VEC_GET_UNCHECKED(type), type) \
 IMPL_VEC_AT(linkage,            MANGLE_VEC_TYPE(type), MANGLE_VEC_AT(type),            type) \
 IMPL_VEC_SET(linkage,           MANGLE_VEC_TYPE(type), MANGLE_VEC_SET(type),           type) \
@@ -175,11 +175,11 @@ IMPL_VEC_PUSH(linkage,           MANGLE_VEC_TYPE(type), MANGLE_VEC_PUSH(type),  
 IMPL_VEC_TRY_PUSH(linkage,       MANGLE_VEC_TYPE(type), MANGLE_VEC_TRY_PUSH(type),       type) \
 IMPL_VEC_PUSH_UNCHECKED(linkage, MANGLE_VEC_TYPE(type), MANGLE_VEC_PUSH_UNCHECKED(type), type) \
 IMPL_VEC_POP(linkage,            MANGLE_VEC_TYPE(type), MANGLE_VEC_POP(type),            type) \
-IMPL_VEC_POP_OPTION(linkage,     MANGLE_VEC_TYPE(type), MANGLE_VEC_POP_OPTION(type),     MANGLE_VEC_POP(type), option_##type, option_##type##_some, option_##type##_none, type) \
+IMPL_VEC_POP_OPTION(linkage,     MANGLE_VEC_TYPE(type), MANGLE_VEC_POP_OPTION(type),     MANGLE_VEC_POP(type), MANGLE_VEC_OPTION_TYPE(type), MANGLE_VEC_OPTION_SOME(type), MANGLE_VEC_OPTION_NONE(type), MANGLE_VEC_RESULT_IS_OK(type), type) \
 IMPL_VEC_CLEAR(linkage,          MANGLE_VEC_TYPE(type), MANGLE_VEC_CLEAR(type)) \
 IMPL_VEC_INSERT(linkage,         MANGLE_VEC_TYPE(type), MANGLE_VEC_INSERT(type),         type) \
 IMPL_VEC_REMOVE(linkage,         MANGLE_VEC_TYPE(type), MANGLE_VEC_REMOVE(type),         type) \
-IMPL_VEC_REMOVE_OPTION(linkage,  MANGLE_VEC_TYPE(type), MANGLE_VEC_REMOVE_OPTION(type),  MANGLE_VEC_REMOVE(type), option_##type, option_##type##_some, option_##type##_none, type) \
+IMPL_VEC_REMOVE_OPTION(linkage,  MANGLE_VEC_TYPE(type), MANGLE_VEC_REMOVE_OPTION(type),  MANGLE_VEC_REMOVE(type), MANGLE_VEC_OPTION_TYPE(type), MANGLE_VEC_OPTION_SOME(type), MANGLE_VEC_OPTION_NONE(type), MANGLE_VEC_RESULT_IS_OK(type), type) \
 \
 IMPL_VEC_APPEND_ARRAY(linkage, MANGLE_VEC_TYPE(type), MANGLE_VEC_APPEND_ARRAY(type), type) \
 IMPL_VEC_EXTEND(linkage,       MANGLE_VEC_TYPE(type), MANGLE_VEC_EXTEND(type),       MANGLE_VEC_APPEND_ARRAY(type), type) \
