@@ -104,6 +104,67 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════
+   Option integration names
+   ════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Name of the Option type for a given element type
+ *
+ * Default: option_##type  (matches CANON_OPTION naming from option.h)
+ * Example: MANGLE_VEC_OPTION_TYPE(int) → option_int
+ *
+ * Used by: IMPL_VEC_GET_OPTION, IMPL_VEC_POP_OPTION, IMPL_VEC_REMOVE_OPTION
+ */
+#ifndef MANGLE_VEC_OPTION_TYPE
+    #define MANGLE_VEC_OPTION_TYPE(type)        option_##type
+#endif
+
+/**
+ * @brief Name of the Option Some constructor for a given element type
+ *
+ * Default: option_##type##_some  (matches CANON_OPTION naming from option.h)
+ * Example: MANGLE_VEC_OPTION_SOME(int) → option_int_some
+ *
+ * Used by: IMPL_VEC_GET_OPTION, IMPL_VEC_POP_OPTION, IMPL_VEC_REMOVE_OPTION
+ */
+#ifndef MANGLE_VEC_OPTION_SOME
+    #define MANGLE_VEC_OPTION_SOME(type)        option_##type##_some
+#endif
+
+/**
+ * @brief Name of the Option None constructor for a given element type
+ *
+ * Default: option_##type##_none  (matches CANON_OPTION naming from option.h)
+ * Example: MANGLE_VEC_OPTION_NONE(int) → option_int_none
+ *
+ * Used by: IMPL_VEC_GET_OPTION, IMPL_VEC_POP_OPTION, IMPL_VEC_REMOVE_OPTION
+ */
+#ifndef MANGLE_VEC_OPTION_NONE
+    #define MANGLE_VEC_OPTION_NONE(type)        option_##type##_none
+#endif
+
+/* ════════════════════════════════════════════════════════════════
+   Result integration names
+   ════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Name of the result_bool_Error is_ok checker
+ *
+ * Default: result_bool_Error_is_ok
+ *
+ * The type parameter is accepted for macro uniformity but ignored in the
+ * default expansion — the result type is fixed as result_bool_Error across
+ * all vec instantiations (see CANON_RESULT_BOOL_ERROR_DEFINED in vec_impl.h).
+ *
+ * Override only if you have replaced the result type used by push/pop/insert/remove.
+ *
+ * Used by: IMPL_VEC_POP_OPTION, IMPL_VEC_REMOVE_OPTION
+ */
+#ifndef MANGLE_VEC_RESULT_IS_OK
+    #define MANGLE_VEC_RESULT_IS_OK(type)       result_bool_Error_is_ok
+#endif
+
+/* ════════════════════════════════════════════════════════════════
    Constructor / destructor names
    ════════════════════════════════════════════════════════════════ */
 
