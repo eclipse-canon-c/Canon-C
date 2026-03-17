@@ -8,6 +8,7 @@
 #include "core/memory.h"
 #include "core/slice.h"
 #include "core/ownership.h"
+#include "semantics/option/option.h"
 
 /**
  * @file data/bitset.h
@@ -29,12 +30,25 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - A NULL Bitset* is always a silent no-op for void functions
  * - Query functions return 0, false, or BITSET_NPOS for NULL input
+ * - option_usize-returning find functions return None for NULL input
  * - Out-of-bounds index on a valid (non-NULL) Bitset* is a contract violation
  *   and fires require_msg — it is a programming error, not a recoverable condition
  *
+ * Typed find functions (preferred):
+ * ────────────────────────────────────────────────────────────────────────────
+ * bitset_find_first_option / bitset_find_next_option / bitset_find_last_option
+ * return option_usize instead of the BITSET_NPOS sentinel. Use these in
+ * preference to the raw variants in new code.
+ *
+ * Requires CANON_OPTION(usize) to be instantiated before including this header.
+ *
+ * The raw sentinel-returning variants (bitset_find_first, bitset_find_next,
+ * bitset_find_last) are kept for BITSET_FOR_EACH and performance-critical
+ * tight loops where the option wrapper overhead is undesirable.
+ *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
- * data/bitset.h is in data/. It depends only on core/.
+ * data/bitset.h is in data/. It may depend on core/ and semantics/.
  * No other data/ headers may be included here.
  *
  * Thread-safety:
@@ -63,6 +77,8 @@
  * ```c
  * #include "data/bitset.h"
  *
+ * CANON_OPTION(usize)   // required before including bitset.h
+ *
  * // Stack-backed bitset for 200 bits
  * u64 words[BITSET_WORD_COUNT(200)];
  * Bitset bs;
@@ -72,7 +88,13 @@
  * bitset_set(&bs, 199);
  * bool v = bitset_test(&bs, 42);      // true
  * usize n = bitset_count(&bs);        // 2
- * usize f = bitset_find_first(&bs);   // 42
+ *
+ * // Preferred — typed option variants
+ * option_usize f = bitset_find_first_option(&bs);   // Some(42)
+ * if (option_usize_is_some(f)) { ... }
+ *
+ * // Legacy sentinel variants (used by BITSET_FOR_EACH)
+ * usize raw = bitset_find_first(&bs);               // 42
  *
  * // Arena-backed
  * u64* buf = arena_alloc(&arena, BITSET_WORD_COUNT(1024) * sizeof(u64));
@@ -80,9 +102,10 @@
  * bitset_init(&bs2, buf, 1024);
  * ```
  *
- * @sa core/primitives/bits.h — bits_popcount, bits_ctz, bits_clz used internally
- * @sa core/slice.h           — bytes_t used by bitset_as_bytes()
- * @sa core/ownership.h       — borrowed() annotation
+ * @sa core/primitives/bits.h    — bits_popcount, bits_ctz, bits_clz used internally
+ * @sa core/slice.h              — bytes_t used by bitset_as_bytes()
+ * @sa core/ownership.h          — borrowed() annotation
+ * @sa semantics/option/option.h — option_usize for typed find results
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -100,7 +123,7 @@
 #define BITSET_WORD_COUNT(n) \
     (((usize)(n) + BITSET_BITS_PER_WORD - 1) / BITSET_BITS_PER_WORD)
 
-/** @brief Sentinel returned by bitset_find_first / bitset_find_next when no bit is set */
+/** @brief Sentinel returned by bitset_find_first / bitset_find_next / bitset_find_last when no bit is set */
 #define BITSET_NPOS CANON_USIZE_MAX
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -411,7 +434,8 @@ static inline usize bitset_capacity(borrowed(const Bitset*) bs) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Search — O(n/64)
+   Search — raw sentinel variants — O(n/64)
+   Used internally by BITSET_FOR_EACH. Prefer the option variants in new code.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -419,6 +443,9 @@ static inline usize bitset_capacity(borrowed(const Bitset*) bs) {
  *
  * NULL bs returns BITSET_NPOS.
  * Uses bits_ctz (count trailing zeros) from core/primitives/bits.h.
+ *
+ * Prefer bitset_find_first_option() in new code.
+ *
  * Performance: O(n/64) worst case
  */
 static inline usize bitset_find_first(borrowed(const Bitset*) bs) {
@@ -436,7 +463,9 @@ static inline usize bitset_find_first(borrowed(const Bitset*) bs) {
  * @brief Returns the index of the next set bit after position prev, or BITSET_NPOS
  *
  * NULL bs returns BITSET_NPOS.
- * Used for iterating over set bits:
+ *
+ * Prefer bitset_find_next_option() in new code.
+ * Used for iterating over set bits via BITSET_FOR_EACH:
  * ```c
  * for (usize i = bitset_find_first(&bs);
  *      i != BITSET_NPOS;
@@ -477,6 +506,9 @@ static inline usize bitset_find_next(borrowed(const Bitset*) bs, usize prev) {
  *
  * NULL bs returns BITSET_NPOS.
  * Uses bits_clz (count leading zeros) from core/primitives/bits.h.
+ *
+ * Prefer bitset_find_last_option() in new code.
+ *
  * Performance: O(n/64) worst case
  */
 static inline usize bitset_find_last(borrowed(const Bitset*) bs) {
@@ -490,6 +522,66 @@ static inline usize bitset_find_last(borrowed(const Bitset*) bs) {
         }
     }
     return BITSET_NPOS;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Search — option_usize variants (preferred) — O(n/64)
+   Requires CANON_OPTION(usize) to be instantiated before including this header.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Returns the index of the first set bit as option_usize
+ *
+ * NULL bs or empty bitset returns None.
+ *
+ * @return Some(index) if a set bit exists, None otherwise
+ *
+ * Performance: O(n/64) worst case
+ */
+static inline option_usize bitset_find_first_option(borrowed(const Bitset*) bs) {
+    usize raw = bitset_find_first(bs);
+    if (raw == BITSET_NPOS) return option_usize_none();
+    return option_usize_some(raw);
+}
+
+/**
+ * @brief Returns the index of the next set bit after prev as option_usize
+ *
+ * NULL bs or no further set bits returns None.
+ *
+ * Used for option-style iteration:
+ * ```c
+ * option_usize cur = bitset_find_first_option(&bs);
+ * while (option_usize_is_some(cur)) {
+ *     usize i = option_usize_unwrap(cur);
+ *     // process bit i
+ *     cur = bitset_find_next_option(&bs, i);
+ * }
+ * ```
+ *
+ * @return Some(index) if a further set bit exists, None otherwise
+ *
+ * Performance: O(n/64) worst case per call
+ */
+static inline option_usize bitset_find_next_option(borrowed(const Bitset*) bs, usize prev) {
+    usize raw = bitset_find_next(bs, prev);
+    if (raw == BITSET_NPOS) return option_usize_none();
+    return option_usize_some(raw);
+}
+
+/**
+ * @brief Returns the index of the last set bit as option_usize
+ *
+ * NULL bs or empty bitset returns None.
+ *
+ * @return Some(index) if a set bit exists, None otherwise
+ *
+ * Performance: O(n/64) worst case
+ */
+static inline option_usize bitset_find_last_option(borrowed(const Bitset*) bs) {
+    usize raw = bitset_find_last(bs);
+    if (raw == BITSET_NPOS) return option_usize_none();
+    return option_usize_some(raw);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -518,6 +610,10 @@ static inline bytes_t bitset_as_bytes(borrowed(const Bitset*) bs) {
 /**
  * @def BITSET_FOR_EACH(bs_ptr, idx_var)
  * @brief Iterates over all set bit indices in a Bitset
+ *
+ * Uses the raw sentinel-returning find functions internally for zero overhead
+ * in tight loops. For option-style manual iteration use
+ * bitset_find_first_option / bitset_find_next_option instead.
  *
  * @param bs_ptr  Pointer to Bitset
  * @param idx_var usize variable name to use as the loop index
