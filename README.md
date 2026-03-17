@@ -478,6 +478,16 @@ you will find everywhere in a Canon-C codebase, whether it is 300 lines or
 
 ### Contracts — preconditions are visible at every function boundary
 ```c
+/* WITHOUT Canon-C — preconditions are invisible or scattered */
+int process(Arena* arena, Config* cfg, size_t count) {
+    if (!arena) return -1;  /* what does -1 mean? */
+    if (!cfg)   return -1;  /* same code, different cause — indistinguishable */
+    if (!count) return -1;  /* caller has no idea which check failed */
+    /* ... */
+}
+```
+```c
+/* WITH Canon-C — preconditions are visible, grep-able, self-documenting */
 #define CANON_CONTRACT_IMPL
 #include "core/primitives/contract.h"
 
@@ -501,6 +511,20 @@ Every precondition is visible, grep-able, and self-documenting.
 
 ### Ownership — intent is visible at every call site
 ```c
+/* WITHOUT Canon-C — ownership is implicit, conventions drift */
+Config* config_create(uint8_t* buffer, size_t size); /* owned? borrowed? */
+char*   config_get_name(const Config* cfg);           /* heap copy? pointer into cfg? */
+void    config_destroy(Config* cfg);                  /* can I use cfg after this? */
+
+/* ... 2000 lines later ... */
+
+Config* cfg  = config_create(buf, sizeof(buf));
+char*   name = config_get_name(cfg);
+config_destroy(cfg);
+printf("%s\n", name); /* is name still valid? nobody knows */
+```
+```c
+/* WITH Canon-C — intent is visible at every call site */
 #include "core/ownership.h"
 
 /* caller receives ownership — caller must free */
@@ -526,6 +550,21 @@ immediately knows who owns what.
 
 ### Arena — lifetime is explicit and controlled
 ```c
+/* WITHOUT Canon-C — allocations are scattered, lifetimes implicit */
+void process(void) {
+    void* a = malloc(256);
+    void* b = malloc(512);
+    if (!validate(a)) {
+        free(a);
+        return; /* b leaked */
+    }
+    free(a);
+    free(b);
+    /* ... 500 lines of this ... */
+}
+```
+```c
+/* WITH Canon-C — lifetime boundary is visible where it is declared */
 #include "core/arena.h"
 #include "core/scope.h"
 
@@ -554,6 +593,23 @@ Lifetime boundaries are visible at the site where they are declared.
 
 ### Error propagation — failures are values, not surprises
 ```c
+/* WITHOUT Canon-C — errors are easy to ignore, origin is lost */
+int parse_and_validate(Arena* arena, const char** inputs, size_t count) {
+    int vec[MAX];
+    if (collect(arena, inputs, count, vec) < 0) return -1; /* which error? */
+    if (validate(vec)                      < 0) return -1; /* same -1, different cause */
+    return sum(vec);
+}
+
+/* ... caller, 1000 lines away ... */
+
+int result = parse_and_validate(&arena, inputs, count);
+if (result < 0) {
+    printf("something failed\n"); /* no idea what or where */
+}
+```
+```c
+/* WITH Canon-C — failures are values, propagation is explicit */
 #include "semantics/result/result.h"
 #include "semantics/error.h"
 
@@ -590,8 +646,23 @@ Failures propagate explicitly through the entire call chain.
 ---
 
 ### Error context — the full chain, no allocation, no framework
-
 ```c
+/* WITHOUT Canon-C — one error code reaches the surface, context is gone */
+int load_config(const char* path, int* out_timeout) {
+    const char* raw = read_field(path, "timeout");
+    if (parse_int(raw, out_timeout) < 0)
+        return -1; /* caller sees -1. was it a missing file? bad field? overflow? */
+    return 0;
+}
+
+/* ... surface ... */
+
+if (load_config("config.txt", &timeout) < 0) {
+    printf("config failed\n"); /* the chain is gone — root cause is invisible */
+}
+```
+```c
+/* WITH Canon-C — full chain survives from root cause to surface */
 #include "semantics/diag.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
@@ -641,7 +712,7 @@ static bool load_config(
 
 /* ... surface, 1000 lines away ... */
 
-Diag diag  = diag_init();
+Diag diag = diag_init();
 int  timeout;
 
 if (!load_config("config.txt", &timeout, &diag)) {
@@ -665,8 +736,23 @@ surface — allocation-free, framework-free, visible at every level.
 ---
 
 ### Borrow lifetime — know when a borrowed value is still valid
-
 ```c
+/* WITHOUT Canon-C — stale borrows are silent undefined behavior */
+const char* get_name(Arena* scratch) {
+    char* name = arena_alloc(scratch, 64);
+    strcpy(name, "Alice");
+    arena_reset(scratch); /* name is now dangling — nothing warns you */
+    return name;
+}
+
+/* ... 500 lines later ... */
+
+const char* name = get_name(&scratch);
+/* scratch was reset somewhere in between */
+printf("%s\n", name); /* undefined behavior — crash or silent corruption */
+```
+```c
+/* WITH Canon-C — borrow validity is assertable at any point */
 #include "core/region.h"
 #include "core/arena.h"
 #include "semantics/borrow.h"
@@ -677,7 +763,7 @@ arena_init(&scratch, backing, sizeof(backing));
 
 Region r;
 region_begin(&r);
-region_attach_arena(&r, &scratch);  /* arena resets automatically on region_end */
+region_attach_arena(&r, &scratch); /* arena resets automatically on region_end */
 
 /* stamp the borrow with this region's lifetime */
 region_id_t  rid  = region_id(&r);
