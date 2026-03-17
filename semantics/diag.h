@@ -2,7 +2,7 @@
 #define CANON_SEMANTICS_DIAG_H
 
 #include "core/primitives/types.h"    /* usize, bool */
-#include "core/primitives/contract.h" /* require_msg */
+#include "core/primitives/contract.h" /* require_msg, static_require */
 #include "semantics/error.h"          /* Error, ERR_OK */
 
 /* Standard library headers required by this file */
@@ -86,14 +86,13 @@
 #endif
 
 /*
- * Compile-time contract: configuration values must satisfy their documented
- * lower bounds. These fire as hard errors before any code is compiled.
- * require_msg is from core/primitives/contract.h.
+ * Compile-time contracts: configuration values must satisfy their documented
+ * lower bounds. static_require() from contract.h fires as a hard compile
+ * error if either condition is false — it never reaches runtime.
+ * The msg argument must be an identifier (no spaces, no quotes).
  */
-require_msg(DIAG_MAX_FRAMES  >= (usize)1,
-            "DIAG_MAX_FRAMES must be at least 1");
-require_msg(DIAG_MAX_MSG_LEN >= (usize)1,
-            "DIAG_MAX_MSG_LEN must be at least 1");
+static_require(DIAG_MAX_FRAMES  >= 1, DIAG_MAX_FRAMES_must_be_at_least_1);
+static_require(DIAG_MAX_MSG_LEN >= 1, DIAG_MAX_MSG_LEN_must_be_at_least_1);
 
 /* ════════════════════════════════════════════════════════════════════════════
    DiagFrame — single context record
@@ -205,15 +204,19 @@ static inline bool diag_push(Diag       *d,
                               Error       code,
                               const char *msg)
 {
+    bool       dropped;
+    DiagFrame *f;
+    usize      len;
+
     if (d == NULL) {
         return false;
     }
 
     /* Internal invariant: depth can never legally exceed DIAG_MAX_FRAMES. */
     require_msg(d->depth <= DIAG_MAX_FRAMES,
-                "diag_push: depth exceeded DIAG_MAX_FRAMES — chain is corrupt");
+                "diag_push: depth exceeded DIAG_MAX_FRAMES -- chain is corrupt");
 
-    bool dropped = false;
+    dropped = false;
 
     if (d->depth == DIAG_MAX_FRAMES) {
         /* Chain full: discard oldest frame, shift remaining frames down. */
@@ -224,30 +227,28 @@ static inline bool diag_push(Diag       *d,
         dropped = true;
     }
 
-    {
-        DiagFrame *f = &d->frames[d->depth];
-        d->depth++;
+    f = &d->frames[d->depth];
+    d->depth++;
 
-        f->file = file;
-        f->line = line;
-        f->func = func;
-        f->code = code;
+    f->file = file;
+    f->line = line;
+    f->func = func;
+    f->code = code;
 
-        if (msg != NULL) {
-            /*
-             * Use memcpy instead of strncpy to avoid implementation-defined
-             * zero-padding behaviour and compiler warnings on MSVC/clang-tidy.
-             * We manually find the length, clamp it, copy, and null-terminate.
-             */
-            usize len = 0;
-            while (len < (DIAG_MAX_MSG_LEN - 1u) && msg[len] != '\0') {
-                len++;
-            }
-            memcpy(f->message, msg, len);
-            f->message[len] = '\0';
-        } else {
-            f->message[0] = '\0';
+    if (msg != NULL) {
+        /*
+         * Use memcpy instead of strncpy to avoid implementation-defined
+         * zero-padding behaviour and compiler warnings on MSVC/clang-tidy.
+         * We manually find the length, clamp it, copy, and null-terminate.
+         */
+        len = 0u;
+        while (len < (DIAG_MAX_MSG_LEN - 1u) && msg[len] != '\0') {
+            len++;
         }
+        memcpy(f->message, msg, len);
+        f->message[len] = '\0';
+    } else {
+        f->message[0] = '\0';
     }
 
     return dropped;
@@ -401,7 +402,11 @@ static inline Error diag_latest_code(const Diag *d)
  * @brief Prints the full chain to `stream`, from root cause to latest frame.
  *
  * Output format per frame:
- *   [<index>] <file>:<line> in <func>() — error <code>: "<message>"
+ *   [<index>] <file>:<line> in <func>() -- error <code>: "<message>"
+ *
+ * The separator is ASCII "--" for portability across all platforms,
+ * terminal codepages, and embedded serial outputs. A UTF-8 em dash would
+ * produce mojibake on Windows legacy codepages and non-UTF-8 targets.
  *
  * No trailing newline after the last frame beyond what each line already has.
  *
@@ -419,7 +424,7 @@ static inline void diag_print(const Diag *d, FILE *stream)
     for (i = 0u; i < d->depth; i++) {
         const DiagFrame *f = &d->frames[i];
         fprintf(stream,
-                "[%zu] %s:%zu in %s() \xe2\x80\x94 error %d: \"%s\"\n",
+                "[%zu] %s:%zu in %s() -- error %d: \"%s\"\n",
                 i,
                 (f->file != NULL) ? f->file : "?",
                 f->line,
