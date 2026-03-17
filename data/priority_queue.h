@@ -2,18 +2,22 @@
 #define CANON_DATA_PRIORITY_QUEUE_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"
 #include "core/primitives/contract.h"
 #include "core/primitives/ptr.h"
 #include "core/primitives/compare.h"
 #include "core/memory.h"
 #include "core/slice.h"
-#include "semantics/option/option.h"   // for option_type
-#include "semantics/result/result.h"   // for result_bool_Error
+#include "core/ownership.h"
+#include "semantics/error.h"
+#include "semantics/option/option.h"
+#include "semantics/result/result.h"
+
+/* Instantiate the Result type used by fallible operations */
+CANON_RESULT(bool, Error)
 
 /**
  * @file data/priority_queue.h
- * @brief Fixed-capacity binary heap (priority queue) with caller-owned buffer
+ * @brief Fixed-capacity binary min-heap (priority queue) with caller-owned buffer
  *
  * A PriorityQueue is a binary min-heap backed by a flat contiguous buffer.
  * The element with the lowest comparator value is always at the top.
@@ -23,19 +27,33 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Fixed capacity — no dynamic growth, no hidden allocation
  * - Caller owns the backing buffer (stack, arena, static, etc.)
- * - Min-heap by default (ascending comparator)
+ * - Min-heap by default; pass a descending comparator for max-heap
  * - O(log n) push/pop, O(1) peek
- * - Returns option_type / result_bool_Error for idiomatic Canon-C style
+ * - Fallible operations return result_bool_Error
+ * - Typed peek/pop return option_T via DEFINE_PRIORITY_QUEUE(T)
  * - bytes_t view of current contents via pq_as_bytes()
+ *
+ * NULL contract (uniform across all functions):
+ * ────────────────────────────────────────────────────────────────────────────
+ * - A NULL PriorityQueue* is a silent no-op for void functions
+ * - Query functions return 0, false, or a safe sentinel for NULL input
+ * - Invalid arguments on a valid non-NULL PriorityQueue* fire require_msg —
+ *   these are programming errors, not recoverable conditions
  *
  * Min-heap vs max-heap:
  * ────────────────────────────────────────────────────────────────────────────
- * - Min-heap (default): use algo_cmp_int or ascending comparator
- * - Max-heap: use algo_cmp_int_desc or descending comparator
+ * - Min-heap (default): pass algo_cmp_i32 or any ascending comparator
+ * - Max-heap: pass algo_cmp_i32_desc or any descending comparator
+ *
+ * Typed usage (recommended):
+ * ────────────────────────────────────────────────────────────────────────────
+ * Use DEFINE_PRIORITY_QUEUE(T) to get a fully type-safe wrapper that
+ * returns option_T from pop/peek instead of raw void* out-params.
+ * Requires CANON_OPTION(T) to be instantiated first.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
- * data/priority_queue.h is in data/ — depends only on core/ and semantics/
+ * data/priority_queue.h is in data/ — depends on core/ and semantics/.
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -43,54 +61,85 @@
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - pq_push_result / pq_push:            O(log n)
- * - pq_pop_option / pq_pop:              O(log n)
- * - pq_peek_option / pq_peek:            O(1)
- * - pq_remove_at_result / pq_remove_at:  O(log n)
- * - pq_heapify:                          O(n)   — Floyd's algorithm
- * - pq_as_bytes:                         O(1)
+ * - pq_push / pq_push_result:           O(log n)
+ * - pq_pop_raw / pq_pop:                O(log n)
+ * - pq_peek_raw / pq_peek:              O(1)
+ * - pq_remove_at / pq_remove_at_result: O(log n)
+ * - pq_heapify:                         O(n) — Floyd's algorithm
+ * - pq_as_bytes:                        O(1)
+ *
+ * Quick start:
+ * ```c
+ * CANON_OPTION(int)
+ * DEFINE_PRIORITY_QUEUE(int)
+ *
+ * int buf[64];
+ * pq_int h;
+ * pq_int_init(&h, buf, 64, algo_cmp_i32, NULL);
+ * pq_int_push_result(&h, 42);
+ * pq_int_push_result(&h, 7);
+ *
+ * option_int top = pq_int_pop_option(&h);  // Some(7) — min-heap
+ * ```
  *
  * @sa core/primitives/compare.h — algo_cmp_fn and built-in comparators
- * @sa semantics/option/option.h — option_type for peek/pop
+ * @sa semantics/option/option.h — option_T for typed peek/pop
  * @sa semantics/result/result.h — result_bool_Error for fallible operations
- * @sa core/slice.h — bytes_t view of heap contents
- * @sa core/memory.h — mem_copy() for element operations
+ * @sa semantics/error.h         — Error enum (ERR_INVALID_ARG, etc.)
+ * @sa core/ownership.h          — borrowed() annotation
+ * @sa core/slice.h              — bytes_t view of heap contents
+ * @sa core/memory.h             — mem_copy, mem_swap, CANON_MEM_SWAP_MAX
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    PriorityQueue struct
    ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Fixed-capacity binary min-heap
+ *
+ * Do not access fields directly — use the provided functions.
+ * Always initialize with pq_init() before use.
+ */
 typedef struct {
-    void* data;         ///< Caller-owned buffer
-    usize len;          ///< Current number of elements
-    usize capacity;     ///< Fixed maximum number of elements
-    usize elem_size;    ///< Size of each element in bytes
-    algo_cmp_fn cmp;    ///< Three-way comparator (min-heap: <= 0 means parent first)
-    void* ctx;          ///< Optional context passed to cmp (may be NULL)
+    void*       data;      ///< Caller-owned element buffer
+    usize       len;       ///< Current number of elements
+    usize       capacity;  ///< Fixed maximum number of elements
+    usize       elem_size; ///< Size of each element in bytes
+    algo_cmp_fn cmp;       ///< Three-way comparator (< 0 means parent first)
+    void*       ctx;       ///< Optional context passed to cmp (may be NULL)
 } PriorityQueue;
 
-/* ───────────────────────────────────────────────────────────────────────────
+/* ════════════════════════════════════════════════════════════════════════════
    Internal helpers
-   ─────────────────────────────────────────────────────────────────────────── */
-static inline usize pq_parent(usize i) { return (i - 1) / 2; }
-static inline usize pq_left_child(usize i) { return 2 * i + 1; }
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/** @brief Returns index of parent node — @pre i > 0 */
+static inline usize pq_parent(usize i) {
+    require_msg(i > 0, "pq_parent: i must be > 0 (root has no parent)");
+    return (i - 1) / 2;
+}
+/** @brief Returns index of left child */
+static inline usize pq_left_child(usize i)  { return 2 * i + 1; }
+/** @brief Returns index of right child */
 static inline usize pq_right_child(usize i) { return 2 * i + 2; }
 
 /**
  * @brief Swaps two elements in the heap
  *
- * Uses mem_swap() for elements <= CANON_MEM_SWAP_MAX (typically 256 bytes).
- * For larger elements, falls back to byte-by-byte swapping.
+ * @pre pq != NULL
+ * @pre a < pq->len && b < pq->len
  */
-static inline void pq_swap(PriorityQueue* pq, usize a, usize b) {
+static inline void pq_swap(borrowed(PriorityQueue*) pq, usize a, usize b) {
+    require_msg(pq != NULL, "pq_swap: pq cannot be NULL");
     if (a == b) return;
     usize es = pq->elem_size;
     void* pa = ptr_elem(pq->data, a, es);
     void* pb = ptr_elem(pq->data, b, es);
-
     if (es <= CANON_MEM_SWAP_MAX) {
         mem_swap(pa, pb, es);
     } else {
-        // Fallback for large elements exceeding mem_swap buffer
+        /* Fallback for elements larger than mem_swap's stack buffer */
         unsigned char* ba = (unsigned char*)pa;
         unsigned char* bb = (unsigned char*)pb;
         for (usize k = 0; k < es; k++) {
@@ -99,9 +148,15 @@ static inline void pq_swap(PriorityQueue* pq, usize a, usize b) {
     }
 }
 
-static inline void pq_sift_up(PriorityQueue* pq, usize i) {
+/**
+ * @brief Restores heap invariant upward from index i
+ *
+ * @pre pq != NULL
+ */
+static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
+    require_msg(pq != NULL, "pq_sift_up: pq cannot be NULL");
     while (i > 0) {
-        usize p = pq_parent(i);
+        usize p  = pq_parent(i);
         void* pe = ptr_elem(pq->data, p, pq->elem_size);
         void* ie = ptr_elem(pq->data, i, pq->elem_size);
         if (pq->cmp(pe, ie, pq->ctx) <= 0) break;
@@ -110,19 +165,25 @@ static inline void pq_sift_up(PriorityQueue* pq, usize i) {
     }
 }
 
-static inline void pq_sift_down(PriorityQueue* pq, usize i) {
+/**
+ * @brief Restores heap invariant downward from index i
+ *
+ * @pre pq != NULL
+ */
+static inline void pq_sift_down(borrowed(PriorityQueue*) pq, usize i) {
+    require_msg(pq != NULL, "pq_sift_down: pq cannot be NULL");
     while (true) {
         usize smallest = i;
-        usize left = pq_left_child(i);
-        usize right = pq_right_child(i);
+        usize left     = pq_left_child(i);
+        usize right    = pq_right_child(i);
         if (left < pq->len) {
             void* sl = ptr_elem(pq->data, smallest, pq->elem_size);
-            void* le = ptr_elem(pq->data, left, pq->elem_size);
+            void* le = ptr_elem(pq->data, left,     pq->elem_size);
             if (pq->cmp(le, sl, pq->ctx) < 0) smallest = left;
         }
         if (right < pq->len) {
             void* sl = ptr_elem(pq->data, smallest, pq->elem_size);
-            void* re = ptr_elem(pq->data, right, pq->elem_size);
+            void* re = ptr_elem(pq->data, right,    pq->elem_size);
             if (pq->cmp(re, sl, pq->ctx) < 0) smallest = right;
         }
         if (smallest == i) break;
@@ -131,50 +192,46 @@ static inline void pq_sift_down(PriorityQueue* pq, usize i) {
     }
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
+/* ════════════════════════════════════════════════════════════════════════════
    Initialization
-   ─────────────────────────────────────────────────────────────────────────── */
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * @brief Initializes a PriorityQueue over a caller-owned buffer
  *
- * @param pq       Pointer to the PriorityQueue to initialize (non-NULL)
- * @param buffer   Caller-owned element buffer — must hold at least
- *                 capacity * elem_size bytes and remain valid for the
- *                 lifetime of the queue
- * @param capacity Maximum number of elements the queue can hold (> 0)
+ * @param pq        Pointer to uninitialized PriorityQueue
+ * @param buffer    Caller-owned element buffer — must hold at least
+ *                  capacity * elem_size bytes and remain valid for the
+ *                  lifetime of the queue
+ * @param capacity  Maximum number of elements (> 0)
  * @param elem_size Size of each element in bytes (> 0)
- * @param cmp      Three-way comparator — must not be NULL
- * @param ctx      Optional context forwarded to cmp on every comparison
- *                 (may be NULL)
+ * @param cmp       Three-way comparator — must not be NULL
+ * @param ctx       Optional context forwarded to cmp (may be NULL)
  *
- * @pre pq != NULL       — triggers require_msg (always-on)
- * @pre buffer != NULL   — triggers require_msg (always-on)
- * @pre capacity > 0     — triggers require_msg (always-on)
- * @pre elem_size > 0    — triggers require_msg (always-on)
- * @pre cmp != NULL      — triggers require_msg (always-on)
+ * @pre pq != NULL
+ * @pre buffer != NULL
+ * @pre capacity > 0
+ * @pre elem_size > 0
+ * @pre cmp != NULL
  *
  * @post pq->len == 0
  * @post pq->capacity == capacity
- * @post pq->data == buffer
  *
- * Performance:
- * - Time:  O(1)
- * - Space: O(1)
+ * Performance: O(1)
  */
 static inline void pq_init(
-    PriorityQueue* pq,
-    void* buffer,
-    usize capacity,
-    usize elem_size,
-    algo_cmp_fn cmp,
-    void* ctx)
+    borrowed(PriorityQueue*) pq,
+    borrowed(void*)          buffer,
+    usize                    capacity,
+    usize                    elem_size,
+    algo_cmp_fn              cmp,
+    void*                    ctx)
 {
-    require_msg(pq != NULL,      "pq_init: pq cannot be NULL");
-    require_msg(buffer != NULL,  "pq_init: buffer cannot be NULL");
-    require_msg(capacity > 0,    "pq_init: capacity must be > 0");
-    require_msg(elem_size > 0,   "pq_init: elem_size must be > 0");
-    require_msg(cmp != NULL,     "pq_init: cmp cannot be NULL");
+    require_msg(pq        != NULL, "pq_init: pq cannot be NULL");
+    require_msg(buffer    != NULL, "pq_init: buffer cannot be NULL");
+    require_msg(capacity   > 0,    "pq_init: capacity must be > 0");
+    require_msg(elem_size  > 0,    "pq_init: elem_size must be > 0");
+    require_msg(cmp       != NULL, "pq_init: cmp cannot be NULL");
 
     pq->data      = buffer;
     pq->len       = 0;
@@ -185,38 +242,29 @@ static inline void pq_init(
 }
 
 /**
- * @brief Builds a valid heap from len pre-existing elements in the buffer
+ * @brief Builds a valid heap in-place from len pre-existing elements
  *
- * Uses Floyd's algorithm — sifts down from the last internal node toward
- * the root. This is O(n), not O(n log n). Prefer this over pushing
+ * Uses Floyd's algorithm — O(n), not O(n log n). Prefer this over pushing
  * elements one at a time when bulk-initializing from an existing array.
  *
  * The first `len` elements of pq->data must already be populated by the
- * caller before calling this function. pq_heapify rearranges them
- * in-place to satisfy the heap invariant.
+ * caller. pq_heapify rearranges them in-place to satisfy the heap invariant.
+ * If len > pq->capacity it is silently clamped to pq->capacity.
  *
- * If len > pq->capacity, it is silently clamped to pq->capacity.
+ * NULL pq is a no-op.
  *
- * @param pq  Initialized PriorityQueue (pq_init must have been called first)
- * @param len Number of elements already in pq->data to heapify
- *
- * @pre pq != NULL     — triggers require_msg (always-on)
- * @pre pq_init() has been called on pq
  * @pre pq->data contains len valid elements of size pq->elem_size
- *
  * @post pq->len == min(len, pq->capacity)
- * @post Heap invariant holds: pq->data[parent] <= pq->data[child] for all nodes
+ * @post Heap invariant holds for all nodes
  *
- * Performance:
- * - Time:  O(n) — Floyd's algorithm, not O(n log n)
- * - Space: O(1) — in-place, no allocation
- *
- * Note: building a heap by calling pq_push n times is O(n log n).
- *       Use pq_heapify when all elements are known upfront.
+ * Performance: O(n) — Floyd's algorithm
  */
-static inline void pq_heapify(PriorityQueue* pq, usize len) {
-    require_msg(pq != NULL, "pq_heapify: pq cannot be NULL");
-    if (!pq || len == 0) return;
+static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
+    if (!pq) return;
+    require_msg(pq->data    != NULL, "pq_heapify: pq not initialized (data is NULL)");
+    require_msg(pq->cmp     != NULL, "pq_heapify: pq not initialized (cmp is NULL)");
+    require_msg(pq->capacity > 0,    "pq_heapify: pq not initialized (capacity is 0)");
+    if (len == 0) { pq->len = 0; return; }
     if (len > pq->capacity) len = pq->capacity;
     pq->len = len;
     if (len < 2) return;
@@ -226,25 +274,26 @@ static inline void pq_heapify(PriorityQueue* pq, usize len) {
     }
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
-   Core operations — modern Canon-C style (preferred)
-   ─────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   Core operations — result_bool_Error / raw out-param (untyped base layer)
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Inserts an element into the heap (fallible)
- * @return result_bool_Error — Ok(true) on success, Err on full / invalid
+ * @brief Inserts an element into the heap (fallible, preferred)
+ *
+ * NULL pq or elem returns Err(ERR_INVALID_ARG).
+ * Full queue returns Err(ERR_CAPACITY_EXCEEDED).
+ *
+ * @return result_bool_Error — Ok(true) on success, Err on failure
+ *
+ * Performance: O(log n)
  */
 static inline result_bool_Error pq_push_result(
-    PriorityQueue* pq,
-    borrowed const void* elem)
+    borrowed(PriorityQueue*)  pq,
+    borrowed(const void*)     elem)
 {
-    if (!pq || !elem) {
-        return result_bool_Error_err(ERR_INVALID_ARG);
-    }
-    if (pq->len >= pq->capacity) {
-        return result_bool_Error_err(ERR_CAPACITY_EXCEEDED);
-    }
-
+    if (!pq || !elem) return result_bool_Error_err(ERR_INVALID_ARG);
+    if (pq->len >= pq->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED);
     mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
     pq_sift_up(pq, pq->len - 1);
@@ -252,163 +301,248 @@ static inline result_bool_Error pq_push_result(
 }
 
 /**
- * @brief Removes and returns the top element (optional value)
- * @return option_type — Some(value) if non-empty, None otherwise
+ * @brief Removes the top element and copies it into out
+ *
+ * NULL pq or empty queue returns false. NULL out is permitted — the element
+ * is removed from the heap even if out is NULL (discard semantics).
+ *
+ * For a type-safe option-returning variant use pq_##T##_pop_option()
+ * from DEFINE_PRIORITY_QUEUE(T).
+ *
+ * @return true if an element was removed, false if empty or pq is NULL
+ *
+ * Performance: O(log n)
  */
-static inline option_type pq_pop_option(PriorityQueue* pq) {
-    if (!pq || pq->len == 0) {
-        return option_type_none();
-    }
-
-    type top;
-    mem_copy(&top, ptr_elem(pq->data, 0, pq->elem_size), sizeof(type));
-
+static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
+    if (!pq || pq->len == 0) return false;
+    if (out) mem_copy(out, ptr_elem(pq->data, 0, pq->elem_size), pq->elem_size);
     pq->len--;
     if (pq->len > 0) {
-        mem_copy(ptr_elem(pq->data, 0, pq->elem_size),
+        mem_copy(ptr_elem(pq->data, 0,       pq->elem_size),
                  ptr_elem(pq->data, pq->len, pq->elem_size),
                  pq->elem_size);
         pq_sift_down(pq, 0);
     }
-
-    return option_type_some(top);
+    return true;
 }
 
 /**
- * @brief Returns the top element without removing it
- * @return option_type — Some(value) if non-empty, None otherwise
+ * @brief Returns a pointer to the top element without removing it
+ *
+ * NULL pq or empty queue returns NULL.
+ * The returned pointer is valid until the next mutating operation.
+ *
+ * For a type-safe option-returning variant use pq_##T##_peek_option()
+ * from DEFINE_PRIORITY_QUEUE(T).
+ *
+ * @return Pointer to the top element, or NULL if empty or pq is NULL
+ *
+ * Performance: O(1)
  */
-static inline option_type pq_peek_option(const PriorityQueue* pq) {
-    if (!pq || pq->len == 0) {
-        return option_type_none();
-    }
-    type* top = ptr_elem_const(pq->data, 0, pq->elem_size);
-    return option_type_some(*top);
+static inline const void* pq_peek_raw(borrowed(const PriorityQueue*) pq) {
+    if (!pq || pq->len == 0) return NULL;
+    return ptr_elem_const(pq->data, 0, pq->elem_size);
 }
 
 /**
- * @brief Removes element at given heap index (fallible)
+ * @brief Removes the element at heap index i (fallible, preferred)
  *
  * Replaces the removed slot with the last element, then runs both
  * pq_sift_up and pq_sift_down to restore the heap invariant regardless
  * of whether the replacement is smaller or larger than its neighbors.
  *
- * @return result_bool_Error — Ok(true) on success, Err on invalid index
+ * NULL pq or out-of-range i returns Err(ERR_OUT_OF_RANGE).
+ *
+ * @return result_bool_Error — Ok(true) on success, Err on failure
+ *
+ * Performance: O(log n)
  */
 static inline result_bool_Error pq_remove_at_result(
-    PriorityQueue* pq,
-    usize i)
+    borrowed(PriorityQueue*) pq,
+    usize                    i)
 {
-    if (!pq || i >= pq->len) {
-        return result_bool_Error_err(ERR_OUT_OF_RANGE);
-    }
-
+    if (!pq)          return result_bool_Error_err(ERR_INVALID_ARG);
+    if (i >= pq->len) return result_bool_Error_err(ERR_OUT_OF_RANGE);
     pq->len--;
-    if (i == pq->len) {
-        /* Removed the last element — no fixup needed */
-        return result_bool_Error_ok(true);
-    }
-
-    mem_copy(ptr_elem(pq->data, i, pq->elem_size),
+    if (i == pq->len) return result_bool_Error_ok(true); /* removed last element */
+    mem_copy(ptr_elem(pq->data, i,       pq->elem_size),
              ptr_elem(pq->data, pq->len, pq->elem_size),
              pq->elem_size);
-
     pq_sift_up(pq, i);
     pq_sift_down(pq, i);
     return result_bool_Error_ok(true);
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
-   Compatibility / legacy bool + out-param versions
-   (still available, but option/result variants preferred)
-   ─────────────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════════
+   Legacy bool wrappers — kept for compatibility, result variants preferred
+   ════════════════════════════════════════════════════════════════════════════ */
 
-static inline bool pq_push(PriorityQueue* pq, const void* elem) {
+/** @brief Inserts elem — returns true on success. Prefer pq_push_result(). */
+static inline bool pq_push(borrowed(PriorityQueue*) pq, borrowed(const void*) elem) {
     return result_bool_Error_is_ok(pq_push_result(pq, elem));
 }
 
-static inline bool pq_pop(PriorityQueue* pq, void* out) {
-    option_type opt = pq_pop_option(pq);
-    if (option_type_is_none(opt)) return false;
-    if (out) mem_copy(out, &opt.value, pq->elem_size);
+/** @brief Removes and copies the top element into out. Prefer pq_pop_raw(). */
+static inline bool pq_pop(borrowed(PriorityQueue*) pq, void* out) {
+    return pq_pop_raw(pq, out);
+}
+
+/** @brief Copies the top element into out without removing it. Prefer pq_peek_raw(). */
+static inline bool pq_peek(borrowed(const PriorityQueue*) pq, void* out) {
+    const void* top = pq_peek_raw(pq);
+    if (!top || !out) return false;
+    mem_copy(out, top, pq->elem_size);
     return true;
 }
 
-static inline bool pq_peek(const PriorityQueue* pq, void* out) {
-    option_type opt = pq_peek_option(pq);
-    if (option_type_is_none(opt)) return false;
-    if (out) mem_copy(out, &opt.value, pq->elem_size);
-    return true;
-}
-
-static inline bool pq_remove_at(PriorityQueue* pq, usize i) {
+/** @brief Removes element at index i — returns true on success. Prefer pq_remove_at_result(). */
+static inline bool pq_remove_at(borrowed(PriorityQueue*) pq, usize i) {
     return result_bool_Error_is_ok(pq_remove_at_result(pq, i));
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
+/* ════════════════════════════════════════════════════════════════════════════
    Queries
-   ─────────────────────────────────────────────────────────────────────────── */
-static inline usize pq_len(const PriorityQueue* pq)       { return pq ? pq->len : 0; }
-static inline usize pq_capacity(const PriorityQueue* pq)  { return pq ? pq->capacity : 0; }
-static inline usize pq_remaining(const PriorityQueue* pq) { return pq ? (pq->capacity - pq->len) : 0; }
-static inline bool  pq_is_empty(const PriorityQueue* pq)  { return !pq || pq->len == 0; }
-static inline bool  pq_is_full(const PriorityQueue* pq)   { return !pq || pq->len >= pq->capacity; }
+   ════════════════════════════════════════════════════════════════════════════ */
 
-static inline bytes_t pq_as_bytes(const PriorityQueue* pq) {
+/** @brief Returns current element count. NULL pq returns 0. */
+static inline usize pq_len(borrowed(const PriorityQueue*) pq) {
+    return pq ? pq->len : 0;
+}
+
+/** @brief Returns maximum element capacity. NULL pq returns 0. */
+static inline usize pq_capacity(borrowed(const PriorityQueue*) pq) {
+    return pq ? pq->capacity : 0;
+}
+
+/** @brief Returns number of remaining free slots. NULL pq returns 0. */
+static inline usize pq_remaining(borrowed(const PriorityQueue*) pq) {
+    return pq ? (pq->capacity - pq->len) : 0;
+}
+
+/** @brief Returns true if the queue has no elements. NULL pq returns true. */
+static inline bool pq_is_empty(borrowed(const PriorityQueue*) pq) {
+    return !pq || pq->len == 0;
+}
+
+/** @brief Returns true if the queue is at capacity. NULL pq returns false. */
+static inline bool pq_is_full(borrowed(const PriorityQueue*) pq) {
+    return pq && pq->len >= pq->capacity;
+}
+
+/**
+ * @brief Returns a bytes_t view over the live heap elements
+ *
+ * Covers only [0, len). NULL or empty pq returns bytes_empty().
+ * Non-owning — do not free the returned bytes_t.ptr.
+ *
+ * Performance: O(1)
+ */
+static inline bytes_t pq_as_bytes(borrowed(const PriorityQueue*) pq) {
     if (!pq || !pq->data || pq->len == 0) return bytes_empty();
     return bytes_from(pq->data, pq->len * pq->elem_size);
 }
 
-/* ───────────────────────────────────────────────────────────────────────────
-   Typed macro wrapper
-   ─────────────────────────────────────────────────────────────────────────── */
-#define DEFINE_PRIORITY_QUEUE(type) \
-\
-typedef struct { PriorityQueue _pq; } pq_##type; \
-\
-static inline void pq_##type##_init( \
-    pq_##type* h, type* buf, usize cap, algo_cmp_fn cmp, void* ctx) { \
-    pq_init(&h->_pq, buf, cap, sizeof(type), cmp, ctx); \
-} \
-\
-static inline void pq_##type##_heapify(pq_##type* h, usize len) { \
-    pq_heapify(&h->_pq, len); \
-} \
-\
-static inline result_bool_Error pq_##type##_push_result(pq_##type* h, type val) { \
-    return pq_push_result(&h->_pq, &val); \
-} \
-\
-static inline option_##type pq_##type##_pop_option(pq_##type* h) { \
-    return pq_pop_option(&h->_pq); \
-} \
-\
-static inline option_##type pq_##type##_peek_option(const pq_##type* h) { \
-    return pq_peek_option(&h->_pq); \
-} \
-\
-static inline result_bool_Error pq_##type##_remove_at_result(pq_##type* h, usize i) { \
-    return pq_remove_at_result(&h->_pq, i); \
-} \
-\
-/* Legacy / compatibility */ \
-static inline bool pq_##type##_push(pq_##type* h, type val) { \
-    return pq_push(&h->_pq, &val); \
-} \
-static inline bool pq_##type##_pop(pq_##type* h, type* out) { \
-    return pq_pop(&h->_pq, out); \
-} \
-static inline bool pq_##type##_peek(const pq_##type* h, type* out) { \
-    return pq_peek(&h->_pq, out); \
-} \
-static inline bool pq_##type##_remove_at(pq_##type* h, usize i) { \
-    return pq_remove_at(&h->_pq, i); \
-} \
-\
-static inline usize   pq_##type##_len(const pq_##type* h)      { return pq_len(&h->_pq); } \
-static inline usize   pq_##type##_capacity(const pq_##type* h) { return pq_capacity(&h->_pq); } \
-static inline bool    pq_##type##_is_empty(const pq_##type* h) { return pq_is_empty(&h->_pq); } \
-static inline bool    pq_##type##_is_full(const pq_##type* h)  { return pq_is_full(&h->_pq); } \
-static inline bytes_t pq_##type##_as_bytes(const pq_##type* h) { return pq_as_bytes(&h->_pq); }
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_PRIORITY_QUEUE(type) — typed wrapper macro
+   ════════════════════════════════════════════════════════════════════════════
+   Generates a type-safe pq_T wrapper over PriorityQueue.
+   Pop and peek return option_T instead of raw void* out-params.
+
+   Requires CANON_OPTION(type) to be instantiated before expanding this macro.
+
+   Usage:
+   ```c
+   CANON_OPTION(int)
+   DEFINE_PRIORITY_QUEUE(int)
+
+   int buf[64];
+   pq_int h;
+   pq_int_init(&h, buf, 64, algo_cmp_i32, NULL);
+   pq_int_push_result(&h, 42);
+   pq_int_push_result(&h, 7);
+
+   option_int top = pq_int_pop_option(&h);  // Some(7) — min-heap
+   if (option_int_is_some(top)) {
+       printf("%d\n", option_int_unwrap(top));
+   }
+   ```
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Generates a fully type-safe priority queue for a given element type
+ *
+ * @param type Element type — CANON_OPTION(type) must be instantiated first
+ */
+#define DEFINE_PRIORITY_QUEUE(type)                                                          \
+                                                                                             \
+typedef struct { PriorityQueue _pq; } pq_##type;                                            \
+                                                                                             \
+/** Initializes a typed priority queue over a caller-owned buffer */                         \
+static inline void pq_##type##_init(                                                         \
+    borrowed(pq_##type*) h,                                                                  \
+    borrowed(type*)      buf,                                                                \
+    usize                cap,                                                                \
+    algo_cmp_fn          cmp,                                                                \
+    void*                ctx)                                                                \
+{                                                                                            \
+    pq_init(&h->_pq, buf, cap, sizeof(type), cmp, ctx);                                     \
+}                                                                                            \
+                                                                                             \
+/** Heapifies len pre-existing elements already in the buffer — O(n) */                      \
+static inline void pq_##type##_heapify(borrowed(pq_##type*) h, usize len) {                 \
+    pq_heapify(&h->_pq, len);                                                                \
+}                                                                                            \
+                                                                                             \
+/** Inserts val — returns result_bool_Error */                                                \
+static inline result_bool_Error pq_##type##_push_result(                                     \
+    borrowed(pq_##type*) h, type val)                                                        \
+{                                                                                            \
+    return pq_push_result(&h->_pq, &val);                                                    \
+}                                                                                            \
+                                                                                             \
+/** Removes and returns the top element as option_##type */                                   \
+static inline option_##type pq_##type##_pop_option(borrowed(pq_##type*) h) {                \
+    type val;                                                                                \
+    if (!pq_pop_raw(&h->_pq, &val)) return option_##type##_none();                          \
+    return option_##type##_some(val);                                                        \
+}                                                                                            \
+                                                                                             \
+/** Returns the top element as option_##type without removing it */                           \
+static inline option_##type pq_##type##_peek_option(borrowed(const pq_##type*) h) {         \
+    const void* raw = pq_peek_raw(&h->_pq);                                                  \
+    if (!raw) return option_##type##_none();                                                 \
+    type val;                                                                                \
+    mem_copy(&val, raw, sizeof(type));                                                       \
+    return option_##type##_some(val);                                                        \
+}                                                                                            \
+                                                                                             \
+/** Removes element at heap index i — returns result_bool_Error */                            \
+static inline result_bool_Error pq_##type##_remove_at_result(                               \
+    borrowed(pq_##type*) h, usize i)                                                         \
+{                                                                                            \
+    return pq_remove_at_result(&h->_pq, i);                                                  \
+}                                                                                            \
+                                                                                             \
+/* ── Legacy bool wrappers ──────────────────────────────────────────────── */               \
+static inline bool pq_##type##_push(borrowed(pq_##type*) h, type val) {                     \
+    return pq_push(&h->_pq, &val);                                                           \
+}                                                                                            \
+static inline bool pq_##type##_pop(borrowed(pq_##type*) h, type* out) {                     \
+    return pq_pop_raw(&h->_pq, out);                                                         \
+}                                                                                            \
+static inline bool pq_##type##_peek(borrowed(const pq_##type*) h, type* out) {              \
+    return pq_peek(&h->_pq, out);                                                            \
+}                                                                                            \
+static inline bool pq_##type##_remove_at(borrowed(pq_##type*) h, usize i) {                 \
+    return pq_remove_at(&h->_pq, i);                                                         \
+}                                                                                            \
+                                                                                             \
+/* ── Queries ────────────────────────────────────────────────────────────── */              \
+static inline usize   pq_##type##_len(borrowed(const pq_##type*) h)       { return pq_len(&h->_pq); }      \
+static inline usize   pq_##type##_capacity(borrowed(const pq_##type*) h)  { return pq_capacity(&h->_pq); } \
+static inline usize   pq_##type##_remaining(borrowed(const pq_##type*) h) { return pq_remaining(&h->_pq); }\
+static inline bool    pq_##type##_is_empty(borrowed(const pq_##type*) h)  { return pq_is_empty(&h->_pq); } \
+static inline bool    pq_##type##_is_full(borrowed(const pq_##type*) h)   { return pq_is_full(&h->_pq); }  \
+static inline bytes_t pq_##type##_as_bytes(borrowed(const pq_##type*) h)  { return pq_as_bytes(&h->_pq); }
 
 #endif /* CANON_DATA_PRIORITY_QUEUE_H */
