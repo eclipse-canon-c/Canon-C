@@ -7,6 +7,8 @@
 #include "core/primitives/checked.h"
 #include "semantics/option/option.h"
 
+CANON_OPTION(isize)
+
 /**
  * @file range.h
  * @brief Explicit bounded integer range generator (iterator-style)
@@ -28,6 +30,8 @@
  * - Requires C99 or later
  * - Uses isize (ptrdiff_t equivalent) and usize from primitives/types.h
  * - No platform-specific code
+ * - RANGE_FOR uses typeof() on GNU C / C23; define CANON_NO_GNU_EXTENSIONS
+ *   for a strict C99 fallback (var must be isize-compatible in that case)
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -360,7 +364,6 @@ static inline option_isize range_peek_option(const range* r) {
  *
  * @post r->current is advanced by r->step using checked_add_isize()
  * @post On overflow, saturates to r->end for safety
- * @note Returns 0 as a safety fallback in release builds if called on empty range
  *
  * ⚠️ WARNING: Always check range_has_next() before calling, or use RANGE_FOR.
  *    Calling on an exhausted range is a logic error.
@@ -372,7 +375,6 @@ static inline option_isize range_peek_option(const range* r) {
 static inline isize range_next(range* r) {
     require_msg(r != NULL, "range_next: r cannot be NULL");
     ensure_msg(range_has_next(r), "range_next: called on exhausted range");
-    if (!r || !range_has_next(r)) return 0;
 
     isize value = r->current;
     isize next_value;
@@ -477,7 +479,9 @@ static inline void range_skip(range* r, usize n) {
  * @param r_expr Expression that evaluates to a range (evaluated once)
  *
  * @note var must be declared before the loop
- * @note var type must be compatible with isize (assignment via cast)
+ * @note With CANON_NO_GNU_EXTENSIONS: var must be isize-compatible (cast to isize)
+ * @note Without CANON_NO_GNU_EXTENSIONS: var may be any type compatible with
+ *       isize via typeof() (GNU C / C23)
  * @note break and continue work normally inside the loop body
  * @note r_expr is evaluated exactly once at loop start
  *
@@ -526,8 +530,15 @@ static inline void range_skip(range* r, usize n) {
  * }
  * ```
  */
-#define RANGE_FOR(var, r_expr) \
-    for (range _r = (r_expr), *_rp = &_r; \
-         range_has_next(_rp) && ((var) = (typeof(var))range_next(_rp), true); )
+#ifndef CANON_NO_GNU_EXTENSIONS
+    #define RANGE_FOR(var, r_expr) \
+        for (range _r = (r_expr), *_rp = &_r; \
+             range_has_next(_rp) && ((var) = (typeof(var))range_next(_rp), true); )
+#else
+    /* Strict C99 fallback: var must be isize-compatible */
+    #define RANGE_FOR(var, r_expr) \
+        for (range _r = (r_expr), *_rp = &_r; \
+             range_has_next(_rp) && ((var) = (isize)range_next(_rp), true); )
+#endif
 
 #endif /* CANON_DATA_RANGE_H */
