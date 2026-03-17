@@ -340,7 +340,7 @@
 #define CANON_POINTER_SIZE  ((usize)sizeof(void*))
 
 /** @brief Number of bits in a byte — always 8 on supported platforms. */
-#define CANON_BITS_PER_BYTE ((usize)CHAR_BIT)
+#define CANON_BITS_PER_BYTE ((usize)8)
 
 /** @brief Number of bits in a pointer — 32 or 64. */
 #define CANON_POINTER_BITS  (CANON_POINTER_SIZE * CANON_BITS_PER_BYTE)
