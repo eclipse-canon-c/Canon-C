@@ -22,6 +22,14 @@
 
 #include "core/primitives/ptr.h"
 
+/* contract.h declares canon_contract_handler as extern; provide a minimal
+ * stub here so ptr_test links without needing a separate contract.c.        */
+#include <stdlib.h>
+void canon_contract_handler(const char* msg, const char* file, int line) {
+    fprintf(stderr, "CONTRACT VIOLATION  %s:%d  %s\n", file, line, msg);
+    abort();
+}
+
 /* ── Minimal test harness ─────────────────────────────────────────────────── */
 
 static int s_pass = 0;
@@ -438,17 +446,29 @@ static void test_struct_macros(void) {
 /* ══════════════════════════════════════════════════════════════════════════ */
 
 static void test_align_macros(void) {
+    /* Pre-compute ALIGN_OF values into named variables.
+     * MSVC warns (C4116) about unnamed type definitions in parentheses when
+     * the offsetof-trick form of ALIGN_OF appears directly inside an expression
+     * macro like CHECK(). Hoisting to variables avoids that entirely.        */
+    usize al_char   = ALIGN_OF(char);
+    usize al_short  = ALIGN_OF(short);
+    usize al_int    = ALIGN_OF(int);
+    usize al_long   = ALIGN_OF(long);
+    usize al_float  = ALIGN_OF(float);
+    usize al_double = ALIGN_OF(double);
+    usize al_ptr    = ALIGN_OF(void*);
+
     /* ALIGN_OF must be a positive power of two for fundamental types */
-    CHECK(is_power_of_two(ALIGN_OF(char)));
-    CHECK(is_power_of_two(ALIGN_OF(short)));
-    CHECK(is_power_of_two(ALIGN_OF(int)));
-    CHECK(is_power_of_two(ALIGN_OF(long)));
-    CHECK(is_power_of_two(ALIGN_OF(float)));
-    CHECK(is_power_of_two(ALIGN_OF(double)));
-    CHECK(is_power_of_two(ALIGN_OF(void*)));
+    CHECK(is_power_of_two(al_char));
+    CHECK(is_power_of_two(al_short));
+    CHECK(is_power_of_two(al_int));
+    CHECK(is_power_of_two(al_long));
+    CHECK(is_power_of_two(al_float));
+    CHECK(is_power_of_two(al_double));
+    CHECK(is_power_of_two(al_ptr));
 
     /* char always has alignment 1 */
-    CHECK(ALIGN_OF(char) == 1);
+    CHECK(al_char == 1);
 
     /* ALIGN_MAX: result is the larger of the two */
     CHECK(ALIGN_MAX(1,  4)  == 4);
@@ -459,9 +479,9 @@ static void test_align_macros(void) {
     CHECK(ALIGN_MAX(16, 32) == 32);
 
     /* ALIGN_MAX of type alignments */
-    CHECK(ALIGN_MAX(ALIGN_OF(char),   ALIGN_OF(double)) == ALIGN_OF(double));
-    CHECK(ALIGN_MAX(ALIGN_OF(int),    ALIGN_OF(int))    == ALIGN_OF(int));
-    CHECK(ALIGN_MAX(ALIGN_OF(double), ALIGN_OF(char))   == ALIGN_OF(double));
+    CHECK(ALIGN_MAX(al_char,   al_double) == al_double);
+    CHECK(ALIGN_MAX(al_int,    al_int)    == al_int);
+    CHECK(ALIGN_MAX(al_double, al_char)   == al_double);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
