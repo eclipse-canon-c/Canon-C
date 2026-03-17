@@ -20,15 +20,22 @@
 #include <stdio.h>
 #include <stddef.h>
 
-#include "core/primitives/ptr.h"
+/* Define the contract handler in this translation unit.
+ * contract.h uses the CANON_CONTRACT_IMPL pattern: exactly one TU must
+ * define this before including the header so that canon_contract_handler
+ * gets its definition (a contract_handler_fn variable, not a function).   */
+#define CANON_CONTRACT_IMPL
 
-/* contract.h declares canon_contract_handler as extern; provide a minimal
- * stub here so ptr_test links without needing a separate contract.c.        */
-#include <stdlib.h>
-void canon_contract_handler(const char* msg, const char* file, int line) {
-    fprintf(stderr, "CONTRACT VIOLATION  %s:%d  %s\n", file, line, msg);
-    abort();
-}
+/* On MSVC, ALIGN_OF falls back to the offsetof struct trick (C99 path),
+ * which triggers warning C4116 (unnamed type definition in parentheses).
+ * MSVC does support _Alignof as a C11 compiler, so force the C11 path by
+ * predefining __STDC_VERSION__ before ptr.h is parsed. Only do this when
+ * the compiler hasn't already set it high enough.                         */
+#if defined(_MSC_VER) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
+#   define __STDC_VERSION__ 201112L
+#endif
+
+#include "core/primitives/ptr.h"
 
 /* ── Minimal test harness ─────────────────────────────────────────────────── */
 
