@@ -26,6 +26,7 @@
  * - Preconditions use require_msg(), debug invariants use ensure_msg()
  * - usize used throughout — no raw size_t
  * - mem_copy/mem_move used — no raw memcpy/memmove
+ * - mem_alloc/mem_free used — no raw malloc/free
  * - CANON_VEC_MAX_CAPACITY enforced at construction time
  *
  * Do NOT include this file directly. Use:
@@ -203,20 +204,20 @@ linkage VecType fn(void) { \
  *       For auto-growing vectors, use data/convenience/dynvec.h.
  *
  * Performance:
- * - Time:  O(1) amortized (single malloc)
+ * - Time:  O(1) amortized (single mem_alloc)
  * - Space: O(capacity * sizeof(type))
  */
 #define IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 linkage VecType fn_alloc(usize capacity) { \
     if (capacity == 0) return fn_empty(); \
+    if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
+        return fn_empty(); \
+    } \
     usize total_bytes; \
     if (!checked_mul(capacity, (usize)sizeof(type), &total_bytes)) { \
         return fn_empty(); \
     } \
-    if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
-        return fn_empty(); \
-    } \
-    type* buf = (type*)malloc(total_bytes); \
+    type* buf = (type*)mem_alloc(total_bytes); \
     if (!buf) return fn_empty(); \
     return fn_init(buf, capacity); \
 }
@@ -253,7 +254,7 @@ linkage VecType fn_alloc(usize capacity) { \
 #define IMPL_VEC_FREE(linkage, VecType, fn) \
 linkage void fn(VecType* v) { \
     if (!v || !v->items) return; \
-    free(v->items); \
+    mem_free(v->items); \
     v->items    = NULL; \
     v->len      = 0; \
     v->capacity = 0; \
@@ -294,11 +295,11 @@ linkage void fn(VecType* v) { \
 #define IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 linkage VecType fn_alloc(Arena* arena, usize capacity) { \
     if (!arena || capacity == 0) return fn_empty(); \
-    usize total_bytes; \
-    if (!checked_mul(capacity, (usize)sizeof(type), &total_bytes)) { \
+    if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
         return fn_empty(); \
     } \
-    if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
+    usize total_bytes; \
+    if (!checked_mul(capacity, (usize)sizeof(type), &total_bytes)) { \
         return fn_empty(); \
     } \
     type* buf = (type*)arena_alloc(arena, total_bytes); \
@@ -706,10 +707,10 @@ linkage result_bool_Error fn(VecType* v, type* out) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
-#define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, type) \
+#define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(VecType* v) { \
     type out; \
-    if (result_bool_Error_is_ok(fn_pop(v, &out))) \
+    if (fn_result_is_ok(fn_pop(v, &out))) \
         return fn_some(out); \
     return fn_none(); \
 }
@@ -818,10 +819,10 @@ linkage result_bool_Error fn(VecType* v, usize i, type* out) { \
  * - Time:  O(n)
  * - Space: O(1)
  */
-#define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, type) \
+#define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(VecType* v, usize i) { \
     type out; \
-    if (result_bool_Error_is_ok(fn_remove(v, i, &out))) \
+    if (fn_result_is_ok(fn_remove(v, i, &out))) \
         return fn_some(out); \
     return fn_none(); \
 }
@@ -902,7 +903,9 @@ linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
 #define IMPL_VEC_FILL(linkage, VecType, fn, type) \
 linkage void fn(VecType* v, type value, usize count) { \
     if (!v || !v->items) return; \
-    usize to_fill = (count < v->capacity - v->len) ? count : (v->capacity - v->len); \
+    /* safe: struct invariant guarantees len <= capacity */ \
+    usize remaining = v->capacity - v->len; \
+    usize to_fill   = (count < remaining) ? count : remaining; \
     for (usize i = 0; i < to_fill; i++) { \
         v->items[v->len + i] = value; \
     } \
