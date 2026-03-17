@@ -28,3 +28,7 @@ else()
     target_compile_options(contract_test PRIVATE -UNDEBUG)
 endif()
 add_test(NAME ContractTest COMMAND contract_test)
+
+add_executable(limits_test test/core/primitives/limits_test.c)
+target_include_directories(limits_test PRIVATE ${CMAKE_SOURCE_DIR}/core/primitives)
+add_test(NAME LimitsTest COMMAND limits_test)
