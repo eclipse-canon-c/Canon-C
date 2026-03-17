@@ -3,49 +3,49 @@
 
 /*
  *
- * Canon-C — error.h
+ * Canon-C -- error.h
  * Common error codes and human-readable messages.
  *
  * Requires C99 or later. No platform-specific code.
  * Depends on core/primitives/types.h from this library.
  *
- * ── Portability ──────────────────────────────────────────────────────────────
+ * -- Portability --------------------------------------------------------------
  * Tested with GCC, Clang, and MSVC on Windows, Linux, and macOS.
  *
- * ── Thread-safety ────────────────────────────────────────────────────────────
+ * -- Thread-safety ------------------------------------------------------------
  * All functions are thread-safe: pure/const, no shared mutable state.
  *
- * ── Performance ──────────────────────────────────────────────────────────────
+ * -- Performance --------------------------------------------------------------
  * Time:  O(1) for all operations.
- * Space: O(1) — static data only, no allocations.
+ * Space: O(1) -- static data only, no allocations.
  * Error representation: plain integer (enum).
  * Message lookup: switch-based (typically compiled to a jump table).
  *
- * ── Design ───────────────────────────────────────────────────────────────────
+ * -- Design -------------------------------------------------------------------
  * - Simple flat enum (no hierarchies).
  * - Zero runtime cost for error representation.
  * - Consistent messages via error_message().
  * - Easy to extend: add new codes before ERR_COUNT.
  * - Thread-safe pure functions.
  * - Generic enough for cross-domain use.
- * - Brief messages — add context at call sites.
+ * - Brief messages -- add context at call sites.
  * - No result.h dependency in this file. For Result<T, Error> integration,
  *   include "error_result.h" separately (opt-in).
  *
- * ── Error code ranges ────────────────────────────────────────────────────────
+ * -- Error code ranges --------------------------------------------------------
  *   0:       Success (ERR_OK)
- *   1–99:    Argument / input errors
- *   100–199: Resource / memory errors
- *   200–299: I/O and system errors
- *   300–399: Arithmetic errors
+ *   1-99:    Argument / input errors
+ *   100-199: Resource / memory errors
+ *   200-299: I/O and system errors
+ *   300-399: Arithmetic errors
  *   400+:    Generic / miscellaneous
  *
- * ── Extension guide ──────────────────────────────────────────────────────────
+ * -- Extension guide ----------------------------------------------------------
  * 1. Add new code before ERR_COUNT in the enum below.
  * 2. Add a matching case in error_message().
  * 3. (Optional) Define a domain-specific enum (e.g. ErrorJson) for subsystems.
  *
- * ── Typical use ──────────────────────────────────────────────────────────────
+ * -- Typical use --------------------------------------------------------------
  *
  *   Error validate_age(int age) {
  *       if (age < 0 || age > 150) return ERR_OUT_OF_RANGE;
@@ -58,11 +58,11 @@
  *   }
  */
 
-#include "core/primitives/types.h" /* bool, usize, u8 … i64, f32, f64 — Canon-C base types */
+#include "core/primitives/types.h" /* bool, usize, u8 ... i64, f32, f64 -- Canon-C base types */
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    ERROR CODE ENUMERATION
-   ════════════════════════════════════════════════════════════════════════════ */
+   ============================================================================ */
 
 /**
  * @brief Common error codes used across the library.
@@ -72,32 +72,38 @@
  *
  * Add new domain-specific codes before ERR_COUNT. Keep the list small and
  * general-purpose; prefer a separate enum for highly domain-specific errors.
+ *
+ * Note: intentional gaps exist between ranges (e.g. 6-99, 106-199) to allow
+ * future codes to be added within each range without breaking ABI. Gap values
+ * are NOT valid error codes -- error_in_range() returns true for them because
+ * it checks the integer range, not enum membership. error_message() returns
+ * "Unknown error" for gap values via the default branch.
  */
 typedef enum {
     /* Success */
     ERR_OK = 0,
 
-    /* Argument and input validation errors (1–99) */
+    /* Argument and input validation errors (1-99) */
     ERR_INVALID_ARG,        /* NULL pointer, invalid value, precondition failed */
     ERR_OUT_OF_RANGE,       /* Index or value exceeds valid bounds              */
     ERR_PARSE_FAILED,       /* String or number parsing failed                  */
     ERR_INVALID_FORMAT,     /* Data format is corrupted or unrecognised         */
     ERR_INVALID_STATE,      /* Operation is invalid in the current state        */
 
-    /* Resource and memory errors (100–199) */
+    /* Resource and memory errors (100-199) */
     ERR_OUT_OF_MEMORY  = 100, /* Allocation failed                              */
     ERR_BUFFER_TOO_SMALL,     /* Provided buffer too small to hold the result   */
     ERR_CAPACITY_EXCEEDED,    /* Fixed container or resource is full            */
     ERR_NOT_FOUND,            /* Requested key, item, or resource not found     */
 
-    /* I/O and system errors (200–299) */
+    /* I/O and system errors (200-299) */
     ERR_IO_FAILED      = 200, /* File, network, or device I/O error             */
     ERR_PERMISSION,           /* Access denied                                  */
     ERR_TIMEOUT,              /* Operation timed out                            */
     ERR_NOT_SUPPORTED,        /* Feature unavailable on this platform           */
     ERR_ALREADY_EXISTS,       /* Resource or file already exists                */
 
-    /* Arithmetic errors (300–399) */
+    /* Arithmetic errors (300-399) */
     ERR_OVERFLOW       = 300, /* Numeric overflow                               */
     ERR_UNDERFLOW,            /* Numeric underflow                              */
     ERR_DIVIDE_BY_ZERO,       /* Division or modulo by zero                     */
@@ -107,29 +113,30 @@ typedef enum {
     ERR_NOT_IMPLEMENTED,      /* Feature is stubbed or not yet complete         */
 
     /*
-     * Sentinel — do not use as a real error code.
+     * Sentinel -- do not use as a real error code.
      * Tracks the total count of defined codes for validation.
      */
     ERR_COUNT
 } Error;
 
-/* ════════════════════════════════════════════════════════════════════════════
+/* ============================================================================
    ERROR MESSAGE AND UTILITY FUNCTIONS
-   ════════════════════════════════════════════════════════════════════════════ */
+   ============================================================================ */
 
 /**
  * @brief Returns a brief, human-readable string for an error code.
  *
  * Returns a static string literal. Never returns NULL. Lifetime is the entire
- * program. Thread-safe. Strings are intentionally short — add context at the
+ * program. Thread-safe. Strings are intentionally short -- add context at the
  * call site.
  *
- * For codes outside the defined range, returns "Unknown error".
+ * For codes outside the defined range, or for gap values within a range that
+ * have not been assigned, returns "Unknown error".
  *
  * @param e  Error code to describe.
  * @return   Pointer to a static, null-terminated string. Never NULL.
  */
-static inline const char* error_message(Error e) {
+static inline const char *error_message(Error e) {
     switch (e) {
         case ERR_OK:                return "No error";
         case ERR_INVALID_ARG:       return "Invalid argument";
@@ -167,18 +174,24 @@ static inline bool error_is_ok(Error e) {
 }
 
 /**
- * @brief Returns true if the error code is within the defined valid range.
+ * @brief Returns true if the integer value of e falls within [ERR_OK, ERR_COUNT).
  *
- * Valid codes are ERR_OK (0) through ERR_COUNT - 1. ERR_COUNT itself and any
- * negative or out-of-range integer cast to Error are considered invalid.
+ * This checks the integer range only -- it does NOT verify that e is a named,
+ * assigned enum member. Gap values between ranges (e.g. 6-99, 106-199) pass
+ * this check even though they are not defined error codes. For those values,
+ * error_message() returns "Unknown error" via the default branch.
  *
- * Note: Because Error is a signed enum in C99, negative values are possible
- * via explicit cast. This function rejects them.
+ * Use this function to guard against wildly out-of-range or negative values
+ * (possible via explicit cast to Error in C). Do not use it to assert that a
+ * code is a known, meaningful error -- compare directly against the enum
+ * members instead.
  *
- * @param e  Error code to validate.
- * @return   true if e is a defined, usable error code.
+ * Note: ERR_COUNT itself is excluded (returns false).
+ *
+ * @param e  Error code to check.
+ * @return   true if (int)e is in [0, ERR_COUNT), false otherwise.
  */
-static inline bool error_is_valid(Error e) {
+static inline bool error_in_range(Error e) {
     return (int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT;
 }
 
@@ -196,7 +209,7 @@ static inline int error_code(Error e) {
 }
 
 /*
- * ── Result<T, Error> integration ─────────────────────────────────────────────
+ * -- Result<T, Error> integration ---------------------------------------------
  *
  * Convenience macros for use with result.h are intentionally NOT included here.
  * Including them would couple this header to result.h and to the token-pasting
