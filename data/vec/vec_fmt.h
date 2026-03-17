@@ -44,12 +44,14 @@
  * DEFINE_VEC(static inline, int)
  * DEFINE_VEC_FMT(static inline, int)
  *
- * int buf[4] = {1, 2, 3, 4};
+ * int buf[4];
  * canon_vec_int v = canon_vec_int_init(buf, 4);
- * v.len = 4;
+ * int src[4] = {1, 2, 3, 4};
+ * canon_vec_int_append_array(&v, src, 4);
  *
  * char out[256];
- * StringBuf sb = stringbuf_init(out, sizeof(out));
+ * StringBuf sb;
+ * stringbuf_init_buffer(&sb, out, sizeof(out));
  *
  * // Printf-style:
  * canon_vec_int_to_stringbuf(&v, &sb, "%d ");
