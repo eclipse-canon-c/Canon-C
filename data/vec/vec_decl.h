@@ -89,25 +89,25 @@ extern bool  MANGLE_VEC_IS_EMPTY(type)(const MANGLE_VEC_TYPE(type)* v); \
 extern bool  MANGLE_VEC_IS_FULL(type)(const MANGLE_VEC_TYPE(type)* v); \
 \
 /* Element access */ \
-extern bool                      MANGLE_VEC_GET(type)(const MANGLE_VEC_TYPE(type)* v, usize i, type* out); \
-extern option_##type             MANGLE_VEC_GET_OPTION(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
-extern type                      MANGLE_VEC_GET_UNCHECKED(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
-extern type*                     MANGLE_VEC_AT(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
-extern bool                      MANGLE_VEC_SET(type)(MANGLE_VEC_TYPE(type)* v, usize i, type val); \
-extern type*                     MANGLE_VEC_FIRST(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern type*                     MANGLE_VEC_LAST(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern type*                     MANGLE_VEC_DATA(type)(const MANGLE_VEC_TYPE(type)* v); \
+extern bool                         MANGLE_VEC_GET(type)(const MANGLE_VEC_TYPE(type)* v, usize i, type* out); \
+extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_GET_OPTION(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
+extern type                         MANGLE_VEC_GET_UNCHECKED(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
+extern type*                        MANGLE_VEC_AT(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
+extern bool                         MANGLE_VEC_SET(type)(MANGLE_VEC_TYPE(type)* v, usize i, type val); \
+extern type*                        MANGLE_VEC_FIRST(type)(const MANGLE_VEC_TYPE(type)* v); \
+extern type*                        MANGLE_VEC_LAST(type)(const MANGLE_VEC_TYPE(type)* v); \
+extern type*                        MANGLE_VEC_DATA(type)(const MANGLE_VEC_TYPE(type)* v); \
 \
 /* Modification */ \
-extern result_bool_Error MANGLE_VEC_PUSH(type)(MANGLE_VEC_TYPE(type)* v, type item); \
-extern bool              MANGLE_VEC_TRY_PUSH(type)(MANGLE_VEC_TYPE(type)* v, type item); \
-extern void              MANGLE_VEC_PUSH_UNCHECKED(type)(MANGLE_VEC_TYPE(type)* v, type item); \
-extern result_bool_Error MANGLE_VEC_POP(type)(MANGLE_VEC_TYPE(type)* v, type* out); \
-extern option_##type     MANGLE_VEC_POP_OPTION(type)(MANGLE_VEC_TYPE(type)* v); \
-extern void              MANGLE_VEC_CLEAR(type)(MANGLE_VEC_TYPE(type)* v); \
-extern result_bool_Error MANGLE_VEC_INSERT(type)(MANGLE_VEC_TYPE(type)* v, usize i, type item); \
-extern result_bool_Error MANGLE_VEC_REMOVE(type)(MANGLE_VEC_TYPE(type)* v, usize i, type* out); \
-extern option_##type     MANGLE_VEC_REMOVE_OPTION(type)(MANGLE_VEC_TYPE(type)* v, usize i); \
+extern result_bool_Error            MANGLE_VEC_PUSH(type)(MANGLE_VEC_TYPE(type)* v, type item); \
+extern bool                         MANGLE_VEC_TRY_PUSH(type)(MANGLE_VEC_TYPE(type)* v, type item); \
+extern void                         MANGLE_VEC_PUSH_UNCHECKED(type)(MANGLE_VEC_TYPE(type)* v, type item); \
+extern result_bool_Error            MANGLE_VEC_POP(type)(MANGLE_VEC_TYPE(type)* v, type* out); \
+extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_POP_OPTION(type)(MANGLE_VEC_TYPE(type)* v); \
+extern void                         MANGLE_VEC_CLEAR(type)(MANGLE_VEC_TYPE(type)* v); \
+extern result_bool_Error            MANGLE_VEC_INSERT(type)(MANGLE_VEC_TYPE(type)* v, usize i, type item); \
+extern result_bool_Error            MANGLE_VEC_REMOVE(type)(MANGLE_VEC_TYPE(type)* v, usize i, type* out); \
+extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_REMOVE_OPTION(type)(MANGLE_VEC_TYPE(type)* v, usize i); \
 \
 /* Bulk operations */ \
 extern result_bool_Error MANGLE_VEC_APPEND_ARRAY(type)(MANGLE_VEC_TYPE(type)* v, const type* src, usize count); \
