@@ -1,8 +1,9 @@
 #ifndef CANON_SEMANTICS_BORROW_H
 #define CANON_SEMANTICS_BORROW_H
 
-#include "core/primitives/types.h"      /* usize, bool, u8 */
-#include "core/primitives/contract.h"   /* require_msg     */
+#include "core/primitives/types.h"      /* usize, bool, u8              */
+#include "core/primitives/contract.h"   /* require_msg                  */
+#include "core/primitives/checked.h"    /* checked_mul                  */
 #include "core/slice.h"                 /* str_t, cbytes_t, slice_##type */
 #include "core/ownership.h"             /* borrowed(T) annotation style  */
 
@@ -63,6 +64,14 @@
  * non-crashing behaviour in release builds where require_msg is a no-op,
  * while debug builds catch misuse early.
  *
+ * Equality semantics:
+ * --------------------------------------------------------------------------
+ * borrowed_ptr_eq   — pointer identity (a.ptr == b.ptr).
+ * borrowed_str_eq   — content equality via str_equal (same as strcmp-equal).
+ * borrowed_bytes_eq — content equality (same bytes, same length).
+ * These differ because the underlying types have different natural equality.
+ * Source tags are always ignored by all _eq functions.
+ *
  * Dependency rule:
  * --------------------------------------------------------------------------
  * borrow.h lives in semantics/ and may include core/ only.
@@ -96,8 +105,9 @@
  *   borrowed_slice_int view =
  *       borrowed_slice_int_from(slice_int_from(arr, 4u), arr);
  *
- * @sa core/slice.h     — underlying str_t, cbytes_t, slice_##type
- * @sa core/ownership.h — borrowed(T) annotation macros
+ * @sa core/slice.h              — underlying str_t, cbytes_t, slice_##type
+ * @sa core/ownership.h          — borrowed(T) annotation macros
+ * @sa core/primitives/checked.h — checked_mul used in _as_bytes overflow guard
  */
 
 /* ============================================================================
@@ -179,8 +189,8 @@ static inline bool borrowed_ptr_is_valid(const borrowed_ptr *b)
 /**
  * @brief Returns non-zero (true) if a and b point to the same address.
  *
- * Source tags are intentionally ignored — equality is based on the
- * pointed-to address alone.
+ * Equality is pointer identity — source tags are intentionally ignored.
+ * For content equality over pointed-to data, dereference and compare manually.
  *
  * @param a First borrowed_ptr (by value).
  * @param b Second borrowed_ptr (by value).
@@ -287,7 +297,9 @@ static inline usize borrowed_str_len(const borrowed_str *b)
 /**
  * @brief Returns non-zero (true) if both strings have equal content.
  *
- * Source tags are intentionally ignored — equality is content-only.
+ * Equality is content-based via str_equal — source tags are intentionally
+ * ignored. This differs from borrowed_ptr_eq which uses pointer identity;
+ * the difference reflects the natural equality of the underlying types.
  *
  * @param a First borrowed_str (by value).
  * @param b Second borrowed_str (by value).
@@ -370,15 +382,13 @@ static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
 
 /**
  * @brief Constructs an empty (zero-length, NULL ptr) borrowed_bytes.
- * @return A borrowed_bytes with bytes.ptr == NULL, bytes.len == 0,
- *         and source == NULL.
+ * @return A borrowed_bytes with bytes == cbytes_empty() and source == NULL.
  */
 static inline borrowed_bytes borrowed_bytes_empty(void)
 {
     borrowed_bytes b;
-    b.bytes.ptr = NULL;
-    b.bytes.len = (usize)0;
-    b.source    = NULL;
+    b.bytes  = cbytes_empty();
+    b.source = NULL;
     return b;
 }
 
@@ -388,20 +398,15 @@ static inline borrowed_bytes borrowed_bytes_empty(void)
  * Do NOT free the returned ptr field.
  *
  * @pre  b != NULL  (checked with require_msg in debug builds).
- * @note Returns an empty cbytes_t when b == NULL in release builds.
+ * @note Returns cbytes_empty() when b == NULL in release builds.
  * @param b Pointer to borrowed_bytes; must not be NULL.
  * @return  The wrapped cbytes_t.
  */
 static inline cbytes_t borrowed_bytes_get(const borrowed_bytes *b)
 {
     require_msg(b != NULL, "borrowed_bytes_get: b must not be NULL");
-    if (b != NULL) { return b->bytes; }
-    {
-        cbytes_t empty;
-        empty.ptr = NULL;
-        empty.len = (usize)0;
-        return empty;
-    }
+    if (b == NULL) { return cbytes_empty(); }
+    return b->bytes;
 }
 
 /**
@@ -487,6 +492,8 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
  *   borrowed_slice_<type>_at        — bounds-checked const element pointer
  *   borrowed_slice_<type>_slice     — sub-borrow [start, end)
  *   borrowed_slice_<type>_as_bytes  — raw borrowed_bytes view over slice
+ *                                     (returns borrowed_bytes_empty() on
+ *                                      overflow of len * sizeof(type))
  *
  * No block comments are used inside the macro body to ensure compatibility
  * with all C99-conforming preprocessors.
@@ -568,13 +575,17 @@ borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
 static inline borrowed_bytes                                                   \
 borrowed_slice_##type##_as_bytes(const borrowed_slice_##type *b)               \
 {                                                                              \
+    usize byte_len;                                                            \
     borrowed_bytes r;                                                          \
     if ((b == NULL) || (b->slice.ptr == NULL)) {                              \
         return borrowed_bytes_empty();                                         \
     }                                                                          \
+    if (!checked_mul(b->slice.len, sizeof(type), &byte_len)) {                \
+        return borrowed_bytes_empty();                                         \
+    }                                                                          \
     r.bytes.ptr = (const u8 *)b->slice.ptr;                                   \
-    r.bytes.len = b->slice.len * sizeof(type);                                 \
-    r.source    = b.source;                                                    \
+    r.bytes.len = byte_len;                                                    \
+    r.source    = b->source;                                                   \
     return r;                                                                  \
 }
 
