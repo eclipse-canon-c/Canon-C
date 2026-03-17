@@ -160,8 +160,7 @@ static void test_checked_mul(void) {
     /* Overflow */
     ASSERT_OVERFLOW("mul: MAX*2",       checked_mul((usize)~0ULL, 2, &r));
     ASSERT_OVERFLOW("mul: MAX*MAX",     checked_mul((usize)~0ULL, (usize)~0ULL, &r));
-    ASSERT_OVERFLOW("mul: 1000*1000*1000*1000", /* rough large overflow */
-                                        checked_mul((usize)1000000000ULL, (usize)1000000000ULL, &r));
+    ASSERT_OVERFLOW("mul: large overflow", checked_mul((usize)~0ULL / 2 + 2, (usize)2, &r));
 }
 
 /* ============================================================================
