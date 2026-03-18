@@ -248,7 +248,10 @@ lifetime conventions as the rest of Canon-C.
 - Logging: `log.h`, `log_macros.h`
 - File I/O, parsing, random number generation, timing
 
-**Goal:** Provide ergonomic helpers while relying on **lower layers**.
+**Goal:** Extend Canon-C's conventions — explicit ownership, `Result`-based
+errors, arena-backed allocation — into application-level utility code.
+For production logging, use `zlog`. For everything else, `util/` removes
+the seam between Canon-C's lower layers and the rest of your codebase.
 
 ## Scope
 
