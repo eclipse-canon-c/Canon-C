@@ -23,6 +23,13 @@
  * - Callback variant enables custom type formatting without format strings
  * - NULL-safe — silently does nothing on NULL inputs
  *
+ * Ownership model:
+ * ────────────────────────────────────────────────────────────────────────────
+ * All generated functions borrow every pointer they receive. Neither the
+ * vector nor the StringBuf is consumed or owned. borrowed() annotations
+ * from core/ownership.h (pulled in transitively via data/stringbuf.h) are
+ * applied to every generated parameter to make this explicit.
+ *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
@@ -35,6 +42,9 @@
  * - semantics/
  * - data/stringbuf.h  (same layer, different module — explicit dependency)
  * - data/vec/         (same module)
+ *
+ * core/ownership.h is available transitively through data/stringbuf.h.
+ * No additional include is needed.
  *
  * Usage — format a vec_int into a StringBuf:
  * ```c
@@ -82,7 +92,7 @@
  *
  * Generated function signature:
  * ```c
- * void fn(const VecType* v, StringBuf* sb, const char* fmt);
+ * void fn(borrowed(const VecType*) v, borrowed(StringBuf*) sb, borrowed(const char*) fmt);
  * ```
  *
  * @pre fmt is a valid printf format string for type (e.g. "%d" for int)
@@ -100,12 +110,17 @@
  * - Time:  O(n) where n = v->len
  * - Space: O(1) — writes into caller-owned StringBuf, no allocation
  */
-#define IMPL_VEC_TO_STRINGBUF(linkage, VecType, fn, type) \
-linkage void fn(const VecType* v, StringBuf* sb, const char* fmt) { \
-    if (!v || !sb || !fmt) return; \
-    for (usize i = 0; i < v->len; i++) { \
-        stringbuf_printf(sb, fmt, v->items[i]); \
-    } \
+#define IMPL_VEC_TO_STRINGBUF(linkage, VecType, fn, type)                          \
+linkage void fn(                                                                    \
+        borrowed(const VecType*) v,                                                 \
+        borrowed(StringBuf*)     sb,                                                \
+        borrowed(const char*)    fmt)                                               \
+{                                                                                   \
+    usize i;                                                                        \
+    if (!v || !sb || !fmt) return;                                                  \
+    for (i = 0; i < v->len; i++) {                                                  \
+        stringbuf_printf(sb, fmt, v->items[i]);                                     \
+    }                                                                               \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -122,7 +137,7 @@ linkage void fn(const VecType* v, StringBuf* sb, const char* fmt) { \
  *
  * Generated function signature:
  * ```c
- * void fn(const VecType* v, StringBuf* sb, void (*cb)(StringBuf*, type));
+ * void fn(borrowed(const VecType*) v, borrowed(StringBuf*) sb, void (*cb)(borrowed(StringBuf*), type));
  * ```
  *
  * @pre cb is a valid function pointer — not NULL
@@ -140,12 +155,17 @@ linkage void fn(const VecType* v, StringBuf* sb, const char* fmt) { \
  * - Time:  O(n * cb_cost) where n = v->len
  * - Space: O(1) — no allocation, writes via caller-provided callback
  */
-#define IMPL_VEC_TO_STRINGBUF_CB(linkage, VecType, fn, type) \
-linkage void fn(const VecType* v, StringBuf* sb, void (*cb)(StringBuf*, type)) { \
-    if (!v || !sb || !cb) return; \
-    for (usize i = 0; i < v->len; i++) { \
-        cb(sb, v->items[i]); \
-    } \
+#define IMPL_VEC_TO_STRINGBUF_CB(linkage, VecType, fn, type)                       \
+linkage void fn(                                                                    \
+        borrowed(const VecType*) v,                                                 \
+        borrowed(StringBuf*)     sb,                                                \
+        void (*cb)(borrowed(StringBuf*), type))                                     \
+{                                                                                   \
+    usize i;                                                                        \
+    if (!v || !sb || !cb) return;                                                   \
+    for (i = 0; i < v->len; i++) {                                                  \
+        cb(sb, v->items[i]);                                                        \
+    }                                                                               \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -194,12 +214,22 @@ linkage void fn(const VecType* v, StringBuf* sb, void (*cb)(StringBuf*, type)) {
  * DEFINE_VEC_FMT(static inline, int)
  *
  * // Now available:
- * // void canon_vec_int_to_stringbuf(const canon_vec_int* v, StringBuf* sb, const char* fmt);
- * // void canon_vec_int_to_stringbuf_cb(const canon_vec_int* v, StringBuf* sb, void(*cb)(StringBuf*, int));
+ * // void canon_vec_int_to_stringbuf(borrowed(const canon_vec_int*) v,
+ * //                                 borrowed(StringBuf*) sb,
+ * //                                 borrowed(const char*) fmt);
+ * // void canon_vec_int_to_stringbuf_cb(borrowed(const canon_vec_int*) v,
+ * //                                    borrowed(StringBuf*) sb,
+ * //                                    void (*cb)(borrowed(StringBuf*), int));
  * ```
  */
-#define DEFINE_VEC_FMT(linkage, type) \
-    IMPL_VEC_TO_STRINGBUF(linkage,    MANGLE_VEC_TYPE(type), MANGLE_VEC_TO_STRINGBUF(type),    type) \
-    IMPL_VEC_TO_STRINGBUF_CB(linkage, MANGLE_VEC_TYPE(type), MANGLE_VEC_TO_STRINGBUF_CB(type), type)
+#define DEFINE_VEC_FMT(linkage, type)                                               \
+    IMPL_VEC_TO_STRINGBUF(   linkage,                                               \
+        MANGLE_VEC_TYPE(type),                                                      \
+        MANGLE_VEC_TO_STRINGBUF(type),                                              \
+        type)                                                                       \
+    IMPL_VEC_TO_STRINGBUF_CB(linkage,                                               \
+        MANGLE_VEC_TYPE(type),                                                      \
+        MANGLE_VEC_TO_STRINGBUF_CB(type),                                           \
+        type)
 
 #endif /* CANON_DATA_VEC_FMT_H */
