@@ -218,13 +218,21 @@ Optional modules for **ease-of-use**:
 
 ### 6. `algo/` — Algorithms on collections
 
-Generic, reusable algorithms:
+Generic and typed reusable algorithms, each implemented as a modular
+5-file architecture (consistent with `data/` and `semantics/` layers):
 
-- Transformation (`map.h`), filtering, folding, searching
-- Sorting, reversing, uniqueness
-- Predicate checks (`any_all.h`)
+- Transformation (`map/`), filtering (`filter/`), folding (`fold/`), searching (`search/`)
+- Sorting (`sort/`), reversing (`reverse/`), uniqueness (`unique/`)
+- Predicate checks (`any_all/`), element location (`find/`)
 
-**Goal:** Apply operations to collections **predictably and generically**.
+Each module provides three levels of use:
+- **Generic** — `void*` + function pointer interface, works on any type
+- **Typed macro** — compile-time type safety, wraps the generic level
+- **Typed instantiation** — `DEFINE_ALGO_X(type)` stamps out fully typed
+  slice variants with no `void*`, directly optimizable by the compiler
+
+**Goal:** Apply operations to collections **predictably and generically**,
+with opt-in typed instantiation for cases where full type visibility matters.
 
 ---
 
