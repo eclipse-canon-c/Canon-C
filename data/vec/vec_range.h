@@ -23,6 +23,12 @@
  * - Overflow-protected element count calculation via range_len() + checked.h
  * - Returns Result<bool, Error> on failure — never silently truncates
  *
+ * Ownership model:
+ * ────────────────────────────────────────────────────────────────────────────
+ * The vector pointer is borrowed — the function does not take ownership.
+ * borrowed() from core/ownership.h is available transitively via vec_impl.h.
+ * The range is passed by value — no ownership annotation applies.
+ *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
@@ -77,7 +83,7 @@
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, range r);
+ * result_bool_Error fn(borrowed(VecType*) v, range r);
  * ```
  *
  * @pre v != NULL
@@ -101,7 +107,7 @@
  * - Space: O(1) — no allocation, fills into existing buffer
  */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, range r) { \
+linkage result_bool_Error fn(borrowed(VecType*) v, range r) { \
     if (!v || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
     usize count = range_len(&r); \
     usize total; \
@@ -151,7 +157,7 @@ linkage result_bool_Error fn(VecType* v, range r) { \
  * DEFINE_VEC_RANGE(static inline, int)
  *
  * // Now available:
- * // result_bool_Error canon_vec_int_extend_from_range(canon_vec_int* v, range r);
+ * // result_bool_Error canon_vec_int_extend_from_range(borrowed(canon_vec_int*) v, range r);
  * ```
  *
  * @note Only makes semantic sense for numeric element types (int, float, i32, etc.)
