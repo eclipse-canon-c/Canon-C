@@ -4,6 +4,7 @@
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"      /* CANON_DEQUE_MAX_CAPACITY fallback: CANON_VEC_MAX_CAPACITY */
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "core/ownership.h"              /* borrowed() */
 #include "semantics/result/result.h"     /* CANON_RESULT */
 #include "semantics/error.h"             /* Error, ERR_* */
 
@@ -21,6 +22,7 @@
  * - Preconditions use require_msg(), debug invariants use ensure_msg()
  * - CANON_DEQUE_MAX_CAPACITY enforced at init time
  * - Option variants provided for pop and peek alongside Result/bool variants
+ * - All pointer parameters annotated with borrowed() per ownership.h conventions
  *
  * Ring buffer invariant:
  * ────────────────────────────────────────────────────────────────────────────
@@ -119,14 +121,9 @@ typedef struct DequeTag { \
 /**
  * @brief Initializes a deque using a caller-owned buffer
  *
- * @param linkage   Function linkage
- * @param DequeType Mangled deque type name
- * @param fn        Mangled function name
- * @param type      Element type
- *
  * Generated function signature:
  * ```c
- * void fn(DequeType* d, type* buffer, usize capacity);
+ * void fn(borrowed(DequeType*) d, borrowed(type*) buffer, usize capacity);
  * ```
  *
  * @pre d != NULL
@@ -140,14 +137,13 @@ typedef struct DequeTag { \
  *
  * @note Capacity is fixed forever — no growth possible.
  * @note require_msg() panics on precondition violation — never returns on failure.
- *       There is no defensive fallback path; callers must satisfy preconditions.
  *
  * Performance:
  * - Time:  O(1)
  * - Space: O(1) — no allocation, wraps caller-provided buffer
  */
 #define IMPL_DEQUE_INIT(linkage, DequeType, fn, type) \
-linkage void fn(DequeType* d, type* buffer, usize capacity) { \
+linkage void fn(borrowed(DequeType*) d, borrowed(type*) buffer, usize capacity) { \
     require_msg(d != NULL,      #fn ": d cannot be NULL"); \
     require_msg(buffer != NULL, #fn ": buffer cannot be NULL"); \
     require_msg(capacity > 0,   #fn ": capacity must be > 0"); \
@@ -162,10 +158,6 @@ linkage void fn(DequeType* d, type* buffer, usize capacity) { \
 
 /**
  * @brief Returns an empty zero-initialized deque (no buffer)
- *
- * @param linkage   Function linkage
- * @param DequeType Mangled deque type name
- * @param fn        Mangled function name
  *
  * Generated function signature:
  * ```c
@@ -192,7 +184,7 @@ linkage DequeType fn(void) { \
  *
  * Generated function signature:
  * ```c
- * usize fn(const DequeType* d);
+ * usize fn(borrowed(const DequeType*) d);
  * ```
  *
  * @post Returns 0 if d == NULL
@@ -202,7 +194,7 @@ linkage DequeType fn(void) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_LEN(linkage, DequeType, fn) \
-linkage usize fn(const DequeType* d) { \
+linkage usize fn(borrowed(const DequeType*) d) { \
     return d ? d->size : 0; \
 }
 
@@ -211,7 +203,7 @@ linkage usize fn(const DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * usize fn(const DequeType* d);
+ * usize fn(borrowed(const DequeType*) d);
  * ```
  *
  * @post Returns 0 if d == NULL
@@ -221,7 +213,7 @@ linkage usize fn(const DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_CAPACITY(linkage, DequeType, fn) \
-linkage usize fn(const DequeType* d) { \
+linkage usize fn(borrowed(const DequeType*) d) { \
     return d ? d->capacity : 0; \
 }
 
@@ -230,7 +222,7 @@ linkage usize fn(const DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * usize fn(const DequeType* d);
+ * usize fn(borrowed(const DequeType*) d);
  * ```
  *
  * @post Returns 0 if d == NULL
@@ -240,7 +232,7 @@ linkage usize fn(const DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_REMAINING(linkage, DequeType, fn) \
-linkage usize fn(const DequeType* d) { \
+linkage usize fn(borrowed(const DequeType*) d) { \
     return d ? (d->capacity - d->size) : 0; \
 }
 
@@ -249,7 +241,7 @@ linkage usize fn(const DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const DequeType* d);
+ * bool fn(borrowed(const DequeType*) d);
  * ```
  *
  * @post Returns true if d == NULL
@@ -259,7 +251,7 @@ linkage usize fn(const DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_IS_EMPTY(linkage, DequeType, fn) \
-linkage bool fn(const DequeType* d) { \
+linkage bool fn(borrowed(const DequeType*) d) { \
     return !d || d->size == 0; \
 }
 
@@ -268,7 +260,7 @@ linkage bool fn(const DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const DequeType* d);
+ * bool fn(borrowed(const DequeType*) d);
  * ```
  *
  * @post Returns true if d == NULL
@@ -278,7 +270,7 @@ linkage bool fn(const DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_IS_FULL(linkage, DequeType, fn) \
-linkage bool fn(const DequeType* d) { \
+linkage bool fn(borrowed(const DequeType*) d) { \
     return !d || d->size >= d->capacity; \
 }
 
@@ -289,16 +281,9 @@ linkage bool fn(const DequeType* d) { \
 /**
  * @brief Inserts element at the front of the deque (O(1) ring buffer step)
  *
- * Decrements head modulo capacity, then writes element there.
- *
- * @param linkage   Function linkage
- * @param DequeType Mangled deque type name
- * @param fn        Mangled function name
- * @param type      Element type
- *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(DequeType* d, type item);
+ * result_bool_Error fn(borrowed(DequeType*) d, type item);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if d == NULL or d->buffer == NULL
@@ -310,7 +295,7 @@ linkage bool fn(const DequeType* d) { \
  * - Space: O(1) — no allocation
  */
 #define IMPL_DEQUE_PUSH_FRONT(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(DequeType* d, type item) { \
+linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (d->size >= d->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
@@ -322,16 +307,9 @@ linkage result_bool_Error fn(DequeType* d, type item) { \
 /**
  * @brief Inserts element at the back of the deque (O(1) ring buffer step)
  *
- * Writes element at tail, then increments tail modulo capacity.
- *
- * @param linkage   Function linkage
- * @param DequeType Mangled deque type name
- * @param fn        Mangled function name
- * @param type      Element type
- *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(DequeType* d, type item);
+ * result_bool_Error fn(borrowed(DequeType*) d, type item);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if d == NULL or d->buffer == NULL
@@ -343,7 +321,7 @@ linkage result_bool_Error fn(DequeType* d, type item) { \
  * - Space: O(1) — no allocation
  */
 #define IMPL_DEQUE_PUSH_BACK(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(DequeType* d, type item) { \
+linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (d->size >= d->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     d->buffer[d->tail] = item; \
@@ -361,7 +339,7 @@ linkage result_bool_Error fn(DequeType* d, type item) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(DequeType* d, type* out);
+ * result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
@@ -373,7 +351,7 @@ linkage result_bool_Error fn(DequeType* d, type item) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_POP_FRONT(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(DequeType* d, type* out) { \
+linkage result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
     if (!d || !out || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (d->size == 0) return result_bool_Error_err(ERR_INVALID_STATE); \
     *out = d->buffer[d->head]; \
@@ -387,7 +365,7 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(DequeType* d, type* out);
+ * result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
@@ -399,7 +377,7 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_POP_BACK(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(DequeType* d, type* out) { \
+linkage result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
     if (!d || !out || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (d->size == 0) return result_bool_Error_err(ERR_INVALID_STATE); \
     d->tail = (d->tail == 0) ? d->capacity - 1 : d->tail - 1; \
@@ -411,19 +389,9 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
 /**
  * @brief Removes and returns the front element as Option<type>
  *
- * @param linkage       Function linkage
- * @param DequeType     Mangled deque type name
- * @param fn            Mangled function name
- * @param fn_pop_front  Mangled pop_front function name
- * @param OptionType    Mangled option type name
- * @param fn_some       Mangled option Some constructor name
- * @param fn_none       Mangled option None constructor name
- * @param fn_result_is_ok Mangled result is_ok checker name
- * @param type          Element type
- *
  * Generated function signature:
  * ```c
- * OptionType fn(DequeType* d);
+ * OptionType fn(borrowed(DequeType*) d);
  * ```
  *
  * @post Returns None if d == NULL, d->buffer == NULL, or d->size == 0
@@ -433,7 +401,7 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
-linkage OptionType fn(DequeType* d) { \
+linkage OptionType fn(borrowed(DequeType*) d) { \
     type out; \
     if (fn_result_is_ok(fn_pop_front(d, &out))) \
         return fn_some(out); \
@@ -443,19 +411,9 @@ linkage OptionType fn(DequeType* d) { \
 /**
  * @brief Removes and returns the back element as Option<type>
  *
- * @param linkage       Function linkage
- * @param DequeType     Mangled deque type name
- * @param fn            Mangled function name
- * @param fn_pop_back   Mangled pop_back function name
- * @param OptionType    Mangled option type name
- * @param fn_some       Mangled option Some constructor name
- * @param fn_none       Mangled option None constructor name
- * @param fn_result_is_ok Mangled result is_ok checker name
- * @param type          Element type
- *
  * Generated function signature:
  * ```c
- * OptionType fn(DequeType* d);
+ * OptionType fn(borrowed(DequeType*) d);
  * ```
  *
  * @post Returns None if d == NULL, d->buffer == NULL, or d->size == 0
@@ -465,7 +423,7 @@ linkage OptionType fn(DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
-linkage OptionType fn(DequeType* d) { \
+linkage OptionType fn(borrowed(DequeType*) d) { \
     type out; \
     if (fn_result_is_ok(fn_pop_back(d, &out))) \
         return fn_some(out); \
@@ -481,7 +439,7 @@ linkage OptionType fn(DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const DequeType* d, type* out);
+ * bool fn(borrowed(const DequeType*) d, borrowed(type*) out);
  * ```
  *
  * @pre d   != NULL (programming error — triggers require_msg)
@@ -496,7 +454,7 @@ linkage OptionType fn(DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_FRONT(linkage, DequeType, fn, type) \
-linkage bool fn(const DequeType* d, type* out) { \
+linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
     require_msg(d   != NULL, #fn ": d cannot be NULL"); \
     require_msg(out != NULL, #fn ": out cannot be NULL"); \
     if (d->size == 0) return false; \
@@ -509,7 +467,7 @@ linkage bool fn(const DequeType* d, type* out) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const DequeType* d, type* out);
+ * bool fn(borrowed(const DequeType*) d, borrowed(type*) out);
  * ```
  *
  * @pre d   != NULL (programming error — triggers require_msg)
@@ -524,7 +482,7 @@ linkage bool fn(const DequeType* d, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_BACK(linkage, DequeType, fn, type) \
-linkage bool fn(const DequeType* d, type* out) { \
+linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
     require_msg(d   != NULL, #fn ": d cannot be NULL"); \
     require_msg(out != NULL, #fn ": out cannot be NULL"); \
     if (d->size == 0) return false; \
@@ -536,18 +494,9 @@ linkage bool fn(const DequeType* d, type* out) { \
 /**
  * @brief Returns front element as Option<type> without removing it
  *
- * @param linkage        Function linkage
- * @param DequeType      Mangled deque type name
- * @param fn             Mangled function name
- * @param fn_peek_front  Mangled peek_front function name
- * @param OptionType     Mangled option type name
- * @param fn_some        Mangled option Some constructor name
- * @param fn_none        Mangled option None constructor name
- * @param type           Element type
- *
  * Generated function signature:
  * ```c
- * OptionType fn(const DequeType* d);
+ * OptionType fn(borrowed(const DequeType*) d);
  * ```
  *
  * @pre d != NULL (programming error — triggers require_msg via peek_front)
@@ -560,7 +509,7 @@ linkage bool fn(const DequeType* d, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_FRONT_OPTION(linkage, DequeType, fn, fn_peek_front, OptionType, fn_some, fn_none, type) \
-linkage OptionType fn(const DequeType* d) { \
+linkage OptionType fn(borrowed(const DequeType*) d) { \
     type out; \
     if (fn_peek_front(d, &out)) \
         return fn_some(out); \
@@ -570,18 +519,9 @@ linkage OptionType fn(const DequeType* d) { \
 /**
  * @brief Returns back element as Option<type> without removing it
  *
- * @param linkage       Function linkage
- * @param DequeType     Mangled deque type name
- * @param fn            Mangled function name
- * @param fn_peek_back  Mangled peek_back function name
- * @param OptionType    Mangled option type name
- * @param fn_some       Mangled option Some constructor name
- * @param fn_none       Mangled option None constructor name
- * @param type          Element type
- *
  * Generated function signature:
  * ```c
- * OptionType fn(const DequeType* d);
+ * OptionType fn(borrowed(const DequeType*) d);
  * ```
  *
  * @pre d != NULL (programming error — triggers require_msg via peek_back)
@@ -594,7 +534,7 @@ linkage OptionType fn(const DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_BACK_OPTION(linkage, DequeType, fn, fn_peek_back, OptionType, fn_some, fn_none, type) \
-linkage OptionType fn(const DequeType* d) { \
+linkage OptionType fn(borrowed(const DequeType*) d) { \
     type out; \
     if (fn_peek_back(d, &out)) \
         return fn_some(out); \
@@ -610,7 +550,7 @@ linkage OptionType fn(const DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * void fn(DequeType* d);
+ * void fn(borrowed(DequeType*) d);
  * ```
  *
  * @post d->size == 0, d->head == 0, d->tail == 0
@@ -623,7 +563,7 @@ linkage OptionType fn(const DequeType* d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_CLEAR(linkage, DequeType, fn) \
-linkage void fn(DequeType* d) { \
+linkage void fn(borrowed(DequeType*) d) { \
     if (!d) return; \
     d->size = 0; \
     d->head = 0; \
@@ -635,7 +575,7 @@ linkage void fn(DequeType* d) { \
  *
  * Generated function signature:
  * ```c
- * void fn(DequeType* a, DequeType* b);
+ * void fn(borrowed(DequeType*) a, borrowed(DequeType*) b);
  * ```
  *
  * @pre a != NULL
@@ -646,7 +586,7 @@ linkage void fn(DequeType* d) { \
  * - Space: O(1) — struct copy on stack
  */
 #define IMPL_DEQUE_SWAP(linkage, DequeType, fn) \
-linkage void fn(DequeType* a, DequeType* b) { \
+linkage void fn(borrowed(DequeType*) a, borrowed(DequeType*) b) { \
     require_msg(a != NULL, #fn ": a cannot be NULL"); \
     require_msg(b != NULL, #fn ": b cannot be NULL"); \
     DequeType tmp = *a; \
