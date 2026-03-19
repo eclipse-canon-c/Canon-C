@@ -7,6 +7,7 @@
 #include "core/primitives/checked.h"
 #include "core/memory.h"
 #include "core/arena.h"
+#include "core/ownership.h"              /* borrowed(), owned() */
 #include "semantics/result/result.h"
 #include "semantics/error.h"
 
@@ -28,6 +29,7 @@
  * - mem_copy/mem_move used — no raw memcpy/memmove
  * - mem_alloc/mem_free used — no raw malloc/free
  * - CANON_VEC_MAX_CAPACITY enforced at construction time
+ * - All pointer parameters annotated with borrowed() per ownership.h conventions
  *
  * Do NOT include this file directly. Use:
  * - data/vec/vec_defn.h  — to instantiate a typed vector
@@ -97,7 +99,7 @@ typedef struct VecTag { \
 } VecType; \
 \
 typedef struct IterTag { \
-    VecType* vec;  /**< Vector being iterated (invalidated by any modification) */ \
+    VecType* vec;   /**< Vector being iterated (invalidated by any modification) */ \
     usize    index; /**< Current position (0 = start) */ \
 } IterType; \
 \
@@ -113,14 +115,9 @@ typedef struct SliceTag { \
 /**
  * @brief Initializes a vector using a caller-owned buffer
  *
- * @param linkage  Function linkage (static inline, extern, etc.)
- * @param VecType  Mangled vector type name
- * @param fn       Mangled function name
- * @param type     Element type
- *
  * Generated function signature:
  * ```c
- * VecType fn(type* buffer, usize capacity);
+ * VecType fn(borrowed(type*) buffer, usize capacity);
  * ```
  *
  * @pre buffer != NULL || capacity == 0
@@ -135,7 +132,7 @@ typedef struct SliceTag { \
  * - Space: O(1) — no allocation, wraps caller-provided buffer
  */
 #define IMPL_VEC_INIT(linkage, VecType, fn, type) \
-linkage VecType fn(type* buffer, usize capacity) { \
+linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
     require_msg(buffer != NULL || capacity == 0, \
         #fn ": buffer cannot be NULL when capacity > 0"); \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
@@ -150,10 +147,6 @@ linkage VecType fn(type* buffer, usize capacity) { \
 
 /**
  * @brief Returns an empty zero-initialized vector (no buffer)
- *
- * @param linkage  Function linkage
- * @param VecType  Mangled vector type name
- * @param fn       Mangled function name
  *
  * Generated function signature:
  * ```c
@@ -180,13 +173,6 @@ linkage VecType fn(void) { \
 /**
  * @brief Allocates a vector buffer on the heap with fixed capacity
  *
- * @param linkage  Function linkage
- * @param VecType  Mangled vector type name
- * @param fn_alloc Mangled alloc function name
- * @param fn_empty Mangled empty function name
- * @param fn_init  Mangled init function name
- * @param type     Element type
- *
  * Generated function signature:
  * ```c
  * VecType fn_alloc(usize capacity);
@@ -199,7 +185,6 @@ linkage VecType fn(void) { \
  * @post On failure (OOM or overflow): returns fn_empty()
  *
  * @note Caller must call fn_free() when done.
- * @note For arena-backed allocation, use fn_arena_alloc() instead.
  * @note Capacity is FIXED — no automatic growth.
  *       For auto-growing vectors, use data/convenience/dynvec.h.
  *
@@ -229,13 +214,9 @@ linkage VecType fn_alloc(usize capacity) { \
 /**
  * @brief Frees a heap-allocated vector's buffer
  *
- * @param linkage  Function linkage
- * @param VecType  Mangled vector type name
- * @param fn       Mangled function name
- *
  * Generated function signature:
  * ```c
- * void fn(VecType* v);
+ * void fn(dropped(VecType*) v);
  * ```
  *
  * @pre v was allocated via fn_alloc() — NOT stack or arena backed
@@ -252,7 +233,7 @@ linkage VecType fn_alloc(usize capacity) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_FREE(linkage, VecType, fn) \
-linkage void fn(VecType* v) { \
+linkage void fn(dropped(VecType*) v) { \
     if (!v || !v->items) return; \
     mem_free(v->items); \
     v->items    = NULL; \
@@ -267,16 +248,9 @@ linkage void fn(VecType* v) { \
 /**
  * @brief Allocates a vector buffer from an arena with fixed capacity
  *
- * @param linkage      Function linkage
- * @param VecType      Mangled vector type name
- * @param fn_alloc     Mangled arena_alloc function name
- * @param fn_empty     Mangled empty function name
- * @param fn_init      Mangled init function name
- * @param type         Element type
- *
  * Generated function signature:
  * ```c
- * VecType fn_alloc(Arena* arena, usize capacity);
+ * VecType fn_alloc(borrowed(Arena*) arena, usize capacity);
  * ```
  *
  * @pre arena != NULL and initialized via arena_init()
@@ -293,7 +267,7 @@ linkage void fn(VecType* v) { \
  * - Space: O(capacity * sizeof(type)) consumed from arena
  */
 #define IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
-linkage VecType fn_alloc(Arena* arena, usize capacity) { \
+linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
     if (!arena || capacity == 0) return fn_empty(); \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
         return fn_empty(); \
@@ -316,7 +290,7 @@ linkage VecType fn_alloc(Arena* arena, usize capacity) { \
  *
  * Generated function signature:
  * ```c
- * usize fn(const VecType* v);
+ * usize fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns 0 if v == NULL
@@ -326,7 +300,7 @@ linkage VecType fn_alloc(Arena* arena, usize capacity) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_LEN(linkage, VecType, fn) \
-linkage usize fn(const VecType* v) { \
+linkage usize fn(borrowed(const VecType*) v) { \
     return v ? v->len : 0; \
 }
 
@@ -335,7 +309,7 @@ linkage usize fn(const VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * usize fn(const VecType* v);
+ * usize fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns 0 if v == NULL
@@ -345,7 +319,7 @@ linkage usize fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_CAPACITY(linkage, VecType, fn) \
-linkage usize fn(const VecType* v) { \
+linkage usize fn(borrowed(const VecType*) v) { \
     return v ? v->capacity : 0; \
 }
 
@@ -354,7 +328,7 @@ linkage usize fn(const VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * usize fn(const VecType* v);
+ * usize fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns 0 if v == NULL
@@ -364,7 +338,7 @@ linkage usize fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_REMAINING(linkage, VecType, fn) \
-linkage usize fn(const VecType* v) { \
+linkage usize fn(borrowed(const VecType*) v) { \
     return v ? (v->capacity - v->len) : 0; \
 }
 
@@ -373,7 +347,7 @@ linkage usize fn(const VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const VecType* v);
+ * bool fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns true if v == NULL
@@ -383,7 +357,7 @@ linkage usize fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_IS_EMPTY(linkage, VecType, fn) \
-linkage bool fn(const VecType* v) { \
+linkage bool fn(borrowed(const VecType*) v) { \
     return !v || v->len == 0; \
 }
 
@@ -392,7 +366,7 @@ linkage bool fn(const VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const VecType* v);
+ * bool fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns true if v == NULL
@@ -402,7 +376,7 @@ linkage bool fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_IS_FULL(linkage, VecType, fn) \
-linkage bool fn(const VecType* v) { \
+linkage bool fn(borrowed(const VecType*) v) { \
     return !v || v->len >= v->capacity; \
 }
 
@@ -415,10 +389,9 @@ linkage bool fn(const VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(const VecType* v, usize i, type* out);
+ * bool fn(borrowed(const VecType*) v, usize i, borrowed(type*) out);
  * ```
  *
- * @pre out != NULL
  * @post *out is set if return is true
  * @post Returns false if v == NULL, out == NULL, or i >= v->len
  *
@@ -427,7 +400,7 @@ linkage bool fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_GET(linkage, VecType, fn, type) \
-linkage bool fn(const VecType* v, usize i, type* out) { \
+linkage bool fn(borrowed(const VecType*) v, usize i, borrowed(type*) out) { \
     if (!v || !out || i >= v->len) return false; \
     *out = v->items[i]; \
     return true; \
@@ -438,7 +411,7 @@ linkage bool fn(const VecType* v, usize i, type* out) { \
  *
  * Generated function signature:
  * ```c
- * option_##type fn(const VecType* v, usize i);
+ * OptionType fn(borrowed(const VecType*) v, usize i);
  * ```
  *
  * @post Returns None if v == NULL or i >= v->len
@@ -448,7 +421,7 @@ linkage bool fn(const VecType* v, usize i, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_GET_OPTION(linkage, VecType, fn, OptionType, fn_some, fn_none, type) \
-linkage OptionType fn(const VecType* v, usize i) { \
+linkage OptionType fn(borrowed(const VecType*) v, usize i) { \
     if (!v || i >= v->len) return fn_none(); \
     return fn_some(v->items[i]); \
 }
@@ -458,7 +431,7 @@ linkage OptionType fn(const VecType* v, usize i) { \
  *
  * Generated function signature:
  * ```c
- * type fn(const VecType* v, usize i);
+ * type fn(borrowed(const VecType*) v, usize i);
  * ```
  *
  * @pre v != NULL
@@ -473,7 +446,7 @@ linkage OptionType fn(const VecType* v, usize i) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_GET_UNCHECKED(linkage, VecType, fn, type) \
-linkage type fn(const VecType* v, usize i) { \
+linkage type fn(borrowed(const VecType*) v, usize i) { \
     ensure_msg(v != NULL,        #fn ": v cannot be NULL"); \
     ensure_msg(v->items != NULL, #fn ": v->items cannot be NULL"); \
     ensure_msg(i < v->len,       #fn ": index out of bounds"); \
@@ -481,11 +454,11 @@ linkage type fn(const VecType* v, usize i) { \
 }
 
 /**
- * @brief Returns a pointer to the element at index (bounds-checked via ensure)
+ * @brief Returns a borrowed pointer to the element at index (bounds-checked via ensure)
  *
  * Generated function signature:
  * ```c
- * type* fn(const VecType* v, usize i);
+ * borrowed(type*) fn(borrowed(const VecType*) v, usize i);
  * ```
  *
  * @pre v != NULL
@@ -498,7 +471,7 @@ linkage type fn(const VecType* v, usize i) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_AT(linkage, VecType, fn, type) \
-linkage type* fn(const VecType* v, usize i) { \
+linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
     ensure_msg(v != NULL,  #fn ": v cannot be NULL"); \
     ensure_msg(i < v->len, #fn ": index out of bounds"); \
     return &v->items[i]; \
@@ -509,7 +482,7 @@ linkage type* fn(const VecType* v, usize i) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(VecType* v, usize i, type val);
+ * bool fn(borrowed(VecType*) v, usize i, type val);
  * ```
  *
  * @post Returns false if v == NULL or i >= v->len
@@ -519,18 +492,18 @@ linkage type* fn(const VecType* v, usize i) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_SET(linkage, VecType, fn, type) \
-linkage bool fn(VecType* v, usize i, type val) { \
+linkage bool fn(borrowed(VecType*) v, usize i, type val) { \
     if (!v || i >= v->len) return false; \
     v->items[i] = val; \
     return true; \
 }
 
 /**
- * @brief Returns pointer to first element, or NULL if empty
+ * @brief Returns a borrowed pointer to the first element, or NULL if empty
  *
  * Generated function signature:
  * ```c
- * type* fn(const VecType* v);
+ * borrowed(type*) fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns NULL if v == NULL or v->len == 0
@@ -540,16 +513,16 @@ linkage bool fn(VecType* v, usize i, type val) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_FIRST(linkage, VecType, fn, type) \
-linkage type* fn(const VecType* v) { \
+linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return (v && v->len > 0) ? &v->items[0] : NULL; \
 }
 
 /**
- * @brief Returns pointer to last element, or NULL if empty
+ * @brief Returns a borrowed pointer to the last element, or NULL if empty
  *
  * Generated function signature:
  * ```c
- * type* fn(const VecType* v);
+ * borrowed(type*) fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns NULL if v == NULL or v->len == 0
@@ -559,16 +532,16 @@ linkage type* fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_LAST(linkage, VecType, fn, type) \
-linkage type* fn(const VecType* v) { \
+linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return (v && v->len > 0) ? &v->items[v->len - 1] : NULL; \
 }
 
 /**
- * @brief Returns the raw buffer pointer
+ * @brief Returns a borrowed pointer to the raw buffer
  *
  * Generated function signature:
  * ```c
- * type* fn(const VecType* v);
+ * borrowed(type*) fn(borrowed(const VecType*) v);
  * ```
  *
  * @post Returns NULL if v == NULL
@@ -578,7 +551,7 @@ linkage type* fn(const VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_DATA(linkage, VecType, fn, type) \
-linkage type* fn(const VecType* v) { \
+linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return v ? v->items : NULL; \
 }
 
@@ -591,22 +564,19 @@ linkage type* fn(const VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, type item);
+ * result_bool_Error fn(borrowed(VecType*) v, type item);
  * ```
  *
- * @pre v != NULL
- * @pre v->items != NULL
- *
- * @post On Ok: v->len incremented by 1, item stored at v->items[old_len]
  * @post Returns Err(ERR_INVALID_ARG)       if v == NULL or v->items == NULL
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if v->len >= v->capacity
+ * @post On Ok: v->len incremented by 1, item stored at v->items[old_len]
  *
  * Performance:
  * - Time:  O(1)
  * - Space: O(1) — no allocation
  */
 #define IMPL_VEC_PUSH(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, type item) { \
+linkage result_bool_Error fn(borrowed(VecType*) v, type item) { \
     if (!v || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (v->len >= v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     v->items[v->len++] = item; \
@@ -618,7 +588,7 @@ linkage result_bool_Error fn(VecType* v, type item) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(VecType* v, type item);
+ * bool fn(borrowed(VecType*) v, type item);
  * ```
  *
  * @post Returns false if v == NULL, v->items == NULL, or v is full
@@ -628,7 +598,7 @@ linkage result_bool_Error fn(VecType* v, type item) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_TRY_PUSH(linkage, VecType, fn, type) \
-linkage bool fn(VecType* v, type item) { \
+linkage bool fn(borrowed(VecType*) v, type item) { \
     if (!v || !v->items || v->len >= v->capacity) return false; \
     v->items[v->len++] = item; \
     return true; \
@@ -639,7 +609,7 @@ linkage bool fn(VecType* v, type item) { \
  *
  * Generated function signature:
  * ```c
- * void fn(VecType* v, type item);
+ * void fn(borrowed(VecType*) v, type item);
  * ```
  *
  * @pre v != NULL
@@ -654,9 +624,9 @@ linkage bool fn(VecType* v, type item) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_PUSH_UNCHECKED(linkage, VecType, fn, type) \
-linkage void fn(VecType* v, type item) { \
-    ensure_msg(v != NULL,           #fn ": v cannot be NULL"); \
-    ensure_msg(v->items != NULL,    #fn ": v->items cannot be NULL"); \
+linkage void fn(borrowed(VecType*) v, type item) { \
+    ensure_msg(v != NULL,            #fn ": v cannot be NULL"); \
+    ensure_msg(v->items != NULL,     #fn ": v->items cannot be NULL"); \
     ensure_msg(v->len < v->capacity, #fn ": vector is full"); \
     v->items[v->len++] = item; \
 }
@@ -670,23 +640,19 @@ linkage void fn(VecType* v, type item) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, type* out);
+ * result_bool_Error fn(borrowed(VecType*) v, borrowed(type*) out);
  * ```
  *
- * @pre v != NULL
- * @pre out != NULL
- * @pre v->items != NULL
- *
- * @post On Ok: v->len decremented by 1, *out holds removed element
  * @post Returns Err(ERR_INVALID_ARG)   if v == NULL, out == NULL, or v->items == NULL
  * @post Returns Err(ERR_INVALID_STATE) if v->len == 0
+ * @post On Ok: v->len decremented by 1, *out holds removed element
  *
  * Performance:
  * - Time:  O(1)
  * - Space: O(1)
  */
 #define IMPL_VEC_POP(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, type* out) { \
+linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
     if (!v || !out || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (v->len == 0) return result_bool_Error_err(ERR_INVALID_STATE); \
     *out = v->items[--v->len]; \
@@ -698,7 +664,7 @@ linkage result_bool_Error fn(VecType* v, type* out) { \
  *
  * Generated function signature:
  * ```c
- * OptionType fn(VecType* v);
+ * OptionType fn(borrowed(VecType*) v);
  * ```
  *
  * @post Returns None if v == NULL, v->items == NULL, or v->len == 0
@@ -708,7 +674,7 @@ linkage result_bool_Error fn(VecType* v, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
-linkage OptionType fn(VecType* v) { \
+linkage OptionType fn(borrowed(VecType*) v) { \
     type out; \
     if (fn_result_is_ok(fn_pop(v, &out))) \
         return fn_some(out); \
@@ -720,7 +686,7 @@ linkage OptionType fn(VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * void fn(VecType* v);
+ * void fn(borrowed(VecType*) v);
  * ```
  *
  * @note NULL-safe — does nothing if v == NULL
@@ -731,7 +697,7 @@ linkage OptionType fn(VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_CLEAR(linkage, VecType, fn) \
-linkage void fn(VecType* v) { \
+linkage void fn(borrowed(VecType*) v) { \
     if (v) v->len = 0; \
 }
 
@@ -744,25 +710,22 @@ linkage void fn(VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, usize i, type item);
+ * result_bool_Error fn(borrowed(VecType*) v, usize i, type item);
  * ```
  *
- * @pre v != NULL and v->items != NULL
- * @pre i <= v->len (inserting at end is equivalent to push)
- *
- * @post On Ok: element at i is item, elements [i..old_len) shifted right by 1
  * @post Returns Err(ERR_INVALID_ARG)       if v or v->items is NULL
  * @post Returns Err(ERR_OUT_OF_RANGE)      if i > v->len
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if v->len >= v->capacity
+ * @post On Ok: element at i is item, elements [i..old_len) shifted right by 1
  *
  * Performance:
  * - Time:  O(n) — shifts up to n elements right
  * - Space: O(1) — no allocation
  */
 #define IMPL_VEC_INSERT(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, usize i, type item) { \
-    if (!v || !v->items)    return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (i > v->len)         return result_bool_Error_err(ERR_OUT_OF_RANGE); \
+linkage result_bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
+    if (!v || !v->items)       return result_bool_Error_err(ERR_INVALID_ARG); \
+    if (i > v->len)            return result_bool_Error_err(ERR_OUT_OF_RANGE); \
     if (v->len >= v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     if (i < v->len) { \
         mem_move(&v->items[i + 1], &v->items[i], (v->len - i) * sizeof(type)); \
@@ -777,23 +740,20 @@ linkage result_bool_Error fn(VecType* v, usize i, type item) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, usize i, type* out);
+ * result_bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out);
  * ```
  *
- * @pre v != NULL, v->items != NULL, out != NULL
- * @pre i < v->len
- *
- * @post On Ok: *out holds removed element, elements [i+1..len) shifted left by 1
  * @post Returns Err(ERR_INVALID_ARG)   if v, v->items, or out is NULL
  * @post Returns Err(ERR_INVALID_STATE) if v->len == 0
  * @post Returns Err(ERR_OUT_OF_RANGE)  if i >= v->len
+ * @post On Ok: *out holds removed element, elements [i+1..len) shifted left by 1
  *
  * Performance:
  * - Time:  O(n) — shifts up to n elements left
  * - Space: O(1)
  */
 #define IMPL_VEC_REMOVE(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, usize i, type* out) { \
+linkage result_bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out) { \
     if (!v || !v->items || !out) return result_bool_Error_err(ERR_INVALID_ARG); \
     if (v->len == 0)             return result_bool_Error_err(ERR_INVALID_STATE); \
     if (i >= v->len)             return result_bool_Error_err(ERR_OUT_OF_RANGE); \
@@ -810,7 +770,7 @@ linkage result_bool_Error fn(VecType* v, usize i, type* out) { \
  *
  * Generated function signature:
  * ```c
- * OptionType fn(VecType* v, usize i);
+ * OptionType fn(borrowed(VecType*) v, usize i);
  * ```
  *
  * @post Returns None if v == NULL, v->items == NULL, v->len == 0, or i >= v->len
@@ -820,7 +780,7 @@ linkage result_bool_Error fn(VecType* v, usize i, type* out) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
-linkage OptionType fn(VecType* v, usize i) { \
+linkage OptionType fn(borrowed(VecType*) v, usize i) { \
     type out; \
     if (fn_result_is_ok(fn_remove(v, i, &out))) \
         return fn_some(out); \
@@ -836,24 +796,20 @@ linkage OptionType fn(VecType* v, usize i) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, const type* src, usize count);
+ * result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
  * ```
  *
- * @pre v != NULL, v->items != NULL, src != NULL
- * @pre count > 0
- * @pre v->len + count does not overflow usize (checked)
- *
- * @post On Ok: v->len increased by count, elements copied from src
  * @post Returns Err(ERR_INVALID_ARG)       if v, v->items, or src is NULL
  * @post Returns Err(ERR_OVERFLOW)          if v->len + count overflows usize
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if total > v->capacity
+ * @post On Ok: v->len increased by count, elements copied from src
  *
  * Performance:
  * - Time:  O(count)
  * - Space: O(1) — no allocation, copies into existing buffer
  */
 #define IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
+linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
     if (!v || !v->items || !src) return result_bool_Error_err(ERR_INVALID_ARG); \
     usize total; \
     if (!checked_add(v->len, count, &total)) \
@@ -870,7 +826,7 @@ linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(VecType* v, const type* src, usize count);
+ * result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
  * ```
  *
  * @sa IMPL_VEC_APPEND_ARRAY — identical semantics
@@ -880,7 +836,7 @@ linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_EXTEND(linkage, VecType, fn, fn_append_array, type) \
-linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
+linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
     return fn_append_array(v, src, count); \
 }
 
@@ -889,7 +845,7 @@ linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
  *
  * Generated function signature:
  * ```c
- * void fn(VecType* v, type value, usize count);
+ * void fn(borrowed(VecType*) v, type value, usize count);
  * ```
  *
  * @note Silently fills min(count, remaining) elements — does not error on overflow.
@@ -901,9 +857,8 @@ linkage result_bool_Error fn(VecType* v, const type* src, usize count) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_FILL(linkage, VecType, fn, type) \
-linkage void fn(VecType* v, type value, usize count) { \
+linkage void fn(borrowed(VecType*) v, type value, usize count) { \
     if (!v || !v->items) return; \
-    /* safe: struct invariant guarantees len <= capacity */ \
     usize remaining = v->capacity - v->len; \
     usize to_fill   = (count < remaining) ? count : remaining; \
     for (usize i = 0; i < to_fill; i++) { \
@@ -917,7 +872,7 @@ linkage void fn(VecType* v, type value, usize count) { \
  *
  * Generated function signature:
  * ```c
- * void fn(VecType* a, VecType* b);
+ * void fn(borrowed(VecType*) a, borrowed(VecType*) b);
  * ```
  *
  * @pre a != NULL
@@ -928,7 +883,7 @@ linkage void fn(VecType* v, type value, usize count) { \
  * - Space: O(1) — struct copy on stack
  */
 #define IMPL_VEC_SWAP(linkage, VecType, fn) \
-linkage void fn(VecType* a, VecType* b) { \
+linkage void fn(borrowed(VecType*) a, borrowed(VecType*) b) { \
     require_msg(a != NULL, #fn ": a cannot be NULL"); \
     require_msg(b != NULL, #fn ": b cannot be NULL"); \
     VecType tmp = *a; \
@@ -945,7 +900,7 @@ linkage void fn(VecType* a, VecType* b) { \
  *
  * Generated function signature:
  * ```c
- * IterType fn(VecType* v);
+ * IterType fn(borrowed(VecType*) v);
  * ```
  *
  * @note Invalidated by any modification to v.
@@ -955,7 +910,7 @@ linkage void fn(VecType* a, VecType* b) { \
  * - Space: O(1) — iterator is stack-allocated
  */
 #define IMPL_VEC_ITER_INIT(linkage, IterType, fn, VecType) \
-linkage IterType fn(VecType* v) { \
+linkage IterType fn(borrowed(VecType*) v) { \
     return (IterType){ .vec = v, .index = 0 }; \
 }
 
@@ -964,11 +919,8 @@ linkage IterType fn(VecType* v) { \
  *
  * Generated function signature:
  * ```c
- * bool fn(IterType* it, type* out);
+ * bool fn(borrowed(IterType*) it, borrowed(type*) out);
  * ```
- *
- * @pre it != NULL
- * @pre out != NULL
  *
  * @post Returns false when iteration is exhausted
  * @post *out is set on true return only
@@ -987,7 +939,7 @@ linkage IterType fn(VecType* v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_ITER_NEXT(linkage, IterType, fn, type) \
-linkage bool fn(IterType* it, type* out) { \
+linkage bool fn(borrowed(IterType*) it, borrowed(type*) out) { \
     if (!it || !it->vec || !out) return false; \
     if (it->index >= it->vec->len) return false; \
     *out = it->vec->items[it->index++]; \
@@ -1003,11 +955,8 @@ linkage bool fn(IterType* it, type* out) { \
  *
  * Generated function signature:
  * ```c
- * SliceType fn(VecType* v, usize start, usize end);
+ * SliceType fn(borrowed(VecType*) v, usize start, usize end);
  * ```
- *
- * @pre start <= end
- * @pre end <= v->len
  *
  * @post result.items points into v's buffer at &v->items[start]
  * @post result.len == end - start
@@ -1021,7 +970,7 @@ linkage bool fn(IterType* it, type* out) { \
  * - Space: O(1) — no allocation, pointer into existing buffer
  */
 #define IMPL_VEC_SLICE_INIT(linkage, SliceType, fn, VecType, type) \
-linkage SliceType fn(VecType* v, usize start, usize end) { \
+linkage SliceType fn(borrowed(VecType*) v, usize start, usize end) { \
     SliceType s = {0}; \
     if (!v || start > end || end > v->len) return s; \
     s.items = &v->items[start]; \
@@ -1030,11 +979,11 @@ linkage SliceType fn(VecType* v, usize start, usize end) { \
 }
 
 /**
- * @brief Returns pointer to slice element at index (debug-checked)
+ * @brief Returns a borrowed pointer to slice element at index (debug-checked)
  *
  * Generated function signature:
  * ```c
- * type* fn(const SliceType* s, usize i);
+ * borrowed(type*) fn(borrowed(const SliceType*) s, usize i);
  * ```
  *
  * @pre s != NULL
@@ -1047,7 +996,7 @@ linkage SliceType fn(VecType* v, usize start, usize end) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_SLICE_GET(linkage, SliceType, fn, type) \
-linkage type* fn(const SliceType* s, usize i) { \
+linkage borrowed(type*) fn(borrowed(const SliceType*) s, usize i) { \
     ensure_msg(s != NULL,  #fn ": s cannot be NULL"); \
     ensure_msg(i < s->len, #fn ": index out of bounds"); \
     return &s->items[i]; \
