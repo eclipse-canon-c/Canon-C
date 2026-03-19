@@ -2,7 +2,7 @@
 #define CANON_DATA_DEQUE_IMPL_H
 
 #include "core/primitives/types.h"
-#include "core/primitives/limits.h"      /* CANON_VEC_MAX_CAPACITY */
+#include "core/primitives/limits.h"      /* CANON_DEQUE_MAX_CAPACITY fallback: CANON_VEC_MAX_CAPACITY */
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
 #include "semantics/result/result.h"     /* CANON_RESULT */
 #include "semantics/error.h"             /* Error, ERR_* */
@@ -20,7 +20,7 @@
  * - Ring buffer arithmetic uses usize throughout — no raw size_t
  * - Preconditions use require_msg(), debug invariants use ensure_msg()
  * - CANON_DEQUE_MAX_CAPACITY enforced at init time
- * - Option variants provided for pop and peek alongside bool variants
+ * - Option variants provided for pop and peek alongside Result/bool variants
  *
  * Ring buffer invariant:
  * ────────────────────────────────────────────────────────────────────────────
@@ -72,7 +72,8 @@
  * @brief Instantiate result_bool_Error exactly once across all translation units
  *
  * push_front, push_back, pop_front, pop_back all return result_bool_Error.
- * Guard prevents duplicate definition if multiple deque types are instantiated.
+ * Guard prevents duplicate definition if multiple deque types are instantiated,
+ * or if both vec and deque are instantiated in the same translation unit.
  *
  * Must be defined before any IMPL_DEQUE_PUSH_*/POP_* expansion.
  */
@@ -300,12 +301,9 @@ linkage bool fn(const DequeType* d) { \
  * result_bool_Error fn(DequeType* d, type item);
  * ```
  *
- * @pre d != NULL
- * @pre d->buffer != NULL
- *
- * @post On Ok: item is at buffer[new_head], d->size incremented by 1
  * @post Returns Err(ERR_INVALID_ARG)       if d == NULL or d->buffer == NULL
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if d->size >= d->capacity
+ * @post On Ok: item is at buffer[new_head], d->size incremented by 1
  *
  * Performance:
  * - Time:  O(1)
@@ -336,12 +334,9 @@ linkage result_bool_Error fn(DequeType* d, type item) { \
  * result_bool_Error fn(DequeType* d, type item);
  * ```
  *
- * @pre d != NULL
- * @pre d->buffer != NULL
- *
- * @post On Ok: item written at buffer[old_tail], tail advanced, size incremented
  * @post Returns Err(ERR_INVALID_ARG)       if d == NULL or d->buffer == NULL
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if d->size >= d->capacity
+ * @post On Ok: item written at buffer[old_tail], tail advanced, size incremented
  *
  * Performance:
  * - Time:  O(1)
@@ -369,11 +364,9 @@ linkage result_bool_Error fn(DequeType* d, type item) { \
  * result_bool_Error fn(DequeType* d, type* out);
  * ```
  *
- * @pre d != NULL, out != NULL, d->buffer != NULL
- *
- * @post On Ok: *out holds removed element, head advanced, size decremented
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
  * @post Returns Err(ERR_INVALID_STATE) if d->size == 0
+ * @post On Ok: *out holds removed element, head advanced, size decremented
  *
  * Performance:
  * - Time:  O(1)
@@ -397,11 +390,9 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
  * result_bool_Error fn(DequeType* d, type* out);
  * ```
  *
- * @pre d != NULL, out != NULL, d->buffer != NULL
- *
- * @post On Ok: *out holds removed element, tail decremented, size decremented
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
  * @post Returns Err(ERR_INVALID_STATE) if d->size == 0
+ * @post On Ok: *out holds removed element, tail decremented, size decremented
  *
  * Performance:
  * - Time:  O(1)
@@ -420,6 +411,16 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
 /**
  * @brief Removes and returns the front element as Option<type>
  *
+ * @param linkage       Function linkage
+ * @param DequeType     Mangled deque type name
+ * @param fn            Mangled function name
+ * @param fn_pop_front  Mangled pop_front function name
+ * @param OptionType    Mangled option type name
+ * @param fn_some       Mangled option Some constructor name
+ * @param fn_none       Mangled option None constructor name
+ * @param fn_result_is_ok Mangled result is_ok checker name
+ * @param type          Element type
+ *
  * Generated function signature:
  * ```c
  * OptionType fn(DequeType* d);
@@ -431,10 +432,10 @@ linkage result_bool_Error fn(DequeType* d, type* out) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
-#define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, type) \
+#define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(DequeType* d) { \
     type out; \
-    if (result_bool_Error_is_ok(fn_pop_front(d, &out))) \
+    if (fn_result_is_ok(fn_pop_front(d, &out))) \
         return fn_some(out); \
     return fn_none(); \
 }
@@ -442,6 +443,16 @@ linkage OptionType fn(DequeType* d) { \
 /**
  * @brief Removes and returns the back element as Option<type>
  *
+ * @param linkage       Function linkage
+ * @param DequeType     Mangled deque type name
+ * @param fn            Mangled function name
+ * @param fn_pop_back   Mangled pop_back function name
+ * @param OptionType    Mangled option type name
+ * @param fn_some       Mangled option Some constructor name
+ * @param fn_none       Mangled option None constructor name
+ * @param fn_result_is_ok Mangled result is_ok checker name
+ * @param type          Element type
+ *
  * Generated function signature:
  * ```c
  * OptionType fn(DequeType* d);
@@ -453,10 +464,10 @@ linkage OptionType fn(DequeType* d) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
-#define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, type) \
+#define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(DequeType* d) { \
     type out; \
-    if (result_bool_Error_is_ok(fn_pop_back(d, &out))) \
+    if (fn_result_is_ok(fn_pop_back(d, &out))) \
         return fn_some(out); \
     return fn_none(); \
 }
@@ -473,10 +484,11 @@ linkage OptionType fn(DequeType* d) { \
  * bool fn(const DequeType* d, type* out);
  * ```
  *
- * @pre d != NULL, out != NULL
+ * @pre d   != NULL (programming error — triggers require_msg)
+ * @pre out != NULL (programming error — triggers require_msg)
  *
+ * @post Returns false if deque is empty — this is a normal query result
  * @post *out set on true return only
- * @post Returns false if d == NULL, out == NULL, or d->size == 0
  * @post d is unchanged
  *
  * Performance:
@@ -485,7 +497,9 @@ linkage OptionType fn(DequeType* d) { \
  */
 #define IMPL_DEQUE_PEEK_FRONT(linkage, DequeType, fn, type) \
 linkage bool fn(const DequeType* d, type* out) { \
-    if (!d || !out || d->size == 0) return false; \
+    require_msg(d   != NULL, #fn ": d cannot be NULL"); \
+    require_msg(out != NULL, #fn ": out cannot be NULL"); \
+    if (d->size == 0) return false; \
     *out = d->buffer[d->head]; \
     return true; \
 }
@@ -498,10 +512,11 @@ linkage bool fn(const DequeType* d, type* out) { \
  * bool fn(const DequeType* d, type* out);
  * ```
  *
- * @pre d != NULL, out != NULL
+ * @pre d   != NULL (programming error — triggers require_msg)
+ * @pre out != NULL (programming error — triggers require_msg)
  *
+ * @post Returns false if deque is empty — this is a normal query result
  * @post *out set on true return only
- * @post Returns false if d == NULL, out == NULL, or d->size == 0
  * @post d is unchanged
  *
  * Performance:
@@ -510,7 +525,9 @@ linkage bool fn(const DequeType* d, type* out) { \
  */
 #define IMPL_DEQUE_PEEK_BACK(linkage, DequeType, fn, type) \
 linkage bool fn(const DequeType* d, type* out) { \
-    if (!d || !out || d->size == 0) return false; \
+    require_msg(d   != NULL, #fn ": d cannot be NULL"); \
+    require_msg(out != NULL, #fn ": out cannot be NULL"); \
+    if (d->size == 0) return false; \
     usize back_idx = (d->tail == 0) ? d->capacity - 1 : d->tail - 1; \
     *out = d->buffer[back_idx]; \
     return true; \
@@ -519,12 +536,23 @@ linkage bool fn(const DequeType* d, type* out) { \
 /**
  * @brief Returns front element as Option<type> without removing it
  *
+ * @param linkage        Function linkage
+ * @param DequeType      Mangled deque type name
+ * @param fn             Mangled function name
+ * @param fn_peek_front  Mangled peek_front function name
+ * @param OptionType     Mangled option type name
+ * @param fn_some        Mangled option Some constructor name
+ * @param fn_none        Mangled option None constructor name
+ * @param type           Element type
+ *
  * Generated function signature:
  * ```c
  * OptionType fn(const DequeType* d);
  * ```
  *
- * @post Returns None if d == NULL or d->size == 0
+ * @pre d != NULL (programming error — triggers require_msg via peek_front)
+ *
+ * @post Returns None if d->size == 0
  * @post d is unchanged
  *
  * Performance:
@@ -542,12 +570,23 @@ linkage OptionType fn(const DequeType* d) { \
 /**
  * @brief Returns back element as Option<type> without removing it
  *
+ * @param linkage       Function linkage
+ * @param DequeType     Mangled deque type name
+ * @param fn            Mangled function name
+ * @param fn_peek_back  Mangled peek_back function name
+ * @param OptionType    Mangled option type name
+ * @param fn_some       Mangled option Some constructor name
+ * @param fn_none       Mangled option None constructor name
+ * @param type          Element type
+ *
  * Generated function signature:
  * ```c
  * OptionType fn(const DequeType* d);
  * ```
  *
- * @post Returns None if d == NULL or d->size == 0
+ * @pre d != NULL (programming error — triggers require_msg via peek_back)
+ *
+ * @post Returns None if d->size == 0
  * @post d is unchanged
  *
  * Performance:
