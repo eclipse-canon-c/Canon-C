@@ -75,38 +75,38 @@ IMPL_DEQUE_STRUCT( \
 ) \
 \
 /* Constructor */ \
-extern void                  MANGLE_DEQUE_INIT(type)(MANGLE_DEQUE_TYPE(type)* d, type* buffer, usize capacity); \
+extern void                    MANGLE_DEQUE_INIT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) buffer, usize capacity); \
 extern MANGLE_DEQUE_TYPE(type) MANGLE_DEQUE_EMPTY(type)(void); \
 \
 /* Queries */ \
-extern usize MANGLE_DEQUE_LEN(type)(const MANGLE_DEQUE_TYPE(type)* d); \
-extern usize MANGLE_DEQUE_CAPACITY(type)(const MANGLE_DEQUE_TYPE(type)* d); \
-extern usize MANGLE_DEQUE_REMAINING(type)(const MANGLE_DEQUE_TYPE(type)* d); \
-extern bool  MANGLE_DEQUE_IS_EMPTY(type)(const MANGLE_DEQUE_TYPE(type)* d); \
-extern bool  MANGLE_DEQUE_IS_FULL(type)(const MANGLE_DEQUE_TYPE(type)* d); \
+extern usize MANGLE_DEQUE_LEN(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
+extern usize MANGLE_DEQUE_CAPACITY(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
+extern usize MANGLE_DEQUE_REMAINING(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
+extern bool  MANGLE_DEQUE_IS_EMPTY(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
+extern bool  MANGLE_DEQUE_IS_FULL(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
 \
 /* Push */ \
-extern result_bool_Error MANGLE_DEQUE_PUSH_FRONT(type)(MANGLE_DEQUE_TYPE(type)* d, type item); \
-extern result_bool_Error MANGLE_DEQUE_PUSH_BACK(type)(MANGLE_DEQUE_TYPE(type)* d, type item); \
+extern result_bool_Error MANGLE_DEQUE_PUSH_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+extern result_bool_Error MANGLE_DEQUE_PUSH_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
 \
 /* Pop — Result variants */ \
-extern result_bool_Error MANGLE_DEQUE_POP_FRONT(type)(MANGLE_DEQUE_TYPE(type)* d, type* out); \
-extern result_bool_Error MANGLE_DEQUE_POP_BACK(type)(MANGLE_DEQUE_TYPE(type)* d, type* out); \
+extern result_bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern result_bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
 \
 /* Pop — Option variants */ \
-extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_FRONT_OPTION(type)(MANGLE_DEQUE_TYPE(type)* d); \
-extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_BACK_OPTION(type)(MANGLE_DEQUE_TYPE(type)* d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_FRONT_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_BACK_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
 \
 /* Peek — bool variants */ \
-extern bool MANGLE_DEQUE_PEEK_FRONT(type)(const MANGLE_DEQUE_TYPE(type)* d, type* out); \
-extern bool MANGLE_DEQUE_PEEK_BACK(type)(const MANGLE_DEQUE_TYPE(type)* d, type* out); \
+extern bool MANGLE_DEQUE_PEEK_FRONT(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern bool MANGLE_DEQUE_PEEK_BACK(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
 \
 /* Peek — Option variants */ \
-extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(const MANGLE_DEQUE_TYPE(type)* d); \
-extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_BACK_OPTION(type)(const MANGLE_DEQUE_TYPE(type)* d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_BACK_OPTION(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
 \
 /* Misc */ \
-extern void MANGLE_DEQUE_CLEAR(type)(MANGLE_DEQUE_TYPE(type)* d); \
-extern void MANGLE_DEQUE_SWAP(type)(MANGLE_DEQUE_TYPE(type)* a, MANGLE_DEQUE_TYPE(type)* b);
+extern void MANGLE_DEQUE_CLEAR(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
+extern void MANGLE_DEQUE_SWAP(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) a, borrowed(MANGLE_DEQUE_TYPE(type)*) b);
 
 #endif /* CANON_DATA_DEQUE_DECL_H */
