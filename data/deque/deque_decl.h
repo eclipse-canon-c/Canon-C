@@ -33,7 +33,9 @@
  * Matching definition — in exactly one .c file (e.g. tasks.c):
  * ```c
  * #include "data/deque/deque_defn.h"
+ * CANON_OPTION(int)
  * DEFINE_DEQUE(, int)
+ * CANON_OPTION(Task)
  * DEFINE_DEQUE(, Task)
  * ```
  *
@@ -61,6 +63,8 @@
  *
  * @note Must be matched by exactly one DEFINE_DEQUE(linkage, type) in a .c file.
  * @note Do NOT use DECLARE_DEQUE if you are using the header-only path via deque.h.
+ * @note MANGLE_DEQUE_OPTION_TYPE(type) must be available at the declaration site —
+ *       include semantics/option/option.h and call CANON_OPTION(type) beforehand.
  */
 #define DECLARE_DEQUE(type) \
 \
@@ -71,7 +75,7 @@ IMPL_DEQUE_STRUCT( \
 ) \
 \
 /* Constructor */ \
-extern void               MANGLE_DEQUE_INIT(type)(MANGLE_DEQUE_TYPE(type)* d, type* buffer, usize capacity); \
+extern void                  MANGLE_DEQUE_INIT(type)(MANGLE_DEQUE_TYPE(type)* d, type* buffer, usize capacity); \
 extern MANGLE_DEQUE_TYPE(type) MANGLE_DEQUE_EMPTY(type)(void); \
 \
 /* Queries */ \
@@ -90,16 +94,16 @@ extern result_bool_Error MANGLE_DEQUE_POP_FRONT(type)(MANGLE_DEQUE_TYPE(type)* d
 extern result_bool_Error MANGLE_DEQUE_POP_BACK(type)(MANGLE_DEQUE_TYPE(type)* d, type* out); \
 \
 /* Pop — Option variants */ \
-extern option_##type MANGLE_DEQUE_POP_FRONT_OPTION(type)(MANGLE_DEQUE_TYPE(type)* d); \
-extern option_##type MANGLE_DEQUE_POP_BACK_OPTION(type)(MANGLE_DEQUE_TYPE(type)* d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_FRONT_OPTION(type)(MANGLE_DEQUE_TYPE(type)* d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_BACK_OPTION(type)(MANGLE_DEQUE_TYPE(type)* d); \
 \
 /* Peek — bool variants */ \
 extern bool MANGLE_DEQUE_PEEK_FRONT(type)(const MANGLE_DEQUE_TYPE(type)* d, type* out); \
 extern bool MANGLE_DEQUE_PEEK_BACK(type)(const MANGLE_DEQUE_TYPE(type)* d, type* out); \
 \
 /* Peek — Option variants */ \
-extern option_##type MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(const MANGLE_DEQUE_TYPE(type)* d); \
-extern option_##type MANGLE_DEQUE_PEEK_BACK_OPTION(type)(const MANGLE_DEQUE_TYPE(type)* d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(const MANGLE_DEQUE_TYPE(type)* d); \
+extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_BACK_OPTION(type)(const MANGLE_DEQUE_TYPE(type)* d); \
 \
 /* Misc */ \
 extern void MANGLE_DEQUE_CLEAR(type)(MANGLE_DEQUE_TYPE(type)* d); \
