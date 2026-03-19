@@ -3,6 +3,7 @@
 
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
+#include "core/ownership.h"
 #include "semantics/option/option.h"
 #include "data/vec/vec.h"
 
@@ -33,19 +34,20 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - core/primitives/types.h    — usize and bool used directly in DECLARE_STACK
  *                                extern signatures and peek's return type
- * - core/primitives/contract.h — require_msg used directly in peek and init
- * - semantics/option/option.h  — option_##type in pop_option / peek_option;
- *                                not provided transitively through vec.h
- * - data/vec/vec.h             — entire implementation delegates to vec;
- *                                also provides borrowed() transitively via
- *                                vec_impl.h → core/ownership.h
+ * - core/primitives/contract.h — require_msg used directly in init and peek
+ * - core/ownership.h           — borrowed() used directly in all generated
+ *                                function signatures and DECLARE_STACK externs
+ * - semantics/option/option.h  — option_##type_some/none called directly in
+ *                                peek_option; type named in pop_option and
+ *                                peek_option signatures; not transitive via vec.h
+ * - data/vec/vec.h             — all MANGLE_VEC_* macros used directly
  *
  * Intentionally excluded:
- * - core/ownership.h           — available transitively via data/vec/vec.h
- * - semantics/result/result.h  — result_bool_Error enters transitively through
- *                                vec.h → vec_impl.h (CANON_RESULT_BOOL_ERROR_DEFINED)
- * - semantics/error.h          — Error enters the same transitive path;
- *                                stack.h constructs no Error values directly
+ * - semantics/result/result.h  — result_bool_Error is named in push/pop
+ *                                signatures but the type is already instantiated
+ *                                transitively by vec_impl.h via CANON_RESULT.
+ *                                stack.h never calls CANON_RESULT itself.
+ * - semantics/error.h          — no ERR_* codes referenced directly
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
