@@ -61,7 +61,8 @@
  * ```c
  * #include "data/deque/deque.h"
  *
- * // Instantiate a typed deque for int
+ * // Option must be instantiated before DEFINE_DEQUE
+ * CANON_OPTION(int)
  * DEFINE_DEQUE(static inline, int)
  *
  * // Stack-backed deque
@@ -77,7 +78,7 @@
  * canon_deque_int_pop_front(&d, &val);  // val = 5
  * canon_deque_int_pop_back(&d, &val);   // val = 10
  *
- * // Option variants — no out param needed
+ * // Option variants — no out-param needed
  * option_int front = canon_deque_int_pop_front_option(&d);
  * option_int back  = canon_deque_int_peek_back_option(&d);
  *
@@ -92,6 +93,7 @@
  *
  * // Pointer types (typedef first)
  * typedef void* voidptr;
+ * CANON_OPTION(voidptr)
  * DEFINE_DEQUE(static inline, voidptr)
  * ```
  *
@@ -103,6 +105,7 @@
  *
  * // In tasks.c:
  * #include "data/deque/deque_defn.h"
+ * CANON_OPTION(Task)
  * DEFINE_DEQUE(, Task)
  * ```
  *
