@@ -209,13 +209,13 @@
  * Does NOT include unfilled capacity slots. \
  * Non-owning — do not free the returned slice's ptr. \
  * \
- * @param v Pointer to canon_vec_##type (NULL-safe — returns empty slice) \
+ * @param v borrowed(const canon_vec_##type*) — NULL-safe, returns empty slice \
  * @return slice_##type with ptr == v->items and len == v->len \
  * \
  * Performance: O(1) \
  */ \
 static inline slice_##type canon_vec_##type##_as_slice( \
-    const MANGLE_VEC_TYPE(type)* v) { \
+    borrowed(const MANGLE_VEC_TYPE(type)*) v) { \
     if (!v || !v->items) return slice_##type##_empty(); \
     return slice_##type##_from(v->items, v->len); \
 } \
@@ -226,13 +226,13 @@ static inline slice_##type canon_vec_##type##_as_slice( \
  * Covers [items, items + capacity) — includes uninitialized slots beyond len. \
  * Use only when you need to inspect or pre-fill the entire buffer. \
  * \
- * @param v Pointer to canon_vec_##type (NULL-safe) \
+ * @param v borrowed(const canon_vec_##type*) — NULL-safe \
  * @return slice_##type with ptr == v->items and len == v->capacity \
  * \
  * Performance: O(1) \
  */ \
 static inline slice_##type canon_vec_##type##_as_slice_full( \
-    const MANGLE_VEC_TYPE(type)* v) { \
+    borrowed(const MANGLE_VEC_TYPE(type)*) v) { \
     if (!v || !v->items) return slice_##type##_empty(); \
     return slice_##type##_from(v->items, v->capacity); \
 } \
@@ -244,13 +244,13 @@ static inline slice_##type canon_vec_##type##_as_slice_full( \
  * Useful for serialization, hashing, or passing to byte-level APIs. \
  * Non-owning — do not free the returned bytes_t's ptr. \
  * \
- * @param v Pointer to canon_vec_##type (NULL-safe) \
+ * @param v borrowed(const canon_vec_##type*) — NULL-safe \
  * @return bytes_t with ptr == (u8*)v->items and len == v->len * sizeof(type) \
  * \
  * Performance: O(1) \
  */ \
 static inline bytes_t canon_vec_##type##_as_bytes( \
-    const MANGLE_VEC_TYPE(type)* v) { \
+    borrowed(const MANGLE_VEC_TYPE(type)*) v) { \
     if (!v || !v->items) return bytes_empty(); \
     return bytes_from(v->items, v->len * sizeof(type)); \
 }
