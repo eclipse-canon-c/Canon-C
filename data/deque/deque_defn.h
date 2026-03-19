@@ -25,6 +25,9 @@
  * Header-only usage:
  * ```c
  * #include "data/deque/deque_defn.h"
+ *
+ * // Option must be instantiated before DEFINE_DEQUE
+ * CANON_OPTION(int)
  * DEFINE_DEQUE(static inline, int)
  *
  * int buf[64];
@@ -41,12 +44,14 @@
  *
  * // In tasks.c:
  * #include "data/deque/deque_defn.h"
+ * CANON_OPTION(Task)
  * DEFINE_DEQUE(, Task)
  * ```
  *
  * Pointer types (typedef first):
  * ```c
  * typedef void* voidptr;
+ * CANON_OPTION(voidptr)
  * DEFINE_DEQUE(static inline, voidptr)
  * ```
  *
@@ -103,12 +108,11 @@
  * @param linkage C linkage specifier: `static inline`, `static`, or empty
  * @param type    Element type (must be a valid C identifier)
  *
- * @note option_##type must be defined before calling DEFINE_DEQUE.
- *       Either include semantics/option.h and call CANON_OPTION(type, Error),
- *       or ensure the Option type is already instantiated.
+ * @pre CANON_OPTION(type) has already been called for the same type
  *
  * @note For pointer types, typedef first:
  *       typedef void* voidptr;
+ *       CANON_OPTION(voidptr)
  *       DEFINE_DEQUE(static inline, voidptr)
  */
 #define DEFINE_DEQUE(linkage, type) \
@@ -134,14 +138,14 @@ IMPL_DEQUE_PUSH_BACK(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PUSH_BACK(t
 IMPL_DEQUE_POP_FRONT(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_FRONT(type), type) \
 IMPL_DEQUE_POP_BACK(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_BACK(type),  type) \
 \
-IMPL_DEQUE_POP_FRONT_OPTION(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_FRONT_OPTION(type), MANGLE_DEQUE_POP_FRONT(type), option_##type, option_##type##_some, option_##type##_none, type) \
-IMPL_DEQUE_POP_BACK_OPTION(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_BACK_OPTION(type),  MANGLE_DEQUE_POP_BACK(type),  option_##type, option_##type##_some, option_##type##_none, type) \
+IMPL_DEQUE_POP_FRONT_OPTION(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_FRONT_OPTION(type), MANGLE_DEQUE_POP_FRONT(type), MANGLE_DEQUE_OPTION_TYPE(type), MANGLE_DEQUE_OPTION_SOME(type), MANGLE_DEQUE_OPTION_NONE(type), MANGLE_DEQUE_RESULT_IS_OK(type), type) \
+IMPL_DEQUE_POP_BACK_OPTION(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_BACK_OPTION(type),  MANGLE_DEQUE_POP_BACK(type),  MANGLE_DEQUE_OPTION_TYPE(type), MANGLE_DEQUE_OPTION_SOME(type), MANGLE_DEQUE_OPTION_NONE(type), MANGLE_DEQUE_RESULT_IS_OK(type), type) \
 \
 IMPL_DEQUE_PEEK_FRONT(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PEEK_FRONT(type), type) \
 IMPL_DEQUE_PEEK_BACK(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PEEK_BACK(type),  type) \
 \
-IMPL_DEQUE_PEEK_FRONT_OPTION(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PEEK_FRONT_OPTION(type), MANGLE_DEQUE_PEEK_FRONT(type), option_##type, option_##type##_some, option_##type##_none, type) \
-IMPL_DEQUE_PEEK_BACK_OPTION(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PEEK_BACK_OPTION(type),  MANGLE_DEQUE_PEEK_BACK(type),  option_##type, option_##type##_some, option_##type##_none, type) \
+IMPL_DEQUE_PEEK_FRONT_OPTION(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PEEK_FRONT_OPTION(type), MANGLE_DEQUE_PEEK_FRONT(type), MANGLE_DEQUE_OPTION_TYPE(type), MANGLE_DEQUE_OPTION_SOME(type), MANGLE_DEQUE_OPTION_NONE(type), type) \
+IMPL_DEQUE_PEEK_BACK_OPTION(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PEEK_BACK_OPTION(type),  MANGLE_DEQUE_PEEK_BACK(type),  MANGLE_DEQUE_OPTION_TYPE(type), MANGLE_DEQUE_OPTION_SOME(type), MANGLE_DEQUE_OPTION_NONE(type), type) \
 \
 IMPL_DEQUE_CLEAR(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_CLEAR(type)) \
 IMPL_DEQUE_SWAP(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_SWAP(type))
