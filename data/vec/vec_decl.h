@@ -75,52 +75,52 @@ IMPL_VEC_STRUCTS( \
 ) \
 \
 /* Constructors / destructor */ \
-extern MANGLE_VEC_TYPE(type) MANGLE_VEC_INIT(type)(type* buffer, usize capacity); \
+extern MANGLE_VEC_TYPE(type) MANGLE_VEC_INIT(type)(borrowed(type*) buffer, usize capacity); \
 extern MANGLE_VEC_TYPE(type) MANGLE_VEC_EMPTY(type)(void); \
 extern MANGLE_VEC_TYPE(type) MANGLE_VEC_ALLOC(type)(usize capacity); \
-extern MANGLE_VEC_TYPE(type) MANGLE_VEC_ARENA_ALLOC(type)(Arena* arena, usize capacity); \
-extern void                  MANGLE_VEC_FREE(type)(MANGLE_VEC_TYPE(type)* v); \
+extern MANGLE_VEC_TYPE(type) MANGLE_VEC_ARENA_ALLOC(type)(borrowed(Arena*) arena, usize capacity); \
+extern void                  MANGLE_VEC_FREE(type)(dropped(MANGLE_VEC_TYPE(type)*) v); \
 \
 /* Queries */ \
-extern usize MANGLE_VEC_LEN(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern usize MANGLE_VEC_CAPACITY(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern usize MANGLE_VEC_REMAINING(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern bool  MANGLE_VEC_IS_EMPTY(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern bool  MANGLE_VEC_IS_FULL(type)(const MANGLE_VEC_TYPE(type)* v); \
+extern usize MANGLE_VEC_LEN(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern usize MANGLE_VEC_CAPACITY(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern usize MANGLE_VEC_REMAINING(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern bool  MANGLE_VEC_IS_EMPTY(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern bool  MANGLE_VEC_IS_FULL(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
 \
 /* Element access */ \
-extern bool                         MANGLE_VEC_GET(type)(const MANGLE_VEC_TYPE(type)* v, usize i, type* out); \
-extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_GET_OPTION(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
-extern type                         MANGLE_VEC_GET_UNCHECKED(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
-extern type*                        MANGLE_VEC_AT(type)(const MANGLE_VEC_TYPE(type)* v, usize i); \
-extern bool                         MANGLE_VEC_SET(type)(MANGLE_VEC_TYPE(type)* v, usize i, type val); \
-extern type*                        MANGLE_VEC_FIRST(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern type*                        MANGLE_VEC_LAST(type)(const MANGLE_VEC_TYPE(type)* v); \
-extern type*                        MANGLE_VEC_DATA(type)(const MANGLE_VEC_TYPE(type)* v); \
+extern bool                         MANGLE_VEC_GET(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i, borrowed(type*) out); \
+extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_GET_OPTION(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
+extern type                         MANGLE_VEC_GET_UNCHECKED(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
+extern borrowed(type*)              MANGLE_VEC_AT(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
+extern bool                         MANGLE_VEC_SET(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, type val); \
+extern borrowed(type*)              MANGLE_VEC_FIRST(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern borrowed(type*)              MANGLE_VEC_LAST(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern borrowed(type*)              MANGLE_VEC_DATA(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
 \
 /* Modification */ \
-extern result_bool_Error            MANGLE_VEC_PUSH(type)(MANGLE_VEC_TYPE(type)* v, type item); \
-extern bool                         MANGLE_VEC_TRY_PUSH(type)(MANGLE_VEC_TYPE(type)* v, type item); \
-extern void                         MANGLE_VEC_PUSH_UNCHECKED(type)(MANGLE_VEC_TYPE(type)* v, type item); \
-extern result_bool_Error            MANGLE_VEC_POP(type)(MANGLE_VEC_TYPE(type)* v, type* out); \
-extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_POP_OPTION(type)(MANGLE_VEC_TYPE(type)* v); \
-extern void                         MANGLE_VEC_CLEAR(type)(MANGLE_VEC_TYPE(type)* v); \
-extern result_bool_Error            MANGLE_VEC_INSERT(type)(MANGLE_VEC_TYPE(type)* v, usize i, type item); \
-extern result_bool_Error            MANGLE_VEC_REMOVE(type)(MANGLE_VEC_TYPE(type)* v, usize i, type* out); \
-extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_REMOVE_OPTION(type)(MANGLE_VEC_TYPE(type)* v, usize i); \
+extern result_bool_Error            MANGLE_VEC_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
+extern bool                         MANGLE_VEC_TRY_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
+extern void                         MANGLE_VEC_PUSH_UNCHECKED(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
+extern result_bool_Error            MANGLE_VEC_POP(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(type*) out); \
+extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_POP_OPTION(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
+extern void                         MANGLE_VEC_CLEAR(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
+extern result_bool_Error            MANGLE_VEC_INSERT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, type item); \
+extern result_bool_Error            MANGLE_VEC_REMOVE(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, borrowed(type*) out); \
+extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_REMOVE_OPTION(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i); \
 \
 /* Bulk operations */ \
-extern result_bool_Error MANGLE_VEC_APPEND_ARRAY(type)(MANGLE_VEC_TYPE(type)* v, const type* src, usize count); \
-extern result_bool_Error MANGLE_VEC_EXTEND(type)(MANGLE_VEC_TYPE(type)* v, const type* src, usize count); \
-extern void              MANGLE_VEC_FILL(type)(MANGLE_VEC_TYPE(type)* v, type value, usize count); \
-extern void              MANGLE_VEC_SWAP(type)(MANGLE_VEC_TYPE(type)* a, MANGLE_VEC_TYPE(type)* b); \
+extern result_bool_Error MANGLE_VEC_APPEND_ARRAY(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(const type*) src, usize count); \
+extern result_bool_Error MANGLE_VEC_EXTEND(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(const type*) src, usize count); \
+extern void              MANGLE_VEC_FILL(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type value, usize count); \
+extern void              MANGLE_VEC_SWAP(type)(borrowed(MANGLE_VEC_TYPE(type)*) a, borrowed(MANGLE_VEC_TYPE(type)*) b); \
 \
 /* Iterator */ \
-extern MANGLE_VEC_ITER_TYPE(type) MANGLE_VEC_ITER_INIT(type)(MANGLE_VEC_TYPE(type)* v); \
-extern bool                       MANGLE_VEC_ITER_NEXT(type)(MANGLE_VEC_ITER_TYPE(type)* it, type* out); \
+extern MANGLE_VEC_ITER_TYPE(type) MANGLE_VEC_ITER_INIT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
+extern bool                       MANGLE_VEC_ITER_NEXT(type)(borrowed(MANGLE_VEC_ITER_TYPE(type)*) it, borrowed(type*) out); \
 \
 /* Slice */ \
-extern MANGLE_VEC_SLICE_TYPE(type) MANGLE_VEC_SLICE_INIT(type)(MANGLE_VEC_TYPE(type)* v, usize start, usize end); \
-extern type*                       MANGLE_VEC_SLICE_GET(type)(const MANGLE_VEC_SLICE_TYPE(type)* s, usize i);
+extern MANGLE_VEC_SLICE_TYPE(type)  MANGLE_VEC_SLICE_INIT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize start, usize end); \
+extern borrowed(type*)              MANGLE_VEC_SLICE_GET(type)(borrowed(const MANGLE_VEC_SLICE_TYPE(type)*) s, usize i);
 
 #endif /* CANON_DATA_VEC_DECL_H */
