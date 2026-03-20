@@ -177,12 +177,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(
-#     NAME     compare_test
-#     SRC      test/core/primitives/compare_test.c
-#     INCLUDES core/primitives .
-#     FUZZABLE
-# )
+canon_c_test(
+    NAME     compare_test
+    SRC      test/core/primitives/compare_test.c
+    INCLUDES core/primitives .
+    FUZZABLE
+)
 
 # canon_c_test(
 #     NAME     contract_test
