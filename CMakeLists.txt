@@ -190,11 +190,11 @@ canon_c_test(
     INCLUDES core/primitives
 )
 
-# canon_c_test(
-#     NAME     limits_test
-#     SRC      test/core/primitives/limits_test.c
-#     INCLUDES core/primitives
-# )
+canon_c_test(
+    NAME     limits_test
+    SRC      test/core/primitives/limits_test.c
+    INCLUDES core/primitives
+)
 
 # canon_c_test(
 #     NAME     types_test
