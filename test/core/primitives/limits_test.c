@@ -153,11 +153,14 @@ static void test_integer_limits(void) {
     EXPECT(CANON_I64_MIN == (-9223372036854775807LL - 1));
     EXPECT(CANON_I64_MAX ==   9223372036854775807LL);
 
-    /* min + max + 1 == 0 for two's complement */
-    EXPECT((u8)(CANON_U8_MAX   + 1U) == 0U);
-    EXPECT((u16)(CANON_U16_MAX + 1U) == 0U);
-    EXPECT((u32)(CANON_U32_MAX + 1U) == 0U);
-    EXPECT((u64)(CANON_U64_MAX + 1ULL) == 0ULL);
+    /* MAX + 1 wraps to 0: load into a typed variable first so the increment
+     * is a runtime operation — avoids MSVC C4310 "cast truncates constant". */
+    {
+        u8  v8  = CANON_U8_MAX;  v8++;  EXPECT(v8  == 0U);
+        u16 v16 = CANON_U16_MAX; v16++; EXPECT(v16 == 0U);
+        u32 v32 = CANON_U32_MAX; v32++; EXPECT(v32 == 0U);
+        u64 v64 = CANON_U64_MAX; v64++; EXPECT(v64 == 0ULL);
+    }
 
     /* Signed: MAX - MIN == -1 as unsigned difference */
     EXPECT((u8) ((u8) CANON_I8_MAX  - (u8) CANON_I8_MIN)  == 0xFFU);
