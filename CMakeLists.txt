@@ -46,6 +46,12 @@ endif()
 # ---------------------------------------------------------------------------
 # Sanitizer flags
 # Mutually exclusive with fuzzing — libFuzzer manages its own instrumentation
+#
+# NOTE: MSVC ASan (/fsanitize=address) requires clang_rt.asan*.dll to be
+# on PATH at runtime. This DLL is not automatically deployed in CI
+# environments and causes exit code 0xc0000135 (DLL not found). MSVC
+# builds therefore skip sanitizers entirely — memory safety on Windows
+# is covered by Dr. Memory in the dr-memory CI job instead.
 # ---------------------------------------------------------------------------
 if(ENABLE_SANITIZERS AND ENABLE_FUZZING)
     message(FATAL_ERROR
@@ -55,8 +61,8 @@ endif()
 
 if(ENABLE_SANITIZERS)
     if(MSVC)
-        # MSVC: ASan only — UBSan not available
-        add_compile_options(/fsanitize=address)
+        # Intentionally skipped — see note above.
+        message(STATUS "MSVC detected: skipping ASan (DLL deployment not supported in CI)")
     else()
         # GCC/Clang: ASan + UBSan
         add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
