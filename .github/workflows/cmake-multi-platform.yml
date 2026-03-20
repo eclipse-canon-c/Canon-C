@@ -145,8 +145,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          SKIP="arena_test.c memory_test.c ptr_test.c types_test.c \
-                limits_test.c"
+          SKIP="arena_test.c memory_test.c ptr_test.c types_test.c"
           FILES=""
           for f in $(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | sort); do
             if ! grep -qE '[^[:space:]]' "$f"; then continue; fi
