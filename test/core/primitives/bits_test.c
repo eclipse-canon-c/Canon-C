@@ -27,6 +27,10 @@
  *   Loop variables are declared before the loop body (C99 requirement for
  *   some compilers). Array initialisers are used in place of C99 compound
  *   literals where mixed int/u32 comparisons would otherwise arise.
+ *
+ *   The TEST() macro marks each function with CANON_MAYBE_UNUSED so that
+ *   the fuzz twin build (CANON_FUZZING defined, no main()) does not trigger
+ *   -Wunused-function on GCC/Clang.
  */
 
 #include "bits.h"
@@ -35,13 +39,23 @@
 #include <string.h>
 
 /* =========================================================================
+ * Portability: unused-function suppression
+ * ====================================================================== */
+
+#if defined(__GNUC__) || defined(__clang__)
+    #define CANON_MAYBE_UNUSED __attribute__((unused))
+#else
+    #define CANON_MAYBE_UNUSED
+#endif
+
+/* =========================================================================
  * Minimal test framework
  * ====================================================================== */
 
 static int g_pass = 0;
 static int g_fail = 0;
 
-#define TEST(name) static void test_##name(void)
+#define TEST(name) static CANON_MAYBE_UNUSED void test_##name(void)
 #define RUN(name)  do { test_##name(); } while (0)
 
 #define EXPECT(expr)                                                \
@@ -401,11 +415,6 @@ TEST(bits_bswap64_op) {
  * ====================================================================== */
 
 TEST(clz_ctz_popcount_consistency) {
-    /* For any power of two 2^k:
-     *   popcount == 1
-     *   ctz      == k
-     *   clz      == 63 - k
-     */
     u32 k;
     for (k = 0; k < 64u; k++) {
         u64 v = 1ULL << k;
@@ -419,21 +428,18 @@ TEST(set_clear_toggle_consistency) {
     u64 v = 0ULL;
     u32 i;
 
-    /* Set all bits one at a time and verify popcount grows */
     for (i = 0; i < 64u; i++) {
         v = bits_set(v, i);
         EXPECT(bits_test(v, i));
         EXPECT(bits_popcount(v) == i + 1u);
     }
 
-    /* Clear all bits one at a time */
     for (i = 0; i < 64u; i++) {
         v = bits_clear(v, i);
         EXPECT(!bits_test(v, i));
     }
     EXPECT(v == 0ULL);
 
-    /* Toggle each bit twice -> back to original */
     {
         u64 original = 0xDEADBEEFCAFEBABEULL;
         u64 toggled  = original;
@@ -444,7 +450,6 @@ TEST(set_clear_toggle_consistency) {
 }
 
 TEST(extract_insert_roundtrip) {
-    /* Exhaustive round-trip: extract field, re-insert it -> same value */
     u64 base = 0xFEDCBA9876543210ULL;
     u32 start;
     for (start = 0; start < 64u; start++) {
@@ -462,16 +467,7 @@ TEST(extract_insert_roundtrip) {
  * ====================================================================== */
 
 #ifdef CANON_FUZZING
-/* ---------------------------------------------------------------------- */
-/* Fuzz harness - libFuzzer entry point                                    */
-/*                                                                          */
-/* Interprets the raw byte buffer as:                                       */
-/*   bytes [0..7]  -> u64 value  (little-endian memcpy)                   */
-/*   bytes [8]     -> bit index  (0-63, masked)                            */
-/*   bytes [9]     -> shift      (0-63, masked)                            */
-/*   bytes [10]    -> field start (0-63, masked)                           */
-/*   bytes [11]    -> field count (1-64, clamped)                          */
-/* ---------------------------------------------------------------------- */
+
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     u64 value;
     u32 bit, shift, start, count;
@@ -484,44 +480,38 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     bit   = (u32)data[8]  & 63u;
     shift = (u32)data[9]  & 63u;
     start = (u32)data[10] & 63u;
-    count = ((u32)data[11] & 63u) + 1u;  /* 1..64 */
+    count = ((u32)data[11] & 63u) + 1u;
     if (start + count > 64u) count = 64u - start;
     if (count == 0u) count = 1u;
 
-    /* Single-bit ops */
     (void)bits_test(value, bit);
     (void)bits_set(value, bit);
     (void)bits_clear(value, bit);
     (void)bits_toggle(value, bit);
 
-    /* Multi-bit ops: extract->insert round-trip must be identity */
     {
         u64 field   = bits_extract(value, start, count);
         u64 rebuilt = bits_insert(value, field, start, count);
         if (rebuilt != value) __builtin_trap();
     }
 
-    /* Counting */
     (void)bits_popcount(value);
     (void)bits_clz(value);
     (void)bits_ctz(value);
     (void)bits_ffs(value);
     (void)bits_fls(value);
 
-    /* Rotation: rotl->rotr must recover original */
     {
         u64 rotated = bits_rotl(value, shift);
         if (bits_rotr(rotated, shift) != value) __builtin_trap();
     }
 
-    /* Power-of-two */
     {
         u64 next = bits_next_power_of_two(value);
         if (next != 0u && !bits_is_power_of_two(next)) __builtin_trap();
         if (next != 0u && next < value)                 __builtin_trap();
     }
 
-    /* Byte swap: double-swap must be identity */
     {
         u16 v16 = (u16)value;
         u32 v32 = (u32)value;
@@ -533,40 +523,27 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     return 0;
 }
 
-#else /* CANON_FUZZING not defined -> unit test binary */
+#else
 
 int main(void) {
-    /* Basic single-bit */
     RUN(bits_test_op);
     RUN(bits_set_op);
     RUN(bits_clear_op);
     RUN(bits_toggle_op);
-
-    /* Multi-bit */
     RUN(bits_extract_op);
     RUN(bits_insert_op);
-
-    /* Counting */
     RUN(bits_popcount_op);
     RUN(bits_clz_op);
     RUN(bits_ctz_op);
     RUN(bits_ffs_op);
     RUN(bits_fls_op);
-
-    /* Rotation */
     RUN(bits_rotl_op);
     RUN(bits_rotr_op);
-
-    /* Power-of-two */
     RUN(bits_is_power_of_two_op);
     RUN(bits_next_power_of_two_op);
-
-    /* Byte reversal */
     RUN(bits_bswap16_op);
     RUN(bits_bswap32_op);
     RUN(bits_bswap64_op);
-
-    /* Cross-function consistency */
     RUN(clz_ctz_popcount_consistency);
     RUN(set_clear_toggle_consistency);
     RUN(extract_insert_roundtrip);
