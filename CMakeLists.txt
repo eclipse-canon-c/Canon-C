@@ -223,7 +223,14 @@ canon_c_test(
 # canon_c_test(NAME slice_test     SRC test/core/slice_test.c     INCLUDES core/primitives . FUZZABLE)
 # canon_c_test(NAME scope_test     SRC test/core/scope_test.c     INCLUDES core/primitives .)
 # canon_c_test(NAME region_test    SRC test/core/region_test.c    INCLUDES core/primitives .)
-# canon_c_test(NAME memory_test    SRC test/core/memory_test.c    INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME memory_test 
+    SRC test/core/memory_test.c 
+    INCLUDES core/primitives core . 
+    FUZZABLE
+    )
+
 # canon_c_test(NAME ownership_test SRC test/core/ownership_test.c INCLUDES core/primitives .)
 
 # ---------------------------------------------------------------------------
