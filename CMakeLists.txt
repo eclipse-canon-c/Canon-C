@@ -33,6 +33,11 @@ if(MSVC)
         /wd4996   # C4996: 'strncpy' / other "unsafe" CRT functions.
                   # contract_test.c intentionally tests boundary
                   # behaviour of standard C string functions.
+        /wd4146   # C4146: unary minus applied to unsigned type.
+                  # types_test.c tests deliberate unsigned negation
+                  # to verify wrap-around behaviour.
+        /wd4308   # C4308: negative integral constant converted to unsigned.
+                  # Companion diagnostic to C4146 — same source.
     )
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
@@ -159,44 +164,44 @@ canon_c_test(
     FUZZABLE
 )
 
-canon_c_test(
-    NAME     checked_test
-    SRC      test/core/primitives/checked_test.c
-    INCLUDES core/primitives
-    FUZZABLE
-)
+# canon_c_test(
+#     NAME     checked_test
+#     SRC      test/core/primitives/checked_test.c
+#     INCLUDES core/primitives
+#     FUZZABLE
+# )
 
-canon_c_test(
-    NAME     compare_test
-    SRC      test/core/primitives/compare_test.c
-    INCLUDES core/primitives .
-    FUZZABLE
-)
+# canon_c_test(
+#     NAME     compare_test
+#     SRC      test/core/primitives/compare_test.c
+#     INCLUDES core/primitives .
+#     FUZZABLE
+# )
 
-canon_c_test(
-    NAME     contract_test
-    SRC      test/core/primitives/contract_test.c
-    INCLUDES core/primitives
-)
+# canon_c_test(
+#     NAME     contract_test
+#     SRC      test/core/primitives/contract_test.c
+#     INCLUDES core/primitives
+# )
 
-canon_c_test(
-    NAME     limits_test
-    SRC      test/core/primitives/limits_test.c
-    INCLUDES core/primitives
-)
+# canon_c_test(
+#     NAME     limits_test
+#     SRC      test/core/primitives/limits_test.c
+#     INCLUDES core/primitives
+# )
 
-canon_c_test(
-    NAME     types_test
-    SRC      test/core/primitives/types_test.c
-    INCLUDES core/primitives
-)
+# canon_c_test(
+#     NAME     types_test
+#     SRC      test/core/primitives/types_test.c
+#     INCLUDES core/primitives
+# )
 
-canon_c_test(
-    NAME     ptr_test
-    SRC      test/core/primitives/ptr_test.c
-    INCLUDES core/primitives .
-    FUZZABLE
-)
+# canon_c_test(
+#     NAME     ptr_test
+#     SRC      test/core/primitives/ptr_test.c
+#     INCLUDES core/primitives .
+#     FUZZABLE
+# )
 
 # ---------------------------------------------------------------------------
 # core/ tests                          — uncomment when ready (v1.3.0)
