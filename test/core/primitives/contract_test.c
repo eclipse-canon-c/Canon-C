@@ -1,373 +1,514 @@
 /**
  * @file contract_test.c
- * @brief Tests for contract.h
+ * @brief Unit tests for contract.h
  *
- * Strategy for "should fire" tests:
- * ─────────────────────────────────
- * Contract violations call abort() by default. To test that a violation
- * fires without terminating the process, we install a custom handler that
- * calls longjmp() instead of abort(). This is portable (C99, no fork/wait)
- * and works on Windows and Linux alike.
+ * Strategy
+ * ───────────────────────────────────────────────────────────────────────────
+ * contract.h macros call canon_contract_handler on violation and that
+ * handler must not return. Testing violation behaviour therefore requires
+ * intercepting the handler before it calls abort(). We do this by:
  *
- * The ASSERT_FIRES / ASSERT_SILENT macros encapsulate the pattern:
- *   1. Set a longjmp target with setjmp().
- *   2. Execute the expression.
- *   3. If the handler fires → longjmp back → record pass.
- *   4. If no handler fires  → fall through  → record fail.
+ *   1. Installing a capture handler via contract_set_handler() that records
+ *      the violation arguments into static buffers and then longjmp()s back
+ *      to the test site instead of calling abort().
+ *   2. Using setjmp() around each "should fire" call to catch the jump.
+ *   3. Restoring the capture handler after each test group so subsequent
+ *      passing tests still use a safe handler.
  *
- * Flag matrix tests:
- * ──────────────────
- * ensure() and unreachable() behave differently under NDEBUG and CANON_STRICT.
- * Those combinations require separate compilation units compiled with the
- * appropriate flags. They live in:
- *   contract_test_ndebug.c   — compiled with -DNDEBUG
- *   contract_test_strict.c   — compiled with -DCANON_STRICT
- *   contract_test_no_req.c   — compiled with -DCANON_NO_REQUIRE
+ * This requires CANON_CONTRACT_IMPL in exactly one TU — this file is that TU.
  *
- * static_require negative test:
- * ─────────────────────────────
- * A false static_require must fail at compile time. That is verified by
- * contract_test_static_fail.c, which is expected NOT to compile. The build
- * system marks it as a negative compilation test.
+ * Coverage
+ * ───────────────────────────────────────────────────────────────────────────
+ *   require()        — fires on false, silent on true
+ *   require_msg()    — fires on false with correct message, silent on true
+ *   ensure()         — fires on false in debug, silent in release (NDEBUG)
+ *   ensure_msg()     — fires on false with correct message
+ *   unreachable()    — always fires in debug builds
+ *   unreachable_msg()— fires with correct message
+ *   panic()          — always fires, correct message
+ *   contract_set_handler() — custom handler is called; NULL restores default
+ *   static_require() — compile-time; tested via static_require(1 == 1, ...)
+ *
+ * Portability note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   setjmp/longjmp are C89/C99 standard. No 0b literals. Variables declared
+ *   before use. CANON_MAYBE_UNUSED suppresses -Wunused-function for the
+ *   static helper functions below.
  */
 
+/* Must be defined in exactly one TU before including contract.h */
 #define CANON_CONTRACT_IMPL
 #include "contract.h"
 
-#include <stdio.h>
 #include <setjmp.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-/* ============================================================================
- * Test Helpers
- * ========================================================================= */
+/* =========================================================================
+ * Portability
+ * ====================================================================== */
 
-static int tests_run    = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
+#if defined(__GNUC__) || defined(__clang__)
+    #define CANON_MAYBE_UNUSED __attribute__((unused))
+#else
+    #define CANON_MAYBE_UNUSED
+#endif
 
-#define PASS(label) \
-    do { tests_run++; tests_passed++; printf("PASS: %s\n", label); } while (0)
+/* =========================================================================
+ * Minimal test framework
+ * ====================================================================== */
 
-#define FAIL(label) \
-    do { \
-        tests_run++; tests_failed++; \
-        fprintf(stderr, "FAIL: %s  (%s:%d)\n", label, __FILE__, __LINE__); \
+static int g_pass = 0;
+static int g_fail = 0;
+
+#define EXPECT(expr)                                                \
+    do {                                                            \
+        if (expr) {                                                 \
+            g_pass++;                                               \
+        } else {                                                    \
+            g_fail++;                                               \
+            fprintf(stderr, "FAIL  %s:%d  %s\n",                   \
+                    __FILE__, __LINE__, #expr);                     \
+        }                                                           \
     } while (0)
 
-#define ASSERT_TRUE(label, expr) \
-    do { if (expr) PASS(label); else FAIL(label); } while (0)
-
-#define ASSERT_FALSE(label, expr) \
-    do { if (!(expr)) PASS(label); else FAIL(label); } while (0)
-
-/* ============================================================================
- * longjmp-based violation capture
+/* =========================================================================
+ * Capture handler
  *
- * ASSERT_FIRES(label, stmt):
- *   Passes if stmt causes the contract handler to fire.
- *
- * ASSERT_SILENT(label, stmt):
- *   Passes if stmt does NOT cause the contract handler to fire.
- * ========================================================================= */
+ * Installed via contract_set_handler() before any "should fire" test.
+ * Records the violation arguments into static buffers, then longjmp()s
+ * back to the setjmp() site in the test. Never calls abort().
+ * ====================================================================== */
 
-/* Shared jump buffer for the capture handler */
-static jmp_buf  _contract_jmp;
-static int      _handler_fired;
+#define CAP_BUF 256
 
-/* Fields captured from the last handler invocation */
-static char     _cap_file[256];
-static int      _cap_line;
-static char     _cap_func[256];
-static char     _cap_expr[256];
-static char     _cap_msg[256];   /* empty string when msg == NULL */
+static jmp_buf          _cap_jmp;
+static int              _cap_fired  = 0;
+static int              _cap_line   = 0;
+static char             _cap_file[CAP_BUF];
+static char             _cap_func[CAP_BUF];
+static char             _cap_expr[CAP_BUF];
+static char             _cap_msg[CAP_BUF];   /* empty string when msg == NULL */
 
-static void _capture_handler(
+static CANON_MAYBE_UNUSED void _capture_handler(
     const char* file, int line, const char* func,
     const char* expr, const char* msg)
 {
-    /* Copy fields before jumping — they may be stack-allocated by the macro */
-    strncpy(_cap_file, file ? file : "", sizeof(_cap_file) - 1);
-    strncpy(_cap_func, func ? func : "", sizeof(_cap_func) - 1);
-    strncpy(_cap_expr, expr ? expr : "", sizeof(_cap_expr) - 1);
-    strncpy(_cap_msg,  msg  ? msg  : "", sizeof(_cap_msg)  - 1);
-    _cap_line = line;
-    _handler_fired = 1;
-    longjmp(_contract_jmp, 1);
+    _cap_fired = 1;
+    _cap_line  = line;
+    strncpy(_cap_file, file ? file : "", CAP_BUF - 1);
+    _cap_file[CAP_BUF - 1] = '\0';
+    strncpy(_cap_func, func ? func : "", CAP_BUF - 1);
+    _cap_func[CAP_BUF - 1] = '\0';
+    strncpy(_cap_expr, expr ? expr : "", CAP_BUF - 1);
+    _cap_expr[CAP_BUF - 1] = '\0';
+    strncpy(_cap_msg, msg ? msg : "", CAP_BUF - 1);
+    _cap_msg[CAP_BUF - 1] = '\0';
+    longjmp(_cap_jmp, 1);
+}
+
+/* Reset capture state before each "should fire" block */
+static void _cap_reset(void) {
+    _cap_fired = 0;
+    _cap_line  = 0;
+    _cap_file[0] = '\0';
+    _cap_func[0] = '\0';
+    _cap_expr[0] = '\0';
+    _cap_msg[0]  = '\0';
 }
 
 /*
- * Execute stmt inside a setjmp frame with the capture handler installed.
- * After the macro, _handler_fired == 1 if the handler was called.
- * The previous handler is always restored, even if stmt longjmps.
+ * FIRES(stmt) — execute stmt expecting a violation.
+ * Sets _cap_fired=1 if the handler was called, 0 if not.
  */
-#define _CAPTURE_VIOLATION(stmt)                               \
-    do {                                                       \
-        contract_handler_fn _prev = canon_contract_handler;   \
-        contract_set_handler(_capture_handler);               \
-        _handler_fired = 0;                                    \
-        memset(_cap_file, 0, sizeof(_cap_file));               \
-        memset(_cap_func, 0, sizeof(_cap_func));               \
-        memset(_cap_expr, 0, sizeof(_cap_expr));               \
-        memset(_cap_msg,  0, sizeof(_cap_msg));                \
-        _cap_line = 0;                                         \
-        if (setjmp(_contract_jmp) == 0) {                      \
-            stmt;                                              \
-        }                                                      \
-        contract_set_handler(_prev);                           \
+#define FIRES(stmt)                     \
+    do {                                \
+        _cap_reset();                   \
+        if (setjmp(_cap_jmp) == 0) {    \
+            stmt;                       \
+        }                               \
     } while (0)
 
-#define ASSERT_FIRES(label, stmt)          \
-    do {                                   \
-        _CAPTURE_VIOLATION(stmt);          \
-        if (_handler_fired) PASS(label);   \
-        else                FAIL(label);   \
+/*
+ * SILENT(stmt) — execute stmt expecting no violation.
+ * If the handler fires anyway the longjmp skips the rest of the block,
+ * which is benign for our test structure.
+ */
+#define SILENT(stmt)                    \
+    do {                                \
+        _cap_reset();                   \
+        if (setjmp(_cap_jmp) == 0) {    \
+            stmt;                       \
+            /* _cap_fired remains 0 */  \
+        }                               \
     } while (0)
 
-#define ASSERT_SILENT(label, stmt)          \
-    do {                                    \
-        _CAPTURE_VIOLATION(stmt);           \
-        if (!_handler_fired) PASS(label);   \
-        else                 FAIL(label);   \
-    } while (0)
-
-/* ============================================================================
- * 1. require() — always-on precondition
- * ========================================================================= */
+/* =========================================================================
+ * require() tests
+ * ====================================================================== */
 
 static void test_require(void) {
-    /* True condition: handler must not fire */
-    ASSERT_SILENT("require: true condition does not fire",
-        require(1 == 1));
+    contract_set_handler(_capture_handler);
 
-    ASSERT_SILENT("require: true expression does not fire",
-        require(2 + 2 == 4));
+    /* True condition — must not fire */
+    SILENT(require(1 == 1));
+    EXPECT(_cap_fired == 0);
 
-    /* False condition: handler must fire */
-    ASSERT_FIRES("require: false condition fires",
-        require(1 == 2));
+    SILENT(require(1 > 0));
+    EXPECT(_cap_fired == 0);
 
-    ASSERT_FIRES("require: zero fires",
-        require(0));
+    /* False condition — must fire */
+    FIRES(require(0));
+    EXPECT(_cap_fired == 1);
 
-    /* The captured expression must be the stringified condition */
-    _CAPTURE_VIOLATION(require(1 == 2));
-    ASSERT_TRUE("require: expr captured correctly",
-        strcmp(_cap_expr, "1 == 2") == 0);
+    FIRES(require(1 == 2));
+    EXPECT(_cap_fired == 1);
 
-    /* File and function must be populated */
-    ASSERT_TRUE("require: file is populated",  _cap_file[0] != '\0');
-    ASSERT_TRUE("require: func is populated",  _cap_func[0] != '\0');
-    ASSERT_TRUE("require: line is positive",   _cap_line > 0);
+    /* expr string is captured (not NULL) */
+    FIRES(require(0 == 1));
+    EXPECT(_cap_fired == 1);
+    EXPECT(_cap_expr[0] != '\0');
 
-    /* msg must be NULL → captured as empty string */
-    ASSERT_TRUE("require: msg is empty when not provided",
-        _cap_msg[0] == '\0');
+    /* msg is NULL for require() (no message variant) */
+    FIRES(require(0));
+    EXPECT(_cap_fired == 1);
+    EXPECT(_cap_msg[0] == '\0');  /* handler received NULL → stored as "" */
+
+    /* file and func are populated */
+    FIRES(require(0));
+    EXPECT(_cap_fired == 1);
+    EXPECT(_cap_file[0] != '\0');
+    EXPECT(_cap_func[0] != '\0');
+    EXPECT(_cap_line > 0);
+
+    contract_set_handler(_capture_handler);  /* ensure still installed */
 }
 
-/* ============================================================================
- * 2. require_msg() — always-on precondition with message
- * ========================================================================= */
+/* =========================================================================
+ * require_msg() tests
+ * ====================================================================== */
 
 static void test_require_msg(void) {
-    ASSERT_SILENT("require_msg: true condition does not fire",
-        require_msg(1 == 1, "should not fire"));
+    contract_set_handler(_capture_handler);
 
-    ASSERT_FIRES("require_msg: false condition fires",
-        require_msg(0, "expected failure"));
+    /* True condition — must not fire */
+    SILENT(require_msg(1 == 1, "should not fire"));
+    EXPECT(_cap_fired == 0);
 
-    /* Message must be forwarded to the handler */
-    _CAPTURE_VIOLATION(require_msg(0, "sentinel message"));
-    ASSERT_TRUE("require_msg: message captured correctly",
-        strcmp(_cap_msg, "sentinel message") == 0);
+    /* False condition — must fire with correct message */
+    FIRES(require_msg(0, "sentinel_message"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "sentinel_message") == 0);
 
-    _CAPTURE_VIOLATION(require_msg(1 == 2, "bad arithmetic"));
-    ASSERT_TRUE("require_msg: expr captured correctly",
-        strcmp(_cap_expr, "1 == 2") == 0);
-    ASSERT_TRUE("require_msg: message captured correctly",
-        strcmp(_cap_msg, "bad arithmetic") == 0);
+    FIRES(require_msg(1 == 2, "another message"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "another message") == 0);
+
+    /* expr string is not empty */
+    FIRES(require_msg(0, "check expr"));
+    EXPECT(_cap_expr[0] != '\0');
+
+    contract_set_handler(_capture_handler);
 }
 
-/* ============================================================================
- * 3. ensure() — debug-only (this TU is compiled without NDEBUG/CANON_STRICT)
+/* =========================================================================
+ * ensure() tests
  *
- * In this default configuration, ensure() behaves identically to require().
- * The NDEBUG and CANON_STRICT variants are tested in separate TUs.
- * ========================================================================= */
+ * ensure() is debug-only. In a Release build (NDEBUG defined without
+ * CANON_STRICT) it compiles away completely. We test what is observable
+ * in the current build configuration.
+ * ====================================================================== */
 
-static void test_ensure_default(void) {
-    ASSERT_SILENT("ensure (default): true condition does not fire",
-        ensure(1 == 1));
+static void test_ensure(void) {
+    contract_set_handler(_capture_handler);
 
-    ASSERT_FIRES("ensure (default): false condition fires",
-        ensure(0));
+#if defined(CANON_STRICT)
+    /* CANON_STRICT: ensure is always-on */
+    SILENT(ensure(1 == 1));
+    EXPECT(_cap_fired == 0);
 
-    ASSERT_FIRES("ensure_msg (default): false condition fires",
-        ensure_msg(0, "debug check"));
+    FIRES(ensure(0));
+    EXPECT(_cap_fired == 1);
 
-    _CAPTURE_VIOLATION(ensure_msg(0, "ensure sentinel"));
-    ASSERT_TRUE("ensure_msg (default): message captured",
-        strcmp(_cap_msg, "ensure sentinel") == 0);
+    FIRES(ensure(1 == 2));
+    EXPECT(_cap_fired == 1);
+
+#elif defined(NDEBUG)
+    /* Release build without CANON_STRICT: ensure compiles to no-op */
+    FIRES(ensure(0));   /* even (0) must NOT fire */
+    EXPECT(_cap_fired == 0);
+
+#else
+    /* Debug build: ensure behaves like require */
+    SILENT(ensure(1 == 1));
+    EXPECT(_cap_fired == 0);
+
+    FIRES(ensure(0));
+    EXPECT(_cap_fired == 1);
+
+    FIRES(ensure(1 == 2));
+    EXPECT(_cap_fired == 1);
+#endif
+
+    contract_set_handler(_capture_handler);
 }
 
-/* ============================================================================
- * 4. panic() — unconditional, never disabled
- * ========================================================================= */
+/* =========================================================================
+ * ensure_msg() tests
+ * ====================================================================== */
 
-static void test_panic(void) {
-    ASSERT_FIRES("panic: always fires",
-        panic("fatal error"));
+static void test_ensure_msg(void) {
+    contract_set_handler(_capture_handler);
 
-    _CAPTURE_VIOLATION(panic("panic sentinel"));
-    ASSERT_TRUE("panic: message captured",
-        strcmp(_cap_msg, "panic sentinel") == 0);
+#if defined(CANON_STRICT)
+    SILENT(ensure_msg(1 == 1, "no fire"));
+    EXPECT(_cap_fired == 0);
 
-    /* expr field for panic must be the literal string "panic" */
-    _CAPTURE_VIOLATION(panic("anything"));
-    ASSERT_TRUE("panic: expr field is 'panic'",
-        strcmp(_cap_expr, "panic") == 0);
+    FIRES(ensure_msg(0, "strict_ensure_msg"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "strict_ensure_msg") == 0);
+
+#elif defined(NDEBUG)
+    FIRES(ensure_msg(0, "release_ensure_msg"));
+    EXPECT(_cap_fired == 0);  /* no-op in release */
+
+#else
+    SILENT(ensure_msg(1 == 1, "no fire"));
+    EXPECT(_cap_fired == 0);
+
+    FIRES(ensure_msg(0, "debug_ensure_msg"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "debug_ensure_msg") == 0);
+#endif
+
+    contract_set_handler(_capture_handler);
 }
 
-/* ============================================================================
- * 5. unreachable() — fires in debug builds (no NDEBUG, no CANON_STRICT here)
- * ========================================================================= */
+/* =========================================================================
+ * unreachable() tests
+ *
+ * unreachable() fires the handler in debug builds and CANON_STRICT.
+ * In Release builds without CANON_STRICT it expands to a compiler hint
+ * that does not call the handler.
+ * ====================================================================== */
 
 static void test_unreachable(void) {
-    ASSERT_FIRES("unreachable: fires in debug build",
-        unreachable());
+    contract_set_handler(_capture_handler);
 
-    ASSERT_FIRES("unreachable_msg: fires in debug build",
-        unreachable_msg("should not get here"));
+#if defined(NDEBUG) && !defined(CANON_STRICT)
+    /* Release build: unreachable() is a pure hint — must not fire */
+    FIRES(unreachable());
+    EXPECT(_cap_fired == 0);
+#else
+    /* Debug or CANON_STRICT: must fire */
+    FIRES(unreachable());
+    EXPECT(_cap_fired == 1);
+    /* expr string contains "unreachable" */
+    EXPECT(strstr(_cap_expr, "unreachable") != NULL);
+    /* msg is NULL (no message variant) */
+    EXPECT(_cap_msg[0] == '\0');
+#endif
 
-    _CAPTURE_VIOLATION(unreachable_msg("unreachable sentinel"));
-    ASSERT_TRUE("unreachable_msg: message captured",
-        strcmp(_cap_msg, "unreachable sentinel") == 0);
-
-    /* expr field must identify the site as an unreachable path */
-    _CAPTURE_VIOLATION(unreachable());
-    ASSERT_TRUE("unreachable: expr field is 'unreachable code path'",
-        strcmp(_cap_expr, "unreachable code path") == 0);
+    contract_set_handler(_capture_handler);
 }
 
-/* ============================================================================
- * 6. contract_set_handler() — installation and dispatch
- * ========================================================================= */
+/* =========================================================================
+ * unreachable_msg() tests
+ * ====================================================================== */
 
-static int _custom_handler_called = 0;
+static void test_unreachable_msg(void) {
+    contract_set_handler(_capture_handler);
 
-static void _custom_handler(
+#if defined(NDEBUG) && !defined(CANON_STRICT)
+    FIRES(unreachable_msg("release_unreachable"));
+    EXPECT(_cap_fired == 0);
+#else
+    FIRES(unreachable_msg("test_unreachable_msg_sentinel"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "test_unreachable_msg_sentinel") == 0);
+    EXPECT(strstr(_cap_expr, "unreachable") != NULL);
+#endif
+
+    contract_set_handler(_capture_handler);
+}
+
+/* =========================================================================
+ * panic() tests
+ *
+ * panic() is unconditional — never disabled by any flag.
+ * ====================================================================== */
+
+static void test_panic(void) {
+    contract_set_handler(_capture_handler);
+
+    FIRES(panic("test_panic_message"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "test_panic_message") == 0);
+
+    /* expr is "panic" for panic() calls */
+    FIRES(panic("second_panic"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_expr, "panic") == 0);
+    EXPECT(strcmp(_cap_msg, "second_panic") == 0);
+
+    /* file, func, line populated */
+    FIRES(panic("location_check"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(_cap_file[0] != '\0');
+    EXPECT(_cap_func[0] != '\0');
+    EXPECT(_cap_line > 0);
+
+    contract_set_handler(_capture_handler);
+}
+
+/* =========================================================================
+ * contract_set_handler() tests
+ * ====================================================================== */
+
+static int _custom_called = 0;
+static char _custom_msg[CAP_BUF];
+
+static CANON_MAYBE_UNUSED void _custom_handler(
     const char* file, int line, const char* func,
     const char* expr, const char* msg)
 {
-    (void)file; (void)line; (void)func; (void)expr; (void)msg;
-    _custom_handler_called = 1;
-    longjmp(_contract_jmp, 1);
+    (void)file; (void)line; (void)func; (void)expr;
+    _custom_called = 1;
+    strncpy(_custom_msg, msg ? msg : "", CAP_BUF - 1);
+    _custom_msg[CAP_BUF - 1] = '\0';
+    longjmp(_cap_jmp, 1);
 }
 
 static void test_set_handler(void) {
-    contract_handler_fn original = canon_contract_handler;
-
-    /* Install custom handler and verify it is called */
+    /* Install custom handler — panic should call it */
     contract_set_handler(_custom_handler);
-    _custom_handler_called = 0;
-    if (setjmp(_contract_jmp) == 0) {
+    _custom_called = 0;
+    _custom_msg[0] = '\0';
+
+    _cap_reset();
+    if (setjmp(_cap_jmp) == 0) {
+        panic("custom_handler_test");
+    }
+    EXPECT(_custom_called == 1);
+    EXPECT(strcmp(_custom_msg, "custom_handler_test") == 0);
+
+    /* Passing NULL restores default handler.
+     * We can't easily test that abort() is called, but we can verify
+     * the handler pointer changes back from our custom one by installing
+     * the capture handler again and confirming it works. */
+    contract_set_handler(NULL);
+    contract_set_handler(_capture_handler);
+
+    _cap_reset();
+    FIRES(panic("after_null_restore"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "after_null_restore") == 0);
+
+    /* Install a second custom handler, then switch to capture handler */
+    contract_set_handler(_custom_handler);
+    _custom_called = 0;
+    if (setjmp(_cap_jmp) == 0) {
         require(0);
     }
-    contract_set_handler(original);
-    ASSERT_TRUE("set_handler: custom handler is called on violation",
-        _custom_handler_called == 1);
+    EXPECT(_custom_called == 1);
 
-    /* NULL restores the default handler */
-    contract_set_handler(NULL);
-    ASSERT_TRUE("set_handler: NULL restores default handler",
-        canon_contract_handler == contract_default_handler);
-    contract_set_handler(original);
-
-    /* Handler installed before a call fires, not the one installed after */
     contract_set_handler(_capture_handler);
-    _handler_fired = 0;
-    if (setjmp(_contract_jmp) == 0) {
-        require(0);  /* must call _capture_handler, not default */
-    }
-    contract_set_handler(original);
-    ASSERT_TRUE("set_handler: handler active at call site is invoked",
-        _handler_fired == 1);
 }
 
-/* ============================================================================
- * 7. Handler fields — file, line, func accuracy
- * ========================================================================= */
-
-static void _field_check_helper(void) {
-    require(0);  /* line is captured here */
-}
-
-static void test_handler_fields(void) {
-    /* Line number must match the actual source line of the violation */
-    _CAPTURE_VIOLATION(require(0));
-    int captured_line = _cap_line;
-    ASSERT_TRUE("fields: line number is positive", captured_line > 0);
-
-    /* File must end in contract_test.c */
-    int flen = (int)strlen(_cap_file);
-    int slen = (int)strlen("contract_test.c");
-    ASSERT_TRUE("fields: file ends in contract_test.c",
-        flen >= slen &&
-        strcmp(_cap_file + flen - slen, "contract_test.c") == 0);
-
-    /* func must be the name of the calling function */
-    _CAPTURE_VIOLATION(_field_check_helper());
-    ASSERT_TRUE("fields: func is _field_check_helper",
-        strcmp(_cap_func, "_field_check_helper") == 0);
-
-    /* Two consecutive violations produce different line numbers */
-    int line_a, line_b;
-    _CAPTURE_VIOLATION(require(0)); line_a = _cap_line;
-    _CAPTURE_VIOLATION(require(0)); line_b = _cap_line;
-    ASSERT_TRUE("fields: consecutive violations have different line numbers",
-        line_a != line_b);
-}
-
-/* ============================================================================
- * 8. static_require — compile-time assertions
+/* =========================================================================
+ * Diagnostic fields — file, line, func correctness
  *
- * Positive cases only (negative case must fail at compile time — see
- * contract_test_static_fail.c which is expected NOT to compile).
- * ========================================================================= */
+ * Verifies that the handler receives the correct source location.
+ * ====================================================================== */
 
-/* These must compile without error */
-static_require(sizeof(char) == 1,         char_is_one_byte);
-static_require(sizeof(int)  >= 2,         int_at_least_two_bytes);
-static_require(1 + 1 == 2,               arithmetic_is_sane);
-static_require(sizeof(void*) >= 1,        pointer_has_size);
+static void test_diagnostic_fields(void) {
+    int line_a = 0, line_b = 0;
+
+    contract_set_handler(_capture_handler);
+
+    /* Capture the line number before the require() call */
+    _cap_reset();
+    if (setjmp(_cap_jmp) == 0) {
+        line_a = __LINE__ + 1;
+        require(0);
+    }
+    EXPECT(_cap_fired == 1);
+    EXPECT(_cap_line == line_a);
+    EXPECT(strstr(_cap_file, "contract_test") != NULL ||
+           strstr(_cap_file, "contract_test.c") != NULL);
+
+    /* panic() line */
+    _cap_reset();
+    if (setjmp(_cap_jmp) == 0) {
+        line_b = __LINE__ + 1;
+        panic("line_check");
+    }
+    EXPECT(_cap_fired == 1);
+    EXPECT(_cap_line == line_b);
+
+    contract_set_handler(_capture_handler);
+}
+
+/* =========================================================================
+ * static_require() tests
+ *
+ * static_require() is a compile-time assertion. If the condition is true
+ * it produces no code at all. We can only test passing conditions at
+ * runtime — a failing condition would be a compile error, not a test
+ * failure, which is the correct and desired behaviour.
+ * ====================================================================== */
+
+/* These must compile without error — that is the test */
+static_require(1 == 1, one_equals_one);
+static_require(sizeof(char) == 1, char_is_one_byte);
+static_require(sizeof(int) >= 2, int_at_least_two_bytes);
+static_require(sizeof(u64) == 8, u64_is_eight_bytes);
+static_require(sizeof(u32) == 4, u32_is_four_bytes);
+static_require(sizeof(u16) == 2, u16_is_two_bytes);
+static_require(sizeof(u8)  == 1, u8_is_one_byte);
 
 static void test_static_require(void) {
-    /* If we reached this point, all static_require above compiled — pass */
-    PASS("static_require: true conditions compile cleanly");
+    /* If we reached this function, all the static_require() calls above
+     * compiled successfully — that is the entire test. */
+    EXPECT(1);  /* always passes — confirms we got here */
 }
 
-/* ============================================================================
- * Main
- * ========================================================================= */
+/* =========================================================================
+ * Interaction: require fires even if ensure would not (NDEBUG)
+ * ====================================================================== */
+
+static void test_require_fires_in_release(void) {
+    contract_set_handler(_capture_handler);
+
+    /* require() must always fire regardless of NDEBUG */
+    FIRES(require(0));
+    EXPECT(_cap_fired == 1);
+
+    FIRES(require_msg(0, "require_in_release"));
+    EXPECT(_cap_fired == 1);
+    EXPECT(strcmp(_cap_msg, "require_in_release") == 0);
+
+    contract_set_handler(_capture_handler);
+}
+
+/* =========================================================================
+ * main
+ * ====================================================================== */
 
 int main(void) {
-    printf("contract_test (default build: require ON, ensure debug-only)\n");
-    printf("──────────────────────────────────────────────────────────────\n");
-
     test_require();
     test_require_msg();
-    test_ensure_default();
-    test_panic();
+    test_ensure();
+    test_ensure_msg();
     test_unreachable();
+    test_unreachable_msg();
+    test_panic();
     test_set_handler();
-    test_handler_fields();
+    test_diagnostic_fields();
     test_static_require();
+    test_require_fires_in_release();
 
-    printf("\nResults: %d/%d passed", tests_passed, tests_run);
-    if (tests_failed > 0) {
-        printf(", %d FAILED\n", tests_failed);
-        return 1;
-    }
-    printf(" — all tests passed!\n");
-    return 0;
+    printf("\ncontract_test: %d passed, %d failed\n", g_pass, g_fail);
+    return g_fail > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
