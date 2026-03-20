@@ -212,7 +212,13 @@ canon_c_test(
 # ---------------------------------------------------------------------------
 # core/ tests                          — uncomment when ready (v1.3.0)
 # ---------------------------------------------------------------------------
-# canon_c_test(NAME arena_test     SRC test/core/arena_test.c     INCLUDES core/primitives . FUZZABLE)
+canon_c_test(
+    NAME arena_test 
+    SRC test/core/arena_test.c 
+    INCLUDES core/primitives core . 
+    FUZZABLE
+)
+
 # canon_c_test(NAME pool_test      SRC test/core/pool_test.c      INCLUDES core/primitives . FUZZABLE)
 # canon_c_test(NAME slice_test     SRC test/core/slice_test.c     INCLUDES core/primitives . FUZZABLE)
 # canon_c_test(NAME scope_test     SRC test/core/scope_test.c     INCLUDES core/primitives .)
