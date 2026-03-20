@@ -25,7 +25,15 @@ option(ENABLE_FUZZING    "Enable libFuzzer fuzz targets (Clang only)"       OFF)
 # Warning flags — per compiler
 # ---------------------------------------------------------------------------
 if(MSVC)
-    add_compile_options(/W4 /WX)
+    add_compile_options(/W4 /WX
+        /wd4127   # C4127: conditional expression is constant
+                  # Fired by EXPECT(sizeof(...) == N) and similar
+                  # compile-time-constant test assertions. Suppressed
+                  # globally for test code — not a real defect here.
+        /wd4996   # C4996: 'strncpy' / other "unsafe" CRT functions.
+                  # contract_test.c intentionally tests boundary
+                  # behaviour of standard C string functions.
+    )
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()
@@ -134,6 +142,14 @@ endfunction()
 
 # ---------------------------------------------------------------------------
 # core/primitives/ tests
+#
+# Note on INCLUDES:
+#   - "core/primitives" is always included so that flat includes like
+#     #include "bits.h" resolve correctly.
+#   - "." (repo root) is added for any header that uses a path-qualified
+#     include such as #include "core/primitives/types.h". This affects
+#     compare.h, ptr.h, and any future header that follows the same
+#     convention.
 # ---------------------------------------------------------------------------
 
 canon_c_test(
@@ -153,7 +169,7 @@ canon_c_test(
 canon_c_test(
     NAME     compare_test
     SRC      test/core/primitives/compare_test.c
-    INCLUDES core/primitives
+    INCLUDES core/primitives .
     FUZZABLE
 )
 
@@ -178,7 +194,7 @@ canon_c_test(
 canon_c_test(
     NAME     ptr_test
     SRC      test/core/primitives/ptr_test.c
-    INCLUDES core/primitives
+    INCLUDES core/primitives .
     FUZZABLE
 )
 
