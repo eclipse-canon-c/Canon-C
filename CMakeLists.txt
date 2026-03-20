@@ -184,11 +184,11 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(
-#     NAME     contract_test
-#     SRC      test/core/primitives/contract_test.c
-#     INCLUDES core/primitives
-# )
+canon_c_test(
+    NAME     contract_test
+    SRC      test/core/primitives/contract_test.c
+    INCLUDES core/primitives
+)
 
 # canon_c_test(
 #     NAME     limits_test
