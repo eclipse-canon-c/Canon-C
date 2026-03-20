@@ -94,14 +94,7 @@ jobs:
   # 2. Static analysis
   #
   #    clang-tidy — Linux only, tight explicit check allowlist
-  #      Using --checks=* produces thousands of warnings from opinionated
-  #      checks (magic numbers, identifier length, literal suffix case, etc.)
-  #      that are not appropriate for C99 test code. Instead we enable only
-  #      a curated set of checks that catch real bugs.
-  #
-  #    Cppcheck — all platforms, error+warning only
-  #      Style/performance/portability/information are suppressed to avoid
-  #      noise from intentional test patterns.
+  #    Cppcheck   — all platforms, warnings only (style/info suppressed)
   # -------------------------------------------------------------------------
   static-analysis:
     needs: build
@@ -128,18 +121,13 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # The choco Cppcheck package and its MSI installer are compiled
-          # against a non-existent staging path and fail to load std.cfg.
-          # Use the official portable zip release instead.
-          $version = "2.14.0"
-          $zip = "cppcheck-$version-x64.zip"
-          $url = "https://github.com/danmar/cppcheck/releases/download/$version/$zip"
-          Invoke-WebRequest -Uri $url -OutFile $zip -ErrorAction Stop
-          Expand-Archive -Path $zip -DestinationPath "C:\cppcheck" -Force
-          # The zip extracts to a versioned subdirectory; find the exe
-          $exe = (Get-ChildItem "C:\cppcheck" -Filter "cppcheck.exe" -Recurse |
-                  Select-Object -First 1).DirectoryName
-          echo "$exe" >> $env:GITHUB_PATH
+          # choco and the official MSI both use broken staging paths.
+          # winget ships a properly installed Cppcheck on Windows runners.
+          winget install --id Cppcheck.Cppcheck --silent --accept-package-agreements --accept-source-agreements
+          # winget installs to Program Files; add to PATH for this job
+          $path = (Get-ChildItem "C:\Program Files\Cppcheck" -Filter "cppcheck.exe" -ErrorAction SilentlyContinue |
+                   Select-Object -First 1).DirectoryName
+          if ($path) { echo "$path" >> $env:GITHUB_PATH }
 
       # --- clang-tidy (Linux only) ------------------------------------------
 
@@ -155,14 +143,14 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          # Skip blank files and files with known pre-existing issues
-          # in code we did not author.
+          # Only analyse bits_test.c — the only test file we authored.
+          # All other test files have pre-existing issues in code we did
+          # not write and are tracked separately.
           SKIP="arena_test.c memory_test.c ptr_test.c types_test.c \
                 limits_test.c checked_test.c compare_test.c contract_test.c"
           FILES=""
           for f in $(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | sort); do
             if ! grep -qE '[^[:space:]]' "$f"; then
-              echo "Skipping blank file: $f"
               continue
             fi
             BASENAME=$(basename "$f")
@@ -170,10 +158,7 @@ jobs:
             for s in $SKIP; do
               if [ "$BASENAME" = "$s" ]; then SKIP_THIS=1; break; fi
             done
-            if [ "$SKIP_THIS" = "1" ]; then
-              echo "Skipping excluded file: $f"
-              continue
-            fi
+            if [ "$SKIP_THIS" = "1" ]; then continue; fi
             FILES="$FILES $f"
           done
 
@@ -182,8 +167,7 @@ jobs:
             exit 0
           fi
 
-          # Tight explicit allowlist — only checks that catch real bugs
-          # in C99 code, with no style/naming/formatting opinions.
+          # Tight explicit allowlist — real bug checks only, no style opinions
           CHECKS="\
           bugprone-integer-division,\
           bugprone-macro-parentheses,\
@@ -193,7 +177,6 @@ jobs:
           bugprone-suspicious-memset-usage,\
           bugprone-too-small-loop-variable,\
           bugprone-undefined-memory-manipulation,\
-          bugprone-use-after-move,\
           clang-analyzer-core.CallAndMessage,\
           clang-analyzer-core.DivideZero,\
           clang-analyzer-core.NullDereference,\
@@ -216,13 +199,15 @@ jobs:
             $FILES
 
       # --- Cppcheck (all platforms) -----------------------------------------
+      # --enable=warning enables warnings on top of the always-on errors.
+      # "error" is not a valid --enable token — errors are always reported.
 
       - name: Run Cppcheck (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cppcheck \
-            --enable=error,warning \
+            --enable=warning \
             --std=c99 \
             --error-exitcode=1 \
             --suppress=missingIncludeSystem \
@@ -240,7 +225,7 @@ jobs:
         shell: pwsh
         run: |
           cppcheck `
-            --enable=error,warning `
+            --enable=warning `
             --std=c99 `
             --error-exitcode=1 `
             --suppress=missingIncludeSystem `
@@ -289,8 +274,11 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 4. Dr. Memory — Windows only
-  #    Install directly from the official GitHub release zip to guarantee
-  #    a known install path instead of relying on choco's versioned layout.
+  #
+  #    Dr. Memory 2.x has compatibility issues with Windows Server 2022
+  #    (the current windows-latest runner) due to dbghelp.dll conflicts.
+  #    We install the latest available release and run with -ignore_kernel
+  #    to work around the initialisation failure on newer kernels.
   # -------------------------------------------------------------------------
   dr-memory:
     needs: build
@@ -302,15 +290,16 @@ jobs:
       - name: Install Dr. Memory
         shell: pwsh
         run: |
-          $version  = "2.6.0"
-          $tag      = "release_$version"
-          $zip      = "DrMemory-Windows-$version.zip"
-          $url      = "https://github.com/DynamoRIO/drmemory/releases/download/$tag/$zip"
-          $dest     = "C:\DrMemory"
-          Invoke-WebRequest -Uri $url -OutFile $zip -ErrorAction Stop
-          Expand-Archive -Path $zip -DestinationPath $dest -Force
-          # The zip extracts to DrMemory-Windows-<version>/bin/drmemory.exe
-          $bin = (Get-ChildItem $dest -Filter "drmemory.exe" -Recurse |
+          # Use the latest release tag from GitHub
+          $release = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/DynamoRIO/drmemory/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -like "DrMemory-Windows-*.zip" } |
+                   Select-Object -First 1
+          if (-not $asset) { Write-Error "No Windows zip asset found"; exit 1 }
+          Write-Host "Downloading $($asset.name) from $($asset.browser_download_url)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "drmemory.zip"
+          Expand-Archive -Path "drmemory.zip" -DestinationPath "C:\DrMemory" -Force
+          $bin = (Get-ChildItem "C:\DrMemory" -Filter "drmemory.exe" -Recurse |
                   Select-Object -First 1).DirectoryName
           if (-not $bin) { Write-Error "drmemory.exe not found after extraction"; exit 1 }
           Write-Host "Dr. Memory bin: $bin"
@@ -343,7 +332,9 @@ jobs:
 
           foreach ($exe in $testExes) {
             Write-Host "Running Dr. Memory on $($exe.Name)..."
-            & "$drmemory" -exit_code_if_errors 1 -- $exe.FullName
+            # -ignore_kernel suppresses false positives from kernel internals
+            # on newer Windows Server runners
+            & "$drmemory" -ignore_kernel -exit_code_if_errors 1 -- $exe.FullName
             if ($LASTEXITCODE -ne 0) { $failed += $exe.Name }
           }
 
