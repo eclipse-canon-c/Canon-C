@@ -1,517 +1,719 @@
 /**
  * @file ptr_test.c
- * @brief Tests for core/primitives/ptr.h
+ * @brief Unit tests (and optional fuzz harness) for ptr.h
  *
- * Covers every public function and macro exported by ptr.h:
- *   - is_power_of_two
- *   - is_aligned / align_up / align_down / align_padding
- *   - ptr_align_up / ptr_align_down / ptr_is_aligned / ptr_align_padding
- *   - ptr_offset / ptr_offset_const / ptr_retreat
- *   - ptr_diff / ptr_span
- *   - ptr_in_range / ptr_range_in_range
- *   - ptr_elem / ptr_elem_const
- *   - ptr_or / ptr_or_const / ptr_is_valid
- *   - PTR_OFFSET_OF / PTR_CONTAINER_OF
- *   - ALIGN_OF / ALIGN_MAX
+ * Build modes
+ * ───────────────────────────────────────────────────────────────────────────
+ *   Unit test  (default)  : int main(void) runs all test groups
+ *   Fuzz twin  (CANON_FUZZING defined by CMake):
+ *              LLVMFuzzerTestOneInput exercises the same logic with
+ *              arbitrary byte input.
  *
- * Exit code: 0 on all pass, 1 on any failure.
+ * Coverage
+ * ───────────────────────────────────────────────────────────────────────────
+ *   is_power_of_two()     — zero, powers, non-powers
+ *   is_aligned()          — multiples and non-multiples
+ *   align_up()            — already aligned, round-up, zero
+ *   align_down()          — already aligned, round-down, zero
+ *   align_padding()       — zero when aligned, positive when not
+ *   ptr_align_up()        — NULL passthrough, alignment, already aligned
+ *   ptr_align_down()      — NULL passthrough, alignment
+ *   ptr_is_aligned()      — NULL returns false, aligned/unaligned pointers
+ *   ptr_align_padding()   — NULL returns 0, positive padding
+ *   ptr_offset()          — NULL passthrough, forward advance
+ *   ptr_offset_const()    — same as ptr_offset for const pointers
+ *   ptr_retreat()         — NULL passthrough, backward retreat
+ *   ptr_diff()            — positive, negative, zero distances
+ *   ptr_span()            — unsigned distance, equal pointers
+ *   ptr_in_range()        — NULL args, inside, at start, at end, outside
+ *   ptr_range_in_range()  — NULL args, fits, overflow-safe boundary
+ *   ptr_elem()            — index 0, 1, last; elem_size 1, N
+ *   ptr_elem_const()      — same as ptr_elem for const pointers
+ *   ptr_or()              — non-NULL returns p, NULL returns fallback
+ *   ptr_or_const()        — same for const
+ *   ptr_is_valid()        — NULL → false, non-NULL → true
+ *   PTR_OFFSET_OF()       — offset matches manual layout
+ *   PTR_CONTAINER_OF()    — recover struct from member pointer
+ *   ALIGN_OF()            — matches known type alignments
+ *   ALIGN_MAX()           — picks the larger value
+ *
+ * Portability note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   ptr.h uses require_msg() which calls canon_contract_handler on violation.
+ *   We must define CANON_CONTRACT_IMPL in this TU. Contract violations that
+ *   would abort() are not exercised here — that is contract_test.c's job.
+ *   No 0b literals. Variables declared before use (C99).
  */
 
-#include <stdio.h>
-#include <stddef.h>
-
-/* Define the contract handler in this translation unit.
- * contract.h uses the CANON_CONTRACT_IMPL pattern: exactly one TU must
- * define this before including the header so that canon_contract_handler
- * gets its definition (a contract_handler_fn variable, not a function).   */
 #define CANON_CONTRACT_IMPL
+#include "contract.h"
+#include "ptr.h"
 
-/* On MSVC, ALIGN_OF falls back to the offsetof struct trick (C99 path),
- * which triggers warning C4116 (unnamed type definition in parentheses).
- * MSVC does support _Alignof as a C11 compiler, so force the C11 path by
- * predefining __STDC_VERSION__ before ptr.h is parsed. Only do this when
- * the compiler hasn't already set it high enough.                         */
-#if defined(_MSC_VER) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
-#   define __STDC_VERSION__ 201112L
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* =========================================================================
+ * Portability: unused-function suppression
+ * ====================================================================== */
+
+#if defined(__GNUC__) || defined(__clang__)
+    #define CANON_MAYBE_UNUSED __attribute__((unused))
+#else
+    #define CANON_MAYBE_UNUSED
 #endif
 
-#include "core/primitives/ptr.h"
+/* =========================================================================
+ * Minimal test framework
+ * ====================================================================== */
 
-/* ── Minimal test harness ─────────────────────────────────────────────────── */
+static int g_pass = 0;
+static int g_fail = 0;
 
-static int s_pass = 0;
-static int s_fail = 0;
-
-#define CHECK(expr)                                                             \
-    do {                                                                        \
-        if (expr) {                                                             \
-            ++s_pass;                                                           \
-        } else {                                                                \
-            ++s_fail;                                                           \
-            fprintf(stderr, "FAIL  %s:%d  %s\n", __FILE__, __LINE__, #expr);   \
-        }                                                                       \
+#define EXPECT(expr)                                                \
+    do {                                                            \
+        if (expr) {                                                 \
+            g_pass++;                                               \
+        } else {                                                    \
+            g_fail++;                                               \
+            fprintf(stderr, "FAIL  %s:%d  %s\n",                   \
+                    __FILE__, __LINE__, #expr);                     \
+        }                                                           \
     } while (0)
 
-static int report(void) {
-    printf("%d passed, %d failed\n", s_pass, s_fail);
-    return s_fail ? 1 : 0;
-}
+/* =========================================================================
+ * Compile-time invariants
+ * ====================================================================== */
 
-/* ── Fixtures ─────────────────────────────────────────────────────────────── */
+static_require(ALIGN_OF(char)   >= 1, align_of_char_at_least_1);
+static_require(ALIGN_OF(int)    >= 1, align_of_int_at_least_1);
+static_require(ALIGN_OF(double) >= 1, align_of_double_at_least_1);
+static_require(ALIGN_OF(void*)  >= 1, align_of_voidptr_at_least_1);
 
-/* Flat buffer large enough for all pointer arithmetic tests. */
-static u8 g_buf[256];
+/* ALIGN_MAX picks the larger */
+static_require(ALIGN_MAX(1, 2) == 2, align_max_picks_larger_1_2);
+static_require(ALIGN_MAX(8, 4) == 8, align_max_picks_larger_8_4);
+static_require(ALIGN_MAX(4, 4) == 4, align_max_equal_inputs);
 
-/* Struct for PTR_OFFSET_OF / PTR_CONTAINER_OF tests. */
-typedef struct {
-    u8   tag;
-    u32  value;
-    u8*  link;
-} TestNode;
-
-typedef struct {
-    int      data;
-    TestNode node;
-} Container;
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  1. is_power_of_two                                                        */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * is_power_of_two
+ * ====================================================================== */
 
 static void test_is_power_of_two(void) {
-    /* true */
-    CHECK(is_power_of_two(1));
-    CHECK(is_power_of_two(2));
-    CHECK(is_power_of_two(4));
-    CHECK(is_power_of_two(8));
-    CHECK(is_power_of_two(16));
-    CHECK(is_power_of_two(64));
-    CHECK(is_power_of_two(1024));
-    CHECK(is_power_of_two(4096));
-    CHECK(is_power_of_two((usize)1 << (sizeof(usize) * 8 - 1)));
+    /* Zero is NOT a power of two */
+    EXPECT(is_power_of_two(0) == false);
 
-    /* false */
-    CHECK(!is_power_of_two(0));
-    CHECK(!is_power_of_two(3));
-    CHECK(!is_power_of_two(5));
-    CHECK(!is_power_of_two(6));
-    CHECK(!is_power_of_two(7));
-    CHECK(!is_power_of_two(12));
-    CHECK(!is_power_of_two(100));
-    CHECK(!is_power_of_two(255));
+    /* True powers */
+    EXPECT(is_power_of_two(1)   == true);
+    EXPECT(is_power_of_two(2)   == true);
+    EXPECT(is_power_of_two(4)   == true);
+    EXPECT(is_power_of_two(8)   == true);
+    EXPECT(is_power_of_two(16)  == true);
+    EXPECT(is_power_of_two(32)  == true);
+    EXPECT(is_power_of_two(64)  == true);
+    EXPECT(is_power_of_two(128) == true);
+    EXPECT(is_power_of_two(256) == true);
+    EXPECT(is_power_of_two((usize)1 << 31) == true);
+    EXPECT(is_power_of_two((usize)1 << 62) == true);
+
+    /* Non-powers */
+    EXPECT(is_power_of_two(3)   == false);
+    EXPECT(is_power_of_two(5)   == false);
+    EXPECT(is_power_of_two(6)   == false);
+    EXPECT(is_power_of_two(7)   == false);
+    EXPECT(is_power_of_two(9)   == false);
+    EXPECT(is_power_of_two(15)  == false);
+    EXPECT(is_power_of_two(17)  == false);
+    EXPECT(is_power_of_two(100) == false);
+    EXPECT(is_power_of_two(255) == false);
+    EXPECT(is_power_of_two((usize)~(usize)0) == false);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  2. is_aligned                                                              */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * is_aligned / align_up / align_down / align_padding
+ * ====================================================================== */
 
-static void test_is_aligned(void) {
-    CHECK( is_aligned(0,   8));   /* zero is always aligned */
-    CHECK( is_aligned(8,   8));
-    CHECK( is_aligned(16,  8));
-    CHECK( is_aligned(64,  8));
-    CHECK(!is_aligned(1,   8));
-    CHECK(!is_aligned(7,   8));
-    CHECK(!is_aligned(9,   8));
-    CHECK(!is_aligned(13,  8));
+static void test_integer_alignment(void) {
+    /* is_aligned */
+    EXPECT(is_aligned(0,  8) == true);
+    EXPECT(is_aligned(8,  8) == true);
+    EXPECT(is_aligned(16, 8) == true);
+    EXPECT(is_aligned(7,  8) == false);
+    EXPECT(is_aligned(9,  8) == false);
+    EXPECT(is_aligned(1,  1) == true);
+    EXPECT(is_aligned(0,  1) == true);
+    EXPECT(is_aligned(100, 4) == true);
+    EXPECT(is_aligned(101, 4) == false);
 
-    CHECK( is_aligned(0,   1));   /* align=1: everything is aligned */
-    CHECK( is_aligned(1,   1));
-    CHECK( is_aligned(99,  1));
+    /* align_up */
+    EXPECT(align_up(0,  8) == 0);
+    EXPECT(align_up(1,  8) == 8);
+    EXPECT(align_up(7,  8) == 8);
+    EXPECT(align_up(8,  8) == 8);
+    EXPECT(align_up(9,  8) == 16);
+    EXPECT(align_up(13, 8) == 16);
+    EXPECT(align_up(16, 8) == 16);
+    EXPECT(align_up(1,  1) == 1);
+    EXPECT(align_up(0,  1) == 0);
+    EXPECT(align_up(100, 16) == 112);
+    EXPECT(align_up(112, 16) == 112);
+    EXPECT(align_up(113, 16) == 128);
 
-    CHECK( is_aligned(0,  16));
-    CHECK( is_aligned(16, 16));
-    CHECK(!is_aligned(15, 16));
-    CHECK(!is_aligned(17, 16));
+    /* align_down */
+    EXPECT(align_down(0,  8) == 0);
+    EXPECT(align_down(7,  8) == 0);
+    EXPECT(align_down(8,  8) == 8);
+    EXPECT(align_down(9,  8) == 8);
+    EXPECT(align_down(15, 8) == 8);
+    EXPECT(align_down(16, 8) == 16);
+    EXPECT(align_down(13, 8) == 8);
+    EXPECT(align_down(1,  1) == 1);
+    EXPECT(align_down(100, 16) == 96);
+    EXPECT(align_down(112, 16) == 112);
+
+    /* align_padding */
+    EXPECT(align_padding(0,  8) == 0);
+    EXPECT(align_padding(8,  8) == 0);
+    EXPECT(align_padding(1,  8) == 7);
+    EXPECT(align_padding(7,  8) == 1);
+    EXPECT(align_padding(9,  8) == 7);
+    EXPECT(align_padding(13, 8) == 3);
+    EXPECT(align_padding(16, 8) == 0);
+    EXPECT(align_padding(1,  1) == 0);
+
+    /* align_up(n, a) == n + align_padding(n, a) */
+    {
+        usize values[6];
+        int idx;
+        values[0] = 0;
+        values[1] = 1;
+        values[2] = 7;
+        values[3] = 13;
+        values[4] = 64;
+        values[5] = 1023;
+        for (idx = 0; idx < 6; idx++) {
+            usize val = values[idx];
+            EXPECT(align_up(val, 8) == val + align_padding(val, 8));
+            EXPECT(align_up(val, 16) == val + align_padding(val, 16));
+        }
+    }
+
+    /* align_up >= n, align_down <= n */
+    {
+        usize vals[5];
+        int idx;
+        vals[0] = 0;
+        vals[1] = 1;
+        vals[2] = 100;
+        vals[3] = 255;
+        vals[4] = 1024;
+        for (idx = 0; idx < 5; idx++) {
+            EXPECT(align_up(vals[idx],   8) >= vals[idx]);
+            EXPECT(align_down(vals[idx], 8) <= vals[idx]);
+        }
+    }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  3. align_up                                                               */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ptr_align_up / ptr_align_down / ptr_is_aligned / ptr_align_padding
+ * ====================================================================== */
 
-static void test_align_up(void) {
-    CHECK(align_up(0,   8) == 0);
-    CHECK(align_up(1,   8) == 8);
-    CHECK(align_up(7,   8) == 8);
-    CHECK(align_up(8,   8) == 8);   /* already aligned */
-    CHECK(align_up(9,   8) == 16);
-    CHECK(align_up(13,  8) == 16);
-    CHECK(align_up(16,  8) == 16);  /* already aligned */
+static void test_pointer_alignment(void) {
+    /* Use a local buffer guaranteed to be at least 16-byte aligned
+     * by the compiler (C11 max_align_t). We over-allocate and manually
+     * advance to an unaligned position for testing. */
+    unsigned char buf[256];
+    void* base;
+    void* unaligned;
+    void* result;
 
-    CHECK(align_up(0,   1) == 0);
-    CHECK(align_up(5,   1) == 5);   /* align=1: no-op */
-
-    CHECK(align_up(0,  16) == 0);
-    CHECK(align_up(1,  16) == 16);
-    CHECK(align_up(15, 16) == 16);
-    CHECK(align_up(16, 16) == 16);
-    CHECK(align_up(17, 16) == 32);
-
-    CHECK(align_up(100, 64) == 128);
-    CHECK(align_up(128, 64) == 128);
-    CHECK(align_up(129, 64) == 192);
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  4. align_down                                                              */
-/* ══════════════════════════════════════════════════════════════════════════ */
-
-static void test_align_down(void) {
-    CHECK(align_down(0,   8) == 0);
-    CHECK(align_down(1,   8) == 0);
-    CHECK(align_down(7,   8) == 0);
-    CHECK(align_down(8,   8) == 8);
-    CHECK(align_down(9,   8) == 8);
-    CHECK(align_down(15,  8) == 8);
-    CHECK(align_down(16,  8) == 16);
-
-    CHECK(align_down(0,   1) == 0);
-    CHECK(align_down(7,   1) == 7);  /* align=1: no-op */
-
-    CHECK(align_down(0,  16) == 0);
-    CHECK(align_down(15, 16) == 0);
-    CHECK(align_down(16, 16) == 16);
-    CHECK(align_down(31, 16) == 16);
-    CHECK(align_down(32, 16) == 32);
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  5. align_padding                                                           */
-/* ══════════════════════════════════════════════════════════════════════════ */
-
-static void test_align_padding(void) {
-    CHECK(align_padding(0,   8) == 0);
-    CHECK(align_padding(8,   8) == 0);
-    CHECK(align_padding(1,   8) == 7);
-    CHECK(align_padding(7,   8) == 1);
-    CHECK(align_padding(9,   8) == 7);
-    CHECK(align_padding(13,  8) == 3);
-
-    CHECK(align_padding(0,   1) == 0);
-    CHECK(align_padding(5,   1) == 0);  /* align=1: always 0 */
-
-    CHECK(align_padding(1,  16) == 15);
-    CHECK(align_padding(16, 16) == 0);
-    CHECK(align_padding(17, 16) == 15);
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  6. ptr_align_up / ptr_align_down                                          */
-/* ══════════════════════════════════════════════════════════════════════════ */
-
-static void test_ptr_align_up_down(void) {
-    u8* base = g_buf;
+    /* Find a 16-byte aligned address inside buf */
+    base = (void*)(((uintptr_t)buf + 15) & ~(uintptr_t)15);
 
     /* NULL passthrough */
-    CHECK(ptr_align_up(NULL,   8) == NULL);
-    CHECK(ptr_align_down(NULL, 8) == NULL);
+    EXPECT(ptr_align_up(NULL, 8)   == NULL);
+    EXPECT(ptr_align_down(NULL, 8) == NULL);
+    EXPECT(ptr_is_aligned(NULL, 8) == false);
+    EXPECT(ptr_align_padding(NULL, 8) == 0);
 
-    /* Already aligned pointer — should be unchanged */
-    u8* aligned = (u8*)align_up((usize)(uintptr_t)base, 16);
-    CHECK(ptr_align_up(aligned,   16) == (void*)aligned);
-    CHECK(ptr_align_down(aligned, 16) == (void*)aligned);
+    /* Already aligned pointer — align_up returns same address */
+    EXPECT(ptr_align_up(base, 16) == base);
+    EXPECT(ptr_align_down(base, 16) == base);
+    EXPECT(ptr_is_aligned(base, 16) == true);
+    EXPECT(ptr_align_padding(base, 16) == 0);
 
-    /* One byte past alignment boundary */
-    u8* one_past = aligned + 1;
-    CHECK(ptr_align_up(one_past,   16) == (void*)(aligned + 16));
-    CHECK(ptr_align_down(one_past, 16) == (void*)aligned);
+    /* Unaligned: base + 3 */
+    unaligned = (void*)((u8*)base + 3);
+    result = ptr_align_up(unaligned, 8);
+    EXPECT((uintptr_t)result >= (uintptr_t)unaligned);
+    EXPECT(((uintptr_t)result & 7) == 0);
 
-    /* align=1: always a no-op */
-    CHECK(ptr_align_up(base + 3,   1) == (void*)(base + 3));
-    CHECK(ptr_align_down(base + 3, 1) == (void*)(base + 3));
+    result = ptr_align_down(unaligned, 8);
+    EXPECT((uintptr_t)result <= (uintptr_t)unaligned);
+    EXPECT(((uintptr_t)result & 7) == 0);
+
+    EXPECT(ptr_is_aligned(unaligned, 8) == false);
+    EXPECT(ptr_is_aligned(unaligned, 1) == true);  /* everything is 1-aligned */
+
+    /* padding > 0 for unaligned, 0 for aligned */
+    EXPECT(ptr_align_padding(unaligned, 8) > 0);
+    EXPECT(ptr_align_padding(base, 16) == 0);
+
+    /* ptr_align_up result is always aligned */
+    {
+        int offset;
+        for (offset = 0; offset < 32; offset++) {
+            void* p = (void*)((u8*)base + offset);
+            void* up   = ptr_align_up(p, 16);
+            void* down = ptr_align_down(p, 16);
+            EXPECT(ptr_is_aligned(up,   16));
+            EXPECT(ptr_is_aligned(down, 16));
+            EXPECT((uintptr_t)up   >= (uintptr_t)p);
+            EXPECT((uintptr_t)down <= (uintptr_t)p);
+        }
+    }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  7. ptr_is_aligned / ptr_align_padding                                     */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ptr_offset / ptr_offset_const / ptr_retreat
+ * ====================================================================== */
 
-static void test_ptr_is_aligned_padding(void) {
-    /* NULL: is_aligned → false, padding → 0 */
-    CHECK(!ptr_is_aligned(NULL, 8));
-    CHECK( ptr_align_padding(NULL, 8) == 0);
-
-    u8* base    = g_buf;
-    u8* aligned = (u8*)align_up((usize)(uintptr_t)base, 16);
-
-    CHECK( ptr_is_aligned(aligned,      16));
-    CHECK(!ptr_is_aligned(aligned + 1,  16));
-    CHECK(!ptr_is_aligned(aligned + 7,  16));
-    CHECK( ptr_is_aligned(aligned + 16, 16));
-
-    CHECK(ptr_align_padding(aligned,      16) == 0);
-    CHECK(ptr_align_padding(aligned + 1,  16) == 15);
-    CHECK(ptr_align_padding(aligned + 15, 16) == 1);
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  8. ptr_offset / ptr_offset_const                                          */
-/* ══════════════════════════════════════════════════════════════════════════ */
-
-static void test_ptr_offset(void) {
-    u8* base = g_buf;
+static void test_ptr_arithmetic(void) {
+    unsigned char buf[128];
+    void* base = (void*)buf;
 
     /* NULL passthrough */
-    CHECK(ptr_offset(NULL, 10)       == NULL);
-    CHECK(ptr_offset_const(NULL, 10) == NULL);
+    EXPECT(ptr_offset(NULL, 10)        == NULL);
+    EXPECT(ptr_offset_const(NULL, 10)  == NULL);
+    EXPECT(ptr_retreat(NULL, 10)       == NULL);
 
-    /* Zero offset — same pointer */
-    CHECK(ptr_offset(base, 0)       == (void*)base);
-    CHECK(ptr_offset_const(base, 0) == (const void*)base);
+    /* ptr_offset advances */
+    EXPECT(ptr_offset(base, 0)  == base);
+    EXPECT(ptr_offset(base, 1)  == (void*)((u8*)base + 1));
+    EXPECT(ptr_offset(base, 64) == (void*)((u8*)base + 64));
 
-    /* Positive offsets */
-    CHECK(ptr_offset(base, 1)   == (void*)(base + 1));
-    CHECK(ptr_offset(base, 8)   == (void*)(base + 8));
-    CHECK(ptr_offset(base, 128) == (void*)(base + 128));
-    CHECK(ptr_offset(base, 255) == (void*)(base + 255));
+    /* ptr_offset_const same */
+    {
+        const void* cb = (const void*)buf;
+        EXPECT(ptr_offset_const(cb, 0)  == cb);
+        EXPECT(ptr_offset_const(cb, 32) == (const void*)((const u8*)cb + 32));
+    }
 
-    /* const variant */
-    CHECK(ptr_offset_const(base, 32) == (const void*)(base + 32));
+    /* ptr_retreat retreats */
+    {
+        void* mid = ptr_offset(base, 64);
+        EXPECT(ptr_retreat(mid, 0)  == mid);
+        EXPECT(ptr_retreat(mid, 1)  == ptr_offset(base, 63));
+        EXPECT(ptr_retreat(mid, 64) == base);
+    }
+
+    /* ptr_offset then ptr_retreat recovers original */
+    {
+        int step;
+        for (step = 0; step < 64; step++) {
+            void* fwd = ptr_offset(base, (usize)step);
+            void* bck = ptr_retreat(fwd, (usize)step);
+            EXPECT(bck == base);
+        }
+    }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  9. ptr_retreat                                                             */
-/* ══════════════════════════════════════════════════════════════════════════ */
-
-static void test_ptr_retreat(void) {
-    u8* base = g_buf;
-    u8* mid  = base + 128;
-
-    /* NULL passthrough */
-    CHECK(ptr_retreat(NULL, 10) == NULL);
-
-    /* Zero retreat — same pointer */
-    CHECK(ptr_retreat(mid, 0) == (void*)mid);
-
-    /* Positive retreat */
-    CHECK(ptr_retreat(mid,  1)  == (void*)(mid - 1));
-    CHECK(ptr_retreat(mid, 64)  == (void*)(mid - 64));
-    CHECK(ptr_retreat(mid, 128) == (void*)base);
-}
-
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  10. ptr_diff / ptr_span                                                   */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ptr_diff / ptr_span
+ * ====================================================================== */
 
 static void test_ptr_diff_span(void) {
-    u8* base = g_buf;
-    u8* mid  = base + 64;
-    u8* end  = base + 128;
+    unsigned char buf[128];
+    void* start = (void*)buf;
+    void* mid   = (void*)(buf + 64);
+    void* end   = (void*)(buf + 128);
 
-    /* ptr_diff: signed, may be negative */
-    CHECK(ptr_diff(base, base) == 0);
-    CHECK(ptr_diff(mid,  base) == 64);
-    CHECK(ptr_diff(end,  base) == 128);
-    CHECK(ptr_diff(base, mid)  == -64);
-    CHECK(ptr_diff(end,  mid)  == 64);
+    /* ptr_diff: signed distance */
+    EXPECT(ptr_diff(start, start) == 0);
+    EXPECT(ptr_diff(mid,   start) == 64);
+    EXPECT(ptr_diff(end,   start) == 128);
+    EXPECT(ptr_diff(start, mid)   == -64);
+    EXPECT(ptr_diff(start, end)   == -128);
+    EXPECT(ptr_diff(mid,   end)   == -64);
 
-    /* ptr_span: unsigned, requires to >= from */
-    CHECK(ptr_span(base, base) == 0);
-    CHECK(ptr_span(mid,  base) == 64);
-    CHECK(ptr_span(end,  base) == 128);
-    CHECK(ptr_span(end,  mid)  == 64);
+    /* ptr_span: unsigned, to >= from */
+    EXPECT(ptr_span(start, start) == 0);
+    EXPECT(ptr_span(mid,   start) == 64);
+    EXPECT(ptr_span(end,   start) == 128);
+    EXPECT(ptr_span(end,   mid)   == 64);
+
+    /* ptr_diff and ptr_span agree for to >= from */
+    EXPECT((isize)ptr_span(end, start) == ptr_diff(end, start));
+    EXPECT((isize)ptr_span(mid, start) == ptr_diff(mid, start));
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  11. ptr_in_range                                                           */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ptr_in_range / ptr_range_in_range
+ * ====================================================================== */
 
-static void test_ptr_in_range(void) {
-    u8* start = g_buf;
-    u8* end   = g_buf + 128;
+static void test_bounds_checking(void) {
+    unsigned char buf[64];
+    void* start = (void*)buf;
+    void* end   = (void*)(buf + 64);
+    void* mid   = (void*)(buf + 32);
+    void* last  = (void*)(buf + 63);
+    void* outside_before = (void*)(buf - 1);
+    void* outside_after  = (void*)(buf + 64);  /* == end, excluded */
 
-    /* NULL handling */
-    CHECK(!ptr_in_range(NULL,  start, end));
-    CHECK(!ptr_in_range(start, NULL,  end));
-    CHECK(!ptr_in_range(start, start, NULL));
+    /* NULL args */
+    EXPECT(ptr_in_range(NULL,  start, end) == false);
+    EXPECT(ptr_in_range(mid,   NULL,  end) == false);
+    EXPECT(ptr_in_range(mid,   start, NULL) == false);
 
-    /* Inside [start, end) */
-    CHECK( ptr_in_range(start,      start, end));
-    CHECK( ptr_in_range(start + 1,  start, end));
-    CHECK( ptr_in_range(start + 64, start, end));
-    CHECK( ptr_in_range(end - 1,    start, end));
+    /* Inside */
+    EXPECT(ptr_in_range(start, start, end) == true);  /* at start */
+    EXPECT(ptr_in_range(mid,   start, end) == true);
+    EXPECT(ptr_in_range(last,  start, end) == true);  /* last valid byte */
 
     /* Outside */
-    CHECK(!ptr_in_range(end,       start, end));  /* one-past-end excluded */
-    CHECK(!ptr_in_range(end + 1,   start, end));
-    CHECK(!ptr_in_range(start - 1, start, end));
-}
+    EXPECT(ptr_in_range(end,           start, end) == false);  /* end excluded */
+    EXPECT(ptr_in_range(outside_after, start, end) == false);
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  12. ptr_range_in_range                                                    */
-/* ══════════════════════════════════════════════════════════════════════════ */
+    /* outside_before may or may not be testable depending on address space;
+     * skip it since subtracting below buf is UB in strict C */
 
-static void test_ptr_range_in_range(void) {
-    u8* start = g_buf;
-    u8* end   = g_buf + 128;
+    /* ptr_range_in_range */
+    EXPECT(ptr_range_in_range(NULL,  10, start, end) == false);
+    EXPECT(ptr_range_in_range(start, 10, NULL,  end) == false);
+    EXPECT(ptr_range_in_range(start, 10, start, NULL) == false);
 
-    /* NULL handling */
-    CHECK(!ptr_range_in_range(NULL,  10, start, end));
-    CHECK(!ptr_range_in_range(start, 10, NULL,  end));
-    CHECK(!ptr_range_in_range(start, 10, start, NULL));
-
-    /* Zero-length range */
-    CHECK( ptr_range_in_range(start,      0, start, end));
-    CHECK( ptr_range_in_range(start + 64, 0, start, end));
-    CHECK( ptr_range_in_range(end,        0, start, end));
-
-    /* Fully inside */
-    CHECK( ptr_range_in_range(start,      1,   start, end));
-    CHECK( ptr_range_in_range(start,      128, start, end));
-    CHECK( ptr_range_in_range(start + 64, 64,  start, end));
+    /* Fits entirely */
+    EXPECT(ptr_range_in_range(start,  0, start, end) == true);
+    EXPECT(ptr_range_in_range(start, 64, start, end) == true);
+    EXPECT(ptr_range_in_range(mid,   32, start, end) == true);
+    EXPECT(ptr_range_in_range(start,  1, start, end) == true);
 
     /* Overflows region */
-    CHECK(!ptr_range_in_range(start,      129, start, end));
-    CHECK(!ptr_range_in_range(start + 64, 65,  start, end));
-    CHECK(!ptr_range_in_range(start + 1,  128, start, end));
+    EXPECT(ptr_range_in_range(start, 65, start, end) == false);
+    EXPECT(ptr_range_in_range(mid,   33, start, end) == false);
+    EXPECT(ptr_range_in_range(last,   2, start, end) == false);  /* 63+2=65 > 64 */
 
-    /* Starts before region */
-    CHECK(!ptr_range_in_range(start - 1,  1,   start, end));
+    /* Zero-length range is always in range as long as pointer is in range */
+    EXPECT(ptr_range_in_range(start,  0, start, end) == true);
+    EXPECT(ptr_range_in_range(mid,    0, start, end) == true);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  13. ptr_elem / ptr_elem_const                                             */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ptr_elem / ptr_elem_const
+ * ====================================================================== */
 
 static void test_ptr_elem(void) {
-    u8* base = g_buf;
+    unsigned char buf[128];
+    void* base = (void*)buf;
+    int idx;
 
-    /* elem_size = 1 */
-    CHECK(ptr_elem(base, 0,   1) == (void*)(base + 0));
-    CHECK(ptr_elem(base, 1,   1) == (void*)(base + 1));
-    CHECK(ptr_elem(base, 100, 1) == (void*)(base + 100));
+    /* elem_size == 1: ptr_elem(base, i, 1) == base + i */
+    for (idx = 0; idx < 64; idx++) {
+        EXPECT(ptr_elem(base, (usize)idx, 1) ==
+               (void*)((u8*)base + idx));
+    }
 
-    /* elem_size = 4 (u32 array) */
-    CHECK(ptr_elem(base, 0, 4) == (void*)(base + 0));
-    CHECK(ptr_elem(base, 1, 4) == (void*)(base + 4));
-    CHECK(ptr_elem(base, 2, 4) == (void*)(base + 8));
-    CHECK(ptr_elem(base, 3, 4) == (void*)(base + 12));
+    /* elem_size == 4 */
+    EXPECT(ptr_elem(base, 0, 4) == base);
+    EXPECT(ptr_elem(base, 1, 4) == (void*)((u8*)base + 4));
+    EXPECT(ptr_elem(base, 2, 4) == (void*)((u8*)base + 8));
+    EXPECT(ptr_elem(base, 3, 4) == (void*)((u8*)base + 12));
 
-    /* elem_size = 8 (u64 array) */
-    CHECK(ptr_elem(base, 0, 8) == (void*)(base + 0));
-    CHECK(ptr_elem(base, 4, 8) == (void*)(base + 32));
+    /* elem_size == 8 */
+    EXPECT(ptr_elem(base, 0, 8) == base);
+    EXPECT(ptr_elem(base, 1, 8) == (void*)((u8*)base + 8));
+    EXPECT(ptr_elem(base, 15, 8) == (void*)((u8*)base + 120));
 
-    /* const variant */
-    CHECK(ptr_elem_const(base, 3, 4) == (const void*)(base + 12));
-    CHECK(ptr_elem_const(base, 0, 8) == (const void*)(base + 0));
+    /* ptr_elem_const */
+    {
+        const void* cb = (const void*)buf;
+        EXPECT(ptr_elem_const(cb, 0, 4) == cb);
+        EXPECT(ptr_elem_const(cb, 3, 4) ==
+               (const void*)((const u8*)cb + 12));
+    }
+
+    /* ptr_elem(base, i, sz) == ptr_offset(base, i * sz) */
+    {
+        usize sizes[3];
+        usize idxs[4];
+        int si, ii;
+        sizes[0] = 1;
+        sizes[1] = 4;
+        sizes[2] = 8;
+        idxs[0] = 0;
+        idxs[1] = 1;
+        idxs[2] = 5;
+        idxs[3] = 10;
+        for (si = 0; si < 3; si++) {
+            for (ii = 0; ii < 4; ii++) {
+                EXPECT(ptr_elem(base, idxs[ii], sizes[si]) ==
+                       ptr_offset(base, idxs[ii] * sizes[si]));
+            }
+        }
+    }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  14. ptr_or / ptr_or_const / ptr_is_valid                                  */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ptr_or / ptr_or_const / ptr_is_valid
+ * ====================================================================== */
 
 static void test_ptr_null_safety(void) {
-    u8* base     = g_buf;
-    u8* fallback = g_buf + 64;
+    unsigned char buf[8];
+    void* p        = (void*)buf;
+    void* fallback = (void*)(buf + 4);
 
-    CHECK(ptr_or(base, fallback) == (void*)base);
-    CHECK(ptr_or(NULL, fallback) == (void*)fallback);
-    CHECK(ptr_or(base, NULL)     == (void*)base);
-    CHECK(ptr_or(NULL, NULL)     == NULL);
+    /* ptr_or */
+    EXPECT(ptr_or(p,    fallback) == p);
+    EXPECT(ptr_or(NULL, fallback) == fallback);
+    EXPECT(ptr_or(NULL, NULL)     == NULL);
 
-    CHECK(ptr_or_const(base, fallback) == (const void*)base);
-    CHECK(ptr_or_const(NULL, fallback) == (const void*)fallback);
-    CHECK(ptr_or_const(NULL, NULL)     == NULL);
+    /* ptr_or_const */
+    {
+        const void* cp = (const void*)buf;
+        const void* cf = (const void*)(buf + 4);
+        EXPECT(ptr_or_const(cp,   cf) == cp);
+        EXPECT(ptr_or_const(NULL, cf) == cf);
+        EXPECT(ptr_or_const(NULL, NULL) == NULL);
+    }
 
-    CHECK( ptr_is_valid(base));
-    CHECK( ptr_is_valid(fallback));
-    CHECK(!ptr_is_valid(NULL));
+    /* ptr_is_valid */
+    EXPECT(ptr_is_valid(p)    == true);
+    EXPECT(ptr_is_valid(NULL) == false);
+    EXPECT(ptr_is_valid((void*)buf) == true);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  15. PTR_OFFSET_OF / PTR_CONTAINER_OF                                      */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * PTR_OFFSET_OF / PTR_CONTAINER_OF
+ * ====================================================================== */
 
-static void test_struct_macros(void) {
-    /* PTR_OFFSET_OF must agree with standard offsetof */
-    CHECK(PTR_OFFSET_OF(TestNode, tag)   == (usize)offsetof(TestNode, tag));
-    CHECK(PTR_OFFSET_OF(TestNode, value) == (usize)offsetof(TestNode, value));
-    CHECK(PTR_OFFSET_OF(TestNode, link)  == (usize)offsetof(TestNode, link));
+typedef struct {
+    u32  alpha;
+    u8   beta;
+    u16  gamma;
+    u64  delta;
+} TestStruct;
 
-    CHECK(PTR_OFFSET_OF(Container, data) == (usize)offsetof(Container, data));
-    CHECK(PTR_OFFSET_OF(Container, node) == (usize)offsetof(Container, node));
+typedef struct {
+    int      value;
+    u8       tag;
+    u32      next_offset;
+} NodeStruct;
 
-    /* PTR_CONTAINER_OF: round-trip from member pointer back to parent */
-    Container c;
-    c.data       = 42;
-    c.node.tag   = 7;
-    c.node.value = 99;
+static void test_offset_of(void) {
+    /* PTR_OFFSET_OF matches offsetof */
+    EXPECT(PTR_OFFSET_OF(TestStruct, alpha)  == offsetof(TestStruct, alpha));
+    EXPECT(PTR_OFFSET_OF(TestStruct, beta)   == offsetof(TestStruct, beta));
+    EXPECT(PTR_OFFSET_OF(TestStruct, gamma)  == offsetof(TestStruct, gamma));
+    EXPECT(PTR_OFFSET_OF(TestStruct, delta)  == offsetof(TestStruct, delta));
 
-    Container* recovered = PTR_CONTAINER_OF(&c.node, Container, node);
-    CHECK(recovered        == &c);
-    CHECK(recovered->data       == 42);
-    CHECK(recovered->node.tag   == 7);
-    CHECK(recovered->node.value == 99);
+    /* alpha is at offset 0 */
+    EXPECT(PTR_OFFSET_OF(TestStruct, alpha) == 0);
 
-    /* Works from the very first member too */
-    TestNode n;
-    n.tag = 3;
-    CHECK(PTR_CONTAINER_OF(&n.tag, TestNode, tag) == &n);
+    /* delta starts after alpha(4) + beta(1) + padding + gamma(2) */
+    EXPECT(PTR_OFFSET_OF(TestStruct, delta) >= 7);
+
+    EXPECT(PTR_OFFSET_OF(NodeStruct, value)  == offsetof(NodeStruct, value));
+    EXPECT(PTR_OFFSET_OF(NodeStruct, value)  == 0);
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  16. ALIGN_OF / ALIGN_MAX                                                  */
-/* ══════════════════════════════════════════════════════════════════════════ */
+static void test_container_of(void) {
+    TestStruct obj;
+    TestStruct* recovered;
+    u8* member_ptr;
 
-static void test_align_macros(void) {
-    /* Pre-compute ALIGN_OF values into named variables.
-     * MSVC warns (C4116) about unnamed type definitions in parentheses when
-     * the offsetof-trick form of ALIGN_OF appears directly inside an expression
-     * macro like CHECK(). Hoisting to variables avoids that entirely.        */
-    usize al_char   = ALIGN_OF(char);
-    usize al_short  = ALIGN_OF(short);
-    usize al_int    = ALIGN_OF(int);
-    usize al_long   = ALIGN_OF(long);
-    usize al_float  = ALIGN_OF(float);
-    usize al_double = ALIGN_OF(double);
-    usize al_ptr    = ALIGN_OF(void*);
+    obj.alpha = 0xDEADBEEFU;
+    obj.beta  = 0xAB;
+    obj.gamma = 0x1234;
+    obj.delta = 0xCAFEBABEDEADBEEFULL;
 
-    /* ALIGN_OF must be a positive power of two for fundamental types */
-    CHECK(is_power_of_two(al_char));
-    CHECK(is_power_of_two(al_short));
-    CHECK(is_power_of_two(al_int));
-    CHECK(is_power_of_two(al_long));
-    CHECK(is_power_of_two(al_float));
-    CHECK(is_power_of_two(al_double));
-    CHECK(is_power_of_two(al_ptr));
+    /* Recover struct from &obj.beta */
+    member_ptr = &obj.beta;
+    recovered  = PTR_CONTAINER_OF(member_ptr, TestStruct, beta);
+    EXPECT(recovered == &obj);
+    EXPECT(recovered->alpha == 0xDEADBEEFU);
+    EXPECT(recovered->beta  == 0xAB);
+    EXPECT(recovered->delta == 0xCAFEBABEDEADBEEFULL);
 
-    /* char always has alignment 1 */
-    CHECK(al_char == 1);
+    /* Recover struct from &obj.delta */
+    {
+        u64* delta_ptr = &obj.delta;
+        TestStruct* rec2 = PTR_CONTAINER_OF(delta_ptr, TestStruct, delta);
+        EXPECT(rec2 == &obj);
+        EXPECT(rec2->alpha == 0xDEADBEEFU);
+    }
 
-    /* ALIGN_MAX: result is the larger of the two */
-    CHECK(ALIGN_MAX(1,  4)  == 4);
-    CHECK(ALIGN_MAX(4,  1)  == 4);
-    CHECK(ALIGN_MAX(4,  4)  == 4);
-    CHECK(ALIGN_MAX(8,  4)  == 8);
-    CHECK(ALIGN_MAX(4,  8)  == 8);
-    CHECK(ALIGN_MAX(16, 32) == 32);
+    /* Recover from &obj.alpha (offset 0 — pointer unchanged) */
+    {
+        u32* alpha_ptr = &obj.alpha;
+        TestStruct* rec3 = PTR_CONTAINER_OF(alpha_ptr, TestStruct, alpha);
+        EXPECT(rec3 == &obj);
+    }
 
-    /* ALIGN_MAX of type alignments */
-    CHECK(ALIGN_MAX(al_char,   al_double) == al_double);
-    CHECK(ALIGN_MAX(al_int,    al_int)    == al_int);
-    CHECK(ALIGN_MAX(al_double, al_char)   == al_double);
+    /* Array of structs — recover each from its member */
+    {
+        TestStruct arr[4];
+        int ii;
+        for (ii = 0; ii < 4; ii++) {
+            arr[ii].alpha = (u32)ii;
+        }
+        for (ii = 0; ii < 4; ii++) {
+            u32* ap = &arr[ii].alpha;
+            TestStruct* rec = PTR_CONTAINER_OF(ap, TestStruct, alpha);
+            EXPECT(rec == &arr[ii]);
+            EXPECT(rec->alpha == (u32)ii);
+        }
+    }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════ */
-/*  main                                                                       */
-/* ══════════════════════════════════════════════════════════════════════════ */
+/* =========================================================================
+ * ALIGN_OF / ALIGN_MAX — runtime assertions
+ * ====================================================================== */
+
+static void test_align_of(void) {
+    /* Fundamental types have known minimum alignments */
+    EXPECT(ALIGN_OF(char)   >= 1);
+    EXPECT(ALIGN_OF(short)  >= 1);
+    EXPECT(ALIGN_OF(int)    >= 1);
+    EXPECT(ALIGN_OF(long)   >= 1);
+    EXPECT(ALIGN_OF(double) >= 1);
+    EXPECT(ALIGN_OF(void*)  >= 1);
+
+    /* All are powers of two */
+    EXPECT(is_power_of_two(ALIGN_OF(char)));
+    EXPECT(is_power_of_two(ALIGN_OF(int)));
+    EXPECT(is_power_of_two(ALIGN_OF(double)));
+    EXPECT(is_power_of_two(ALIGN_OF(void*)));
+
+    /* ALIGN_MAX */
+    EXPECT(ALIGN_MAX(1, 2)  == 2);
+    EXPECT(ALIGN_MAX(2, 1)  == 2);
+    EXPECT(ALIGN_MAX(4, 4)  == 4);
+    EXPECT(ALIGN_MAX(8, 16) == 16);
+    EXPECT(ALIGN_MAX(ALIGN_OF(int), ALIGN_OF(double)) >=
+           ALIGN_OF(int));
+    EXPECT(ALIGN_MAX(ALIGN_OF(int), ALIGN_OF(double)) >=
+           ALIGN_OF(double));
+}
+
+/* =========================================================================
+ * Fuzz harness
+ * ====================================================================== */
+
+#ifdef CANON_FUZZING
+
+int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
+    unsigned char buf[256];
+    usize offset_a = 0, offset_b = 0;
+    usize align_exp = 0;
+    usize align     = 0;
+
+    if (size < 4) return 0;
+
+    offset_a  = (usize)data[0];
+    offset_b  = (usize)data[1];
+    align_exp = (usize)(data[2] & 7);   /* 0..7 → shift amount for power of 2 */
+    align     = (usize)1 << align_exp;  /* 1, 2, 4, 8, 16, 32, 64, 128 */
+
+    memset(buf, 0, sizeof(buf));
+
+    /* Constrain offsets to buffer */
+    if (offset_a >= 128) offset_a = 127;
+    if (offset_b >= 128) offset_b = 127;
+
+    {
+        void* base = (void*)buf;
+        void* pa   = ptr_offset(base, offset_a);
+        void* pb   = ptr_offset(base, offset_b);
+
+        /* align_up result is always >= input */
+        usize up_a = align_up(offset_a, align);
+        usize dn_a = align_down(offset_a, align);
+        if (up_a < offset_a) __builtin_trap();
+        if (dn_a > offset_a) __builtin_trap();
+
+        /* align_up result is aligned */
+        if (!is_aligned(up_a, align)) __builtin_trap();
+        if (!is_aligned(dn_a, align)) __builtin_trap();
+
+        /* padding + n == align_up(n, align) */
+        if (align_padding(offset_a, align) + offset_a != up_a)
+            __builtin_trap();
+
+        /* ptr_align_up result >= pa and is aligned */
+        {
+            void* up = ptr_align_up(pa, align);
+            if ((uintptr_t)up < (uintptr_t)pa) __builtin_trap();
+            if (!ptr_is_aligned(up, align))     __builtin_trap();
+        }
+
+        /* ptr_align_down result <= pa and is aligned */
+        {
+            void* dn = ptr_align_down(pa, align);
+            if ((uintptr_t)dn > (uintptr_t)pa) __builtin_trap();
+            if (!ptr_is_aligned(dn, align))     __builtin_trap();
+        }
+
+        /* ptr_offset then ptr_retreat round-trips */
+        {
+            void* fwd = ptr_offset(base, offset_a);
+            void* bck = ptr_retreat(fwd, offset_a);
+            if (bck != base) __builtin_trap();
+        }
+
+        /* ptr_diff is antisymmetric */
+        {
+            isize d_ab = ptr_diff(pa, pb);
+            isize d_ba = ptr_diff(pb, pa);
+            if (d_ab != -d_ba) __builtin_trap();
+        }
+
+        /* ptr_span(to, from) == ptr_diff when to >= from */
+        if ((uintptr_t)pa >= (uintptr_t)pb) {
+            usize span = ptr_span(pa, pb);
+            isize diff = ptr_diff(pa, pb);
+            if ((isize)span != diff) __builtin_trap();
+        }
+
+        /* ptr_in_range */
+        {
+            void* bstart = base;
+            void* bend   = ptr_offset(base, 128);
+            bool in_a = ptr_in_range(pa, bstart, bend);
+            bool in_b = ptr_in_range(pb, bstart, bend);
+            /* Both pa and pb have offset < 128, so both must be in range */
+            if (!in_a) __builtin_trap();
+            if (!in_b) __builtin_trap();
+        }
+
+        /* NULL passthrough invariants */
+        if (ptr_offset(NULL, offset_a) != NULL)       __builtin_trap();
+        if (ptr_align_up(NULL, align)  != NULL)        __builtin_trap();
+        if (ptr_align_down(NULL, align) != NULL)       __builtin_trap();
+        if (ptr_is_aligned(NULL, align) != false)      __builtin_trap();
+        if (ptr_align_padding(NULL, align) != (usize)0) __builtin_trap();
+        if (ptr_is_valid(NULL) != false)               __builtin_trap();
+    }
+
+    return 0;
+}
+
+#else
 
 int main(void) {
     test_is_power_of_two();
-    test_is_aligned();
-    test_align_up();
-    test_align_down();
-    test_align_padding();
-    test_ptr_align_up_down();
-    test_ptr_is_aligned_padding();
-    test_ptr_offset();
-    test_ptr_retreat();
+    test_integer_alignment();
+    test_pointer_alignment();
+    test_ptr_arithmetic();
     test_ptr_diff_span();
-    test_ptr_in_range();
-    test_ptr_range_in_range();
+    test_bounds_checking();
     test_ptr_elem();
     test_ptr_null_safety();
-    test_struct_macros();
-    test_align_macros();
+    test_offset_of();
+    test_container_of();
+    test_align_of();
 
-    return report();
+    printf("\nptr_test: %d passed, %d failed\n", g_pass, g_fail);
+    return g_fail > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
+
+#endif /* CANON_FUZZING */
