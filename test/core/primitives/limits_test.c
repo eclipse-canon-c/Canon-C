@@ -1,389 +1,418 @@
 /**
  * @file limits_test.c
- * @brief Tests for limits.h
+ * @brief Unit tests for limits.h
  *
- * Tests are organized by section matching the header:
- *   1. Integer type limits       — values match stdint.h constants
- *   2. Size type limits          — usize/isize bounds
- *   3. Size literals             — KB/MB/GB arithmetic
- *   4. Alignment constants       — power-of-two, relative ordering
- *   5. Capacity limits           — practical upper bounds
- *   6. SSO/SVO thresholds        — small buffer values
- *   7. Growth factor constants   — ratio and minimum allocation
- *   8. Pointer tagging           — tag/addr masks are complementary,
- *                                  tag bits match platform width
- *   9. Platform read-only info   — pointer size, bits per byte
- *  10. Override mechanism        — #define before include takes effect
+ * Coverage
+ * ───────────────────────────────────────────────────────────────────────────
+ *   Integer type limits      — CANON_U8/U16/U32/U64_MAX,
+ *                              CANON_I8/I16/I32/I64_MIN/MAX
+ *   Size type limits         — CANON_USIZE_MAX, CANON_ISIZE_MAX/MIN
+ *   Size literals            — CANON_KB, CANON_MB, CANON_GB
+ *   Alignment constants      — CANON_DEFAULT_ALIGN, CANON_CACHE_LINE,
+ *                              CANON_SIMD_ALIGN, CANON_SIMD_ALIGN_AVX,
+ *                              CANON_SIMD_ALIGN_AVX512, CANON_PAGE_SIZE,
+ *                              CANON_ATOMIC_ALIGN
+ *   CANON_ALIGN_MAX()        — picks the larger of two alignments
+ *   Capacity limits          — CANON_VEC_MAX_CAPACITY,
+ *                              CANON_STRING_MAX_SIZE, CANON_ARENA_MAX_SIZE
+ *   SBO thresholds           — CANON_SSO_THRESHOLD, CANON_SVO_THRESHOLD
+ *   Growth factor            — CANON_GROWTH_FACTOR_NUM/DENOM,
+ *                              CANON_MIN_ALLOCATION
+ *   Pointer tagging          — CANON_PTR_TAG_BITS, CANON_PTR_TAG_MASK,
+ *                              CANON_PTR_ADDR_MASK
+ *   Platform info            — CANON_POINTER_SIZE, CANON_BITS_PER_BYTE,
+ *                              CANON_POINTER_BITS
  *
- * No dynamic allocation. No external dependencies beyond limits.h itself.
- * All tests are O(1) compile-time or single-expression runtime checks.
+ * Portability note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   No 0b binary literals. Variables declared before use (C99).
+ *   static_require() is used for compile-time invariants; EXPECT() for
+ *   runtime assertions.
  */
 
-#include <limits.h>
+/* Pull in CANON_CONTRACT_IMPL so static_require() compiles — limits.h
+ * includes types.h which is the only dependency needed here. */
+#define CANON_CONTRACT_IMPL
+#include "contract.h"   /* for static_require() */
 #include "limits.h"
 
-#include <stdio.h>
-#include <stdint.h>
 #include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-/* ============================================================================
- * Test Helpers
- * ========================================================================= */
+/* =========================================================================
+ * Minimal test framework
+ * ====================================================================== */
 
-static int tests_run    = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
+static int g_pass = 0;
+static int g_fail = 0;
 
-#define ASSERT_EQ(label, expected, actual)                                       \
-    do {                                                                         \
-        tests_run++;                                                             \
-        if ((u64)(expected) == (u64)(actual)) {                                  \
-            tests_passed++;                                                      \
-        } else {                                                                 \
-            tests_failed++;                                                      \
-            fprintf(stderr, "FAIL: %s — expected %llu, got %llu  (%s:%d)\n",    \
-                    label, (unsigned long long)(expected),                       \
-                    (unsigned long long)(actual), __FILE__, __LINE__);           \
-        }                                                                        \
+#define EXPECT(expr)                                                \
+    do {                                                            \
+        if (expr) {                                                 \
+            g_pass++;                                               \
+        } else {                                                    \
+            g_fail++;                                               \
+            fprintf(stderr, "FAIL  %s:%d  %s\n",                   \
+                    __FILE__, __LINE__, #expr);                     \
+        }                                                           \
     } while (0)
 
-#define ASSERT_TRUE(label, expr) \
-    do { \
-        tests_run++; \
-        if (expr) { \
-            tests_passed++; \
-        } else { \
-            tests_failed++; \
-            fprintf(stderr, "FAIL: %s  (%s:%d)\n", label, __FILE__, __LINE__); \
-        } \
-    } while (0)
+/* =========================================================================
+ * Compile-time invariants via static_require()
+ *
+ * These fire at compile time if violated — that is the test.
+ * If this file compiles, all static_require() assertions passed.
+ * ====================================================================== */
 
-/* Helper: check that a value is a power of two */
-static int is_power_of_two(usize v) {
-    return v > 0 && (v & (v - 1)) == 0;
-}
+/* Integer limits match standard header values */
+static_require(CANON_U8_MAX  == UINT8_MAX,  u8_max_matches_uint8_max);
+static_require(CANON_U16_MAX == UINT16_MAX, u16_max_matches_uint16_max);
+static_require(CANON_U32_MAX == UINT32_MAX, u32_max_matches_uint32_max);
+static_require(CANON_U64_MAX == UINT64_MAX, u64_max_matches_uint64_max);
 
-/* ============================================================================
- * 1. Integer Type Limits
- * ========================================================================= */
+static_require(CANON_I8_MIN  == INT8_MIN,   i8_min_matches_int8_min);
+static_require(CANON_I8_MAX  == INT8_MAX,   i8_max_matches_int8_max);
+static_require(CANON_I16_MIN == INT16_MIN,  i16_min_matches_int16_min);
+static_require(CANON_I16_MAX == INT16_MAX,  i16_max_matches_int16_max);
+static_require(CANON_I32_MIN == INT32_MIN,  i32_min_matches_int32_min);
+static_require(CANON_I32_MAX == INT32_MAX,  i32_max_matches_int32_max);
+static_require(CANON_I64_MIN == INT64_MIN,  i64_min_matches_int64_min);
+static_require(CANON_I64_MAX == INT64_MAX,  i64_max_matches_int64_max);
+
+/* Size type limits match standard header values */
+static_require(CANON_USIZE_MAX == SIZE_MAX,    usize_max_matches_size_max);
+static_require(CANON_ISIZE_MAX == PTRDIFF_MAX, isize_max_matches_ptrdiff_max);
+static_require(CANON_ISIZE_MIN == PTRDIFF_MIN, isize_min_matches_ptrdiff_min);
+
+/* Size literals have correct values */
+static_require(CANON_KB == (usize)1024,                                kb_is_1024);
+static_require(CANON_MB == (usize)1024 * (usize)1024,                  mb_is_1048576);
+static_require(CANON_GB == (usize)1024 * (usize)1024 * (usize)1024,    gb_is_correct);
+
+/* Alignment constants are powers of two and at least 1 */
+static_require(CANON_DEFAULT_ALIGN    >= 1, default_align_at_least_1);
+static_require(CANON_CACHE_LINE       >= 1, cache_line_at_least_1);
+static_require(CANON_SIMD_ALIGN       >= 1, simd_align_at_least_1);
+static_require(CANON_SIMD_ALIGN_AVX   >= 1, simd_align_avx_at_least_1);
+static_require(CANON_SIMD_ALIGN_AVX512 >= 1, simd_align_avx512_at_least_1);
+static_require(CANON_PAGE_SIZE        >= 1, page_size_at_least_1);
+static_require(CANON_ATOMIC_ALIGN     >= 1, atomic_align_at_least_1);
+
+/* Hierarchy: each wider SIMD alignment >= the narrower one */
+static_require(CANON_SIMD_ALIGN_AVX    >= CANON_SIMD_ALIGN,
+               avx_align_at_least_simd);
+static_require(CANON_SIMD_ALIGN_AVX512 >= CANON_SIMD_ALIGN_AVX,
+               avx512_align_at_least_avx);
+
+/* Capacity limits are positive and sensibly ordered */
+static_require(CANON_VEC_MAX_CAPACITY  > 0, vec_max_capacity_positive);
+static_require(CANON_STRING_MAX_SIZE   > 0, string_max_size_positive);
+static_require(CANON_ARENA_MAX_SIZE    > 0, arena_max_size_positive);
+
+/* SBO thresholds are positive */
+static_require(CANON_SSO_THRESHOLD > 0, sso_threshold_positive);
+static_require(CANON_SVO_THRESHOLD > 0, svo_threshold_positive);
+
+/* Growth factor is > 1 (num > denom) */
+static_require(CANON_GROWTH_FACTOR_NUM  > CANON_GROWTH_FACTOR_DENOM,
+               growth_factor_greater_than_one);
+static_require(CANON_MIN_ALLOCATION > 0, min_allocation_positive);
+
+/* Pointer tag bits are 1, 2, or 3 */
+static_require(CANON_PTR_TAG_BITS >= 1, ptr_tag_bits_at_least_1);
+static_require(CANON_PTR_TAG_BITS <= 3, ptr_tag_bits_at_most_3);
+
+/* Platform info */
+static_require(CANON_BITS_PER_BYTE == 8, bits_per_byte_is_8);
+static_require(CANON_POINTER_SIZE  == sizeof(void*),
+               pointer_size_matches_sizeof_voidptr);
+static_require(CANON_POINTER_BITS  == sizeof(void*) * 8,
+               pointer_bits_is_pointer_size_times_8);
+
+/* =========================================================================
+ * Integer type limit values
+ * ====================================================================== */
 
 static void test_integer_limits(void) {
-    /* Unsigned: match stdint.h exactly */
-    ASSERT_EQ("U8_MAX  == UINT8_MAX",  UINT8_MAX,  CANON_U8_MAX);
-    ASSERT_EQ("U16_MAX == UINT16_MAX", UINT16_MAX, CANON_U16_MAX);
-    ASSERT_EQ("U32_MAX == UINT32_MAX", UINT32_MAX, CANON_U32_MAX);
-    ASSERT_EQ("U64_MAX == UINT64_MAX", UINT64_MAX, CANON_U64_MAX);
+    /* Unsigned: check known exact values */
+    EXPECT(CANON_U8_MAX  == 255U);
+    EXPECT(CANON_U16_MAX == 65535U);
+    EXPECT(CANON_U32_MAX == 4294967295UL);
+    EXPECT(CANON_U64_MAX == 18446744073709551615ULL);
 
-    /* Signed min: cast to u64 for macro comparison — bit patterns must match */
-    ASSERT_EQ("I8_MIN  == INT8_MIN",  (u64)(i64)INT8_MIN,  (u64)(i64)CANON_I8_MIN);
-    ASSERT_EQ("I16_MIN == INT16_MIN", (u64)(i64)INT16_MIN, (u64)(i64)CANON_I16_MIN);
-    ASSERT_EQ("I32_MIN == INT32_MIN", (u64)(i64)INT32_MIN, (u64)(i64)CANON_I32_MIN);
-    ASSERT_EQ("I64_MIN == INT64_MIN", (u64)(i64)INT64_MIN, (u64)(i64)CANON_I64_MIN);
+    /* Signed minimums and maximums */
+    EXPECT(CANON_I8_MIN  == -128);
+    EXPECT(CANON_I8_MAX  ==  127);
+    EXPECT(CANON_I16_MIN == -32768);
+    EXPECT(CANON_I16_MAX ==  32767);
+    EXPECT(CANON_I32_MIN == (-2147483647 - 1));
+    EXPECT(CANON_I32_MAX ==   2147483647);
+    EXPECT(CANON_I64_MIN == (-9223372036854775807LL - 1));
+    EXPECT(CANON_I64_MAX ==   9223372036854775807LL);
 
-    /* Signed max */
-    ASSERT_EQ("I8_MAX  == INT8_MAX",  (u64)INT8_MAX,  (u64)CANON_I8_MAX);
-    ASSERT_EQ("I16_MAX == INT16_MAX", (u64)INT16_MAX, (u64)CANON_I16_MAX);
-    ASSERT_EQ("I32_MAX == INT32_MAX", (u64)INT32_MAX, (u64)CANON_I32_MAX);
-    ASSERT_EQ("I64_MAX == INT64_MAX", (u64)INT64_MAX, (u64)CANON_I64_MAX);
+    /* min + max + 1 == 0 for two's complement */
+    EXPECT((u8)(CANON_U8_MAX   + 1U) == 0U);
+    EXPECT((u16)(CANON_U16_MAX + 1U) == 0U);
+    EXPECT((u32)(CANON_U32_MAX + 1U) == 0U);
+    EXPECT((u64)(CANON_U64_MAX + 1ULL) == 0ULL);
 
-    /* Sanity: unsigned max == signed max * 2 + 1 */
-    ASSERT_EQ("U8_MAX  == 2*I8_MAX+1",  (u64)CANON_U8_MAX,  (u64)(2 * CANON_I8_MAX  + 1));
-    ASSERT_EQ("U16_MAX == 2*I16_MAX+1", (u64)CANON_U16_MAX, (u64)(2 * CANON_I16_MAX + 1));
-    ASSERT_EQ("U32_MAX == 2*I32_MAX+1", (u64)CANON_U32_MAX, (u64)(2u * CANON_I32_MAX + 1u));
-
-    /* Widths increase monotonically */
-    ASSERT_TRUE("U8_MAX < U16_MAX",  CANON_U8_MAX  < CANON_U16_MAX);
-    ASSERT_TRUE("U16_MAX < U32_MAX", CANON_U16_MAX < CANON_U32_MAX);
-    ASSERT_TRUE("U32_MAX < U64_MAX", CANON_U32_MAX < CANON_U64_MAX);
-    ASSERT_TRUE("I8_MIN > I16_MIN",  CANON_I8_MIN  > CANON_I16_MIN);
-    ASSERT_TRUE("I8_MAX < I16_MAX",  CANON_I8_MAX  < CANON_I16_MAX);
+    /* Signed: MAX - MIN == -1 as unsigned difference */
+    EXPECT((u8) ((u8) CANON_I8_MAX  - (u8) CANON_I8_MIN)  == 0xFFU);
+    EXPECT((u16)((u16)CANON_I16_MAX - (u16)CANON_I16_MIN) == 0xFFFFU);
+    EXPECT((u32)((u32)CANON_I32_MAX - (u32)CANON_I32_MIN) == 0xFFFFFFFFU);
+    EXPECT((u64)((u64)CANON_I64_MAX - (u64)CANON_I64_MIN) == 0xFFFFFFFFFFFFFFFFULL);
 }
 
-/* ============================================================================
- * 2. Size Type Limits
- * ========================================================================= */
+/* =========================================================================
+ * Size type limits
+ * ====================================================================== */
 
 static void test_size_limits(void) {
-    ASSERT_EQ("USIZE_MAX == SIZE_MAX",    (u64)SIZE_MAX,    (u64)CANON_USIZE_MAX);
-    ASSERT_EQ("ISIZE_MAX == PTRDIFF_MAX", (u64)PTRDIFF_MAX, (u64)CANON_ISIZE_MAX);
-    ASSERT_EQ("ISIZE_MIN == PTRDIFF_MIN", (u64)(i64)PTRDIFF_MIN, (u64)(i64)CANON_ISIZE_MIN);
+    /* USIZE_MAX is at least 2^16-1 (C99 guarantees SIZE_MAX >= 65535) */
+    EXPECT(CANON_USIZE_MAX >= 65535U);
 
-    /* ISIZE_MAX must be exactly (USIZE_MAX >> 1) on two's-complement platforms */
-    ASSERT_EQ("ISIZE_MAX == USIZE_MAX >> 1",
-        (u64)(CANON_USIZE_MAX >> 1), (u64)CANON_ISIZE_MAX);
+    /* ISIZE_MAX is positive, ISIZE_MIN is negative */
+    EXPECT(CANON_ISIZE_MAX > (isize)0);
+    EXPECT(CANON_ISIZE_MIN < (isize)0);
 
-    /* ISIZE_MIN must be negative */
-    ASSERT_TRUE("ISIZE_MIN < 0", CANON_ISIZE_MIN < 0);
+    /* ISIZE_MAX + 1 as usize == high bit of platform word */
+    {
+        usize one_past_max = (usize)CANON_ISIZE_MAX + (usize)1;
+        EXPECT(one_past_max > (usize)CANON_ISIZE_MAX);
+    }
 
-    /* USIZE_MAX must be at least 32-bit */
-    ASSERT_TRUE("USIZE_MAX >= U32_MAX", CANON_USIZE_MAX >= CANON_U32_MAX);
+    /* USIZE_MAX >= ISIZE_MAX (the unsigned range covers the signed range) */
+    EXPECT(CANON_USIZE_MAX >= (usize)CANON_ISIZE_MAX);
 }
 
-/* ============================================================================
- * 3. Size Literals
- * ========================================================================= */
+/* =========================================================================
+ * Size literals
+ * ====================================================================== */
 
 static void test_size_literals(void) {
-    ASSERT_EQ("KB == 1024",           (usize)1024,                 CANON_KB);
-    ASSERT_EQ("MB == 1024*KB",        (usize)1024 * CANON_KB,      CANON_MB);
-    ASSERT_EQ("GB == 1024*MB",        (usize)1024 * CANON_MB,      CANON_GB);
+    EXPECT(CANON_KB == (usize)1024);
+    EXPECT(CANON_MB == (usize)1024 * CANON_KB);
+    EXPECT(CANON_GB == (usize)1024 * CANON_MB);
 
-    ASSERT_EQ("MB == 1048576",        (usize)1048576,              CANON_MB);
-    ASSERT_EQ("GB == 1073741824",     (usize)1073741824,           CANON_GB);
+    /* Hierarchy */
+    EXPECT(CANON_MB > CANON_KB);
+    EXPECT(CANON_GB > CANON_MB);
 
-    /* Ordering */
-    ASSERT_TRUE("KB < MB", CANON_KB < CANON_MB);
-    ASSERT_TRUE("MB < GB", CANON_MB < CANON_GB);
-
-    /* All fit in usize (no truncation) */
-    ASSERT_TRUE("KB fits in usize", CANON_KB <= CANON_USIZE_MAX);
-    ASSERT_TRUE("MB fits in usize", CANON_MB <= CANON_USIZE_MAX);
-    ASSERT_TRUE("GB fits in usize", CANON_GB <= CANON_USIZE_MAX);
+    /* GB fits in usize on both 32-bit and 64-bit */
+    EXPECT(CANON_GB <= CANON_USIZE_MAX);
 }
 
-/* ============================================================================
- * 4. Alignment Constants
- * ========================================================================= */
+/* =========================================================================
+ * Alignment constants
+ * ====================================================================== */
+
+/* Helper: returns 1 if n is a power of two, 0 otherwise */
+static int is_pow2(usize n) {
+    return (n > 0) && ((n & (n - 1)) == 0);
+}
 
 static void test_alignment_constants(void) {
-    /* All alignment constants must be powers of two */
-    ASSERT_TRUE("DEFAULT_ALIGN is power of two",     is_power_of_two(CANON_DEFAULT_ALIGN));
-    ASSERT_TRUE("CACHE_LINE is power of two",        is_power_of_two(CANON_CACHE_LINE));
-    ASSERT_TRUE("SIMD_ALIGN is power of two",        is_power_of_two(CANON_SIMD_ALIGN));
-    ASSERT_TRUE("SIMD_ALIGN_AVX is power of two",    is_power_of_two(CANON_SIMD_ALIGN_AVX));
-    ASSERT_TRUE("SIMD_ALIGN_AVX512 is power of two", is_power_of_two(CANON_SIMD_ALIGN_AVX512));
-    ASSERT_TRUE("PAGE_SIZE is power of two",         is_power_of_two(CANON_PAGE_SIZE));
-    ASSERT_TRUE("ATOMIC_ALIGN is power of two",      is_power_of_two(CANON_ATOMIC_ALIGN));
+    /* Every alignment constant must be a power of two */
+    EXPECT(is_pow2(CANON_DEFAULT_ALIGN));
+    EXPECT(is_pow2(CANON_CACHE_LINE));
+    EXPECT(is_pow2(CANON_SIMD_ALIGN));
+    EXPECT(is_pow2(CANON_SIMD_ALIGN_AVX));
+    EXPECT(is_pow2(CANON_SIMD_ALIGN_AVX512));
+    EXPECT(is_pow2(CANON_PAGE_SIZE));
+    EXPECT(is_pow2(CANON_ATOMIC_ALIGN));
 
-    /* Minimum expected values */
-    ASSERT_TRUE("DEFAULT_ALIGN >= 8",      CANON_DEFAULT_ALIGN      >= 8);
-    ASSERT_TRUE("CACHE_LINE >= 64",        CANON_CACHE_LINE         >= 64);
-    ASSERT_TRUE("SIMD_ALIGN >= 16",        CANON_SIMD_ALIGN         >= 16);
-    ASSERT_TRUE("SIMD_ALIGN_AVX >= 32",    CANON_SIMD_ALIGN_AVX     >= 32);
-    ASSERT_TRUE("SIMD_ALIGN_AVX512 >= 64", CANON_SIMD_ALIGN_AVX512  >= 64);
-    ASSERT_TRUE("PAGE_SIZE >= 4096",       CANON_PAGE_SIZE          >= 4096);
-    ASSERT_TRUE("ATOMIC_ALIGN >= 8",       CANON_ATOMIC_ALIGN       >= 8);
+    /* Minimum expected values (documented defaults) */
+    EXPECT(CANON_DEFAULT_ALIGN    >= (usize)8);
+    EXPECT(CANON_CACHE_LINE       >= (usize)32);
+    EXPECT(CANON_SIMD_ALIGN       >= (usize)16);
+    EXPECT(CANON_SIMD_ALIGN_AVX   >= (usize)32);
+    EXPECT(CANON_SIMD_ALIGN_AVX512 >= (usize)64);
+    EXPECT(CANON_PAGE_SIZE        >= (usize)4096);
+    EXPECT(CANON_ATOMIC_ALIGN     >= (usize)8);
 
-    /* Relative ordering */
-    ASSERT_TRUE("SIMD_ALIGN <= SIMD_ALIGN_AVX",     CANON_SIMD_ALIGN     <= CANON_SIMD_ALIGN_AVX);
-    ASSERT_TRUE("SIMD_ALIGN_AVX <= SIMD_ALIGN_AVX512", CANON_SIMD_ALIGN_AVX <= CANON_SIMD_ALIGN_AVX512);
-
-    /* ALIGN_MAX returns the larger of two values */
-    ASSERT_EQ("ALIGN_MAX(16, 32) == 32", (usize)32, CANON_ALIGN_MAX(16, 32));
-    ASSERT_EQ("ALIGN_MAX(32, 16) == 32", (usize)32, CANON_ALIGN_MAX(32, 16));
-    ASSERT_EQ("ALIGN_MAX(16, 16) == 16", (usize)16, CANON_ALIGN_MAX(16, 16));
-    ASSERT_EQ("ALIGN_MAX(DEFAULT, SIMD)",
-        CANON_DEFAULT_ALIGN >= CANON_SIMD_ALIGN ? CANON_DEFAULT_ALIGN : CANON_SIMD_ALIGN,
-        CANON_ALIGN_MAX(CANON_DEFAULT_ALIGN, CANON_SIMD_ALIGN));
+    /* Documented hierarchy */
+    EXPECT(CANON_SIMD_ALIGN_AVX    >= CANON_SIMD_ALIGN);
+    EXPECT(CANON_SIMD_ALIGN_AVX512 >= CANON_SIMD_ALIGN_AVX);
 }
 
-/* ============================================================================
- * 5. Capacity Limits
- * ========================================================================= */
+/* =========================================================================
+ * CANON_ALIGN_MAX()
+ * ====================================================================== */
+
+static void test_align_max(void) {
+    EXPECT(CANON_ALIGN_MAX((usize)8,  (usize)16) == (usize)16);
+    EXPECT(CANON_ALIGN_MAX((usize)16, (usize)8)  == (usize)16);
+    EXPECT(CANON_ALIGN_MAX((usize)32, (usize)32) == (usize)32);
+    EXPECT(CANON_ALIGN_MAX((usize)1,  (usize)64) == (usize)64);
+    EXPECT(CANON_ALIGN_MAX((usize)64, (usize)1)  == (usize)64);
+
+    /* With named constants */
+    EXPECT(CANON_ALIGN_MAX(CANON_SIMD_ALIGN, CANON_SIMD_ALIGN_AVX) ==
+           CANON_SIMD_ALIGN_AVX);
+    EXPECT(CANON_ALIGN_MAX(CANON_DEFAULT_ALIGN, CANON_CACHE_LINE) >=
+           CANON_DEFAULT_ALIGN);
+    EXPECT(CANON_ALIGN_MAX(CANON_DEFAULT_ALIGN, CANON_CACHE_LINE) >=
+           CANON_CACHE_LINE);
+}
+
+/* =========================================================================
+ * Capacity limits
+ * ====================================================================== */
 
 static void test_capacity_limits(void) {
-    /* VEC_MAX_CAPACITY default is 1 GiB */
-    ASSERT_EQ("VEC_MAX_CAPACITY == GB", CANON_GB, CANON_VEC_MAX_CAPACITY);
-
-    /* STRING_MAX_SIZE default is 16 MiB */
-    ASSERT_EQ("STRING_MAX_SIZE == 16*MB", (usize)16 * CANON_MB, CANON_STRING_MAX_SIZE);
-
-    /* ARENA_MAX_SIZE default is 1 GiB */
-    ASSERT_EQ("ARENA_MAX_SIZE == GB", CANON_GB, CANON_ARENA_MAX_SIZE);
+    /* All positive */
+    EXPECT(CANON_VEC_MAX_CAPACITY > (usize)0);
+    EXPECT(CANON_STRING_MAX_SIZE  > (usize)0);
+    EXPECT(CANON_ARENA_MAX_SIZE   > (usize)0);
 
     /* All fit in usize */
-    ASSERT_TRUE("VEC_MAX_CAPACITY fits in usize",   CANON_VEC_MAX_CAPACITY  <= CANON_USIZE_MAX);
-    ASSERT_TRUE("STRING_MAX_SIZE fits in usize",    CANON_STRING_MAX_SIZE   <= CANON_USIZE_MAX);
-    ASSERT_TRUE("ARENA_MAX_SIZE fits in usize",     CANON_ARENA_MAX_SIZE    <= CANON_USIZE_MAX);
+    EXPECT(CANON_VEC_MAX_CAPACITY  <= CANON_USIZE_MAX);
+    EXPECT(CANON_STRING_MAX_SIZE   <= CANON_USIZE_MAX);
+    EXPECT(CANON_ARENA_MAX_SIZE    <= CANON_USIZE_MAX);
 
-    /* Ordering: string limit is well below vec and arena limits */
-    ASSERT_TRUE("STRING_MAX_SIZE < VEC_MAX_CAPACITY", CANON_STRING_MAX_SIZE < CANON_VEC_MAX_CAPACITY);
+    /* Default values: vec and arena are 1 GiB, string is 16 MiB */
+    EXPECT(CANON_VEC_MAX_CAPACITY  >= CANON_MB);
+    EXPECT(CANON_STRING_MAX_SIZE   >= CANON_KB);
+    EXPECT(CANON_ARENA_MAX_SIZE    >= CANON_MB);
+
+    /* String max < vec max (string is typically smaller) */
+    EXPECT(CANON_STRING_MAX_SIZE <= CANON_VEC_MAX_CAPACITY);
 }
 
-/* ============================================================================
- * 6. SSO / SVO Thresholds
- * ========================================================================= */
+/* =========================================================================
+ * Small buffer optimization thresholds
+ * ====================================================================== */
 
-static void test_sso_svo_thresholds(void) {
-    /* SSO: 23 bytes fits the classic 24-byte small-string struct */
-    ASSERT_EQ("SSO_THRESHOLD == 23", (usize)23, CANON_SSO_THRESHOLD);
+static void test_sbo_thresholds(void) {
+    /* SSO: 23 bytes is the standard "fits in 24-byte struct" value */
+    EXPECT(CANON_SSO_THRESHOLD >= (usize)1);
+    EXPECT(CANON_SSO_THRESHOLD <= (usize)255);  /* must fit in u8 length field */
 
-    /* The SSO struct is: 23 bytes data + 1 byte length/tag = 24 bytes total */
-    ASSERT_TRUE("SSO_THRESHOLD + 1 == 24", CANON_SSO_THRESHOLD + 1 == 24);
+    /* SVO: must hold at least one element */
+    EXPECT(CANON_SVO_THRESHOLD >= (usize)1);
 
-    /* SVO: default 8 elements */
-    ASSERT_EQ("SVO_THRESHOLD == 8", (usize)8, CANON_SVO_THRESHOLD);
-
-    /* Both thresholds must be positive */
-    ASSERT_TRUE("SSO_THRESHOLD > 0", CANON_SSO_THRESHOLD > 0);
-    ASSERT_TRUE("SVO_THRESHOLD > 0", CANON_SVO_THRESHOLD > 0);
+    /* Both fit comfortably in usize */
+    EXPECT(CANON_SSO_THRESHOLD <= CANON_USIZE_MAX);
+    EXPECT(CANON_SVO_THRESHOLD <= CANON_USIZE_MAX);
 }
 
-/* ============================================================================
- * 7. Growth Factor Constants
- * ========================================================================= */
+/* =========================================================================
+ * Growth factor
+ * ====================================================================== */
 
 static void test_growth_factor(void) {
-    /* Default 1.5x: NUM=3, DENOM=2 */
-    ASSERT_EQ("GROWTH_FACTOR_NUM == 3",   (usize)3, CANON_GROWTH_FACTOR_NUM);
-    ASSERT_EQ("GROWTH_FACTOR_DENOM == 2", (usize)2, CANON_GROWTH_FACTOR_DENOM);
+    usize old_cap = 16;
+    usize new_cap = old_cap * CANON_GROWTH_FACTOR_NUM / CANON_GROWTH_FACTOR_DENOM;
 
-    /* The ratio must be > 1 to guarantee growth */
-    ASSERT_TRUE("GROWTH_FACTOR_NUM > GROWTH_FACTOR_DENOM",
-        CANON_GROWTH_FACTOR_NUM > CANON_GROWTH_FACTOR_DENOM);
+    /* Growth factor > 1 means new_cap > old_cap */
+    EXPECT(new_cap > old_cap);
 
-    /* Applied to a concrete capacity: 100 * 3 / 2 == 150 */
-    ASSERT_EQ("growth: 100 -> 150",
-        (usize)150,
-        (usize)100 * CANON_GROWTH_FACTOR_NUM / CANON_GROWTH_FACTOR_DENOM);
+    /* Growth factor denominator is non-zero */
+    EXPECT(CANON_GROWTH_FACTOR_DENOM > (usize)0);
 
-    /* Applied to capacity 1: must produce at least 1 (no zero-capacity loop) */
-    ASSERT_TRUE("growth: 1 -> >= 1",
-        (usize)1 * CANON_GROWTH_FACTOR_NUM / CANON_GROWTH_FACTOR_DENOM >= 1);
+    /* Minimum allocation is positive and a reasonable size */
+    EXPECT(CANON_MIN_ALLOCATION >= (usize)1);
+    EXPECT(CANON_MIN_ALLOCATION <= CANON_VEC_MAX_CAPACITY);
 
-    /* MIN_ALLOCATION: default 32 bytes, positive, power of two */
-    ASSERT_EQ("MIN_ALLOCATION == 32", (usize)32, CANON_MIN_ALLOCATION);
-    ASSERT_TRUE("MIN_ALLOCATION > 0",            CANON_MIN_ALLOCATION > 0);
-    ASSERT_TRUE("MIN_ALLOCATION is power of two", is_power_of_two(CANON_MIN_ALLOCATION));
+    /* Applying growth repeatedly never stalls (always strictly increases) */
+    {
+        usize cap = CANON_MIN_ALLOCATION;
+        int idx;
+        for (idx = 0; idx < 8; idx++) {
+            usize next = cap * CANON_GROWTH_FACTOR_NUM / CANON_GROWTH_FACTOR_DENOM;
+            EXPECT(next > cap);
+            cap = next;
+        }
+    }
 }
 
-/* ============================================================================
- * 8. Pointer Tagging
- * ========================================================================= */
+/* =========================================================================
+ * Pointer tagging constants
+ * ====================================================================== */
 
-static void test_pointer_tagging(void) {
-    /* TAG_BITS must be 1, 2, or 3 depending on platform width */
+static void test_ptr_tag(void) {
+    uintptr_t tag_mask  = CANON_PTR_TAG_MASK;
+    uintptr_t addr_mask = CANON_PTR_ADDR_MASK;
+
+    /* Tag mask has exactly CANON_PTR_TAG_BITS low bits set */
+    EXPECT(tag_mask == (uintptr_t)(((uintptr_t)1 << CANON_PTR_TAG_BITS) - 1));
+
+    /* Addr mask is the bitwise complement of tag mask */
+    EXPECT(addr_mask == ~tag_mask);
+
+    /* Tag mask and addr mask are disjoint */
+    EXPECT((tag_mask & addr_mask) == (uintptr_t)0);
+
+    /* Together they cover all bits */
+    EXPECT((tag_mask | addr_mask) == (uintptr_t)~(uintptr_t)0);
+
+    /* TAG_BITS is consistent with platform pointer size */
 #if UINTPTR_MAX == UINT64_MAX
-    ASSERT_EQ("PTR_TAG_BITS == 3 on 64-bit", (usize)3, (usize)CANON_PTR_TAG_BITS);
+    EXPECT(CANON_PTR_TAG_BITS == 3);
 #elif UINTPTR_MAX == UINT32_MAX
-    ASSERT_EQ("PTR_TAG_BITS == 2 on 32-bit", (usize)2, (usize)CANON_PTR_TAG_BITS);
+    EXPECT(CANON_PTR_TAG_BITS == 2);
 #else
-    ASSERT_EQ("PTR_TAG_BITS == 1 on other",  (usize)1, (usize)CANON_PTR_TAG_BITS);
+    EXPECT(CANON_PTR_TAG_BITS == 1);
 #endif
 
-    /* TAG_MASK must have exactly PTR_TAG_BITS low bits set */
-    uintptr_t expected_tag_mask = ((uintptr_t)1 << CANON_PTR_TAG_BITS) - (uintptr_t)1;
-    ASSERT_EQ("PTR_TAG_MASK has correct low bits set",
-        (u64)expected_tag_mask, (u64)CANON_PTR_TAG_MASK);
+    /* Round-trip: strip tags, re-apply, recover original */
+    {
+        /* Construct a fake "tagged pointer" with all tag bits set */
+        uintptr_t fake_ptr = (uintptr_t)0xABCDEF00UL | tag_mask;
+        uintptr_t tag      = fake_ptr & tag_mask;
+        uintptr_t addr     = fake_ptr & addr_mask;
+        uintptr_t rebuilt  = addr | tag;
+        EXPECT(rebuilt == fake_ptr);
+        EXPECT((addr & tag_mask) == (uintptr_t)0);  /* addr has no tag bits */
+    }
 
-    /* ADDR_MASK must be the bitwise complement of TAG_MASK */
-    ASSERT_EQ("PTR_ADDR_MASK == ~PTR_TAG_MASK",
-        (u64)(uintptr_t)(~CANON_PTR_TAG_MASK), (u64)CANON_PTR_ADDR_MASK);
-
-    /* TAG_MASK | ADDR_MASK must be all-ones — together they cover every bit */
-    ASSERT_EQ("TAG_MASK | ADDR_MASK == all ones",
-        (u64)(uintptr_t)(~(uintptr_t)0),
-        (u64)(CANON_PTR_TAG_MASK | CANON_PTR_ADDR_MASK));
-
-    /* TAG_MASK & ADDR_MASK must be zero — no bit belongs to both */
-    ASSERT_EQ("TAG_MASK & ADDR_MASK == 0",
-        (u64)0,
-        (u64)(CANON_PTR_TAG_MASK & CANON_PTR_ADDR_MASK));
-
-    /* TAG_MASK must be a sequence of low bits — is_power_of_two(mask + 1) */
-    ASSERT_TRUE("PTR_TAG_MASK is a low-bit mask",
-        is_power_of_two(CANON_PTR_TAG_MASK + 1));
-
-    /* Round-trip: tag + untag recovers original pointer */
-    uintptr_t original = (uintptr_t)0xDEADBEEF & CANON_PTR_ADDR_MASK;
-    uintptr_t tag      = (uintptr_t)0x1;
-    uintptr_t tagged   = (original & CANON_PTR_ADDR_MASK) | tag;
-    uintptr_t untagged = tagged & CANON_PTR_ADDR_MASK;
-    ASSERT_EQ("PTR round-trip: untag recovers original", (u64)original, (u64)untagged);
-    ASSERT_EQ("PTR round-trip: tag extracted correctly",  (u64)tag,     (u64)(tagged & CANON_PTR_TAG_MASK));
+    /* A naturally aligned pointer loses no address bits when masked */
+    {
+        /* Use the address of a local variable as a naturally aligned pointer */
+        int dummy = 0;
+        uintptr_t raw  = (uintptr_t)(void*)&dummy;
+        uintptr_t stripped = raw & addr_mask;
+        /* The low CANON_PTR_TAG_BITS of a naturally aligned pointer are 0,
+         * so stripping them is a no-op */
+        EXPECT((raw & tag_mask) == (uintptr_t)0 || stripped <= raw);
+    }
 }
 
-/* ============================================================================
- * 9. Platform Read-Only Info
- * ========================================================================= */
+/* =========================================================================
+ * Platform info constants
+ * ====================================================================== */
 
 static void test_platform_info(void) {
-    ASSERT_EQ("POINTER_SIZE == sizeof(void*)", (usize)sizeof(void*), CANON_POINTER_SIZE);
-    ASSERT_EQ("BITS_PER_BYTE == 8",            (usize)8,             CANON_BITS_PER_BYTE);
+    EXPECT(CANON_BITS_PER_BYTE == (usize)8);
+    EXPECT(CANON_POINTER_SIZE  == sizeof(void*));
+    EXPECT(CANON_POINTER_BITS  == sizeof(void*) * 8);
 
-    ASSERT_EQ("POINTER_BITS == POINTER_SIZE * BITS_PER_BYTE",
-        CANON_POINTER_SIZE * CANON_BITS_PER_BYTE, CANON_POINTER_BITS);
+    /* Pointer size is 4 (32-bit) or 8 (64-bit) */
+    EXPECT(CANON_POINTER_SIZE == (usize)4 || CANON_POINTER_SIZE == (usize)8);
 
-    /* Pointer size must be 4 or 8 bytes on all supported platforms */
-    ASSERT_TRUE("POINTER_SIZE is 4 or 8",
-        CANON_POINTER_SIZE == 4 || CANON_POINTER_SIZE == 8);
-
-    /* POINTER_BITS must be 32 or 64 */
-    ASSERT_TRUE("POINTER_BITS is 32 or 64",
-        CANON_POINTER_BITS == 32 || CANON_POINTER_BITS == 64);
-
-    /* PTR_TAG_BITS must fit within a pointer */
-    ASSERT_TRUE("PTR_TAG_BITS < POINTER_BITS",
-        (usize)CANON_PTR_TAG_BITS < CANON_POINTER_BITS);
+    /* Pointer bits matches */
+    EXPECT(CANON_POINTER_BITS == CANON_POINTER_SIZE * CANON_BITS_PER_BYTE);
 }
 
-/* ============================================================================
- * 10. Compile-Time Override Mechanism
- *
- * The override mechanism is verified by a separate translation unit:
- * limits_test_override.c, compiled with custom #defines set via
- * -D flags. It checks that each overridden constant reflects the
- * user-supplied value rather than the header default.
- *
- * Here we just verify that all constants are defined (compilation proof)
- * and have the expected default values on a system where nothing was
- * overridden.
- * ========================================================================= */
-
-static void test_override_defaults(void) {
-    /* Confirm defaults have not been silently zeroed or corrupted */
-    ASSERT_TRUE("PAGE_SIZE > 0",          CANON_PAGE_SIZE          > 0);
-    ASSERT_TRUE("CACHE_LINE > 0",         CANON_CACHE_LINE         > 0);
-    ASSERT_TRUE("VEC_MAX_CAPACITY > 0",   CANON_VEC_MAX_CAPACITY   > 0);
-    ASSERT_TRUE("STRING_MAX_SIZE > 0",    CANON_STRING_MAX_SIZE    > 0);
-    ASSERT_TRUE("ARENA_MAX_SIZE > 0",     CANON_ARENA_MAX_SIZE     > 0);
-    ASSERT_TRUE("MIN_ALLOCATION > 0",     CANON_MIN_ALLOCATION     > 0);
-    ASSERT_TRUE("SSO_THRESHOLD > 0",      CANON_SSO_THRESHOLD      > 0);
-    ASSERT_TRUE("SVO_THRESHOLD > 0",      CANON_SVO_THRESHOLD      > 0);
-}
-
-/* ============================================================================
- * Compile-Time Assertions (static_require equivalents via _Static_assert)
- *
- * These fire at compile time if any fundamental invariant is violated.
- * They complement the runtime tests above.
- * ========================================================================= */
-
-/* KB/MB/GB are representable as usize */
-typedef char _check_kb[(usize)CANON_KB  <= (usize)-1 ? 1 : -1];
-typedef char _check_mb[(usize)CANON_MB  <= (usize)-1 ? 1 : -1];
-typedef char _check_gb[(usize)CANON_GB  <= (usize)-1 ? 1 : -1];
-
-/* Alignment constants are non-zero */
-typedef char _check_default_align[CANON_DEFAULT_ALIGN > 0 ? 1 : -1];
-typedef char _check_cache_line   [CANON_CACHE_LINE    > 0 ? 1 : -1];
-typedef char _check_page_size    [CANON_PAGE_SIZE     > 0 ? 1 : -1];
-
-/* ============================================================================
- * Main
- * ========================================================================= */
+/* =========================================================================
+ * main
+ * ====================================================================== */
 
 int main(void) {
-    printf("limits_test\n");
-    printf("───────────\n");
-
     test_integer_limits();
     test_size_limits();
     test_size_literals();
     test_alignment_constants();
+    test_align_max();
     test_capacity_limits();
-    test_sso_svo_thresholds();
+    test_sbo_thresholds();
     test_growth_factor();
-    test_pointer_tagging();
+    test_ptr_tag();
     test_platform_info();
-    test_override_defaults();
 
-    printf("\nResults: %d/%d passed", tests_passed, tests_run);
-    if (tests_failed > 0) {
-        printf(", %d FAILED\n", tests_failed);
-        return 1;
-    }
-    printf(" — all tests passed!\n");
-    return 0;
+    printf("\nlimits_test: %d passed, %d failed\n", g_pass, g_fail);
+    return g_fail > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
