@@ -196,11 +196,11 @@ canon_c_test(
     INCLUDES core/primitives
 )
 
-# canon_c_test(
-#     NAME     types_test
-#     SRC      test/core/primitives/types_test.c
-#     INCLUDES core/primitives
-# )
+canon_c_test(
+    NAME     types_test
+    SRC      test/core/primitives/types_test.c
+    INCLUDES core/primitives
+)
 
 canon_c_test(
     NAME     ptr_test
