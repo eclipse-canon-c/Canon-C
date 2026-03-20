@@ -104,7 +104,7 @@ static_require(ALIGN_MAX(8, 16) == 16, align_max_8_16);
  * is_power_of_two
  * ====================================================================== */
 
-static void test_is_power_of_two(void) {
+static CANON_MAYBE_UNUSED void test_is_power_of_two(void) {
     /* Zero is NOT a power of two */
     EXPECT(is_power_of_two(0) == false);
 
@@ -138,7 +138,7 @@ static void test_is_power_of_two(void) {
  * is_aligned / align_up / align_down / align_padding
  * ====================================================================== */
 
-static void test_integer_alignment(void) {
+static CANON_MAYBE_UNUSED void test_integer_alignment(void) {
     /* is_aligned */
     EXPECT(is_aligned(0,  8) == true);
     EXPECT(is_aligned(8,  8) == true);
@@ -223,7 +223,7 @@ static void test_integer_alignment(void) {
  * ptr_align_up / ptr_align_down / ptr_is_aligned / ptr_align_padding
  * ====================================================================== */
 
-static void test_pointer_alignment(void) {
+static CANON_MAYBE_UNUSED void test_pointer_alignment(void) {
     unsigned char buf[256];
     void* base;
     void* unaligned;
@@ -280,7 +280,7 @@ static void test_pointer_alignment(void) {
  * ptr_offset / ptr_offset_const / ptr_retreat
  * ====================================================================== */
 
-static void test_ptr_arithmetic(void) {
+static CANON_MAYBE_UNUSED void test_ptr_arithmetic(void) {
     unsigned char buf[128];
     void* base = (void*)buf;
 
@@ -324,7 +324,7 @@ static void test_ptr_arithmetic(void) {
  * ptr_diff / ptr_span
  * ====================================================================== */
 
-static void test_ptr_diff_span(void) {
+static CANON_MAYBE_UNUSED void test_ptr_diff_span(void) {
     unsigned char buf[128];
     void* start;
     void* mid;
@@ -359,7 +359,7 @@ static void test_ptr_diff_span(void) {
  * ptr_in_range / ptr_range_in_range
  * ====================================================================== */
 
-static void test_bounds_checking(void) {
+static CANON_MAYBE_UNUSED void test_bounds_checking(void) {
     unsigned char buf[64];
     void* start;
     void* end;
@@ -411,7 +411,7 @@ static void test_bounds_checking(void) {
  * ptr_elem / ptr_elem_const
  * ====================================================================== */
 
-static void test_ptr_elem(void) {
+static CANON_MAYBE_UNUSED void test_ptr_elem(void) {
     unsigned char buf[128];
     void* base = (void*)buf;
     int idx;
@@ -461,10 +461,14 @@ static void test_ptr_elem(void) {
  * ptr_or / ptr_or_const / ptr_is_valid
  * ====================================================================== */
 
-static void test_ptr_null_safety(void) {
+static CANON_MAYBE_UNUSED void test_ptr_null_safety(void) {
     unsigned char buf[8];
-    void* p        = (void*)buf;
-    void* fallback = (void*)(buf + 4);
+    void* p;
+    void* fallback;
+    /* Initialize so Cppcheck does not flag derived pointers as uninitialized */
+    memset(buf, 0, sizeof(buf));
+    p        = (void*)buf;
+    fallback = (void*)(buf + 4);
 
     /* ptr_or */
     EXPECT(ptr_or(p,    fallback) == p);
@@ -503,7 +507,7 @@ typedef struct {
     u32  next_offset;
 } NodeStruct;
 
-static void test_offset_of(void) {
+static CANON_MAYBE_UNUSED void test_offset_of(void) {
     EXPECT(PTR_OFFSET_OF(TestStruct, alpha) == offsetof(TestStruct, alpha));
     EXPECT(PTR_OFFSET_OF(TestStruct, beta)  == offsetof(TestStruct, beta));
     EXPECT(PTR_OFFSET_OF(TestStruct, gamma) == offsetof(TestStruct, gamma));
@@ -519,7 +523,7 @@ static void test_offset_of(void) {
     EXPECT(PTR_OFFSET_OF(NodeStruct, value) == 0);
 }
 
-static void test_container_of(void) {
+static CANON_MAYBE_UNUSED void test_container_of(void) {
     TestStruct obj;
     TestStruct* recovered;
     u8* member_ptr;
@@ -572,7 +576,7 @@ static void test_container_of(void) {
  * ALIGN_MAX runtime tests (using concrete constants only, no ALIGN_OF)
  * ====================================================================== */
 
-static void test_align_max(void) {
+static CANON_MAYBE_UNUSED void test_align_max(void) {
     EXPECT(ALIGN_MAX(1,  2)  == 2);
     EXPECT(ALIGN_MAX(2,  1)  == 2);
     EXPECT(ALIGN_MAX(4,  4)  == 4);
