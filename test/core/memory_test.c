@@ -84,7 +84,6 @@ static void test_regions_overlap_adjacent(void)
 {
     u8 buf[16];
     memset(buf, 0, sizeof(buf));
-    /* [0,8) and [8,16) — touch but don't overlap */
     EXPECT(!mem_regions_overlap(buf, buf + 8, 8));
     EXPECT(!mem_regions_overlap(buf + 8, buf, 8));
 }
@@ -93,7 +92,6 @@ static void test_regions_overlap_partial(void)
 {
     u8 buf[16];
     memset(buf, 0, sizeof(buf));
-    /* [0,8) and [4,12) — overlap by 4 bytes */
     EXPECT(mem_regions_overlap(buf, buf + 4, 8));
     EXPECT(mem_regions_overlap(buf + 4, buf, 8));
 }
@@ -102,7 +100,6 @@ static void test_regions_overlap_contained(void)
 {
     u8 buf[16];
     memset(buf, 0, sizeof(buf));
-    /* [2,6) fully inside [0,8) */
     EXPECT(mem_regions_overlap(buf, buf + 2, 8));
 }
 
@@ -112,10 +109,8 @@ static void test_regions_overlap_non_overlapping(void)
     u8 b[8];
     memset(a, 0, sizeof(a));
     memset(b, 0, sizeof(b));
-    /* Separate stack buffers — at least one direction non-overlapping */
     EXPECT(!mem_regions_overlap(a, b, 8) ||
            !mem_regions_overlap(b, a, 8));
-    /* Single-byte region — definitely non-overlapping within same buffer */
     EXPECT(!mem_regions_overlap(a, a + 4, 1));
 }
 
@@ -236,8 +231,9 @@ static void test_get_alignment_null(void)
 static void test_get_alignment_nonzero(void)
 {
     void* p = mem_alloc(64);
+    usize a;
     EXPECT_NOT_NULL(p);
-    usize a = mem_get_alignment(p);
+    a = mem_get_alignment(p);
     EXPECT(a >= 1);
     EXPECT(mem_is_power_of_two(a));
     mem_free(p);
@@ -592,9 +588,9 @@ static void test_swap_buf_null_safe(void)
 {
     u8 a[8]       = {0};
     u8 scratch[8] = {0};
-    mem_swap_buf(NULL, a,    8, scratch, 8);
-    mem_swap_buf(a,    NULL, 8, scratch, 8);
-    mem_swap_buf(a,    a+1,  0, scratch, 8);
+    mem_swap_buf(NULL, a,   8, scratch, 8);
+    mem_swap_buf(a, NULL,   8, scratch, 8);
+    mem_swap_buf(a, a + 1,  0, scratch, 8);
     EXPECT(1);
 }
 
@@ -633,9 +629,10 @@ static void test_move_bytes_overlapping(void)
 static void test_zero_bytes(void)
 {
     u8      buf[16];
-    bytes_t b = bytes_from(buf, 16);
+    bytes_t b;
     usize   i;
     memset(buf, 0xAB, 16);
+    b = bytes_from(buf, 16);
     mem_zero_bytes(b);
     for (i = 0; i < 16; i++) EXPECT(buf[i] == 0);
 }
@@ -643,9 +640,10 @@ static void test_zero_bytes(void)
 static void test_set_bytes(void)
 {
     u8      buf[16];
-    bytes_t b = bytes_from(buf, 16);
+    bytes_t b;
     usize   i;
     memset(buf, 0, 16);
+    b = bytes_from(buf, 16);
     mem_set_bytes(b, 0x5A);
     for (i = 0; i < 16; i++) EXPECT(buf[i] == 0x5A);
 }
@@ -687,26 +685,29 @@ static void test_equal_bytes_both_empty(void)
 static void test_is_zero_bytes_true(void)
 {
     u8       buf[16];
-    cbytes_t b = cbytes_from(buf, 16);
-    memset(buf, 0, 16);
+    cbytes_t b;
+    memset(buf, 0, sizeof(buf));
+    b = cbytes_from(buf, 16);
     EXPECT(mem_is_zero_bytes(b));
 }
 
 static void test_is_zero_bytes_false(void)
 {
     u8       buf[16];
-    cbytes_t b = cbytes_from(buf, 16);
-    memset(buf, 0, 16);
+    cbytes_t b;
+    memset(buf, 0, sizeof(buf));
     buf[8] = 1;
+    b = cbytes_from(buf, 16);
     EXPECT(!mem_is_zero_bytes(b));
 }
 
 static void test_secure_zero_bytes(void)
 {
     u8      buf[16];
-    bytes_t b = bytes_from(buf, 16);
+    bytes_t b;
     usize   i;
     memset(buf, 0xAB, 16);
+    b = bytes_from(buf, 16);
     mem_secure_zero_bytes(b);
     for (i = 0; i < 16; i++) EXPECT(buf[i] == 0);
 }
