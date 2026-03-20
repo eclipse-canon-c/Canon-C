@@ -22,6 +22,8 @@
  *     overflow, and that returned pointers satisfy alignment.
  */
 
+/* Must be defined in exactly one TU before including contract.h (via arena.h) */
+#define CANON_CONTRACT_IMPL
 #define CANON_ARENA_DEBUG
 #include "core/arena.h"
 
@@ -538,17 +540,6 @@ int main(void)
 #else /* CANON_FUZZING */
 
 /* ── Fuzz entry point ────────────────────────────────────────────────────── */
-/*
- * Layout of the fuzzer input (all values little-endian):
- *
- *   [0..1]  u16  size1       — first alloc size
- *   [2]     u8   log2_align  — alignment for aligned alloc (clamped 0..6 → 1..64)
- *   [3..4]  u16  size2       — second alloc size (aligned variant)
- *   [5]     u8   do_reset    — if non-zero, reset between allocs
- *   [6..7]  u16  size3       — third alloc size (zero-init variant)
- *
- * Total minimum input: 8 bytes. Shorter inputs are padded with zeros.
- */
 
 #define FUZZ_BUF_SIZE ((usize)1024)
 
@@ -565,73 +556,55 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     bool         do_reset;
     void*        p;
 
-    /* pad input to 8 bytes */
     memset(raw, 0, sizeof(raw));
     if (size > sizeof(raw)) size = sizeof(raw);
     memcpy(raw, data, size);
 
     size1      = (u16)((u16)raw[0] | ((u16)raw[1] << 8));
-    log2_align = raw[2] & 0x07u;          /* 0..7 → alignment 1..128 */
+    log2_align = raw[2] & 0x07u;
     size2      = (u16)((u16)raw[3] | ((u16)raw[4] << 8));
     do_reset   = raw[5] != 0;
     size3      = (u16)((u16)raw[6] | ((u16)raw[7] << 8));
 
-    alignment  = (usize)1 << log2_align;  /* 1, 2, 4, 8, 16, 32, 64, 128 */
+    alignment  = (usize)1 << log2_align;
 
     arena_init(&a, fuzz_buf, FUZZ_BUF_SIZE);
 
-    /* alloc 1 — default alignment */
     p = arena_alloc(&a, (usize)size1);
     if (p != NULL) {
-        /* returned pointer must be inside the buffer */
-        if ((u8*)p < fuzz_buf || (u8*)p + size1 > fuzz_buf + FUZZ_BUF_SIZE) {
+        if ((u8*)p < fuzz_buf || (u8*)p + size1 > fuzz_buf + FUZZ_BUF_SIZE)
             __builtin_trap();
-        }
-        if (!mem_is_aligned(p, CANON_DEFAULT_ALIGN)) {
+        if (!mem_is_aligned(p, CANON_DEFAULT_ALIGN))
             __builtin_trap();
-        }
     }
 
-    if (do_reset) {
-        arena_reset(&a);
-    }
+    if (do_reset) arena_reset(&a);
 
-    /* alloc 2 — custom alignment */
     p = arena_alloc_aligned(&a, (usize)size2, alignment);
     if (p != NULL) {
-        if ((u8*)p < fuzz_buf || (u8*)p + size2 > fuzz_buf + FUZZ_BUF_SIZE) {
+        if ((u8*)p < fuzz_buf || (u8*)p + size2 > fuzz_buf + FUZZ_BUF_SIZE)
             __builtin_trap();
-        }
-        if (!mem_is_aligned(p, alignment)) {
+        if (!mem_is_aligned(p, alignment))
             __builtin_trap();
-        }
     }
 
-    /* alloc 3 — zero-init, verify contents */
     p = arena_alloc_zero(&a, (usize)size3);
     if (p != NULL && size3 > 0) {
-        if (!mem_is_zero(p, (usize)size3)) {
+        if (!mem_is_zero(p, (usize)size3))
             __builtin_trap();
-        }
     }
 
-    /* mark / rollback round-trip */
     {
-        ArenaMark mark  = arena_mark(&a);
-        usize     used  = arena_used(&a);
-        void*     tmp   = arena_alloc(&a, 32);
+        ArenaMark mark = arena_mark(&a);
+        usize     used = arena_used(&a);
+        void*     tmp  = arena_alloc(&a, 32);
         (void)tmp;
         arena_reset_to(&a, mark);
-        if (arena_used(&a) != used) {
-            __builtin_trap();
-        }
+        if (arena_used(&a) != used) __builtin_trap();
     }
 
-    /* secure reset — must not crash */
     arena_reset_secure(&a);
-    if (arena_used(&a) != 0) {
-        __builtin_trap();
-    }
+    if (arena_used(&a) != 0) __builtin_trap();
 
     return 0;
 }
