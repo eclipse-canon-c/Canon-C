@@ -60,6 +60,7 @@ static int g_failed = 0;
 static void test_regions_overlap_null(void)
 {
     u8 buf[8];
+    memset(buf, 0, sizeof(buf));
     EXPECT(!mem_regions_overlap(NULL, buf,  4));
     EXPECT(!mem_regions_overlap(buf,  NULL, 4));
     EXPECT(!mem_regions_overlap(NULL, NULL, 4));
@@ -68,18 +69,21 @@ static void test_regions_overlap_null(void)
 static void test_regions_overlap_zero_size(void)
 {
     u8 buf[8];
+    memset(buf, 0, sizeof(buf));
     EXPECT(!mem_regions_overlap(buf, buf, 0));
 }
 
 static void test_regions_overlap_same_pointer(void)
 {
     u8 buf[8];
+    memset(buf, 0, sizeof(buf));
     EXPECT(mem_regions_overlap(buf, buf, 8));
 }
 
 static void test_regions_overlap_adjacent(void)
 {
     u8 buf[16];
+    memset(buf, 0, sizeof(buf));
     /* [0,8) and [8,16) — touch but don't overlap */
     EXPECT(!mem_regions_overlap(buf, buf + 8, 8));
     EXPECT(!mem_regions_overlap(buf + 8, buf, 8));
@@ -88,6 +92,7 @@ static void test_regions_overlap_adjacent(void)
 static void test_regions_overlap_partial(void)
 {
     u8 buf[16];
+    memset(buf, 0, sizeof(buf));
     /* [0,8) and [4,12) — overlap by 4 bytes */
     EXPECT(mem_regions_overlap(buf, buf + 4, 8));
     EXPECT(mem_regions_overlap(buf + 4, buf, 8));
@@ -96,6 +101,7 @@ static void test_regions_overlap_partial(void)
 static void test_regions_overlap_contained(void)
 {
     u8 buf[16];
+    memset(buf, 0, sizeof(buf));
     /* [2,6) fully inside [0,8) */
     EXPECT(mem_regions_overlap(buf, buf + 2, 8));
 }
@@ -104,12 +110,12 @@ static void test_regions_overlap_non_overlapping(void)
 {
     u8 a[8];
     u8 b[8];
-    /* Separate stack buffers — must not overlap */
+    memset(a, 0, sizeof(a));
+    memset(b, 0, sizeof(b));
+    /* Separate stack buffers — at least one direction non-overlapping */
     EXPECT(!mem_regions_overlap(a, b, 8) ||
            !mem_regions_overlap(b, a, 8));
-    /* At least one direction must be non-overlapping;
-     * accept either since stack layout is implementation-defined.
-     * The real test: a single-byte region far apart. */
+    /* Single-byte region — definitely non-overlapping within same buffer */
     EXPECT(!mem_regions_overlap(a, a + 4, 1));
 }
 
@@ -149,7 +155,7 @@ static void test_alloc_array_macro(void)
 
 static void test_free_null_safe(void)
 {
-    mem_free(NULL);   /* must not crash */
+    mem_free(NULL);
     EXPECT(1);
 }
 
@@ -197,12 +203,14 @@ static void test_is_aligned_null(void)
 
 static void test_is_aligned_true(void)
 {
-    /* Allocate with known alignment via mem_align_to on a stack buffer.
-     * Use a large enough buffer to guarantee we can find an aligned offset. */
     u8    buf[256];
-    usize addr = (usize)(uintptr_t)buf;
-    usize pad  = (64 - (addr % 64)) % 64;
-    u8*   p    = buf + pad;
+    usize addr;
+    usize pad;
+    u8*   p;
+    memset(buf, 0, sizeof(buf));
+    addr = (usize)(uintptr_t)buf;
+    pad  = (64 - (addr % 64)) % 64;
+    p    = buf + pad;
     if (pad + 1 <= sizeof(buf)) {
         EXPECT(mem_is_aligned(p, 1));
     }
@@ -213,9 +221,8 @@ static void test_is_aligned_heap(void)
 {
     void* p = mem_alloc(64);
     EXPECT_NOT_NULL(p);
-    /* malloc guarantees at least max_align_t alignment — at least 8 */
     EXPECT(mem_is_aligned(p, 1));
-    EXPECT(mem_is_aligned(p, 2) || !mem_is_aligned(p, 2)); /* just no crash */
+    EXPECT(mem_is_aligned(p, 2) || !mem_is_aligned(p, 2));
     mem_free(p);
 }
 
@@ -268,14 +275,14 @@ static void test_copy_basic(void)
 static void test_copy_null_dest(void)
 {
     u8 src[8] = {1,2,3,4,5,6,7,8};
-    mem_copy(NULL, src, 8);   /* must not crash */
+    mem_copy(NULL, src, 8);
     EXPECT(1);
 }
 
 static void test_copy_null_src(void)
 {
     u8 dst[8] = {0};
-    mem_copy(dst, NULL, 8);   /* must not crash */
+    mem_copy(dst, NULL, 8);
     EXPECT(1);
 }
 
@@ -284,7 +291,7 @@ static void test_copy_zero_size(void)
     u8 src[8] = {1,2,3,4,5,6,7,8};
     u8 dst[8] = {0};
     mem_copy(dst, src, 0);
-    EXPECT(dst[0] == 0);   /* unchanged */
+    EXPECT(dst[0] == 0);
 }
 
 static void test_copy_partial(void)
@@ -293,7 +300,7 @@ static void test_copy_partial(void)
     u8 dst[8] = {0};
     mem_copy(dst, src, 4);
     EXPECT(dst[0] == 1 && dst[3] == 4);
-    EXPECT(dst[4] == 0);   /* untouched */
+    EXPECT(dst[4] == 0);
 }
 
 /* ── mem_move ────────────────────────────────────────────────────────────── */
@@ -350,7 +357,7 @@ static void test_zero_size_zero(void)
     u8 buf[8];
     memset(buf, 0xAB, sizeof(buf));
     mem_zero(buf, 0);
-    EXPECT(buf[0] == 0xAB);   /* unchanged */
+    EXPECT(buf[0] == 0xAB);
 }
 
 /* ── mem_set ─────────────────────────────────────────────────────────────── */
@@ -359,6 +366,7 @@ static void test_set_fills(void)
 {
     u8    buf[16];
     usize i;
+    memset(buf, 0, sizeof(buf));
     mem_set(buf, 0xFF, sizeof(buf));
     for (i = 0; i < sizeof(buf); i++) EXPECT(buf[i] == 0xFF);
 }
@@ -500,6 +508,7 @@ static void test_is_all_null(void)
 static void test_is_all_zero_size(void)
 {
     u8 buf[8];
+    memset(buf, 0, sizeof(buf));
     EXPECT(!mem_is_all(buf, 0, 0));
 }
 
@@ -527,12 +536,10 @@ static void test_is_zero_null(void)
 
 static void test_swap_basic(void)
 {
-    u8 a[8] = {1,2,3,4,5,6,7,8};
-    u8 b[8] = {9,10,11,12,13,14,15,16};
-    u8 orig_a[8];
-    u8 orig_b[8];
-    memcpy(orig_a, a, 8);
-    memcpy(orig_b, b, 8);
+    u8 a[8]      = {1,2,3,4,5,6,7,8};
+    u8 b[8]      = {9,10,11,12,13,14,15,16};
+    u8 orig_a[8] = {1,2,3,4,5,6,7,8};
+    u8 orig_b[8] = {9,10,11,12,13,14,15,16};
     mem_swap(a, b, 8);
     EXPECT(memcmp(a, orig_b, 8) == 0);
     EXPECT(memcmp(b, orig_a, 8) == 0);
@@ -551,7 +558,7 @@ static void test_swap_zero_size(void)
     u8 a[8] = {1,2,3,4,5,6,7,8};
     u8 b[8] = {9,10,11,12,13,14,15,16};
     mem_swap(a, b, 0);
-    EXPECT(a[0] == 1 && b[0] == 9);   /* unchanged */
+    EXPECT(a[0] == 1 && b[0] == 9);
 }
 
 static void test_swap_single_byte(void)
@@ -566,15 +573,16 @@ static void test_swap_single_byte(void)
 
 static void test_swap_buf_large(void)
 {
-    u8 a[128];
-    u8 b[128];
-    u8 scratch[128];
-    u8 orig_a[128];
-    u8 orig_b[128];
+    u8    a[128];
+    u8    b[128];
+    u8    scratch[128];
+    u8    orig_a[128];
+    u8    orig_b[128];
     usize i;
     for (i = 0; i < 128; i++) { a[i] = (u8)i; b[i] = (u8)(255 - i); }
     memcpy(orig_a, a, 128);
     memcpy(orig_b, b, 128);
+    memset(scratch, 0, sizeof(scratch));
     mem_swap_buf(a, b, 128, scratch, 128);
     EXPECT(memcmp(a, orig_b, 128) == 0);
     EXPECT(memcmp(b, orig_a, 128) == 0);
@@ -584,9 +592,9 @@ static void test_swap_buf_null_safe(void)
 {
     u8 a[8]       = {0};
     u8 scratch[8] = {0};
-    mem_swap_buf(NULL, a, 8, scratch, 8);
-    mem_swap_buf(a, NULL, 8, scratch, 8);
-    mem_swap_buf(a, a+1,  0, scratch, 8);   /* zero size — no-op */
+    mem_swap_buf(NULL, a,    8, scratch, 8);
+    mem_swap_buf(a,    NULL, 8, scratch, 8);
+    mem_swap_buf(a,    a+1,  0, scratch, 8);
     EXPECT(1);
 }
 
@@ -594,30 +602,30 @@ static void test_swap_buf_null_safe(void)
 
 static void test_copy_bytes_basic(void)
 {
-    u8      src[8] = {1,2,3,4,5,6,7,8};
-    u8      dst[8] = {0};
-    bytes_t d      = bytes_from(dst, 8);
-    cbytes_t s     = cbytes_from(src, 8);
-    usize n        = mem_copy_bytes(d, s);
+    u8       src[8] = {1,2,3,4,5,6,7,8};
+    u8       dst[8] = {0};
+    bytes_t  d      = bytes_from(dst, 8);
+    cbytes_t s      = cbytes_from(src, 8);
+    usize    n      = mem_copy_bytes(d, s);
     EXPECT(n == 8);
     EXPECT(memcmp(dst, src, 8) == 0);
 }
 
 static void test_copy_bytes_null_src(void)
 {
-    u8      dst[8] = {0};
-    bytes_t d      = bytes_from(dst, 8);
-    cbytes_t s     = cbytes_empty();
-    usize n        = mem_copy_bytes(d, s);
+    u8       dst[8] = {0};
+    bytes_t  d      = bytes_from(dst, 8);
+    cbytes_t s      = cbytes_empty();
+    usize    n      = mem_copy_bytes(d, s);
     EXPECT(n == 0);
 }
 
 static void test_move_bytes_overlapping(void)
 {
-    u8 buf[16] = {1,2,3,4,5,6,7,8,0,0,0,0,0,0,0,0};
-    bytes_t  dst = bytes_from(buf + 4, 8);
-    cbytes_t src = cbytes_from(buf,    8);
-    usize n = mem_move_bytes(dst, src);
+    u8       buf[16] = {1,2,3,4,5,6,7,8,0,0,0,0,0,0,0,0};
+    bytes_t  dst     = bytes_from(buf + 4, 8);
+    cbytes_t src     = cbytes_from(buf,    8);
+    usize    n       = mem_move_bytes(dst, src);
     EXPECT(n == 8);
     EXPECT(buf[4] == 1 && buf[11] == 8);
 }
@@ -637,6 +645,7 @@ static void test_set_bytes(void)
     u8      buf[16];
     bytes_t b = bytes_from(buf, 16);
     usize   i;
+    memset(buf, 0, 16);
     mem_set_bytes(b, 0x5A);
     for (i = 0; i < 16; i++) EXPECT(buf[i] == 0x5A);
 }
@@ -739,7 +748,7 @@ static void test_zero_array_macro(void)
 
 static void test_secure_zero_type_macro(void)
 {
-    i64 secret = 0x0123456789ABCDEFLL;
+    i64 secret = (i64)0x0123456789ABCDEFLL;
     mem_secure_zero_type(&secret);
     EXPECT(secret == 0);
 }
@@ -874,14 +883,11 @@ int main(void)
 
 /* ── Fuzz entry point ────────────────────────────────────────────────────── */
 /*
- * Input layout (all values used as raw bytes):
- *
+ * Input layout:
  *   [0..3]   u8[4]  fill_a   — pattern to fill buffer A
  *   [4..7]   u8[4]  fill_b   — pattern to fill buffer B
- *   [8]      u8     op       — which operation to exercise (modulo 6)
+ *   [8]      u8     op       — operation to exercise (modulo 6)
  *   [9]      u8     size_raw — region size (modulo 64, min 1)
- *
- * Minimum useful input: 10 bytes.
  */
 
 #define FUZZ_BUF ((usize)128)
@@ -917,9 +923,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             if (!mem_equal(b, a, n)) __builtin_trap();
             break;
         case 2: {
-            int r = mem_compare(a, b, n);
+            int r  = mem_compare(a, b, n);
             int r2 = mem_compare(b, a, n);
-            /* antisymmetry: sign must flip or both zero */
             if (r > 0 && r2 >= 0) __builtin_trap();
             if (r < 0 && r2 <= 0) __builtin_trap();
             break;
@@ -930,10 +935,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             break;
         case 4:
             mem_swap(a, b, n);
-            /* after swap, swap back — result must equal original */
             mem_swap(a, b, n);
             if (raw[0] != raw[4]) {
-                /* buffers had different fill — each byte must match original */
                 usize i;
                 for (i = 0; i < n; i++) {
                     if (a[i] != raw[0]) __builtin_trap();
