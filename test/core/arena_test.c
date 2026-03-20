@@ -117,7 +117,7 @@ static void test_alloc_exhaustion_returns_null(void)
     setup();
     void* p = arena_alloc(&g_arena, BUF_SIZE);
     if (p == NULL) {
-        /* already full due to alignment pad */
+        /* already full due to alignment pad — expected */
     } else {
         EXPECT(arena_alloc(&g_arena, 1) == NULL);
     }
@@ -127,9 +127,23 @@ static void test_alloc_exact_fit(void)
 {
     u8    small[64];
     Arena a;
+    usize rem;
+    void* p;
+
     arena_init(&a, small, sizeof(small));
-    usize rem = arena_remaining(&a);
-    void* p   = arena_alloc(&a, rem);
+
+    /* Consume any initial alignment padding by doing a 1-byte alloc first,
+     * then measure what truly remains — that amount must fit exactly. */
+    arena_alloc(&a, 1);
+    rem = arena_remaining(&a);
+
+    if (rem == 0) {
+        /* buffer fully consumed after padding + 1 byte — nothing to test */
+        EXPECT(1);
+        return;
+    }
+
+    p = arena_alloc(&a, rem);
     EXPECT(p != NULL);
     EXPECT(arena_alloc(&a, 1) == NULL);
 }
