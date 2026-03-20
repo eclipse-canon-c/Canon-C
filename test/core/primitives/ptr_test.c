@@ -326,10 +326,15 @@ static void test_ptr_arithmetic(void) {
 
 static void test_ptr_diff_span(void) {
     unsigned char buf[128];
-    /* Declare and initialize directly to avoid GCC -Wmaybe-uninitialized */
-    void* start = (void*)(buf);
-    void* mid   = (void*)(buf + 64);
-    void* end   = (void*)(buf + 128);
+    void* start;
+    void* mid;
+    void* end;
+    /* Initialize the buffer so GCC does not consider buf "uninitialized"
+     * and propagate that through the derived pointer variables. */
+    memset(buf, 0, sizeof(buf));
+    start = (void*)(buf);
+    mid   = (void*)(buf + 64);
+    end   = (void*)(buf + 128);
 
     /* ptr_diff: signed distance */
     EXPECT(ptr_diff(start, start) == 0);
@@ -356,11 +361,17 @@ static void test_ptr_diff_span(void) {
 
 static void test_bounds_checking(void) {
     unsigned char buf[64];
-    /* Direct pointer arithmetic to avoid -Wmaybe-uninitialized */
-    void* start = (void*)(buf);
-    void* end   = (void*)(buf + 64);
-    void* mid   = (void*)(buf + 32);
-    void* last  = (void*)(buf + 63);
+    void* start;
+    void* end;
+    void* mid;
+    void* last;
+    /* Initialize the buffer so GCC does not propagate uninitialized status
+     * through the derived pointer variables. */
+    memset(buf, 0, sizeof(buf));
+    start = (void*)(buf);
+    end   = (void*)(buf + 64);
+    mid   = (void*)(buf + 32);
+    last  = (void*)(buf + 63);
 
     /* NULL args */
     EXPECT(ptr_in_range(NULL,  start, end)  == false);
