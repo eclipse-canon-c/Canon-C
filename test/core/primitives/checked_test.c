@@ -1,338 +1,616 @@
+/**
+ * @file checked_test.c
+ * @brief Unit tests (and optional fuzz harness) for checked.h
+ *
+ * Build modes
+ * ───────────────────────────────────────────────────────────────────────────
+ *   Unit test  (default)  : int main(void) runs all TEST() groups
+ *   Fuzz twin  (CANON_FUZZING defined by CMake):
+ *              LLVMFuzzerTestOneInput exercises the same logic with
+ *              arbitrary byte input.
+ *
+ * Coverage
+ * ───────────────────────────────────────────────────────────────────────────
+ *   checked_add  / checked_add_u8  / checked_add_u16  / checked_add_u32  / checked_add_u64
+ *   checked_sub  / checked_sub_u8  / checked_sub_u16  / checked_sub_u32  / checked_sub_u64
+ *   checked_mul  / checked_mul_u8  / checked_mul_u16  / checked_mul_u32  / checked_mul_u64
+ *   checked_add_isize / checked_sub_isize / checked_mul_isize
+ *   checked_min  / checked_max     / checked_clamp
+ *
+ * Portability note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   No 0b binary literals (C23/GNU extension). Loop variables declared
+ *   before the loop body (C99). The TEST() macro uses CANON_MAYBE_UNUSED
+ *   to suppress -Wunused-function in the fuzz twin build.
+ */
+
+#include "checked.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "checked.h"
+#include <string.h>
 
-/* ============================================================================
- * Test Helpers
- * ========================================================================= */
+/* =========================================================================
+ * Portability: unused-function suppression
+ * ====================================================================== */
 
-static int tests_run    = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
+#if defined(__GNUC__) || defined(__clang__)
+    #define CANON_MAYBE_UNUSED __attribute__((unused))
+#else
+    #define CANON_MAYBE_UNUSED
+#endif
 
-#define ASSERT_EQ(label, expected, actual)                                      \
-    do {                                                                        \
-        tests_run++;                                                            \
-        if ((u64)(expected) == (u64)(actual)) {                                 \
-            tests_passed++;                                                     \
-        } else {                                                                \
-            tests_failed++;                                                     \
-            fprintf(stderr, "FAIL: %s — expected %llu, got %llu  (%s:%d)\n",   \
-                    label, (unsigned long long)(expected),                      \
-                    (unsigned long long)(actual), __FILE__, __LINE__);          \
-        }                                                                       \
+/* =========================================================================
+ * Minimal test framework
+ * ====================================================================== */
+
+static int g_pass = 0;
+static int g_fail = 0;
+
+#define TEST(name) static CANON_MAYBE_UNUSED void test_##name(void)
+#define RUN(name)  do { test_##name(); } while (0)
+
+#define EXPECT(expr)                                                \
+    do {                                                            \
+        if (expr) {                                                 \
+            g_pass++;                                               \
+        } else {                                                    \
+            g_fail++;                                               \
+            fprintf(stderr, "FAIL  %s:%d  %s\n",                   \
+                    __FILE__, __LINE__, #expr);                     \
+        }                                                           \
     } while (0)
 
-#define ASSERT_TRUE(label, expr)  ASSERT_EQ(label, 1, !!(expr))
-#define ASSERT_FALSE(label, expr) ASSERT_EQ(label, 0, !!(expr))
-
-/* Helper: assert the operation succeeds AND produces the expected value */
-#define ASSERT_OK(label, expected, ok, actual)                                  \
-    do {                                                                        \
-        ASSERT_TRUE(label " (no overflow)", ok);                                \
-        ASSERT_EQ  (label " (value)",       expected, actual);                  \
-    } while (0)
-
-/* Helper: assert the operation reports overflow (return value = false) */
-#define ASSERT_OVERFLOW(label, ok) \
-    ASSERT_FALSE(label " (overflow detected)", ok)
-
-/* ============================================================================
+/* =========================================================================
  * checked_add (usize)
- * ========================================================================= */
+ * ====================================================================== */
 
-static void test_checked_add(void) {
-    usize r;
+TEST(checked_add_op) {
+    usize result = 0;
 
     /* Normal cases */
-    ASSERT_OK("add: 0+0",       0ULL,  checked_add(0, 0, &r),              r);
-    ASSERT_OK("add: 1+1",       2ULL,  checked_add(1, 1, &r),              r);
-    ASSERT_OK("add: large+0",   100ULL,checked_add(100, 0, &r),            r);
-    ASSERT_OK("add: near-max",  (usize)(~0ULL - 1),
-                                       checked_add((usize)(~0ULL - 1), 0, &r), r);
+    EXPECT(checked_add(0, 0, &result) == true  && result == 0);
+    EXPECT(checked_add(1, 1, &result) == true  && result == 2);
+    EXPECT(checked_add(100, 200, &result) == true && result == 300);
 
-    /* Boundary: USIZE_MAX exactly */
-    ASSERT_OK("add: USIZE_MAX",  (usize)~0ULL,
-                                        checked_add((usize)~0ULL - 1, 1, &r), r);
+    /* Boundary: max - 1 + 1 == max */
+    EXPECT(checked_add(CANON_USIZE_MAX - 1, 1, &result) == true &&
+           result == CANON_USIZE_MAX);
 
-    /* Overflow: USIZE_MAX + 1 */
-    ASSERT_OVERFLOW("add: USIZE_MAX+1", checked_add((usize)~0ULL, 1, &r));
+    /* Overflow: max + 1 */
+    EXPECT(checked_add(CANON_USIZE_MAX, 1, &result) == false);
 
-    /* Overflow: USIZE_MAX + USIZE_MAX */
-    ASSERT_OVERFLOW("add: MAX+MAX",     checked_add((usize)~0ULL, (usize)~0ULL, &r));
+    /* Overflow: max + max */
+    EXPECT(checked_add(CANON_USIZE_MAX, CANON_USIZE_MAX, &result) == false);
+
+    /* Zero identity */
+    EXPECT(checked_add(42, 0, &result) == true && result == 42);
+    EXPECT(checked_add(0, 42, &result) == true && result == 42);
 }
 
-/* ============================================================================
- * checked_add_u8 / u16 / u32 / u64
- * ========================================================================= */
+/* =========================================================================
+ * checked_add_u8
+ * ====================================================================== */
 
-static void test_checked_add_sized(void) {
-    u8  r8;
-    u16 r16;
-    u32 r32;
-    u64 r64;
+TEST(checked_add_u8_op) {
+    u8 result = 0;
 
-    /* u8 */
-    ASSERT_OK      ("add_u8: 100+50",   150U,  checked_add_u8(100, 50,  &r8),  r8);
-    ASSERT_OK      ("add_u8: 255+0",    255U,  checked_add_u8(255,  0,  &r8),  r8);
-    ASSERT_OVERFLOW("add_u8: 255+1",           checked_add_u8(255,  1,  &r8));
-    ASSERT_OVERFLOW("add_u8: 200+100",         checked_add_u8(200, 100, &r8));
-
-    /* u16 */
-    ASSERT_OK      ("add_u16: 60000+5534",  65534U, checked_add_u16(60000, 5534, &r16), r16);
-    ASSERT_OK      ("add_u16: 65535+0",     65535U, checked_add_u16(65535,    0, &r16), r16);
-    ASSERT_OVERFLOW("add_u16: 65535+1",             checked_add_u16(65535,    1, &r16));
-
-    /* u32 */
-    ASSERT_OK      ("add_u32: UINT32_MAX+0",  0xFFFFFFFFU, checked_add_u32(0xFFFFFFFFU, 0, &r32), r32);
-    ASSERT_OVERFLOW("add_u32: UINT32_MAX+1",              checked_add_u32(0xFFFFFFFFU, 1, &r32));
-
-    /* u64 */
-    ASSERT_OK      ("add_u64: 1+1",  2ULL,  checked_add_u64(1, 1, &r64), r64);
-    ASSERT_OVERFLOW("add_u64: MAX+1",       checked_add_u64(~0ULL, 1, &r64));
+    EXPECT(checked_add_u8(0, 0, &result) == true  && result == 0);
+    EXPECT(checked_add_u8(1, 1, &result) == true  && result == 2);
+    EXPECT(checked_add_u8(100, 55, &result) == true && result == 155);
+    EXPECT(checked_add_u8(254, 1, &result) == true  && result == 255);
+    EXPECT(checked_add_u8(255, 1, &result) == false);
+    EXPECT(checked_add_u8(255, 255, &result) == false);
+    EXPECT(checked_add_u8(128, 128, &result) == false);
+    EXPECT(checked_add_u8(0, 255, &result) == true && result == 255);
 }
 
-/* ============================================================================
+/* =========================================================================
+ * checked_add_u16
+ * ====================================================================== */
+
+TEST(checked_add_u16_op) {
+    u16 result = 0;
+
+    EXPECT(checked_add_u16(0, 0, &result) == true && result == 0);
+    EXPECT(checked_add_u16(1000, 1000, &result) == true && result == 2000);
+    EXPECT(checked_add_u16(65534, 1, &result) == true  && result == 65535);
+    EXPECT(checked_add_u16(65535, 1, &result) == false);
+    EXPECT(checked_add_u16(65535, 65535, &result) == false);
+    EXPECT(checked_add_u16(32768, 32767, &result) == true && result == 65535);
+    EXPECT(checked_add_u16(32768, 32768, &result) == false);
+}
+
+/* =========================================================================
+ * checked_add_u32
+ * ====================================================================== */
+
+TEST(checked_add_u32_op) {
+    u32 result = 0;
+
+    EXPECT(checked_add_u32(0, 0, &result) == true && result == 0);
+    EXPECT(checked_add_u32(0xFFFFFFFEU, 1, &result) == true  && result == 0xFFFFFFFFU);
+    EXPECT(checked_add_u32(0xFFFFFFFFU, 1, &result) == false);
+    EXPECT(checked_add_u32(0xFFFFFFFFU, 0xFFFFFFFFU, &result) == false);
+    EXPECT(checked_add_u32(1000000, 2000000, &result) == true && result == 3000000);
+}
+
+/* =========================================================================
+ * checked_add_u64
+ * ====================================================================== */
+
+TEST(checked_add_u64_op) {
+    u64 result = 0;
+
+    EXPECT(checked_add_u64(0, 0, &result) == true && result == 0);
+    EXPECT(checked_add_u64(0xFFFFFFFFFFFFFFFEULL, 1, &result) == true &&
+           result == 0xFFFFFFFFFFFFFFFFULL);
+    EXPECT(checked_add_u64(0xFFFFFFFFFFFFFFFFULL, 1, &result) == false);
+    EXPECT(checked_add_u64(0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, &result) == false);
+    EXPECT(checked_add_u64(1000000000ULL, 2000000000ULL, &result) == true &&
+           result == 3000000000ULL);
+}
+
+/* =========================================================================
  * checked_sub (usize)
- * ========================================================================= */
+ * ====================================================================== */
 
-static void test_checked_sub(void) {
-    usize r;
+TEST(checked_sub_op) {
+    usize result = 0;
 
-    /* Normal cases */
-    ASSERT_OK("sub: 10-3",   7ULL, checked_sub(10, 3, &r),  r);
-    ASSERT_OK("sub: 5-5",    0ULL, checked_sub(5,  5, &r),  r);
-    ASSERT_OK("sub: 0-0",    0ULL, checked_sub(0,  0, &r),  r);
-    ASSERT_OK("sub: MAX-MAX", 0ULL, checked_sub((usize)~0ULL, (usize)~0ULL, &r), r);
+    EXPECT(checked_sub(0, 0, &result) == true  && result == 0);
+    EXPECT(checked_sub(10, 3, &result) == true  && result == 7);
+    EXPECT(checked_sub(100, 100, &result) == true && result == 0);
+    EXPECT(checked_sub(CANON_USIZE_MAX, CANON_USIZE_MAX, &result) == true && result == 0);
+    EXPECT(checked_sub(CANON_USIZE_MAX, 0, &result) == true && result == CANON_USIZE_MAX);
 
     /* Underflow */
-    ASSERT_OVERFLOW("sub: 0-1",   checked_sub(0, 1, &r));
-    ASSERT_OVERFLOW("sub: 5-6",   checked_sub(5, 6, &r));
-    ASSERT_OVERFLOW("sub: 0-MAX", checked_sub(0, (usize)~0ULL, &r));
+    EXPECT(checked_sub(0, 1, &result) == false);
+    EXPECT(checked_sub(5, 6, &result) == false);
+    EXPECT(checked_sub(0, CANON_USIZE_MAX, &result) == false);
 }
 
-/* ============================================================================
+/* =========================================================================
  * checked_sub_u8 / u16 / u32 / u64
- * ========================================================================= */
+ * ====================================================================== */
 
-static void test_checked_sub_sized(void) {
-    u8  r8;
-    u16 r16;
-    u32 r32;
-    u64 r64;
+TEST(checked_sub_typed_op) {
+    u8  r8  = 0;
+    u16 r16 = 0;
+    u32 r32 = 0;
+    u64 r64 = 0;
 
     /* u8 */
-    ASSERT_OK      ("sub_u8: 10-3",   7U, checked_sub_u8(10, 3, &r8), r8);
-    ASSERT_OK      ("sub_u8: 0-0",    0U, checked_sub_u8(0,  0, &r8), r8);
-    ASSERT_OVERFLOW("sub_u8: 0-1",       checked_sub_u8(0,  1, &r8));
-    ASSERT_OVERFLOW("sub_u8: 5-6",       checked_sub_u8(5,  6, &r8));
+    EXPECT(checked_sub_u8(10, 3, &r8) == true  && r8 == 7);
+    EXPECT(checked_sub_u8(0, 0, &r8)  == true  && r8 == 0);
+    EXPECT(checked_sub_u8(255, 255, &r8) == true && r8 == 0);
+    EXPECT(checked_sub_u8(0, 1, &r8)  == false);
+    EXPECT(checked_sub_u8(5, 6, &r8)  == false);
 
     /* u16 */
-    ASSERT_OK      ("sub_u16: 1000-999",  1U, checked_sub_u16(1000, 999, &r16), r16);
-    ASSERT_OVERFLOW("sub_u16: 0-1",           checked_sub_u16(0, 1, &r16));
+    EXPECT(checked_sub_u16(1000, 500, &r16) == true  && r16 == 500);
+    EXPECT(checked_sub_u16(0, 1, &r16)      == false);
+    EXPECT(checked_sub_u16(65535, 65535, &r16) == true && r16 == 0);
 
     /* u32 */
-    ASSERT_OK      ("sub_u32: MAX-1",  0xFFFFFFFEU, checked_sub_u32(0xFFFFFFFFU, 1, &r32), r32);
-    ASSERT_OVERFLOW("sub_u32: 0-1",                 checked_sub_u32(0, 1, &r32));
+    EXPECT(checked_sub_u32(0xFFFFFFFFU, 1, &r32) == true && r32 == 0xFFFFFFFEU);
+    EXPECT(checked_sub_u32(0, 1, &r32)           == false);
 
     /* u64 */
-    ASSERT_OK      ("sub_u64: MAX-MAX",  0ULL, checked_sub_u64(~0ULL, ~0ULL, &r64), r64);
-    ASSERT_OVERFLOW("sub_u64: 0-1",           checked_sub_u64(0, 1, &r64));
+    EXPECT(checked_sub_u64(0xFFFFFFFFFFFFFFFFULL, 1, &r64) == true &&
+           r64 == 0xFFFFFFFFFFFFFFFEULL);
+    EXPECT(checked_sub_u64(0, 1, &r64) == false);
 }
 
-/* ============================================================================
+/* =========================================================================
  * checked_mul (usize)
- * ========================================================================= */
+ * ====================================================================== */
 
-static void test_checked_mul(void) {
-    usize r;
+TEST(checked_mul_op) {
+    usize result = 0;
 
-    /* Normal cases */
-    ASSERT_OK("mul: 0*anything",  0ULL, checked_mul(0, (usize)~0ULL, &r), r);
-    ASSERT_OK("mul: anything*0",  0ULL, checked_mul((usize)~0ULL, 0, &r), r);
-    ASSERT_OK("mul: 1*1",         1ULL, checked_mul(1, 1, &r),            r);
-    ASSERT_OK("mul: 100*100",  10000ULL,checked_mul(100, 100, &r),        r);
-
-    /* Boundary: large but valid */
-    ASSERT_OK("mul: 2*(MAX/2)", (usize)(~0ULL & ~1ULL),
-                                       checked_mul(2, (usize)~0ULL / 2, &r), r);
+    EXPECT(checked_mul(0, 0, &result) == true && result == 0);
+    EXPECT(checked_mul(0, CANON_USIZE_MAX, &result) == true && result == 0);
+    EXPECT(checked_mul(CANON_USIZE_MAX, 0, &result) == true && result == 0);
+    EXPECT(checked_mul(1, 1, &result) == true && result == 1);
+    EXPECT(checked_mul(100, 200, &result) == true && result == 20000);
+    EXPECT(checked_mul(CANON_USIZE_MAX, 1, &result) == true && result == CANON_USIZE_MAX);
+    EXPECT(checked_mul(1, CANON_USIZE_MAX, &result) == true && result == CANON_USIZE_MAX);
 
     /* Overflow */
-    ASSERT_OVERFLOW("mul: MAX*2",       checked_mul((usize)~0ULL, 2, &r));
-    ASSERT_OVERFLOW("mul: MAX*MAX",     checked_mul((usize)~0ULL, (usize)~0ULL, &r));
-    ASSERT_OVERFLOW("mul: large overflow", checked_mul((usize)~0ULL / 2 + 2, (usize)2, &r));
+    EXPECT(checked_mul(CANON_USIZE_MAX, 2, &result) == false);
+    EXPECT(checked_mul(2, CANON_USIZE_MAX, &result) == false);
+    EXPECT(checked_mul(CANON_USIZE_MAX, CANON_USIZE_MAX, &result) == false);
 }
 
-/* ============================================================================
+/* =========================================================================
  * checked_mul_u8 / u16 / u32 / u64
- * ========================================================================= */
+ * ====================================================================== */
 
-static void test_checked_mul_sized(void) {
-    u8  r8;
-    u16 r16;
-    u32 r32;
-    u64 r64;
+TEST(checked_mul_typed_op) {
+    u8  r8  = 0;
+    u16 r16 = 0;
+    u32 r32 = 0;
+    u64 r64 = 0;
 
     /* u8 */
-    ASSERT_OK      ("mul_u8: 10*10",  100U, checked_mul_u8(10, 10, &r8), r8);
-    ASSERT_OK      ("mul_u8: 0*255",    0U, checked_mul_u8( 0,255, &r8), r8);
-    ASSERT_OK      ("mul_u8: 255*1",  255U, checked_mul_u8(255,  1, &r8), r8);
-    ASSERT_OVERFLOW("mul_u8: 16*16",       checked_mul_u8(16,  16, &r8)); /* 256 > 255 */
-    ASSERT_OVERFLOW("mul_u8: 255*2",       checked_mul_u8(255,   2, &r8));
+    EXPECT(checked_mul_u8(0, 255, &r8) == true  && r8 == 0);
+    EXPECT(checked_mul_u8(1, 255, &r8) == true  && r8 == 255);
+    EXPECT(checked_mul_u8(15, 17, &r8) == true  && r8 == 255);
+    EXPECT(checked_mul_u8(16, 16, &r8) == true  && r8 == 0);  /* 256 overflows to 0 */
+    EXPECT(checked_mul_u8(16, 16, &r8) == false);
+    EXPECT(checked_mul_u8(2, 128, &r8) == false);
+    EXPECT(checked_mul_u8(255, 2,  &r8) == false);
 
     /* u16 */
-    ASSERT_OK      ("mul_u16: 256*255",  65280U, checked_mul_u16(256, 255, &r16), r16);
-    ASSERT_OVERFLOW("mul_u16: 256*256",          checked_mul_u16(256, 256, &r16)); /* 65536 > 65535 */
+    EXPECT(checked_mul_u16(256, 256, &r16) == true  && r16 == 0);    /* 65536 overflows */
+    EXPECT(checked_mul_u16(256, 256, &r16) == false);
+    EXPECT(checked_mul_u16(255, 257, &r16) == true  && r16 == 65535);
+    EXPECT(checked_mul_u16(0, 65535, &r16) == true  && r16 == 0);
 
     /* u32 */
-    ASSERT_OK      ("mul_u32: 65535*65535", 0xFFFE0001UL, checked_mul_u32(65535, 65535, &r32), r32);
-    ASSERT_OVERFLOW("mul_u32: 65536*65536",              checked_mul_u32(65536, 65536, &r32));
+    EXPECT(checked_mul_u32(0x10000U, 0x10000U, &r32) == false);
+    EXPECT(checked_mul_u32(0xFFFFU, 0x10001U, &r32)  == true && r32 == 0xFFFFFFFFU);
+    EXPECT(checked_mul_u32(1000, 1000, &r32) == true && r32 == 1000000);
 
     /* u64 */
-    ASSERT_OK      ("mul_u64: 1000*1000", 1000000ULL, checked_mul_u64(1000, 1000, &r64), r64);
-    ASSERT_OVERFLOW("mul_u64: MAX*2",                  checked_mul_u64(~0ULL, 2, &r64));
+    EXPECT(checked_mul_u64(0xFFFFFFFFULL, 0xFFFFFFFFULL, &r64) == true &&
+           r64 == 0xFFFFFFFE00000001ULL);
+    EXPECT(checked_mul_u64(0x100000000ULL, 0x100000000ULL, &r64) == false);
+    EXPECT(checked_mul_u64(0, 0xFFFFFFFFFFFFFFFFULL, &r64) == true && r64 == 0);
 }
 
-/* ============================================================================
- * checked_add_isize (signed)
- * ========================================================================= */
+/* =========================================================================
+ * checked_add_isize
+ * ====================================================================== */
 
-static void test_checked_add_isize(void) {
-    isize r;
+TEST(checked_add_isize_op) {
+    isize result = 0;
 
-    /* Normal cases */
-    ASSERT_OK("iadd: 1+1",       2,    checked_add_isize(1,  1,  &r), r);
-    ASSERT_OK("iadd: -1+(-1)",  -2,    checked_add_isize(-1, -1, &r), r);
-    ASSERT_OK("iadd: -5+5",      0,    checked_add_isize(-5,  5, &r), r);
-    ASSERT_OK("iadd: 0+0",       0,    checked_add_isize(0,   0, &r), r);
+    /* Normal */
+    EXPECT(checked_add_isize(0, 0, &result)   == true && result == 0);
+    EXPECT(checked_add_isize(1, 1, &result)   == true && result == 2);
+    EXPECT(checked_add_isize(-1, -1, &result) == true && result == -2);
+    EXPECT(checked_add_isize(100, -50, &result) == true && result == 50);
+    EXPECT(checked_add_isize(-100, 50, &result) == true && result == -50);
 
-    /* Boundary: exact max/min */
-    ASSERT_OK("iadd: MAX+0",   CANON_ISIZE_MAX, checked_add_isize(CANON_ISIZE_MAX, 0,  &r), r);
-    ASSERT_OK("iadd: MIN+0",   CANON_ISIZE_MIN, checked_add_isize(CANON_ISIZE_MIN, 0,  &r), r);
-    ASSERT_OK("iadd: MAX+MIN",  -1,             checked_add_isize(CANON_ISIZE_MAX, CANON_ISIZE_MIN, &r), r);
+    /* Boundary */
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX, 0, &result) == true &&
+           result == CANON_ISIZE_MAX);
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN, 0, &result) == true &&
+           result == CANON_ISIZE_MIN);
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX - 1, 1, &result) == true &&
+           result == CANON_ISIZE_MAX);
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN + 1, -1, &result) == true &&
+           result == CANON_ISIZE_MIN);
 
-    /* Positive overflow */
-    ASSERT_OVERFLOW("iadd: MAX+1",   checked_add_isize(CANON_ISIZE_MAX, 1, &r));
-    ASSERT_OVERFLOW("iadd: MAX+MAX", checked_add_isize(CANON_ISIZE_MAX, CANON_ISIZE_MAX, &r));
-
-    /* Negative overflow (underflow) */
-    ASSERT_OVERFLOW("iadd: MIN+(-1)",   checked_add_isize(CANON_ISIZE_MIN, -1, &r));
-    ASSERT_OVERFLOW("iadd: MIN+MIN",    checked_add_isize(CANON_ISIZE_MIN, CANON_ISIZE_MIN, &r));
+    /* Overflow */
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX, 1, &result)  == false);
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN, -1, &result) == false);
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX, CANON_ISIZE_MAX, &result) == false);
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN, CANON_ISIZE_MIN, &result) == false);
 
     /* Mixed signs never overflow */
-    ASSERT_TRUE("iadd: no overflow (mixed signs)", checked_add_isize(CANON_ISIZE_MAX, CANON_ISIZE_MIN, &r));
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX, CANON_ISIZE_MIN, &result) == true &&
+           result == -1);
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN, CANON_ISIZE_MAX, &result) == true &&
+           result == -1);
 }
 
-/* ============================================================================
- * checked_sub_isize (signed)
- * ========================================================================= */
+/* =========================================================================
+ * checked_sub_isize
+ * ====================================================================== */
 
-static void test_checked_sub_isize(void) {
-    isize r;
+TEST(checked_sub_isize_op) {
+    isize result = 0;
 
-    /* Normal cases */
-    ASSERT_OK("isub: 5-3",      2,  checked_sub_isize(5,   3,  &r), r);
-    ASSERT_OK("isub: -5-(-3)", -2,  checked_sub_isize(-5, -3,  &r), r);
-    ASSERT_OK("isub: 0-0",      0,  checked_sub_isize(0,   0,  &r), r);
-    ASSERT_OK("isub: 0-1",     -1,  checked_sub_isize(0,   1,  &r), r);
-    ASSERT_OK("isub: MIN-0",  CANON_ISIZE_MIN, checked_sub_isize(CANON_ISIZE_MIN, 0, &r), r);
-    ASSERT_OK("isub: MAX-0",  CANON_ISIZE_MAX, checked_sub_isize(CANON_ISIZE_MAX, 0, &r), r);
+    /* Normal */
+    EXPECT(checked_sub_isize(0, 0, &result)   == true && result == 0);
+    EXPECT(checked_sub_isize(5, 3, &result)   == true && result == 2);
+    EXPECT(checked_sub_isize(-5, -3, &result) == true && result == -2);
+    EXPECT(checked_sub_isize(0, 1, &result)   == true && result == -1);
+    EXPECT(checked_sub_isize(1, -1, &result)  == true && result == 2);
 
-    /* Overflow: subtracting a negative from MAX → too positive */
-    ASSERT_OVERFLOW("isub: MAX-(-1)",  checked_sub_isize(CANON_ISIZE_MAX, -1,  &r));
-    ASSERT_OVERFLOW("isub: MAX-MIN",   checked_sub_isize(CANON_ISIZE_MAX, CANON_ISIZE_MIN, &r));
+    /* Boundary */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN, 0, &result) == true &&
+           result == CANON_ISIZE_MIN);
+    EXPECT(checked_sub_isize(CANON_ISIZE_MAX, 0, &result) == true &&
+           result == CANON_ISIZE_MAX);
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN + 1, 1, &result) == true &&
+           result == CANON_ISIZE_MIN);
+    EXPECT(checked_sub_isize(CANON_ISIZE_MAX - 1, -1, &result) == true &&
+           result == CANON_ISIZE_MAX);
 
-    /* Underflow: subtracting a positive from MIN → too negative */
-    ASSERT_OVERFLOW("isub: MIN-1",     checked_sub_isize(CANON_ISIZE_MIN, 1,   &r));
-    ASSERT_OVERFLOW("isub: MIN-MAX",   checked_sub_isize(CANON_ISIZE_MIN, CANON_ISIZE_MAX, &r));
+    /* Overflow */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN, 1, &result)  == false);
+    EXPECT(checked_sub_isize(CANON_ISIZE_MAX, -1, &result) == false);
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN, CANON_ISIZE_MAX, &result) == false);
+    EXPECT(checked_sub_isize(CANON_ISIZE_MAX, CANON_ISIZE_MIN, &result) == false);
 }
 
-/* ============================================================================
- * checked_mul_isize (signed)
- * ========================================================================= */
+/* =========================================================================
+ * checked_mul_isize
+ * ====================================================================== */
 
-static void test_checked_mul_isize(void) {
-    isize r;
+TEST(checked_mul_isize_op) {
+    isize result = 0;
 
-    /* Zero short-circuits */
-    ASSERT_OK("imul: 0*MAX",   0, checked_mul_isize(0, CANON_ISIZE_MAX, &r), r);
-    ASSERT_OK("imul: MAX*0",   0, checked_mul_isize(CANON_ISIZE_MAX, 0, &r), r);
-    ASSERT_OK("imul: 0*MIN",   0, checked_mul_isize(0, CANON_ISIZE_MIN, &r), r);
+    /* Zero */
+    EXPECT(checked_mul_isize(0, 0, &result)            == true && result == 0);
+    EXPECT(checked_mul_isize(0, CANON_ISIZE_MAX, &result) == true && result == 0);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MAX, 0, &result) == true && result == 0);
+    EXPECT(checked_mul_isize(0, CANON_ISIZE_MIN, &result) == true && result == 0);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MIN, 0, &result) == true && result == 0);
 
-    /* Normal cases */
-    ASSERT_OK("imul: 3*4",    12, checked_mul_isize(3,   4, &r), r);
-    ASSERT_OK("imul: -3*4",  -12, checked_mul_isize(-3,  4, &r), r);
-    ASSERT_OK("imul: 3*(-4)",-12, checked_mul_isize(3,  -4, &r), r);
-    ASSERT_OK("imul: -3*(-4)", 12,checked_mul_isize(-3, -4, &r), r);
-    ASSERT_OK("imul: 1*MAX",  CANON_ISIZE_MAX, checked_mul_isize(1, CANON_ISIZE_MAX, &r), r);
-    ASSERT_OK("imul: -1*MAX", -CANON_ISIZE_MAX, checked_mul_isize(-1, CANON_ISIZE_MAX, &r), r);
+    /* Identity */
+    EXPECT(checked_mul_isize(1, 1, &result)   == true && result == 1);
+    EXPECT(checked_mul_isize(-1, 1, &result)  == true && result == -1);
+    EXPECT(checked_mul_isize(1, -1, &result)  == true && result == -1);
+    EXPECT(checked_mul_isize(-1, -1, &result) == true && result == 1);
 
-    /* (+,+) overflow */
-    ASSERT_OVERFLOW("imul: MAX*2",   checked_mul_isize(CANON_ISIZE_MAX, 2, &r));
-    ASSERT_OVERFLOW("imul: MAX*MAX", checked_mul_isize(CANON_ISIZE_MAX, CANON_ISIZE_MAX, &r));
+    /* ISIZE_MAX * 1 and ISIZE_MIN * 1 */
+    EXPECT(checked_mul_isize(CANON_ISIZE_MAX, 1, &result) == true &&
+           result == CANON_ISIZE_MAX);
+    EXPECT(checked_mul_isize(1, CANON_ISIZE_MAX, &result) == true &&
+           result == CANON_ISIZE_MAX);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MIN, 1, &result) == true &&
+           result == CANON_ISIZE_MIN);
+    EXPECT(checked_mul_isize(1, CANON_ISIZE_MIN, &result) == true &&
+           result == CANON_ISIZE_MIN);
 
-    /* (-,-) overflow: result would exceed MAX */
-    ASSERT_OVERFLOW("imul: MIN*(-1)", checked_mul_isize(CANON_ISIZE_MIN, -1, &r));
-    ASSERT_OVERFLOW("imul: MIN*MIN",  checked_mul_isize(CANON_ISIZE_MIN, CANON_ISIZE_MIN, &r));
+    /* ISIZE_MIN special cases */
+    EXPECT(checked_mul_isize(CANON_ISIZE_MIN, -1, &result) == false);
+    EXPECT(checked_mul_isize(-1, CANON_ISIZE_MIN, &result) == false);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MIN, 2, &result)  == false);
+    EXPECT(checked_mul_isize(2, CANON_ISIZE_MIN, &result)  == false);
 
-    /* (+,-) and (-,+) underflow */
-    ASSERT_OVERFLOW("imul: MAX*(-2)",  checked_mul_isize(CANON_ISIZE_MAX, -2, &r));
-    ASSERT_OVERFLOW("imul: MIN*2",     checked_mul_isize(CANON_ISIZE_MIN,  2, &r));
+    /* Normal overflow */
+    EXPECT(checked_mul_isize(CANON_ISIZE_MAX, 2, &result)  == false);
+    EXPECT(checked_mul_isize(2, CANON_ISIZE_MAX, &result)  == false);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MAX, CANON_ISIZE_MAX, &result) == false);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MIN, CANON_ISIZE_MIN, &result) == false);
+
+    /* Normal values */
+    EXPECT(checked_mul_isize(100, 200, &result) == true && result == 20000);
+    EXPECT(checked_mul_isize(-100, 200, &result) == true && result == -20000);
+    EXPECT(checked_mul_isize(100, -200, &result) == true && result == -20000);
+    EXPECT(checked_mul_isize(-100, -200, &result) == true && result == 20000);
 }
 
-/* ============================================================================
- * checked_min / checked_max / checked_clamp (macros)
- * ========================================================================= */
+/* =========================================================================
+ * checked_min / checked_max / checked_clamp
+ * ====================================================================== */
 
-static void test_checked_min_max_clamp(void) {
-    /* min */
-    ASSERT_EQ("min: 3,5",        3,   checked_min(3, 5));
-    ASSERT_EQ("min: 5,3",        3,   checked_min(5, 3));
-    ASSERT_EQ("min: equal",      4,   checked_min(4, 4));
-    ASSERT_EQ("min: negative",  -5,   checked_min(-5, -3));
-    ASSERT_EQ("min: 0,MAX",      0,   checked_min(0, (usize)~0ULL));
+TEST(checked_min_op) {
+    EXPECT(checked_min(0, 0) == 0);
+    EXPECT(checked_min(1, 2) == 1);
+    EXPECT(checked_min(2, 1) == 1);
+    EXPECT(checked_min(-1, 1) == -1);
+    EXPECT(checked_min(1, -1) == -1);
+    EXPECT(checked_min(CANON_ISIZE_MIN, CANON_ISIZE_MAX) == CANON_ISIZE_MIN);
+    EXPECT(checked_min(CANON_ISIZE_MAX, CANON_ISIZE_MIN) == CANON_ISIZE_MIN);
 
-    /* max */
-    ASSERT_EQ("max: 3,5",        5,   checked_max(3, 5));
-    ASSERT_EQ("max: 5,3",        5,   checked_max(5, 3));
-    ASSERT_EQ("max: equal",      4,   checked_max(4, 4));
-    ASSERT_EQ("max: negative",  -3,   checked_max(-5, -3));
-
-    /* clamp */
-    ASSERT_EQ("clamp: in range",    5,   checked_clamp(5, 1, 10));
-    ASSERT_EQ("clamp: below lo",    1,   checked_clamp(0, 1, 10));
-    ASSERT_EQ("clamp: above hi",   10,   checked_clamp(15, 1, 10));
-    ASSERT_EQ("clamp: at lo",       1,   checked_clamp(1, 1, 10));
-    ASSERT_EQ("clamp: at hi",      10,   checked_clamp(10, 1, 10));
-    ASSERT_EQ("clamp: lo==hi",      7,   checked_clamp(5,  7, 7));
-    ASSERT_EQ("clamp: negative",   -3,   checked_clamp(-5, -3, 0));
+    /* Equal inputs */
+    EXPECT(checked_min(42, 42) == 42);
+    EXPECT(checked_min(-7, -7) == -7);
 }
 
-/* ============================================================================
- * Main
- * ========================================================================= */
+TEST(checked_max_op) {
+    EXPECT(checked_max(0, 0) == 0);
+    EXPECT(checked_max(1, 2) == 2);
+    EXPECT(checked_max(2, 1) == 2);
+    EXPECT(checked_max(-1, 1) == 1);
+    EXPECT(checked_max(1, -1) == 1);
+    EXPECT(checked_max(CANON_ISIZE_MIN, CANON_ISIZE_MAX) == CANON_ISIZE_MAX);
+    EXPECT(checked_max(CANON_ISIZE_MAX, CANON_ISIZE_MIN) == CANON_ISIZE_MAX);
 
-int main(void) {
-    test_checked_add();
-    test_checked_add_sized();
+    /* Equal inputs */
+    EXPECT(checked_max(42, 42) == 42);
+    EXPECT(checked_max(-7, -7) == -7);
+}
 
-    test_checked_sub();
-    test_checked_sub_sized();
+TEST(checked_clamp_op) {
+    /* Normal clamping */
+    EXPECT(checked_clamp(5, 0, 10) == 5);
+    EXPECT(checked_clamp(0, 0, 10) == 0);   /* at lo */
+    EXPECT(checked_clamp(10, 0, 10) == 10); /* at hi */
+    EXPECT(checked_clamp(-1, 0, 10) == 0);  /* below lo */
+    EXPECT(checked_clamp(11, 0, 10) == 10); /* above hi */
 
-    test_checked_mul();
-    test_checked_mul_sized();
+    /* Degenerate: lo == hi */
+    EXPECT(checked_clamp(5, 7, 7) == 7);
+    EXPECT(checked_clamp(7, 7, 7) == 7);
+    EXPECT(checked_clamp(9, 7, 7) == 7);
 
-    test_checked_add_isize();
-    test_checked_sub_isize();
-    test_checked_mul_isize();
+    /* Negative ranges */
+    EXPECT(checked_clamp(-5, -10, -1) == -5);
+    EXPECT(checked_clamp(-15, -10, -1) == -10);
+    EXPECT(checked_clamp(0, -10, -1) == -1);
 
-    test_checked_min_max_clamp();
+    /* Boundary values */
+    EXPECT(checked_clamp(CANON_ISIZE_MIN, CANON_ISIZE_MIN, CANON_ISIZE_MAX) ==
+           CANON_ISIZE_MIN);
+    EXPECT(checked_clamp(CANON_ISIZE_MAX, CANON_ISIZE_MIN, CANON_ISIZE_MAX) ==
+           CANON_ISIZE_MAX);
+    EXPECT(checked_clamp(0, CANON_ISIZE_MIN, CANON_ISIZE_MAX) == 0);
+}
 
-    printf("\nResults: %d/%d passed", tests_passed, tests_run);
-    if (tests_failed > 0) {
-        printf(", %d FAILED\n", tests_failed);
-        return 1;
+/* =========================================================================
+ * Cross-checks: add/sub inverse, mul identity
+ * ====================================================================== */
+
+TEST(add_sub_inverse) {
+    usize result_add = 0;
+    usize result_sub = 0;
+    usize values[6];
+    int idx;
+
+    values[0] = 0;
+    values[1] = 1;
+    values[2] = 100;
+    values[3] = CANON_USIZE_MAX / 2;
+    values[4] = CANON_USIZE_MAX - 1;
+    values[5] = CANON_USIZE_MAX;
+
+    for (idx = 0; idx < 6; idx++) {
+        usize val = values[idx];
+        /* add then sub recovers original when no overflow */
+        if (checked_add(val, 1, &result_add)) {
+            EXPECT(checked_sub(result_add, 1, &result_sub) == true &&
+                   result_sub == val);
+        }
+        if (checked_sub(val, 1, &result_sub)) {
+            EXPECT(checked_add(result_sub, 1, &result_add) == true &&
+                   result_add == val);
+        }
     }
-    printf(" — all tests passed!\n");
+}
+
+TEST(mul_identity) {
+    usize result = 0;
+    usize values[5];
+    int idx;
+
+    values[0] = 0;
+    values[1] = 1;
+    values[2] = 42;
+    values[3] = CANON_USIZE_MAX / 2;
+    values[4] = CANON_USIZE_MAX;
+
+    for (idx = 0; idx < 5; idx++) {
+        usize val = values[idx];
+        EXPECT(checked_mul(val, 1, &result) == true && result == val);
+        EXPECT(checked_mul(1, val, &result) == true && result == val);
+        EXPECT(checked_mul(val, 0, &result) == true && result == 0);
+        EXPECT(checked_mul(0, val, &result) == true && result == 0);
+    }
+}
+
+/* =========================================================================
+ * Entry points
+ * ====================================================================== */
+
+#ifdef CANON_FUZZING
+
+int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
+    usize  ua = 0, ub = 0;
+    isize  ia = 0, ib = 0;
+    usize  ur = 0;
+    isize  ir = 0;
+    u8     r8  = 0;
+    u16    r16 = 0;
+    u32    r32 = 0;
+    u64    r64 = 0;
+
+    if (size < 16) return 0;
+
+    memcpy(&ua, data,     sizeof(usize));
+    memcpy(&ub, data + 8, sizeof(usize));
+    ia = (isize)ua;
+    ib = (isize)ub;
+
+    /* Unsigned add/sub/mul — result not checked for value, only consistency */
+    (void)checked_add(ua, ub, &ur);
+    (void)checked_sub(ua, ub, &ur);
+    (void)checked_mul(ua, ub, &ur);
+
+    /* add then sub inverse: if add succeeds, sub must also succeed and recover ua */
+    if (checked_add(ua, ub, &ur)) {
+        usize recovered = 0;
+        if (!checked_sub(ur, ub, &recovered)) __builtin_trap();
+        if (recovered != ua) __builtin_trap();
+    }
+
+    /* mul by zero always succeeds */
+    if (!checked_mul(ua, 0, &ur) || ur != 0) __builtin_trap();
+    if (!checked_mul(0, ua, &ur) || ur != 0) __builtin_trap();
+
+    /* mul by one preserves value */
+    if (!checked_mul(ua, 1, &ur) || ur != ua) __builtin_trap();
+
+    /* Typed unsigned */
+    {
+        u8 a8 = (u8)ua, b8 = (u8)ub;
+        (void)checked_add_u8(a8, b8, &r8);
+        (void)checked_sub_u8(a8, b8, &r8);
+        (void)checked_mul_u8(a8, b8, &r8);
+    }
+    {
+        u16 a16 = (u16)ua, b16 = (u16)ub;
+        (void)checked_add_u16(a16, b16, &r16);
+        (void)checked_sub_u16(a16, b16, &r16);
+        (void)checked_mul_u16(a16, b16, &r16);
+    }
+    {
+        u32 a32 = (u32)ua, b32 = (u32)ub;
+        (void)checked_add_u32(a32, b32, &r32);
+        (void)checked_sub_u32(a32, b32, &r32);
+        (void)checked_mul_u32(a32, b32, &r32);
+    }
+    {
+        u64 a64 = (u64)ua, b64 = (u64)ub;
+        (void)checked_add_u64(a64, b64, &r64);
+        (void)checked_sub_u64(a64, b64, &r64);
+        (void)checked_mul_u64(a64, b64, &r64);
+    }
+
+    /* Signed — add then sub inverse */
+    if (checked_add_isize(ia, ib, &ir)) {
+        isize recovered = 0;
+        if (!checked_sub_isize(ir, ib, &recovered)) __builtin_trap();
+        if (recovered != ia) __builtin_trap();
+    }
+
+    /* Signed mul: zero always succeeds */
+    if (!checked_mul_isize(ia, 0, &ir) || ir != 0) __builtin_trap();
+    if (!checked_mul_isize(0, ia, &ir) || ir != 0) __builtin_trap();
+
+    /* Signed mul: one preserves value */
+    if (!checked_mul_isize(ia, 1, &ir) || ir != ia) __builtin_trap();
+    if (!checked_mul_isize(1, ia, &ir) || ir != ia) __builtin_trap();
+
+    /* min/max/clamp sanity */
+    {
+        isize lo = checked_min(ia, ib);
+        isize hi = checked_max(ia, ib);
+        /* clamp(ia, lo, hi) == ia when ia is already in [lo, hi] */
+        if (checked_clamp(ia, lo, hi) != ia) __builtin_trap();
+        if (checked_clamp(ib, lo, hi) != ib) __builtin_trap();
+        /* clamp result is always in [lo, hi] */
+        isize clamped = checked_clamp(ia, lo, hi);
+        if (clamped < lo || clamped > hi) __builtin_trap();
+    }
+
     return 0;
 }
+
+#else
+
+int main(void) {
+    RUN(checked_add_op);
+    RUN(checked_add_u8_op);
+    RUN(checked_add_u16_op);
+    RUN(checked_add_u32_op);
+    RUN(checked_add_u64_op);
+
+    RUN(checked_sub_op);
+    RUN(checked_sub_typed_op);
+
+    RUN(checked_mul_op);
+    RUN(checked_mul_typed_op);
+
+    RUN(checked_add_isize_op);
+    RUN(checked_sub_isize_op);
+    RUN(checked_mul_isize_op);
+
+    RUN(checked_min_op);
+    RUN(checked_max_op);
+    RUN(checked_clamp_op);
+
+    RUN(add_sub_inverse);
+    RUN(mul_identity);
+
+    printf("\nchecked_test: %d passed, %d failed\n", g_pass, g_fail);
+    return g_fail > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+#endif /* CANON_FUZZING */
