@@ -202,12 +202,12 @@ canon_c_test(
 #     INCLUDES core/primitives
 # )
 
-# canon_c_test(
-#     NAME     ptr_test
-#     SRC      test/core/primitives/ptr_test.c
-#     INCLUDES core/primitives .
-#     FUZZABLE
-# )
+canon_c_test(
+    NAME     ptr_test
+    SRC      test/core/primitives/ptr_test.c
+    INCLUDES core/primitives .
+    FUZZABLE
+)
 
 # ---------------------------------------------------------------------------
 # core/ tests                          — uncomment when ready (v1.3.0)
