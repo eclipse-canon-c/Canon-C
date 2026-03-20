@@ -125,26 +125,28 @@ static void test_alloc_exhaustion_returns_null(void)
 
 static void test_alloc_exact_fit(void)
 {
-    u8    small[64];
+    /* Verify that allocating exactly the remaining aligned space
+     * leaves the arena full. We force the offset to an aligned
+     * position first so the subsequent alloc needs zero padding. */
+    u8    small[128];
     Arena a;
-    usize rem;
     void* p;
+    usize rem;
 
     arena_init(&a, small, sizeof(small));
 
-    /* Consume any initial alignment padding by doing a 1-byte alloc first,
-     * then measure what truly remains — that amount must fit exactly. */
-    arena_alloc(&a, 1);
-    rem = arena_remaining(&a);
+    /* Allocate CANON_DEFAULT_ALIGN bytes — offset is now exactly
+     * CANON_DEFAULT_ALIGN, which is aligned, so remaining is a
+     * clean multiple of CANON_DEFAULT_ALIGN with no padding needed. */
+    p = arena_alloc(&a, CANON_DEFAULT_ALIGN);
+    EXPECT(p != NULL);
 
-    if (rem == 0) {
-        /* buffer fully consumed after padding + 1 byte — nothing to test */
-        EXPECT(1);
-        return;
-    }
+    rem = arena_remaining(&a);
+    EXPECT(rem > 0);
 
     p = arena_alloc(&a, rem);
     EXPECT(p != NULL);
+    EXPECT(arena_remaining(&a) == 0);
     EXPECT(arena_alloc(&a, 1) == NULL);
 }
 
