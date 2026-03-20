@@ -236,14 +236,12 @@ TEST(checked_mul_typed_op) {
     EXPECT(checked_mul_u8(0, 255, &r8) == true  && r8 == 0);
     EXPECT(checked_mul_u8(1, 255, &r8) == true  && r8 == 255);
     EXPECT(checked_mul_u8(15, 17, &r8) == true  && r8 == 255);
-    EXPECT(checked_mul_u8(16, 16, &r8) == true  && r8 == 0);  /* 256 overflows to 0 */
-    EXPECT(checked_mul_u8(16, 16, &r8) == false);
+    EXPECT(checked_mul_u8(16, 16, &r8) == false);   /* 256 overflows u8 */
     EXPECT(checked_mul_u8(2, 128, &r8) == false);
     EXPECT(checked_mul_u8(255, 2,  &r8) == false);
 
     /* u16 */
-    EXPECT(checked_mul_u16(256, 256, &r16) == true  && r16 == 0);    /* 65536 overflows */
-    EXPECT(checked_mul_u16(256, 256, &r16) == false);
+    EXPECT(checked_mul_u16(256, 256, &r16) == false);  /* 65536 overflows u16 */
     EXPECT(checked_mul_u16(255, 257, &r16) == true  && r16 == 65535);
     EXPECT(checked_mul_u16(0, 65535, &r16) == true  && r16 == 0);
 
@@ -335,7 +333,7 @@ TEST(checked_mul_isize_op) {
     isize result = 0;
 
     /* Zero */
-    EXPECT(checked_mul_isize(0, 0, &result)            == true && result == 0);
+    EXPECT(checked_mul_isize(0, 0, &result)               == true && result == 0);
     EXPECT(checked_mul_isize(0, CANON_ISIZE_MAX, &result) == true && result == 0);
     EXPECT(checked_mul_isize(CANON_ISIZE_MAX, 0, &result) == true && result == 0);
     EXPECT(checked_mul_isize(0, CANON_ISIZE_MIN, &result) == true && result == 0);
@@ -364,15 +362,15 @@ TEST(checked_mul_isize_op) {
     EXPECT(checked_mul_isize(2, CANON_ISIZE_MIN, &result)  == false);
 
     /* Normal overflow */
-    EXPECT(checked_mul_isize(CANON_ISIZE_MAX, 2, &result)  == false);
-    EXPECT(checked_mul_isize(2, CANON_ISIZE_MAX, &result)  == false);
+    EXPECT(checked_mul_isize(CANON_ISIZE_MAX, 2, &result)            == false);
+    EXPECT(checked_mul_isize(2, CANON_ISIZE_MAX, &result)            == false);
     EXPECT(checked_mul_isize(CANON_ISIZE_MAX, CANON_ISIZE_MAX, &result) == false);
     EXPECT(checked_mul_isize(CANON_ISIZE_MIN, CANON_ISIZE_MIN, &result) == false);
 
     /* Normal values */
-    EXPECT(checked_mul_isize(100, 200, &result) == true && result == 20000);
-    EXPECT(checked_mul_isize(-100, 200, &result) == true && result == -20000);
-    EXPECT(checked_mul_isize(100, -200, &result) == true && result == -20000);
+    EXPECT(checked_mul_isize(100, 200, &result)   == true && result == 20000);
+    EXPECT(checked_mul_isize(-100, 200, &result)  == true && result == -20000);
+    EXPECT(checked_mul_isize(100, -200, &result)  == true && result == -20000);
     EXPECT(checked_mul_isize(-100, -200, &result) == true && result == 20000);
 }
 
@@ -388,8 +386,6 @@ TEST(checked_min_op) {
     EXPECT(checked_min(1, -1) == -1);
     EXPECT(checked_min(CANON_ISIZE_MIN, CANON_ISIZE_MAX) == CANON_ISIZE_MIN);
     EXPECT(checked_min(CANON_ISIZE_MAX, CANON_ISIZE_MIN) == CANON_ISIZE_MIN);
-
-    /* Equal inputs */
     EXPECT(checked_min(42, 42) == 42);
     EXPECT(checked_min(-7, -7) == -7);
 }
@@ -402,19 +398,17 @@ TEST(checked_max_op) {
     EXPECT(checked_max(1, -1) == 1);
     EXPECT(checked_max(CANON_ISIZE_MIN, CANON_ISIZE_MAX) == CANON_ISIZE_MAX);
     EXPECT(checked_max(CANON_ISIZE_MAX, CANON_ISIZE_MIN) == CANON_ISIZE_MAX);
-
-    /* Equal inputs */
     EXPECT(checked_max(42, 42) == 42);
     EXPECT(checked_max(-7, -7) == -7);
 }
 
 TEST(checked_clamp_op) {
     /* Normal clamping */
-    EXPECT(checked_clamp(5, 0, 10) == 5);
-    EXPECT(checked_clamp(0, 0, 10) == 0);   /* at lo */
-    EXPECT(checked_clamp(10, 0, 10) == 10); /* at hi */
-    EXPECT(checked_clamp(-1, 0, 10) == 0);  /* below lo */
-    EXPECT(checked_clamp(11, 0, 10) == 10); /* above hi */
+    EXPECT(checked_clamp(5, 0, 10)  == 5);
+    EXPECT(checked_clamp(0, 0, 10)  == 0);   /* at lo */
+    EXPECT(checked_clamp(10, 0, 10) == 10);  /* at hi */
+    EXPECT(checked_clamp(-1, 0, 10) == 0);   /* below lo */
+    EXPECT(checked_clamp(11, 0, 10) == 10);  /* above hi */
 
     /* Degenerate: lo == hi */
     EXPECT(checked_clamp(5, 7, 7) == 7);
@@ -422,9 +416,9 @@ TEST(checked_clamp_op) {
     EXPECT(checked_clamp(9, 7, 7) == 7);
 
     /* Negative ranges */
-    EXPECT(checked_clamp(-5, -10, -1) == -5);
+    EXPECT(checked_clamp(-5,  -10, -1) == -5);
     EXPECT(checked_clamp(-15, -10, -1) == -10);
-    EXPECT(checked_clamp(0, -10, -1) == -1);
+    EXPECT(checked_clamp(0,   -10, -1) == -1);
 
     /* Boundary values */
     EXPECT(checked_clamp(CANON_ISIZE_MIN, CANON_ISIZE_MIN, CANON_ISIZE_MAX) ==
@@ -453,7 +447,6 @@ TEST(add_sub_inverse) {
 
     for (idx = 0; idx < 6; idx++) {
         usize val = values[idx];
-        /* add then sub recovers original when no overflow */
         if (checked_add(val, 1, &result_add)) {
             EXPECT(checked_sub(result_add, 1, &result_sub) == true &&
                    result_sub == val);
@@ -492,14 +485,14 @@ TEST(mul_identity) {
 #ifdef CANON_FUZZING
 
 int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
-    usize  ua = 0, ub = 0;
-    isize  ia = 0, ib = 0;
-    usize  ur = 0;
-    isize  ir = 0;
-    u8     r8  = 0;
-    u16    r16 = 0;
-    u32    r32 = 0;
-    u64    r64 = 0;
+    usize ua = 0, ub = 0;
+    isize ia = 0, ib = 0;
+    usize ur = 0;
+    isize ir = 0;
+    u8    r8  = 0;
+    u16   r16 = 0;
+    u32   r32 = 0;
+    u64   r64 = 0;
 
     if (size < 16) return 0;
 
@@ -508,16 +501,16 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     ia = (isize)ua;
     ib = (isize)ub;
 
-    /* Unsigned add/sub/mul — result not checked for value, only consistency */
+    /* Unsigned add/sub/mul */
     (void)checked_add(ua, ub, &ur);
     (void)checked_sub(ua, ub, &ur);
     (void)checked_mul(ua, ub, &ur);
 
-    /* add then sub inverse: if add succeeds, sub must also succeed and recover ua */
+    /* add then sub inverse */
     if (checked_add(ua, ub, &ur)) {
         usize recovered = 0;
         if (!checked_sub(ur, ub, &recovered)) __builtin_trap();
-        if (recovered != ua) __builtin_trap();
+        if (recovered != ua)                  __builtin_trap();
     }
 
     /* mul by zero always succeeds */
@@ -553,11 +546,11 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
         (void)checked_mul_u64(a64, b64, &r64);
     }
 
-    /* Signed — add then sub inverse */
+    /* Signed add then sub inverse */
     if (checked_add_isize(ia, ib, &ir)) {
         isize recovered = 0;
         if (!checked_sub_isize(ir, ib, &recovered)) __builtin_trap();
-        if (recovered != ia) __builtin_trap();
+        if (recovered != ia)                        __builtin_trap();
     }
 
     /* Signed mul: zero always succeeds */
@@ -572,12 +565,12 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     {
         isize lo = checked_min(ia, ib);
         isize hi = checked_max(ia, ib);
-        /* clamp(ia, lo, hi) == ia when ia is already in [lo, hi] */
         if (checked_clamp(ia, lo, hi) != ia) __builtin_trap();
         if (checked_clamp(ib, lo, hi) != ib) __builtin_trap();
-        /* clamp result is always in [lo, hi] */
-        isize clamped = checked_clamp(ia, lo, hi);
-        if (clamped < lo || clamped > hi) __builtin_trap();
+        {
+            isize clamped = checked_clamp(ia, lo, hi);
+            if (clamped < lo || clamped > hi) __builtin_trap();
+        }
     }
 
     return 0;
