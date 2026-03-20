@@ -22,7 +22,6 @@
 ![MSVC](https://img.shields.io/badge/MSVC-Dev%2FTest-orange)
 ![ASan+UBSan](https://img.shields.io/badge/ASan%2BUBSan-Configurable-lightgrey)
 ![Valgrind](https://img.shields.io/badge/Valgrind-Configurable-lightgrey)
-![Dr.Memory](https://img.shields.io/badge/Dr.Memory-Configurable-lightgrey)
 ![Fuzzing](https://img.shields.io/badge/Fuzzing-Configurable-lightgrey)
 
 <!-- Static Analysis -->
