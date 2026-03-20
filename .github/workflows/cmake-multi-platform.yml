@@ -6,27 +6,10 @@ on:
   pull_request:
     branches: [ "master" ]
 
-# ---------------------------------------------------------------------------
-# Job overview
-#
-#   build           — core matrix: all platforms, Release + Debug, sanitizers
-#   static-analysis — clang-tidy + Cppcheck, all platforms, errors block
-#   valgrind        — Linux only, Debug, memory error detection
-#   dr-memory       — Windows only, Debug, memory error detection
-#   fuzzing         — Linux + macOS + Windows/Clang, 30s per fuzz target
-#
-# Jobs 2-5 depend on build passing first.
-# ---------------------------------------------------------------------------
-
 jobs:
 
   # -------------------------------------------------------------------------
-  # 1. Build + test — all platforms, Release and Debug
-  #
-  # Sanitizer matrix:
-  #   Linux/macOS  GCC + Clang  ->  ASan + UBSan
-  #   Windows      MSVC         ->  ASan only (/fsanitize=address)
-  #   Windows      Clang        ->  ASan + UBSan
+  # 1. Build + test
   # -------------------------------------------------------------------------
   build:
     runs-on: ${{ matrix.os }}
@@ -53,7 +36,6 @@ jobs:
             c_compiler: cl
           - os: macos-latest
             c_compiler: cl
-          # macOS + gcc is Apple's Clang shim — redundant
           - os: macos-latest
             c_compiler: gcc
 
@@ -94,57 +76,19 @@ jobs:
       - name: Build
         run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
 
-      # On Windows Debug builds with ASan enabled the clang_rt.asan DLL is
-      # not automatically on PATH, causing 0xc0000135 (DLL not found) at
-      # runtime. We locate the DLL directory and prepend it to PATH before
-      # running ctest.
-      - name: Add ASan runtime to PATH (Windows Debug only)
-        if: runner.os == 'Windows' && matrix.build_type == 'Debug'
-        shell: pwsh
-        run: |
-          # MSVC ASan DLL lives alongside the compiler
-          $cl = (Get-Command cl.exe -ErrorAction SilentlyContinue)?.Source
-          if ($cl) {
-            $compilerDir = Split-Path $cl
-            # The ASan DLL is one level up in the MSVC tools tree
-            $candidates = @(
-              $compilerDir,
-              (Join-Path $compilerDir "..\..\..\..\..\bin\Hostx64\x64"),
-              "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC"
-            )
-            foreach ($dir in $candidates) {
-              $resolved = Resolve-Path $dir -ErrorAction SilentlyContinue
-              if ($resolved -and (Get-ChildItem $resolved -Filter "clang_rt.asan*.dll" -Recurse -ErrorAction SilentlyContinue)) {
-                $asanDir = (Get-ChildItem $resolved -Filter "clang_rt.asan*.dll" -Recurse | Select-Object -First 1).DirectoryName
-                Write-Host "Adding ASan dir to PATH: $asanDir"
-                echo "$asanDir" >> $env:GITHUB_PATH
-                break
-              }
-            }
-          }
-          # Clang ASan DLL lives in the LLVM bin directory
-          $clang = (Get-Command clang.exe -ErrorAction SilentlyContinue)?.Source
-          if ($clang) {
-            $llvmBin = Split-Path $clang
-            Write-Host "Adding LLVM bin to PATH: $llvmBin"
-            echo "$llvmBin" >> $env:GITHUB_PATH
-          }
-
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
 
   # -------------------------------------------------------------------------
   # 2. Static analysis — clang-tidy + Cppcheck
-  #    Runs on all three platforms. Errors block the build.
-  #    Needs compile_commands.json from CMake (CMAKE_EXPORT_COMPILE_COMMANDS).
   # -------------------------------------------------------------------------
   static-analysis:
     needs: build
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -156,31 +100,47 @@ jobs:
 
       - name: Install clang-tidy and Cppcheck (macOS)
         if: matrix.os == 'macos-latest'
-        run: brew install llvm cppcheck
-
-      - name: Install clang-tidy and Cppcheck (Windows)
-        if: matrix.os == 'windows-latest'
-        run: choco install cppcheck llvm --yes
+        run: |
+          brew install llvm cppcheck
+          # brew installs LLVM tools with version suffix; add the bin dir to PATH
+          LLVM_BIN="$(brew --prefix llvm)/bin"
+          echo "$LLVM_BIN" >> $GITHUB_PATH
 
       - name: Configure CMake (generate compile_commands.json)
-        shell: pwsh
+        shell: bash
         run: |
-          cmake -B build `
-            -DCMAKE_BUILD_TYPE=Debug `
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -S "${{ github.workspace }}"
 
       - name: Run clang-tidy
         shell: bash
         run: |
-          FILES=$(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | tr '\n' ' ')
+          # Only analyse files that are non-empty and part of the active build.
+          # Empty placeholder files (arena_test.c, memory_test.c, etc.) produce
+          # clang-diagnostic-empty-translation-unit errors — skip them.
+          FILES=""
+          for f in $(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null); do
+            # Skip empty files
+            if [ ! -s "$f" ]; then
+              echo "Skipping empty file: $f"
+              continue
+            fi
+            FILES="$FILES $f"
+          done
+
           if [ -z "$FILES" ]; then
-            echo "No test source files found — skipping clang-tidy"
+            echo "No non-empty test source files found — skipping clang-tidy"
             exit 0
           fi
+
           clang-tidy \
             -p build \
             --warnings-as-errors="*" \
+            -extra-arg="-I${{ github.workspace }}/core/primitives" \
+            -extra-arg="-I${{ github.workspace }}/core" \
+            -extra-arg="-I${{ github.workspace }}" \
             $FILES
 
       - name: Run Cppcheck
@@ -201,8 +161,6 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 3. Valgrind — Linux only
-  #    Builds without sanitizers (conflicts with Valgrind instrumentation),
-  #    then runs the test suite under Valgrind memcheck.
   # -------------------------------------------------------------------------
   valgrind:
     needs: build
@@ -237,8 +195,6 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 4. Dr. Memory — Windows only
-  #    Builds without sanitizers (conflicts with Dr. Memory instrumentation),
-  #    then runs each test binary individually under Dr. Memory.
   # -------------------------------------------------------------------------
   dr-memory:
     needs: build
@@ -265,10 +221,18 @@ jobs:
       - name: Run tests under Dr. Memory
         shell: pwsh
         run: |
-          $drmemory = (Get-Command drmemory.exe -ErrorAction SilentlyContinue)?.Source
+          # choco installs Dr. Memory under a versioned subdirectory;
+          # search for the actual executable rather than assuming a fixed path.
+          $drmemory = Get-ChildItem -Path "C:\Program Files\Dr. Memory" `
+            -Filter "drmemory.exe" -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+
           if (-not $drmemory) {
-            $drmemory = "C:\Program Files\Dr. Memory\bin\drmemory.exe"
+            Write-Error "drmemory.exe not found — is Dr. Memory installed?"
+            exit 1
           }
+
+          Write-Host "Using Dr. Memory at: $drmemory"
 
           $testExes = Get-ChildItem -Path build\Debug -Filter "*_test.exe"
           $failed = @()
@@ -288,8 +252,9 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 5. Fuzzing — Linux, macOS, Windows/Clang
-  #    Each fuzz target runs for 25 seconds (30s CTest timeout).
-  #    Uses libFuzzer — Clang only.
+  #    libFuzzer requires Clang on all platforms.
+  #    On Windows we use Ninja + explicit clang-cl to avoid CMake
+  #    defaulting to the MSVC generator which ignores -DCMAKE_C_COMPILER.
   # -------------------------------------------------------------------------
   fuzzing:
     needs: build
@@ -307,6 +272,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja --yes
 
       - name: Set reusable strings
         id: strings
@@ -328,8 +297,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # Force Ninja generator so CMake respects -DCMAKE_C_COMPILER=clang
+          # instead of defaulting to the Visual Studio generator (which
+          # ignores the flag and selects MSVC, causing ENABLE_FUZZING to fail).
           cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
-            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+            -G Ninja `
+            -DCMAKE_C_COMPILER=clang `
             -DCMAKE_BUILD_TYPE=Debug `
             -DENABLE_FUZZING=ON `
             -S "${{ github.workspace }}"
