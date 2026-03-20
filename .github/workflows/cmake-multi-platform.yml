@@ -66,9 +66,6 @@ jobs:
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-      # Sanitizers are enabled on Debug builds only.
-      # On Windows we use pwsh to avoid bash mangling the workspace path.
-      # On Linux/macOS we keep bash for the conditional SANITIZERS variable.
       - name: Configure CMake (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -96,6 +93,42 @@ jobs:
 
       - name: Build
         run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
+
+      # On Windows Debug builds with ASan enabled the clang_rt.asan DLL is
+      # not automatically on PATH, causing 0xc0000135 (DLL not found) at
+      # runtime. We locate the DLL directory and prepend it to PATH before
+      # running ctest.
+      - name: Add ASan runtime to PATH (Windows Debug only)
+        if: runner.os == 'Windows' && matrix.build_type == 'Debug'
+        shell: pwsh
+        run: |
+          # MSVC ASan DLL lives alongside the compiler
+          $cl = (Get-Command cl.exe -ErrorAction SilentlyContinue)?.Source
+          if ($cl) {
+            $compilerDir = Split-Path $cl
+            # The ASan DLL is one level up in the MSVC tools tree
+            $candidates = @(
+              $compilerDir,
+              (Join-Path $compilerDir "..\..\..\..\..\bin\Hostx64\x64"),
+              "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC"
+            )
+            foreach ($dir in $candidates) {
+              $resolved = Resolve-Path $dir -ErrorAction SilentlyContinue
+              if ($resolved -and (Get-ChildItem $resolved -Filter "clang_rt.asan*.dll" -Recurse -ErrorAction SilentlyContinue)) {
+                $asanDir = (Get-ChildItem $resolved -Filter "clang_rt.asan*.dll" -Recurse | Select-Object -First 1).DirectoryName
+                Write-Host "Adding ASan dir to PATH: $asanDir"
+                echo "$asanDir" >> $env:GITHUB_PATH
+                break
+              }
+            }
+          }
+          # Clang ASan DLL lives in the LLVM bin directory
+          $clang = (Get-Command clang.exe -ErrorAction SilentlyContinue)?.Source
+          if ($clang) {
+            $llvmBin = Split-Path $clang
+            Write-Host "Adding LLVM bin to PATH: $llvmBin"
+            echo "$llvmBin" >> $env:GITHUB_PATH
+          }
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
