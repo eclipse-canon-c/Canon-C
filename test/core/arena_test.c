@@ -32,6 +32,8 @@
 
 /* ── Harness ─────────────────────────────────────────────────────────────── */
 
+#ifndef CANON_FUZZING
+
 static int g_failed = 0;
 
 #define EXPECT(cond)                                             \
@@ -40,6 +42,19 @@ static int g_failed = 0;
             fprintf(stderr, "FAIL %s:%d  %s\n",                 \
                     __FILE__, __LINE__, #cond);                  \
             g_failed++;                                          \
+        }                                                        \
+    } while (0)
+
+/* EXPECT_NOT_NULL — records failure and returns from the calling function
+ * if ptr is NULL. Prevents cppcheck nullPointerRedundantCheck false positives
+ * that arise when EXPECT(p != NULL) is followed by a dereference of p. */
+#define EXPECT_NOT_NULL(ptr)                                     \
+    do {                                                         \
+        if ((ptr) == NULL) {                                     \
+            fprintf(stderr, "FAIL %s:%d  %s != NULL\n",         \
+                    __FILE__, __LINE__, #ptr);                   \
+            g_failed++;                                          \
+            return;                                              \
         }                                                        \
     } while (0)
 
@@ -99,7 +114,7 @@ static void test_alloc_default_alignment(void)
 {
     setup();
     void* p = arena_alloc(&g_arena, 1);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, CANON_DEFAULT_ALIGN));
 }
 
@@ -108,7 +123,8 @@ static void test_alloc_sequential_non_overlapping(void)
     setup();
     u8* a = (u8*)arena_alloc(&g_arena, 8);
     u8* b = (u8*)arena_alloc(&g_arena, 8);
-    EXPECT(a != NULL && b != NULL);
+    EXPECT_NOT_NULL(a);
+    EXPECT_NOT_NULL(b);
     EXPECT(b >= a + 8);
 }
 
@@ -125,9 +141,6 @@ static void test_alloc_exhaustion_returns_null(void)
 
 static void test_alloc_exact_fit(void)
 {
-    /* Verify that allocating exactly the remaining aligned space
-     * leaves the arena full. We force the offset to an aligned
-     * position first so the subsequent alloc needs zero padding. */
     u8    small[128];
     Arena a;
     void* p;
@@ -139,13 +152,13 @@ static void test_alloc_exact_fit(void)
      * CANON_DEFAULT_ALIGN, which is aligned, so remaining is a
      * clean multiple of CANON_DEFAULT_ALIGN with no padding needed. */
     p = arena_alloc(&a, CANON_DEFAULT_ALIGN);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
 
     rem = arena_remaining(&a);
     EXPECT(rem > 0);
 
     p = arena_alloc(&a, rem);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(arena_remaining(&a) == 0);
     EXPECT(arena_alloc(&a, 1) == NULL);
 }
@@ -156,7 +169,7 @@ static void test_alloc_aligned_16(void)
 {
     setup();
     void* p = arena_alloc_aligned(&g_arena, 32, 16);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, 16));
 }
 
@@ -164,7 +177,7 @@ static void test_alloc_aligned_64(void)
 {
     setup();
     void* p = arena_alloc_aligned(&g_arena, 8, 64);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, 64));
 }
 
@@ -189,7 +202,7 @@ static void test_alloc_zero_is_zeroed(void)
     setup();
     u8*   p = (u8*)arena_alloc_zero(&g_arena, 32);
     usize i;
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     for (i = 0; i < 32; i++) EXPECT(p[i] == 0);
 }
 
@@ -198,7 +211,7 @@ static void test_alloc_aligned_zero_is_zeroed(void)
     setup();
     u8*   p = (u8*)arena_alloc_aligned_zero(&g_arena, 16, 16);
     usize i;
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, 16));
     for (i = 0; i < 16; i++) EXPECT(p[i] == 0);
 }
@@ -229,7 +242,7 @@ static void test_try_alloc_aligned_success(void)
     void* p  = NULL;
     bool  ok = arena_try_alloc_aligned(&g_arena, 16, 16, &p);
     EXPECT(ok);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, 16));
 }
 
@@ -249,10 +262,10 @@ static void test_reset_allows_reuse(void)
 {
     setup();
     void* a = arena_alloc(&g_arena, 128);
-    EXPECT(a != NULL);
+    EXPECT_NOT_NULL(a);
     arena_reset(&g_arena);
     void* b = arena_alloc(&g_arena, 128);
-    EXPECT(b != NULL);
+    EXPECT_NOT_NULL(b);
     EXPECT(b == a);
 }
 
@@ -269,7 +282,7 @@ static void test_reset_secure_wipes_memory(void)
     setup();
     u8*   p = (u8*)arena_alloc(&g_arena, 32);
     usize i;
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     for (i = 0; i < 32; i++) p[i] = (u8)(i + 1);
     usize used = arena_used(&g_arena);
     arena_reset_secure(&g_arena);
@@ -397,7 +410,7 @@ static void test_alloc_type_macro(void)
 {
     setup();
     i32* p = arena_alloc_type(&g_arena, i32);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     *p = 42;
     EXPECT(*p == 42);
 }
@@ -407,7 +420,7 @@ static void test_alloc_array_macro(void)
     setup();
     i32*  arr = arena_alloc_array(&g_arena, i32, 8);
     usize i;
-    EXPECT(arr != NULL);
+    EXPECT_NOT_NULL(arr);
     for (i = 0; i < 8; i++) arr[i] = (i32)i;
     for (i = 0; i < 8; i++) EXPECT(arr[i] == (i32)i);
 }
@@ -416,7 +429,7 @@ static void test_alloc_type_zero_macro(void)
 {
     setup();
     i32* p = arena_alloc_type_zero(&g_arena, i32);
-    EXPECT(p != NULL);
+    EXPECT_NOT_NULL(p);
     EXPECT(*p == 0);
 }
 
@@ -425,7 +438,7 @@ static void test_alloc_array_zero_macro(void)
     setup();
     i32*  arr = arena_alloc_array_zero(&g_arena, i32, 8);
     usize i;
-    EXPECT(arr != NULL);
+    EXPECT_NOT_NULL(arr);
     for (i = 0; i < 8; i++) EXPECT(arr[i] == 0);
 }
 
@@ -487,8 +500,6 @@ static void test_debug_stats_null_returns_zero(void)
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
-
-#ifndef CANON_FUZZING
 
 int main(void)
 {
