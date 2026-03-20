@@ -24,9 +24,9 @@ jobs:
   # 1. Build + test — all platforms, Release and Debug
   #
   # Sanitizer matrix:
-  #   Linux/macOS  GCC + Clang  →  ASan + UBSan
-  #   Windows      MSVC         →  ASan only (/fsanitize=address)
-  #   Windows      Clang        →  ASan + UBSan
+  #   Linux/macOS  GCC + Clang  ->  ASan + UBSan
+  #   Windows      MSVC         ->  ASan only (/fsanitize=address)
+  #   Windows      Clang        ->  ASan + UBSan
   # -------------------------------------------------------------------------
   build:
     runs-on: ${{ matrix.os }}
@@ -67,24 +67,35 @@ jobs:
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
       # Sanitizers are enabled on Debug builds only.
-      # CMakeLists.txt handles the per-compiler difference:
-      #   GCC/Clang → ASan + UBSan
-      #   MSVC      → ASan only (/fsanitize=address, no UBSan)
-      - name: Configure CMake
+      # On Windows we use pwsh to avoid bash mangling the workspace path.
+      # On Linux/macOS we keep bash for the conditional SANITIZERS variable.
+      - name: Configure CMake (Linux / macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           SANITIZERS=OFF
           if [[ "${{ matrix.build_type }}" == "Debug" ]]; then
             SANITIZERS=ON
           fi
-          cmake -B ${{ steps.strings.outputs.build-output-dir }} \
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
             -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DENABLE_SANITIZERS=${SANITIZERS} \
-            -S ${{ github.workspace }}
+            -S "${{ github.workspace }}"
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sanitizers = if ("${{ matrix.build_type }}" -eq "Debug") { "ON" } else { "OFF" }
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DENABLE_SANITIZERS="$sanitizers" `
+            -S "${{ github.workspace }}"
 
       - name: Build
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+        run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
@@ -119,18 +130,17 @@ jobs:
         run: choco install cppcheck llvm --yes
 
       - name: Configure CMake (generate compile_commands.json)
-        shell: bash
+        shell: pwsh
         run: |
-          cmake -B build \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -S ${{ github.workspace }}
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
+            -S "${{ github.workspace }}"
 
       - name: Run clang-tidy
         shell: bash
         run: |
-          # Collect all C source files under test/
-          FILES=$(find ${{ github.workspace }}/test -name "*.c" 2>/dev/null | tr '\n' ' ')
+          FILES=$(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | tr '\n' ' ')
           if [ -z "$FILES" ]; then
             echo "No test source files found — skipping clang-tidy"
             exit 0
@@ -148,13 +158,13 @@ jobs:
             --std=c99 \
             --error-exitcode=1 \
             --suppress=missingIncludeSystem \
-            -I ${{ github.workspace }}/core/primitives \
-            -I ${{ github.workspace }}/core \
-            -I ${{ github.workspace }}/semantics \
-            -I ${{ github.workspace }}/data \
-            -I ${{ github.workspace }}/algo \
-            -I ${{ github.workspace }}/util \
-            ${{ github.workspace }}/test
+            -I "${{ github.workspace }}/core/primitives" \
+            -I "${{ github.workspace }}/core" \
+            -I "${{ github.workspace }}/semantics" \
+            -I "${{ github.workspace }}/data" \
+            -I "${{ github.workspace }}/algo" \
+            -I "${{ github.workspace }}/util" \
+            "${{ github.workspace }}/test"
 
   # -------------------------------------------------------------------------
   # 3. Valgrind — Linux only
@@ -177,7 +187,7 @@ jobs:
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_BUILD_TYPE=Debug \
             -DENABLE_SANITIZERS=OFF \
-            -S ${{ github.workspace }}
+            -S "${{ github.workspace }}"
 
       - name: Build
         run: cmake --build build
@@ -196,7 +206,6 @@ jobs:
   # 4. Dr. Memory — Windows only
   #    Builds without sanitizers (conflicts with Dr. Memory instrumentation),
   #    then runs each test binary individually under Dr. Memory.
-  #    ASan-instrumented binaries cannot run under Dr. Memory — separate build.
   # -------------------------------------------------------------------------
   dr-memory:
     needs: build
@@ -209,12 +218,13 @@ jobs:
         run: choco install drmemory --yes
 
       - name: Configure CMake (no sanitizers — conflicts with Dr. Memory)
+        shell: pwsh
         run: |
           cmake -B build `
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_BUILD_TYPE=Debug `
             -DENABLE_SANITIZERS=OFF `
-            -S ${{ github.workspace }}
+            -S "${{ github.workspace }}"
 
       - name: Build
         run: cmake --build build --config Debug
@@ -271,17 +281,28 @@ jobs:
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-      - name: Configure CMake
+      - name: Configure CMake (Linux / macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          cmake -B ${{ steps.strings.outputs.build-output-dir }} \
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
             -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
             -DCMAKE_BUILD_TYPE=Debug \
             -DENABLE_FUZZING=ON \
-            -S ${{ github.workspace }}
+            -S "${{ github.workspace }}"
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -DENABLE_FUZZING=ON `
+            -S "${{ github.workspace }}"
 
       - name: Build fuzz targets
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Debug
+        run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config Debug
 
       - name: Run fuzz targets
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
