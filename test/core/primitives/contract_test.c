@@ -423,29 +423,36 @@ static void test_set_handler(void) {
  * ====================================================================== */
 
 static void test_diagnostic_fields(void) {
-    int line_a = 0, line_b = 0;
+    /*
+     * Declared volatile to prevent -Werror=clobbered: local variables
+     * that are written before setjmp and read after longjmp must be
+     * volatile so the compiler does not cache them in a register that
+     * longjmp may restore to a stale value.
+     */
+    volatile int line_a = 0;
+    volatile int line_b = 0;
 
     contract_set_handler(_capture_handler);
 
-    /* Capture the line number before the require() call */
+    /* require(0) — verify line number, file, and func are populated */
     _cap_reset();
     if (setjmp(_cap_jmp) == 0) {
-        line_a = __LINE__ + 1;
-        require(0);
+        line_a = __LINE__; require(0);  /* same line so __LINE__ matches */
     }
     EXPECT(_cap_fired == 1);
     EXPECT(_cap_line == line_a);
     EXPECT(strstr(_cap_file, "contract_test") != NULL ||
            strstr(_cap_file, "contract_test.c") != NULL);
+    EXPECT(_cap_func[0] != '\0');
 
-    /* panic() line */
+    /* panic() — verify line number is captured */
     _cap_reset();
     if (setjmp(_cap_jmp) == 0) {
-        line_b = __LINE__ + 1;
-        panic("line_check");
+        line_b = __LINE__; panic("line_check");  /* same line */
     }
     EXPECT(_cap_fired == 1);
     EXPECT(_cap_line == line_b);
+    EXPECT(_cap_line > 0);
 
     contract_set_handler(_capture_handler);
 }
