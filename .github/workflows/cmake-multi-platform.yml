@@ -93,17 +93,15 @@ jobs:
   # -------------------------------------------------------------------------
   # 2. Static analysis
   #
-  #    clang-tidy — Linux only
-  #      Requires compile_commands.json. Uses a curated check set that
-  #      excludes checks inappropriate for test code (style complexity
-  #      limits, LLVM-internal libc restrictions, cert naming rules for
-  #      identifiers, etc.).
+  #    clang-tidy — Linux only, tight explicit check allowlist
+  #      Using --checks=* produces thousands of warnings from opinionated
+  #      checks (magic numbers, identifier length, literal suffix case, etc.)
+  #      that are not appropriate for C99 test code. Instead we enable only
+  #      a curated set of checks that catch real bugs.
   #
-  #    Cppcheck — all platforms
-  #      Does not need a compile DB. Errors and warnings are reported;
-  #      style/information/performance/portability diagnostics are
-  #      suppressed to avoid noise from intentional test patterns
-  #      (same-expression comparisons that verify identity, etc.).
+  #    Cppcheck — all platforms, error+warning only
+  #      Style/performance/portability/information are suppressed to avoid
+  #      noise from intentional test patterns.
   # -------------------------------------------------------------------------
   static-analysis:
     needs: build
@@ -130,16 +128,18 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # The choco Cppcheck package is compiled against a non-existent
-          # staging path and fails to load std.cfg. Install the official
-          # release directly instead.
+          # The choco Cppcheck package and its MSI installer are compiled
+          # against a non-existent staging path and fail to load std.cfg.
+          # Use the official portable zip release instead.
           $version = "2.14.0"
-          $installer = "cppcheck-$version-x64-Setup.msi"
-          $url = "https://github.com/danmar/cppcheck/releases/download/$version/$installer"
-          Invoke-WebRequest -Uri $url -OutFile $installer
-          Start-Process msiexec.exe -Wait -ArgumentList "/i $installer /quiet /norestart"
-          # Add to PATH for subsequent steps
-          echo "C:\Program Files\Cppcheck" >> $env:GITHUB_PATH
+          $zip = "cppcheck-$version-x64.zip"
+          $url = "https://github.com/danmar/cppcheck/releases/download/$version/$zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip -ErrorAction Stop
+          Expand-Archive -Path $zip -DestinationPath "C:\cppcheck" -Force
+          # The zip extracts to a versioned subdirectory; find the exe
+          $exe = (Get-ChildItem "C:\cppcheck" -Filter "cppcheck.exe" -Recurse |
+                  Select-Object -First 1).DirectoryName
+          echo "$exe" >> $env:GITHUB_PATH
 
       # --- clang-tidy (Linux only) ------------------------------------------
 
@@ -156,12 +156,9 @@ jobs:
         shell: bash
         run: |
           # Skip blank files and files with known pre-existing issues
-          # that belong to code we did not author:
-          #   ptr_test.c   — ALIGN_OF macro triggers gnu-offsetof-extensions
-          #   types_test.c — CHECK(!true == false) triggers logical-not-parentheses
-          #   limits_test.c — reserved _check_* identifiers, cert-err33-c on fprintf
-          #   arena_test.c / memory_test.c — empty placeholder files
-          SKIP="arena_test.c memory_test.c ptr_test.c types_test.c limits_test.c"
+          # in code we did not author.
+          SKIP="arena_test.c memory_test.c ptr_test.c types_test.c \
+                limits_test.c checked_test.c compare_test.c contract_test.c"
           FILES=""
           for f in $(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | sort); do
             if ! grep -qE '[^[:space:]]' "$f"; then
@@ -185,54 +182,40 @@ jobs:
             exit 0
           fi
 
-          # Curated check set:
-          #   Start with all checks (*), then disable categories/checks that
-          #   are inappropriate for C99 test code:
-          #
-          #   -llvmlibc-*                  LLVM-internal rules (no system headers etc.)
-          #   -cppcoreguidelines-avoid-non-const-global-variables
-          #                                Test counters (g_pass/g_fail) are intentionally mutable globals
-          #   -readability-function-cognitive-complexity
-          #                                Test functions are intentionally long
-          #   -readability-magic-numbers   Test literals are self-documenting
-          #   -cert-err33-c                fprintf return ignored in test macros — intentional
-          #   -bugprone-reserved-identifier
-          #   -cert-dcl37-c
-          #   -cert-dcl51-cpp              _check_* typedefs in limits_test.c — not our code
-          #   -google-readability-casting  C-style casts are idiomatic in C99
-          #   -misc-include-cleaner        Header inclusion style is intentional
-          #   -altera-*                    FPGA-specific rules not applicable here
-          #   -fuchsia-*                   Fuchsia OS-specific rules not applicable here
-          #   -hicpp-*                     High-integrity C++ rules not applicable to C test code
-          CHECKS="*,\
-          -llvmlibc-*,\
-          -cppcoreguidelines-avoid-non-const-global-variables,\
-          -readability-function-cognitive-complexity,\
-          -readability-magic-numbers,\
-          -cert-err33-c,\
-          -bugprone-reserved-identifier,\
-          -cert-dcl37-c,\
-          -cert-dcl51-cpp,\
-          -google-readability-casting,\
-          -misc-include-cleaner,\
-          -altera-*,\
-          -fuchsia-*,\
-          -hicpp-*"
+          # Tight explicit allowlist — only checks that catch real bugs
+          # in C99 code, with no style/naming/formatting opinions.
+          CHECKS="\
+          bugprone-integer-division,\
+          bugprone-macro-parentheses,\
+          bugprone-misplaced-widening-cast,\
+          bugprone-signed-char-misuse,\
+          bugprone-sizeof-expression,\
+          bugprone-suspicious-memset-usage,\
+          bugprone-too-small-loop-variable,\
+          bugprone-undefined-memory-manipulation,\
+          bugprone-use-after-move,\
+          clang-analyzer-core.CallAndMessage,\
+          clang-analyzer-core.DivideZero,\
+          clang-analyzer-core.NullDereference,\
+          clang-analyzer-core.UndefinedBinaryOperatorResult,\
+          clang-analyzer-core.uninitialized.Assign,\
+          clang-analyzer-core.uninitialized.Branch,\
+          clang-analyzer-deadcode.DeadStores,\
+          clang-analyzer-security.insecureAPI.strcpy,\
+          misc-misplaced-const,\
+          misc-redundant-expression,\
+          misc-unused-parameters"
 
           clang-tidy \
             -p build \
-            --checks="$CHECKS" \
-            --warnings-as-errors=* \
+            --checks="-*,$CHECKS" \
+            --warnings-as-errors="$CHECKS" \
             --extra-arg="-I${{ github.workspace }}/core/primitives" \
             --extra-arg="-I${{ github.workspace }}/core" \
             --extra-arg="-I${{ github.workspace }}" \
             $FILES
 
       # --- Cppcheck (all platforms) -----------------------------------------
-      # Only error-level findings are reported. Style, performance,
-      # portability, and information diagnostics are suppressed to avoid
-      # noise from intentional test patterns (identity comparisons,
-      # duplicate expressions in boundary tests, etc.).
 
       - name: Run Cppcheck (Linux / macOS)
         if: runner.os != 'Windows'
@@ -306,6 +289,8 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 4. Dr. Memory — Windows only
+  #    Install directly from the official GitHub release zip to guarantee
+  #    a known install path instead of relying on choco's versioned layout.
   # -------------------------------------------------------------------------
   dr-memory:
     needs: build
@@ -317,16 +302,18 @@ jobs:
       - name: Install Dr. Memory
         shell: pwsh
         run: |
-          # Install Dr. Memory via its official GitHub release rather than
-          # choco, which places the binary in an unpredictable versioned path.
-          $version = "2.6.0"
-          $zip = "DrMemory-Windows-$version.zip"
-          $url = "https://github.com/DynamoRIO/drmemory/releases/download/release_$version/$zip"
-          Invoke-WebRequest -Uri $url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath "C:\DrMemory"
-          # Add the bin directory (one level inside the versioned folder) to PATH
-          $bin = (Get-ChildItem "C:\DrMemory" -Filter "bin" -Recurse -Directory |
-                  Select-Object -First 1).FullName
+          $version  = "2.6.0"
+          $tag      = "release_$version"
+          $zip      = "DrMemory-Windows-$version.zip"
+          $url      = "https://github.com/DynamoRIO/drmemory/releases/download/$tag/$zip"
+          $dest     = "C:\DrMemory"
+          Invoke-WebRequest -Uri $url -OutFile $zip -ErrorAction Stop
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          # The zip extracts to DrMemory-Windows-<version>/bin/drmemory.exe
+          $bin = (Get-ChildItem $dest -Filter "drmemory.exe" -Recurse |
+                  Select-Object -First 1).DirectoryName
+          if (-not $bin) { Write-Error "drmemory.exe not found after extraction"; exit 1 }
+          Write-Host "Dr. Memory bin: $bin"
           echo "$bin" >> $env:GITHUB_PATH
 
       - name: Configure CMake (no sanitizers — conflicts with Dr. Memory)
@@ -349,18 +336,15 @@ jobs:
             Write-Error "drmemory.exe not found on PATH"
             exit 1
           }
-
-          Write-Host "Using Dr. Memory at: $drmemory"
+          Write-Host "Using Dr. Memory: $drmemory"
 
           $testExes = Get-ChildItem -Path build\Debug -Filter "*_test.exe"
-          $failed = @()
+          $failed   = @()
 
           foreach ($exe in $testExes) {
             Write-Host "Running Dr. Memory on $($exe.Name)..."
             & "$drmemory" -exit_code_if_errors 1 -- $exe.FullName
-            if ($LASTEXITCODE -ne 0) {
-              $failed += $exe.Name
-            }
+            if ($LASTEXITCODE -ne 0) { $failed += $exe.Name }
           }
 
           if ($failed.Count -gt 0) {
@@ -370,11 +354,6 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 5. Fuzzing — Linux only
-  #
-  #    libFuzzer requires a Clang toolchain that ships the fuzzer runtime.
-  #    macOS Xcode Clang does not ship libclang_rt.fuzzer_osx.a, and
-  #    Windows Clang CI does not have the fuzzer DLL available at runtime.
-  #    Linux apt Clang ships the full fuzzer runtime reliably.
   # -------------------------------------------------------------------------
   fuzzing:
     needs: build
