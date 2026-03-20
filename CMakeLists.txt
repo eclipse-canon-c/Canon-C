@@ -170,12 +170,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(
-#     NAME     checked_test
-#     SRC      test/core/primitives/checked_test.c
-#     INCLUDES core/primitives
-#     FUZZABLE
-# )
+canon_c_test(
+    NAME     checked_test
+    SRC      test/core/primitives/checked_test.c
+    INCLUDES core/primitives
+    FUZZABLE
+)
 
 # canon_c_test(
 #     NAME     compare_test
