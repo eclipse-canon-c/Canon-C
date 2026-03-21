@@ -74,7 +74,7 @@
 #include "semantics/result/result.h"
 #include "semantics/error.h"
 
-#include <string.h>  /* memset, memcpy */
+#include <string.h>  /* memset */
 
 /* ============================================================================
  * Required user definitions (must be #defined before including hashmap_impl.h)
@@ -582,7 +582,7 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) _HM_GET_OR_NULL(
  */
 HASHMAP_LINKAGE bool _HM_CONTAINS_KEY(
     const HASHMAP_TYPE_NAME* map,
-    const hm_key_t*          key   /* FIX: was _hm_key_t — reserved identifier */
+    const hm_key_t*          key
 ) {
     require_msg(map != NULL, "hashmap_contains_key: map cannot be NULL");
     require_msg(key != NULL, "hashmap_contains_key: key cannot be NULL");
@@ -685,8 +685,8 @@ HASHMAP_LINKAGE result_hm_val_t_Error _HM_REMOVE(
  * Usage:
  * ```c
  * usize iter = 0;
- * const hm_key_t* k;   // FIX: was _hm_key_t — reserved identifier
- * const hm_val_t* v;   // FIX: was _hm_val_t — reserved identifier
+ * const hm_key_t* k;
+ * const hm_val_t* v;
  * while (hashmap_iter_next(&map, &iter, &k, &v)) {
  *     printf("key/value pair found\n");
  * }
