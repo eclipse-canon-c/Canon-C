@@ -298,18 +298,22 @@ static inline bytes_t pool_reserved_bytes(const Pool* pool) {
  * @post All pointers returned by pool_alloc() / pool_get() are invalid
  */
 static inline void pool_reset(Pool* pool) {
-    void*  region;
-    usize  needed;
+    void* region;
+    usize needed;
 
     if (!pool || !pool->arena) return;
     arena_reset_to(pool->arena, pool->base_mark);
     pool->used = 0;
 
-    /* Re-reserve the region so subsequent allocs remain within bounds. */
+    /* Re-reserve the region so subsequent allocs remain within bounds.
+     * The pointer value is not used directly — the side effect of advancing
+     * the arena offset is what matters. (void) suppresses unused-variable
+     * warnings on strict compilers without affecting correctness. */
     needed = pool->object_size * pool->capacity;
     region = arena_alloc(pool->arena, needed);
     ensure_msg(region != NULL,
                "pool_reset: failed to re-reserve pool region after rollback");
+    (void)region;
 }
 
 /**
