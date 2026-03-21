@@ -2,10 +2,9 @@
 #define CANON_DATA_CONVENIENCE_DYNVEC_H
 
 #include <stdlib.h>
-#include "core/primitives/types.h"       // usize, bool, type safety
-#include "core/primitives/limits.h"      // growth constants, max capacity
-#include "core/primitives/contract.h"    // require_msg, ensure_msg
-#include "core/memory.h"                 // mem_copy, mem_move, mem_zero
+#include "core/primitives/types.h"       /* usize, bool */
+#include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "core/memory.h"                 /* mem_copy, mem_move */
 
 /**
  * @file convenience/dynvec.h
@@ -84,9 +83,11 @@
  *
  * @sa data/vec/vec.h — fixed-capacity, explicit-allocation alternative
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    Configuration
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Initial heap allocation in elements when buffer is first needed
  *
@@ -109,6 +110,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Branch hint helpers
    ════════════════════════════════════════════════════════════════════════════ */
+
 #if defined(__GNUC__) || defined(__clang__)
     #define DYNVEC_LIKELY(x) __builtin_expect(!!(x), 1)
     #define DYNVEC_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -120,6 +122,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_DYNVEC — instantiate a typed auto-growing vector
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Instantiates a fully typed auto-growing vector for element type `type`
  *
