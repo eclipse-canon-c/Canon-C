@@ -1,7 +1,7 @@
 /**
  * @file pool_test.c
  * @brief Tests for pool.h — fixed-size object pool allocator
- *
+ * 
  * Covers:
  *   - pool_init: basic setup, arena reservation, failure cases
  *   - pool_alloc: sequential allocation, exhaustion, NULL pool
