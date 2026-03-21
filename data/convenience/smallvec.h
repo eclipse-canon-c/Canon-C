@@ -1,13 +1,12 @@
 #ifndef CANON_DATA_SMALLVEC_H
 #define CANON_DATA_SMALLVEC_H
 
-#include "core/primitives/types.h"       // usize, bool
-#include "core/primitives/limits.h"      // growth constants, max capacity
-#include "core/primitives/contract.h"    // require_msg, ensure_msg
-#include "core/memory.h"                 // mem_copy, mem_move
-#include "core/arena.h"                  // Arena*, arena_alloc_array
-#include "data/vec/vec.h"                // canon_vec_type, MANGLE_VEC_INIT
 #include <stdlib.h>
+#include "core/primitives/types.h"       /* usize, bool */
+#include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "core/memory.h"                 /* mem_copy, mem_move */
+#include "core/arena.h"                  /* Arena*, arena_alloc_array */
+#include "data/vec/vec.h"                /* MANGLE_VEC_TYPE, MANGLE_VEC_INIT */
 
 /**
  * @file convenience/smallvec.h
@@ -99,9 +98,11 @@
  * @sa data/vec/vec.h — fixed-capacity, explicit-allocation alternative
  * @sa data/convenience/dynvec.h — unlimited growth, always heap
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    Branch hint helpers
    ════════════════════════════════════════════════════════════════════════════ */
+
 #if defined(__GNUC__) || defined(__clang__)
     #define SMALLVEC_LIKELY(x) __builtin_expect(!!(x), 1)
     #define SMALLVEC_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -113,6 +114,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_SMALLVEC — instantiate a typed inline-first vector
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Instantiates a typed inline-first vector for element type `type`
  *
