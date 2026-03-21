@@ -222,7 +222,8 @@ canon_c_test(
 canon_c_test(
     NAME pool_test      
     SRC test/core/pool_test.c      
-    INCLUDES core/primitives . FUZZABLE
+    INCLUDES core/primitives . 
+    FUZZABLE
 )
 
 # canon_c_test(NAME slice_test     SRC test/core/slice_test.c     INCLUDES core/primitives . FUZZABLE)
@@ -234,9 +235,14 @@ canon_c_test(
     SRC test/core/memory_test.c 
     INCLUDES core/primitives core . 
     FUZZABLE
-    )
+)
 
-# canon_c_test(NAME ownership_test SRC test/core/ownership_test.c INCLUDES core/primitives .)
+canon_c_test(
+    NAME ownership_test 
+    SRC test/core/ownership_test.c 
+    INCLUDES core/primitives .
+    FUZZABLE
+)
 
 # ---------------------------------------------------------------------------
 # semantics/ tests                     — uncomment when ready (v1.3.0)
