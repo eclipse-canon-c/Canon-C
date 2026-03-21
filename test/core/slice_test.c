@@ -25,7 +25,6 @@
 
 /* ── Generate typed slice for i32 (used by both unit and fuzz builds) ────── */
 
-// cppcheck-suppress returnDanglingLifetime
 DEFINE_SLICE(i32)
 
 /* ══════════════════════════════════════════════════════════════════════════
