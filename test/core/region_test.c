@@ -35,6 +35,36 @@ static int g_failed = 0;
         }                                                        \
     } while (0)
 
+/* ── Hook helpers — file scope (C99 forbids nested functions) ────────────── */
+
+static int g_hook_order[REGION_MAX_CLEANUP + 1];
+static int g_hook_count = 0;
+
+static void hook_record(void* ctx)
+{
+    int id = (int)(uintptr_t)ctx;
+    if (g_hook_count < REGION_MAX_CLEANUP) {
+        g_hook_order[g_hook_count++] = id;
+    }
+}
+
+static int g_hook_null_ctx_called = 0;
+static void hook_null_ctx(void* ctx)
+{
+    (void)ctx;
+    g_hook_null_ctx_called = 1;
+}
+
+static u8    g_hook_arena_buf[256];
+static Arena g_hook_arena;
+static int   g_hook_saw_alloc = 0;
+
+static void hook_check_arena_live(void* ctx)
+{
+    Arena* a = (Arena*)ctx;
+    g_hook_saw_alloc = (arena_remaining(a) > 0) ? 1 : 0;
+}
+
 /* ── region_begin ────────────────────────────────────────────────────────── */
 
 static void test_begin_sets_open(void)
@@ -113,10 +143,11 @@ static void test_end_clears_hooks(void)
 
 static void test_attach_arena_reset_on_end(void)
 {
-    u8    buf[256];
-    Arena arena;
+    u8     buf[256];
+    Arena  arena;
     Region r;
 
+    memset(buf, 0, sizeof(buf));
     arena_init(&arena, buf, sizeof(buf));
     arena_alloc(&arena, 64);
     EXPECT(arena_used(&arena) > 0);
@@ -131,10 +162,11 @@ static void test_attach_arena_reset_on_end(void)
 
 static void test_attach_arena_null_after_end(void)
 {
-    u8    buf[64];
-    Arena arena;
+    u8     buf[64];
+    Arena  arena;
     Region r;
 
+    memset(buf, 0, sizeof(buf));
     arena_init(&arena, buf, sizeof(buf));
     region_begin(&r);
     region_attach_arena(&r, &arena);
@@ -144,37 +176,27 @@ static void test_attach_arena_null_after_end(void)
 
 static void test_attach_arena_replace(void)
 {
-    u8    buf1[64];
-    u8    buf2[64];
-    Arena a1;
-    Arena a2;
+    u8     buf1[64];
+    u8     buf2[64];
+    Arena  a1;
+    Arena  a2;
     Region r;
 
+    memset(buf1, 0, sizeof(buf1));
+    memset(buf2, 0, sizeof(buf2));
     arena_init(&a1, buf1, sizeof(buf1));
     arena_init(&a2, buf2, sizeof(buf2));
     arena_alloc(&a2, 32);
 
     region_begin(&r);
     region_attach_arena(&r, &a1);
-    region_attach_arena(&r, &a2);   /* replace — a1 NOT reset */
+    region_attach_arena(&r, &a2);
     region_end(&r);
 
-    /* a2 was the final attachment — it gets reset */
     EXPECT(arena_used(&a2) == 0);
 }
 
 /* ── region_register / cleanup hooks ────────────────────────────────────── */
-
-static int g_hook_order[REGION_MAX_CLEANUP + 1];
-static int g_hook_count = 0;
-
-static void hook_record(void* ctx)
-{
-    int id = (int)(uintptr_t)ctx;
-    if (g_hook_count < REGION_MAX_CLEANUP) {
-        g_hook_order[g_hook_count++] = id;
-    }
-}
 
 static void test_hooks_called_on_end(void)
 {
@@ -226,7 +248,6 @@ static void test_register_returns_false_when_full(void)
         ok = region_register(&r, hook_record, NULL);
         EXPECT(ok);
     }
-    /* One more — must fail */
     ok = region_register(&r, hook_record, NULL);
     EXPECT(!ok);
     EXPECT(region_hook_count(&r) == (usize)REGION_MAX_CLEANUP);
@@ -235,33 +256,20 @@ static void test_register_returns_false_when_full(void)
 
 static void test_hook_ctx_null_ok(void)
 {
-    /* Hook with NULL ctx must not crash */
-    static int called = 0;
-    void hook_null_ctx(void* ctx) { (void)ctx; called = 1; }
     Region r;
-    called = 0;
+    g_hook_null_ctx_called = 0;
     region_begin(&r);
     region_register(&r, hook_null_ctx, NULL);
     region_end(&r);
-    EXPECT(called == 1);
+    EXPECT(g_hook_null_ctx_called == 1);
 }
 
 /* ── hooks run before arena reset ────────────────────────────────────────── */
 
-static u8    g_hook_arena_buf[256];
-static Arena g_hook_arena;
-static int   g_hook_saw_alloc = 0;
-
-static void hook_check_arena_live(void* ctx)
-{
-    Arena* a = (Arena*)ctx;
-    /* arena must still be valid inside a hook */
-    g_hook_saw_alloc = (arena_remaining(a) > 0) ? 1 : 0;
-}
-
 static void test_hooks_run_before_arena_reset(void)
 {
     Region r;
+    memset(g_hook_arena_buf, 0, sizeof(g_hook_arena_buf));
     arena_init(&g_hook_arena, g_hook_arena_buf, sizeof(g_hook_arena_buf));
     arena_alloc(&g_hook_arena, 32);
     g_hook_saw_alloc = 0;
@@ -275,7 +283,7 @@ static void test_hooks_run_before_arena_reset(void)
     EXPECT(arena_used(&g_hook_arena) == 0);
 }
 
-/* ── region_id / region_is_open / region_hook_count — NULL safety ────────── */
+/* ── query — NULL safety ─────────────────────────────────────────────────── */
 
 static void test_query_null_safe(void)
 {
@@ -298,7 +306,7 @@ static void test_assert_open_passes_when_open(void)
 {
     Region r;
     region_begin(&r);
-    region_assert_open(&r);   /* must not abort */
+    region_assert_open(&r);
     EXPECT(1);
     region_end(&r);
 }
@@ -307,7 +315,6 @@ static void test_assert_borrow_valid_static_lifetime(void)
 {
     Region r;
     region_begin(&r);
-    /* REGION_ID_STATIC always valid — no assertion */
     region_assert_borrow_valid(&r, REGION_ID_STATIC);
     EXPECT(1);
     region_end(&r);
@@ -319,7 +326,7 @@ static void test_assert_borrow_valid_matching_id(void)
     region_id_t rid;
     region_begin(&r);
     rid = region_id(&r);
-    region_assert_borrow_valid(&r, rid);   /* must not abort */
+    region_assert_borrow_valid(&r, rid);
     EXPECT(1);
     region_end(&r);
 }
@@ -329,7 +336,7 @@ static void test_assert_borrow_valid_matching_id(void)
 static void test_parent_tracking(void)
 {
 #ifdef CANON_NO_REGION_PARENT
-    EXPECT(1);   /* parent tracking compiled out — skip */
+    EXPECT(1);
 #else
     Region outer;
     Region inner;
@@ -359,13 +366,15 @@ static void test_has_parent_false_without_set(void)
 
 static void test_nested_regions_independent(void)
 {
-    u8    buf_outer[256];
-    u8    buf_inner[128];
-    Arena outer_arena;
-    Arena inner_arena;
+    u8     buf_outer[256];
+    u8     buf_inner[128];
+    Arena  outer_arena;
+    Arena  inner_arena;
     Region outer;
     Region inner;
 
+    memset(buf_outer, 0, sizeof(buf_outer));
+    memset(buf_inner, 0, sizeof(buf_inner));
     arena_init(&outer_arena, buf_outer, sizeof(buf_outer));
     arena_init(&inner_arena, buf_inner, sizeof(buf_inner));
     arena_alloc(&outer_arena, 64);
@@ -377,13 +386,11 @@ static void test_nested_regions_independent(void)
     region_begin(&inner);
     region_attach_arena(&inner, &inner_arena);
 
-    /* close inner — only inner arena reset */
     region_end(&inner);
     EXPECT(arena_used(&inner_arena) == 0);
     EXPECT(arena_used(&outer_arena) > 0);
     EXPECT(region_is_open(&outer));
 
-    /* close outer — outer arena reset */
     region_end(&outer);
     EXPECT(arena_used(&outer_arena) == 0);
 }
@@ -410,7 +417,6 @@ static void test_reuse_after_end(void)
     region_end(&r);
     EXPECT(!region_is_open(&r));
 
-    /* Re-open the same Region variable */
     region_begin(&r);
     EXPECT(region_is_open(&r));
     EXPECT(r.id == (region_id_t)(uintptr_t)&r);
