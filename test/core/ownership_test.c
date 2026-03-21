@@ -56,8 +56,7 @@ DEFINE_BORROWED(Widget)
 
 static void test_owned_expands_to_T(void)
 {
-    /* owned(Widget*) must be identical to Widget* at the type level */
-    Widget  w  = {42};
+    Widget         w = {42};
     owned(Widget*) p = &w;
     EXPECT(p == &w);
     EXPECT(p->value == 42);
@@ -65,7 +64,7 @@ static void test_owned_expands_to_T(void)
 
 static void test_borrowed_expands_to_T(void)
 {
-    Widget  w  = {7};
+    Widget            w = {7};
     borrowed(Widget*) p = &w;
     EXPECT(p == &w);
     EXPECT(p->value == 7);
@@ -73,7 +72,7 @@ static void test_borrowed_expands_to_T(void)
 
 static void test_moved_expands_to_T(void)
 {
-    Widget  w  = {99};
+    Widget         w = {99};
     moved(Widget*) p = &w;
     EXPECT(p == &w);
     EXPECT(p->value == 99);
@@ -81,21 +80,21 @@ static void test_moved_expands_to_T(void)
 
 static void test_dropped_expands_to_T(void)
 {
-    Widget  w  = {0};
+    Widget           w = {0};
     dropped(Widget*) p = &w;
     EXPECT(p == &w);
 }
 
 static void test_owned_const_ptr(void)
 {
-    Widget        w  = {5};
+    Widget               w = {5};
     owned(const Widget*) p = &w;
     EXPECT(p->value == 5);
 }
 
 static void test_borrowed_const_ptr(void)
 {
-    Widget              w  = {3};
+    Widget                  w = {3};
     borrowed(const Widget*) p = &w;
     EXPECT(p->value == 3);
 }
@@ -104,9 +103,9 @@ static void test_borrowed_const_ptr(void)
 
 static void test_canon_drop_calls_free_fn(void)
 {
-    Widget* p = (Widget*)&g_free_call_count; /* non-NULL sentinel — not dereffed */
-    int     before;
-    before             = g_free_call_count;
+    /* Use a non-NULL sentinel pointer — widget_free ignores the value */
+    Widget* p      = (Widget*)&g_free_call_count;
+    int     before = g_free_call_count;
     CANON_DROP(p, widget_free);
     EXPECT(g_free_call_count == before + 1);
     EXPECT(p == NULL);
@@ -114,8 +113,8 @@ static void test_canon_drop_calls_free_fn(void)
 
 static void test_canon_drop_nulls_pointer(void)
 {
-    Widget  w  = {0};
-    Widget* p  = &w;
+    Widget  w = {0};
+    Widget* p = &w;
     CANON_DROP(p, widget_free);
     EXPECT(p == NULL);
 }
@@ -127,7 +126,7 @@ static void test_canon_drop_if_null_is_noop(void)
     Widget* p      = NULL;
     int     before = g_free_call_count;
     CANON_DROP_IF(p, widget_free);
-    EXPECT(g_free_call_count == before);   /* free_fn not called */
+    EXPECT(g_free_call_count == before);
     EXPECT(p == NULL);
 }
 
@@ -143,8 +142,8 @@ static void test_canon_drop_if_non_null_calls_free(void)
 
 static void test_canon_drop_if_nulls_pointer(void)
 {
-    Widget  w  = {0};
-    Widget* p  = &w;
+    Widget  w = {0};
+    Widget* p = &w;
     CANON_DROP_IF(p, widget_free);
     EXPECT(p == NULL);
 }
@@ -185,7 +184,6 @@ static void test_owned_unwrap_returns_raw(void)
     Widget*      raw = owned_Widget_unwrap(&ow);
     EXPECT(raw == &w);
     EXPECT(raw->value == 55);
-    /* After unwrap the wrapper must be NULLed */
     EXPECT(!owned_Widget_is_valid(&ow));
 }
 
@@ -209,7 +207,6 @@ static void test_owned_drop_calls_free_fn(void)
 
 static void test_owned_drop_null_ptr_is_noop(void)
 {
-    /* wrapping NULL — drop should not call free_fn */
     owned_Widget ow     = owned_Widget_wrap(NULL);
     int          before = g_free_call_count;
     owned_Widget_drop(&ow, widget_free);
@@ -219,7 +216,6 @@ static void test_owned_drop_null_ptr_is_noop(void)
 
 static void test_owned_borrow_null_wrapper(void)
 {
-    /* borrow(NULL wrapper) fires contract — skip; just verify is_valid */
     owned_Widget ow = owned_Widget_wrap(NULL);
     EXPECT(!owned_Widget_is_valid(&ow));
 }
@@ -255,17 +251,13 @@ static void test_borrowed_is_valid_null_wrapper(void)
 
 static void test_borrowed_get_null_wrapper(void)
 {
-    /* get(NULL wrapper) fires contract — just verify is_valid returns false */
     borrowed_Widget bw = borrowed_Widget_from(NULL);
     EXPECT(!borrowed_Widget_is_valid(&bw));
 }
 
 /* ── annotation macros in function signatures ────────────────────────────── */
 
-/* These functions exist only to verify the macros compile correctly
- * in parameter and return-type positions. */
-
-static owned(Widget*)    make_widget(void)
+static owned(Widget*) make_widget(void)
 {
     static Widget w = {42};
     return &w;
@@ -283,18 +275,16 @@ static void consume_widget(dropped(Widget*) w, void (*fn)(Widget*))
 
 static void test_annotations_in_signatures(void)
 {
-    owned(Widget*)         p = make_widget();
+    owned(Widget*)          p = make_widget();
     borrowed(const Widget*) b = p;
+    int before;
     EXPECT(read_widget(b) == 42);
-
-    {
-        int before = g_free_call_count;
-        consume_widget(p, widget_free);
-        EXPECT(g_free_call_count == before + 1);
-    }
+    before = g_free_call_count;
+    consume_widget(p, widget_free);
+    EXPECT(g_free_call_count == before + 1);
 }
 
-/* ── multiple DEFINE_OWNED types ─────────────────────────────────────────── */
+/* ── multiple DEFINE_OWNED / DEFINE_BORROWED types ──────────────────────── */
 
 typedef struct { f64 r; f64 i; } Complex;
 static void complex_free(Complex* c) { (void)c; }
@@ -310,6 +300,15 @@ static void test_multiple_define_owned_types(void)
     EXPECT(rp == &c);
     EXPECT(owned_Complex_is_valid(&oc));
     owned_Complex_drop(&oc, complex_free);
+    EXPECT(!owned_Complex_is_valid(&oc));
+}
+
+static void test_owned_complex_unwrap(void)
+{
+    Complex       c   = {3.0, 4.0};
+    owned_Complex oc  = owned_Complex_wrap(&c);
+    Complex*      raw = owned_Complex_unwrap(&oc);
+    EXPECT(raw == &c);
     EXPECT(!owned_Complex_is_valid(&oc));
 }
 
@@ -366,6 +365,7 @@ int main(void)
 
     /* multiple DEFINE_OWNED / DEFINE_BORROWED types */
     test_multiple_define_owned_types();
+    test_owned_complex_unwrap();
     test_multiple_define_borrowed_types();
 
     if (g_failed == 0) {
