@@ -18,7 +18,6 @@
  * // Step 1: provide the hash and equality functions
  * static u64  hash_u64(const u64* k, void* ctx) {
  *     (void)ctx;
- *     // FNV-1a or similar
  *     u64 h = *k * 11400714819323198485ULL;
  *     return h == 0 ? 1 : h;
  * }
@@ -43,27 +42,32 @@
  * hashmap_defn.h is included from .c files only. It pulls in hashmap_impl.h
  * with HASHMAP_LINKAGE set to empty (external linkage, no static/inline).
  *
+ * NOTE: This file intentionally has NO include guard.
+ * It is a typed-instantiation file — consistent with hashmap_impl.h and
+ * hashmap.h — and must remain re-includable so that a single .c file can
+ * generate definitions for multiple distinct hashmap types by reconfiguring
+ * the HASHMAP_* macros between includes. An include guard would silently
+ * suppress all but the first instantiation.
+ *
  * @sa hashmap_decl.h  — pair this with decl.h in headers
  * @sa hashmap.h       — use this instead for header-only static-inline usage
  * @sa hashmap_impl.h  — the actual logic (do not include directly)
  */
 
-#ifndef CANON_DATA_HASHMAP_DEFN_H
-#define CANON_DATA_HASHMAP_DEFN_H
+/*
+ * NOTE: No include guard — intentionally re-includable.
+ * See file-level comment above.
+ */
 
 /*
  * Set linkage to external (no static, no inline) before impl generates code.
  * hashmap_impl.h uses HASHMAP_LINKAGE as the function specifier on all fns.
  */
 #define HASHMAP_LINKAGE /* external linkage */
-
 #include "hashmap_impl.h"
-
 /*
  * hashmap_impl.h checks for HASHMAP_LINKAGE and errors if absent.
  * We set it here before including, so the check passes.
  * Undefine after so re-includes from other sources are not confused.
  */
 #undef HASHMAP_LINKAGE
-
-#endif /* CANON_DATA_HASHMAP_DEFN_H */
