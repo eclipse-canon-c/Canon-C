@@ -13,8 +13,8 @@
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random offsets and lengths into bytes_t / str_t / slice_i32
- *     slice, take, skip, at, get operations. Verifies no crash and that
- *     returned pointers stay within backing buffers.
+ *     operations. Verifies no crash and returned pointers stay within
+ *     backing buffers.
  */
 
 #define CANON_CONTRACT_IMPL
@@ -23,11 +23,13 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ── Generate typed slice for i32 ───────────────────────────────────────── */
+/* ── Generate typed slice for i32 (used by both unit and fuzz builds) ────── */
 
 DEFINE_SLICE(i32)
 
-/* ── Harness ─────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   Unit test build
+   ══════════════════════════════════════════════════════════════════════════ */
 
 #ifndef CANON_FUZZING
 
@@ -377,7 +379,9 @@ static void test_str_slice_basic(void)
 {
     str_t s = str_from_cstr("hello");
     str_t r = str_slice(s, 1, 4);
-    EXPECT(r.len    == 3);
+    EXPECT(r.len == 3);
+    /* Guard ptr before dereferencing — clang-tidy NullDereference */
+    EXPECT_NOT_NULL(r.ptr);
     EXPECT(r.ptr[0] == 'e');
 }
 
@@ -385,7 +389,8 @@ static void test_str_take(void)
 {
     str_t s = str_from_cstr("hello");
     str_t t = str_take(s, 3);
-    EXPECT(t.len    == 3);
+    EXPECT(t.len == 3);
+    EXPECT_NOT_NULL(t.ptr);
     EXPECT(t.ptr[0] == 'h');
 }
 
@@ -393,7 +398,8 @@ static void test_str_skip(void)
 {
     str_t s = str_from_cstr("hello");
     str_t r = str_skip(s, 2);
-    EXPECT(r.len    == 3);
+    EXPECT(r.len == 3);
+    EXPECT_NOT_NULL(r.ptr);
     EXPECT(r.ptr[0] == 'l');
 }
 
@@ -716,14 +722,13 @@ int main(void)
 /* ── Fuzz entry point ────────────────────────────────────────────────────── */
 /*
  * Input layout:
- *   [0]     u8   buf_fill   — byte value to fill backing buffers
- *   [1]     u8   start_raw  — slice/skip/at start index (modulo BUF_LEN)
- *   [2]     u8   end_raw    — slice end index (modulo BUF_LEN)
- *   [3]     u8   op         — operation selector (modulo 8)
+ *   [0]  u8  buf_fill  — byte value to fill backing buffers
+ *   [1]  u8  start_raw — start index (modulo buffer length + 1)
+ *   [2]  u8  end_raw   — end index   (modulo buffer length + 1)
+ *   [3]  u8  op        — operation selector (modulo 10)
  *
- * Exercises bytes_t, str_t, and slice_i32 slicing and indexing with
- * arbitrary indices. Verifies returned pointers stay within backing
- * buffers and lengths are consistent.
+ * All generated slice_i32_* functions are exercised here so the fuzz
+ * build does not produce unused-function errors.
  */
 
 #define FUZZ_BUF_LEN  ((usize)32)
@@ -749,9 +754,10 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     start = (usize)(raw[1] % (u8)(FUZZ_BUF_LEN + 1));
     end   = (usize)(raw[2] % (u8)(FUZZ_BUF_LEN + 1));
-    op    = raw[3] % 8u;
+    op    = raw[3] % 10u;
 
     switch (op) {
+        /* ── bytes_t operations ─────────────────────────────────────────── */
         case 0: {
             bytes_t b = bytes_from(byte_buf, FUZZ_BUF_LEN);
             bytes_t s = bytes_slice(b, start, end);
@@ -764,67 +770,107 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
         case 1: {
             bytes_t b = bytes_from(byte_buf, FUZZ_BUF_LEN);
             bytes_t t = bytes_take(b, start);
-            if (t.ptr != NULL) {
-                if (t.len > FUZZ_BUF_LEN)                      __builtin_trap();
-                if (t.ptr + t.len > byte_buf + FUZZ_BUF_LEN)   __builtin_trap();
-            }
+            bytes_t k = bytes_skip(b, start);
+            if (t.ptr != NULL && t.ptr + t.len > byte_buf + FUZZ_BUF_LEN)
+                __builtin_trap();
+            if (k.ptr != NULL && k.ptr + k.len > byte_buf + FUZZ_BUF_LEN)
+                __builtin_trap();
             break;
         }
         case 2: {
             bytes_t b = bytes_from(byte_buf, FUZZ_BUF_LEN);
-            bytes_t s = bytes_skip(b, start);
-            if (s.ptr != NULL) {
-                if (s.ptr < byte_buf)                           __builtin_trap();
-                if (s.ptr + s.len > byte_buf + FUZZ_BUF_LEN)   __builtin_trap();
-            }
-            break;
-        }
-        case 3: {
-            bytes_t b = bytes_from(byte_buf, FUZZ_BUF_LEN);
             u8*     p = bytes_at(b, start);
             if (p != NULL) {
-                if (p < byte_buf || p >= byte_buf + FUZZ_BUF_LEN) __builtin_trap();
+                if (p < byte_buf || p >= byte_buf + FUZZ_BUF_LEN)
+                    __builtin_trap();
                 (void)*p;
             }
             break;
         }
-        case 4: {
+        /* ── str_t operations ───────────────────────────────────────────── */
+        case 3: {
             str_t s = str_from((const char*)byte_buf, FUZZ_BUF_LEN);
             str_t r = str_slice(s, start, end);
-            if (r.ptr != NULL) {
-                if ((const u8*)r.ptr < byte_buf)                         __builtin_trap();
-                if ((const u8*)r.ptr + r.len > byte_buf + FUZZ_BUF_LEN) __builtin_trap();
-            }
+            str_t t = str_take(s, start);
+            str_t k = str_skip(s, start);
+            if (r.ptr != NULL &&
+                (const u8*)r.ptr + r.len > byte_buf + FUZZ_BUF_LEN)
+                __builtin_trap();
+            if (t.ptr != NULL &&
+                (const u8*)t.ptr + t.len > byte_buf + FUZZ_BUF_LEN)
+                __builtin_trap();
+            if (k.ptr != NULL &&
+                (const u8*)k.ptr + k.len > byte_buf + FUZZ_BUF_LEN)
+                __builtin_trap();
             break;
         }
-        case 5: {
+        /* ── slice_i32 — slice, take, skip ──────────────────────────────── */
+        case 4: {
             usize     s_start = start % (FUZZ_I32_LEN + 1);
             usize     s_end   = end   % (FUZZ_I32_LEN + 1);
             slice_i32 s       = slice_i32_from(i32_buf, FUZZ_I32_LEN);
             slice_i32 r       = slice_i32_slice(s, s_start, s_end);
-            if (r.ptr != NULL) {
-                if (r.ptr < i32_buf)                             __builtin_trap();
-                if (r.ptr + r.len > i32_buf + FUZZ_I32_LEN)     __builtin_trap();
+            slice_i32 t       = slice_i32_take(s, s_start);
+            slice_i32 k       = slice_i32_skip(s, s_start);
+            if (r.ptr != NULL && r.ptr + r.len > i32_buf + FUZZ_I32_LEN)
+                __builtin_trap();
+            if (t.ptr != NULL && t.ptr + t.len > i32_buf + FUZZ_I32_LEN)
+                __builtin_trap();
+            if (k.ptr != NULL && k.ptr + k.len > i32_buf + FUZZ_I32_LEN)
+                __builtin_trap();
+            break;
+        }
+        /* ── slice_i32 — at, get, get_unchecked ─────────────────────────── */
+        case 5: {
+            usize     idx = start % (FUZZ_I32_LEN + 1);
+            slice_i32 s   = slice_i32_from(i32_buf, FUZZ_I32_LEN);
+            i32*      p   = slice_i32_at(s, idx);
+            if (p != NULL) {
+                if (p < i32_buf || p >= i32_buf + FUZZ_I32_LEN)
+                    __builtin_trap();
+                (void)*p;
             }
             break;
         }
         case 6: {
             usize     idx = start % (FUZZ_I32_LEN + 1);
             slice_i32 s   = slice_i32_from(i32_buf, FUZZ_I32_LEN);
-            i32*      p   = slice_i32_at(s, idx);
-            if (p != NULL) {
-                if (p < i32_buf || p >= i32_buf + FUZZ_I32_LEN) __builtin_trap();
-                (void)*p;
-            }
+            i32       val = 0;
+            bool      ok  = slice_i32_get(s, idx, &val);
+            if ( ok && idx >= FUZZ_I32_LEN) __builtin_trap();
+            if (!ok && idx <  FUZZ_I32_LEN) __builtin_trap();
             break;
         }
         case 7: {
-            usize     idx = start % (FUZZ_I32_LEN + 1);
+            /* get_unchecked — only call with valid index */
+            usize     idx = start % FUZZ_I32_LEN;
             slice_i32 s   = slice_i32_from(i32_buf, FUZZ_I32_LEN);
-            i32       val = 0;
-            bool      ok  = slice_i32_get(s, idx, &val);
-            if (ok  && idx >= FUZZ_I32_LEN) __builtin_trap();
-            if (!ok && idx <  FUZZ_I32_LEN) __builtin_trap();
+            i32       val = slice_i32_get_unchecked(s, idx);
+            if (val != (i32)idx) __builtin_trap();
+            break;
+        }
+        /* ── slice_i32 — len, is_empty, first, last, as_bytes, as_cbytes ── */
+        case 8: {
+            slice_i32 s = slice_i32_from(i32_buf, FUZZ_I32_LEN);
+            if (slice_i32_len(s)      != FUZZ_I32_LEN) __builtin_trap();
+            if (slice_i32_is_empty(s) != false)         __builtin_trap();
+            {
+                i32* f = slice_i32_first(s);
+                i32* l = slice_i32_last(s);
+                if (f == NULL || l == NULL)              __builtin_trap();
+                if (f != &i32_buf[0])                    __builtin_trap();
+                if (l != &i32_buf[FUZZ_I32_LEN - 1])    __builtin_trap();
+            }
+            break;
+        }
+        case 9: {
+            slice_i32 s = slice_i32_from(i32_buf, FUZZ_I32_LEN);
+            bytes_t   b = slice_i32_as_bytes(s);
+            cbytes_t  c = slice_i32_as_cbytes(s);
+            if (b.len != FUZZ_I32_LEN * sizeof(i32)) __builtin_trap();
+            if (c.len != FUZZ_I32_LEN * sizeof(i32)) __builtin_trap();
+            if (b.ptr != (u8*)i32_buf)               __builtin_trap();
+            if (c.ptr != (const u8*)i32_buf)         __builtin_trap();
             break;
         }
         default:
