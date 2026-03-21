@@ -238,9 +238,6 @@ struct Region {
  */
 static inline void region_begin(Region* r) {
     require_msg(r != NULL, "region_begin: r cannot be NULL");
-    /* Zero-initialize all fields, then set id and open.
-     * Casting through a char* loop is C99-portable and avoids
-     * a memset dependency; compilers reduce this to a single instruction. */
     *r      = (Region){0};
     r->id   = (region_id_t)(uintptr_t)r;
     r->open = true;
@@ -458,6 +455,9 @@ static inline usize region_hook_count(const Region* r) {
 static inline void region_assert_open(const Region* r) {
     ensure_msg(r != NULL, "region_assert_open: r cannot be NULL");
     ensure_msg(r->open,   "region_assert_open: region is closed — borrow may be invalid");
+    /* Suppress unused-parameter warning when ensure_msg compiles away (NDEBUG
+     * without CANON_STRICT). The parameter is genuinely used in debug builds. */
+    (void)r;
 }
 
 /**
@@ -481,6 +481,9 @@ static inline void region_assert_borrow_valid(const Region* r, region_id_t borro
     ensure_msg(r != NULL,           "region_assert_borrow_valid: r cannot be NULL");
     ensure_msg(r->open,             "region_assert_borrow_valid: region is closed");
     ensure_msg(r->id == borrow_rid, "region_assert_borrow_valid: ID mismatch — wrong region");
+    /* Suppress unused-parameter warning when ensure_msg compiles away (NDEBUG
+     * without CANON_STRICT). The parameter is genuinely used in debug builds. */
+    (void)r;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
