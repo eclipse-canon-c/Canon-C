@@ -281,6 +281,7 @@ static inline bool slice_##type##_get(slice_##type s, usize i, type* out) {     
 static inline type slice_##type##_get_unchecked(slice_##type s, usize i) {         \
     ensure_msg(s.ptr != NULL, "slice_" #type "_get_unchecked: NULL ptr");           \
     ensure_msg(i < s.len,     "slice_" #type "_get_unchecked: index out of bounds");\
+    /* cppcheck-suppress returnDanglingLifetime */                                  \
     return s.ptr[i];                                                                \
 }                                                                                   \
                                                                                     \
