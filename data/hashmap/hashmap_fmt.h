@@ -36,13 +36,13 @@
  * static bool fmt_u64_key(StringBuf* sb, const u64* k) {
  *     char tmp[24];
  *     snprintf(tmp, sizeof(tmp), "%llu", (unsigned long long)*k);
- *     return stringbuf_push_cstr(sb, tmp);
+ *     return stringbuf_append(sb, tmp);
  * }
  *
  * static bool fmt_int_val(StringBuf* sb, const int* v) {
  *     char tmp[16];
  *     snprintf(tmp, sizeof(tmp), "%d", *v);
- *     return stringbuf_push_cstr(sb, tmp);
+ *     return stringbuf_append(sb, tmp);
  * }
  *
  * #define HASHMAP_KEY_TYPE  u64
@@ -78,7 +78,6 @@
 
 #include "hashmap_mangle.h"
 #include "data/stringbuf.h"
-#include "core/primitives/types.h"
 #include "core/primitives/contract.h"
 #include "core/ownership.h"
 
