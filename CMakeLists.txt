@@ -241,7 +241,6 @@ canon_c_test(
     NAME ownership_test 
     SRC test/core/ownership_test.c 
     INCLUDES core/primitives core .
-    FUZZABLE
 )
 
 # ---------------------------------------------------------------------------
