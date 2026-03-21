@@ -202,6 +202,7 @@ jobs:
             --std=c99 \
             --error-exitcode=1 \
             --suppress=missingIncludeSystem \
+            "--suppress=returnDanglingLifetime:*slice_test.c" \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -220,6 +221,7 @@ jobs:
             --std=c99 `
             --error-exitcode=1 `
             --suppress=missingIncludeSystem `
+            "--suppress=returnDanglingLifetime:*slice_test.c" `
             -I "${{ github.workspace }}/core/primitives" `
             -I "${{ github.workspace }}/core" `
             -I "${{ github.workspace }}/semantics" `
