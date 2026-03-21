@@ -222,7 +222,7 @@ canon_c_test(
 canon_c_test(
     NAME pool_test      
     SRC test/core/pool_test.c      
-    INCLUDES core/primitives . 
+    INCLUDES core/primitives core .
     FUZZABLE
 )
 
@@ -240,7 +240,7 @@ canon_c_test(
 canon_c_test(
     NAME ownership_test 
     SRC test/core/ownership_test.c 
-    INCLUDES core/primitives .
+    INCLUDES core/primitives core .
     FUZZABLE
 )
 
