@@ -223,7 +223,7 @@ canon_c_test(
     NAME pool_test      
     SRC test/core/pool_test.c      
     INCLUDES core/primitives core .
-    FUZZABLE
+    FUZZABLE 
 )
 
 # canon_c_test(NAME slice_test     SRC test/core/slice_test.c     INCLUDES core/primitives . FUZZABLE)
