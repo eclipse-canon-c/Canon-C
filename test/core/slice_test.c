@@ -25,6 +25,9 @@
 
 /* ── Generate typed slice for i32 (used by both unit and fuzz builds) ────── */
 
+/* cppcheck-suppress returnDanglingLifetime -- false positive:
+ * slice_i32_get_unchecked returns T by value, not a pointer to
+ * the local slice struct. The ptr field is used only for indexing. */
 DEFINE_SLICE(i32)
 
 /* ══════════════════════════════════════════════════════════════════════════
