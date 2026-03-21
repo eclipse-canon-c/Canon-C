@@ -1,14 +1,13 @@
 #ifndef CANON_DATA_CONVENIENCE_DYNSTRING_H
 #define CANON_DATA_CONVENIENCE_DYNSTRING_H
 
-#include <stdarg.h>                      // va_list, va_start, va_end — for append_fmt
-#include <stdlib.h>
-#include <stdio.h>
+#include <stdarg.h>                      /* va_list, va_start, va_end — for append_fmt */
+#include <stdlib.h>                      /* malloc, realloc, free */
+#include <stdio.h>                       /* vsnprintf */
 
-#include "core/primitives/types.h"       // usize, bool
-#include "core/primitives/limits.h"      // growth constants, max capacity
-#include "core/primitives/contract.h"    // require_msg, ensure_msg
-#include "core/memory.h"                 // str_len, mem_copy, mem_zero
+#include "core/primitives/types.h"       /* usize, bool */
+#include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "core/memory.h"                 /* mem_copy */
 
 /**
  * @file convenience/dynstring.h
@@ -77,9 +76,11 @@
  *
  * @sa data/stringbuf.h — fixed-capacity, arena-friendly alternative
  */
+
 /* ════════════════════════════════════════════════════════════════════════════
    Configuration
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Initial heap allocation size in bytes (including null terminator)
  *
@@ -103,6 +104,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Branch hint helpers
    ════════════════════════════════════════════════════════════════════════════ */
+
 #if defined(__GNUC__) || defined(__clang__)
     #define DYNSTRING_LIKELY(x) __builtin_expect(!!(x), 1)
     #define DYNSTRING_UNLIKELY(x) __builtin_expect(!!(x), 0)
@@ -114,6 +116,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    DynString struct
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Auto-growing heap-allocated string builder
  *
@@ -137,6 +140,7 @@ typedef struct {
 /* ════════════════════════════════════════════════════════════════════════════
    Internal helper — capacity management
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Ensures the buffer has at least min_cap bytes of capacity
  *
@@ -178,6 +182,7 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
 /* ════════════════════════════════════════════════════════════════════════════
    Constructors
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Creates an empty DynString with no initial allocation
  *
@@ -237,19 +242,19 @@ static inline DynString dynstring_with_capacity(usize capacity) {
  * @note Call dynstring_free() when done.
  *
  * Performance:
- * - Time: O(str_len(str))
- * - Space: str_len(str) + 1 bytes on the heap
+ * - Time: O(strlen(str))
+ * - Space: strlen(str) + 1 bytes on the heap
  */
 static inline DynString dynstring_from(const char* str) {
     DynString s = dynstring_init();
     if (!str) return s;
 
-    usize len = str_len(str);
+    usize len = strlen(str);
     usize cap = len + 1;
 
     s.data = (char*)malloc(cap);
     if (s.data) {
-        mem_copy(s.data, str, len + 1);  // includes null terminator
+        mem_copy(s.data, str, len + 1);  /* includes null terminator */
         s.len = len;
         s.cap = cap;
     }
@@ -259,6 +264,7 @@ static inline DynString dynstring_from(const char* str) {
 /* ════════════════════════════════════════════════════════════════════════════
    Queries
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Returns the current string length (excluding null terminator)
  *
@@ -323,6 +329,7 @@ static inline const char* dynstring_str(const DynString* s) {
 /* ════════════════════════════════════════════════════════════════════════════
    Append operations (auto-growing)
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Appends a null-terminated C string, growing if needed
  *
@@ -330,20 +337,20 @@ static inline const char* dynstring_str(const DynString* s) {
  * @param str String to append (NULL treated as empty — no-op, returns true)
  * @return true on success, false on allocation failure
  *
- * @post On true: str appended, s->len increased by str_len(str)
+ * @post On true: str appended, s->len increased by strlen(str)
  * @post On false: s is unchanged
  *
  * @note May allocate heap memory.
  *
  * Performance:
- * - Time: Amortized O(str_len(str)), worst-case O(len + str_len(str)) on realloc
+ * - Time: Amortized O(strlen(str)), worst-case O(len + strlen(str)) on realloc
  * - Space: May allocate up to 2× current capacity
  */
 static inline bool dynstring_append(DynString* s, const char* str) {
     if (!s) return false;
     if (!str) return true;  /* NULL is a no-op */
 
-    usize add_len = str_len(str);
+    usize add_len = strlen(str);
     if (add_len == 0) return true;
 
     usize required_cap = s->len + add_len + 1;
@@ -430,7 +437,7 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
 /**
  * @brief Appends at most n characters from str, growing if needed
  *
- * Appends min(n, str_len(str)) characters.
+ * Appends min(n, strlen(str)) characters.
  *
  * @param s DynString to append to
  * @param str Source string (NULL treated as empty — no-op, returns true)
@@ -440,7 +447,7 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
  * @note May allocate heap memory.
  *
  * Performance:
- * - Time: Amortized O(min(n, str_len(str)))
+ * - Time: Amortized O(min(n, strlen(str)))
  * - Space: May allocate up to 2× current capacity
  */
 static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
@@ -464,6 +471,7 @@ static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
 /* ════════════════════════════════════════════════════════════════════════════
    Mutation
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Resets the string to empty without freeing the heap buffer
  *
@@ -513,6 +521,7 @@ static inline void dynstring_truncate(DynString* s, usize new_len) {
 /* ════════════════════════════════════════════════════════════════════════════
    Capacity management
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Ensures the buffer can hold at least min_cap bytes
  *
@@ -569,6 +578,7 @@ static inline bool dynstring_shrink_to_fit(DynString* s) {
 /* ════════════════════════════════════════════════════════════════════════════
    Memory management
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Frees the heap buffer and resets all fields to zero
  *
@@ -595,6 +605,7 @@ static inline void dynstring_free(DynString* s) {
 /* ════════════════════════════════════════════════════════════════════════════
    Utility
    ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Creates a heap-allocated copy of the string as a plain C string
  *
