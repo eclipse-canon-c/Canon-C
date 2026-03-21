@@ -33,13 +33,22 @@
  * hashmap_decl.h may be included from any layer that needs to forward-declare
  * the hashmap type. It generates extern declarations, not definitions.
  *
+ * NOTE: This file intentionally has NO include guard.
+ * It is a typed-instantiation header — like hashmap_impl.h and hashmap.h —
+ * and must be re-includable with different HASHMAP_KEY_TYPE / HASHMAP_VAL_TYPE
+ * configurations to produce distinct type declarations in the same translation
+ * unit. The internal hm_decl_key_t / hm_decl_val_t aliases are #undef'd at
+ * the bottom of this file, making re-inclusion safe.
+ *
  * @sa hashmap.h       — header-only entry point (includes everything)
  * @sa hashmap_defn.h  — generates definitions (include in exactly one .c)
  * @sa hashmap_impl.h  — pure logic (included by defn)
  */
 
-#ifndef CANON_DATA_HASHMAP_DECL_H
-#define CANON_DATA_HASHMAP_DECL_H
+/*
+ * NOTE: No include guard — intentionally re-includable.
+ * See file-level comment above.
+ */
 
 #include "hashmap_mangle.h"
 
@@ -145,5 +154,3 @@ extern bool _HM_ITER_NEXT(
 
 #undef hm_decl_key_t
 #undef hm_decl_val_t
-
-#endif /* CANON_DATA_HASHMAP_DECL_H */
