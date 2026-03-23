@@ -261,11 +261,40 @@ canon_c_test(
 # ---------------------------------------------------------------------------
 # semantics/ tests                     — uncomment when ready (v1.3.0)
 # ---------------------------------------------------------------------------
-# canon_c_test(NAME option_test SRC test/semantics/option_test.c INCLUDES core/primitives . FUZZABLE)
-# canon_c_test(NAME result_test SRC test/semantics/result_test.c INCLUDES core/primitives . FUZZABLE)
-# canon_c_test(NAME borrow_test SRC test/semantics/borrow_test.c INCLUDES core/primitives .)
-# canon_c_test(NAME diag_test   SRC test/semantics/diag_test.c   INCLUDES core/primitives .)
-# canon_c_test(NAME error_test  SRC test/semantics/error_test.c  INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME option_test 
+    SRC test/semantics/option_test.c 
+    INCLUDES core/primitives core semantics . 
+    FUZZABLE
+)
+
+canon_c_test(
+    NAME result_test 
+    SRC test/semantics/result_test.c 
+    INCLUDES core/primitives core semantics . 
+    FUZZABLE
+)
+
+canon_c_test(
+    NAME borrow_test 
+    SRC test/semantics/borrow_test.c 
+    INCLUDES core/primitives core semantics . 
+    FUZZABLE
+)
+
+canon_c_test(
+    NAME diag_test   
+    SRC test/semantics/diag_test.c   
+    INCLUDES core/primitives core semantics . 
+    FUZZABLE
+)
+
+canon_c_test(
+    NAME error_test  
+    SRC test/semantics/error_test.c  
+    INCLUDES core/primitives core semantics .
+)
 
 # ---------------------------------------------------------------------------
 # data/ tests                          — uncomment when ready (v1.3.0)
