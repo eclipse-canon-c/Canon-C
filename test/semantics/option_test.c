@@ -38,6 +38,37 @@ CANON_OPTION(int)
 typedef struct { int x; int y; } Point;
 CANON_OPTION(Point)
 
+/* ── Helper functions (visible to both unit test and fuzz builds) ─────────── */
+
+static int  double_it(int x)          { return x * 2; }
+static int  negate(int x)             { return -x; }
+static int  add(int a, int b)         { return a + b; }
+static bool is_positive(int x)        { return x > 0; }
+static bool is_even(int x)            { return (x % 2) == 0; }
+static bool int_eq(int a, int b)      { return a == b; }
+
+static option_int half_if_even(int x)
+{
+    if (x % 2 == 0) return option_int_some(x / 2);
+    return option_int_none();
+}
+
+static option_int always_none(void) { return option_int_none(); }
+static option_int always_42(void)   { return option_int_some(42); }
+
+static bool point_eq_fn(Point a, Point b) { return a.x == b.x && a.y == b.y; }
+static Point point_double(Point p) { Point r = {p.x * 2, p.y * 2}; return r; }
+static Point point_add(Point a, Point b) { Point r = {a.x+b.x, a.y+b.y}; return r; }
+static bool  point_positive(Point p) { return p.x > 0 && p.y > 0; }
+static option_Point point_none_if_origin(Point p) {
+    if (p.x == 0 && p.y == 0) return option_Point_none();
+    return option_Point_some(p);
+}
+static option_Point point_fallback(void) {
+    Point r = {-1, -1};
+    return option_Point_some(r);
+}
+
 /* ── Harness ─────────────────────────────────────────────────────────────── */
 
 #ifndef CANON_FUZZING
@@ -65,24 +96,6 @@ static int g_failed = 0;
             return;                                              \
         }                                                        \
     } while (0)
-
-/* ── Helper functions for combinators ───────────────────────────────────── */
-
-static int  double_it(int x)          { return x * 2; }
-static int  negate(int x)             { return -x; }
-static int  add(int a, int b)         { return a + b; }
-static bool is_positive(int x)        { return x > 0; }
-static bool is_even(int x)            { return (x % 2) == 0; }
-static bool int_eq(int a, int b)      { return a == b; }
-
-static option_int half_if_even(int x)
-{
-    if (x % 2 == 0) return option_int_some(x / 2);
-    return option_int_none();
-}
-
-static option_int always_none(void) { return option_int_none(); }
-static option_int always_42(void)   { return option_int_some(42); }
 
 /* ── Constructors ────────────────────────────────────────────────────────── */
 
@@ -405,19 +418,6 @@ static void test_struct_round_trip(void)
 /* These tests exist to exercise the full generated API for Point so that
  * -Wunused-function does not fire. Each generated function must be called
  * at least once per instantiation. */
-
-static bool point_eq_fn(Point a, Point b) { return a.x == b.x && a.y == b.y; }
-static Point point_double(Point p) { Point r = {p.x * 2, p.y * 2}; return r; }
-static Point point_add(Point a, Point b) { Point r = {a.x+b.x, a.y+b.y}; return r; }
-static bool  point_positive(Point p) { return p.x > 0 && p.y > 0; }
-static option_Point point_none_if_origin(Point p) {
-    if (p.x == 0 && p.y == 0) return option_Point_none();
-    return option_Point_some(p);
-}
-static option_Point point_fallback(void) {
-    Point r = {-1, -1};
-    return option_Point_some(r);
-}
 
 static void test_struct_all_functions(void)
 {
