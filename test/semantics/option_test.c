@@ -30,7 +30,10 @@
 /* ── Type instantiations ─────────────────────────────────────────────────── */
 
 CANON_OPTION(int)
-CANON_OPTION(float)
+
+/* float omitted -- int already covers all numeric-type code paths.
+ * A second numeric instantiation would generate unused-function warnings
+ * for combinators not exercised in this file. */
 
 typedef struct { int x; int y; } Point;
 CANON_OPTION(Point)
@@ -106,12 +109,6 @@ static void test_none_value_zero_initialized(void)
     option_int a = option_int_none();
     option_int b = option_int_none();
     EXPECT(memcmp(&a, &b, sizeof(option_int)) == 0);
-}
-
-static void test_some_float(void)
-{
-    option_float o = option_float_some(3.14f);
-    EXPECT(option_float_is_some(o));
 }
 
 static void test_some_struct(void)
@@ -404,6 +401,85 @@ static void test_struct_round_trip(void)
     EXPECT(out.x == 10 && out.y == 20);
 }
 
+/* ── Point combinators and remaining API ─────────────────────────────────── */
+/* These tests exist to exercise the full generated API for Point so that
+ * -Wunused-function does not fire. Each generated function must be called
+ * at least once per instantiation. */
+
+static bool point_eq_fn(Point a, Point b) { return a.x == b.x && a.y == b.y; }
+static Point point_double(Point p) { Point r = {p.x * 2, p.y * 2}; return r; }
+static Point point_add(Point a, Point b) { Point r = {a.x+b.x, a.y+b.y}; return r; }
+static bool  point_positive(Point p) { return p.x > 0 && p.y > 0; }
+static option_Point point_none_if_origin(Point p) {
+    if (p.x == 0 && p.y == 0) return option_Point_none();
+    return option_Point_some(p);
+}
+static option_Point point_fallback(void) {
+    Point r = {-1, -1};
+    return option_Point_some(r);
+}
+
+static void test_struct_all_functions(void)
+{
+    Point        p    = {3, 4};
+    Point        zero = {0, 0};
+    Point        def  = {-1, -1};
+    option_Point o    = option_Point_some(p);
+    option_Point n    = option_Point_none();
+    Point        v;
+
+    /* unwrap_or */
+    v = option_Point_unwrap_or(o, def);
+    EXPECT(v.x == 3 && v.y == 4);
+    v = option_Point_unwrap_or(n, def);
+    EXPECT(v.x == -1 && v.y == -1);
+
+    /* unwrap */
+    v = option_Point_unwrap(o);
+    EXPECT(v.x == 3 && v.y == 4);
+
+    /* expect */
+    v = option_Point_expect(o, "must be present");
+    EXPECT(v.x == 3 && v.y == 4);
+
+    /* map */
+    option_Point m = option_Point_map(o, point_double);
+    EXPECT(option_Point_is_some(m));
+    v = option_Point_unwrap(m);
+    EXPECT(v.x == 6 && v.y == 8);
+    EXPECT(option_Point_is_none(option_Point_map(n, point_double)));
+
+    /* and_then */
+    option_Point at = option_Point_and_then(o, point_none_if_origin);
+    EXPECT(option_Point_is_some(at));
+    option_Point at2 = option_Point_and_then(option_Point_some(zero),
+                                              point_none_if_origin);
+    EXPECT(option_Point_is_none(at2));
+
+    /* or_else */
+    option_Point oe = option_Point_or_else(n, point_fallback);
+    EXPECT(option_Point_is_some(oe));
+    v = option_Point_unwrap(oe);
+    EXPECT(v.x == -1 && v.y == -1);
+
+    /* filter */
+    option_Point f1 = option_Point_filter(o, point_positive);
+    EXPECT(option_Point_is_some(f1));
+    option_Point f2 = option_Point_filter(option_Point_some(zero), point_positive);
+    EXPECT(option_Point_is_none(f2));
+
+    /* combine_with */
+    option_Point c = option_Point_combine_with(o, option_Point_some(p), point_add);
+    EXPECT(option_Point_is_some(c));
+    v = option_Point_unwrap(c);
+    EXPECT(v.x == 6 && v.y == 8);
+
+    /* eq */
+    EXPECT(option_Point_eq(o, o, point_eq_fn));
+    EXPECT(!option_Point_eq(o, n, point_eq_fn));
+    EXPECT(option_Point_eq(n, n, point_eq_fn));
+}
+
 static void test_struct_replace_and_take(void)
 {
     Point        p1  = {1, 2};
@@ -430,7 +506,6 @@ int main(void)
     test_some_is_some();
     test_none_is_none();
     test_none_value_zero_initialized();
-    test_some_float();
     test_some_struct();
 
     /* get */
@@ -490,6 +565,7 @@ int main(void)
     /* struct round-trip */
     test_struct_round_trip();
     test_struct_replace_and_take();
+    test_struct_all_functions();
 
     if (g_failed == 0) {
         printf("OK  option_test  (all assertions passed)\n");
