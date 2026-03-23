@@ -580,6 +580,44 @@ int main(void)
 /* ── Fuzz entry point ────────────────────────────────────────────────────── */
 
 /*
+ * Suppress unused-function warnings for helpers and generated API functions
+ * not exercised in the fuzz entry point. The fuzz build is intentionally
+ * minimal — only the operations being stress-tested are called. This follows
+ * the same pattern used in arena_test.c and other fuzzable Canon-C tests.
+ */
+static void option_fuzz_suppress_unused(void)
+{
+    /* int helpers not used in fuzz path */
+    (void)negate;
+    (void)is_even;
+    (void)always_none;
+    /* Point helpers and generated API — Point is not fuzzed */
+    (void)point_eq_fn;
+    (void)point_double;
+    (void)point_add;
+    (void)point_positive;
+    (void)point_none_if_origin;
+    (void)point_fallback;
+    (void)option_int_expect;
+    (void)option_Point_some;
+    (void)option_Point_none;
+    (void)option_Point_is_some;
+    (void)option_Point_is_none;
+    (void)option_Point_get;
+    (void)option_Point_unwrap_or;
+    (void)option_Point_unwrap;
+    (void)option_Point_expect;
+    (void)option_Point_map;
+    (void)option_Point_and_then;
+    (void)option_Point_or_else;
+    (void)option_Point_filter;
+    (void)option_Point_combine_with;
+    (void)option_Point_replace;
+    (void)option_Point_take;
+    (void)option_Point_eq;
+}
+
+/*
  * Input layout (8 bytes, excess ignored):
  *   [0]    has_value flag  (nonzero → Some)
  *   [1..4] int value       (little-endian i32)
@@ -599,6 +637,8 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
     u8  raw[8];
     int val1, val2;
     int out;
+
+    (void)option_fuzz_suppress_unused; /* suppress unused-function warning */
 
     memset(raw, 0, sizeof(raw));
     if (size > sizeof(raw)) size = sizeof(raw);
