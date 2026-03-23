@@ -269,12 +269,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(
-#    NAME result_test 
-#    SRC test/semantics/result_test.c 
-#    INCLUDES core/primitives core semantics . 
-#    FUZZABLE
-#)
+canon_c_test(
+    NAME result_test 
+    SRC test/semantics/result_test.c 
+    INCLUDES core/primitives core semantics . 
+    FUZZABLE
+)
 
 # canon_c_test(
 #   NAME borrow_test 
