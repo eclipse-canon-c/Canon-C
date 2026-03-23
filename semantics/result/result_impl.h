@@ -71,7 +71,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later (compound literals, designated initializers)
  * - Named union member (.val) is used by default for C99 compatibility
- * - Uses Canon-C contract.h for assertions (require)
+ * - Uses Canon-C contract.h for assertions (require_msg)
  * - No platform-specific code
  *
  * map / map_err type constraint:
@@ -90,7 +90,7 @@
  * #undef  IMPL_RESULT_OK
  * #define IMPL_RESULT_OK(_t, _e, _tres, _param) \
  *     { \
- *         require((_param) != NULL, "result_ok: NULL pointer not allowed"); \
+ *         require_msg((_param) != NULL, "result_ok: NULL pointer not allowed"); \
  *         return (_tres){ .is_ok = true, .val.ok = (_param) }; \
  *     }
  *
@@ -251,7 +251,7 @@
  * @brief Safely extracts success value if Ok
  *
  * Contract: _out must not be NULL — a NULL pointer is a programmer error
- * caught by require(). The return value is unambiguous: false means the
+ * caught by require_msg(). The return value is unambiguous: false means the
  * Result is Err, never that the caller passed a bad pointer.
  *
  * Performance: O(1) time, O(1) space (conditional assignment)
@@ -263,7 +263,7 @@
  */
 #define IMPL_RESULT_GET_OK(_t, _e, _r, _out) \
     { \
-        require((_out) != NULL, "result_get_ok: output pointer must not be NULL"); \
+        require_msg((_out) != NULL, "result_get_ok: output pointer must not be NULL"); \
         if ((_r).is_ok) { \
             *(_out) = IMPL_RESULT_OK_FIELD_(_r); \
             return true; \
@@ -275,7 +275,7 @@
  * @brief Safely extracts error value if Err
  *
  * Contract: _out must not be NULL — a NULL pointer is a programmer error
- * caught by require(). The return value is unambiguous: false means the
+ * caught by require_msg(). The return value is unambiguous: false means the
  * Result is Ok, never that the caller passed a bad pointer.
  *
  * Performance: O(1) time, O(1) space (conditional assignment)
@@ -287,7 +287,7 @@
  */
 #define IMPL_RESULT_GET_ERR(_t, _e, _r, _out) \
     { \
-        require((_out) != NULL, "result_get_err: output pointer must not be NULL"); \
+        require_msg((_out) != NULL, "result_get_err: output pointer must not be NULL"); \
         if (!(_r).is_ok) { \
             *(_out) = IMPL_RESULT_ERR_FIELD_(_r); \
             return true; \
@@ -339,7 +339,7 @@
  */
 #define IMPL_RESULT_UNWRAP(_t, _e, _r) \
     { \
-        require((_r).is_ok, "result_unwrap: called on Err value"); \
+        require_msg((_r).is_ok, "result_unwrap: called on Err value"); \
         return IMPL_RESULT_OK_FIELD_(_r); \
     }
 
@@ -358,7 +358,7 @@
  */
 #define IMPL_RESULT_UNWRAP_ERR(_t, _e, _r) \
     { \
-        require(!(_r).is_ok, "result_unwrap_err: called on Ok value"); \
+        require_msg(!(_r).is_ok, "result_unwrap_err: called on Ok value"); \
         return IMPL_RESULT_ERR_FIELD_(_r); \
     }
 
@@ -378,7 +378,7 @@
  */
 #define IMPL_RESULT_EXPECT(_t, _e, _r, _msg) \
     { \
-        require((_r).is_ok, (_msg)); \
+        require_msg((_r).is_ok, (_msg)); \
         return IMPL_RESULT_OK_FIELD_(_r); \
     }
 
