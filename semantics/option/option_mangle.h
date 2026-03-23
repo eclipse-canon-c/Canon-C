@@ -10,7 +10,7 @@
  * ----------------------------------------------------------------------------
  *   - Everything is explicit.  No name is generated without a visible macro.
  *   - Everything is optional.  Every macro is guarded with #ifndef so the
- *     caller may override any — or all — names before inclusion.
+ *     caller may override any -- or all -- names before inclusion.
  *   - No hidden behaviour.  If a name cannot be found by reading this file,
  *     it does not exist.
  *   - Abstractions clarify, not conceal.
@@ -28,24 +28,24 @@
  *   The type token T must be a single preprocessor token that is also a
  *   valid C identifier fragment.  Avoid tokens that begin with an underscore
  *   or that contain two consecutive underscores; the resulting identifiers
- *   would be reserved by the C standard (C99 §7.1.3).
+ *   would be reserved by the C standard (C99 s7.1.3).
  *
  * Customisation
  * ----------------------------------------------------------------------------
  *   Define any subset of MANGLE_OPTION_* before including this header.
  *   Undefined macros receive their defaults; defined macros are left alone.
  *
- *   Example — Haskell-style Maybe/Just/Nothing naming:
+ *   Example -- Haskell-style Maybe/Just/Nothing naming:
  *
- *     #define MANGLE_OPTION_TYPE(T)      Maybe##T
+ *     #define MANGLE_OPTION_TYPE(T)       Maybe##T
  *     #define MANGLE_OPTION_STRUCT_TAG(T) Maybe##T##_s
- *     #define MANGLE_OPTION_SOME(T)      Maybe##T##_Just
- *     #define MANGLE_OPTION_NONE(T)      Maybe##T##_Nothing
- *     #define MANGLE_OPTION_IS_SOME(T)   Maybe##T##_isJust
- *     #define MANGLE_OPTION_IS_NONE(T)   Maybe##T##_isNothing
+ *     #define MANGLE_OPTION_SOME(T)       Maybe##T##_Just
+ *     #define MANGLE_OPTION_NONE(T)       Maybe##T##_Nothing
+ *     #define MANGLE_OPTION_IS_SOME(T)    Maybe##T##_isJust
+ *     #define MANGLE_OPTION_IS_NONE(T)    Maybe##T##_isNothing
  *     #include "option.h"
  *
- *     CANON_OPTION(Int)               /* note: capital I, not 'int' */
+ *     CANON_OPTION(Int)               (note: capital I, not lowercase int)
  *
  *     MaybeInt x = MaybeInt_Just(42);
  *     bool present = MaybeInt_isJust(x);
@@ -54,7 +54,7 @@
  *   embed in your MANGLE_* overrides.  If you write Maybe##Int then you must
  *   write CANON_OPTION(Int), not CANON_OPTION(int).
  *
- *   Example — project-scoped prefix to avoid link-time collisions:
+ *   Example -- project-scoped prefix to avoid link-time collisions:
  *
  *     #define MANGLE_OPTION_TYPE(T)  myproject_opt_##T
  *     #include "option.h"
@@ -72,29 +72,29 @@
  *     - NOT begin with an underscore.
  *     - NOT contain two consecutive underscores.
  *
- *   Violating these constraints produces reserved identifiers (C99 §7.1.3)
+ *   Violating these constraints produces reserved identifiers (C99 s7.1.3)
  *   or ill-formed token pastes; behaviour is undefined.
  *
  * Performance
  * ----------------------------------------------------------------------------
- *   Time  : O(1) — pure compile-time token pasting.
- *   Space : O(1) — no runtime storage; all names resolved by the preprocessor.
+ *   Time  : O(1) -- pure compile-time token pasting.
+ *   Space : O(1) -- no runtime storage; all names resolved by the preprocessor.
  *
  * Thread safety
  * ----------------------------------------------------------------------------
- *   N/A — this file contains no runtime behaviour whatsoever.
+ *   N/A -- this file contains no runtime behaviour whatsoever.
  *
  * Portability
  * ----------------------------------------------------------------------------
- *   Requires C99 or later.  Token pasting (##) is defined in C99 §6.10.3.3.
+ *   Requires C99 or later.  Token pasting (##) is defined in C99 s6.10.3.3.
  *   No compiler extensions are used or required.
  *   Tested with GCC, Clang, and MSVC in C99 mode.
  *
  * Consumed by
  * ----------------------------------------------------------------------------
- *   option_decl.h  — struct layout and function declarations
- *   option_defn.h  — inline / static function definitions
- *   option_impl.h  — non-inline implementation stubs (optional)
+ *   option_decl.h  -- struct layout and function declarations
+ *   option_defn.h  -- inline / static function definitions
+ *   option_impl.h  -- non-inline implementation stubs (optional)
  *
  * ============================================================================
  * SPDX-License-Identifier: MPL-2.0
@@ -118,7 +118,7 @@
  *
  * Override example:
  *   #define MANGLE_OPTION_TYPE(T)  Maybe##T
- *   → MaybeInt, MaybeFloat, …
+ *   -> MaybeInt, MaybeFloat, ...
  */
 #ifndef MANGLE_OPTION_TYPE
 #  define MANGLE_OPTION_TYPE(T)            option_##T
@@ -132,8 +132,8 @@
  *
  * Default : option_T_s   (e.g. option_int_s)
  *
- * Consumed by: option_decl.h — the struct definition reads:
- *   typedef struct MANGLE_OPTION_STRUCT_TAG(T) { … } MANGLE_OPTION_TYPE(T);
+ * Consumed by: option_decl.h -- the struct definition reads:
+ *   typedef struct MANGLE_OPTION_STRUCT_TAG(T) { ... } MANGLE_OPTION_TYPE(T);
  */
 #ifndef MANGLE_OPTION_STRUCT_TAG
 #  define MANGLE_OPTION_STRUCT_TAG(T)      option_##T##_s
@@ -220,7 +220,7 @@
  * Writes the contained value into *out and returns non-zero on success.
  * Returns zero without modifying *out when the option is None.
  *
- * Contract: out must not be NULL — passing NULL is always a caller bug
+ * Contract: out must not be NULL -- passing NULL is always a caller bug
  * and triggers a contract violation.
  *
  * Default : option_T_get   (e.g. option_int_get(opt, &out))
