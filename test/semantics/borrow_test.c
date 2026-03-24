@@ -285,7 +285,7 @@ static void test_str_slice_inherits_source(void)
 
 static void test_bytes_from_stores_ptr_len_source(void)
 {
-    u8             buf[8];
+    u8             buf[8] = {0};
     borrowed_bytes b = borrowed_bytes_from(buf, 8, buf);
     EXPECT(b.bytes.ptr == buf);
     EXPECT(b.bytes.len == 8);
@@ -312,7 +312,7 @@ static void test_bytes_empty_constructor(void)
 
 static void test_bytes_get_returns_inner(void)
 {
-    u8             buf[4];
+    u8             buf[4] = {0};
     borrowed_bytes b  = borrowed_bytes_from(buf, 4, NULL);
     cbytes_t       cb = borrowed_bytes_get(&b);
     EXPECT(cb.ptr == buf);
@@ -328,7 +328,7 @@ static void test_bytes_get_null_b_returns_empty(void)
 
 static void test_bytes_len_correct(void)
 {
-    u8             buf[16];
+    u8             buf[16] = {0};
     borrowed_bytes b = borrowed_bytes_from(buf, 16, NULL);
     EXPECT(borrowed_bytes_len(&b) == 16);
 }
@@ -340,7 +340,7 @@ static void test_bytes_len_null_b_returns_zero(void)
 
 static void test_bytes_is_valid_non_null(void)
 {
-    u8             buf[4];
+    u8             buf[4] = {0};
     borrowed_bytes b = borrowed_bytes_from(buf, 4, NULL);
     EXPECT(borrowed_bytes_is_valid(&b));
 }
@@ -368,7 +368,7 @@ static void test_bytes_slice_middle(void)
 
 static void test_bytes_slice_full_range(void)
 {
-    u8             buf[4];
+    u8             buf[4] = {0};
     borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
     borrowed_bytes sub = borrowed_bytes_slice(b, 0, 4);
     EXPECT(sub.bytes.len == 4);
@@ -377,7 +377,7 @@ static void test_bytes_slice_full_range(void)
 
 static void test_bytes_slice_clamps_end(void)
 {
-    u8             buf[4];
+    u8             buf[4] = {0};
     borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
     borrowed_bytes sub = borrowed_bytes_slice(b, 0, 999);
     EXPECT(sub.bytes.len == 4);
@@ -385,7 +385,7 @@ static void test_bytes_slice_clamps_end(void)
 
 static void test_bytes_slice_start_equals_end_returns_empty(void)
 {
-    u8             buf[4];
+    u8             buf[4] = {0};
     borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
     borrowed_bytes sub = borrowed_bytes_slice(b, 2, 2);
     EXPECT(sub.bytes.ptr == NULL);
@@ -394,7 +394,7 @@ static void test_bytes_slice_start_equals_end_returns_empty(void)
 
 static void test_bytes_slice_start_beyond_len_returns_empty(void)
 {
-    u8             buf[4];
+    u8             buf[4] = {0};
     borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
     borrowed_bytes sub = borrowed_bytes_slice(b, 10, 20);
     EXPECT(sub.bytes.ptr == NULL);
@@ -413,7 +413,7 @@ static void test_bytes_slice_null_ptr_returns_empty(void)
 
 static void test_bytes_slice_start_greater_than_end_returns_empty(void)
 {
-    u8             buf[8];
+    u8             buf[8] = {0};
     borrowed_bytes b   = borrowed_bytes_from(buf, 8, NULL);
     /* end (2) < len (8) but start (5) > end (2) after clamping — empty */
     borrowed_bytes sub = borrowed_bytes_slice(b, 5, 2);
