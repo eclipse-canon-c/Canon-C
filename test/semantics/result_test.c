@@ -670,6 +670,7 @@ static void result_fuzz_suppress_unused(void)
     (void)result_Point_MyError_eq;
     /* int API not used in fuzz path */
     (void)result_int_MyError_expect;
+    (void)result_int_MyError_unwrap_err;
 }
 
 /*
