@@ -50,8 +50,6 @@ static int      int_negate(int x)          { return -x; }
 static bool     int_eq(int a, int b)       { return a == b; }
 static bool     err_eq(MyError a, MyError b) { return a == b; }
 static MyError  err_enrich(MyError e)      { (void)e; return ERR_OVERFLOW; }
-static bool     int_positive(int x)        { return x > 0; }
-
 static result_int_MyError checked_double(int x)
 {
     if (x > 1000) return result_int_MyError_err(ERR_OVERFLOW);
@@ -69,6 +67,11 @@ static result_int_MyError always_err(MyError e)
     (void)e;
     return result_int_MyError_err(ERR_NOT_FOUND);
 }
+
+/* ── Fuzz-only helpers — not used in unit test build ─────────────────────── */
+#ifdef CANON_FUZZING
+static bool int_positive(int x) { return x > 0; }
+#endif
 
 /* ── TRY helper — must be a function so TRY can early-return ─────────────── */
 
@@ -624,8 +627,8 @@ int main(void)
  */
 static void result_fuzz_suppress_unused(void)
 {
-    (void)int_negate;
     (void)int_positive;
+    (void)int_negate;
     (void)always_err;
     (void)try_chain;
     (void)try_remap_fn;
