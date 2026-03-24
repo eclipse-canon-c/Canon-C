@@ -45,11 +45,12 @@ CANON_RESULT(Point, MyError)
 
 /* ── Helper functions (visible to both unit test and fuzz builds) ─────────── */
 
-static int      int_double(int x)          { return x * 2; }
-static int      int_negate(int x)          { return -x; }
-static bool     int_eq(int a, int b)       { return a == b; }
+static int      int_double(int x)            { return x * 2; }
+static int      int_negate(int x)            { return -x; }
+static bool     int_eq(int a, int b)         { return a == b; }
 static bool     err_eq(MyError a, MyError b) { return a == b; }
-static MyError  err_enrich(MyError e)      { (void)e; return ERR_OVERFLOW; }
+static MyError  err_enrich(MyError e)        { (void)e; return ERR_OVERFLOW; }
+
 static result_int_MyError checked_double(int x)
 {
     if (x > 1000) return result_int_MyError_err(ERR_OVERFLOW);
@@ -68,7 +69,32 @@ static result_int_MyError always_err(MyError e)
     return result_int_MyError_err(ERR_NOT_FOUND);
 }
 
-/* ── Fuzz-only helpers — not used in unit test build ─────────────────────── */
+/* ── Point helpers (visible to both unit test and fuzz builds) ───────────── */
+
+static bool point_eq(Point a, Point b) { return a.x == b.x && a.y == b.y; }
+
+static Point point_double(Point p)
+{
+    Point r = {p.x * 2, p.y * 2};
+    return r;
+}
+
+static MyError err_to_overflow(MyError e) { (void)e; return ERR_OVERFLOW; }
+
+static result_Point_MyError point_ok_if_positive(Point p)
+{
+    if (p.x > 0 && p.y > 0) return result_Point_MyError_ok(p);
+    return result_Point_MyError_err(ERR_INVALID);
+}
+
+static result_Point_MyError point_fallback(MyError e)
+{
+    Point z = {-1, -1};
+    (void)e;
+    return result_Point_MyError_ok(z);
+}
+
+/* ── Fuzz-only helpers ───────────────────────────────────────────────────── */
 #ifdef CANON_FUZZING
 static bool int_positive(int x) { return x > 0; }
 #endif
@@ -447,19 +473,6 @@ static void test_try_remap_err_substitutes(void)
 }
 
 /* ── Point struct round-trip and full API coverage ───────────────────────── */
-
-static bool point_eq(Point a, Point b) { return a.x == b.x && a.y == b.y; }
-static Point point_double(Point p) { Point r = {p.x*2, p.y*2}; return r; }
-static MyError err_to_overflow(MyError e) { (void)e; return ERR_OVERFLOW; }
-static result_Point_MyError point_ok_if_positive(Point p) {
-    if (p.x > 0 && p.y > 0) return result_Point_MyError_ok(p);
-    return result_Point_MyError_err(ERR_INVALID);
-}
-static result_Point_MyError point_fallback(MyError e) {
-    Point z = {-1, -1};
-    (void)e;
-    return result_Point_MyError_ok(z);
-}
 
 static void test_point_round_trip(void)
 {
