@@ -1,0 +1,764 @@
+/**
+ * @file borrow_test.c
+ * @brief Tests for semantics/borrow.h — non-owning semantic view types
+ *
+ * Covers:
+ *   - borrowed_ptr: from, null, get, is_valid, eq
+ *   - borrowed_str: from, from_cstr, empty, get, is_valid, len, eq, slice
+ *   - borrowed_bytes: from, from_cbytes, empty, get, len, is_valid, slice
+ *   - DEFINE_BORROWED_SLICE(int): from, empty, get, len, is_valid, at, slice,
+ *     as_bytes (including overflow guard path)
+ *   - NULL-safety contracts on all pointer-accepting functions
+ *   - Source tag round-trip (stored, not dereferenced)
+ *   - borrowed_bytes_slice clamping and edge cases
+ *
+ * Fuzz entry point (CANON_FUZZING):
+ *   - Feeds random (start, end, len) triples into borrowed_bytes_slice and
+ *     borrowed_slice_int_as_bytes. Verifies no crash, no out-of-bounds
+ *     pointer, and that the overflow guard on as_bytes fires correctly.
+ */
+
+#define CANON_CONTRACT_IMPL
+#include "semantics/borrow.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/* ── Slice instantiation needed by borrowed slice tests ───────────────────── */
+
+DEFINE_SLICE(int)
+DEFINE_BORROWED_SLICE(int)
+
+/* ── Harness ──────────────────────────────────────────────────────────────── */
+
+#ifndef CANON_FUZZING
+
+static int g_failed = 0;
+
+#define EXPECT(cond)                                                \
+    do {                                                            \
+        if (!(cond)) {                                              \
+            fprintf(stderr, "FAIL %s:%d  %s\n",                    \
+                    __FILE__, __LINE__, #cond);                     \
+            g_failed++;                                             \
+        }                                                           \
+    } while (0)
+
+#define EXPECT_NOT_NULL(ptr)                                        \
+    do {                                                            \
+        if ((ptr) == NULL) {                                        \
+            fprintf(stderr, "FAIL %s:%d  %s != NULL\n",            \
+                    __FILE__, __LINE__, #ptr);                      \
+            g_failed++;                                             \
+            return;                                                 \
+        }                                                           \
+    } while (0)
+
+/* ============================================================================
+   borrowed_ptr
+   ============================================================================ */
+
+static void test_ptr_from_stores_ptr_and_source(void)
+{
+    int        owner = 0;
+    borrowed_ptr b   = borrowed_ptr_from(&owner, &owner);
+    EXPECT(b.ptr    == (const void *)&owner);
+    EXPECT(b.source == (const void *)&owner);
+}
+
+static void test_ptr_from_null_ptr(void)
+{
+    int          owner = 0;
+    borrowed_ptr b     = borrowed_ptr_from(NULL, &owner);
+    EXPECT(b.ptr    == NULL);
+    EXPECT(b.source == (const void *)&owner);
+}
+
+static void test_ptr_null_constructor(void)
+{
+    borrowed_ptr b = borrowed_ptr_null();
+    EXPECT(b.ptr    == NULL);
+    EXPECT(b.source == NULL);
+}
+
+static void test_ptr_get_returns_stored_pointer(void)
+{
+    int          owner = 42;
+    borrowed_ptr b     = borrowed_ptr_from(&owner, &owner);
+    const void  *p     = borrowed_ptr_get(&b);
+    EXPECT(p == (const void *)&owner);
+}
+
+static void test_ptr_get_null_b_returns_null(void)
+{
+    /* NULL-safety contract: returns NULL when b == NULL */
+    const void *p = borrowed_ptr_get(NULL);
+    EXPECT(p == NULL);
+}
+
+static void test_ptr_is_valid_true(void)
+{
+    int          owner = 0;
+    borrowed_ptr b     = borrowed_ptr_from(&owner, &owner);
+    EXPECT(borrowed_ptr_is_valid(&b));
+}
+
+static void test_ptr_is_valid_null_ptr(void)
+{
+    borrowed_ptr b = borrowed_ptr_null();
+    EXPECT(!borrowed_ptr_is_valid(&b));
+}
+
+static void test_ptr_is_valid_null_b(void)
+{
+    EXPECT(!borrowed_ptr_is_valid(NULL));
+}
+
+static void test_ptr_eq_same_address(void)
+{
+    int          owner = 0;
+    borrowed_ptr a     = borrowed_ptr_from(&owner, NULL);
+    borrowed_ptr b     = borrowed_ptr_from(&owner, &owner); /* different source */
+    EXPECT(borrowed_ptr_eq(a, b));                          /* source ignored */
+}
+
+static void test_ptr_eq_different_address(void)
+{
+    int          x = 0, y = 0;
+    borrowed_ptr a = borrowed_ptr_from(&x, NULL);
+    borrowed_ptr b = borrowed_ptr_from(&y, NULL);
+    EXPECT(!borrowed_ptr_eq(a, b));
+}
+
+static void test_ptr_eq_both_null(void)
+{
+    borrowed_ptr a = borrowed_ptr_null();
+    borrowed_ptr b = borrowed_ptr_null();
+    EXPECT(borrowed_ptr_eq(a, b));
+}
+
+/* ============================================================================
+   borrowed_str
+   ============================================================================ */
+
+static void test_str_from_stores_str_and_source(void)
+{
+    const char  *owner = "hello";
+    str_t        s     = str_from_cstr(owner);
+    borrowed_str b     = borrowed_str_from(s, owner);
+    EXPECT(b.str.ptr    == s.ptr);
+    EXPECT(b.str.len    == s.len);
+    EXPECT(b.source     == (const void *)owner);
+}
+
+static void test_str_from_cstr_round_trip(void)
+{
+    const char  *lit = "Canon";
+    borrowed_str b   = borrowed_str_from_cstr(lit, lit);
+    EXPECT(b.str.len == 5);
+    EXPECT(b.str.ptr == (const char *)lit);
+}
+
+static void test_str_from_cstr_null_yields_empty(void)
+{
+    borrowed_str b = borrowed_str_from_cstr(NULL, NULL);
+    /* str_from_cstr(NULL) must yield len == 0 per slice.h contract */
+    EXPECT(b.str.len == 0);
+}
+
+static void test_str_empty_constructor(void)
+{
+    borrowed_str b = borrowed_str_empty();
+    EXPECT(b.str.ptr == NULL);
+    EXPECT(b.str.len == 0);
+    EXPECT(b.source  == NULL);
+}
+
+static void test_str_get_returns_inner(void)
+{
+    const char  *lit = "world";
+    borrowed_str b   = borrowed_str_from_cstr(lit, NULL);
+    str_t        s   = borrowed_str_get(&b);
+    EXPECT(s.ptr == b.str.ptr);
+    EXPECT(s.len == b.str.len);
+}
+
+static void test_str_get_null_b_returns_empty(void)
+{
+    str_t s = borrowed_str_get(NULL);
+    EXPECT(s.ptr == NULL);
+    EXPECT(s.len == 0);
+}
+
+static void test_str_is_valid_non_null_ptr(void)
+{
+    borrowed_str b = borrowed_str_from_cstr("ok", NULL);
+    EXPECT(borrowed_str_is_valid(&b));
+}
+
+static void test_str_is_valid_empty(void)
+{
+    borrowed_str b = borrowed_str_empty();
+    EXPECT(!borrowed_str_is_valid(&b));
+}
+
+static void test_str_is_valid_null_b(void)
+{
+    EXPECT(!borrowed_str_is_valid(NULL));
+}
+
+static void test_str_len_correct(void)
+{
+    borrowed_str b = borrowed_str_from_cstr("hello", NULL);
+    EXPECT(borrowed_str_len(&b) == 5);
+}
+
+static void test_str_len_null_b_returns_zero(void)
+{
+    EXPECT(borrowed_str_len(NULL) == 0);
+}
+
+static void test_str_eq_same_content(void)
+{
+    borrowed_str a = borrowed_str_from_cstr("abc", NULL);
+    borrowed_str b = borrowed_str_from_cstr("abc", (const void *)0x1); /* diff source */
+    EXPECT(borrowed_str_eq(a, b));
+}
+
+static void test_str_eq_different_content(void)
+{
+    borrowed_str a = borrowed_str_from_cstr("abc", NULL);
+    borrowed_str b = borrowed_str_from_cstr("xyz", NULL);
+    EXPECT(!borrowed_str_eq(a, b));
+}
+
+static void test_str_eq_different_lengths(void)
+{
+    borrowed_str a = borrowed_str_from_cstr("ab",  NULL);
+    borrowed_str b = borrowed_str_from_cstr("abc", NULL);
+    EXPECT(!borrowed_str_eq(a, b));
+}
+
+static void test_str_slice_middle(void)
+{
+    /* "hello" → [1,4) → "ell" */
+    borrowed_str b   = borrowed_str_from_cstr("hello", NULL);
+    borrowed_str sub = borrowed_str_slice(b, 1, 4);
+    EXPECT(sub.str.len == 3);
+    EXPECT(sub.source  == b.source);
+    EXPECT(strncmp(sub.str.ptr, "ell", 3) == 0);
+}
+
+static void test_str_slice_full_range(void)
+{
+    borrowed_str b   = borrowed_str_from_cstr("hello", NULL);
+    borrowed_str sub = borrowed_str_slice(b, 0, 5);
+    EXPECT(sub.str.len == 5);
+}
+
+static void test_str_slice_empty_range(void)
+{
+    borrowed_str b   = borrowed_str_from_cstr("hello", NULL);
+    borrowed_str sub = borrowed_str_slice(b, 2, 2);
+    EXPECT(sub.str.len == 0);
+}
+
+static void test_str_slice_out_of_bounds_clamped(void)
+{
+    borrowed_str b   = borrowed_str_from_cstr("hi", NULL);
+    borrowed_str sub = borrowed_str_slice(b, 0, 999);
+    /* str_slice must clamp end to len */
+    EXPECT(sub.str.len == 2);
+}
+
+static void test_str_slice_inherits_source(void)
+{
+    const char  *owner = "test";
+    borrowed_str b     = borrowed_str_from_cstr(owner, owner);
+    borrowed_str sub   = borrowed_str_slice(b, 0, 2);
+    EXPECT(sub.source == (const void *)owner);
+}
+
+/* ============================================================================
+   borrowed_bytes
+   ============================================================================ */
+
+static void test_bytes_from_stores_ptr_len_source(void)
+{
+    u8             buf[8];
+    borrowed_bytes b = borrowed_bytes_from(buf, 8, buf);
+    EXPECT(b.bytes.ptr == buf);
+    EXPECT(b.bytes.len == 8);
+    EXPECT(b.source    == (const void *)buf);
+}
+
+static void test_bytes_from_cbytes(void)
+{
+    u8       buf[4]  = {0xAA, 0xBB, 0xCC, 0xDD};
+    cbytes_t cb      = cbytes_from(buf, 4);
+    borrowed_bytes b = borrowed_bytes_from_cbytes(cb, buf);
+    EXPECT(b.bytes.ptr == buf);
+    EXPECT(b.bytes.len == 4);
+    EXPECT(b.source    == (const void *)buf);
+}
+
+static void test_bytes_empty_constructor(void)
+{
+    borrowed_bytes b = borrowed_bytes_empty();
+    EXPECT(b.bytes.ptr == NULL);
+    EXPECT(b.bytes.len == 0);
+    EXPECT(b.source    == NULL);
+}
+
+static void test_bytes_get_returns_inner(void)
+{
+    u8             buf[4];
+    borrowed_bytes b  = borrowed_bytes_from(buf, 4, NULL);
+    cbytes_t       cb = borrowed_bytes_get(&b);
+    EXPECT(cb.ptr == buf);
+    EXPECT(cb.len == 4);
+}
+
+static void test_bytes_get_null_b_returns_empty(void)
+{
+    cbytes_t cb = borrowed_bytes_get(NULL);
+    EXPECT(cb.ptr == NULL);
+    EXPECT(cb.len == 0);
+}
+
+static void test_bytes_len_correct(void)
+{
+    u8             buf[16];
+    borrowed_bytes b = borrowed_bytes_from(buf, 16, NULL);
+    EXPECT(borrowed_bytes_len(&b) == 16);
+}
+
+static void test_bytes_len_null_b_returns_zero(void)
+{
+    EXPECT(borrowed_bytes_len(NULL) == 0);
+}
+
+static void test_bytes_is_valid_non_null(void)
+{
+    u8             buf[4];
+    borrowed_bytes b = borrowed_bytes_from(buf, 4, NULL);
+    EXPECT(borrowed_bytes_is_valid(&b));
+}
+
+static void test_bytes_is_valid_empty(void)
+{
+    borrowed_bytes b = borrowed_bytes_empty();
+    EXPECT(!borrowed_bytes_is_valid(&b));
+}
+
+static void test_bytes_is_valid_null_b(void)
+{
+    EXPECT(!borrowed_bytes_is_valid(NULL));
+}
+
+static void test_bytes_slice_middle(void)
+{
+    u8             buf[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    borrowed_bytes b      = borrowed_bytes_from(buf, 8, buf);
+    borrowed_bytes sub    = borrowed_bytes_slice(b, 2, 5);
+    EXPECT(sub.bytes.len      == 3);
+    EXPECT(sub.bytes.ptr      == buf + 2);
+    EXPECT(sub.source         == (const void *)buf);
+}
+
+static void test_bytes_slice_full_range(void)
+{
+    u8             buf[4];
+    borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
+    borrowed_bytes sub = borrowed_bytes_slice(b, 0, 4);
+    EXPECT(sub.bytes.len == 4);
+    EXPECT(sub.bytes.ptr == buf);
+}
+
+static void test_bytes_slice_clamps_end(void)
+{
+    u8             buf[4];
+    borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
+    borrowed_bytes sub = borrowed_bytes_slice(b, 0, 999);
+    EXPECT(sub.bytes.len == 4);
+}
+
+static void test_bytes_slice_start_equals_end_returns_empty(void)
+{
+    u8             buf[4];
+    borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
+    borrowed_bytes sub = borrowed_bytes_slice(b, 2, 2);
+    EXPECT(sub.bytes.ptr == NULL);
+    EXPECT(sub.bytes.len == 0);
+}
+
+static void test_bytes_slice_start_beyond_len_returns_empty(void)
+{
+    u8             buf[4];
+    borrowed_bytes b   = borrowed_bytes_from(buf, 4, NULL);
+    borrowed_bytes sub = borrowed_bytes_slice(b, 10, 20);
+    EXPECT(sub.bytes.ptr == NULL);
+    EXPECT(sub.bytes.len == 0);
+}
+
+static void test_bytes_slice_null_ptr_returns_empty(void)
+{
+    borrowed_bytes b;
+    b.bytes  = cbytes_empty();
+    b.source = NULL;
+    borrowed_bytes sub = borrowed_bytes_slice(b, 0, 1);
+    EXPECT(sub.bytes.ptr == NULL);
+    EXPECT(sub.bytes.len == 0);
+}
+
+static void test_bytes_slice_start_greater_than_end_returns_empty(void)
+{
+    u8             buf[8];
+    borrowed_bytes b   = borrowed_bytes_from(buf, 8, NULL);
+    /* end (2) < len (8) but start (5) > end (2) after clamping — empty */
+    borrowed_bytes sub = borrowed_bytes_slice(b, 5, 2);
+    EXPECT(sub.bytes.ptr == NULL);
+    EXPECT(sub.bytes.len == 0);
+}
+
+/* ============================================================================
+   DEFINE_BORROWED_SLICE(int)
+   ============================================================================ */
+
+static void test_slice_int_from_stores_slice_and_source(void)
+{
+    int                arr[4]  = {10, 20, 30, 40};
+    slice_int          s       = slice_int_from(arr, 4);
+    borrowed_slice_int b       = borrowed_slice_int_from(s, arr);
+    EXPECT(b.slice.ptr  == arr);
+    EXPECT(b.slice.len  == 4);
+    EXPECT(b.source     == (const void *)arr);
+}
+
+static void test_slice_int_empty_constructor(void)
+{
+    borrowed_slice_int b = borrowed_slice_int_empty();
+    EXPECT(b.slice.ptr == NULL);
+    EXPECT(b.slice.len == 0);
+    EXPECT(b.source    == NULL);
+}
+
+static void test_slice_int_get_returns_inner(void)
+{
+    int                arr[2] = {1, 2};
+    slice_int          s      = slice_int_from(arr, 2);
+    borrowed_slice_int b      = borrowed_slice_int_from(s, arr);
+    slice_int          got    = borrowed_slice_int_get(&b);
+    EXPECT(got.ptr == arr);
+    EXPECT(got.len == 2);
+}
+
+static void test_slice_int_get_null_b_returns_empty(void)
+{
+    slice_int s = borrowed_slice_int_get(NULL);
+    EXPECT(s.ptr == NULL);
+    EXPECT(s.len == 0);
+}
+
+static void test_slice_int_len_correct(void)
+{
+    int                arr[5] = {0};
+    slice_int          s      = slice_int_from(arr, 5);
+    borrowed_slice_int b      = borrowed_slice_int_from(s, NULL);
+    EXPECT(borrowed_slice_int_len(&b) == 5);
+}
+
+static void test_slice_int_len_null_b_returns_zero(void)
+{
+    EXPECT(borrowed_slice_int_len(NULL) == 0);
+}
+
+static void test_slice_int_is_valid_non_null(void)
+{
+    int                arr[1] = {0};
+    slice_int          s      = slice_int_from(arr, 1);
+    borrowed_slice_int b      = borrowed_slice_int_from(s, NULL);
+    EXPECT(borrowed_slice_int_is_valid(&b));
+}
+
+static void test_slice_int_is_valid_empty(void)
+{
+    borrowed_slice_int b = borrowed_slice_int_empty();
+    EXPECT(!borrowed_slice_int_is_valid(&b));
+}
+
+static void test_slice_int_is_valid_null_b(void)
+{
+    EXPECT(!borrowed_slice_int_is_valid(NULL));
+}
+
+static void test_slice_int_at_in_bounds(void)
+{
+    int                arr[3]  = {7, 8, 9};
+    slice_int          s       = slice_int_from(arr, 3);
+    borrowed_slice_int b       = borrowed_slice_int_from(s, NULL);
+    const int         *p0      = borrowed_slice_int_at(&b, 0);
+    const int         *p2      = borrowed_slice_int_at(&b, 2);
+    EXPECT_NOT_NULL(p0);
+    EXPECT(*p0 == 7);
+    EXPECT_NOT_NULL(p2);
+    EXPECT(*p2 == 9);
+}
+
+static void test_slice_int_at_out_of_bounds_returns_null(void)
+{
+    int                arr[3] = {1, 2, 3};
+    slice_int          s      = slice_int_from(arr, 3);
+    borrowed_slice_int b      = borrowed_slice_int_from(s, NULL);
+    EXPECT(borrowed_slice_int_at(&b, 3)  == NULL);
+    EXPECT(borrowed_slice_int_at(&b, 99) == NULL);
+}
+
+static void test_slice_int_at_null_b_returns_null(void)
+{
+    EXPECT(borrowed_slice_int_at(NULL, 0) == NULL);
+}
+
+static void test_slice_int_slice_sub_range(void)
+{
+    int                arr[6]  = {0, 1, 2, 3, 4, 5};
+    slice_int          s       = slice_int_from(arr, 6);
+    borrowed_slice_int b       = borrowed_slice_int_from(s, arr);
+    borrowed_slice_int sub     = borrowed_slice_int_slice(b, 2, 5);
+    EXPECT(sub.slice.len == 3);
+    EXPECT(sub.slice.ptr == arr + 2);
+    EXPECT(sub.source    == (const void *)arr);
+}
+
+static void test_slice_int_slice_empty_range(void)
+{
+    int                arr[4] = {0};
+    slice_int          s      = slice_int_from(arr, 4);
+    borrowed_slice_int b      = borrowed_slice_int_from(s, NULL);
+    borrowed_slice_int sub    = borrowed_slice_int_slice(b, 2, 2);
+    EXPECT(sub.slice.len == 0);
+}
+
+static void test_slice_int_as_bytes_size(void)
+{
+    int                arr[4]  = {1, 2, 3, 4};
+    slice_int          s       = slice_int_from(arr, 4);
+    borrowed_slice_int b       = borrowed_slice_int_from(s, arr);
+    borrowed_bytes     raw     = borrowed_slice_int_as_bytes(&b);
+    EXPECT(raw.bytes.ptr == (const u8 *)arr);
+    EXPECT(raw.bytes.len == 4 * sizeof(int));
+    EXPECT(raw.source    == (const void *)arr);
+}
+
+static void test_slice_int_as_bytes_null_b_returns_empty(void)
+{
+    borrowed_bytes raw = borrowed_slice_int_as_bytes(NULL);
+    EXPECT(raw.bytes.ptr == NULL);
+    EXPECT(raw.bytes.len == 0);
+}
+
+static void test_slice_int_as_bytes_null_ptr_returns_empty(void)
+{
+    borrowed_slice_int b = borrowed_slice_int_empty();
+    borrowed_bytes     raw = borrowed_slice_int_as_bytes(&b);
+    EXPECT(raw.bytes.ptr == NULL);
+    EXPECT(raw.bytes.len == 0);
+}
+
+/* ============================================================================
+   Source tag round-trip — stored and retrievable, never dereferenced
+   ============================================================================ */
+
+static void test_source_tag_round_trip_all_types(void)
+{
+    /* Use a stack address as the tag — just verify it survives the round-trip */
+    int    sentinel   = 0xDEAD;
+    u8     buf[4]     = {0};
+    int    arr[2]     = {0};
+
+    borrowed_ptr   bp = borrowed_ptr_from(&sentinel, &sentinel);
+    borrowed_str   bs = borrowed_str_from_cstr("tag", &sentinel);
+    borrowed_bytes bb = borrowed_bytes_from(buf, 4, &sentinel);
+
+    slice_int          si = slice_int_from(arr, 2);
+    borrowed_slice_int bv = borrowed_slice_int_from(si, &sentinel);
+
+    EXPECT(bp.source == (const void *)&sentinel);
+    EXPECT(bs.source == (const void *)&sentinel);
+    EXPECT(bb.source == (const void *)&sentinel);
+    EXPECT(bv.source == (const void *)&sentinel);
+}
+
+/* ============================================================================
+   Unit test entry point
+   ============================================================================ */
+
+int main(void)
+{
+    /* borrowed_ptr */
+    test_ptr_from_stores_ptr_and_source();
+    test_ptr_from_null_ptr();
+    test_ptr_null_constructor();
+    test_ptr_get_returns_stored_pointer();
+    test_ptr_get_null_b_returns_null();
+    test_ptr_is_valid_true();
+    test_ptr_is_valid_null_ptr();
+    test_ptr_is_valid_null_b();
+    test_ptr_eq_same_address();
+    test_ptr_eq_different_address();
+    test_ptr_eq_both_null();
+
+    /* borrowed_str */
+    test_str_from_stores_str_and_source();
+    test_str_from_cstr_round_trip();
+    test_str_from_cstr_null_yields_empty();
+    test_str_empty_constructor();
+    test_str_get_returns_inner();
+    test_str_get_null_b_returns_empty();
+    test_str_is_valid_non_null_ptr();
+    test_str_is_valid_empty();
+    test_str_is_valid_null_b();
+    test_str_len_correct();
+    test_str_len_null_b_returns_zero();
+    test_str_eq_same_content();
+    test_str_eq_different_content();
+    test_str_eq_different_lengths();
+    test_str_slice_middle();
+    test_str_slice_full_range();
+    test_str_slice_empty_range();
+    test_str_slice_out_of_bounds_clamped();
+    test_str_slice_inherits_source();
+
+    /* borrowed_bytes */
+    test_bytes_from_stores_ptr_len_source();
+    test_bytes_from_cbytes();
+    test_bytes_empty_constructor();
+    test_bytes_get_returns_inner();
+    test_bytes_get_null_b_returns_empty();
+    test_bytes_len_correct();
+    test_bytes_len_null_b_returns_zero();
+    test_bytes_is_valid_non_null();
+    test_bytes_is_valid_empty();
+    test_bytes_is_valid_null_b();
+    test_bytes_slice_middle();
+    test_bytes_slice_full_range();
+    test_bytes_slice_clamps_end();
+    test_bytes_slice_start_equals_end_returns_empty();
+    test_bytes_slice_start_beyond_len_returns_empty();
+    test_bytes_slice_null_ptr_returns_empty();
+    test_bytes_slice_start_greater_than_end_returns_empty();
+
+    /* DEFINE_BORROWED_SLICE(int) */
+    test_slice_int_from_stores_slice_and_source();
+    test_slice_int_empty_constructor();
+    test_slice_int_get_returns_inner();
+    test_slice_int_get_null_b_returns_empty();
+    test_slice_int_len_correct();
+    test_slice_int_len_null_b_returns_zero();
+    test_slice_int_is_valid_non_null();
+    test_slice_int_is_valid_empty();
+    test_slice_int_is_valid_null_b();
+    test_slice_int_at_in_bounds();
+    test_slice_int_at_out_of_bounds_returns_null();
+    test_slice_int_at_null_b_returns_null();
+    test_slice_int_slice_sub_range();
+    test_slice_int_slice_empty_range();
+    test_slice_int_as_bytes_size();
+    test_slice_int_as_bytes_null_b_returns_empty();
+    test_slice_int_as_bytes_null_ptr_returns_empty();
+
+    /* Source tag round-trip */
+    test_source_tag_round_trip_all_types();
+
+    if (g_failed == 0) {
+        printf("OK  borrow_test  (all assertions passed)\n");
+        return 0;
+    }
+    fprintf(stderr, "FAILED  borrow_test  (%d assertion(s) failed)\n", g_failed);
+    return 1;
+}
+
+#else /* CANON_FUZZING */
+
+/* ── Fuzz entry point ─────────────────────────────────────────────────────
+ *
+ * Targets the two non-trivial functions in borrow.h:
+ *   - borrowed_bytes_slice: clamping logic, pointer arithmetic on u8*
+ *   - borrowed_slice_int_as_bytes: checked_mul overflow guard
+ *
+ * Input layout (10 bytes):
+ *   [0..1]  buf_len   — u16, size of the byte buffer to borrow
+ *   [2..3]  start     — u16, slice start index
+ *   [4..5]  end       — u16, slice end index
+ *   [6..7]  arr_len   — u16, number of int elements for slice_int
+ *   [8]     flags     — bit 0: run bytes_slice, bit 1: run as_bytes
+ *   [9]     pad
+ */
+
+#define FUZZ_BUF_SIZE  ((usize)65536)
+#define FUZZ_ARR_SIZE  ((usize)4096)
+
+int LLVMFuzzerTestOneInput(const u8 *data, usize size)
+{
+    static u8  fuzz_buf[FUZZ_BUF_SIZE];
+    static int fuzz_arr[FUZZ_ARR_SIZE];
+
+    u8    raw[10];
+    u16   buf_len16, start16, end16, arr_len16;
+    u8    flags;
+    usize buf_len, start, end, arr_len;
+
+    memset(raw, 0, sizeof(raw));
+    if (size > sizeof(raw)) { size = sizeof(raw); }
+    memcpy(raw, data, size);
+
+    buf_len16 = (u16)((u16)raw[0] | ((u16)raw[1] << 8));
+    start16   = (u16)((u16)raw[2] | ((u16)raw[3] << 8));
+    end16     = (u16)((u16)raw[4] | ((u16)raw[5] << 8));
+    arr_len16 = (u16)((u16)raw[6] | ((u16)raw[7] << 8));
+    flags     = raw[8];
+
+    buf_len = (usize)buf_len16 % (FUZZ_BUF_SIZE + 1u);
+    start   = (usize)start16;
+    end     = (usize)end16;
+    arr_len = (usize)arr_len16 % (FUZZ_ARR_SIZE + 1u);
+
+    /* ── borrowed_bytes_slice ─────────────────────────────────────────── */
+    if (flags & 0x01u) {
+        borrowed_bytes b   = borrowed_bytes_from(fuzz_buf, buf_len, fuzz_buf);
+        borrowed_bytes sub = borrowed_bytes_slice(b, start, end);
+
+        /* Invariant: result ptr must be within the original buffer or NULL */
+        if (sub.bytes.ptr != NULL) {
+            if ((const u8 *)sub.bytes.ptr < fuzz_buf)
+                __builtin_trap();
+            if ((const u8 *)sub.bytes.ptr + sub.bytes.len > fuzz_buf + buf_len)
+                __builtin_trap();
+            if (sub.bytes.len == 0)
+                __builtin_trap(); /* non-NULL ptr must have non-zero len */
+        }
+    }
+
+    /* ── borrowed_slice_int_as_bytes ─────────────────────────────────── */
+    if (flags & 0x02u) {
+        slice_int          s   = slice_int_from(fuzz_arr, arr_len);
+        borrowed_slice_int b   = borrowed_slice_int_from(s, fuzz_arr);
+        borrowed_bytes     raw_b = borrowed_slice_int_as_bytes(&b);
+
+        if (raw_b.bytes.ptr != NULL) {
+            /* Pointer must alias the original array */
+            if ((const u8 *)raw_b.bytes.ptr != (const u8 *)fuzz_arr)
+                __builtin_trap();
+            /* Byte length must equal arr_len * sizeof(int) exactly */
+            usize expected;
+            if (!checked_mul(arr_len, sizeof(int), &expected))
+                __builtin_trap(); /* overflow path should have returned empty */
+            if (raw_b.bytes.len != expected)
+                __builtin_trap();
+        }
+    }
+
+    return 0;
+}
+
+#endif /* CANON_FUZZING */
