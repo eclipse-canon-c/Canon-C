@@ -126,13 +126,13 @@ static void test_message_err_count(void) {
     SECTION("error_message: ERR_COUNT returns sentinel string");
 
     const char *msg = error_message(ERR_COUNT);
-    EXPECT(msg != NULL);
-    EXPECT(strlen(msg) > 0);
+    /* Combined: avoids cppcheck nullPointerRedundantCheck on the stored pointer. */
+    EXPECT(msg != NULL && strlen(msg) > 0);
     /*
      * The header documents the exact string. Pin it so a future edit
      * to the message text is a conscious, visible change.
      */
-    EXPECT(strcmp(msg, "Invalid error code (ERR_COUNT)") == 0);
+    EXPECT(msg != NULL && strcmp(msg, "Invalid error code (ERR_COUNT)") == 0);
 }
 
 /* ============================================================================
