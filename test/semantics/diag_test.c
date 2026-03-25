@@ -505,8 +505,12 @@ static void test_frame_at_out_of_bounds_returns_null(void)
 {
     Diag d = diag_init();
     diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, NULL);
-    EXPECT(diag_frame_at(&d, 1)  == NULL);
-    EXPECT(diag_frame_at(&d, 99) == NULL);
+    /* Use depth+1 and DIAG_MAX_FRAMES+1 rather than a large literal (e.g. 99)
+     * to avoid Cppcheck arrayIndexOutOfBounds: it traces the concrete value
+     * into diag_frame_at and flags the array access even though the guard
+     * i >= d->depth would prevent it. Both values are still clearly OOB. */
+    EXPECT(diag_frame_at(&d, 1)                   == NULL);
+    EXPECT(diag_frame_at(&d, DIAG_MAX_FRAMES + 1u) == NULL);
 }
 
 static void test_frame_at_empty_chain_returns_null(void)
