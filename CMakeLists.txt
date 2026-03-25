@@ -290,11 +290,11 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(
-#    NAME error_test  
-#    SRC test/semantics/error_test.c  
-#    INCLUDES core/primitives core semantics .
-#)
+canon_c_test(
+    NAME error_test  
+    SRC test/semantics/error_test.c  
+    INCLUDES core/primitives core semantics .
+)
 
 # ---------------------------------------------------------------------------
 # data/ tests                          — uncomment when ready (v1.3.0)
