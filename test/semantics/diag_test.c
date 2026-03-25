@@ -373,23 +373,34 @@ static void test_diag_push_macro_null_diag_no_crash(void)
 
 #ifndef CANON_NO_GNU_EXTENSIONS
 
+/* MSVC C4130: "logical operation on address of string constant"
+ * fires from require_msg() calls inside the DIAG_PUSH_FMT macro body
+ * because MSVC evaluates the stringified condition as a string literal
+ * address in a boolean context. Suppress around these three call sites. */
+#if defined(_MSC_VER)
+#  pragma warning(push)
+#  pragma warning(disable: 4130)
+#endif
+
 static void test_diag_push_fmt_formats_message(void)
 {
-    Diag d   = diag_init();
-    char tmp[64];
+    Diag             d = diag_init();
+    char             tmp[64];
+    const DiagFrame *f;
 
     DIAG_PUSH_FMT(&d, ERR_OUT_OF_RANGE, tmp, sizeof(tmp),
                   "index %d out of range [0, %d)", 7, 4);
 
-    EXPECT_NOT_NULL(diag_root(&d));
-    EXPECT(diag_root(&d)->code == ERR_OUT_OF_RANGE);
-    EXPECT(strcmp(diag_root(&d)->message, "index 7 out of range [0, 4)") == 0);
+    f = diag_root(&d);
+    EXPECT_NOT_NULL(f);
+    EXPECT(f->code == ERR_OUT_OF_RANGE);
+    EXPECT(strcmp(f->message, "index 7 out of range [0, 4)") == 0);
 }
 
 static void test_diag_push_fmt_truncates_long_format(void)
 {
-    Diag  d = diag_init();
-    char  tmp[DIAG_MAX_MSG_LEN + 32];
+    Diag d = diag_init();
+    char tmp[DIAG_MAX_MSG_LEN + 32];
 
     /* Format a string that will exceed DIAG_MAX_MSG_LEN when rendered */
     DIAG_PUSH_FMT(&d, ERR_UNKNOWN, tmp, sizeof(tmp),
@@ -406,6 +417,10 @@ static void test_diag_push_fmt_null_diag_no_crash(void)
     DIAG_PUSH_FMT(NULL, ERR_UNKNOWN, tmp, sizeof(tmp), "no crash %d", 0);
     EXPECT(1);
 }
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
 
 #endif /* CANON_NO_GNU_EXTENSIONS */
 
