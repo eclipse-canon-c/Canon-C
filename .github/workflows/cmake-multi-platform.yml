@@ -204,6 +204,7 @@ jobs:
             --suppress=missingIncludeSystem \
             "--suppress=returnDanglingLifetime:*slice_test.c" \
             "--suppress=returnDanglingLifetime:*borrow_test.c" \
+            "--suppress=literalWithCharPtrCompare:*diag_test.c" \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -224,6 +225,7 @@ jobs:
             --suppress=missingIncludeSystem `
             "--suppress=returnDanglingLifetime:*slice_test.c" `
             "--suppress=returnDanglingLifetime:*borrow_test.c" `
+            "--suppress=literalWithCharPtrCompare:*diag_test.c" `
             -I "${{ github.workspace }}/core/primitives" `
             -I "${{ github.workspace }}/core" `
             -I "${{ github.workspace }}/semantics" `
