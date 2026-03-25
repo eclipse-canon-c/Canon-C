@@ -166,9 +166,9 @@ static void test_message_gap_values(void) {
     EXPECT(error_message(raw(303)) != NULL);
     EXPECT(strcmp(error_message(raw(303)), "Unknown error") == 0);
 
-    /* Gap between generic and ERR_COUNT: 402 onwards */
-    EXPECT(error_message(raw(402)) != NULL);
-    EXPECT(strcmp(error_message(raw(402)), "Unknown error") == 0);
+    /* Values beyond ERR_COUNT (ERR_NOT_IMPLEMENTED=401, ERR_COUNT=402) */
+    EXPECT(error_message(raw(500)) != NULL);
+    EXPECT(strcmp(error_message(raw(500)), "Unknown error") == 0);
 }
 
 /* ============================================================================
