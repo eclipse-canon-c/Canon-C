@@ -31,7 +31,22 @@
  */
 
 #define CANON_CONTRACT_IMPL
+
+/* diag.h defines DIAG_PUSH_FMT using ##__VA_ARGS__ (GNU token-pasting
+ * extension). Clang with -Werror fires -Wgnu-zero-variadic-macro-arguments
+ * when parsing that macro definition even if it is never called. Suppress
+ * the warning around the include; the macro itself is tested under
+ * #ifndef CANON_NO_GNU_EXTENSIONS where the extension is expected. */
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#endif
+
 #include "semantics/diag.h"
+
+#if defined(__clang__)
+#  pragma clang diagnostic pop
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -145,8 +160,9 @@ static void test_push_stores_file_and_func(void)
     const char *file = __FILE__;
     const char *func = __func__;
     diag_push(&d, file, (usize)__LINE__, func, ERR_UNKNOWN, NULL);
-    EXPECT(d.frames[0].file == file);
-    EXPECT(d.frames[0].func == func);
+    /* Compare content rather than pointer identity to avoid MSVC C4130 */
+    EXPECT(strcmp(d.frames[0].file, file) == 0);
+    EXPECT(strcmp(d.frames[0].func, func) == 0);
 }
 
 static void test_push_stores_line(void)
@@ -327,18 +343,22 @@ static void test_overflow_chain_shift_preserves_order(void)
 
 static void test_diag_push_macro_captures_location(void)
 {
-    Diag        d    = diag_init();
-    const char *file = __FILE__;
-    usize       line;
+    Diag             d    = diag_init();
+    const char      *file = __FILE__;
+    usize            line;
+    const DiagFrame *f;
 
     line = (usize)(__LINE__ + 1); /* must match the macro call below */
     DIAG_PUSH(&d, ERR_PARSE_FAILED, "macro test");
 
-    EXPECT_NOT_NULL(diag_root(&d));
-    EXPECT(diag_root(&d)->code == ERR_PARSE_FAILED);
-    EXPECT(strcmp(diag_root(&d)->message, "macro test") == 0);
-    EXPECT(diag_root(&d)->file == file);
-    EXPECT(diag_root(&d)->line == line);
+    f = diag_root(&d);
+    EXPECT_NOT_NULL(f);
+    EXPECT(f->code == ERR_PARSE_FAILED);
+    EXPECT(strcmp(f->message, "macro test") == 0);
+    /* __FILE__ is a string literal — compare content, not pointer identity,
+     * to avoid MSVC C4130 (logical operation on address of string constant) */
+    EXPECT(strcmp(f->file, file) == 0);
+    EXPECT(f->line == line);
 }
 
 static void test_diag_push_macro_null_diag_no_crash(void)
