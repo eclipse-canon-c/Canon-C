@@ -460,11 +460,15 @@ static void queue_suppress_unused(void)
     (void)canon_deque_int_pop_back_option;
     (void)canon_deque_int_peek_back;
     (void)canon_deque_int_peek_back_option;
+    (void)canon_deque_int_empty;
+    (void)canon_deque_int_swap;
     (void)canon_deque_Msg_push_front;
     (void)canon_deque_Msg_pop_back;
     (void)canon_deque_Msg_pop_back_option;
     (void)canon_deque_Msg_peek_back;
     (void)canon_deque_Msg_peek_back_option;
+    (void)canon_deque_Msg_empty;
+    (void)canon_deque_Msg_swap;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -524,11 +528,15 @@ static void queue_fuzz_suppress_unused(void)
     (void)canon_deque_int_pop_back_option;
     (void)canon_deque_int_peek_back;
     (void)canon_deque_int_peek_back_option;
+    (void)canon_deque_int_empty;
+    (void)canon_deque_int_swap;
     (void)canon_deque_Msg_push_front;
     (void)canon_deque_Msg_pop_back;
     (void)canon_deque_Msg_pop_back_option;
     (void)canon_deque_Msg_peek_back;
     (void)canon_deque_Msg_peek_back_option;
+    (void)canon_deque_Msg_empty;
+    (void)canon_deque_Msg_swap;
 
     /* option_int combinators not used in fuzz path */
     (void)option_int_is_none;
