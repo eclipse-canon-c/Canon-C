@@ -313,7 +313,13 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME hashmap_test        SRC test/data/hashmap_test.c        INCLUDES core/primitives . FUZZABLE)
+canon_c_test(
+    NAME     hashmap_test
+    SRC      test/data/hashmap_test.c
+    INCLUDES core/primitives core semantics data .
+    FUZZABLE
+)
+
 # canon_c_test(NAME array_test          SRC test/data/array_test.c          INCLUDES core/primitives .)
 # canon_c_test(NAME stack_test          SRC test/data/stack_test.c          INCLUDES core/primitives .)
 # canon_c_test(NAME queue_test          SRC test/data/queue_test.c          INCLUDES core/primitives .)
