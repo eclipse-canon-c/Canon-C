@@ -19,11 +19,18 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Zero overhead — every function is a direct deque passthrough
  * - FIFO semantics only — no front-insert, no back-pop (use deque for that)
- * - result_bool_Error from enqueue/dequeue — matches deque and vec
+ * - result__Bool_Error from enqueue/dequeue — matches deque and vec
  * - Option variants for dequeue and peek — no out-param required
  * - Caller owns the buffer (stack, arena, static, heap)
  * - Fixed capacity is intentional — real-time safe, deterministic
  * - All pointer parameters annotated with borrowed() per ownership.h conventions
+ *
+ * Note on result__Bool_Error:
+ * ────────────────────────────────────────────────────────────────────────────
+ * CANON_RESULT(bool, Error) token-pastes to result__Bool_Error (not
+ * result_bool_Error) because bool expands to _Bool before ## in C99.
+ * All enqueue/dequeue signatures use result__Bool_Error to match the
+ * type instantiated by deque_impl.h.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
@@ -43,7 +50,7 @@
  * - data/deque/deque.h         — all MANGLE_DEQUE_* macros used directly
  *
  * Intentionally excluded:
- * - semantics/result/result.h  — result_bool_Error is named in enqueue/dequeue
+ * - semantics/result/result.h  — result__Bool_Error is named in enqueue/dequeue
  *                                signatures but the type is already instantiated
  *                                transitively by deque_impl.h via CANON_RESULT.
  *                                queue.h never calls CANON_RESULT itself.
@@ -152,8 +159,8 @@
  * - canon_queue_##type##_is_full(q)                 → bool
  *
  * Enqueue / dequeue (Result variants):
- * - canon_queue_##type##_enqueue(q, item)           → result_bool_Error
- * - canon_queue_##type##_dequeue(q, out)            → result_bool_Error
+ * - canon_queue_##type##_enqueue(q, item)           → result__Bool_Error
+ * - canon_queue_##type##_dequeue(q, out)            → result__Bool_Error
  *
  * Dequeue (Option variant):
  * - canon_queue_##type##_dequeue_option(q)          → option_##type
@@ -220,7 +227,7 @@ linkage void canon_queue_##type##_init( \
  * \
  * @param q    borrowed(canon_queue_##type*) — initialized queue instance \
  * @param item Value to add \
- * @return result_bool_Error — Ok(true) on success \
+ * @return result__Bool_Error — Ok(true) on success \
  * \
  * @post Returns Err(ERR_INVALID_ARG)       if q == NULL or q->buffer == NULL \
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if queue is full \
@@ -229,7 +236,7 @@ linkage void canon_queue_##type##_init( \
  * - Time:  O(1) — ring buffer tail advance \
  * - Space: O(1) — no allocation \
  */ \
-linkage result_bool_Error canon_queue_##type##_enqueue( \
+linkage result__Bool_Error canon_queue_##type##_enqueue( \
     borrowed(canon_queue_##type*) q, type item) \
 { \
     return MANGLE_DEQUE_PUSH_BACK(type)(q, item); \
@@ -242,7 +249,7 @@ linkage result_bool_Error canon_queue_##type##_enqueue( \
  * \
  * @param q   borrowed(canon_queue_##type*) — initialized queue instance \
  * @param out borrowed(type*) — pointer to store the dequeued value \
- * @return result_bool_Error — Ok(true) on success \
+ * @return result__Bool_Error — Ok(true) on success \
  * \
  * @post Returns Err(ERR_INVALID_ARG)   if q == NULL, out == NULL, or q->buffer == NULL \
  * @post Returns Err(ERR_INVALID_STATE) if queue is empty \
@@ -251,7 +258,7 @@ linkage result_bool_Error canon_queue_##type##_enqueue( \
  * - Time:  O(1) — ring buffer head advance \
  * - Space: O(1) \
  */ \
-linkage result_bool_Error canon_queue_##type##_dequeue( \
+linkage result__Bool_Error canon_queue_##type##_dequeue( \
     borrowed(canon_queue_##type*) q, borrowed(type*) out) \
 { \
     return MANGLE_DEQUE_POP_FRONT(type)(q, out); \
@@ -429,6 +436,10 @@ linkage void canon_queue_##type##_clear(borrowed(canon_queue_##type*) q) { \
  * Use in shared headers alongside DECLARE_DEQUE(type).
  * Match with DEFINE_QUEUE(linkage, type) in exactly one .c file.
  *
+ * Note: enqueue and dequeue return result__Bool_Error (not result_bool_Error).
+ * CANON_RESULT(bool, Error) token-pastes to result__Bool_Error in C99 because
+ * bool expands to _Bool before ## sees it.
+ *
  * @param type Element type — DECLARE_DEQUE(type) must be called first
  *
  * @pre DECLARE_DEQUE(type) has already been called for the same type
@@ -454,17 +465,17 @@ linkage void canon_queue_##type##_clear(borrowed(canon_queue_##type*) q) { \
 \
 typedef MANGLE_DEQUE_TYPE(type) canon_queue_##type; \
 \
-extern void              canon_queue_##type##_init(borrowed(canon_queue_##type*) q, borrowed(type*) buffer, usize capacity); \
-extern result_bool_Error canon_queue_##type##_enqueue(borrowed(canon_queue_##type*) q, type item); \
-extern result_bool_Error canon_queue_##type##_dequeue(borrowed(canon_queue_##type*) q, borrowed(type*) out); \
-extern option_##type     canon_queue_##type##_dequeue_option(borrowed(canon_queue_##type*) q); \
-extern bool              canon_queue_##type##_peek(borrowed(const canon_queue_##type*) q, borrowed(type*) out); \
-extern option_##type     canon_queue_##type##_peek_option(borrowed(const canon_queue_##type*) q); \
-extern usize             canon_queue_##type##_len(borrowed(const canon_queue_##type*) q); \
-extern usize             canon_queue_##type##_capacity(borrowed(const canon_queue_##type*) q); \
-extern usize             canon_queue_##type##_remaining(borrowed(const canon_queue_##type*) q); \
-extern bool              canon_queue_##type##_is_empty(borrowed(const canon_queue_##type*) q); \
-extern bool              canon_queue_##type##_is_full(borrowed(const canon_queue_##type*) q); \
-extern void              canon_queue_##type##_clear(borrowed(canon_queue_##type*) q);
+extern void                canon_queue_##type##_init(borrowed(canon_queue_##type*) q, borrowed(type*) buffer, usize capacity); \
+extern result__Bool_Error  canon_queue_##type##_enqueue(borrowed(canon_queue_##type*) q, type item); \
+extern result__Bool_Error  canon_queue_##type##_dequeue(borrowed(canon_queue_##type*) q, borrowed(type*) out); \
+extern option_##type       canon_queue_##type##_dequeue_option(borrowed(canon_queue_##type*) q); \
+extern bool                canon_queue_##type##_peek(borrowed(const canon_queue_##type*) q, borrowed(type*) out); \
+extern option_##type       canon_queue_##type##_peek_option(borrowed(const canon_queue_##type*) q); \
+extern usize               canon_queue_##type##_len(borrowed(const canon_queue_##type*) q); \
+extern usize               canon_queue_##type##_capacity(borrowed(const canon_queue_##type*) q); \
+extern usize               canon_queue_##type##_remaining(borrowed(const canon_queue_##type*) q); \
+extern bool                canon_queue_##type##_is_empty(borrowed(const canon_queue_##type*) q); \
+extern bool                canon_queue_##type##_is_full(borrowed(const canon_queue_##type*) q); \
+extern void                canon_queue_##type##_clear(borrowed(canon_queue_##type*) q);
 
 #endif /* CANON_DATA_QUEUE_H */
