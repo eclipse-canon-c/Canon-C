@@ -407,7 +407,7 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  */
 #define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(DequeType*) d) { \
-    type out; \
+    type out = {0}; \
     if (fn_result_is_ok(fn_pop_front(d, &out))) \
         return fn_some(out); \
     return fn_none(); \
@@ -429,7 +429,7 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
  */
 #define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(DequeType*) d) { \
-    type out; \
+    type out = {0}; \
     if (fn_result_is_ok(fn_pop_back(d, &out))) \
         return fn_some(out); \
     return fn_none(); \
@@ -515,7 +515,7 @@ linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
  */
 #define IMPL_DEQUE_PEEK_FRONT_OPTION(linkage, DequeType, fn, fn_peek_front, OptionType, fn_some, fn_none, type) \
 linkage OptionType fn(borrowed(const DequeType*) d) { \
-    type out; \
+    type out = {0}; \
     if (fn_peek_front(d, &out)) \
         return fn_some(out); \
     return fn_none(); \
@@ -540,7 +540,7 @@ linkage OptionType fn(borrowed(const DequeType*) d) { \
  */
 #define IMPL_DEQUE_PEEK_BACK_OPTION(linkage, DequeType, fn, fn_peek_back, OptionType, fn_some, fn_none, type) \
 linkage OptionType fn(borrowed(const DequeType*) d) { \
-    type out; \
+    type out = {0}; \
     if (fn_peek_back(d, &out)) \
         return fn_some(out); \
     return fn_none(); \
