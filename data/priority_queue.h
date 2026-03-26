@@ -513,7 +513,7 @@ static inline result__Bool_Error pq_##type##_push_result(                       
                                                                                              \
 /** Removes and returns the top element as option_##type */                                   \
 static inline option_##type pq_##type##_pop_option(borrowed(pq_##type*) h) {                \
-    type val;                                                                                \
+    type val = {0}; /* zero-init so val is never uninitialized on any path */               \
     if (!pq_pop_raw(&h->_pq, &val)) return option_##type##_none();                          \
     return option_##type##_some(val);                                                        \
 }                                                                                            \
