@@ -899,11 +899,49 @@ int main(void)
 
 /*
  * Suppress unused-function warnings for helpers and generated API functions
- * not exercised in the fuzz entry point. Point is not fuzzed — only int.
+ * not exercised in the fuzz entry point.
+ *
+ * int option combinators — fuzz path only uses is_some and is_none:
  */
 static void deque_fuzz_suppress_unused(void)
 {
+    /* int option API not used in fuzz path */
+    (void)option_int_get;
+    (void)option_int_unwrap;
+    (void)option_int_unwrap_or;
+    (void)option_int_expect;
+    (void)option_int_map;
+    (void)option_int_and_then;
+    (void)option_int_or_else;
+    (void)option_int_filter;
+    (void)option_int_combine_with;
+    (void)option_int_replace;
+    (void)option_int_take;
+    (void)option_int_eq;
+
+    /* int deque functions not used in fuzz path */
+    (void)canon_deque_int_empty;
+    (void)canon_deque_int_capacity;
+    (void)canon_deque_int_swap;
+
+    /* Point is not fuzzed — suppress entire Point API */
     (void)point_eq;
+    (void)option_Point_some;
+    (void)option_Point_none;
+    (void)option_Point_is_some;
+    (void)option_Point_is_none;
+    (void)option_Point_get;
+    (void)option_Point_unwrap;
+    (void)option_Point_unwrap_or;
+    (void)option_Point_expect;
+    (void)option_Point_map;
+    (void)option_Point_and_then;
+    (void)option_Point_or_else;
+    (void)option_Point_filter;
+    (void)option_Point_combine_with;
+    (void)option_Point_replace;
+    (void)option_Point_take;
+    (void)option_Point_eq;
     (void)canon_deque_Point_init;
     (void)canon_deque_Point_empty;
     (void)canon_deque_Point_len;
