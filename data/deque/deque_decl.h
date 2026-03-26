@@ -65,6 +65,12 @@
  * @note Do NOT use DECLARE_DEQUE if you are using the header-only path via deque.h.
  * @note MANGLE_DEQUE_OPTION_TYPE(type) must be available at the declaration site —
  *       include semantics/option/option.h and call CANON_OPTION(type) beforehand.
+ *
+ * Note on result__Bool_Error:
+ *   push and pop functions return result__Bool_Error (not result_bool_Error)
+ *   because CANON_RESULT(bool, Error) token-pastes to result__Bool_Error in C99
+ *   — bool expands to _Bool before ## sees it. These extern signatures must
+ *   match the definitions emitted by DEFINE_DEQUE exactly.
  */
 #define DECLARE_DEQUE(type) \
 \
@@ -86,12 +92,12 @@ extern bool  MANGLE_DEQUE_IS_EMPTY(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*
 extern bool  MANGLE_DEQUE_IS_FULL(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
 \
 /* Push */ \
-extern result_bool_Error MANGLE_DEQUE_PUSH_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
-extern result_bool_Error MANGLE_DEQUE_PUSH_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+extern result__Bool_Error MANGLE_DEQUE_PUSH_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+extern result__Bool_Error MANGLE_DEQUE_PUSH_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
 \
 /* Pop — Result variants */ \
-extern result_bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
-extern result_bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern result__Bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern result__Bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
 \
 /* Pop — Option variants */ \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_FRONT_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
