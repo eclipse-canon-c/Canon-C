@@ -123,28 +123,28 @@ static void test_push_back_pop_front_fifo(void)
     canon_deque_int d;
     canon_deque_int_init(&d, buf, 4);
 
-    result_bool_Error r;
+    result__Bool_Error r;
 
     r = canon_deque_int_push_back(&d, 1);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
     r = canon_deque_int_push_back(&d, 2);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
     r = canon_deque_int_push_back(&d, 3);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
 
     EXPECT(canon_deque_int_len(&d) == 3);
 
     int out = 0;
     r = canon_deque_int_pop_front(&d, &out);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out == 1);
 
     r = canon_deque_int_pop_front(&d, &out);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out == 2);
 
     r = canon_deque_int_pop_front(&d, &out);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out == 3);
 
     EXPECT(canon_deque_int_is_empty(&d));
@@ -213,9 +213,9 @@ static void test_push_back_full_returns_err(void)
 
     EXPECT(canon_deque_int_is_full(&d));
 
-    result_bool_Error r = canon_deque_int_push_back(&d, 3);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
+    result__Bool_Error r = canon_deque_int_push_back(&d, 3);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
 
     /* deque is unchanged */
     EXPECT(canon_deque_int_len(&d) == 2);
@@ -230,9 +230,9 @@ static void test_push_front_full_returns_err(void)
     canon_deque_int_push_front(&d, 1);
     canon_deque_int_push_front(&d, 2);
 
-    result_bool_Error r = canon_deque_int_push_front(&d, 3);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
+    result__Bool_Error r = canon_deque_int_push_front(&d, 3);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
 }
 
 /* ── pop on empty ────────────────────────────────────────────────────────── */
@@ -244,9 +244,9 @@ static void test_pop_front_empty_returns_err(void)
     canon_deque_int_init(&d, buf, 4);
 
     int out = 0;
-    result_bool_Error r = canon_deque_int_pop_front(&d, &out);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
+    result__Bool_Error r = canon_deque_int_pop_front(&d, &out);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
 }
 
 static void test_pop_back_empty_returns_err(void)
@@ -256,38 +256,38 @@ static void test_pop_back_empty_returns_err(void)
     canon_deque_int_init(&d, buf, 4);
 
     int out = 0;
-    result_bool_Error r = canon_deque_int_pop_back(&d, &out);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
+    result__Bool_Error r = canon_deque_int_pop_back(&d, &out);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
 }
 
 /* ── NULL guard on push/pop ──────────────────────────────────────────────── */
 
 static void test_push_null_deque_returns_err(void)
 {
-    result_bool_Error r;
+    result__Bool_Error r;
 
     r = canon_deque_int_push_back(NULL, 1);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
     r = canon_deque_int_push_front(NULL, 1);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
 
 static void test_pop_null_deque_returns_err(void)
 {
     int out = 0;
-    result_bool_Error r;
+    result__Bool_Error r;
 
     r = canon_deque_int_pop_front(NULL, &out);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
     r = canon_deque_int_pop_back(NULL, &out);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
 
 static void test_pop_null_out_returns_err(void)
@@ -297,15 +297,15 @@ static void test_pop_null_out_returns_err(void)
     canon_deque_int_init(&d, buf, 4);
     canon_deque_int_push_back(&d, 1);
 
-    result_bool_Error r;
+    result__Bool_Error r;
 
     r = canon_deque_int_pop_front(&d, NULL);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
     r = canon_deque_int_pop_back(&d, NULL);
-    EXPECT(!result_bool_Error_is_ok(r));
-    EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
 
 /* ── peek_front / peek_back ──────────────────────────────────────────────── */
@@ -500,11 +500,11 @@ static void test_clear_allows_reuse(void)
     canon_deque_int_clear(&d);
 
     /* After clear, deque is usable at full capacity again */
-    result_bool_Error r;
+    result__Bool_Error r;
     r = canon_deque_int_push_back(&d, 30);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
     r = canon_deque_int_push_back(&d, 40);
-    EXPECT(result_bool_Error_is_ok(r));
+    EXPECT(result__Bool_Error_is_ok(r));
 
     int out = 0;
     canon_deque_int_pop_front(&d, &out);
@@ -954,12 +954,12 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
 
         switch (op) {
             case 0: { /* push_back */
-                result_bool_Error r = canon_deque_int_push_back(&d, val);
+                result__Bool_Error r = canon_deque_int_push_back(&d, val);
                 if (canon_deque_int_len(&d) == cap) {
                     /* Was full before push — must fail */
-                    if (result_bool_Error_is_ok(r))     __builtin_trap();
+                    if (result__Bool_Error_is_ok(r))     __builtin_trap();
                 } else {
-                    if (!result_bool_Error_is_ok(r))    __builtin_trap();
+                    if (!result__Bool_Error_is_ok(r))    __builtin_trap();
                     if (ref_size < cap) {
                         ref[(ref_head + ref_size) % cap] = val;
                         ref_size++;
@@ -968,8 +968,8 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 break;
             }
             case 1: { /* push_front */
-                result_bool_Error r = canon_deque_int_push_front(&d, val);
-                if (!result_bool_Error_is_ok(r) &&
+                result__Bool_Error r = canon_deque_int_push_front(&d, val);
+                if (!result__Bool_Error_is_ok(r) &&
                     canon_deque_int_len(&d) < cap)      __builtin_trap();
                 /* Note: push_front alters FIFO ordering — reset reference */
                 ref_head = 0;
@@ -978,11 +978,11 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
             }
             case 2: { /* pop_front */
                 int out = 0;
-                result_bool_Error r = canon_deque_int_pop_front(&d, &out);
+                result__Bool_Error r = canon_deque_int_pop_front(&d, &out);
                 if (canon_deque_int_is_empty(&d)) {
                     /* Was empty — must fail (is_empty checked before pop) */
                 }
-                if (result_bool_Error_is_ok(r)) {
+                if (result__Bool_Error_is_ok(r)) {
                     if (ref_size > 0) {
                         int expected = ref[ref_head % cap];
                         if (out != expected)            __builtin_trap();
