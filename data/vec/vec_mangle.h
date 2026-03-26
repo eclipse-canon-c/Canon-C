@@ -148,12 +148,16 @@
    ════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Name of the result_bool_Error is_ok checker
+ * @brief Name of the result__Bool_Error is_ok checker
  *
- * Default: result_bool_Error_is_ok
+ * Default: result__Bool_Error_is_ok
+ *
+ * Note: CANON_RESULT(bool, Error) generates result__Bool_Error (not
+ * result_bool_Error) because bool expands to _Bool before token-pasting
+ * in C99. This macro uses the correct generated name.
  *
  * The type parameter is accepted for macro uniformity but ignored in the
- * default expansion — the result type is fixed as result_bool_Error across
+ * default expansion — the result type is fixed as result__Bool_Error across
  * all vec instantiations (see CANON_RESULT_BOOL_ERROR_DEFINED in vec_impl.h).
  *
  * Override only if you have replaced the result type used by push/pop/insert/remove.
@@ -161,7 +165,7 @@
  * Used by: IMPL_VEC_POP_OPTION, IMPL_VEC_REMOVE_OPTION
  */
 #ifndef MANGLE_VEC_RESULT_IS_OK
-    #define MANGLE_VEC_RESULT_IS_OK(type)       result_bool_Error_is_ok
+    #define MANGLE_VEC_RESULT_IS_OK(type)       result__Bool_Error_is_ok
 #endif
 
 /* ════════════════════════════════════════════════════════════════
