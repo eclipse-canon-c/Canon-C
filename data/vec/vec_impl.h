@@ -50,14 +50,19 @@
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
-   result_bool_Error instantiation
+   result__Bool_Error instantiation
    ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Instantiate result_bool_Error exactly once across all translation units
+ * @brief Instantiate result__Bool_Error exactly once across all translation units
  *
- * push, pop, insert, remove all return result_bool_Error.
+ * push, pop, insert, remove all return result__Bool_Error.
  * Guard prevents duplicate definition if multiple vec types are instantiated.
+ *
+ * Note: CANON_RESULT(bool, Error) token-pastes to result__Bool_Error because
+ * bool expands to _Bool in C99. The generated type name is result__Bool_Error,
+ * not result_bool_Error. All push/pop/insert/remove signatures and call sites
+ * use the correct generated name.
  */
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
     #define CANON_RESULT_BOOL_ERROR_DEFINED
@@ -560,11 +565,11 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Appends one element, returns Result<bool, Error>
+ * @brief Appends one element, returns result__Bool_Error
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, type item);
+ * result__Bool_Error fn(borrowed(VecType*) v, type item);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if v == NULL or v->items == NULL
@@ -576,11 +581,11 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  * - Space: O(1) — no allocation
  */
 #define IMPL_VEC_PUSH(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, type item) { \
-    if (!v || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (v->len >= v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
+    if (!v || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (v->len >= v->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     v->items[v->len++] = item; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -636,11 +641,11 @@ linkage void fn(borrowed(VecType*) v, type item) { \
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Removes and returns last element via Result<bool, Error>
+ * @brief Removes and returns last element via result__Bool_Error
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, borrowed(type*) out);
+ * result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)   if v == NULL, out == NULL, or v->items == NULL
@@ -652,11 +657,11 @@ linkage void fn(borrowed(VecType*) v, type item) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_POP(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
-    if (!v || !out || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (v->len == 0) return result_bool_Error_err(ERR_INVALID_STATE); \
+linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
+    if (!v || !out || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (v->len == 0) return result__Bool_Error_err(ERR_INVALID_STATE); \
     *out = v->items[--v->len]; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -675,7 +680,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
  */
 #define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(VecType*) v) { \
-    type out; \
+    type out = {0}; \
     if (fn_result_is_ok(fn_pop(v, &out))) \
         return fn_some(out); \
     return fn_none(); \
@@ -710,7 +715,7 @@ linkage void fn(borrowed(VecType*) v) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, usize i, type item);
+ * result__Bool_Error fn(borrowed(VecType*) v, usize i, type item);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if v or v->items is NULL
@@ -723,16 +728,16 @@ linkage void fn(borrowed(VecType*) v) { \
  * - Space: O(1) — no allocation
  */
 #define IMPL_VEC_INSERT(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
-    if (!v || !v->items)       return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (i > v->len)            return result_bool_Error_err(ERR_OUT_OF_RANGE); \
-    if (v->len >= v->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
+    if (!v || !v->items)       return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (i > v->len)            return result__Bool_Error_err(ERR_OUT_OF_RANGE); \
+    if (v->len >= v->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     if (i < v->len) { \
         mem_move(&v->items[i + 1], &v->items[i], (v->len - i) * sizeof(type)); \
     } \
     v->items[i] = item; \
     v->len++; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -740,7 +745,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out);
+ * result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)   if v, v->items, or out is NULL
@@ -753,16 +758,16 @@ linkage result_bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_REMOVE(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out) { \
-    if (!v || !v->items || !out) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (v->len == 0)             return result_bool_Error_err(ERR_INVALID_STATE); \
-    if (i >= v->len)             return result_bool_Error_err(ERR_OUT_OF_RANGE); \
+linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out) { \
+    if (!v || !v->items || !out) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (v->len == 0)             return result__Bool_Error_err(ERR_INVALID_STATE); \
+    if (i >= v->len)             return result__Bool_Error_err(ERR_OUT_OF_RANGE); \
     *out = v->items[i]; \
     if (i < v->len - 1) { \
         mem_move(&v->items[i], &v->items[i + 1], (v->len - i - 1) * sizeof(type)); \
     } \
     v->len--; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -781,7 +786,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out)
  */
 #define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(VecType*) v, usize i) { \
-    type out; \
+    type out = {0}; \
     if (fn_result_is_ok(fn_remove(v, i, &out))) \
         return fn_some(out); \
     return fn_none(); \
@@ -796,7 +801,7 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
+ * result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if v, v->items, or src is NULL
@@ -809,16 +814,16 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  * - Space: O(1) — no allocation, copies into existing buffer
  */
 #define IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
-    if (!v || !v->items || !src) return result_bool_Error_err(ERR_INVALID_ARG); \
+linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
+    if (!v || !v->items || !src) return result__Bool_Error_err(ERR_INVALID_ARG); \
     usize total; \
     if (!checked_add(v->len, count, &total)) \
-        return result_bool_Error_err(ERR_OVERFLOW); \
+        return result__Bool_Error_err(ERR_OVERFLOW); \
     if (total > v->capacity) \
-        return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+        return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     mem_copy(&v->items[v->len], src, count * sizeof(type)); \
     v->len = total; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -826,7 +831,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, us
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
+ * result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
  * ```
  *
  * @sa IMPL_VEC_APPEND_ARRAY — identical semantics
@@ -836,7 +841,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, us
  * - Space: O(1)
  */
 #define IMPL_VEC_EXTEND(linkage, VecType, fn, fn_append_array, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
+linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
     return fn_append_array(v, src, count); \
 }
 
