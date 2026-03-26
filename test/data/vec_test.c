@@ -320,7 +320,7 @@ static void test_set_overwrites_element(void)
     canon_vec_int_get(&v, 0, &out);
     EXPECT(out == 99);
 
-    EXPECT(!canon_vec_int_set(&v, 5, 0)); /* out of range */
+    EXPECT(!canon_vec_int_set(&v, 2, 0)); /* out of range — len==2, so index 2 is invalid */
 }
 
 /* ── first() / last() / data() ───────────────────────────────────────────── */
@@ -863,6 +863,12 @@ static void vec_suppress_unused_option_fns(void)
     (void)option_int_replace;
     (void)option_int_take;
     (void)option_int_eq;
+
+    /* int vec functions only exercised via the Point path in test_struct_all_functions */
+    (void)canon_vec_int_arena_alloc;
+    (void)canon_vec_int_get_unchecked;
+    (void)canon_vec_int_at;
+    (void)canon_vec_int_push_unchecked;
 
     (void)option_Point_get;
     (void)option_Point_unwrap_or;
