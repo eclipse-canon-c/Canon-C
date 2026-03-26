@@ -12,7 +12,13 @@
 #include "semantics/option/option.h"
 #include "semantics/result/result.h"
 
-/* Instantiate the Result type used by fallible operations */
+/*
+ * Instantiate the Result type used by fallible operations.
+ *
+ * NOTE: CANON_RESULT(bool, Error) token-pastes to result__Bool_Error
+ * (not result_bool_Error) because bool expands to _Bool before ## in C99.
+ * All function signatures and call sites use result__Bool_Error accordingly.
+ */
 CANON_RESULT(bool, Error)
 
 /**
@@ -29,7 +35,7 @@ CANON_RESULT(bool, Error)
  * - Caller owns the backing buffer (stack, arena, static, etc.)
  * - Min-heap by default; pass a descending comparator for max-heap
  * - O(log n) push/pop, O(1) peek
- * - Fallible operations return result_bool_Error
+ * - Fallible operations return result__Bool_Error
  * - Typed peek/pop return option_T via DEFINE_PRIORITY_QUEUE(T)
  * - bytes_t view of current contents via pq_as_bytes()
  *
@@ -84,7 +90,7 @@ CANON_RESULT(bool, Error)
  *
  * @sa core/primitives/compare.h — algo_cmp_fn and built-in comparators
  * @sa semantics/option/option.h — option_T for typed peek/pop
- * @sa semantics/result/result.h — result_bool_Error for fallible operations
+ * @sa semantics/result/result.h — result__Bool_Error for fallible operations
  * @sa semantics/error.h         — Error enum (ERR_INVALID_ARG, etc.)
  * @sa core/ownership.h          — borrowed() annotation
  * @sa core/slice.h              — bytes_t view of heap contents
@@ -275,7 +281,7 @@ static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Core operations — result_bool_Error / raw out-param (untyped base layer)
+   Core operations — result__Bool_Error / raw out-param (untyped base layer)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -284,20 +290,20 @@ static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
  * NULL pq or elem returns Err(ERR_INVALID_ARG).
  * Full queue returns Err(ERR_CAPACITY_EXCEEDED).
  *
- * @return result_bool_Error — Ok(true) on success, Err on failure
+ * @return result__Bool_Error — Ok(true) on success, Err on failure
  *
  * Performance: O(log n)
  */
-static inline result_bool_Error pq_push_result(
+static inline result__Bool_Error pq_push_result(
     borrowed(PriorityQueue*)  pq,
     borrowed(const void*)     elem)
 {
-    if (!pq || !elem) return result_bool_Error_err(ERR_INVALID_ARG);
-    if (pq->len >= pq->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED);
+    if (!pq || !elem) return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (pq->len >= pq->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
     pq_sift_up(pq, pq->len - 1);
-    return result_bool_Error_ok(true);
+    return result__Bool_Error_ok(true);
 }
 
 /**
@@ -353,24 +359,24 @@ static inline const void* pq_peek_raw(borrowed(const PriorityQueue*) pq) {
  *
  * NULL pq or out-of-range i returns Err(ERR_OUT_OF_RANGE).
  *
- * @return result_bool_Error — Ok(true) on success, Err on failure
+ * @return result__Bool_Error — Ok(true) on success, Err on failure
  *
  * Performance: O(log n)
  */
-static inline result_bool_Error pq_remove_at_result(
+static inline result__Bool_Error pq_remove_at_result(
     borrowed(PriorityQueue*) pq,
     usize                    i)
 {
-    if (!pq)          return result_bool_Error_err(ERR_INVALID_ARG);
-    if (i >= pq->len) return result_bool_Error_err(ERR_OUT_OF_RANGE);
+    if (!pq)          return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (i >= pq->len) return result__Bool_Error_err(ERR_OUT_OF_RANGE);
     pq->len--;
-    if (i == pq->len) return result_bool_Error_ok(true); /* removed last element */
+    if (i == pq->len) return result__Bool_Error_ok(true); /* removed last element */
     mem_copy(ptr_elem(pq->data, i,       pq->elem_size),
              ptr_elem(pq->data, pq->len, pq->elem_size),
              pq->elem_size);
     pq_sift_up(pq, i);
     pq_sift_down(pq, i);
-    return result_bool_Error_ok(true);
+    return result__Bool_Error_ok(true);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -379,7 +385,7 @@ static inline result_bool_Error pq_remove_at_result(
 
 /** @brief Inserts elem — returns true on success. Prefer pq_push_result(). */
 static inline bool pq_push(borrowed(PriorityQueue*) pq, borrowed(const void*) elem) {
-    return result_bool_Error_is_ok(pq_push_result(pq, elem));
+    return result__Bool_Error_is_ok(pq_push_result(pq, elem));
 }
 
 /** @brief Removes and copies the top element into out. Prefer pq_pop_raw(). */
@@ -397,7 +403,7 @@ static inline bool pq_peek(borrowed(const PriorityQueue*) pq, void* out) {
 
 /** @brief Removes element at index i — returns true on success. Prefer pq_remove_at_result(). */
 static inline bool pq_remove_at(borrowed(PriorityQueue*) pq, usize i) {
-    return result_bool_Error_is_ok(pq_remove_at_result(pq, i));
+    return result__Bool_Error_is_ok(pq_remove_at_result(pq, i));
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -472,6 +478,11 @@ static inline bytes_t pq_as_bytes(borrowed(const PriorityQueue*) pq) {
  * @brief Generates a fully type-safe priority queue for a given element type
  *
  * @param type Element type — CANON_OPTION(type) must be instantiated first
+ *
+ * Note: pq_##type##_push_result and pq_##type##_remove_at_result return
+ * result__Bool_Error (not result_bool_Error) — CANON_RESULT(bool, Error)
+ * token-pastes to result__Bool_Error in C99 because bool expands to _Bool
+ * before ## sees it.
  */
 #define DEFINE_PRIORITY_QUEUE(type)                                                          \
                                                                                              \
@@ -493,8 +504,8 @@ static inline void pq_##type##_heapify(borrowed(pq_##type*) h, usize len) {     
     pq_heapify(&h->_pq, len);                                                                \
 }                                                                                            \
                                                                                              \
-/** Inserts val — returns result_bool_Error */                                                \
-static inline result_bool_Error pq_##type##_push_result(                                     \
+/** Inserts val — returns result__Bool_Error */                                               \
+static inline result__Bool_Error pq_##type##_push_result(                                    \
     borrowed(pq_##type*) h, type val)                                                        \
 {                                                                                            \
     return pq_push_result(&h->_pq, &val);                                                    \
@@ -516,8 +527,8 @@ static inline option_##type pq_##type##_peek_option(borrowed(const pq_##type*) h
     return option_##type##_some(val);                                                        \
 }                                                                                            \
                                                                                              \
-/** Removes element at heap index i — returns result_bool_Error */                            \
-static inline result_bool_Error pq_##type##_remove_at_result(                               \
+/** Removes element at heap index i — returns result__Bool_Error */                           \
+static inline result__Bool_Error pq_##type##_remove_at_result(                              \
     borrowed(pq_##type*) h, usize i)                                                         \
 {                                                                                            \
     return pq_remove_at_result(&h->_pq, i);                                                  \
