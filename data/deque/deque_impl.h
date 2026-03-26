@@ -67,15 +67,20 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
-   result_bool_Error instantiation
+   result__Bool_Error instantiation
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Instantiate result_bool_Error exactly once across all translation units
+ * @brief Instantiate result__Bool_Error exactly once across all translation units
  *
- * push_front, push_back, pop_front, pop_back all return result_bool_Error.
+ * push_front, push_back, pop_front, pop_back all return result__Bool_Error.
  * Guard prevents duplicate definition if multiple deque types are instantiated,
  * or if both vec and deque are instantiated in the same translation unit.
+ *
+ * Note: CANON_RESULT(bool, Error) token-pastes to result__Bool_Error because
+ * bool expands to _Bool in C99. The generated type name is result__Bool_Error,
+ * not result_bool_Error. All push/pop signatures and call sites use the correct
+ * generated name.
  *
  * Must be defined before any IMPL_DEQUE_PUSH_*/POP_* expansion.
  */
@@ -283,7 +288,7 @@ linkage bool fn(borrowed(const DequeType*) d) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(DequeType*) d, type item);
+ * result__Bool_Error fn(borrowed(DequeType*) d, type item);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if d == NULL or d->buffer == NULL
@@ -295,13 +300,13 @@ linkage bool fn(borrowed(const DequeType*) d) { \
  * - Space: O(1) — no allocation
  */
 #define IMPL_DEQUE_PUSH_FRONT(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
-    if (!d || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size >= d->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
+    if (!d || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (d->size >= d->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
     d->buffer[d->head] = item; \
     d->size++; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -309,7 +314,7 @@ linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(DequeType*) d, type item);
+ * result__Bool_Error fn(borrowed(DequeType*) d, type item);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)       if d == NULL or d->buffer == NULL
@@ -321,13 +326,13 @@ linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
  * - Space: O(1) — no allocation
  */
 #define IMPL_DEQUE_PUSH_BACK(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
-    if (!d || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size >= d->capacity) return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
+    if (!d || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (d->size >= d->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     d->buffer[d->tail] = item; \
     d->tail = (d->tail + 1) % d->capacity; \
     d->size++; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -339,7 +344,7 @@ linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
+ * result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
@@ -351,13 +356,13 @@ linkage result_bool_Error fn(borrowed(DequeType*) d, type item) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_POP_FRONT(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
-    if (!d || !out || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size == 0) return result_bool_Error_err(ERR_INVALID_STATE); \
+linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
+    if (!d || !out || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (d->size == 0) return result__Bool_Error_err(ERR_INVALID_STATE); \
     *out = d->buffer[d->head]; \
     d->head = (d->head + 1) % d->capacity; \
     d->size--; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
@@ -365,7 +370,7 @@ linkage result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
+ * result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
  * ```
  *
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
@@ -377,13 +382,13 @@ linkage result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_POP_BACK(linkage, DequeType, fn, type) \
-linkage result_bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
-    if (!d || !out || !d->buffer) return result_bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size == 0) return result_bool_Error_err(ERR_INVALID_STATE); \
+linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
+    if (!d || !out || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (d->size == 0) return result__Bool_Error_err(ERR_INVALID_STATE); \
     d->tail = (d->tail == 0) ? d->capacity - 1 : d->tail - 1; \
     *out = d->buffer[d->tail]; \
     d->size--; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /**
