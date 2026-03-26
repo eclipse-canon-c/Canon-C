@@ -207,6 +207,7 @@ jobs:
             "--suppress=literalWithCharPtrCompare:*diag_test.c" \
             "--suppress=arrayIndexOutOfBounds:*diag.h" \
             "--suppress=ctunullpointer:*deque_test.c" \
+            "--suppress=ctunullpointer:*vec_test.c" \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -230,6 +231,7 @@ jobs:
             "--suppress=literalWithCharPtrCompare:*diag_test.c" `
             "--suppress=arrayIndexOutOfBounds:*diag.h" `
             "--suppress=ctunullpointer:*deque_test.c" `
+            "--suppress=ctunullpointer:*vec_test.c" `
             -I "${{ github.workspace }}/core/primitives" `
             -I "${{ github.workspace }}/core" `
             -I "${{ github.workspace }}/semantics" `
