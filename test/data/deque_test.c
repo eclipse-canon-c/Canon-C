@@ -1008,6 +1008,13 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
     int  ref[8];
     usize ref_head = 0;
     usize ref_size = 0;
+    /*
+     * ref_dirty: set whenever push_front or pop_back is called, because those
+     * operations break the push_back-only FIFO assumption the ref tracks.
+     * When dirty, ordering checks are skipped — only structural invariants
+     * (len, remaining, is_empty, is_full) are verified. Cleared on clear().
+     */
+    bool ref_dirty = false;
 
     for (usize i = 1; i < size; i++) {
         u8    byte  = data[i];
@@ -1046,23 +1053,26 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 result__Bool_Error r = canon_deque_int_push_front(&d, val);
                 if (!result__Bool_Error_is_ok(r) &&
                     canon_deque_int_len(&d) < cap)      __builtin_trap();
-                /* Note: push_front alters FIFO ordering — reset reference */
-                ref_head = 0;
-                ref_size = 0;
+                /* push_front inserts at the front — ref only tracks push_back
+                 * order, so mark it dirty to disable ordering checks */
+                ref_dirty = true;
+                ref_head  = 0;
+                ref_size  = 0;
                 break;
             }
             case 2: { /* pop_front */
                 int out = 0;
                 result__Bool_Error r = canon_deque_int_pop_front(&d, &out);
-                if (canon_deque_int_is_empty(&d)) {
-                    /* Was empty — must fail (is_empty checked before pop) */
-                }
                 if (result__Bool_Error_is_ok(r)) {
-                    if (ref_size > 0) {
+                    if (!ref_dirty && ref_size > 0) {
                         int expected = ref[ref_head % cap];
                         if (out != expected)            __builtin_trap();
                         ref_head = (ref_head + 1) % cap;
                         ref_size--;
+                    } else if (!ref_dirty && ref_size == 0) {
+                        /* pop succeeded but ref is empty — deque had stale
+                         * elements; this can happen after mixed ops, just
+                         * skip the value check */
                     }
                 }
                 break;
@@ -1070,9 +1080,10 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
             case 3: { /* pop_back */
                 int out = 0;
                 canon_deque_int_pop_back(&d, &out);
-                /* Invalidate reference — mixed front/back makes tracking harder */
-                ref_head = 0;
-                ref_size = 0;
+                /* pop_back removes from the back, invalidating the FIFO ref */
+                ref_dirty = true;
+                ref_head  = 0;
+                ref_size  = 0;
                 break;
             }
             case 4: { /* peek_front */
@@ -1099,8 +1110,9 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 option_int o = canon_deque_int_pop_front_option(&d);
                 if (before == 0 && option_int_is_some(o)) __builtin_trap();
                 if (before >  0 && option_int_is_none(o)) __builtin_trap();
-                ref_head = 0;
-                ref_size = 0;
+                ref_dirty = true;
+                ref_head  = 0;
+                ref_size  = 0;
                 break;
             }
             case 7: { /* pop_back_option */
@@ -1108,8 +1120,9 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 option_int o = canon_deque_int_pop_back_option(&d);
                 if (before == 0 && option_int_is_some(o)) __builtin_trap();
                 if (before >  0 && option_int_is_none(o)) __builtin_trap();
-                ref_head = 0;
-                ref_size = 0;
+                ref_dirty = true;
+                ref_head  = 0;
+                ref_size  = 0;
                 break;
             }
             case 8: { /* peek_front_option / peek_back_option */
@@ -1131,8 +1144,9 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 canon_deque_int_clear(&d);
                 if (!canon_deque_int_is_empty(&d))      __builtin_trap();
                 if (canon_deque_int_len(&d) != 0)       __builtin_trap();
-                ref_head = 0;
-                ref_size = 0;
+                ref_head  = 0;
+                ref_size  = 0;
+                ref_dirty = false; /* clean state — FIFO tracking can resume */
                 break;
             }
             default:
