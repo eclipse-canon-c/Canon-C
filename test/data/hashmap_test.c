@@ -98,6 +98,7 @@ static int g_failed = 0;
 /* Helper: initialize a map over a stack buffer, assert success */
 static void init_map(hashmap* m, u8* buf, usize buf_len, usize cap)
 {
+    *m = (hashmap){0}; /* ensure slots is NULL if init fails — prevents garbage reads */
     result__Bool_Error r = hashmap_init(m, bytes_from(buf, buf_len), cap, NULL);
     if (!result__Bool_Error_is_ok(r)) {
         fprintf(stderr, "FAIL: hashmap_init returned Err in helper\n");
