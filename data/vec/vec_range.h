@@ -21,7 +21,7 @@
  * - No hidden allocation — fills into existing bounded buffer
  * - Supports ascending, descending, and stepped ranges (full range semantics)
  * - Overflow-protected element count calculation via range_len() + checked.h
- * - Returns Result<bool, Error> on failure — never silently truncates
+ * - Returns result__Bool_Error on failure — never silently truncates
  *
  * Ownership model:
  * ────────────────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@
  * canon_vec_int v = canon_vec_int_init(buf, 16);
  *
  * range r = range_make(0, 10, 1);  // 0..9 ascending
- * result_bool_Error res = canon_vec_int_extend_from_range(&v, r);
+ * result__Bool_Error res = canon_vec_int_extend_from_range(&v, r);
  * // v now contains [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
  *
  * range desc = range_make(5, 0, -1);  // 5..1 descending
@@ -83,7 +83,7 @@
  *
  * Generated function signature:
  * ```c
- * result_bool_Error fn(borrowed(VecType*) v, range r);
+ * result__Bool_Error fn(borrowed(VecType*) v, range r);
  * ```
  *
  * @pre v != NULL
@@ -107,19 +107,19 @@
  * - Space: O(1) — no allocation, fills into existing buffer
  */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
-linkage result_bool_Error fn(borrowed(VecType*) v, range r) { \
-    if (!v || !v->items) return result_bool_Error_err(ERR_INVALID_ARG); \
+linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
+    if (!v || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
     usize count = range_len(&r); \
     usize total; \
     if (!checked_add(v->len, count, &total)) \
-        return result_bool_Error_err(ERR_OVERFLOW); \
+        return result__Bool_Error_err(ERR_OVERFLOW); \
     if (total > v->capacity) \
-        return result_bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+        return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     for (usize i = 0; range_has_next(&r); i++) { \
         v->items[v->len + i] = (type)range_next(&r); \
     } \
     v->len = total; \
-    return result_bool_Error_ok(true); \
+    return result__Bool_Error_ok(true); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -146,7 +146,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, range r) { \
  * Must be called AFTER DEFINE_VEC(linkage, type) for the same type.
  *
  * Generated function (using default mangle):
- * - canon_vec_##type##_extend_from_range(v, r) → result_bool_Error
+ * - canon_vec_##type##_extend_from_range(v, r) → result__Bool_Error
  *
  * @param linkage Function linkage (should match the DEFINE_VEC call)
  * @param type    Element type (must be castable from isize)
@@ -157,7 +157,7 @@ linkage result_bool_Error fn(borrowed(VecType*) v, range r) { \
  * DEFINE_VEC_RANGE(static inline, int)
  *
  * // Now available:
- * // result_bool_Error canon_vec_int_extend_from_range(borrowed(canon_vec_int*) v, range r);
+ * // result__Bool_Error canon_vec_int_extend_from_range(borrowed(canon_vec_int*) v, range r);
  * ```
  *
  * @note Only makes semantic sense for numeric element types (int, float, i32, etc.)
