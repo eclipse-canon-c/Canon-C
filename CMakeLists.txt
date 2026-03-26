@@ -323,7 +323,14 @@ canon_c_test(
 # canon_c_test(NAME array_test          SRC test/data/array_test.c          INCLUDES core/primitives .)
 # canon_c_test(NAME stack_test          SRC test/data/stack_test.c          INCLUDES core/primitives .)
 # canon_c_test(NAME queue_test          SRC test/data/queue_test.c          INCLUDES core/primitives .)
-# canon_c_test(NAME priority_queue_test SRC test/data/priority_queue_test.c INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME     priority_queue_test
+    SRC      test/data/priority_queue_test.c
+    INCLUDES core/primitives core semantics data .
+    FUZZABLE
+)
+
 # canon_c_test(NAME bitset_test         SRC test/data/bitset_test.c         INCLUDES core/primitives .)
 # canon_c_test(NAME stringbuf_test      SRC test/data/stringbuf_test.c      INCLUDES core/primitives . FUZZABLE)
 # canon_c_test(NAME range_test          SRC test/data/range_test.c          INCLUDES core/primitives .)
