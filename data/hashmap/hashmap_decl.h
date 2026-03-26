@@ -40,6 +40,13 @@
  * unit. The internal hm_decl_key_t / hm_decl_val_t aliases are #undef'd at
  * the bottom of this file, making re-inclusion safe.
  *
+ * Note on result__Bool_Error:
+ * ────────────────────────────────────────────────────────────────────────────
+ * CANON_RESULT(bool, Error) generates result__Bool_Error (not result_bool_Error)
+ * because bool expands to _Bool before ## token-pasting in C99. The extern
+ * declarations for hashmap_init and hashmap_insert use result__Bool_Error to
+ * match the definitions emitted by hashmap_impl.h exactly.
+ *
  * @sa hashmap.h       — header-only entry point (includes everything)
  * @sa hashmap_defn.h  — generates definitions (include in exactly one .c)
  * @sa hashmap_impl.h  — pure logic (included by defn)
@@ -101,11 +108,15 @@ typedef struct {
 
 /* ============================================================================
  * External function declarations
+ *
+ * Note: hashmap_init and hashmap_insert return result__Bool_Error, not
+ * result_bool_Error. CANON_RESULT(bool, Error) token-pastes to
+ * result__Bool_Error because bool expands to _Bool before ## in C99.
  * ========================================================================= */
 
 extern usize _HM_BUFFER_SIZE(usize capacity);
 
-extern result_bool_Error _HM_INIT(
+extern result__Bool_Error _HM_INIT(
     borrowed(HASHMAP_TYPE_NAME*) map,
     bytes_t                      buf,
     usize                        capacity,
@@ -119,7 +130,7 @@ extern usize _HM_CAPACITY(const HASHMAP_TYPE_NAME* map);
 extern bool  _HM_IS_EMPTY(const HASHMAP_TYPE_NAME* map);
 extern f64   _HM_LOAD_FACTOR(const HASHMAP_TYPE_NAME* map);
 
-extern result_bool_Error _HM_INSERT(
+extern result__Bool_Error _HM_INSERT(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_decl_key_t*         key,
     const hm_decl_val_t*         val
