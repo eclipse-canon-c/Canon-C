@@ -61,6 +61,12 @@
  *
  * @note Must be matched by exactly one DEFINE_VEC(linkage, type) in a .c file.
  * @note Do NOT use DECLARE_VEC if you are using the header-only path via vec.h.
+ *
+ * Note on result__Bool_Error:
+ *   push, pop, insert, remove, append_array, and extend return result__Bool_Error
+ *   (not result_bool_Error) because CANON_RESULT(bool, Error) token-pastes to
+ *   result__Bool_Error in C99 — bool expands to _Bool before ## sees it.
+ *   These extern signatures must match the definitions emitted by DEFINE_VEC exactly.
  */
 #define DECLARE_VEC(type) \
 \
@@ -99,21 +105,21 @@ extern borrowed(type*)              MANGLE_VEC_LAST(type)(borrowed(const MANGLE_
 extern borrowed(type*)              MANGLE_VEC_DATA(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
 \
 /* Modification */ \
-extern result_bool_Error            MANGLE_VEC_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
+extern result__Bool_Error           MANGLE_VEC_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
 extern bool                         MANGLE_VEC_TRY_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
 extern void                         MANGLE_VEC_PUSH_UNCHECKED(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
-extern result_bool_Error            MANGLE_VEC_POP(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(type*) out); \
+extern result__Bool_Error           MANGLE_VEC_POP(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(type*) out); \
 extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_POP_OPTION(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
 extern void                         MANGLE_VEC_CLEAR(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
-extern result_bool_Error            MANGLE_VEC_INSERT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, type item); \
-extern result_bool_Error            MANGLE_VEC_REMOVE(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, borrowed(type*) out); \
+extern result__Bool_Error           MANGLE_VEC_INSERT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, type item); \
+extern result__Bool_Error           MANGLE_VEC_REMOVE(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, borrowed(type*) out); \
 extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_REMOVE_OPTION(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i); \
 \
 /* Bulk operations */ \
-extern result_bool_Error MANGLE_VEC_APPEND_ARRAY(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(const type*) src, usize count); \
-extern result_bool_Error MANGLE_VEC_EXTEND(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(const type*) src, usize count); \
-extern void              MANGLE_VEC_FILL(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type value, usize count); \
-extern void              MANGLE_VEC_SWAP(type)(borrowed(MANGLE_VEC_TYPE(type)*) a, borrowed(MANGLE_VEC_TYPE(type)*) b); \
+extern result__Bool_Error MANGLE_VEC_APPEND_ARRAY(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(const type*) src, usize count); \
+extern result__Bool_Error MANGLE_VEC_EXTEND(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(const type*) src, usize count); \
+extern void               MANGLE_VEC_FILL(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type value, usize count); \
+extern void               MANGLE_VEC_SWAP(type)(borrowed(MANGLE_VEC_TYPE(type)*) a, borrowed(MANGLE_VEC_TYPE(type)*) b); \
 \
 /* Iterator */ \
 extern MANGLE_VEC_ITER_TYPE(type) MANGLE_VEC_ITER_INIT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
