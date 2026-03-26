@@ -1028,8 +1028,9 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
 
         switch (op) {
             case 0: { /* push_back */
+                usize before = canon_deque_int_len(&d);
                 result__Bool_Error r = canon_deque_int_push_back(&d, val);
-                if (canon_deque_int_len(&d) == cap) {
+                if (before >= cap) {
                     /* Was full before push — must fail */
                     if (result__Bool_Error_is_ok(r))     __builtin_trap();
                 } else {
