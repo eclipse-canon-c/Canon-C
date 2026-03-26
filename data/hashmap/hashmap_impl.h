@@ -256,11 +256,24 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
 
         /*
          * Robin Hood: steal from the rich (low PSL).
+         *
+         * After the swap, `incoming` is the displaced element whose original
+         * PSL was tmp.psl. Reset `psl` to tmp.psl so the increment below
+         * produces incoming.psl = tmp.psl + 1 — the correct PSL for the
+         * displaced element one slot further along.
+         *
+         * Without this reset, the displaced element would be stored with
+         * PSL = (original_incoming_psl + 1) instead of (tmp.psl + 1).
+         * Since original_incoming_psl > tmp.psl (the steal condition),
+         * the stored PSL would be too large, corrupting the early-exit
+         * invariant (slot->psl < probe_dist → not found) and causing
+         * lookups and duplicate checks to miss existing keys.
          */
         if (slot->psl < psl) {
             HASHMAP_SLOT_NAME tmp = *slot;
             *slot    = incoming;
             incoming = tmp;
+            psl      = incoming.psl; /* reset to displaced element's PSL */
         }
 
         psl++;
