@@ -82,7 +82,7 @@
  * not result_bool_Error. All push/pop signatures and call sites use the correct
  * generated name.
  *
- * Must be defined before any IMPL_DEQUE_PUSH_*/POP_* expansion.
+ * Must be defined before any IMPL_DEQUE_PUSH_* or POP_* expansion.
  */
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
     #define CANON_RESULT_BOOL_ERROR_DEFINED
