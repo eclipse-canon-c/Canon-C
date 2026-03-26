@@ -38,6 +38,12 @@
  *   DEFINE_VEC(static inline, u64)
  *   DEFINE_VEC(static inline, int)
  *
+ * Note on result__Bool_Error:
+ * ────────────────────────────────────────────────────────────────────────────
+ * collect_keys and collect_values return result__Bool_Error (not
+ * result_bool_Error) because CANON_RESULT(bool, Error) token-pastes to
+ * result__Bool_Error in C99 — bool expands to _Bool before ## sees it.
+ *
  * Usage example:
  * ────────────────────────────────────────────────────────────────────────────
  * ```c
@@ -55,12 +61,12 @@
  * // Collect all keys into a caller-owned vec
  * u64 key_buf[64];
  * canon_vec_u64 keys = canon_vec_u64_init(key_buf, 64);
- * result_bool_Error r = hashmap_collect_keys(&my_map, &keys);
+ * result__Bool_Error r = hashmap_collect_keys(&my_map, &keys);
  *
  * // Collect all values into a caller-owned vec
  * int val_buf[64];
  * canon_vec_int vals = canon_vec_int_init(val_buf, 64);
- * result_bool_Error r2 = hashmap_collect_values(&my_map, &vals);
+ * result__Bool_Error r2 = hashmap_collect_values(&my_map, &vals);
  *
  * // Ergonomic iteration macro (no vec needed)
  * const u64* k;
@@ -68,16 +74,6 @@
  * HASHMAP_FOR_EACH(&my_map, k, v) {
  *     printf("%llu => %d\n", (unsigned long long)*k, *v);
  * }
- * ```
- *
- * Pointer key/value types:
- * ────────────────────────────────────────────────────────────────────────────
- * For pointer types, typedef first so the canon_vec macro works:
- * ```c
- * typedef const char* cstr;
- * DEFINE_VEC(static inline, cstr)
- * #define HASHMAP_KEY_TYPE u64
- * #define HASHMAP_VAL_TYPE cstr
  * ```
  *
  * @sa hashmap.h      — main entry point, must be included before this
@@ -107,14 +103,6 @@
 
 /* ============================================================================
  * Internal: derive canon_vec push function names from key/value types
- *
- * canon_vec naming convention (from data/vec/vec.h):
- *   type name:  canon_vec_##TYPE
- *   push fn:    canon_vec_##TYPE##_push(canon_vec_##TYPE*, const TYPE*)
- *               returns result_bool_Error
- *
- * We derive these directly because DEFINE_VEC always generates
- * identically-named functions. No user-supplied function pointer needed.
  * ========================================================================= */
 
 /** @brief Expands to the canon_vec type for a given element type */
@@ -137,16 +125,9 @@
  * Err(ERR_CAPACITY_EXCEEDED). Keys are appended to whatever is already
  * in the vec; it is NOT cleared before insertion.
  *
- * Key ordering is unspecified (open addressing does not preserve insertion
- * order). Sort the resulting vec with algo/sort.h if ordered output is needed.
- *
- * If you need key-value correspondence between a keys vec and a values vec,
- * call collect_keys then collect_values without mutating the map between calls.
- * Both use iter_next which visits slots in the same deterministic order.
- *
  * @param map  Pointer to initialized hashmap (must not be NULL)
  * @param out  Caller-owned canon_vec for keys to append into (must not be NULL)
- * @return     result_bool_Error — Ok(true) on success,
+ * @return     result__Bool_Error — Ok(true) on success,
  *             Err(ERR_CAPACITY_EXCEEDED) if vec fills before all keys are pushed,
  *             Err(ERR_INVALID_ARG) if any pointer is NULL
  *
@@ -154,12 +135,12 @@
  * - Time:  O(capacity) — iterates all slots, pushes only occupied ones
  * - Space: O(1) — no allocation; output goes into caller's vec buffer
  */
-static inline result_bool_Error HASHMAP_FN(collect_keys)(
+static inline result__Bool_Error HASHMAP_FN(collect_keys)(
     const HASHMAP_TYPE_NAME*                   map,
     borrowed(_HM_RANGE_VEC(HASHMAP_KEY_TYPE)*) out
 ) {
-    if (!map) return RESULT_ERR(bool, ERR_INVALID_ARG);
-    if (!out) return RESULT_ERR(bool, ERR_INVALID_ARG);
+    if (!map) return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (!out) return result__Bool_Error_err(ERR_INVALID_ARG);
     require_msg(map->slots != NULL, "hashmap_collect_keys: map is uninitialized");
 
     usize iter = 0;
@@ -168,12 +149,12 @@ static inline result_bool_Error HASHMAP_FN(collect_keys)(
 
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
         (void)v; /* only collecting keys */
-        result_bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_KEY_TYPE, out, k);
-        if (result_bool_Error_is_err(push_res))
-            return RESULT_ERR(bool, ERR_CAPACITY_EXCEEDED);
+        result__Bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_KEY_TYPE, out, k);
+        if (result__Bool_Error_is_err(push_res))
+            return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     }
 
-    return RESULT_OK(bool, true);
+    return result__Bool_Error_ok(true);
 }
 
 /* ============================================================================
@@ -190,7 +171,7 @@ static inline result_bool_Error HASHMAP_FN(collect_keys)(
  *
  * @param map  Pointer to initialized hashmap (must not be NULL)
  * @param out  Caller-owned canon_vec for values to append into (must not be NULL)
- * @return     result_bool_Error — Ok(true) on success,
+ * @return     result__Bool_Error — Ok(true) on success,
  *             Err(ERR_CAPACITY_EXCEEDED) if vec fills before all values are pushed,
  *             Err(ERR_INVALID_ARG) if any pointer is NULL
  *
@@ -198,12 +179,12 @@ static inline result_bool_Error HASHMAP_FN(collect_keys)(
  * - Time:  O(capacity)
  * - Space: O(1)
  */
-static inline result_bool_Error HASHMAP_FN(collect_values)(
+static inline result__Bool_Error HASHMAP_FN(collect_values)(
     const HASHMAP_TYPE_NAME*                   map,
     borrowed(_HM_RANGE_VEC(HASHMAP_VAL_TYPE)*) out
 ) {
-    if (!map) return RESULT_ERR(bool, ERR_INVALID_ARG);
-    if (!out) return RESULT_ERR(bool, ERR_INVALID_ARG);
+    if (!map) return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (!out) return result__Bool_Error_err(ERR_INVALID_ARG);
     require_msg(map->slots != NULL, "hashmap_collect_values: map is uninitialized");
 
     usize iter = 0;
@@ -212,12 +193,12 @@ static inline result_bool_Error HASHMAP_FN(collect_values)(
 
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
         (void)k; /* only collecting values */
-        result_bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_VAL_TYPE, out, v);
-        if (result_bool_Error_is_err(push_res))
-            return RESULT_ERR(bool, ERR_CAPACITY_EXCEEDED);
+        result__Bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_VAL_TYPE, out, v);
+        if (result__Bool_Error_is_err(push_res))
+            return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     }
 
-    return RESULT_OK(bool, true);
+    return result__Bool_Error_ok(true);
 }
 
 /* ============================================================================
@@ -242,24 +223,6 @@ static inline result_bool_Error HASHMAP_FN(collect_values)(
  * @note break and continue work normally
  * @note Uses __LINE__ to generate unique iterator variable names,
  *       allowing nested HASHMAP_FOR_EACH loops without name collisions
- *
- * Usage:
- * ```c
- * const u64* k;
- * const int* v;
- * HASHMAP_FOR_EACH(&my_map, k, v) {
- *     printf("%llu => %d\n", (unsigned long long)*k, *v);
- * }
- * ```
- *
- * Nested:
- * ```c
- * const u64* k1; const int* v1;
- * const u64* k2; const int* v2;
- * HASHMAP_FOR_EACH(&map_a, k1, v1) {
- *     HASHMAP_FOR_EACH(&map_b, k2, v2) { ... }
- * }
- * ```
  */
 #define _HM_ITER_VAR_(line)  _hm_iter_##line
 #define _HM_ITER_VAR(line)   _HM_ITER_VAR_(line)
