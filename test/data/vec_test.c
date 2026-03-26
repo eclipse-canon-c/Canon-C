@@ -870,6 +870,9 @@ static void vec_suppress_unused_option_fns(void)
     (void)canon_vec_int_at;
     (void)canon_vec_int_push_unchecked;
 
+    /* Point arena_alloc — no Arena available in test context */
+    (void)canon_vec_Point_arena_alloc;
+
     (void)option_Point_get;
     (void)option_Point_unwrap_or;
     (void)option_Point_expect;
