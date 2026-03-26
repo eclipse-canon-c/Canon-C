@@ -299,7 +299,12 @@ canon_c_test(
 # ---------------------------------------------------------------------------
 # data/ tests                          — uncomment when ready (v1.3.0)
 # ---------------------------------------------------------------------------
-# canon_c_test(NAME vec_test            SRC test/data/vec_test.c            INCLUDES core/primitives . FUZZABLE)
+canon_c_test(
+    NAME vec_test            
+    SRC test/data/vec_test.c            
+    INCLUDES core/primitives core semantics data . 
+    FUZZABLE
+)
 
 canon_c_test(
     NAME     deque_test
