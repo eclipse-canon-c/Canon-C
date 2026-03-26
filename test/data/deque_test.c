@@ -780,10 +780,46 @@ static void test_struct_all_functions(void)
     EXPECT(canon_deque_Point_is_empty(&d2));
 }
 
+/* ── Suppress unused option API functions ────────────────────────────────────
+ *
+ * CANON_OPTION generates the full combinator API (map, filter, eq, etc.).
+ * Deque tests only use is_some, is_none, unwrap, some, none — the remaining
+ * generated functions are suppressed here to prevent -Wunused-function errors.
+ * This follows the same pattern as option_test.c's fuzz suppress block.
+ */
+static void deque_suppress_unused_option_fns(void)
+{
+    /* int option combinators not exercised by deque tests */
+    (void)option_int_get;
+    (void)option_int_unwrap_or;
+    (void)option_int_expect;
+    (void)option_int_map;
+    (void)option_int_and_then;
+    (void)option_int_or_else;
+    (void)option_int_filter;
+    (void)option_int_combine_with;
+    (void)option_int_replace;
+    (void)option_int_take;
+    (void)option_int_eq;
+    /* Point option combinators not exercised by deque tests */
+    (void)option_Point_get;
+    (void)option_Point_unwrap_or;
+    (void)option_Point_expect;
+    (void)option_Point_map;
+    (void)option_Point_and_then;
+    (void)option_Point_or_else;
+    (void)option_Point_filter;
+    (void)option_Point_combine_with;
+    (void)option_Point_replace;
+    (void)option_Point_take;
+    (void)option_Point_eq;
+}
+
 /* ── Unit test entry point ───────────────────────────────────────────────── */
 
 int main(void)
 {
+    (void)deque_suppress_unused_option_fns;
     /* constructor */
     test_init_sets_state();
     test_empty_is_null_state();
