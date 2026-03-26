@@ -605,6 +605,9 @@ int main(void)
 
 static void pq_fuzz_suppress_unused(void)
 {
+    /* Comparators unused in fuzz path (only cmp_int_asc is used) */
+    (void)cmp_int_desc;
+    (void)cmp_score;
     /* Raw untyped legacy bool wrappers */
     (void)pq_push;
     (void)pq_pop;
