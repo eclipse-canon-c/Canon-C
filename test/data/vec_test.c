@@ -996,6 +996,8 @@ int main(void)
 static void vec_fuzz_suppress_unused(void)
 {
     /* int option API */
+    (void)option_int_is_some;
+    (void)option_int_is_none;
     (void)option_int_get;
     (void)option_int_unwrap;
     (void)option_int_unwrap_or;
@@ -1014,6 +1016,7 @@ static void vec_fuzz_suppress_unused(void)
     (void)canon_vec_int_alloc;
     (void)canon_vec_int_arena_alloc;
     (void)canon_vec_int_free;
+    (void)canon_vec_int_capacity;
     (void)canon_vec_int_get_option;
     (void)canon_vec_int_get_unchecked;
     (void)canon_vec_int_at;
