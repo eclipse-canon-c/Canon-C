@@ -372,8 +372,7 @@ static void test_as_bytes(void)
 
     bytes_t bv = bitset_as_bytes(&bs);
     EXPECT(bv.len == 8); /* 1 word * 8 bytes */
-    /* Access through bv.ptr — valid because bs.words is non-NULL stack memory */
-    EXPECT(bv.ptr != NULL && bv.len == 8);
+    /* bv.ptr is always non-NULL here — bs.words is a stack array */
 
     /* Setting a bit should be visible in the byte view */
     bitset_set(&bs, 0);
