@@ -734,6 +734,8 @@ static void array_fuzz_suppress_unused(void)
     (void)slice_Point_as_cbytes;
 
     /* array_int_8 functions not used in fuzz path */
+    (void)array_int_8_fill;
+    (void)array_int_8_len;
     (void)array_int_8_from_ptr;
     (void)array_int_8_size_bytes;
     (void)array_int_8_get_unchecked;
