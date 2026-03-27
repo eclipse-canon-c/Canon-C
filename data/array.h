@@ -169,6 +169,12 @@
  * - CANON_OPTION(type) must be called before DEFINE_ARRAY to use any
  *   _option functions (get_option, first_option, last_option)
  *
+ * Note on static_require:
+ * The static assertion message incorporates both type and N
+ * (array_##type##_##N##_capacity_must_be_greater_than_zero) so that multiple
+ * DEFINE_ARRAY calls in the same translation unit each produce a unique
+ * typedef name and do not conflict with each other.
+ *
  * Generated type:
  * - array_##type##_##N  -- struct containing type items[N]
  *
@@ -215,7 +221,7 @@
  */
 #define DEFINE_ARRAY(type, N) \
 \
-static_require((N) > 0, array_capacity_N_must_be_greater_than_zero); \
+static_require((N) > 0, array_##type##_##N##_capacity_must_be_greater_than_zero); \
 \
 typedef struct { \
     type items[N]; \
@@ -550,7 +556,8 @@ static inline borrowed(cbytes_t) array_##type##_##N##_as_cbytes( \
  *
  * Example:
  * ```c
- * ARRAY_FOR_PTR(int, 4, &a, p) {
+ * array_int_8* ap = &a;   // go through a pointer so &a != NULL warning is avoided
+ * ARRAY_FOR_PTR(int, 8, ap, p) {
  *     *p *= 2;
  * }
  * ```
