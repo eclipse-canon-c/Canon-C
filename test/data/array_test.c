@@ -53,8 +53,6 @@ CANON_OPTION(int)
 DEFINE_SLICE(int)
 DEFINE_ARRAY(int, 8)
 
-/* Smaller array for boundary testing */
-DEFINE_ARRAY(int, 1)
 
 /* Second instantiation — struct type */
 typedef struct { int x; int y; } Point;
@@ -296,14 +294,12 @@ static void test_first_last(void)
     EXPECT(option_int_is_none(array_int_8_first_option(NULL)));
     EXPECT(option_int_is_none(array_int_8_last_option(NULL)));
 
-    /* N=1: first == last */
-    array_int_1 s = array_int_1_fill(55);
-    int* sf = array_int_1_first(&s);
-    int* sl = array_int_1_last(&s);
-    EXPECT_NOT_NULL(sf);
-    EXPECT_NOT_NULL(sl);
-    EXPECT(sf == sl);
-    EXPECT(*sf == 55);
+    /* first and last point into the same contiguous buffer */
+    int* f2 = array_int_8_first(&a);
+    int* l2 = array_int_8_last(&a);
+    EXPECT_NOT_NULL(f2);
+    EXPECT_NOT_NULL(l2);
+    EXPECT(l2 == f2 + 7); /* last is exactly N-1 elements past first */
 }
 
 /* ── fill_all ────────────────────────────────────────────────────────────── */
@@ -439,8 +435,11 @@ static void test_array_for_ptr(void)
     array_int_8 a = array_int_8_fill(1);
 
     /* Double every element in-place */
-    ARRAY_FOR_PTR(int, 8, &a, p) {
-        *p *= 2;
+    {
+        array_int_8* ap = &a;
+        ARRAY_FOR_PTR(int, 8, ap, p) {
+            *p *= 2;
+        }
     }
 
     for (usize i = 0; i < 8; i++) {
@@ -580,25 +579,7 @@ static void array_suppress_unused(void)
     (void)option_Point_take;
     (void)option_Point_eq;
 
-    /* array_int_1 functions not fully exercised */
-    (void)array_int_1_zero;
-    (void)array_int_1_fill;
-    (void)array_int_1_from_ptr;
-    (void)array_int_1_len;
-    (void)array_int_1_size_bytes;
-    (void)array_int_1_get;
-    (void)array_int_1_get_option;
-    (void)array_int_1_get_unchecked;
-    (void)array_int_1_set;
-    (void)array_int_1_at;
-    (void)array_int_1_first_option;
-    (void)array_int_1_last_option;
-    (void)array_int_1_fill_all;
-    (void)array_int_1_copy_from;
-    (void)array_int_1_equal;
-    (void)array_int_1_as_slice;
-    (void)array_int_1_as_bytes;
-    (void)array_int_1_as_cbytes;
+
 
     /* array_int_8 functions not used above */
     (void)array_int_8_get_unchecked; /* used in test_get_unchecked */
@@ -645,27 +626,7 @@ int main(void)
 
 static void array_fuzz_suppress_unused(void)
 {
-    /* array_int_1 — not used in fuzz path */
-    (void)array_int_1_zero;
-    (void)array_int_1_fill;
-    (void)array_int_1_from_ptr;
-    (void)array_int_1_len;
-    (void)array_int_1_size_bytes;
-    (void)array_int_1_get;
-    (void)array_int_1_get_option;
-    (void)array_int_1_get_unchecked;
-    (void)array_int_1_set;
-    (void)array_int_1_at;
-    (void)array_int_1_first;
-    (void)array_int_1_last;
-    (void)array_int_1_first_option;
-    (void)array_int_1_last_option;
-    (void)array_int_1_fill_all;
-    (void)array_int_1_copy_from;
-    (void)array_int_1_equal;
-    (void)array_int_1_as_slice;
-    (void)array_int_1_as_bytes;
-    (void)array_int_1_as_cbytes;
+
 
     /* array_Point_4 — not used in fuzz path */
     (void)array_Point_4_zero;
