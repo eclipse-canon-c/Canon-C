@@ -106,7 +106,7 @@ static void test_init_arena(void)
     Arena arena;
     arena_init(&arena, arena_buf, sizeof(arena_buf));
 
-    StringBuf sb;
+    StringBuf sb = {0};
     EXPECT(stringbuf_init_arena(&sb, &arena, 128));
     EXPECT(sb.len      == 0);
     EXPECT(sb.capacity == 128);
@@ -116,7 +116,7 @@ static void test_init_arena(void)
     EXPECT(!stringbuf_is_arena_backed(NULL));
 
     /* Arena failure: request more than available */
-    StringBuf big;
+    StringBuf big = {0};
     EXPECT(!stringbuf_init_arena(&big, &arena, 1024)); /* can't fit */
 }
 
