@@ -19,11 +19,18 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Zero overhead — every function is a direct vec passthrough
  * - LIFO semantics only — no enqueue, no front-access (use deque for that)
- * - result_bool_Error from push/pop — matches vec and queue
+ * - result__Bool_Error from push/pop — matches vec and queue
  * - Option variants for pop and peek — no out-param required
  * - Caller owns the buffer (stack memory, arena, static, heap)
  * - Fixed capacity is intentional — real-time safe, deterministic
  * - All pointer parameters annotated with borrowed() per ownership.h conventions
+ *
+ * Note on result__Bool_Error:
+ * ────────────────────────────────────────────────────────────────────────────
+ * CANON_RESULT(bool, Error) token-pastes to result__Bool_Error (not
+ * result_bool_Error) because bool expands to _Bool before ## in C99.
+ * All push/pop signatures use result__Bool_Error to match the type
+ * instantiated by vec_impl.h.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
@@ -43,7 +50,7 @@
  * - data/vec/vec.h             — all MANGLE_VEC_* macros used directly
  *
  * Intentionally excluded:
- * - semantics/result/result.h  — result_bool_Error is named in push/pop
+ * - semantics/result/result.h  — result__Bool_Error is named in push/pop
  *                                signatures but the type is already instantiated
  *                                transitively by vec_impl.h via CANON_RESULT.
  *                                stack.h never calls CANON_RESULT itself.
@@ -125,7 +132,7 @@
  * - FIFO access (use queue.h)
  * - Double-ended access (use deque.h)
  * - Random access by index (use vec directly)
- * - Auto-growing containers (use data/convenience/dynvec.h)
+ * - Auto-growing containers
  * - Multi-threaded access without external synchronization
  *
  * @sa data/vec/vec.h, data/queue.h, data/deque/deque.h
@@ -154,8 +161,8 @@
  * - canon_stack_##type##_is_full(s)                 → bool
  *
  * Push / pop (Result variants):
- * - canon_stack_##type##_push(s, item)              → result_bool_Error
- * - canon_stack_##type##_pop(s, out)                → result_bool_Error
+ * - canon_stack_##type##_push(s, item)              → result__Bool_Error
+ * - canon_stack_##type##_pop(s, out)                → result__Bool_Error
  *
  * Pop (Option variant):
  * - canon_stack_##type##_pop_option(s)              → option_##type
@@ -220,7 +227,7 @@ linkage void canon_stack_##type##_init( \
  * \
  * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
  * @param item Value to push \
- * @return result_bool_Error — Ok(true) on success \
+ * @return result__Bool_Error — Ok(true) on success \
  * \
  * @post Returns Err(ERR_INVALID_ARG)       if s == NULL or s->items == NULL \
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if stack is full \
@@ -229,7 +236,7 @@ linkage void canon_stack_##type##_init( \
  * - Time:  O(1) — no allocation \
  * - Space: O(1) \
  */ \
-linkage result_bool_Error canon_stack_##type##_push( \
+linkage result__Bool_Error canon_stack_##type##_push( \
     borrowed(canon_stack_##type*) s, type item) \
 { \
     return MANGLE_VEC_PUSH(type)(s, item); \
@@ -240,7 +247,7 @@ linkage result_bool_Error canon_stack_##type##_push( \
  * \
  * @param s   borrowed(canon_stack_##type*) — initialized stack instance \
  * @param out borrowed(type*) — pointer to store the popped value \
- * @return result_bool_Error — Ok(true) on success \
+ * @return result__Bool_Error — Ok(true) on success \
  * \
  * @post Returns Err(ERR_INVALID_ARG)   if s == NULL, out == NULL, \
  *       or s->items == NULL \
@@ -250,7 +257,7 @@ linkage result_bool_Error canon_stack_##type##_push( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage result_bool_Error canon_stack_##type##_pop( \
+linkage result__Bool_Error canon_stack_##type##_pop( \
     borrowed(canon_stack_##type*) s, borrowed(type*) out) \
 { \
     return MANGLE_VEC_POP(type)(s, out); \
@@ -324,7 +331,7 @@ linkage bool canon_stack_##type##_peek( \
 linkage option_##type canon_stack_##type##_peek_option( \
     borrowed(const canon_stack_##type*) s) \
 { \
-    type val; \
+    type val = {0}; /* zero-init so val is never uninitialized on any path */ \
     if (canon_stack_##type##_peek(s, &val)) \
         return option_##type##_some(val); \
     return option_##type##_none(); \
@@ -437,42 +444,30 @@ linkage void canon_stack_##type##_clear(borrowed(canon_stack_##type*) s) { \
  * Use in shared headers alongside DECLARE_VEC(type).
  * Match with DEFINE_STACK(linkage, type) in exactly one .c file.
  *
+ * Note: push and pop return result__Bool_Error (not result_bool_Error).
+ * CANON_RESULT(bool, Error) token-pastes to result__Bool_Error in C99 because
+ * bool expands to _Bool before ## sees it.
+ *
  * @param type Element type — DECLARE_VEC(type) must be called first
  *
  * @pre DECLARE_VEC(type) has already been called for the same type
  * @pre option_##type is available (from CANON_OPTION(type))
- *
- * Example:
- * ```c
- * // In tasks.h:
- * #include "data/vec/vec_decl.h"
- * #include "data/stack.h"
- * DECLARE_VEC(Task)
- * DECLARE_STACK(Task)
- *
- * // In tasks.c:
- * #include "data/vec/vec_defn.h"
- * #include "data/stack.h"
- * CANON_OPTION(Task)
- * DEFINE_VEC(, Task)
- * DEFINE_STACK(, Task)
- * ```
  */
 #define DECLARE_STACK(type) \
 \
 typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
 \
-extern void              canon_stack_##type##_init(borrowed(canon_stack_##type*) s, borrowed(type*) buffer, usize capacity); \
-extern result_bool_Error canon_stack_##type##_push(borrowed(canon_stack_##type*) s, type item); \
-extern result_bool_Error canon_stack_##type##_pop(borrowed(canon_stack_##type*) s, borrowed(type*) out); \
-extern option_##type     canon_stack_##type##_pop_option(borrowed(canon_stack_##type*) s); \
-extern bool              canon_stack_##type##_peek(borrowed(const canon_stack_##type*) s, borrowed(type*) out); \
-extern option_##type     canon_stack_##type##_peek_option(borrowed(const canon_stack_##type*) s); \
-extern usize             canon_stack_##type##_len(borrowed(const canon_stack_##type*) s); \
-extern usize             canon_stack_##type##_capacity(borrowed(const canon_stack_##type*) s); \
-extern usize             canon_stack_##type##_remaining(borrowed(const canon_stack_##type*) s); \
-extern bool              canon_stack_##type##_is_empty(borrowed(const canon_stack_##type*) s); \
-extern bool              canon_stack_##type##_is_full(borrowed(const canon_stack_##type*) s); \
-extern void              canon_stack_##type##_clear(borrowed(canon_stack_##type*) s);
+extern void                canon_stack_##type##_init(borrowed(canon_stack_##type*) s, borrowed(type*) buffer, usize capacity); \
+extern result__Bool_Error  canon_stack_##type##_push(borrowed(canon_stack_##type*) s, type item); \
+extern result__Bool_Error  canon_stack_##type##_pop(borrowed(canon_stack_##type*) s, borrowed(type*) out); \
+extern option_##type       canon_stack_##type##_pop_option(borrowed(canon_stack_##type*) s); \
+extern bool                canon_stack_##type##_peek(borrowed(const canon_stack_##type*) s, borrowed(type*) out); \
+extern option_##type       canon_stack_##type##_peek_option(borrowed(const canon_stack_##type*) s); \
+extern usize               canon_stack_##type##_len(borrowed(const canon_stack_##type*) s); \
+extern usize               canon_stack_##type##_capacity(borrowed(const canon_stack_##type*) s); \
+extern usize               canon_stack_##type##_remaining(borrowed(const canon_stack_##type*) s); \
+extern bool                canon_stack_##type##_is_empty(borrowed(const canon_stack_##type*) s); \
+extern bool                canon_stack_##type##_is_full(borrowed(const canon_stack_##type*) s); \
+extern void                canon_stack_##type##_clear(borrowed(canon_stack_##type*) s);
 
 #endif /* CANON_DATA_STACK_H */
