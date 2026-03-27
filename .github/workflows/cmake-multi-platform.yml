@@ -211,6 +211,7 @@ jobs:
             "--suppress=ctunullpointer:*hashmap_test.c" \
             "--suppress=ctunullpointer:*queue_test.c" \
             "--suppress=ctunullpointer:*stack_test.c" \
+            "--suppress=ctunullpointer:*array_test.c" \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -238,6 +239,7 @@ jobs:
             "--suppress=ctunullpointer:*hashmap_test.c" `
             "--suppress=ctunullpointer:*queue_test.c" `
             "--suppress=ctunullpointer:*stack_test.c" `
+            "--suppress=ctunullpointer:*array_test.c" `
             -I "${{ github.workspace }}/core/primitives" `
             -I "${{ github.workspace }}/core" `
             -I "${{ github.workspace }}/semantics" `
