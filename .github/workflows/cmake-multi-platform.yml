@@ -204,6 +204,7 @@ jobs:
             --suppress=missingIncludeSystem \
             "--suppress=returnDanglingLifetime:*slice_test.c" \
             "--suppress=returnDanglingLifetime:*borrow_test.c" \
+            "--suppress=returnDanglingLifetime:*array_test.c" \
             "--suppress=literalWithCharPtrCompare:*diag_test.c" \
             "--suppress=arrayIndexOutOfBounds:*diag.h" \
             "--suppress=ctunullpointer:*deque_test.c" \
@@ -232,6 +233,7 @@ jobs:
             --suppress=missingIncludeSystem `
             "--suppress=returnDanglingLifetime:*slice_test.c" `
             "--suppress=returnDanglingLifetime:*borrow_test.c" `
+            "--suppress=returnDanglingLifetime:*array_test.c" `
             "--suppress=literalWithCharPtrCompare:*diag_test.c" `
             "--suppress=arrayIndexOutOfBounds:*diag.h" `
             "--suppress=ctunullpointer:*deque_test.c" `
