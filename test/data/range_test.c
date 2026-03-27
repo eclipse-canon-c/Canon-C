@@ -376,12 +376,18 @@ static void test_range_for(void)
     }
     EXPECT(count == 0);
 
-    /* Nested */
+    /* Nested — use manual outer loop to avoid _r/_rp shadowing on MSVC */
     isize pairs = 0;
-    isize x, y;
-    RANGE_FOR(x, range_upto(3)) {
-        RANGE_FOR(y, range_upto(3)) {
-            pairs++;
+    {
+        range _outer = range_upto(3);
+        while (range_has_next(&_outer)) {
+            isize _x = range_next(&_outer);
+            (void)_x;
+            isize _inner_i;
+            RANGE_FOR(_inner_i, range_upto(3)) {
+                (void)_inner_i;
+                pairs++;
+            }
         }
     }
     EXPECT(pairs == 9);
