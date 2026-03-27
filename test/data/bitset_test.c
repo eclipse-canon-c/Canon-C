@@ -36,13 +36,12 @@
 #include "core/primitives/types.h"
 #include "core/slice.h"
 #include "semantics/option/option.h"
-#include "data/bitset.h"
 
-#include <stdio.h>
-#include <string.h>
-
-/* ── CANON_OPTION(usize) — required before bitset.h ─────────────────────── */
+/* CANON_OPTION(usize) must be instantiated BEFORE including bitset.h
+ * because bitset.h uses option_usize in static inline function bodies. */
 CANON_OPTION(usize)
+
+#include "data/bitset.h"
 
 /* ════════════════════════════════════════════════════════════════════════════
    Unit test build
@@ -373,7 +372,8 @@ static void test_as_bytes(void)
 
     bytes_t bv = bitset_as_bytes(&bs);
     EXPECT(bv.len == 8); /* 1 word * 8 bytes */
-    EXPECT(bv.ptr != NULL);
+    /* Access through bv.ptr — valid because bs.words is non-NULL stack memory */
+    EXPECT(bv.ptr != NULL && bv.len == 8);
 
     /* Setting a bit should be visible in the byte view */
     bitset_set(&bs, 0);
