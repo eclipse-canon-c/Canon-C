@@ -37,6 +37,14 @@
 
 #define CANON_CONTRACT_IMPL
 
+/* Force the strict C99 RANGE_FOR fallback — all loop variables in this test
+ * are isize, so the (isize) cast in the fallback macro is always correct.
+ * Without this, range.h uses typeof() which is a GNU extension unavailable
+ * on MSVC and strict-C99 clang builds. */
+#ifndef CANON_NO_GNU_EXTENSIONS
+#  define CANON_NO_GNU_EXTENSIONS
+#endif
+
 #include "core/primitives/types.h"
 #include "data/range.h"
 
