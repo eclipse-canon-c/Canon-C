@@ -348,7 +348,13 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME bitset_test         SRC test/data/bitset_test.c         INCLUDES core/primitives .)
+canon_c_test(
+    NAME     bitset_test
+    SRC      test/data/bitset_test.c
+    INCLUDES core/primitives core semantics data .
+    FUZZABLE
+)
+
 # canon_c_test(NAME stringbuf_test      SRC test/data/stringbuf_test.c      INCLUDES core/primitives . FUZZABLE)
 # canon_c_test(NAME range_test          SRC test/data/range_test.c          INCLUDES core/primitives .)
 
