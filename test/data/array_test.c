@@ -607,6 +607,7 @@ static void array_suppress_unused(void)
 
     /* array_int_8 functions not used above */
     (void)array_int_8_get_unchecked; /* used in test_get_unchecked */
+    (void)array_Point_4_get_unchecked;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
