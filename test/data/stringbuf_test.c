@@ -124,6 +124,8 @@ static void test_init_arena(void)
 static void test_append(void)
 {
     char buf[16] = {0};
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
 
     /* basic append */
     EXPECT(stringbuf_append(&sb, "Hello"));
@@ -378,6 +380,11 @@ static void test_clear(void)
 static void test_truncate(void)
 {
     char buf[32] = {0};
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+
+    stringbuf_append(&sb, "Hello, World!");
+    EXPECT(sb.len == 13);
 
     /* Truncate to 5 */
     stringbuf_truncate(&sb, 5);
