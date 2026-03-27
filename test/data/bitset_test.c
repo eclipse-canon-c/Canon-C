@@ -426,8 +426,8 @@ static void test_word_boundary(void)
         bitset_set(&bs, 64);
         EXPECT(bitset_test(&bs, 63));
         EXPECT(bitset_test(&bs, 64));
-        EXPECT(words[0] >> 63 == 1);
-        EXPECT(words[1] & 1   == 1);
+        EXPECT((words[0] >> 63) == 1);
+        EXPECT((words[1] & 1)   == 1);
         EXPECT(bitset_find_first(&bs) == 63);
         EXPECT(bitset_find_next(&bs, 63) == 64);
         EXPECT(bitset_find_last(&bs)  == 64);
