@@ -579,7 +579,31 @@ static void array_suppress_unused(void)
     (void)option_Point_take;
     (void)option_Point_eq;
 
+    /* slice_int functions not directly exercised (used transitively via as_slice) */
+    (void)slice_int_len;
+    (void)slice_int_is_empty;
+    (void)slice_int_get;
+    (void)slice_int_get_unchecked;
+    (void)slice_int_at;
+    (void)slice_int_first;
+    (void)slice_int_last;
+    (void)slice_int_take;
+    (void)slice_int_skip;
+    (void)slice_int_as_bytes;
+    (void)slice_int_as_cbytes;
 
+    /* slice_Point functions not directly exercised */
+    (void)slice_Point_len;
+    (void)slice_Point_is_empty;
+    (void)slice_Point_get;
+    (void)slice_Point_get_unchecked;
+    (void)slice_Point_at;
+    (void)slice_Point_first;
+    (void)slice_Point_last;
+    (void)slice_Point_take;
+    (void)slice_Point_skip;
+    (void)slice_Point_as_bytes;
+    (void)slice_Point_as_cbytes;
 
     /* array_int_8 functions not used above */
     (void)array_int_8_get_unchecked; /* used in test_get_unchecked */
@@ -681,6 +705,32 @@ static void array_fuzz_suppress_unused(void)
     (void)option_int_replace;
     (void)option_int_take;
     (void)option_int_eq;
+
+    /* slice_int functions not used in fuzz path */
+    (void)slice_int_len;
+    (void)slice_int_is_empty;
+    (void)slice_int_get;
+    (void)slice_int_get_unchecked;
+    (void)slice_int_at;
+    (void)slice_int_first;
+    (void)slice_int_last;
+    (void)slice_int_take;
+    (void)slice_int_skip;
+    (void)slice_int_as_bytes;
+    (void)slice_int_as_cbytes;
+
+    /* slice_Point functions not used in fuzz path */
+    (void)slice_Point_len;
+    (void)slice_Point_is_empty;
+    (void)slice_Point_get;
+    (void)slice_Point_get_unchecked;
+    (void)slice_Point_at;
+    (void)slice_Point_first;
+    (void)slice_Point_last;
+    (void)slice_Point_take;
+    (void)slice_Point_skip;
+    (void)slice_Point_as_bytes;
+    (void)slice_Point_as_cbytes;
 
     /* array_int_8 functions not used in fuzz path */
     (void)array_int_8_from_ptr;
