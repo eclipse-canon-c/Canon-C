@@ -32,6 +32,8 @@ CANON_OPTION(isize)
  * - No platform-specific code
  * - RANGE_FOR uses typeof() on GNU C / C23; define CANON_NO_GNU_EXTENSIONS
  *   for a strict C99 fallback (var must be isize-compatible in that case)
+ * - Nesting RANGE_FOR on MSVC requires explicit block scoping to avoid
+ *   C4456 (variable shadowing of _r/_rp); use manual outer loops instead.
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -265,7 +267,12 @@ static inline bool range_is_valid(const range* r) {
  * Returns CANON_USIZE_MAX if the count cannot be represented in usize.
  *
  * @param r Range to measure (NULL-safe)
- * @return Exact element count, CANON_USIZE_MAX if too large, 0 if NULL or empty
+ * @return Exact element count, or 0 if NULL or empty
+ *
+ * Note on overflow guard:
+ * diff is a non-negative isize, abs_step >= 1, so the result
+ * (diff-1)/abs_step + 1 is at most ISIZE_MAX, which always fits in
+ * usize without overflow. The result is exact.
  *
  * Examples:
  * - range_len(&range_make(0, 10, 1))  → 10
@@ -285,8 +292,8 @@ static inline usize range_len(const range* r) {
                                  : (r->current - r->end);
 
     if (diff <= 0) return 0;
-    if (diff > (isize)CANON_USIZE_MAX) return CANON_USIZE_MAX;
 
+    /* diff is a positive isize; abs_step >= 1; result fits in usize. */
     isize adjusted_diff;
     if (!checked_sub_isize(diff, 1, &adjusted_diff)) {
         return CANON_USIZE_MAX;
@@ -485,48 +492,22 @@ static inline void range_skip(range* r, usize n) {
  * @note break and continue work normally inside the loop body
  * @note r_expr is evaluated exactly once at loop start
  *
- * @warning Do not modify the internal range variable (_r) inside the loop
+ * @warning Nesting RANGE_FOR on MSVC triggers C4456 (shadowing of _r/_rp).
+ *          For portable nested iteration, use a manual outer loop:
+ *          ```c
+ *          range outer = range_upto(3);
+ *          while (range_has_next(&outer)) {
+ *              isize x = range_next(&outer);
+ *              isize y;
+ *              RANGE_FOR(y, range_upto(3)) { ... }
+ *          }
+ *          ```
  *
  * Basic usage:
  * ```c
  * int i;
  * RANGE_FOR(i, range_make(0, 10, 1)) {
  *     printf("%d ", i);  // 0 1 2 3 4 5 6 7 8 9
- * }
- * ```
- *
- * Descending:
- * ```c
- * int i;
- * RANGE_FOR(i, range_make(10, 0, -1)) {
- *     printf("%d ", i);  // 10 9 8 7 6 5 4 3 2 1
- * }
- * ```
- *
- * Stepped:
- * ```c
- * int i;
- * RANGE_FOR(i, range_make(0, 20, 3)) {
- *     printf("%d ", i);  // 0 3 6 9 12 15 18
- * }
- * ```
- *
- * Nested (each loop has its own _r / _rp via shadowing):
- * ```c
- * int i, j;
- * RANGE_FOR(i, range_upto(3)) {
- *     RANGE_FOR(j, range_upto(3)) {
- *         printf("(%d,%d) ", i, j);
- *     }
- * }
- * ```
- *
- * With break:
- * ```c
- * int i;
- * RANGE_FOR(i, range_upto(100)) {
- *     if (i == 10) break;
- *     printf("%d ", i);
  * }
  * ```
  */
