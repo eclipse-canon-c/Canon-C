@@ -320,7 +320,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME array_test          SRC test/data/array_test.c          INCLUDES core/primitives .)
+canon_c_test(
+    NAME     array_test
+    SRC      test/data/array_test.c
+    INCLUDES core/primitives core semantics data .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME     stack_test
