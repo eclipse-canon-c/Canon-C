@@ -407,6 +407,7 @@ static void test_convenience_iteration(void)
 {
     isize collected[16];
     usize nc;
+    memset(collected, 0, sizeof(collected));
 
     /* range_upto(5): 0,1,2,3,4 */
     nc = 0;
