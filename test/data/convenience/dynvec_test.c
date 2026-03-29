@@ -578,9 +578,9 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
         switch (op) {
             case 0: { /* push */
-                bool ok = dynvec_int_push(&v, aux);
-                if (ok && ref_count < FUZZ_REF_MAX) {
-                    ref[ref_count++] = aux;
+                if (ref_count < FUZZ_REF_MAX) {
+                    bool ok = dynvec_int_push(&v, aux);
+                    if (ok) ref[ref_count++] = aux;
                 }
                 break;
             }
