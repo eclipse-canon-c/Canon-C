@@ -56,13 +56,25 @@
 
 /* ── Type instantiations ─────────────────────────────────────────────────── */
 
-/* smallvec.h includes vec.h for MANGLE_VEC_TYPE / MANGLE_VEC_INIT.
- * DEFINE_VEC takes two arguments (linkage, type) whose exact form is
- * internal to vec_defn.h — we therefore skip it here and suppress as_vec. */
+/* DEFINE_SMALLVEC unconditionally emits as_vec, which references
+ * canon_vec_##type and canon_vec_##type##_init. DEFINE_VEC(linkage, type)
+ * would provide these but requires CANON_OPTION and CANON_RESULT first.
+ * Instead, provide minimal shim typedefs — just the struct layout and the
+ * init constructor that as_vec actually calls. The vec struct has exactly
+ * three fields (data, len, cap) matching the standard canon_vec layout. */
+
+typedef struct { int*   data; usize len; usize cap; } canon_vec_int;
+static inline canon_vec_int canon_vec_int_init(int* d, usize n)
+    { canon_vec_int v; v.data = d; v.len = 0; v.cap = n; return v; }
 
 DEFINE_SMALLVEC(int,   4)
 
 typedef struct { int x; int y; } Point;
+
+typedef struct { Point* data; usize len; usize cap; } canon_vec_Point;
+static inline canon_vec_Point canon_vec_Point_init(Point* d, usize n)
+    { canon_vec_Point v; v.data = d; v.len = 0; v.cap = n; return v; }
+
 DEFINE_SMALLVEC(Point, 2)
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -425,6 +437,22 @@ static void test_inline_invariant(void)
     smallvec_int_free(&v);
 }
 
+/* ── as_vec interop ──────────────────────────────────────────────────────── */
+static void test_as_vec(void)
+{
+    smallvec_int v = smallvec_int_init();
+    smallvec_int_push(&v, 10);
+    smallvec_int_push(&v, 20);
+    smallvec_int_push(&v, 30);
+
+    canon_vec_int vv = smallvec_int_as_vec(&v);
+    /* Borrowed view — same data pointer, same capacity */
+    EXPECT(vv.data == v.data);
+    EXPECT(vv.cap  == v.cap);
+    /* len is 0 in the view (vec starts logically empty) */
+    EXPECT(vv.len  == 0);
+}
+
 /* ── Point struct instantiation ──────────────────────────────────────────── */
 static void test_point(void)
 {
@@ -458,10 +486,6 @@ static void smallvec_suppress_unused(void)
 {
     (void)smallvec_int_spill;
     (void)smallvec_Point_spill;
-
-    /* as_vec requires DEFINE_VEC which needs CANON_OPTION — suppress both */
-    (void)smallvec_int_as_vec;
-    (void)smallvec_Point_as_vec;
 
     /* Point functions not exercised in test_point */
     (void)smallvec_Point_len;
@@ -497,6 +521,7 @@ int main(void)
     test_extend();
     test_clear();
     test_free();
+    test_as_vec();
     test_inline_invariant();
     test_point();
 
