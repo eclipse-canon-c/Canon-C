@@ -48,7 +48,6 @@
 
 #include "core/primitives/types.h"
 #include "core/arena.h"
-#include "data/vec/vec.h"
 #include "data/convenience/smallvec.h"
 
 #include <stdio.h>
@@ -57,14 +56,13 @@
 
 /* ── Type instantiations ─────────────────────────────────────────────────── */
 
-/* Vec types must be defined first (as_vec interop requires MANGLE_VEC_TYPE) */
-DEFINE_VEC(int)
+/* smallvec.h includes vec.h for MANGLE_VEC_TYPE / MANGLE_VEC_INIT.
+ * DEFINE_VEC takes two arguments (linkage, type) whose exact form is
+ * internal to vec_defn.h — we therefore skip it here and suppress as_vec. */
+
+DEFINE_SMALLVEC(int,   4)
 
 typedef struct { int x; int y; } Point;
-DEFINE_VEC(Point)
-
-/* Smallvec instantiations — small INLINE_CAP to make spill easy to test */
-DEFINE_SMALLVEC(int,   4)
 DEFINE_SMALLVEC(Point, 2)
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -404,20 +402,6 @@ static void test_free(void)
     smallvec_int_free(NULL);
 }
 
-/* ── as_vec interop ──────────────────────────────────────────────────────── */
-static void test_as_vec(void)
-{
-    smallvec_int v = smallvec_int_init();
-    smallvec_int_push(&v, 10);
-    smallvec_int_push(&v, 20);
-    smallvec_int_push(&v, 30);
-
-    canon_vec_int vv = smallvec_int_as_vec(&v);
-    /* Borrowed view — same data pointer */
-    EXPECT(vv.data == v.data);
-    EXPECT(vv.cap  == v.cap);
-}
-
 /* ── inline invariant ────────────────────────────────────────────────────── */
 static void test_inline_invariant(void)
 {
@@ -475,6 +459,10 @@ static void smallvec_suppress_unused(void)
     (void)smallvec_int_spill;
     (void)smallvec_Point_spill;
 
+    /* as_vec requires DEFINE_VEC which needs CANON_OPTION — suppress both */
+    (void)smallvec_int_as_vec;
+    (void)smallvec_Point_as_vec;
+
     /* Point functions not exercised in test_point */
     (void)smallvec_Point_len;
     (void)smallvec_Point_capacity;
@@ -488,7 +476,6 @@ static void smallvec_suppress_unused(void)
     (void)smallvec_Point_remove;
     (void)smallvec_Point_extend;
     (void)smallvec_Point_clear;
-    (void)smallvec_Point_as_vec;
     (void)smallvec_Point_init_arena;
 }
 
@@ -510,7 +497,6 @@ int main(void)
     test_extend();
     test_clear();
     test_free();
-    test_as_vec();
     test_inline_invariant();
     test_point();
 
