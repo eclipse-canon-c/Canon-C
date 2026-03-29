@@ -380,7 +380,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME smallvec_test  SRC test/data/convenience/smallvec_test.c  INCLUDES core/primitives .)
+canon_c_test(
+    NAME     smallvec_test
+    SRC      test/data/convenience/smallvec_test.c
+    INCLUDES core/primitives core semantics data .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME dynstring_test 
