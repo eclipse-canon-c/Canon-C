@@ -1,3 +1,17 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Fikret Güney Ersezer
+//
+// This file is licensed under MIT (not the project-default MPL-2.0).
+//
+// Reason: types.h defines only thin aliases over standard C99 types
+// (uint8_t → u8, size_t → usize, etc.). It is the foundational include
+// for every other Canon-C header. On exotic or constrained platforms,
+// teams may need to rename, reorder, or replace these aliases entirely
+// to match existing project conventions or toolchain limitations.
+// Requiring those modifications to be disclosed under MPL-2.0 would
+// create unnecessary legal friction for embedded and safety-critical
+// users. MIT removes that friction with zero cost to the project.
+
 /**
  * @file types.h
  * @brief Portable integer and size type aliases for Canon-C
