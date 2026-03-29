@@ -3,17 +3,9 @@
  * @brief Tests for data/convenience/smallvec.h — inline-first vector
  *
  * Two instantiations:
- *   DEFINE_VEC(int) + DEFINE_SMALLVEC(int, 4)
+ *   DEFINE_SMALLVEC(int, 4)
  *       — primary, all functions exercised; INLINE_CAP=4 makes spill easy to trigger
- *   DEFINE_VEC(Point) + #ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuninitialized"
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-DEFINE_SMALLVEC(Point, 2)
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
+ *   DEFINE_SMALLVEC(Point, 2)
  *       — struct coverage; INLINE_CAP=2 forces spill after two elements
  *
  * Covers:
@@ -78,7 +70,9 @@ static inline canon_vec_int canon_vec_int_init(int* d, usize n)
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
+#if !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 #endif
 DEFINE_SMALLVEC(int,   4)
 #ifdef __GNUC__
@@ -94,7 +88,9 @@ static inline canon_vec_Point canon_vec_Point_init(Point* d, usize n)
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
+#if !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 #endif
 DEFINE_SMALLVEC(Point, 2)
 #ifdef __GNUC__
