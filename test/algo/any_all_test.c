@@ -448,6 +448,11 @@ static void any_all_fuzz_suppress_unused(void)
     (void)algo_all_slice_int;
     (void)algo_any_slice_Point;
     (void)algo_all_slice_Point;
+    /* _from and _empty unused in fuzz path (fuzz uses raw arrays directly) */
+    (void)slice_int_from;
+    (void)slice_int_empty;
+    (void)slice_Point_from;
+    (void)slice_Point_empty;
 }
 
 /*
