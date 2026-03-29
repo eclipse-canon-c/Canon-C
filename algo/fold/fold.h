@@ -145,14 +145,8 @@
 
 #define ALGO_FOLD_LINKAGE static inline
 #include "fold_impl.h"   /* implementation support — NOT fold_defn.h */
+/* fold_impl.h already instantiates CANON_RESULT(bool, Error) */
 #undef ALGO_FOLD_LINKAGE
-
-/*
- * result_bool_Error is the standard result type for fallible folds.
- * CANON_RESULT generates static inline functions — safe to instantiate
- * multiple times across translation units without ODR violations.
- */
-CANON_RESULT(bool, Error)
 
 /* ════════════════════════════════════════════════════════════════════════════
    ALGO_FOLD — infallible fold over a C array
