@@ -407,7 +407,13 @@ canon_c_test(
 )
 
 # canon_c_test(NAME fold_test    SRC test/algo/fold_test.c    INCLUDES core/primitives .)
-# canon_c_test(NAME find_test    SRC test/algo/find_test.c    INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME     find_test
+    SRC      test/algo/find_test.c
+    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME     any_all_test
