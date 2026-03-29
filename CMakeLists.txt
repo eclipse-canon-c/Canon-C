@@ -372,7 +372,14 @@ canon_c_test(
 # ---------------------------------------------------------------------------
 # data/convenience/ tests              — uncomment when ready (v1.3.0)
 # ---------------------------------------------------------------------------
-# canon_c_test(NAME dynvec_test    SRC test/data/convenience/dynvec_test.c    INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME     dynvec_test
+    SRC      test/data/convenience/dynvec_test.c
+    INCLUDES core/primitives core semantics data .
+    FUZZABLE
+)
+
 # canon_c_test(NAME smallvec_test  SRC test/data/convenience/smallvec_test.c  INCLUDES core/primitives .)
 
 canon_c_test(
