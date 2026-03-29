@@ -1,0 +1,489 @@
+/**
+ * @file any_all_test.c
+ * @brief Tests for algo/any_all — existential and universal quantification
+ *
+ * Three API levels tested:
+ *   Level 1 — Generic (algo_any / algo_all): void* interface, any element type
+ *   Level 2 — Typed macros (ALGO_ANY_TYPED / ALGO_ALL_TYPED): compile-time sizeof
+ *   Level 3 — Typed slice (algo_any_slice_int / algo_all_slice_int): DEFINE_ALGO_ANY_ALL
+ *
+ * Two instantiations:
+ *   int   — primary; all three levels exercised
+ *   Point — struct coverage; slice level only
+ *
+ * Covers:
+ *   - algo_any()           — false for empty; true on first match; short-circuits
+ *   - algo_all()           — true for empty (vacuous truth); false on first failure
+ *   - ALGO_ANY_TYPED()     — same semantics, automatic sizeof
+ *   - ALGO_ALL_TYPED()     — same semantics, automatic sizeof
+ *   - algo_any_slice_int() — typed slice; false for empty
+ *   - algo_all_slice_int() — typed slice; true for empty
+ *   - algo_any_slice_Point()
+ *   - algo_all_slice_Point()
+ *   - Empty sequence       — any→false, all→true; vacuous truth
+ *   - Single element       — matching and non-matching
+ *   - All match            — any→true, all→true
+ *   - None match           — any→false, all→false
+ *   - Mixed                — any→true, all→false
+ *   - Short-circuit        — predicate not called after early exit
+ *   - Dual invariant       — all(empty)==true && any(empty)==false always
+ *
+ * Fuzz entry point (CANON_FUZZING):
+ *   - Both algo_any and algo_all called on same byte array
+ *   - Verifies dual invariant: for any single-element array,
+ *     any(pred) == !all(!pred) when pred is deterministic
+ *   - Verifies: all(A) → any(A) (when len > 0 and result of all is true)
+ */
+
+#define CANON_CONTRACT_IMPL
+
+#include "core/primitives/types.h"
+#include "core/primitives/compare.h"
+#include "core/slice.h"
+#include "algo/any_all/any_all.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/* ── Typed slice instantiations ──────────────────────────────────────────── */
+
+DEFINE_SLICE(int)
+DEFINE_ALGO_ANY_ALL(int)
+
+typedef struct { int x; int y; } Point;
+DEFINE_SLICE(Point)
+DEFINE_ALGO_ANY_ALL(Point)
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Unit test build
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifndef CANON_FUZZING
+
+static int g_failed = 0;
+
+#define EXPECT(cond)                                                  \
+    do {                                                              \
+        if (!(cond)) {                                                \
+            fprintf(stderr, "FAIL %s:%d  %s\n",                      \
+                    __FILE__, __LINE__, #cond);                       \
+            g_failed++;                                               \
+        }                                                             \
+    } while (0)
+
+/* ── Predicate helpers ───────────────────────────────────────────────────── */
+
+static bool pred_negative(const void* elem, void* ctx)
+{
+    (void)ctx;
+    return *(const int*)elem < 0;
+}
+
+static bool pred_positive(const void* elem, void* ctx)
+{
+    (void)ctx;
+    return *(const int*)elem > 0;
+}
+
+static bool pred_gt_threshold(const void* elem, void* ctx)
+{
+    int threshold = *(const int*)ctx;
+    return *(const int*)elem > threshold;
+}
+
+static bool pred_always_true(const void* elem, void* ctx)
+{
+    (void)elem; (void)ctx;
+    return true;
+}
+
+static bool pred_always_false(const void* elem, void* ctx)
+{
+    (void)elem; (void)ctx;
+    return false;
+}
+
+/* Short-circuit counter */
+static int g_call_count = 0;
+static bool pred_counting(const void* elem, void* ctx)
+{
+    (void)ctx;
+    g_call_count++;
+    return *(const int*)elem < 0;
+}
+
+/* Point predicate: x > y */
+static bool pred_point_x_gt_y(const void* elem, void* ctx)
+{
+    (void)ctx;
+    const Point* p = (const Point*)elem;
+    return p->x > p->y;
+}
+
+/* ── test_empty_sequence ─────────────────────────────────────────────────── */
+static void test_empty_sequence(void)
+{
+    int arr[1] = {42}; /* non-NULL base, but len=0 */
+
+    /* Generic: empty → any=false, all=true (vacuous truth) */
+    EXPECT(!algo_any(arr, 0, sizeof(int), pred_negative, NULL));
+    EXPECT( algo_all(arr, 0, sizeof(int), pred_negative, NULL));
+    EXPECT(!algo_any(arr, 0, sizeof(int), pred_always_true, NULL));
+    EXPECT( algo_all(arr, 0, sizeof(int), pred_always_false, NULL));
+
+    /* Typed macros */
+    EXPECT(!ALGO_ANY_TYPED(arr, 0, int, pred_negative, NULL));
+    EXPECT( ALGO_ALL_TYPED(arr, 0, int, pred_negative, NULL));
+
+    /* Typed slices with empty slice */
+    slice_int empty = slice_int_empty();
+    EXPECT(!algo_any_slice_int(empty, pred_negative, NULL));
+    EXPECT( algo_all_slice_int(empty, pred_negative, NULL));
+
+    /* Dual invariant holds for empty */
+    EXPECT(!algo_any(arr, 0, sizeof(int), pred_negative, NULL));
+    EXPECT( algo_all(arr, 0, sizeof(int), pred_negative, NULL));
+}
+
+/* ── test_single_element ─────────────────────────────────────────────────── */
+static void test_single_element(void)
+{
+    int pos[] = {5};
+    int neg[] = {-3};
+
+    /* any: positive element, looking for negative → false */
+    EXPECT(!algo_any(pos, 1, sizeof(int), pred_negative, NULL));
+    /* any: negative element, looking for negative → true */
+    EXPECT( algo_any(neg, 1, sizeof(int), pred_negative, NULL));
+
+    /* all: positive element, looking for negative → false */
+    EXPECT(!algo_all(pos, 1, sizeof(int), pred_negative, NULL));
+    /* all: negative element, looking for negative → true */
+    EXPECT( algo_all(neg, 1, sizeof(int), pred_negative, NULL));
+
+    /* Typed macros */
+    EXPECT(!ALGO_ANY_TYPED(pos, 1, int, pred_negative, NULL));
+    EXPECT( ALGO_ANY_TYPED(neg, 1, int, pred_negative, NULL));
+    EXPECT(!ALGO_ALL_TYPED(pos, 1, int, pred_negative, NULL));
+    EXPECT( ALGO_ALL_TYPED(neg, 1, int, pred_negative, NULL));
+}
+
+/* ── test_all_match ──────────────────────────────────────────────────────── */
+static void test_all_match(void)
+{
+    int arr[] = {-1, -2, -3, -4, -5};
+    usize n = 5;
+
+    EXPECT( algo_any(arr, n, sizeof(int), pred_negative, NULL)); /* any → true */
+    EXPECT( algo_all(arr, n, sizeof(int), pred_negative, NULL)); /* all → true */
+
+    EXPECT( ALGO_ANY_TYPED(arr, n, int, pred_negative, NULL));
+    EXPECT( ALGO_ALL_TYPED(arr, n, int, pred_negative, NULL));
+
+    slice_int sv = slice_int_from(arr, n);
+    EXPECT( algo_any_slice_int(sv, pred_negative, NULL));
+    EXPECT( algo_all_slice_int(sv, pred_negative, NULL));
+}
+
+/* ── test_none_match ─────────────────────────────────────────────────────── */
+static void test_none_match(void)
+{
+    int arr[] = {1, 2, 3, 4, 5};
+    usize n = 5;
+
+    EXPECT(!algo_any(arr, n, sizeof(int), pred_negative, NULL)); /* any → false */
+    EXPECT(!algo_all(arr, n, sizeof(int), pred_negative, NULL)); /* all → false */
+
+    EXPECT(!ALGO_ANY_TYPED(arr, n, int, pred_negative, NULL));
+    EXPECT(!ALGO_ALL_TYPED(arr, n, int, pred_negative, NULL));
+
+    slice_int sv = slice_int_from(arr, n);
+    EXPECT(!algo_any_slice_int(sv, pred_negative, NULL));
+    EXPECT(!algo_all_slice_int(sv, pred_negative, NULL));
+}
+
+/* ── test_mixed ──────────────────────────────────────────────────────────── */
+static void test_mixed(void)
+{
+    int arr[] = {1, -2, 3, -4, 5};
+    usize n = 5;
+
+    /* any → true (has some negatives) */
+    EXPECT( algo_any(arr, n, sizeof(int), pred_negative, NULL));
+    /* all → false (not all negative) */
+    EXPECT(!algo_all(arr, n, sizeof(int), pred_negative, NULL));
+
+    /* any → true (has some positives) */
+    EXPECT( algo_any(arr, n, sizeof(int), pred_positive, NULL));
+    /* all → false (not all positive) */
+    EXPECT(!algo_all(arr, n, sizeof(int), pred_positive, NULL));
+
+    slice_int sv = slice_int_from(arr, n);
+    EXPECT( algo_any_slice_int(sv, pred_negative, NULL));
+    EXPECT(!algo_all_slice_int(sv, pred_negative, NULL));
+}
+
+/* ── test_short_circuit ──────────────────────────────────────────────────── */
+static void test_short_circuit(void)
+{
+    /* algo_any: should stop after first match at index 0 */
+    int arr_neg_first[] = {-1, 2, 3, 4, 5};
+    g_call_count = 0;
+    EXPECT(algo_any(arr_neg_first, 5, sizeof(int), pred_counting, NULL));
+    EXPECT(g_call_count == 1); /* stopped after first element */
+
+    /* algo_any: no match — must call pred for all 5 elements */
+    int arr_pos[] = {1, 2, 3, 4, 5};
+    g_call_count = 0;
+    EXPECT(!algo_any(arr_pos, 5, sizeof(int), pred_counting, NULL));
+    EXPECT(g_call_count == 5); /* checked all */
+
+    /* algo_all: should stop after first failure at index 0 */
+    int arr_neg[] = {-1, 2, 3, 4, 5};
+    /* pred_counting returns true for negatives.
+     * arr_neg[0]=-1 → true (continue), arr_neg[1]=2 → false (stop).
+     * So algo_all should make exactly 2 predicate calls. */
+    g_call_count = 0;
+    EXPECT(!algo_all(arr_neg, 5, sizeof(int), pred_counting, NULL));
+    EXPECT(g_call_count == 2); /* checked index 0 (-1, pass) then index 1 (2, fail) */
+
+    /* algo_all: all pass — must call pred for all elements */
+    int arr_all_neg[] = {-1, -2, -3};
+    g_call_count = 0;
+    EXPECT(algo_all(arr_all_neg, 3, sizeof(int), pred_counting, NULL));
+    EXPECT(g_call_count == 3);
+}
+
+/* ── test_context_parameter ──────────────────────────────────────────────── */
+static void test_context_parameter(void)
+{
+    int arr[] = {1, 5, 3, 8, 2};
+    int threshold = 6;
+
+    /* any element > 6? yes (8) */
+    EXPECT( algo_any(arr, 5, sizeof(int), pred_gt_threshold, &threshold));
+
+    threshold = 10;
+    /* any element > 10? no */
+    EXPECT(!algo_any(arr, 5, sizeof(int), pred_gt_threshold, &threshold));
+
+    threshold = 0;
+    /* all elements > 0? yes */
+    EXPECT( algo_all(arr, 5, sizeof(int), pred_gt_threshold, &threshold));
+
+    threshold = 2;
+    /* all elements > 2? no (1 and 2 fail) */
+    EXPECT(!algo_all(arr, 5, sizeof(int), pred_gt_threshold, &threshold));
+}
+
+/* ── test_dual_invariant ─────────────────────────────────────────────────── */
+static void test_dual_invariant(void)
+{
+    /* The mathematical duality:
+     *   any(empty) == false
+     *   all(empty) == true
+     *
+     * And for non-empty: if all(A) then any(A) */
+    int all_neg[] = {-1, -2, -3};
+    int mixed[]   = {-1,  2, -3};
+    int all_pos[] = { 1,  2,  3};
+
+    /* If all() returns true, then any() must also return true */
+    EXPECT(algo_all(all_neg, 3, sizeof(int), pred_negative, NULL));
+    EXPECT(algo_any(all_neg, 3, sizeof(int), pred_negative, NULL));
+
+    /* If any() returns false, then all() must also return false */
+    EXPECT(!algo_any(all_pos, 3, sizeof(int), pred_negative, NULL));
+    EXPECT(!algo_all(all_pos, 3, sizeof(int), pred_negative, NULL));
+
+    /* Mixed: any=true, all=false — independently correct */
+    EXPECT( algo_any(mixed, 3, sizeof(int), pred_negative, NULL));
+    EXPECT(!algo_all(mixed, 3, sizeof(int), pred_negative, NULL));
+}
+
+/* ── test_typed_macros ───────────────────────────────────────────────────── */
+static void test_typed_macros(void)
+{
+    /* Verify the typed macros pass correct sizeof — test with a non-int type
+     * by using a struct and verifying behavior */
+    int arr[] = {10, 20, 30, 40};
+    int thresh = 25;
+
+    /* ALGO_ANY_TYPED deduces sizeof(int) correctly */
+    EXPECT( ALGO_ANY_TYPED(arr, 4, int, pred_gt_threshold, &thresh));
+    thresh = 100;
+    EXPECT(!ALGO_ANY_TYPED(arr, 4, int, pred_gt_threshold, &thresh));
+
+    thresh = 5;
+    EXPECT( ALGO_ALL_TYPED(arr, 4, int, pred_gt_threshold, &thresh));
+    thresh = 15;
+    EXPECT(!ALGO_ALL_TYPED(arr, 4, int, pred_gt_threshold, &thresh));
+
+    /* Typed macros on empty */
+    EXPECT(!ALGO_ANY_TYPED(arr, 0, int, pred_always_true,  NULL));
+    EXPECT( ALGO_ALL_TYPED(arr, 0, int, pred_always_false, NULL));
+}
+
+/* ── test_point_struct ───────────────────────────────────────────────────── */
+static void test_point_struct(void)
+{
+    Point arr[] = {{1, 2}, {5, 3}, {2, 7}, {4, 4}};
+    usize n = 4;
+
+    /* any x > y? — {5,3} and {4,4}? No: 4==4. Only {5,3}. → true */
+    EXPECT( algo_any(arr, n, sizeof(Point), pred_point_x_gt_y, NULL));
+
+    /* all x > y? — {1,2} fails. → false */
+    EXPECT(!algo_all(arr, n, sizeof(Point), pred_point_x_gt_y, NULL));
+
+    slice_Point sv = slice_Point_from(arr, n);
+    EXPECT( algo_any_slice_Point(sv, pred_point_x_gt_y, NULL));
+    EXPECT(!algo_all_slice_Point(sv, pred_point_x_gt_y, NULL));
+
+    /* Array where all x > y */
+    Point all_x_gt[] = {{5, 1}, {3, 2}, {10, 0}};
+    slice_Point sv2 = slice_Point_from(all_x_gt, 3);
+    EXPECT( algo_any_slice_Point(sv2, pred_point_x_gt_y, NULL));
+    EXPECT( algo_all_slice_Point(sv2, pred_point_x_gt_y, NULL));
+
+    /* Empty Point slice */
+    slice_Point empty = slice_Point_empty();
+    EXPECT(!algo_any_slice_Point(empty, pred_point_x_gt_y, NULL));
+    EXPECT( algo_all_slice_Point(empty, pred_point_x_gt_y, NULL));
+}
+
+/* ── test_always_predicates ──────────────────────────────────────────────── */
+static void test_always_predicates(void)
+{
+    int arr[] = {1, 2, 3, 4, 5};
+
+    /* pred_always_true: any→true, all→true for non-empty */
+    EXPECT( algo_any(arr, 5, sizeof(int), pred_always_true, NULL));
+    EXPECT( algo_all(arr, 5, sizeof(int), pred_always_true, NULL));
+
+    /* pred_always_false: any→false, all→false for non-empty */
+    EXPECT(!algo_any(arr, 5, sizeof(int), pred_always_false, NULL));
+    EXPECT(!algo_all(arr, 5, sizeof(int), pred_always_false, NULL));
+
+    /* Empty with always-false: any→false, all→true (vacuous) */
+    EXPECT(!algo_any(arr, 0, sizeof(int), pred_always_false, NULL));
+    EXPECT( algo_all(arr, 0, sizeof(int), pred_always_false, NULL));
+}
+
+/* ── Suppress unused ─────────────────────────────────────────────────────── */
+static void any_all_suppress_unused(void)
+{
+    (void)algo_any_slice_Point;
+    (void)algo_all_slice_Point;
+}
+
+/* ── Unit test entry point ───────────────────────────────────────────────── */
+int main(void)
+{
+    (void)any_all_suppress_unused;
+
+    test_empty_sequence();
+    test_single_element();
+    test_all_match();
+    test_none_match();
+    test_mixed();
+    test_short_circuit();
+    test_context_parameter();
+    test_dual_invariant();
+    test_typed_macros();
+    test_point_struct();
+    test_always_predicates();
+
+    if (g_failed == 0) {
+        printf("OK  any_all_test  (all assertions passed)\n");
+        return 0;
+    }
+    fprintf(stderr,
+            "FAILED  any_all_test  (%d assertion(s) failed)\n", g_failed);
+    return 1;
+}
+
+#else /* CANON_FUZZING */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Fuzz entry point
+   ════════════════════════════════════════════════════════════════════════════ */
+
+static void any_all_fuzz_suppress_unused(void)
+{
+    (void)algo_any_slice_int;
+    (void)algo_all_slice_int;
+    (void)algo_any_slice_Point;
+    (void)algo_all_slice_Point;
+}
+
+/*
+ * Fuzz both algo_any and algo_all on the same byte buffer.
+ *
+ * Input layout:
+ *   byte 0:     op — which invariant to check (0-3)
+ *   bytes 1..N: array data (interpreted as int[] or u8[])
+ *
+ * Predicates used:
+ *   P(x) = (x > 127)     — high-byte predicate
+ *   !P(x) = (x <= 127)   — complement predicate
+ *
+ * Invariants checked:
+ *   0 — any(A, P) || all(A, !P) — at least one of these is true when all
+ *       elements are covered: if any satisfies P, done; otherwise all satisfy !P
+ *       i.e. !(any(P)) ↔ all(!P)
+ *   1 — dual: any(A, P) == !all(A, !P)
+ *   2 — empty: any([], P)==false && all([], P)==true always
+ *   3 — monotone: all(A, P) → any(A, P)  when len > 0
+ */
+
+static bool pred_high_byte(const void* elem, void* ctx)
+{
+    (void)ctx;
+    return *(const u8*)elem > 127;
+}
+
+static bool pred_low_byte(const void* elem, void* ctx)
+{
+    (void)ctx;
+    return *(const u8*)elem <= 127;
+}
+
+int LLVMFuzzerTestOneInput(const u8* data, usize size)
+{
+    (void)any_all_fuzz_suppress_unused;
+
+    /* Invariant 2 always: empty results are fixed */
+    {
+        u8 dummy[1] = {0};
+        if (algo_any(dummy, 0, 1, pred_high_byte, NULL))  __builtin_trap();
+        if (!algo_all(dummy, 0, 1, pred_high_byte, NULL)) __builtin_trap();
+    }
+
+    if (size == 0) return 0;
+
+    /* Use the raw input as a u8 array */
+    const u8* arr = data;
+    usize     len = size;
+
+    bool any_high = algo_any(arr, len, sizeof(u8), pred_high_byte, NULL);
+    bool all_high = algo_all(arr, len, sizeof(u8), pred_high_byte, NULL);
+    bool any_low  = algo_any(arr, len, sizeof(u8), pred_low_byte,  NULL);
+    bool all_low  = algo_all(arr, len, sizeof(u8), pred_low_byte,  NULL);
+
+    /* Dual: any(P) == !all(!P) */
+    if (any_high != !all_low)  __builtin_trap();
+    if (any_low  != !all_high) __builtin_trap();
+
+    /* Monotone: all(P) → any(P) for non-empty */
+    if (all_high && !any_high) __builtin_trap();
+    if (all_low  && !any_low)  __builtin_trap();
+
+    /* Consistency: any_high && any_low can both be true (mixed array) */
+    /* Consistency: all_high && all_low cannot both be true (len > 0) */
+    if (len > 0 && all_high && all_low) __builtin_trap();
+
+    return 0;
+}
+
+#endif /* CANON_FUZZING */
