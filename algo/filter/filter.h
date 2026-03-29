@@ -65,6 +65,41 @@
  *   algo_filter_slice_##type(sv, out, out_cap, pred, ctx) → usize
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Time complexity:
+ *   Best case:  O(1) — len == 0 or out_cap == 0 (immediate return)
+ *   Worst case: O(n) — all elements checked, n = len
+ *               Stops scanning as soon as out_cap elements are written,
+ *               so fewer than n pred calls when output fills early.
+ *   Average:    O(k) where k = position of last written element + 1
+ *
+ * Space complexity:
+ *   O(1) — no heap allocation, no recursion, constant stack frame.
+ *   Output is written directly into the caller-provided buffer.
+ *
+ * Copies:
+ *   At most min(matching_elements, out_cap) element copies.
+ *   Each copy is elem_size bytes via mem_copy (typically a single
+ *   memmove at the call site for small fixed-size types).
+ *
+ * Pred calls:
+ *   0 (empty input or out_cap == 0) to n (all elements checked).
+ *   Stops calling pred once out_cap matches are found.
+ *   pred is never called with a NULL elem pointer.
+ *
+ * Level comparison:
+ *   Level 1 — Generic: one stride multiply per element (ptr_elem_const).
+ *   Level 2 — Typed macro: sizeof(Type) is a compile-time constant,
+ *              eliminating the multiply in optimized builds.
+ *   Level 3 — Typed slice: direct pointer indexing, no stride multiply,
+ *              no void* casts. Best codegen; preferred for hot paths.
+ *
+ * Stability:
+ *   Relative order of matching elements is always preserved (stable filter).
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * PREDICATE SIGNATURE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -99,7 +134,7 @@
  */
 #define ALGO_FILTER_LINKAGE static inline
 
-#include "filter_defn.h"
+#include "filter_impl.h"   /* implementation logic — NOT filter_defn.h */
 
 #undef ALGO_FILTER_LINKAGE
 
