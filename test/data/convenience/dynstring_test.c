@@ -374,15 +374,13 @@ static void test_to_cstr(void)
     DynString s = dynstring_from("test string");
 
     char* copy = dynstring_to_cstr(&s);
-    EXPECT(copy != NULL);
-    EXPECT(strcmp(copy, "test string") == 0);
+    EXPECT(copy != NULL && strcmp(copy, "test string") == 0);
     EXPECT(copy != s.data); /* independent allocation */
     free(copy);
 
     /* NULL s — returns copy of "" */
     char* empty = dynstring_to_cstr(NULL);
-    EXPECT(empty != NULL);
-    EXPECT(strcmp(empty, "") == 0);
+    EXPECT(empty != NULL && strcmp(empty, "") == 0);
     free(empty);
 
     dynstring_free(&s);
@@ -396,17 +394,19 @@ static void test_always_null_terminated(void)
     const char* words[] = {"alpha", "beta", "gamma", "delta", "epsilon"};
     for (usize i = 0; i < 5; i++) {
         EXPECT(dynstring_append(&s, words[i]));
-        EXPECT(s.data[s.len] == '\0');
+        /* Verify null-termination via the public API — avoids direct s.data
+         * dereference that clang-analyzer flags as potentially NULL */
+        EXPECT(dynstring_str(&s)[dynstring_len(&s)] == '\0');
     }
 
     dynstring_truncate(&s, 3);
-    EXPECT(s.data[3] == '\0');
+    EXPECT(dynstring_str(&s)[3] == '\0');
 
     dynstring_clear(&s);
-    EXPECT(s.data[0] == '\0');
+    EXPECT(dynstring_str(&s)[0] == '\0');
 
     EXPECT(dynstring_append_char(&s, 'Z'));
-    EXPECT(s.data[1] == '\0');
+    EXPECT(dynstring_str(&s)[1] == '\0');
 
     dynstring_free(&s);
 }
