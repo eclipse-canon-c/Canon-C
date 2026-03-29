@@ -78,8 +78,15 @@
  * @pre elem_size > 0     — triggers require_msg
  *
  * Performance:
- * - Time:  O(k) where k = index of first match (worst case O(n))
- * - Space: O(1) — no allocation
+ * - Time best:  O(1) — len == 0 (immediate false), or first element matches
+ *                       (one pred call, immediate return)
+ * - Time worst: O(n) — no element matches pred (full scan, n = len)
+ * - Time avg:   O(k) where k = index of first match + 1
+ * - Space:      O(1) — no heap allocation, no recursion, constant stack frame
+ * - Pred calls: 0 (len == 0) to n (no match); stops on first match;
+ *                pred is never called with a NULL elem pointer
+ * - Outputs:    out_index and out_elem are optional (NULL skips the write);
+ *                neither is written on no match — always check the bool return
  */
 ALGO_FIND_LINKAGE bool algo_find(
     borrowed(const void*)   base,
