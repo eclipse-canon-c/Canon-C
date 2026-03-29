@@ -102,6 +102,8 @@ static void find_slice_suppress_unused(void)
 static void find_option_suppress_unused(void)
 {
     /* int option — only is_some and unwrap are used in tests */
+    (void)option_int_is_some;
+    (void)option_int_unwrap;
     (void)option_int_is_none;
     (void)option_int_get;
     (void)option_int_unwrap_or;
@@ -116,6 +118,8 @@ static void find_option_suppress_unused(void)
     (void)option_int_eq;
 
     /* Point option — only is_some and unwrap are used in tests */
+    (void)option_Point_is_some;
+    (void)option_Point_unwrap;
     (void)option_Point_is_none;
     (void)option_Point_get;
     (void)option_Point_unwrap_or;
