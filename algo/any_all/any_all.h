@@ -75,6 +75,55 @@
  *   algo_all_slice_##type(sv, pred, ctx) → bool
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Time complexity — all three API levels:
+ *
+ *   algo_any / ALGO_ANY_TYPED / algo_any_slice_##type
+ *     Best case:  O(1) — first element satisfies pred (immediate return)
+ *     Worst case: O(n) — no element satisfies pred (full scan)
+ *     Average:    O(k) where k = index of first match + 1
+ *
+ *   algo_all / ALGO_ALL_TYPED / algo_all_slice_##type
+ *     Best case:  O(1) — first element fails pred (immediate return)
+ *                 O(1) — empty sequence (no iterations, returns true)
+ *     Worst case: O(n) — all elements satisfy pred (full scan)
+ *     Average:    O(k) where k = index of first failure + 1
+ *
+ * Space complexity — all variants:
+ *   O(1) — no heap allocation, no recursion, no auxiliary storage.
+ *   Stack frame is constant regardless of sequence length.
+ *
+ * Predicate call count:
+ *   Both functions short-circuit. pred is called at most n times and
+ *   as few as 0 times (empty sequence) or 1 time (immediate match/fail).
+ *   pred is never called with a NULL elem pointer.
+ *
+ * Level comparison:
+ *
+ *   Level 1 — Generic (algo_any / algo_all)
+ *     Extra cost: one pointer arithmetic step per element via ptr_elem_const
+ *     (byte-offset cast). Negligible — a single multiply-add per iteration.
+ *     Suitable for any flat C array of any element type.
+ *
+ *   Level 2 — Typed macro (ALGO_ANY_TYPED / ALGO_ALL_TYPED)
+ *     Identical generated code to Level 1. sizeof(Type) is a compile-time
+ *     constant so the multiply is eliminated by the optimizer. Zero overhead
+ *     vs. Level 1 in optimized builds.
+ *
+ *   Level 3 — Typed slice (algo_any_slice_##type / algo_all_slice_##type)
+ *     No void* anywhere. The compiler sees the actual element type, enabling
+ *     direct pointer indexing (&sv.ptr[i]) with no stride multiply.
+ *     Best codegen: eligible for auto-vectorization on modern CPUs.
+ *     Recommended for hot paths and large arrays.
+ *
+ * Cache behavior:
+ *   Linear scan — sequential memory access pattern. Optimal cache locality
+ *   for arrays that fit in L1/L2. For very large arrays pred is the primary
+ *   cost; the scan itself is branch-predictor-friendly (single loop counter).
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * PREDICATE SIGNATURE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
