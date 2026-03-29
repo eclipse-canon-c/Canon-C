@@ -107,7 +107,7 @@
  */
 #define ALGO_ANY_ALL_LINKAGE static inline
 
-#include "any_all_defn.h"
+#include "any_all_impl.h"   /* implementation logic — NOT any_all_defn.h */
 
 #undef ALGO_ANY_ALL_LINKAGE
 
