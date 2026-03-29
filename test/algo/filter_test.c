@@ -554,7 +554,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     if (size == 0) return 0;
 
-    /* Output buffer — always large enough to hold all matching elements */
+    /* Output buffer intentionally smaller than max input to exercise
+     * truncation behavior. out_cap = 256 while input can be up to 4096. */
     u8 out[256];
     usize out_cap = sizeof(out);
 
@@ -564,22 +565,23 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     /* Invariant 1: return value <= out_cap */
     if (n > out_cap) __builtin_trap();
 
-    /* Build reference independently */
-    u8 ref[256];
+    /* Build reference independently — must be large enough for full input */
+    u8 ref[4096];
     usize ref_count = 0;
     for (usize i = 0; i < size; i++) {
         if (data[i] > 127) ref[ref_count++] = data[i];
     }
 
-    /* Invariant 2: count matches reference */
-    if (n != ref_count) __builtin_trap();
+    /* Invariant 2: count matches reference, capped at out_cap (truncation) */
+    usize expected = ref_count < out_cap ? ref_count : out_cap;
+    if (n != expected) __builtin_trap();
 
     /* Invariant 3: all output elements satisfy pred */
     for (usize i = 0; i < n; i++) {
         if (out[i] <= 127) __builtin_trap();
     }
 
-    /* Invariant 4: output order matches reference order */
+    /* Invariant 4: output order matches first n elements of reference */
     for (usize i = 0; i < n; i++) {
         if (out[i] != ref[i]) __builtin_trap();
     }
