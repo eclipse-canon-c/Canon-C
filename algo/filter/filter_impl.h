@@ -91,9 +91,21 @@
  * @pre elem_size > 0     — triggers require_msg
  *
  * Performance:
- * - Time:  O(k) where k = position of last written element (worst case O(n))
- * - Space: O(1) — no allocation
- * - Copies: at most min(matching_elements, out_cap)
+ * - Time best:  O(1) — len == 0 or out_cap == 0 (immediate return before
+ *                       any iteration)
+ * - Time worst: O(n) — all n elements checked; occurs when no element
+ *                       matches (full scan, 0 copies) or when all match
+ *                       and out_cap >= n (full scan, n copies)
+ * - Time avg:   O(k) where k = position of last written element + 1;
+ *                       scanning stops as soon as out_cap matches are found
+ * - Space:      O(1) — no heap allocation, no recursion, constant stack
+ *                       frame regardless of len or out_cap
+ * - Pred calls: 0 (len == 0 or out_cap == 0) to n (all elements checked);
+ *                       stops calling pred once out_cap matches are written;
+ *                       pred is never called with a NULL elem pointer
+ * - Copies:     at most min(matching_elements, out_cap) element copies;
+ *                       each copy is elem_size bytes via mem_copy
+ * - Stability:  relative order of matching elements is always preserved
  */
 ALGO_FILTER_LINKAGE usize algo_filter(
     borrowed(const void*)  base,
