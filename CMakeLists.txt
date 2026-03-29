@@ -406,7 +406,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME fold_test    SRC test/algo/fold_test.c    INCLUDES core/primitives .)
+canon_c_test(
+    NAME     fold_test
+    SRC      test/algo/fold_test.c
+    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME     find_test
