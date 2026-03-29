@@ -394,19 +394,21 @@ static void test_always_null_terminated(void)
     const char* words[] = {"alpha", "beta", "gamma", "delta", "epsilon"};
     for (usize i = 0; i < 5; i++) {
         EXPECT(dynstring_append(&s, words[i]));
-        /* Verify null-termination via the public API — avoids direct s.data
-         * dereference that clang-analyzer flags as potentially NULL */
-        EXPECT(dynstring_str(&s)[dynstring_len(&s)] == '\0');
+        /* Verify null-termination: strlen == len implies data[len] == '\0' */
+        EXPECT(strlen(dynstring_str(&s)) == dynstring_len(&s));
     }
 
     dynstring_truncate(&s, 3);
-    EXPECT(dynstring_str(&s)[3] == '\0');
+    EXPECT(dynstring_len(&s) == 3);
+    EXPECT(strlen(dynstring_str(&s)) == 3);
 
     dynstring_clear(&s);
-    EXPECT(dynstring_str(&s)[0] == '\0');
+    EXPECT(dynstring_len(&s) == 0);
+    EXPECT(strcmp(dynstring_str(&s), "") == 0);
 
     EXPECT(dynstring_append_char(&s, 'Z'));
-    EXPECT(dynstring_str(&s)[1] == '\0');
+    EXPECT(dynstring_len(&s) == 1);
+    EXPECT(strlen(dynstring_str(&s)) == 1);
 
     dynstring_free(&s);
 }
