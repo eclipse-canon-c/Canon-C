@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026   Fikret Güney Ersezer
+Copyright (c) 2026 Fikret Güney Ersezer
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,31 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+This MIT license applies ONLY to the following files.
+All other files in this repository are licensed under MPL-2.0 (see LICENSE).
+
+    core/primitives/types.h
+    core/primitives/limits.h
+    core/primitives/bits.h
+    core/primitives/checked.h
+    core/primitives/contract.h
+    semantics/error.h
+
+These files were separated from the project-default MPL-2.0 license because
+they form the platform adaptation surface of the library. They are the files
+most likely to require modification on embedded, bare-metal, and
+safety-critical targets (different page sizes, toolchain-specific builtins,
+certified runtime constraints, custom error codes, etc.).
+
+Requiring modifications to these files to be disclosed under MPL-2.0 would
+create unnecessary legal friction for exactly the users this library is
+designed to serve. MIT removes that friction without affecting the rest of
+the project.
+
+Each of these files carries an SPDX-License-Identifier: MIT header at the
+top to make the per-file license machine-readable and unambiguous.
+
+-------------------------------------------------------------------------------
