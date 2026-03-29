@@ -1,3 +1,19 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Fikret Güney Ersezer
+//
+// This file is licensed under MIT (not the project-default MPL-2.0).
+//
+// Reason: limits.h centralizes platform-specific tuning constants:
+// page size, cache line size, SIMD alignment, arena and vector capacity
+// thresholds, and growth factors. These values are correct for mainstream
+// x86-64 and ARM64 targets but must be changed for Android 15+ (16 KiB
+// pages), Apple M-series (128-byte cache lines), IBM POWER, embedded
+// microcontrollers, and other non-standard targets. Although the file
+// provides #ifndef override points, projects that need to ship a modified
+// version of this file as part of their platform BSP layer should not be
+// obligated to disclose those changes under MPL-2.0. MIT keeps the
+// platform adaptation path legally clear.
+
 /**
  * @file limits.h
  * @brief Common constants and limits for Canon-C
