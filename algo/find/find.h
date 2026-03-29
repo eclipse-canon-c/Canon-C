@@ -70,6 +70,55 @@
  * when no element matches. This is the maximum value of usize — it is
  * never a valid index into any array that fits in memory.
  *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Time complexity — all three API levels:
+ *
+ *   algo_find / ALGO_FIND_TYPED / algo_find_slice_##type /
+ *   algo_find_index_slice_##type
+ *     Best case:  O(1) — first element matches pred (immediate return), or
+ *                         len == 0 (immediate false before any iteration)
+ *     Worst case: O(n) — no element matches (full scan), n = len
+ *     Average:    O(k) where k = index of first match + 1
+ *
+ * Space complexity — all variants:
+ *   O(1) — no heap allocation, no recursion, constant stack frame.
+ *
+ * Pred calls:
+ *   0 (len == 0) to n (no match). Stops on first match.
+ *   pred is never called with a NULL elem pointer.
+ *
+ * Output parameters (generic and typed macro levels):
+ *   out_index and out_elem are optional — passing NULL skips the write.
+ *   On no match, neither output parameter is written. Checking the bool
+ *   return value before reading outputs is required.
+ *
+ * Level comparison:
+ *   Level 1 — Generic: one stride multiply per element (ptr_elem_const).
+ *   Level 2 — Typed macro: sizeof(Type) is a compile-time constant,
+ *              eliminating the multiply in optimized builds.
+ *   Level 3 — Typed slice (algo_find_slice_##type): returns option_##type
+ *              by value — no output pointer, no void* cast, no stride
+ *              multiply. Best codegen; preferred when the element value
+ *              is needed.
+ *   Level 3 — Index variant (algo_find_index_slice_##type): returns the
+ *              raw index. Use when position matters more than the value.
+ *              Same codegen as algo_find_slice_##type but avoids option
+ *              construction overhead for types where that matters.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PREDICATE SIGNATURE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * All levels use algo_pred_fn from core/primitives/compare.h:
+ *   bool pred(const void* elem, void* ctx)
+ *
+ * Return true to select the element as the match.
+ * elem is never NULL — it always points to a valid input element.
+ * ctx is the optional caller context passed through unchanged; may be NULL.
+ *
  * @sa find_mangle.h  — name customization for slice variants
  * @sa find_decl.h    — forward declaration for separate compilation
  * @sa find_defn.h    — definition for separate compilation
@@ -97,7 +146,7 @@
  */
 #define ALGO_FIND_LINKAGE static inline
 
-#include "find_defn.h"
+#include "find_impl.h"   /* implementation logic — NOT find_defn.h */
 
 #undef ALGO_FIND_LINKAGE
 
