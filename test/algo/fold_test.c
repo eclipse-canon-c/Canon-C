@@ -98,9 +98,23 @@ static void fold_result_suppress_unused(void)
     (void)result_bool_Error_expect;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   Unit test build
-   ════════════════════════════════════════════════════════════════════════════ */
+/* ── Portable fallible fold wrapper ─────────────────────────────────────────
+ * ALGO_FOLD_RESULT uses GNU statement expressions in non-pedantic mode,
+ * which triggers -Werror=pedantic on GCC -std=c99 -pedantic builds.
+ * This test-local wrapper always uses the pre-declared variable form,
+ * which is legal in both GNU and strict C99 modes.
+ * ─────────────────────────────────────────────────────────────────────────── */
+#ifndef CANON_NO_GNU_EXTENSIONS
+#  define FOLD_RESULT(acc, arr, len, Type, fn, ctx, out_r) \
+     do { (out_r) = ALGO_FOLD_RESULT((acc), (arr), (len), Type, (fn), (ctx)); } while(0)
+#  define FOLD_RESULT_VEC(acc, vec, Type, fn, ctx, out_r) \
+     do { (out_r) = ALGO_FOLD_RESULT_VEC((acc), (vec), Type, (fn), (ctx)); } while(0)
+#else
+#  define FOLD_RESULT(acc, arr, len, Type, fn, ctx, out_r) \
+     ALGO_FOLD_RESULT((acc), (arr), (len), Type, (fn), (ctx), (out_r))
+#  define FOLD_RESULT_VEC(acc, vec, Type, fn, ctx, out_r) \
+     ALGO_FOLD_RESULT_VEC((acc), (vec), Type, (fn), (ctx), (out_r))
+#endif
 
 #ifndef CANON_FUZZING
 
@@ -161,15 +175,6 @@ static result_bool_Error fn_sum_positive(void* acc, const int* elem, void* ctx)
     return result_bool_Error_ok(true);
 }
 
-/* Fallible: fail on zero */
-static result_bool_Error fn_sum_nonzero(void* acc, const int* elem, void* ctx)
-{
-    (void)ctx;
-    if (*elem == 0) return result_bool_Error_err(ERR_INVALID_ARG);
-    *(int*)acc += *elem;
-    return result_bool_Error_ok(true);
-}
-
 /* Call counter for verifying exact fn call counts */
 static int g_call_count = 0;
 static void fn_sum_counting(void* acc, const int* elem, void* ctx)
@@ -202,7 +207,7 @@ static void test_empty_sequence(void)
 
     /* Fallible: Ok(true) when len=0, acc unchanged */
     acc = 99;
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr, 0, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr, 0, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_ok(r));
     EXPECT(acc == 99);
 
@@ -231,12 +236,12 @@ static void test_single_element(void)
 
     /* Fallible: positive → Ok */
     acc = 0;
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, pos, 1, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, pos, 1, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_ok(r) && acc == 7);
 
     /* Fallible: negative → Err, acc unchanged */
     acc = 0;
-    r = ALGO_FOLD_RESULT(&acc, neg, 1, int, fn_sum_positive, NULL);
+    FOLD_RESULT(&acc, neg, 1, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_err(r) && acc == 0);
 }
 
@@ -257,7 +262,7 @@ static void test_all_succeed(void)
 
     /* Fallible sum: all positive → Ok, sum=15 */
     acc = 0;
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_ok(r) && acc == 15);
 
     /* Typed slice */
@@ -277,7 +282,7 @@ static void test_first_element_fails(void)
     int arr[] = {-1, 2, 3, 4, 5};
     int acc = 0;
 
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_err(r));
     EXPECT(acc == 0); /* nothing accumulated — stopped at first element */
 
@@ -295,7 +300,7 @@ static void test_middle_element_fails(void)
     int arr[] = {1, 2, -3, 4, 5};
     int acc = 0;
 
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_err(r));
     EXPECT(acc == 3); /* partial: 1+2 before the negative */
 
@@ -312,7 +317,7 @@ static void test_last_element_fails(void)
     int arr[] = {1, 2, 3, 4, -5};
     int acc = 0;
 
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_err(r));
     EXPECT(acc == 10); /* 1+2+3+4 accumulated before last failure */
 
@@ -386,15 +391,15 @@ static void test_fn_call_count(void)
     int arr2[] = {1, 2, -3, 4, 5};
     acc = 0;
     g_call_count = 0;
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr2, 5, int,
-                                           fn_sum_positive_counting, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr2, 5, int,
+                                           fn_sum_positive_counting, NULL, r);
     EXPECT(result_bool_Error_is_err(r));
     EXPECT(g_call_count == 3); /* called for index 0, 1, 2 — stopped at 2 */
 
     /* Fallible: all succeed — called n times */
     acc = 0;
     g_call_count = 0;
-    r = ALGO_FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive_counting, NULL);
+    FOLD_RESULT(&acc, arr, 5, int, fn_sum_positive_counting, NULL, r);
     EXPECT(result_bool_Error_is_ok(r));
     EXPECT(g_call_count == 5);
 }
@@ -411,14 +416,14 @@ static void test_fold_vec(void)
 
     /* Fallible vec variant */
     acc = 0;
-    result_bool_Error r = ALGO_FOLD_RESULT_VEC(&acc, v, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT_VEC(&acc, v, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_ok(r) && acc == 60);
 
     /* Fallible vec: contains negative */
     int data2[] = {10, -5, 30};
     IntContainer v2 = { data2, 3 };
     acc = 0;
-    r = ALGO_FOLD_RESULT_VEC(&acc, v2, int, fn_sum_positive, NULL);
+    FOLD_RESULT_VEC(&acc, v2, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_err(r) && acc == 10);
 
     /* Empty vec */
@@ -457,7 +462,7 @@ static void test_c99_mode(void)
     int acc = 0;
 
     /* GNU form used here — same semantics as C99 form */
-    result_bool_Error r = ALGO_FOLD_RESULT(&acc, arr, 3, int, fn_sum_positive, NULL);
+    result_bool_Error r; FOLD_RESULT(&acc, arr, 3, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_ok(r) && acc == 6);
 
     /* Verify is_ok and is_err are mutually exclusive */
@@ -465,7 +470,7 @@ static void test_c99_mode(void)
 
     int arr2[] = {1, -2, 3};
     acc = 0;
-    r = ALGO_FOLD_RESULT(&acc, arr2, 3, int, fn_sum_positive, NULL);
+    FOLD_RESULT(&acc, arr2, 3, int, fn_sum_positive, NULL, r);
     EXPECT(result_bool_Error_is_err(r) && acc == 1);
     EXPECT( result_bool_Error_is_ok(r) != result_bool_Error_is_err(r));
 }
@@ -593,8 +598,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     /* ── Fallible fold: sum until first zero ── */
     u32 partial_sum = 0;
-    result_bool_Error r = ALGO_FOLD_RESULT(&partial_sum, data, size, u8,
-                                           fn_sum_nonzero_u32, NULL);
+    result_bool_Error r;
+    FOLD_RESULT(&partial_sum, data, size, u8, fn_sum_nonzero_u32, NULL, r);
 
     /* Find reference: index of first zero */
     usize first_zero = size; /* sentinel: no zero found */
