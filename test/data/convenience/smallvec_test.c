@@ -596,6 +596,7 @@ static void smallvec_fuzz_suppress_unused(void)
     (void)smallvec_int_spill;
     (void)smallvec_int_init_arena;
     (void)smallvec_int_capacity;
+    (void)smallvec_int_using_inline;
     (void)smallvec_int_get_unchecked;
     (void)smallvec_int_data;
     (void)smallvec_int_first;
