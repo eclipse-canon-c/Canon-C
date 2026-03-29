@@ -81,8 +81,11 @@
  * @pre elem_size > 0     — triggers require_msg
  *
  * Performance:
- * - Time:  O(k) where k = index of first match (worst case O(n))
- * - Space: O(1) — no allocation
+ * - Time best:  O(1) — first element satisfies pred (immediate return)
+ * - Time worst: O(n) — no element satisfies pred (full scan, n = len)
+ * - Time avg:   O(k) where k = index of first match + 1
+ * - Space:      O(1) — no allocation, no recursion, constant stack frame
+ * - Pred calls: 0 (len == 0) to n (no match); never called with NULL elem
  */
 ALGO_ANY_ALL_LINKAGE bool algo_any(
     borrowed(const void*) base,
@@ -129,8 +132,12 @@ ALGO_ANY_ALL_LINKAGE bool algo_any(
  * @pre elem_size > 0     — triggers require_msg
  *
  * Performance:
- * - Time:  O(k) where k = index of first failure (worst case O(n))
- * - Space: O(1) — no allocation
+ * - Time best:  O(1) — empty sequence (no iterations, vacuous truth), or
+ *                       first element fails pred (immediate return)
+ * - Time worst: O(n) — all elements satisfy pred (full scan, n = len)
+ * - Time avg:   O(k) where k = index of first failure + 1
+ * - Space:      O(1) — no allocation, no recursion, constant stack frame
+ * - Pred calls: 0 (len == 0) to n (all pass); never called with NULL elem
  */
 ALGO_ANY_ALL_LINKAGE bool algo_all(
     borrowed(const void*) base,
