@@ -121,7 +121,12 @@ static void test_push_basic(void)
     EXPECT(dynvec_int_push(&v, 30));
     EXPECT(v.len == 3);
     EXPECT(!dynvec_int_is_empty(&v));
-    EXPECT(v.data[0] == 10 && v.data[1] == 20 && v.data[2] == 30);
+    /* Use the bounds-checked API — avoids clang-analyzer false positive
+     * that traces realloc failure leaving data == NULL */
+    { int a=0, b=0, c=0;
+      EXPECT(dynvec_int_get(&v, 0, &a) && a == 10);
+      EXPECT(dynvec_int_get(&v, 1, &b) && b == 20);
+      EXPECT(dynvec_int_get(&v, 2, &c) && c == 30); }
 
     /* NULL returns false */
     EXPECT(!dynvec_int_push(NULL, 99));
@@ -366,7 +371,9 @@ static void test_shrink_to_fit(void)
     EXPECT(dynvec_int_shrink_to_fit(&v));
     EXPECT(v.cap == 3);
     EXPECT(v.len == 3);
-    EXPECT(v.data[0] == 1 && v.data[2] == 3);
+    { int first=0, last=0;
+      EXPECT(dynvec_int_get(&v, 0, &first) && first == 1);
+      EXPECT(dynvec_int_get(&v, 2, &last)  && last  == 3); }
 
     /* Shrink empty — frees buffer */
     dynvec_int_clear(&v);
@@ -406,7 +413,8 @@ static void test_point(void)
     EXPECT(out.x == 3 && out.y == 4);
 
     EXPECT(dynvec_Point_set(&v, 0, (Point){10, 20}));
-    EXPECT(v.data[0].x == 10 && v.data[0].y == 20);
+    { Point check = {0, 0};
+      EXPECT(dynvec_Point_get(&v, 0, &check) && check.x == 10 && check.y == 20); }
 
     Point popped = {0, 0};
     EXPECT(dynvec_Point_pop(&v, &popped));
