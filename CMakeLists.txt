@@ -401,7 +401,15 @@ canon_c_test(
 # canon_c_test(NAME filter_test  SRC test/algo/filter_test.c  INCLUDES core/primitives .)
 # canon_c_test(NAME fold_test    SRC test/algo/fold_test.c    INCLUDES core/primitives .)
 # canon_c_test(NAME find_test    SRC test/algo/find_test.c    INCLUDES core/primitives .)
-# canon_c_test(NAME any_all_test SRC test/algo/any_all_test.c INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME     any_all_test
+    SRC      test/algo/any_all_test.c
+    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    FUZZABLE
+
+)
+
 # canon_c_test(NAME sort_test    SRC test/algo/sort_test.c    INCLUDES core/primitives .)
 # canon_c_test(NAME search_test  SRC test/algo/search_test.c  INCLUDES core/primitives .)
 # canon_c_test(NAME unique_test  SRC test/algo/unique_test.c  INCLUDES core/primitives .)
