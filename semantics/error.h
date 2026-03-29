@@ -1,6 +1,22 @@
 #ifndef CANON_SEMANTICS_ERROR_H
 #define CANON_SEMANTICS_ERROR_H
 
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Fikret Güney Ersezer
+//
+// This file is licensed under MIT (not the project-default MPL-2.0).
+//
+// Reason: error.h defines the canonical Error enum and error_message()
+// used across the entire library. The extension guide explicitly invites
+// users to add new error codes before ERR_COUNT, which constitutes a
+// direct modification to this file. Additionally, domain-specific
+// deployments — embedded firmware, protocol stacks, safety systems —
+// routinely need to remap, remove, or add error codes to match platform
+// constraints or interface requirements. Requiring those modifications
+// to be disclosed under MPL-2.0 would penalize exactly the users for
+// whom this file was designed to be extensible. MIT makes the intended
+// extension path legally unambiguous.
+
 /*
  *
  * Canon-C -- error.h
