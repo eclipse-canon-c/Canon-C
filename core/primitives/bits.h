@@ -1,3 +1,18 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Fikret Güney Ersezer
+//
+// This file is licensed under MIT (not the project-default MPL-2.0).
+//
+// Reason: bits.h provides portable bit manipulation backed by compiler
+// builtins (GCC/Clang __builtin_popcountll, MSVC __popcnt64, etc.) with
+// pure-C fallbacks. On targets with non-standard compilers, proprietary
+// DSP toolchains, or hardware-specific bit instructions (e.g. ARM Cortex-M
+// with dedicated bit-banding or RISC-V B-extension intrinsics), teams
+// routinely replace the builtin detection blocks or fallback implementations
+// with platform-optimized versions. Those modifications are integral to the
+// platform port and should not carry a copyleft disclosure obligation.
+// MIT keeps the porting path open without conditions.
+
 /**
  * @file bits.h
  * @brief Portable bit manipulation operations for Canon-C
