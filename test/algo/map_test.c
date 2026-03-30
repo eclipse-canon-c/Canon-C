@@ -51,8 +51,8 @@
 
 DEFINE_SLICE(int)
 DEFINE_SLICE(double)
-DEFINE_ALGO_MAP(int, double)   /* cross-type: int → double */
-DEFINE_ALGO_MAP(int, int)      /* same-type: int → int (in-place usable) */
+DEFINE_ALGO_MAP(int, double)   /* generates: algo_map_slice_int_double
+                                              algo_map_inplace_slice_int */
 
 typedef struct { int x; int y; } Point;
 DEFINE_SLICE(Point)
@@ -417,7 +417,6 @@ static void test_point_struct(void)
 /* ── Suppress unused ─────────────────────────────────────────────────────── */
 static void map_suppress_unused(void)
 {
-    (void)algo_map_slice_int_int;
     (void)algo_map_inplace_slice_Point;
     (void)algo_map_slice_Point_Point;
 }
