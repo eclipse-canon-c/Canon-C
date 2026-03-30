@@ -73,8 +73,27 @@
  * EMPTY AND SINGLE-ELEMENT BEHAVIOR
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * len == 0 → returns 0 (or 0 if array is NULL)
+ * len == 0 → returns 0
  * len == 1 → returns 1 (trivially unique, no comparisons made)
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * algo_unique / ALGO_UNIQUE_TYPED / algo_unique_slice_##type:
+ *   Time:   O(n) — single pass; exactly n-1 comparisons for len >= 2;
+ *           0 comparisons for len <= 1.
+ *   Space:  O(1) — no allocation. At most n-1 element copies when every
+ *           element is unique; 0 copies when all elements are equal (only
+ *           write advances, but write == read self-copies are skipped).
+ *   Best case:  O(1) — len <= 1 (immediate return)
+ *   Worst case: O(n) — always, since every element is visited exactly once
+ *   cmp calls:  exactly n-1 (for n >= 2), 0 otherwise
+ *   Element copies: between 0 and n-1 depending on duplicate density
+ *
+ * Note: self-copies are avoided — when no duplicates have been seen,
+ * write == read and the copy is skipped, so a fully-unique array has
+ * zero element copies.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
@@ -125,7 +144,7 @@
  */
 #define ALGO_UNIQUE_LINKAGE static inline
 
-#include "unique_defn.h"
+#include "unique_impl.h"   /* implementation logic — NOT unique_defn.h */
 
 #undef ALGO_UNIQUE_LINKAGE
 
@@ -140,6 +159,8 @@
  * Wraps algo_unique() with automatic sizeof(Type), eliminating the manual
  * elem_size argument. Always returns usize — no GNU extensions required.
  *
+ * Performance: O(n) time, O(1) space.
+ *
  * @param array Array of Type (borrowed, modified in place)
  * @param len   Number of elements (0 and 1 are valid — returns len)
  * @param Type  Element type — used for sizeof only
@@ -147,13 +168,6 @@
  * @param ctx   Optional context (borrowed, may be NULL)
  *
  * @return usize — new logical length after removing consecutive duplicates
- *
- * Example:
- * ```c
- * int arr[] = {1, 1, 2, 2, 3};
- * usize n = ALGO_UNIQUE_TYPED(arr, 5, int, algo_cmp_int, NULL);
- * // n == 3, arr[0..2] = {1, 2, 3}
- * ```
  */
 #define ALGO_UNIQUE_TYPED(array, len, Type, cmp, ctx) \
     algo_unique((array), (usize)(len), sizeof(Type), \
@@ -180,8 +194,10 @@
  *     returned value back to sv.len (or their vec.len) after the call.
  *
  * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
- * slice.h invariants). The function returns len immediately when len <= 1,
- * so a NULL ptr with len == 0 is safe.
+ * slice.h invariants). algo_unique returns len immediately when len <= 1,
+ * so a NULL ptr with len == 0 is safe after the precondition checks.
+ *
+ * Performance: O(n) time, O(1) space.
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  *
@@ -202,18 +218,6 @@
  */
 #define DEFINE_ALGO_UNIQUE(type) \
 \
-/** \
- * @brief Removes consecutive duplicates from a slice_##type in place \
- * \
- * Returns the new logical length. Elements at sv.ptr[0..return-1] are \
- * valid; elements at sv.ptr[return..sv.len-1] contain stale data. \
- * The caller must update sv.len to the returned value. \
- * \
- * @param sv  Typed slice over the array to deduplicate (borrowed) \
- * @param cmp Comparator — returns 0 if elements are equal (borrowed) \
- * @param ctx Optional context (borrowed, may be NULL) \
- * @return New logical length after removing consecutive duplicates \
- */ \
 static inline usize ALGO_UNIQUE_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(algo_cmp_fn)   cmp, \
