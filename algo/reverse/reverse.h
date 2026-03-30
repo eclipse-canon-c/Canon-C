@@ -90,6 +90,35 @@
  *   algo_is_palindrome_slice_##type(sv, cmp, ctx)            → bool
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * algo_reverse / ALGO_REVERSE_TYPED / algo_reverse_slice_##type:
+ *   Best case:  O(1) — len == 0 or len == 1 (immediate return, no swaps)
+ *   Worst case: O(n) — exactly ⌊n/2⌋ swaps, n = len
+ *   Average:    O(n) — always visits every pair; no early exit
+ *   Space:      O(1) — ALGO_REVERSE_SWAP_BUF_SIZE bytes on the stack
+ *   Swap cost:  3 × elem_size bytes copied per swap (temp ← left, left ← right,
+ *               right ← temp); both mem_copy calls are to/from the same fixed
+ *               stack buffer, so cache behaviour is excellent for small elements.
+ *
+ * algo_is_palindrome / ALGO_IS_PALINDROME_TYPED / algo_is_palindrome_slice_##type:
+ *   Best case:  O(1) — len < 2 (immediate true), or first pair mismatches
+ *   Worst case: O(n/2) — all ⌊n/2⌋ pairs compared (true result or last pair fails)
+ *   Average:    O(k) where k = index of first mismatching pair from either end
+ *   Space:      O(1) — no allocation; two pointer indices on the stack
+ *   cmp calls:  0 (len < 2) to ⌊n/2⌋ (palindrome or mismatch at center)
+ *               cmp is never called with NULL pointers.
+ *
+ * Level comparison:
+ *   Level 1 — Generic: one stride multiply per pointer per iteration.
+ *   Level 2 — Typed macro: sizeof is compile-time, eliminating the multiply.
+ *   Level 3 — Typed slice: element access through typed pointer arithmetic;
+ *             for algo_reverse_slice_##type the impl still delegates to the
+ *             generic algo_reverse internally (same cost as level 2 when
+ *             sizeof(type) is a compile-time constant visible to the optimizer).
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * COMPARATOR SIGNATURE (algo_is_palindrome)
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -125,7 +154,7 @@
  */
 #define ALGO_REVERSE_LINKAGE static inline
 
-#include "reverse_defn.h"
+#include "reverse_impl.h"   /* implementation logic — NOT reverse_defn.h */
 
 #undef ALGO_REVERSE_LINKAGE
 
@@ -143,6 +172,8 @@
  * @param array C array of Type (borrowed, modified in place)
  * @param len   Number of elements (0 and 1 are valid — no-op)
  * @param Type  Element type — used for sizeof only
+ *
+ * Performance: O(⌊n/2⌋) swaps, O(1) space. O(1) for len < 2.
  *
  * @pre sizeof(Type) <= ALGO_REVERSE_SWAP_BUF_SIZE — enforced by algo_reverse
  * @post array[i] and array[len-1-i] swapped for all i in [0, ⌊len/2⌋)
@@ -162,6 +193,8 @@
  * @param Type  Element type — used for sizeof only
  * @param cmp   Comparator: int (*)(const void*, const void*, void*) (borrowed)
  * @param ctx   Optional context (borrowed, may be NULL)
+ *
+ * Performance: O(1) best case, O(⌊n/2⌋) worst case, O(1) space.
  *
  * @return bool — true if all symmetric pairs compare equal, or len < 2
  */
@@ -198,6 +231,10 @@
  * slice.h invariants). Both functions guard against len < 2 before
  * touching any element, so a NULL ptr with len == 0 is safe.
  *
+ * Performance:
+ *   algo_reverse_slice_##type:        O(⌊n/2⌋) swaps, O(1) space
+ *   algo_is_palindrome_slice_##type:  O(1) best, O(⌊n/2⌋) worst, O(1) space
+ *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  *
  * Example:
@@ -228,13 +265,6 @@
  */
 #define DEFINE_ALGO_REVERSE(type) \
 \
-/** \
- * @brief Reverses the elements of a slice_##type in place \
- * \
- * No-op when sv.len < 2. \
- * \
- * @param sv Typed slice (borrowed — underlying array is modified) \
- */ \
 static inline void ALGO_REVERSE_SLICE_FN(type)( \
     borrowed(slice_##type) sv) \
 { \
@@ -242,16 +272,6 @@ static inline void ALGO_REVERSE_SLICE_FN(type)( \
     algo_reverse(sv.ptr, sv.len, sizeof(type)); \
 } \
 \
-/** \
- * @brief Returns true if slice_##type reads the same forwards and backwards \
- * \
- * Returns true when sv.len < 2 (vacuous palindrome). \
- * \
- * @param sv   Typed slice (borrowed, read-only) \
- * @param cmp  Comparator — returns 0 if elements are equal (borrowed) \
- * @param ctx  Optional context (borrowed, may be NULL) \
- * @return true if all symmetric pairs compare equal, or sv.len < 2 \
- */ \
 static inline bool ALGO_IS_PALINDROME_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(algo_cmp_fn)   cmp, \
