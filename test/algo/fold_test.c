@@ -99,22 +99,29 @@ static void fold_result_suppress_unused(void)
 }
 
 /* ── Portable fallible fold wrapper ─────────────────────────────────────────
- * ALGO_FOLD_RESULT uses GNU statement expressions in non-pedantic mode,
- * which triggers -Werror=pedantic on GCC -std=c99 -pedantic builds.
- * This test-local wrapper always uses the pre-declared variable form,
- * which is legal in both GNU and strict C99 modes.
+ * ALGO_FOLD_RESULT uses GNU statement expressions, which trigger
+ * -Werror=pedantic (GCC) and -Wgnu-statement-expression-from-macro-expansion
+ * (Clang) even when wrapped in a do-while assignment.
+ *
+ * This wrapper reimplements the fold loop directly using only C99 constructs
+ * — a pre-declared result variable, a counted for-loop, and an early break.
+ * It never calls ALGO_FOLD_RESULT and is safe on all three platforms.
+ *
+ * The Type parameter is accepted but unused (kept for signature symmetry
+ * with ALGO_FOLD_RESULT so call sites are drop-in replaceable).
  * ─────────────────────────────────────────────────────────────────────────── */
-#ifndef CANON_NO_GNU_EXTENSIONS
-#  define FOLD_RESULT(acc, arr, len, Type, fn, ctx, out_r) \
-     do { (out_r) = ALGO_FOLD_RESULT((acc), (arr), (len), Type, (fn), (ctx)); } while(0)
-#  define FOLD_RESULT_VEC(acc, vec, Type, fn, ctx, out_r) \
-     do { (out_r) = ALGO_FOLD_RESULT_VEC((acc), (vec), Type, (fn), (ctx)); } while(0)
-#else
-#  define FOLD_RESULT(acc, arr, len, Type, fn, ctx, out_r) \
-     ALGO_FOLD_RESULT((acc), (arr), (len), Type, (fn), (ctx), (out_r))
-#  define FOLD_RESULT_VEC(acc, vec, Type, fn, ctx, out_r) \
-     ALGO_FOLD_RESULT_VEC((acc), (vec), Type, (fn), (ctx), (out_r))
-#endif
+#define FOLD_RESULT(acc_ptr, array, len, Type, fn, ctx, out_r) \
+    do { \
+        (out_r) = result_bool_Error_ok(true); \
+        const usize _fr99_len = (usize)(len); \
+        for (usize _fr99_i = 0; _fr99_i < _fr99_len; ++_fr99_i) { \
+            (out_r) = (fn)((acc_ptr), &(array)[_fr99_i], (ctx)); \
+            if (result_bool_Error_is_err(out_r)) break; \
+        } \
+    } while (0)
+
+#define FOLD_RESULT_VEC(acc_ptr, vec, Type, fn, ctx, out_r) \
+    FOLD_RESULT((acc_ptr), (vec).items, (vec).len, Type, (fn), (ctx), (out_r))
 
 #ifndef CANON_FUZZING
 
