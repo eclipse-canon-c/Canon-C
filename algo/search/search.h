@@ -20,7 +20,7 @@
  * never validated for sortedness; that is the caller's responsibility.
  *
  * Always use the same comparator for sorting and searching:
- *   algo_sort(arr, n, sizeof(T), my_cmp, ctx, tmp);     // sort
+ *   algo_sort(arr, n, sizeof(T), my_cmp, ctx, tmp);       // sort
  *   algo_lower_bound(arr, n, sizeof(T), &k, my_cmp, ctx); // search ✓
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -91,11 +91,49 @@
  * FUNCTION SUMMARY
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- *   lower_bound  — first index where array[i] >= key; always in [0, len]
- *   upper_bound  — first index where array[i] >  key; always in [0, len]
- *   find_sorted  — first exact match index, or CANON_USIZE_MAX
+ *   lower_bound   — first index where array[i] >= key; always in [0, len]
+ *   upper_bound   — first index where array[i] >  key; always in [0, len]
+ *   find_sorted   — first exact match index, or CANON_USIZE_MAX
  *   binary_search — bool: does an exact match exist?
- *   equal_range  — writes [lower, upper) of all equal elements into out[2]
+ *   equal_range   — writes [lower, upper) of all equal elements into out[2]
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * All five functions use iterative binary search — no recursion, O(1) stack.
+ * The midpoint is always computed as low + (high − low) / 2 to avoid the
+ * overflow that arises from (low + high) / 2 when indices approach USIZE_MAX.
+ *
+ * algo_lower_bound / ALGO_LOWER_BOUND_TYPED / algo_lower_bound_slice_##type:
+ *   Time:  O(log n) — at most ⌈log₂(n)⌉ + 1 comparisons
+ *   Space: O(1)
+ *   cmp calls: always ⌈log₂(n)⌉ (no early exit; finds a position, not a match)
+ *
+ * algo_upper_bound / ALGO_UPPER_BOUND_TYPED / algo_upper_bound_slice_##type:
+ *   Time:  O(log n) — independent search with mirrored pivot condition
+ *   Space: O(1)
+ *   cmp calls: always ⌈log₂(n)⌉
+ *
+ * algo_find_sorted / ALGO_FIND_SORTED_TYPED / algo_find_sorted_slice_##type:
+ *   Time:  O(log n) — lower_bound_impl then one verification comparison
+ *   Space: O(1)
+ *   Best case: O(1) when len == 0 (immediate CANON_USIZE_MAX)
+ *
+ * algo_binary_search / ALGO_BINARY_SEARCH_TYPED / algo_binary_search_slice_##type:
+ *   Time:  O(log n) — thin wrapper over algo_find_sorted
+ *   Space: O(1)
+ *
+ * algo_equal_range / ALGO_EQUAL_RANGE_TYPED / algo_equal_range_slice_##type:
+ *   Time:  O(log n) — two independent binary searches (lower + upper)
+ *   Space: O(1)
+ *   cmp calls: at most 2 × ⌈log₂(n)⌉
+ *
+ * Level comparison:
+ *   Level 1 — Generic: one stride multiply per comparison.
+ *   Level 2 — Typed macro: sizeof is compile-time; multiply elided by optimizer.
+ *   Level 3 — Typed slice: delegates to the generic implementation; sizeof(type)
+ *              is a compile-time constant visible to the optimizer at the call site.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
@@ -149,7 +187,7 @@
  */
 #define ALGO_SEARCH_LINKAGE static inline
 
-#include "search_defn.h"
+#include "search_impl.h"   /* implementation logic — NOT search_defn.h */
 
 #undef ALGO_SEARCH_LINKAGE
 
@@ -160,6 +198,8 @@
 /**
  * @def ALGO_LOWER_BOUND_TYPED(array, len, Type, key, cmp, ctx)
  * @brief Type-safe insertion-point lookup — always in [0, len], never CANON_USIZE_MAX
+ *
+ * Performance: O(log n), O(1) space.
  *
  * @param array C array of Type (borrowed, read-only, must be sorted)
  * @param len   Number of elements (0 is valid — returns 0)
@@ -177,6 +217,8 @@
  * @def ALGO_UPPER_BOUND_TYPED(array, len, Type, key, cmp, ctx)
  * @brief Type-safe upper-bound lookup — always in [0, len], never CANON_USIZE_MAX
  *
+ * Performance: O(log n), O(1) space.
+ *
  * @param array C array of Type (borrowed, read-only, must be sorted)
  * @param len   Number of elements (0 is valid — returns 0)
  * @param Type  Element type — used for sizeof only
@@ -192,6 +234,8 @@
 /**
  * @def ALGO_FIND_SORTED_TYPED(array, len, Type, key, cmp, ctx)
  * @brief Type-safe exact-match lookup — returns CANON_USIZE_MAX if not found
+ *
+ * Performance: O(log n), O(1) space.
  *
  * @param array C array of Type (borrowed, read-only, must be sorted)
  * @param len   Number of elements (0 is valid — returns CANON_USIZE_MAX)
@@ -209,6 +253,8 @@
  * @def ALGO_BINARY_SEARCH_TYPED(array, len, Type, key, cmp, ctx)
  * @brief Type-safe boolean existence check
  *
+ * Performance: O(log n), O(1) space.
+ *
  * @param array C array of Type (borrowed, read-only, must be sorted)
  * @param len   Number of elements (0 is valid — returns false)
  * @param Type  Element type — used for sizeof only
@@ -224,6 +270,8 @@
 /**
  * @def ALGO_EQUAL_RANGE_TYPED(array, len, Type, key, cmp, ctx, out_range)
  * @brief Type-safe equal-range query — writes [lower, upper) into out_range[2]
+ *
+ * Performance: O(log n) — two binary searches, O(1) space.
  *
  * @param array     C array of Type (borrowed, read-only, must be sorted)
  * @param len       Number of elements (0 is valid — writes [0, 0))
@@ -252,71 +300,24 @@
  *
  * Generated functions:
  *   algo_lower_bound_slice_##type(sv, key, cmp, ctx)         → usize
- *     First index in [0, sv.len] where sv.ptr[i] >= *key.
- *
  *   algo_upper_bound_slice_##type(sv, key, cmp, ctx)         → usize
- *     First index in [0, sv.len] where sv.ptr[i] > *key.
- *
  *   algo_find_sorted_slice_##type(sv, key, cmp, ctx)         → usize
- *     First exact match index, or CANON_USIZE_MAX if absent.
- *
  *   algo_binary_search_slice_##type(sv, key, cmp, ctx)       → bool
- *     True if an exact match exists.
- *
  *   algo_equal_range_slice_##type(sv, key, cmp, ctx, out[2]) → void
- *     Writes [lower, upper) of all elements equal to *key.
  *
  * The key parameter is typed (const type*) — no void* at call sites.
- * The comparator remains algo_cmp_fn (const void*, const void*, void*)
- * consistent with the generic level.
+ * The comparator remains algo_cmp_fn (const void*, const void*, void*).
  *
  * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
  * slice.h invariants). All functions handle len == 0 before touching
  * any element, so a NULL ptr with len == 0 is safe.
  *
+ * Performance: all five are O(log n) time, O(1) space.
+ *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
- *
- * Example:
- * ```c
- * DEFINE_SLICE(int)
- * DEFINE_ALGO_SEARCH(int)
- *
- * int buf[] = {1, 2, 2, 2, 5, 7, 9};
- * slice_int sv = slice_int_from(buf, 7);
- * int key = 2;
- *
- * usize lo  = algo_lower_bound_slice_int(sv, &key, algo_cmp_int, NULL); // 1
- * usize hi  = algo_upper_bound_slice_int(sv, &key, algo_cmp_int, NULL); // 4
- * usize idx = algo_find_sorted_slice_int(sv, &key, algo_cmp_int, NULL); // 1
- * bool  ok  = algo_binary_search_slice_int(sv, &key, algo_cmp_int, NULL); // true
- * usize range[2];
- * algo_equal_range_slice_int(sv, &key, algo_cmp_int, NULL, range);
- * // range = {1, 4}
- *
- * // key absent:
- * int missing = 3;
- * usize pos = algo_lower_bound_slice_int(sv, &missing, algo_cmp_int, NULL); // 4
- * usize nf  = algo_find_sorted_slice_int(sv, &missing, algo_cmp_int, NULL); // CANON_USIZE_MAX
- *
- * // Empty slice:
- * slice_int empty = slice_int_empty();
- * usize e = algo_lower_bound_slice_int(empty, &key, algo_cmp_int, NULL); // 0
- * ```
  */
 #define DEFINE_ALGO_SEARCH(type) \
 \
-/** \
- * @brief Returns the first index where sv.ptr[i] >= *key \
- * \
- * Returns sv.len if all elements are < *key. Returns 0 if sv.len == 0. \
- * Never returns CANON_USIZE_MAX. \
- * \
- * @param sv  Sorted slice (borrowed, read-only) \
- * @param key Search key (borrowed, read-only) \
- * @param cmp Comparator matching sort order (borrowed) \
- * @param ctx Optional context (borrowed, may be NULL) \
- * @return usize in [0, sv.len] \
- */ \
 static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(const type*)   key, \
@@ -326,18 +327,6 @@ static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \
     return algo_lower_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
-/** \
- * @brief Returns the first index where sv.ptr[i] > *key \
- * \
- * Returns sv.len if all elements are <= *key. Returns 0 if sv.len == 0. \
- * Never returns CANON_USIZE_MAX. \
- * \
- * @param sv  Sorted slice (borrowed, read-only) \
- * @param key Search key (borrowed, read-only) \
- * @param cmp Comparator matching sort order (borrowed) \
- * @param ctx Optional context (borrowed, may be NULL) \
- * @return usize in [0, sv.len] \
- */ \
 static inline usize ALGO_UPPER_BOUND_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(const type*)   key, \
@@ -347,15 +336,6 @@ static inline usize ALGO_UPPER_BOUND_SLICE_FN(type)( \
     return algo_upper_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
-/** \
- * @brief Returns the index of the first exact match, or CANON_USIZE_MAX \
- * \
- * @param sv  Sorted slice (borrowed, read-only) \
- * @param key Search key (borrowed, read-only) \
- * @param cmp Comparator matching sort order (borrowed) \
- * @param ctx Optional context (borrowed, may be NULL) \
- * @return index of first exact match, or CANON_USIZE_MAX if absent \
- */ \
 static inline usize ALGO_FIND_SORTED_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(const type*)   key, \
@@ -365,15 +345,6 @@ static inline usize ALGO_FIND_SORTED_SLICE_FN(type)( \
     return algo_find_sorted(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
-/** \
- * @brief Returns true if an element equal to *key exists in the slice \
- * \
- * @param sv  Sorted slice (borrowed, read-only) \
- * @param key Search key (borrowed, read-only) \
- * @param cmp Comparator matching sort order (borrowed) \
- * @param ctx Optional context (borrowed, may be NULL) \
- * @return true if exact match exists, false otherwise \
- */ \
 static inline bool ALGO_BINARY_SEARCH_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(const type*)   key, \
@@ -383,21 +354,6 @@ static inline bool ALGO_BINARY_SEARCH_SLICE_FN(type)( \
     return algo_binary_search(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
-/** \
- * @brief Writes the range [lower, upper) of all elements equal to *key \
- *        into out_range[2] \
- * \
- * out_range[0] = lower bound (first index where sv.ptr[i] >= *key) \
- * out_range[1] = upper bound (first index where sv.ptr[i] >  *key) \
- * When *key is absent, out_range[0] == out_range[1] (empty range). \
- * When sv.len == 0, writes [0, 0). \
- * \
- * @param sv        Sorted slice (borrowed, read-only) \
- * @param key       Search key (borrowed, read-only) \
- * @param cmp       Comparator matching sort order (borrowed) \
- * @param ctx       Optional context (borrowed, may be NULL) \
- * @param out_range usize[2] output (owned by caller, must not be NULL) \
- */ \
 static inline void ALGO_EQUAL_RANGE_SLICE_FN(type)( \
     borrowed(slice_##type)  sv, \
     borrowed(const type*)   key, \
