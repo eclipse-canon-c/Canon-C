@@ -437,7 +437,13 @@ canon_c_test(
 # canon_c_test(NAME sort_test    SRC test/algo/sort_test.c    INCLUDES core/primitives .)
 # canon_c_test(NAME search_test  SRC test/algo/search_test.c  INCLUDES core/primitives .)
 # canon_c_test(NAME unique_test  SRC test/algo/unique_test.c  INCLUDES core/primitives .)
-# canon_c_test(NAME reverse_test SRC test/algo/reverse_test.c INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME     reverse_test
+    SRC      test/algo/reverse_test.c
+    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    FUZZABLE
+)
 
 # ---------------------------------------------------------------------------
 # util/ tests                          — uncomment when ready (v1.3.0)
