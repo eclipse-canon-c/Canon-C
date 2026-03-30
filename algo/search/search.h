@@ -316,6 +316,13 @@
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  */
+/*
+ * Empty-slice contract note:
+ * slice_##type_empty() sets ptr = NULL and len = 0, which is a valid empty
+ * slice per slice.h invariants. The generic functions (algo_lower_bound etc.)
+ * require array != NULL before checking len == 0, so each slice wrapper below
+ * short-circuits on len == 0 before delegating, keeping NULL ptr safe.
+ */
 #define DEFINE_ALGO_SEARCH(type) \
 \
 static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \
@@ -324,6 +331,7 @@ static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \
     borrowed(algo_cmp_fn)   cmp, \
     borrowed(void*)         ctx) \
 { \
+    if (sv.len == 0) return 0; \
     return algo_lower_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -333,6 +341,7 @@ static inline usize ALGO_UPPER_BOUND_SLICE_FN(type)( \
     borrowed(algo_cmp_fn)   cmp, \
     borrowed(void*)         ctx) \
 { \
+    if (sv.len == 0) return 0; \
     return algo_upper_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -342,6 +351,7 @@ static inline usize ALGO_FIND_SORTED_SLICE_FN(type)( \
     borrowed(algo_cmp_fn)   cmp, \
     borrowed(void*)         ctx) \
 { \
+    if (sv.len == 0) return CANON_USIZE_MAX; \
     return algo_find_sorted(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -351,6 +361,7 @@ static inline bool ALGO_BINARY_SEARCH_SLICE_FN(type)( \
     borrowed(algo_cmp_fn)   cmp, \
     borrowed(void*)         ctx) \
 { \
+    if (sv.len == 0) return false; \
     return algo_binary_search(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -361,6 +372,7 @@ static inline void ALGO_EQUAL_RANGE_SLICE_FN(type)( \
     borrowed(void*)         ctx, \
     usize                   out_range[2]) \
 { \
+    if (sv.len == 0) { out_range[0] = 0; out_range[1] = 0; return; } \
     algo_equal_range(sv.ptr, sv.len, sizeof(type), key, cmp, ctx, out_range); \
 }
 
