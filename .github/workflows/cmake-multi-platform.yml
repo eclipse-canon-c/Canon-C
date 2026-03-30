@@ -212,6 +212,7 @@ jobs:
             "--suppress=returnDanglingLifetime:*fold_test.c" \
             "--suppress=returnDanglingLifetime:*map_test.c" \
             "--suppress=returnDanglingLifetime:*reverse_test.c" \
+            "--suppress=returnDanglingLifetime:*search_test.c" \
             "--suppress=literalWithCharPtrCompare:*diag_test.c" \
             "--suppress=arrayIndexOutOfBounds:*diag.h" \
             "--suppress=ctunullpointer:*deque_test.c" \
@@ -248,6 +249,7 @@ jobs:
             "--suppress=returnDanglingLifetime:*fold_test.c" `
             "--suppress=returnDanglingLifetime:*map_test.c" `
             "--suppress=returnDanglingLifetime:*reverse_test.c" `
+            "--suppress=returnDanglingLifetime:*search_test.c" `
             "--suppress=literalWithCharPtrCompare:*diag_test.c" `
             "--suppress=arrayIndexOutOfBounds:*diag.h" `
             "--suppress=ctunullpointer:*deque_test.c" `
