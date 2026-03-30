@@ -82,6 +82,46 @@
  *   algo_map_inplace_slice_##in_type(sv, fn)                 → void
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Time complexity — all variants:
+ *
+ *   algo_map / ALGO_MAP_TYPED / algo_map_slice_##in##_##out:
+ *     Always O(n) — every element is visited and fn is called exactly once,
+ *     n = len (or min(sv_out.len, sv_in.len) for the slice variant).
+ *     No early exit. Best == Worst == O(n).
+ *
+ *   algo_map_inplace / ALGO_MAP_INPLACE_TYPED / algo_map_inplace_slice_##type:
+ *     Always O(n) — same guarantee; fn called exactly once per element.
+ *     No early exit.
+ *
+ *   Special case: len == 0 (or either slice is empty):
+ *     O(1) — fn is never called, returns immediately.
+ *
+ * Space complexity — all variants:
+ *   O(1) — no heap allocation, no recursion, constant stack frame.
+ *   algo_map writes through the caller-supplied output buffer; it does
+ *   not allocate one.
+ *
+ * fn call count:
+ *   Exactly n calls (0 when len == 0). fn is never called with a NULL
+ *   pointer. Each call receives a valid output element slot and a valid
+ *   input element.
+ *
+ * Level comparison:
+ *   Level 1 — Generic: two stride multiplies per element (ptr_elem_const
+ *             for input, ptr_elem for output) when in/out sizes differ.
+ *   Level 2 — Typed macro: sizeof is a compile-time constant, eliminating
+ *             the multiply in optimized builds.
+ *   Level 3 — Typed slice: fn receives typed pointers directly; no void*
+ *             casts at the call site, no stride multiply. Best codegen;
+ *             preferred when both element types are known at instantiation.
+ *   In-place variants (all levels): single stride multiply eliminated at
+ *             level 2+; the output is the input buffer, so no separate
+ *             output stride computation.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * TRANSFORMATION FUNCTION SIGNATURES
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -118,7 +158,7 @@
  */
 #define ALGO_MAP_LINKAGE static inline
 
-#include "map_defn.h"
+#include "map_impl.h"   /* implementation logic — NOT map_defn.h */
 
 #undef ALGO_MAP_LINKAGE
 
@@ -143,6 +183,10 @@
  * @param OutType Output element type — used for sizeof and pointer arithmetic
  * @param InType  Input element type — used for sizeof and pointer arithmetic
  * @param fn      Transformation function: void (*)(void*, const void*) (borrowed)
+ *
+ * Performance:
+ * - Time:  O(n) — fn called exactly n times (0 calls when len == 0)
+ * - Space: O(1) — writes into caller-supplied output buffer
  *
  * @pre out != NULL, in != NULL, fn != NULL — enforced by algo_map contracts
  * @pre out and in point to buffers of at least len elements each
@@ -170,6 +214,10 @@
  * @param len  Number of elements to process (0 is valid — no-op)
  * @param Type Element type — used for sizeof and pointer arithmetic
  * @param fn   In-place transformation: void (*)(void*) (borrowed)
+ *
+ * Performance:
+ * - Time:  O(n) — fn called exactly n times (0 calls when len == 0)
+ * - Space: O(1) — modifies array in place, no extra allocation
  *
  * @pre arr != NULL, fn != NULL — enforced by algo_map_inplace contracts
  * @pre arr points to a buffer of at least len elements
@@ -219,6 +267,11 @@
  * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
  * slice.h invariants). The loop never executes when len == 0, so a
  * NULL ptr is safe.
+ *
+ * Performance:
+ *   algo_map_slice_##in##_##out: O(min(sv_out.len, sv_in.len)) — all elements
+ *   algo_map_inplace_slice_##in: O(sv.len) — all elements
+ *   Both: O(1) space, fn called exactly that many times (0 if either is empty)
  *
  * @param in_type  Input element type — must match a prior DEFINE_SLICE(in_type) call
  * @param out_type Output element type — must match a prior DEFINE_SLICE(out_type) call
