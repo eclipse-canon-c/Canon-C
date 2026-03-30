@@ -458,7 +458,6 @@ static void map_fuzz_suppress_unused(void)
 {
     (void)algo_map_slice_int_double;
     (void)algo_map_inplace_slice_int;
-    (void)algo_map_slice_int_int;
     (void)algo_map_inplace_slice_Point;
     (void)algo_map_slice_Point_Point;
     (void)slice_int_from;
