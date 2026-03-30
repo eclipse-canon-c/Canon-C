@@ -222,6 +222,7 @@ static void test_basic_dedup(void)
     n = algo_unique(arr3, 2, sizeof(int), cmp_int, NULL);
     EXPECT(n == 2);
     EXPECT(arr3[0] == 3 && arr3[1] == 4);
+    EXPECT(has_no_consecutive_dups(arr3, n));
 }
 
 /* ── test_long_run ───────────────────────────────────────────────────────── */
@@ -239,6 +240,7 @@ static void test_long_run(void)
     EXPECT(n == 5);
     EXPECT(arr2[0] == 1 && arr2[1] == 2 && arr2[2] == 3 &&
            arr2[3] == 4 && arr2[4] == 5);
+    EXPECT(has_no_consecutive_dups(arr2, n));
 }
 
 /* ── test_boundary_duplicates ────────────────────────────────────────────── */
