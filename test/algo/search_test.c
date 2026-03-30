@@ -1,631 +1,379 @@
 /**
- * @file search_test.c
- * @brief Tests for algo/search — binary search utilities for sorted sequences
+ * @file search.h
+ * @brief Binary search utilities for sorted sequences
  *
- * Five functions × three API levels:
- *   algo_lower_bound      / ALGO_LOWER_BOUND_TYPED      / algo_lower_bound_slice_##type
- *   algo_upper_bound      / ALGO_UPPER_BOUND_TYPED      / algo_upper_bound_slice_##type
- *   algo_find_sorted      / ALGO_FIND_SORTED_TYPED      / algo_find_sorted_slice_##type
- *   algo_binary_search    / ALGO_BINARY_SEARCH_TYPED    / algo_binary_search_slice_##type
- *   algo_equal_range      / ALGO_EQUAL_RANGE_TYPED      / algo_equal_range_slice_##type
+ * This is the entry point for header-only usage. Including this file
+ * generates statically-inlined implementations of all five search
+ * functions, plus typed macro wrappers and the DEFINE_ALGO_SEARCH
+ * instantiation macro.
  *
- * Two instantiations:
- *   int   — primary; all three levels exercised
- *   Point — struct coverage; slice level only
+ * For separate compilation (external linkage), use search_decl.h in
+ * headers and search_defn.h in exactly one .c file instead.
  *
- * Covers:
- *   - Empty array (len=0)           — each function's documented sentinel
- *   - Single element, key present   — exact match at index 0
- *   - Single element, key absent    — before/after cases
- *   - Key present once              — lower == upper - 1 == find_sorted
- *   - Key present multiple times    — lower/upper/equal_range all distinct
- *   - Key before all elements       — lower_bound == upper_bound == 0
- *   - Key after all elements        — lower_bound == upper_bound == len
- *   - Key between elements (absent) — lower_bound == upper_bound (empty range)
- *   - find_sorted: first match      — always returns lowest index of duplicates
- *   - binary_search consistency     — result == (find_sorted != CANON_USIZE_MAX)
- *   - equal_range invariant         — out[0] <= out[1], both in [0, len]
- *   - lower_bound <= upper_bound    — always
- *   - Typed macro level             — all five via ALGO_*_TYPED
- *   - Typed slice level             — all five via algo_*_slice_int
- *   - Point struct                  — algo_*_slice_Point
- *   - Context parameter             — comparator uses ctx pointer
- *   - CANON_USIZE_MAX sentinel      — find_sorted miss
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PRECONDITION: ARRAYS MUST BE SORTED
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * Fuzz entry point (CANON_FUZZING):
- *   Input bytes interpreted as int[]. Sorted in-place then searched with
- *   arbitrary keys derived from input. Invariants:
- *     1. lower_bound(arr, key) <= upper_bound(arr, key)
- *     2. binary_search(arr, key) == (find_sorted(arr, key) != CANON_USIZE_MAX)
- *     3. equal_range[0] == lower_bound(arr, key)
- *     4. equal_range[1] == upper_bound(arr, key)
- *     5. lower_bound and upper_bound results are always in [0, len]
- *     6. If binary_search is true, arr[lower_bound] == key (via cmp)
+ * All functions in this module require the input array to be sorted
+ * according to the same comparator used in the search call. Searching
+ * an unsorted array produces wrong results — not crashes. The array is
+ * never validated for sortedness; that is the caller's responsibility.
+ *
+ * Always use the same comparator for sorting and searching:
+ *   algo_sort(arr, n, sizeof(T), my_cmp, ctx, tmp);       // sort
+ *   algo_lower_bound(arr, n, sizeof(T), &k, my_cmp, ctx); // search ✓
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * QUICK START
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Level 1 — Generic (void* interface, works on any type):
+ * ```c
+ * int arr[] = {1, 2, 2, 2, 5, 7, 9};
+ * int key   = 2;
+ *
+ * usize lo = algo_lower_bound(arr, 7, sizeof(int), &key, algo_cmp_int, NULL);
+ * // lo = 1 (first index where arr[i] >= 2)
+ *
+ * usize hi = algo_upper_bound(arr, 7, sizeof(int), &key, algo_cmp_int, NULL);
+ * // hi = 4 (first index where arr[i] > 2)
+ *
+ * usize idx = algo_find_sorted(arr, 7, sizeof(int), &key, algo_cmp_int, NULL);
+ * // idx = 1 (first exact match), or CANON_USIZE_MAX if absent
+ *
+ * bool found = algo_binary_search(arr, 7, sizeof(int), &key, algo_cmp_int, NULL);
+ * // found = true
+ *
+ * usize range[2];
+ * algo_equal_range(arr, 7, sizeof(int), &key, algo_cmp_int, NULL, range);
+ * // range = {1, 4} — indices [1, 4) all equal 2
+ * ```
+ *
+ * Level 2 — Typed macro (compile-time sizeof, same fn signature):
+ * ```c
+ * usize lo    = ALGO_LOWER_BOUND_TYPED(arr, 7, int, &key, algo_cmp_int, NULL);
+ * usize hi    = ALGO_UPPER_BOUND_TYPED(arr, 7, int, &key, algo_cmp_int, NULL);
+ * usize idx   = ALGO_FIND_SORTED_TYPED(arr, 7, int, &key, algo_cmp_int, NULL);
+ * bool  found = ALGO_BINARY_SEARCH_TYPED(arr, 7, int, &key, algo_cmp_int, NULL);
+ * usize range[2];
+ * ALGO_EQUAL_RANGE_TYPED(arr, 7, int, &key, algo_cmp_int, NULL, range);
+ * ```
+ *
+ * Level 3 — Typed slice instantiation (no void*, fully optimizable):
+ * ```c
+ * DEFINE_SLICE(int)
+ * DEFINE_ALGO_SEARCH(int)
+ *
+ * int buf[] = {1, 2, 2, 2, 5, 7, 9};
+ * slice_int sv = slice_int_from(buf, 7);
+ * int key = 2;
+ *
+ * usize lo    = algo_lower_bound_slice_int(sv, &key, algo_cmp_int, NULL);
+ * usize hi    = algo_upper_bound_slice_int(sv, &key, algo_cmp_int, NULL);
+ * usize idx   = algo_find_sorted_slice_int(sv, &key, algo_cmp_int, NULL);
+ * bool  found = algo_binary_search_slice_int(sv, &key, algo_cmp_int, NULL);
+ * usize range[2];
+ * algo_equal_range_slice_int(sv, &key, algo_cmp_int, NULL, range);
+ * ```
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * EMPTY ARRAY BEHAVIOR
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * len == 0 is valid for all functions:
+ *   algo_lower_bound    → 0
+ *   algo_upper_bound    → 0
+ *   algo_find_sorted    → CANON_USIZE_MAX  (not found)
+ *   algo_binary_search  → false
+ *   algo_equal_range    → writes [0, 0)
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * FUNCTION SUMMARY
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ *   lower_bound   — first index where array[i] >= key; always in [0, len]
+ *   upper_bound   — first index where array[i] >  key; always in [0, len]
+ *   find_sorted   — first exact match index, or CANON_USIZE_MAX
+ *   binary_search — bool: does an exact match exist?
+ *   equal_range   — writes [lower, upper) of all equal elements into out[2]
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PERFORMANCE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * All five functions use iterative binary search — no recursion, O(1) stack.
+ * The midpoint is always computed as low + (high − low) / 2 to avoid the
+ * overflow that arises from (low + high) / 2 when indices approach USIZE_MAX.
+ *
+ * algo_lower_bound / ALGO_LOWER_BOUND_TYPED / algo_lower_bound_slice_##type:
+ *   Time:  O(log n) — at most ⌈log₂(n)⌉ + 1 comparisons
+ *   Space: O(1)
+ *   cmp calls: always ⌈log₂(n)⌉ (no early exit; finds a position, not a match)
+ *
+ * algo_upper_bound / ALGO_UPPER_BOUND_TYPED / algo_upper_bound_slice_##type:
+ *   Time:  O(log n) — independent search with mirrored pivot condition
+ *   Space: O(1)
+ *   cmp calls: always ⌈log₂(n)⌉
+ *
+ * algo_find_sorted / ALGO_FIND_SORTED_TYPED / algo_find_sorted_slice_##type:
+ *   Time:  O(log n) — lower_bound_impl then one verification comparison
+ *   Space: O(1)
+ *   Best case: O(1) when len == 0 (immediate CANON_USIZE_MAX)
+ *
+ * algo_binary_search / ALGO_BINARY_SEARCH_TYPED / algo_binary_search_slice_##type:
+ *   Time:  O(log n) — thin wrapper over algo_find_sorted
+ *   Space: O(1)
+ *
+ * algo_equal_range / ALGO_EQUAL_RANGE_TYPED / algo_equal_range_slice_##type:
+ *   Time:  O(log n) — two independent binary searches (lower + upper)
+ *   Space: O(1)
+ *   cmp calls: at most 2 × ⌈log₂(n)⌉
+ *
+ * Level comparison:
+ *   Level 1 — Generic: one stride multiply per comparison.
+ *   Level 2 — Typed macro: sizeof is compile-time; multiply elided by optimizer.
+ *   Level 3 — Typed slice: delegates to the generic implementation; sizeof(type)
+ *              is a compile-time constant visible to the optimizer at the call site.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * API SUMMARY
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Generic:
+ *   algo_lower_bound(array, len, elem_size, key, cmp, ctx)         → usize
+ *   algo_upper_bound(array, len, elem_size, key, cmp, ctx)         → usize
+ *   algo_find_sorted(array, len, elem_size, key, cmp, ctx)         → usize
+ *   algo_binary_search(array, len, elem_size, key, cmp, ctx)       → bool
+ *   algo_equal_range(array, len, elem_size, key, cmp, ctx, out[2]) → void
+ *
+ * Typed macros:
+ *   ALGO_LOWER_BOUND_TYPED(array, len, Type, key, cmp, ctx)         → usize
+ *   ALGO_UPPER_BOUND_TYPED(array, len, Type, key, cmp, ctx)         → usize
+ *   ALGO_FIND_SORTED_TYPED(array, len, Type, key, cmp, ctx)         → usize
+ *   ALGO_BINARY_SEARCH_TYPED(array, len, Type, key, cmp, ctx)       → bool
+ *   ALGO_EQUAL_RANGE_TYPED(array, len, Type, key, cmp, ctx, out[2]) → void
+ *
+ * Typed instantiation (call DEFINE_ALGO_SEARCH(type) first):
+ *   algo_lower_bound_slice_##type(sv, key, cmp, ctx)         → usize
+ *   algo_upper_bound_slice_##type(sv, key, cmp, ctx)         → usize
+ *   algo_find_sorted_slice_##type(sv, key, cmp, ctx)         → usize
+ *   algo_binary_search_slice_##type(sv, key, cmp, ctx)       → bool
+ *   algo_equal_range_slice_##type(sv, key, cmp, ctx, out[2]) → void
+ *
+ * @sa search_mangle.h — name customization for slice variants
+ * @sa search_decl.h   — forward declarations for separate compilation
+ * @sa search_defn.h   — definitions for separate compilation
+ * @sa search_impl.h   — pure logic (do not include directly)
+ * @sa core/slice.h    — slice_##type used by DEFINE_ALGO_SEARCH
+ * @sa core/primitives/compare.h — algo_cmp_fn definition
+ * @sa core/primitives/limits.h  — CANON_USIZE_MAX sentinel value
  */
 
-#define CANON_CONTRACT_IMPL
+#ifndef CANON_ALGO_SEARCH_H
+#define CANON_ALGO_SEARCH_H
 
 #include "core/primitives/types.h"
 #include "core/primitives/limits.h"
+#include "core/primitives/contract.h"
 #include "core/primitives/compare.h"
+#include "core/primitives/ptr.h"
 #include "core/slice.h"
-#include "algo/search/search.h"
-
-#include <stdio.h>
-#include <string.h>
-
-/* ── Typed slice instantiations ──────────────────────────────────────────── */
-
-DEFINE_SLICE(int)
-DEFINE_ALGO_SEARCH(int)
-
-typedef struct { int x; int y; } Point;
-DEFINE_SLICE(Point)
-DEFINE_ALGO_SEARCH(Point)
-
-/* ── Suppress unused slice functions generated by DEFINE_SLICE ───────────── */
-static void search_slice_suppress_unused(void)
-{
-    /* int slice */
-    (void)slice_int_len;
-    (void)slice_int_is_empty;
-    (void)slice_int_get;
-    (void)slice_int_get_unchecked;
-    (void)slice_int_at;
-    (void)slice_int_first;
-    (void)slice_int_last;
-    (void)slice_int_take;
-    (void)slice_int_skip;
-    (void)slice_int_as_bytes;
-    (void)slice_int_as_cbytes;
-
-    /* Point slice */
-    (void)slice_Point_len;
-    (void)slice_Point_is_empty;
-    (void)slice_Point_get;
-    (void)slice_Point_get_unchecked;
-    (void)slice_Point_at;
-    (void)slice_Point_first;
-    (void)slice_Point_last;
-    (void)slice_Point_take;
-    (void)slice_Point_skip;
-    (void)slice_Point_as_bytes;
-    (void)slice_Point_as_cbytes;
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   Unit test build
-   ════════════════════════════════════════════════════════════════════════════ */
-
-#ifndef CANON_FUZZING
-
-static int g_failed = 0;
-
-#define EXPECT(cond)                                                  \
-    do {                                                              \
-        if (!(cond)) {                                                \
-            fprintf(stderr, "FAIL %s:%d  %s\n",                      \
-                    __FILE__, __LINE__, #cond);                       \
-            g_failed++;                                               \
-        }                                                             \
-    } while (0)
-
-/* ── Comparators ─────────────────────────────────────────────────────────── */
-
-static int cmp_int(const void* a, const void* b, void* ctx)
-{
-    (void)ctx;
-    int va = *(const int*)a;
-    int vb = *(const int*)b;
-    return (va > vb) - (va < vb);
-}
-
-/* Reversed order comparator for context-parameter test */
-static int cmp_int_desc(const void* a, const void* b, void* ctx)
-{
-    (void)ctx;
-    int va = *(const int*)a;
-    int vb = *(const int*)b;
-    return (vb > va) - (vb < va);
-}
-
-/* Comparator that uses ctx as a scale factor */
-static int cmp_int_scaled(const void* a, const void* b, void* ctx)
-{
-    int scale = *(const int*)ctx;
-    int va = *(const int*)a * scale;
-    int vb = *(const int*)b * scale;
-    return (va > vb) - (va < vb);
-}
-
-static int cmp_point_x(const void* a, const void* b, void* ctx)
-{
-    (void)ctx;
-    int va = ((const Point*)a)->x;
-    int vb = ((const Point*)b)->x;
-    return (va > vb) - (va < vb);
-}
-
-/* ── test_empty ──────────────────────────────────────────────────────────── */
-static void test_empty(void)
-{
-    /* Use a valid non-NULL array pointer; len=0 controls the empty case */
-    int dummy[1] = {0};
-    int key = 5;
-    usize range[2];
-
-    EXPECT(algo_lower_bound(dummy, 0, sizeof(int), &key, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound(dummy, 0, sizeof(int), &key, cmp_int, NULL) == 0);
-    EXPECT(algo_find_sorted(dummy, 0, sizeof(int), &key, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search(dummy, 0, sizeof(int), &key, cmp_int, NULL)
-           == false);
-
-    algo_equal_range(dummy, 0, sizeof(int), &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 0);
-
-    /* Typed macro */
-    EXPECT(ALGO_LOWER_BOUND_TYPED(dummy, 0, int, &key, cmp_int, NULL) == 0);
-    EXPECT(ALGO_UPPER_BOUND_TYPED(dummy, 0, int, &key, cmp_int, NULL) == 0);
-    EXPECT(ALGO_FIND_SORTED_TYPED(dummy, 0, int, &key, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(ALGO_BINARY_SEARCH_TYPED(dummy, 0, int, &key, cmp_int, NULL) == false);
-    ALGO_EQUAL_RANGE_TYPED(dummy, 0, int, &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 0);
-
-    /* Typed slice — empty */
-    slice_int empty = slice_int_empty();
-    EXPECT(algo_lower_bound_slice_int(empty, &key, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound_slice_int(empty, &key, cmp_int, NULL) == 0);
-    EXPECT(algo_find_sorted_slice_int(empty, &key, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search_slice_int(empty, &key, cmp_int, NULL) == false);
-    algo_equal_range_slice_int(empty, &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 0);
-}
-
-/* ── test_single_element ─────────────────────────────────────────────────── */
-static void test_single_element(void)
-{
-    int arr[1] = {10};
-    usize range[2];
-
-    /* Key present */
-    int key = 10;
-    EXPECT(algo_lower_bound(arr, 1, sizeof(int), &key, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound(arr, 1, sizeof(int), &key, cmp_int, NULL) == 1);
-    EXPECT(algo_find_sorted(arr, 1, sizeof(int), &key, cmp_int, NULL) == 0);
-    EXPECT(algo_binary_search(arr, 1, sizeof(int), &key, cmp_int, NULL) == true);
-    algo_equal_range(arr, 1, sizeof(int), &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 1);
-
-    /* Key before the element */
-    int before = 5;
-    EXPECT(algo_lower_bound(arr, 1, sizeof(int), &before, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound(arr, 1, sizeof(int), &before, cmp_int, NULL) == 0);
-    EXPECT(algo_find_sorted(arr, 1, sizeof(int), &before, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search(arr, 1, sizeof(int), &before, cmp_int, NULL) == false);
-    algo_equal_range(arr, 1, sizeof(int), &before, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 0);
-
-    /* Key after the element */
-    int after = 20;
-    EXPECT(algo_lower_bound(arr, 1, sizeof(int), &after, cmp_int, NULL) == 1);
-    EXPECT(algo_upper_bound(arr, 1, sizeof(int), &after, cmp_int, NULL) == 1);
-    EXPECT(algo_find_sorted(arr, 1, sizeof(int), &after, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search(arr, 1, sizeof(int), &after, cmp_int, NULL) == false);
-    algo_equal_range(arr, 1, sizeof(int), &after, cmp_int, NULL, range);
-    EXPECT(range[0] == 1 && range[1] == 1);
-}
-
-/* ── test_key_present_once ───────────────────────────────────────────────── */
-static void test_key_present_once(void)
-{
-    /* {1, 3, 5, 7, 9} — all unique */
-    int arr[] = {1, 3, 5, 7, 9};
-    usize range[2];
-
-    /* Search for 5 (index 2) */
-    int key = 5;
-    EXPECT(algo_lower_bound(arr, 5, sizeof(int), &key, cmp_int, NULL) == 2);
-    EXPECT(algo_upper_bound(arr, 5, sizeof(int), &key, cmp_int, NULL) == 3);
-    EXPECT(algo_find_sorted(arr, 5, sizeof(int), &key, cmp_int, NULL) == 2);
-    EXPECT(algo_binary_search(arr, 5, sizeof(int), &key, cmp_int, NULL) == true);
-    algo_equal_range(arr, 5, sizeof(int), &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 2 && range[1] == 3);
-
-    /* Search for 1 (index 0 — first element) */
-    int first = 1;
-    EXPECT(algo_lower_bound(arr, 5, sizeof(int), &first, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound(arr, 5, sizeof(int), &first, cmp_int, NULL) == 1);
-    EXPECT(algo_find_sorted(arr, 5, sizeof(int), &first, cmp_int, NULL) == 0);
-    EXPECT(algo_binary_search(arr, 5, sizeof(int), &first, cmp_int, NULL) == true);
-
-    /* Search for 9 (index 4 — last element) */
-    int last = 9;
-    EXPECT(algo_lower_bound(arr, 5, sizeof(int), &last, cmp_int, NULL) == 4);
-    EXPECT(algo_upper_bound(arr, 5, sizeof(int), &last, cmp_int, NULL) == 5);
-    EXPECT(algo_find_sorted(arr, 5, sizeof(int), &last, cmp_int, NULL) == 4);
-    EXPECT(algo_binary_search(arr, 5, sizeof(int), &last, cmp_int, NULL) == true);
-}
-
-/* ── test_key_present_multiple ───────────────────────────────────────────── */
-static void test_key_present_multiple(void)
-{
-    /* {1, 2, 2, 2, 5, 7, 9} — 2 appears at indices 1,2,3 */
-    int arr[] = {1, 2, 2, 2, 5, 7, 9};
-    usize n = 7;
-    usize range[2];
-
-    int key = 2;
-    EXPECT(algo_lower_bound(arr, n, sizeof(int), &key, cmp_int, NULL) == 1);
-    EXPECT(algo_upper_bound(arr, n, sizeof(int), &key, cmp_int, NULL) == 4);
-    EXPECT(algo_find_sorted(arr, n, sizeof(int), &key, cmp_int, NULL) == 1);
-    EXPECT(algo_binary_search(arr, n, sizeof(int), &key, cmp_int, NULL) == true);
-
-    algo_equal_range(arr, n, sizeof(int), &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 1 && range[1] == 4);
-
-    /* All same: {3, 3, 3, 3} */
-    int same[] = {3, 3, 3, 3};
-    int k = 3;
-    EXPECT(algo_lower_bound(same, 4, sizeof(int), &k, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound(same, 4, sizeof(int), &k, cmp_int, NULL) == 4);
-    EXPECT(algo_find_sorted(same, 4, sizeof(int), &k, cmp_int, NULL) == 0);
-    EXPECT(algo_binary_search(same, 4, sizeof(int), &k, cmp_int, NULL) == true);
-
-    algo_equal_range(same, 4, sizeof(int), &k, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 4);
-}
-
-/* ── test_key_absent ─────────────────────────────────────────────────────── */
-static void test_key_absent(void)
-{
-    int arr[] = {1, 3, 5, 7, 9};
-    usize n = 5;
-    usize range[2];
-
-    /* Before all elements */
-    int before = 0;
-    EXPECT(algo_lower_bound(arr, n, sizeof(int), &before, cmp_int, NULL) == 0);
-    EXPECT(algo_upper_bound(arr, n, sizeof(int), &before, cmp_int, NULL) == 0);
-    EXPECT(algo_find_sorted(arr, n, sizeof(int), &before, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search(arr, n, sizeof(int), &before, cmp_int, NULL) == false);
-    algo_equal_range(arr, n, sizeof(int), &before, cmp_int, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 0);
-
-    /* After all elements */
-    int after = 10;
-    EXPECT(algo_lower_bound(arr, n, sizeof(int), &after, cmp_int, NULL) == 5);
-    EXPECT(algo_upper_bound(arr, n, sizeof(int), &after, cmp_int, NULL) == 5);
-    EXPECT(algo_find_sorted(arr, n, sizeof(int), &after, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search(arr, n, sizeof(int), &after, cmp_int, NULL) == false);
-    algo_equal_range(arr, n, sizeof(int), &after, cmp_int, NULL, range);
-    EXPECT(range[0] == 5 && range[1] == 5);
-
-    /* Between elements: 4 would go at index 2 (between 3 and 5) */
-    int mid = 4;
-    EXPECT(algo_lower_bound(arr, n, sizeof(int), &mid, cmp_int, NULL) == 2);
-    EXPECT(algo_upper_bound(arr, n, sizeof(int), &mid, cmp_int, NULL) == 2);
-    EXPECT(algo_find_sorted(arr, n, sizeof(int), &mid, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_binary_search(arr, n, sizeof(int), &mid, cmp_int, NULL) == false);
-    algo_equal_range(arr, n, sizeof(int), &mid, cmp_int, NULL, range);
-    EXPECT(range[0] == 2 && range[1] == 2);
-}
-
-/* ── test_typed_macro ────────────────────────────────────────────────────── */
-static void test_typed_macro(void)
-{
-    int arr[] = {1, 2, 2, 2, 5, 7, 9};
-    usize n = 7;
-    usize range[2];
-    int key = 2;
-
-    EXPECT(ALGO_LOWER_BOUND_TYPED(arr, n, int, &key, cmp_int, NULL) == 1);
-    EXPECT(ALGO_UPPER_BOUND_TYPED(arr, n, int, &key, cmp_int, NULL) == 4);
-    EXPECT(ALGO_FIND_SORTED_TYPED(arr, n, int, &key, cmp_int, NULL) == 1);
-    EXPECT(ALGO_BINARY_SEARCH_TYPED(arr, n, int, &key, cmp_int, NULL) == true);
-
-    ALGO_EQUAL_RANGE_TYPED(arr, n, int, &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 1 && range[1] == 4);
-
-    /* Absent key */
-    int missing = 3;
-    EXPECT(ALGO_LOWER_BOUND_TYPED(arr, n, int, &missing, cmp_int, NULL) == 4);
-    EXPECT(ALGO_BINARY_SEARCH_TYPED(arr, n, int, &missing, cmp_int, NULL) == false);
-    EXPECT(ALGO_FIND_SORTED_TYPED(arr, n, int, &missing, cmp_int, NULL)
-           == CANON_USIZE_MAX);
-}
-
-/* ── test_typed_slice ────────────────────────────────────────────────────── */
-static void test_typed_slice(void)
-{
-    int buf[] = {1, 2, 2, 2, 5, 7, 9};
-    slice_int sv = slice_int_from(buf, 7);
-    usize range[2];
-    int key = 2;
-
-    EXPECT(algo_lower_bound_slice_int(sv, &key, cmp_int, NULL) == 1);
-    EXPECT(algo_upper_bound_slice_int(sv, &key, cmp_int, NULL) == 4);
-    EXPECT(algo_find_sorted_slice_int(sv, &key, cmp_int, NULL) == 1);
-    EXPECT(algo_binary_search_slice_int(sv, &key, cmp_int, NULL) == true);
-
-    algo_equal_range_slice_int(sv, &key, cmp_int, NULL, range);
-    EXPECT(range[0] == 1 && range[1] == 4);
-
-    /* Absent key */
-    int missing = 6;
-    EXPECT(algo_lower_bound_slice_int(sv, &missing, cmp_int, NULL) == 5);
-    EXPECT(algo_upper_bound_slice_int(sv, &missing, cmp_int, NULL) == 5);
-    EXPECT(algo_binary_search_slice_int(sv, &missing, cmp_int, NULL) == false);
-
-    algo_equal_range_slice_int(sv, &missing, cmp_int, NULL, range);
-    EXPECT(range[0] == 5 && range[1] == 5);
-}
-
-/* ── test_lower_upper_bound_invariant ────────────────────────────────────── */
-static void test_lower_upper_bound_invariant(void)
-{
-    /* lower_bound <= upper_bound for any key, always */
-    int arr[] = {2, 4, 4, 6, 8, 8, 8, 10};
-    usize n = 8;
-
-    int keys[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-    for (usize i = 0; i < 11; i++) {
-        usize lo = algo_lower_bound(arr, n, sizeof(int), &keys[i], cmp_int, NULL);
-        usize hi = algo_upper_bound(arr, n, sizeof(int), &keys[i], cmp_int, NULL);
-        EXPECT(lo <= hi);
-        EXPECT(lo <= n && hi <= n);
-
-        /* equal_range must match separate lower/upper calls */
-        usize range[2];
-        algo_equal_range(arr, n, sizeof(int), &keys[i], cmp_int, NULL, range);
-        EXPECT(range[0] == lo && range[1] == hi);
-    }
-}
-
-/* ── test_binary_search_consistency ─────────────────────────────────────── */
-static void test_binary_search_consistency(void)
-{
-    int arr[] = {1, 2, 2, 4, 5, 5, 5, 9};
-    usize n = 8;
-
-    int keys[] = {0, 1, 2, 3, 4, 5, 6, 9, 10};
-    for (usize i = 0; i < 9; i++) {
-        bool found   = algo_binary_search(arr, n, sizeof(int), &keys[i],
-                                          cmp_int, NULL);
-        usize idx    = algo_find_sorted(arr, n, sizeof(int), &keys[i],
-                                        cmp_int, NULL);
-        bool by_find = (idx != CANON_USIZE_MAX);
-
-        EXPECT(found == by_find);
-
-        /* If found, arr[idx] must equal key */
-        if (found) {
-            EXPECT(cmp_int(&arr[idx], &keys[i], NULL) == 0);
-        }
-    }
-}
-
-/* ── test_context_parameter ──────────────────────────────────────────────── */
-static void test_context_parameter(void)
-{
-    /* Descending array searched with descending comparator */
-    int arr_desc[] = {9, 7, 5, 3, 1};
-    int key = 5;
-
-    EXPECT(algo_lower_bound(arr_desc, 5, sizeof(int), &key, cmp_int_desc, NULL)
-           == 2);
-    EXPECT(algo_upper_bound(arr_desc, 5, sizeof(int), &key, cmp_int_desc, NULL)
-           == 3);
-    EXPECT(algo_find_sorted(arr_desc, 5, sizeof(int), &key, cmp_int_desc, NULL)
-           == 2);
-    EXPECT(algo_binary_search(arr_desc, 5, sizeof(int), &key, cmp_int_desc, NULL)
-           == true);
-
-    /* Scale factor in ctx — scale=1 is identity */
-    int arr[] = {1, 3, 5, 7, 9};
-    int scale = 1;
-    int k = 3;
-    EXPECT(algo_lower_bound(arr, 5, sizeof(int), &k, cmp_int_scaled, &scale) == 1);
-    EXPECT(algo_binary_search(arr, 5, sizeof(int), &k, cmp_int_scaled, &scale)
-           == true);
-}
-
-/* ── test_point_struct ───────────────────────────────────────────────────── */
-static void test_point_struct(void)
-{
-    /* Sorted by x */
-    Point arr[] = {{1, 10}, {3, 30}, {3, 99}, {5, 50}, {7, 70}};
-    slice_Point sv = slice_Point_from(arr, 5);
-    usize range[2];
-
-    /* Search for x=3 — two elements */
-    Point key = {3, 0};
-    EXPECT(algo_lower_bound_slice_Point(sv, &key, cmp_point_x, NULL) == 1);
-    EXPECT(algo_upper_bound_slice_Point(sv, &key, cmp_point_x, NULL) == 3);
-    EXPECT(algo_find_sorted_slice_Point(sv, &key, cmp_point_x, NULL) == 1);
-    EXPECT(algo_binary_search_slice_Point(sv, &key, cmp_point_x, NULL) == true);
-
-    algo_equal_range_slice_Point(sv, &key, cmp_point_x, NULL, range);
-    EXPECT(range[0] == 1 && range[1] == 3);
-
-    /* Search for x=4 — absent */
-    Point missing = {4, 0};
-    EXPECT(algo_binary_search_slice_Point(sv, &missing, cmp_point_x, NULL)
-           == false);
-    EXPECT(algo_find_sorted_slice_Point(sv, &missing, cmp_point_x, NULL)
-           == CANON_USIZE_MAX);
-    EXPECT(algo_lower_bound_slice_Point(sv, &missing, cmp_point_x, NULL) == 3);
-
-    /* Empty Point slice */
-    slice_Point empty = slice_Point_empty();
-    EXPECT(algo_lower_bound_slice_Point(empty, &key, cmp_point_x, NULL) == 0);
-    EXPECT(algo_binary_search_slice_Point(empty, &key, cmp_point_x, NULL) == false);
-    algo_equal_range_slice_Point(empty, &key, cmp_point_x, NULL, range);
-    EXPECT(range[0] == 0 && range[1] == 0);
-}
-
-/* ── Suppress Point search functions ─────────────────────────────────────── */
-static void search_suppress_unused(void)
-{
-    /* All five Point slice search functions are exercised in test_point_struct.
-     * Suppress the typed variants that are not called elsewhere. */
-    (void)algo_lower_bound_slice_Point;
-    (void)algo_upper_bound_slice_Point;
-    (void)algo_find_sorted_slice_Point;
-    (void)algo_binary_search_slice_Point;
-    (void)algo_equal_range_slice_Point;
-}
-
-/* ── Unit test entry point ───────────────────────────────────────────────── */
-int main(void)
-{
-    (void)search_slice_suppress_unused;
-    (void)search_suppress_unused;
-
-    test_empty();
-    test_single_element();
-    test_key_present_once();
-    test_key_present_multiple();
-    test_key_absent();
-    test_typed_macro();
-    test_typed_slice();
-    test_lower_upper_bound_invariant();
-    test_binary_search_consistency();
-    test_context_parameter();
-    test_point_struct();
-
-    if (g_failed == 0) {
-        printf("OK  search_test  (all assertions passed)\n");
-        return 0;
-    }
-    fprintf(stderr,
-            "FAILED  search_test  (%d assertion(s) failed)\n", g_failed);
-    return 1;
-}
-
-#else /* CANON_FUZZING */
-
-/* ════════════════════════════════════════════════════════════════════════════
-   Fuzz entry point
-   ════════════════════════════════════════════════════════════════════════════ */
-
-static void search_fuzz_suppress_unused(void)
-{
-    (void)algo_lower_bound_slice_int;
-    (void)algo_upper_bound_slice_int;
-    (void)algo_find_sorted_slice_int;
-    (void)algo_binary_search_slice_int;
-    (void)algo_equal_range_slice_int;
-    (void)algo_lower_bound_slice_Point;
-    (void)algo_upper_bound_slice_Point;
-    (void)algo_find_sorted_slice_Point;
-    (void)algo_binary_search_slice_Point;
-    (void)algo_equal_range_slice_Point;
-    (void)slice_int_from;
-    (void)slice_int_empty;
-    (void)slice_Point_from;
-    (void)slice_Point_empty;
-}
+#include "core/ownership.h"
 
 /*
- * Fuzz all five search functions on sorted int arrays.
- *
- * Strategy:
- *   - Interpret the first half of input as array data (sorted in-place).
- *   - Interpret one int from the second half as the search key.
- *   - Run all five functions and check structural invariants.
- *
- * Invariants (do NOT depend on sorted order of original data):
- *   1. lower_bound(arr, key) <= upper_bound(arr, key)
- *   2. Both lower and upper are in [0, n]
- *   3. binary_search == (find_sorted != CANON_USIZE_MAX)
- *   4. equal_range[0] == lower_bound, equal_range[1] == upper_bound
- *   5. If binary_search is true:
- *      a. lower_bound index is in [0, n)
- *      b. arr[lower_bound] == key (via cmp)
- *      c. find_sorted index is in [0, n)
- *      d. arr[find_sorted] == key (via cmp)
+ * Set linkage to static inline before pulling in the implementation.
+ * This is the header-only mode — all public functions are inlined at call sites.
+ * algo_lower_bound_impl is always static inline regardless of this setting.
  */
+#define ALGO_SEARCH_LINKAGE static inline
 
-static int fuzz_cmp_int(const void* a, const void* b, void* ctx)
-{
-    (void)ctx;
-    int va = *(const int*)a;
-    int vb = *(const int*)b;
-    return (va > vb) - (va < vb);
+#include "search_impl.h"   /* implementation logic — NOT search_defn.h */
+
+#undef ALGO_SEARCH_LINKAGE
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Typed macros — recommended for direct array use
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @def ALGO_LOWER_BOUND_TYPED(array, len, Type, key, cmp, ctx)
+ * @brief Type-safe insertion-point lookup — always in [0, len], never CANON_USIZE_MAX
+ *
+ * Performance: O(log n), O(1) space.
+ *
+ * @param array C array of Type (borrowed, read-only, must be sorted)
+ * @param len   Number of elements (0 is valid — returns 0)
+ * @param Type  Element type — used for sizeof only
+ * @param key   Pointer to the search key (borrowed, read-only)
+ * @param cmp   Comparator matching the sort order (borrowed)
+ * @param ctx   Optional context (borrowed, may be NULL)
+ * @return usize — first index where array[i] >= *key, in [0, len]
+ */
+#define ALGO_LOWER_BOUND_TYPED(array, len, Type, key, cmp, ctx) \
+    algo_lower_bound((array), (usize)(len), sizeof(Type), \
+        (key), (algo_cmp_fn)(cmp), (ctx))
+
+/**
+ * @def ALGO_UPPER_BOUND_TYPED(array, len, Type, key, cmp, ctx)
+ * @brief Type-safe upper-bound lookup — always in [0, len], never CANON_USIZE_MAX
+ *
+ * Performance: O(log n), O(1) space.
+ *
+ * @param array C array of Type (borrowed, read-only, must be sorted)
+ * @param len   Number of elements (0 is valid — returns 0)
+ * @param Type  Element type — used for sizeof only
+ * @param key   Pointer to the search key (borrowed, read-only)
+ * @param cmp   Comparator matching the sort order (borrowed)
+ * @param ctx   Optional context (borrowed, may be NULL)
+ * @return usize — first index where array[i] > *key, in [0, len]
+ */
+#define ALGO_UPPER_BOUND_TYPED(array, len, Type, key, cmp, ctx) \
+    algo_upper_bound((array), (usize)(len), sizeof(Type), \
+        (key), (algo_cmp_fn)(cmp), (ctx))
+
+/**
+ * @def ALGO_FIND_SORTED_TYPED(array, len, Type, key, cmp, ctx)
+ * @brief Type-safe exact-match lookup — returns CANON_USIZE_MAX if not found
+ *
+ * Performance: O(log n), O(1) space.
+ *
+ * @param array C array of Type (borrowed, read-only, must be sorted)
+ * @param len   Number of elements (0 is valid — returns CANON_USIZE_MAX)
+ * @param Type  Element type — used for sizeof only
+ * @param key   Pointer to the search key (borrowed, read-only)
+ * @param cmp   Comparator matching the sort order (borrowed)
+ * @param ctx   Optional context (borrowed, may be NULL)
+ * @return usize — index of first exact match, or CANON_USIZE_MAX
+ */
+#define ALGO_FIND_SORTED_TYPED(array, len, Type, key, cmp, ctx) \
+    algo_find_sorted((array), (usize)(len), sizeof(Type), \
+        (key), (algo_cmp_fn)(cmp), (ctx))
+
+/**
+ * @def ALGO_BINARY_SEARCH_TYPED(array, len, Type, key, cmp, ctx)
+ * @brief Type-safe boolean existence check
+ *
+ * Performance: O(log n), O(1) space.
+ *
+ * @param array C array of Type (borrowed, read-only, must be sorted)
+ * @param len   Number of elements (0 is valid — returns false)
+ * @param Type  Element type — used for sizeof only
+ * @param key   Pointer to the search key (borrowed, read-only)
+ * @param cmp   Comparator matching the sort order (borrowed)
+ * @param ctx   Optional context (borrowed, may be NULL)
+ * @return bool — true if an element equal to *key exists
+ */
+#define ALGO_BINARY_SEARCH_TYPED(array, len, Type, key, cmp, ctx) \
+    algo_binary_search((array), (usize)(len), sizeof(Type), \
+        (key), (algo_cmp_fn)(cmp), (ctx))
+
+/**
+ * @def ALGO_EQUAL_RANGE_TYPED(array, len, Type, key, cmp, ctx, out_range)
+ * @brief Type-safe equal-range query — writes [lower, upper) into out_range[2]
+ *
+ * Performance: O(log n) — two binary searches, O(1) space.
+ *
+ * @param array     C array of Type (borrowed, read-only, must be sorted)
+ * @param len       Number of elements (0 is valid — writes [0, 0))
+ * @param Type      Element type — used for sizeof only
+ * @param key       Pointer to the search key (borrowed, read-only)
+ * @param cmp       Comparator matching the sort order (borrowed)
+ * @param ctx       Optional context (borrowed, may be NULL)
+ * @param out_range usize[2] output array (owned by caller)
+ */
+#define ALGO_EQUAL_RANGE_TYPED(array, len, Type, key, cmp, ctx, out_range) \
+    algo_equal_range((array), (usize)(len), sizeof(Type), \
+        (key), (algo_cmp_fn)(cmp), (ctx), (out_range))
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_ALGO_SEARCH — typed slice variants per element type
+   ════════════════════════════════════════════════════════════════════════════
+   Requires DEFINE_SLICE(type) to have been called first.
+   Generates fully typed functions accepting slice_##type directly.
+   No void* anywhere — the compiler sees the actual element type.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Generates all five search functions operating on slice_##type
+ *
+ * Prerequisites: DEFINE_SLICE(type) must have been called.
+ *
+ * Generated functions:
+ *   algo_lower_bound_slice_##type(sv, key, cmp, ctx)         → usize
+ *   algo_upper_bound_slice_##type(sv, key, cmp, ctx)         → usize
+ *   algo_find_sorted_slice_##type(sv, key, cmp, ctx)         → usize
+ *   algo_binary_search_slice_##type(sv, key, cmp, ctx)       → bool
+ *   algo_equal_range_slice_##type(sv, key, cmp, ctx, out[2]) → void
+ *
+ * The key parameter is typed (const type*) — no void* at call sites.
+ * The comparator remains algo_cmp_fn (const void*, const void*, void*).
+ *
+ * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
+ * slice.h invariants). All functions handle len == 0 before touching
+ * any element, so a NULL ptr with len == 0 is safe.
+ *
+ * Performance: all five are O(log n) time, O(1) space.
+ *
+ * @param type Element type — must match a prior DEFINE_SLICE(type) call
+ */
+/*
+ * Empty-slice contract note:
+ * slice_##type_empty() sets ptr = NULL and len = 0, which is a valid empty
+ * slice per slice.h invariants. The generic functions (algo_lower_bound etc.)
+ * require array != NULL before checking len == 0, so each slice wrapper below
+ * short-circuits on len == 0 before delegating, keeping NULL ptr safe.
+ */
+#define DEFINE_ALGO_SEARCH(type) \
+\
+static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \
+    borrowed(slice_##type)  sv, \
+    borrowed(const type*)   key, \
+    borrowed(algo_cmp_fn)   cmp, \
+    borrowed(void*)         ctx) \
+{ \
+    if (sv.len == 0) return 0; \
+    return algo_lower_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
+} \
+\
+static inline usize ALGO_UPPER_BOUND_SLICE_FN(type)( \
+    borrowed(slice_##type)  sv, \
+    borrowed(const type*)   key, \
+    borrowed(algo_cmp_fn)   cmp, \
+    borrowed(void*)         ctx) \
+{ \
+    if (sv.len == 0) return 0; \
+    return algo_upper_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
+} \
+\
+static inline usize ALGO_FIND_SORTED_SLICE_FN(type)( \
+    borrowed(slice_##type)  sv, \
+    borrowed(const type*)   key, \
+    borrowed(algo_cmp_fn)   cmp, \
+    borrowed(void*)         ctx) \
+{ \
+    if (sv.len == 0) return CANON_USIZE_MAX; \
+    return algo_find_sorted(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
+} \
+\
+static inline bool ALGO_BINARY_SEARCH_SLICE_FN(type)( \
+    borrowed(slice_##type)  sv, \
+    borrowed(const type*)   key, \
+    borrowed(algo_cmp_fn)   cmp, \
+    borrowed(void*)         ctx) \
+{ \
+    if (sv.len == 0) return false; \
+    return algo_binary_search(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
+} \
+\
+static inline void ALGO_EQUAL_RANGE_SLICE_FN(type)( \
+    borrowed(slice_##type)  sv, \
+    borrowed(const type*)   key, \
+    borrowed(algo_cmp_fn)   cmp, \
+    borrowed(void*)         ctx, \
+    usize                   out_range[2]) \
+{ \
+    if (sv.len == 0) { out_range[0] = 0; out_range[1] = 0; return; } \
+    algo_equal_range(sv.ptr, sv.len, sizeof(type), key, cmp, ctx, out_range); \
 }
 
-/* Simple insertion sort for small fuzz arrays */
-static void isort(int* arr, usize n)
-{
-    for (usize i = 1; i < n; i++) {
-        int tmp = arr[i];
-        usize j = i;
-        while (j > 0 && arr[j - 1] > tmp) {
-            arr[j] = arr[j - 1];
-            j--;
-        }
-        arr[j] = tmp;
-    }
-}
-
-#define SEARCH_FUZZ_MAX 128
-
-int LLVMFuzzerTestOneInput(const u8* data, usize size)
-{
-    (void)search_fuzz_suppress_unused;
-    (void)search_slice_suppress_unused;
-
-    /* Need at least 2 ints: one element + one key */
-    if (size < 2 * sizeof(int)) return 0;
-
-    usize n = (size / sizeof(int)) - 1;
-    if (n > SEARCH_FUZZ_MAX) n = SEARCH_FUZZ_MAX;
-
-    int arr[SEARCH_FUZZ_MAX];
-    int key;
-
-    memcpy(arr, data, n * sizeof(int));
-    memcpy(&key, data + n * sizeof(int), sizeof(int));
-
-    /* Sort so the precondition is satisfied */
-    isort(arr, n);
-
-    usize lo    = algo_lower_bound(arr, n, sizeof(int), &key, fuzz_cmp_int, NULL);
-    usize hi    = algo_upper_bound(arr, n, sizeof(int), &key, fuzz_cmp_int, NULL);
-    usize idx   = algo_find_sorted(arr, n, sizeof(int), &key, fuzz_cmp_int, NULL);
-    bool  found = algo_binary_search(arr, n, sizeof(int), &key, fuzz_cmp_int, NULL);
-    usize range[2];
-    algo_equal_range(arr, n, sizeof(int), &key, fuzz_cmp_int, NULL, range);
-
-    /* Invariant 1: lo <= hi */
-    if (lo > hi) __builtin_trap();
-
-    /* Invariant 2: both in [0, n] */
-    if (lo > n || hi > n) __builtin_trap();
-
-    /* Invariant 3: binary_search == (find_sorted != CANON_USIZE_MAX) */
-    if (found != (idx != CANON_USIZE_MAX)) __builtin_trap();
-
-    /* Invariant 4: equal_range matches separate calls */
-    if (range[0] != lo || range[1] != hi) __builtin_trap();
-
-    /* Invariant 5: if found, verify match */
-    if (found) {
-        if (lo >= n) __builtin_trap();
-        if (fuzz_cmp_int(&arr[lo], &key, NULL) != 0) __builtin_trap();
-        if (idx >= n) __builtin_trap();
-        if (fuzz_cmp_int(&arr[idx], &key, NULL) != 0) __builtin_trap();
-    }
-
-    return 0;
-}
-
-#endif /* CANON_FUZZING */
+#endif /* CANON_ALGO_SEARCH_H */
