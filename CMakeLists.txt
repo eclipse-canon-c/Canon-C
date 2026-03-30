@@ -448,7 +448,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME unique_test  SRC test/algo/unique_test.c  INCLUDES core/primitives .)
+canon_c_test(
+    NAME     unique_test
+    SRC      test/algo/unique_test.c
+    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME     reverse_test
