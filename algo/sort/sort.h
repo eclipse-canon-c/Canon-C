@@ -180,16 +180,14 @@
  */
 #define ALGO_SORT_TYPED(base, len, Type, cmp, ctx) \
     do { \
-        usize _len = (usize)(len); \
-        if ((base) && _len >= 2 && (cmp)) { \
-            if (_len <= (usize)ALGO_SORT_STACK_TEMP_MAX) { \
-                Type _tmp[ALGO_SORT_STACK_TEMP_MAX]; \
-                algo_sort((base), _len, sizeof(Type), \
-                          (algo_cmp_fn)(cmp), (ctx), _tmp); \
-            } else { \
-                algo_sort((base), _len, sizeof(Type), \
-                          (algo_cmp_fn)(cmp), (ctx), NULL); \
-            } \
+        usize _asl_len = (usize)(len); \
+        if (_asl_len <= (usize)ALGO_SORT_STACK_TEMP_MAX) { \
+            Type _asl_tmp[ALGO_SORT_STACK_TEMP_MAX]; \
+            algo_sort((base), _asl_len, sizeof(Type), \
+                      (algo_cmp_fn)(cmp), (ctx), _asl_tmp); \
+        } else { \
+            algo_sort((base), _asl_len, sizeof(Type), \
+                      (algo_cmp_fn)(cmp), (ctx), NULL); \
         } \
     } while (0)
 
