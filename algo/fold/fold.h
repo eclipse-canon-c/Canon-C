@@ -145,8 +145,37 @@
 
 #define ALGO_FOLD_LINKAGE static inline
 #include "fold_impl.h"   /* implementation support — NOT fold_defn.h */
-/* fold_impl.h already instantiates CANON_RESULT(bool, Error) */
 #undef ALGO_FOLD_LINKAGE
+
+/*
+ * C99 bool/bool mangling fix:
+ * In C99, `bool` expands to `_Bool` before token-pasting inside CANON_RESULT,
+ * so CANON_RESULT(bool, Error) generates `result__Bool_Error` (double underscore).
+ * The stable name `result_bool_Error` used throughout this header and in user
+ * code is provided by the typedef and function-name aliases below.
+ * Identical typedef re-declarations are valid in C99 and later.
+ */
+#ifndef CANON_RESULT_BOOL_ERROR_COMPAT
+#define CANON_RESULT_BOOL_ERROR_COMPAT
+typedef result__Bool_Error result_bool_Error;
+#define result_bool_Error_ok         result__Bool_Error_ok
+#define result_bool_Error_err        result__Bool_Error_err
+#define result_bool_Error_is_ok      result__Bool_Error_is_ok
+#define result_bool_Error_is_err     result__Bool_Error_is_err
+#define result_bool_Error_get_ok     result__Bool_Error_get_ok
+#define result_bool_Error_get_err    result__Bool_Error_get_err
+#define result_bool_Error_unwrap     result__Bool_Error_unwrap
+#define result_bool_Error_unwrap_err result__Bool_Error_unwrap_err
+#define result_bool_Error_unwrap_or  result__Bool_Error_unwrap_or
+#define result_bool_Error_expect     result__Bool_Error_expect
+#define result_bool_Error_map        result__Bool_Error_map
+#define result_bool_Error_map_err    result__Bool_Error_map_err
+#define result_bool_Error_and_then   result__Bool_Error_and_then
+#define result_bool_Error_or_else    result__Bool_Error_or_else
+#define result_bool_Error_and        result__Bool_Error_and
+#define result_bool_Error_or         result__Bool_Error_or
+#define result_bool_Error_eq         result__Bool_Error_eq
+#endif /* CANON_RESULT_BOOL_ERROR_COMPAT */
 
 /* ════════════════════════════════════════════════════════════════════════════
    ALGO_FOLD — infallible fold over a C array
