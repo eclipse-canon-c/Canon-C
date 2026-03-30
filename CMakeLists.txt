@@ -397,7 +397,13 @@ canon_c_test(
 # ---------------------------------------------------------------------------
 # algo/ tests                          — uncomment when ready (v1.3.0)
 # ---------------------------------------------------------------------------
-# canon_c_test(NAME map_test     SRC test/algo/map_test.c     INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME     map_test
+    SRC      test/algo/map_test.c
+    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME     filter_test
