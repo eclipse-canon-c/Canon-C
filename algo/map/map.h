@@ -307,24 +307,10 @@
  */
 #define DEFINE_ALGO_MAP(in_type, out_type) \
 \
-/** \
- * @brief Maps each element of slice_##in_type into slice_##out_type \
- * \
- * Processes min(sv_out.len, sv_in.len) elements. \
- * fn is called exactly once per processed element. \
- * \
- * @param sv_out Output slice (borrowed, writable) \
- * @param sv_in  Input slice (borrowed, read-only) \
- * @param fn     Transformation: void (*)(out_type*, const in_type*) (borrowed) \
- * \
- * @pre fn != NULL — triggers require_msg \
- * @pre sv_out.ptr != NULL or sv_out.len == 0 (slice.h invariant) \
- * @pre sv_in.ptr  != NULL or sv_in.len  == 0 (slice.h invariant) \
- */ \
 static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
-    borrowed(slice_##out_type)                         sv_out, \
-    borrowed(slice_##in_type)                          sv_in, \
-    borrowed(void (*)(out_type*, const in_type*))      fn) \
+    borrowed(slice_##out_type)                sv_out, \
+    borrowed(slice_##in_type)                 sv_in, \
+    void (*fn)(out_type*, const in_type*)) \
 { \
     require_msg(fn != NULL, \
         "algo_map_slice_" #in_type "_" #out_type ": fn cannot be NULL"); \
@@ -334,23 +320,9 @@ static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
     } \
 } \
 \
-/** \
- * @brief Applies fn to each element of slice_##in_type in place \
- * \
- * Intended for same-type transformations (in_type == out_type). \
- * The generated function depends only on in_type. \
- * \
- * @param sv Slice (borrowed, modified in place) \
- * @param fn In-place transformation: void (*)(in_type*) (borrowed) \
- * \
- * @pre fn != NULL — triggers require_msg \
- * @pre sv.ptr != NULL or sv.len == 0 (slice.h invariant) \
- * \
- * Warning: original values are overwritten. \
- */ \
 static inline void ALGO_MAP_INPLACE_SLICE_FN(in_type)( \
-    borrowed(slice_##in_type)       sv, \
-    borrowed(void (*)(in_type*))    fn) \
+    borrowed(slice_##in_type)  sv, \
+    void (*fn)(in_type*)) \
 { \
     require_msg(fn != NULL, \
         "algo_map_inplace_slice_" #in_type ": fn cannot be NULL"); \
