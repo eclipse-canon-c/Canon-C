@@ -580,6 +580,8 @@ static void fold_u8_suppress(void)
     (void)slice_u8_skip;
     (void)slice_u8_as_bytes;
     (void)slice_u8_as_cbytes;
+    (void)slice_u8_from;
+    (void)slice_u8_empty;
     (void)algo_fold_slice_u8;
     (void)algo_fold_result_slice_u8;
 }
