@@ -71,6 +71,20 @@
  * algo_sort() directly with a caller-managed heap or arena buffer.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * SWAP BUFFER SIZE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * algo_sort uses a fixed stack buffer of ALGO_SORT_SWAP_BUF_SIZE bytes
+ * (default 256) for swapping individual elements during insertion sort.
+ * Elements larger than this buffer trigger a contract failure — consistent
+ * with algo_reverse's ALGO_REVERSE_SWAP_BUF_SIZE contract. Override before
+ * including this header:
+ * ```c
+ * #define ALGO_SORT_SWAP_BUF_SIZE ((usize)1024)
+ * #include "algo/sort/sort.h"
+ * ```
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * EMPTY AND SINGLE-ELEMENT BEHAVIOR
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -81,29 +95,8 @@
  * PERFORMANCE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * algo_sort / ALGO_SORT_TYPED / algo_sort_slice_##type:
- *   len < 2:            O(1) — immediate return
- *   len in [2, 15]:     O(n²) worst / O(n) best — insertion sort,
- *                       cache-friendly, optimal for short sequences
- *   len >= 16, temp:    O(n log n) worst/average — stable merge sort,
- *                       recursion depth O(log n), O(n) additional space
- *   len >= 16, no temp: O(n²) worst — insertion sort fallback; useful when
- *                       heap or arena allocation is unavailable
- *   Stable: yes — equal elements always preserve original relative order
- *
- * algo_is_sorted / ALGO_IS_SORTED_TYPED / algo_is_sorted_slice_##type:
- *   Best case:  O(1) — first pair is out of order
- *   Worst case: O(n) — array is sorted (or has mismatch only at last pair)
- *   Space:      O(1) — no allocation, two pointer indices on the stack
- *   cmp calls:  0 (len < 2) to n-1 (sorted array)
- *   Array is never modified.
- *
- * Level comparison:
- *   Level 1 — Generic: one stride multiply per element access.
- *   Level 2 — Typed macro: sizeof is compile-time; the stack temp array is
- *              a fixed-size array (not a VLA), so no stack size uncertainty.
- *   Level 3 — Typed slice: delegates to the generic implementation;
- *              sizeof(type) is a compile-time constant at the call site.
+ * algo_sort: O(n log n) with temp, O(n²) without. Stable.
+ * algo_is_sorted: O(n) worst, O(1) best, O(1) space.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
@@ -142,8 +135,6 @@
 
 /*
  * Set linkage to static inline before pulling in the implementation.
- * This is the header-only mode — algo_sort and algo_is_sorted are inlined
- * at call sites. The four internal helpers are always static inline regardless.
  */
 #define ALGO_SORT_LINKAGE static inline
 
@@ -155,29 +146,6 @@
    Typed macros — recommended for direct array use
    ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * @def ALGO_SORT_TYPED(base, len, Type, cmp, ctx)
- * @brief Type-safe in-place sort with automatic stack temp buffer
- *
- * For len <= ALGO_SORT_STACK_TEMP_MAX: allocates a fixed-size stack array
- * of Type[ALGO_SORT_STACK_TEMP_MAX] as the merge sort scratch buffer.
- * For len > ALGO_SORT_STACK_TEMP_MAX: passes NULL, falls back to O(n²)
- * insertion sort. For large arrays, call algo_sort() directly with a
- * caller-managed heap or arena buffer.
- *
- * ALGO_SORT_STACK_TEMP_MAX is a compile-time constant (default 128) —
- * the stack array is not a VLA.
- *
- * @param base Array of Type to sort in-place (borrowed, modified in place)
- * @param len  Number of elements
- * @param Type Element type — used for sizeof and stack array declaration
- * @param cmp  algo_cmp_fn comparator (borrowed)
- * @param ctx  Optional context (borrowed, may be NULL)
- *
- * Performance:
- * - Time:  O(n log n) if len <= ALGO_SORT_STACK_TEMP_MAX, O(n²) otherwise
- * - Space: O(ALGO_SORT_STACK_TEMP_MAX * sizeof(Type)) stack for small arrays
- */
 #define ALGO_SORT_TYPED(base, len, Type, cmp, ctx) \
     do { \
         usize _asl_len = (usize)(len); \
@@ -191,23 +159,6 @@
         } \
     } while (0)
 
-/**
- * @def ALGO_IS_SORTED_TYPED(base, len, Type, cmp, ctx)
- * @brief Type-safe sorted check — evaluates to bool
- *
- * Wraps algo_is_sorted() with automatic sizeof(Type).
- * Returns true for empty and single-element arrays.
- *
- * @param base Array of Type (borrowed, read-only)
- * @param len  Number of elements (0 and 1 are valid — returns true)
- * @param Type Element type — used for sizeof only
- * @param cmp  algo_cmp_fn comparator (borrowed)
- * @param ctx  Optional context (borrowed, may be NULL)
- *
- * Performance: O(n) worst, O(1) best, O(1) space.
- *
- * @return bool — true if sorted or len < 2
- */
 #define ALGO_IS_SORTED_TYPED(base, len, Type, cmp, ctx) \
     algo_is_sorted((base), (usize)(len), sizeof(Type), \
         (algo_cmp_fn)(cmp), (ctx))
@@ -216,8 +167,6 @@
    DEFINE_ALGO_SORT — typed slice variants per element type
    ════════════════════════════════════════════════════════════════════════════
    Requires DEFINE_SLICE(type) to have been called first.
-   Generates fully typed functions accepting slice_##type directly.
-   No void* anywhere — the compiler sees the actual element type.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -225,49 +174,11 @@
  *
  * Prerequisites: DEFINE_SLICE(type) must have been called.
  *
- * Generated functions:
- *   algo_sort_slice_##type(sv, cmp, ctx, temp, temp_cap) → void
- *     Sorts sv in place. temp and temp_cap describe a caller-provided scratch
- *     buffer of type[temp_cap] elements. If temp == NULL or temp_cap < sv.len,
- *     falls back to insertion sort. Caller retains ownership of temp.
- *
- *   algo_is_sorted_slice_##type(sv, cmp, ctx) → bool
- *     Returns true if sv.ptr is sorted according to cmp.
- *     Returns true when sv.len < 2 (vacuously sorted).
- *
- * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
- * slice.h invariants). algo_sort_slice guards against len < 2 before
- * delegating. algo_is_sorted handles NULL base internally (returns true).
- *
- * Performance:
- *   algo_sort_slice_##type:     same as algo_sort — O(n log n) with temp,
- *                               O(n²) without
- *   algo_is_sorted_slice_##type: O(n) worst, O(1) best, O(1) space
+ * Slice wrappers enforce contracts (cmp non-NULL, non-empty slice has
+ * non-NULL ptr) before delegating, consistent with the contract pattern
+ * used by filter, find, fold, any_all, reverse, and search.
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
- *
- * Example:
- * ```c
- * DEFINE_SLICE(int)
- * DEFINE_ALGO_SORT(int)
- *
- * int buf[] = {5, 3, 1, 4, 2};
- * int tmp[5];
- * slice_int sv = slice_int_from(buf, 5);
- *
- * algo_sort_slice_int(sv, algo_cmp_int, NULL, tmp, 5);
- * // buf = {1, 2, 3, 4, 5}
- *
- * bool sorted = algo_is_sorted_slice_int(sv, algo_cmp_int, NULL); // true
- *
- * // No temp — falls back to insertion sort (O(n²)):
- * algo_sort_slice_int(sv, algo_cmp_int, NULL, NULL, 0);
- *
- * // Empty slice — no crash, no-op:
- * slice_int empty = slice_int_empty();
- * algo_sort_slice_int(empty, algo_cmp_int, NULL, NULL, 0); // no-op
- * bool r = algo_is_sorted_slice_int(empty, algo_cmp_int, NULL); // true
- * ```
  */
 #define DEFINE_ALGO_SORT(type) \
 \
@@ -278,7 +189,11 @@ static inline void ALGO_SORT_SLICE_FN(type)( \
     borrowed(type*)         temp, \
     usize                   temp_cap) \
 { \
-    if (!sv.ptr || sv.len < 2) return; \
+    require_msg(cmp != NULL, \
+        "algo_sort_slice_" #type ": cmp cannot be NULL"); \
+    require_msg(sv.len == 0 || sv.ptr != NULL, \
+        "algo_sort_slice_" #type ": non-empty slice has NULL ptr"); \
+    if (sv.len < 2) return; \
     void* tmp = (temp && temp_cap >= sv.len) ? (void*)temp : NULL; \
     algo_sort(sv.ptr, sv.len, sizeof(type), cmp, ctx, tmp); \
 } \
@@ -288,6 +203,11 @@ static inline bool ALGO_IS_SORTED_SLICE_FN(type)( \
     borrowed(algo_cmp_fn)   cmp, \
     borrowed(void*)         ctx) \
 { \
+    require_msg(cmp != NULL, \
+        "algo_is_sorted_slice_" #type ": cmp cannot be NULL"); \
+    require_msg(sv.len == 0 || sv.ptr != NULL, \
+        "algo_is_sorted_slice_" #type ": non-empty slice has NULL ptr"); \
+    if (sv.len < 2) return true; \
     return algo_is_sorted(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
 
