@@ -1,6 +1,6 @@
 /**
  * @file sort.h
- * @brief Stable in-place sort — hybrid insertion/merge sort
+ * @brief Stable in-place sort — hybrid insertion/merge sort 
  *
  * This is the entry point for header-only usage. Including this file
  * generates statically-inlined implementations of algo_sort and
