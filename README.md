@@ -265,6 +265,8 @@ errors, arena-backed allocation — into application-level utility code.
 For production logging, use `zlog`. For everything else, `util/` removes
 the seam between Canon-C's lower layers and the rest of your codebase.
 
+
+
 ## Scope
 
 Canon-C covers exactly what is needed to write explicit, ownership-aware C programs
@@ -329,6 +331,21 @@ For what Canon-C intentionally omits, established C libraries exist:
   smaller payloads, faster parsing, schema-driven.
 - `miniz` — single-file deflate/inflate and ZIP compression. Use for compressing
   serialized data or reading and writing ZIP archives.
+
+**Math / numerical computing**
+- `cglm` — optimized graphics and general-purpose math (vectors, matrices,
+  quaternions, transforms) in pure C99. Header-only, SIMD-accelerated where
+  available, no dependencies. Fully cross-platform. Use for 3D transforms,
+  physics, coordinate geometry, and any linear algebra that fits the graphics
+  math model.
+- `CMSIS-DSP` — ARM's official digital signal processing library for Cortex-M
+  targets. Fixed-point and floating-point FFT, filters, matrix operations,
+  statistics. Use on ARM embedded targets doing signal processing, sensor
+  fusion, or control loops.
+- `libfixmath` — portable fixed-point arithmetic (Q16.16) in pure C. No
+  floating-point unit required, no dependencies. Fully cross-platform. Use
+  on embedded targets without an FPU where `<math.h>` operations are
+  prohibitively slow or unavailable.
 
 **Hashing (non-cryptographic)**
 - `xxHash` — extremely fast general-purpose hash. Use for checksums, data
@@ -396,20 +413,29 @@ For what Canon-C intentionally omits, established C libraries exist:
 > rest of your codebase consistent. How cleanly they integrate depends on
 > the library:
 >
-> **Wrap cleanly** — monocypher, LMDB, mpack, miniz, xxHash, SipHash.
+> **Wrap cleanly** — monocypher, mpack, miniz, xxHash, SipHash, cglm,
+> libfixmath, CMSIS-DSP.
 > Flat API, no global state, buffer-based. Maps directly to Canon-C
 > conventions with a thin adapter.
 >
-> **Wrap partially** — SQLite, cJSON, yyjson, libsodium, TinyCThread.
+> **Wrap partially** — SQLite, LMDB, cJSON, yyjson, libsodium,
+> TinyCThread, pthreads, C11 `<threads.h>`, raylib, nuklear, SDL2, zlog.
 > Core operations wrap well into `Result<T, Error>` and `owned()`/`borrowed()`.
-> Callbacks, domain-specific error codes, or global initialization create
-> contained mismatches that cannot be eliminated, only documented.
+> Callbacks, domain-specific error codes, global initialization, stateful
+> handle lifecycles, or thread entry points create contained mismatches
+> that cannot be eliminated, only documented.
 >
-> **Isolate only** — libuv, FreeRTOS, Zephyr, lwIP.
-> Callback-driven or RTOS task models are architecturally incompatible with
-> Canon-C's explicit control flow. Contain the mismatch behind a single
-> adapter file. Canon-C's lower layers (arena, slice, result) remain usable
-> inside these environments — just not as wrappers around them.
+> **Isolate only** — libuv, FreeRTOS, Zephyr, lwIP, lvgl.
+> Callback-driven, tick-driven, or RTOS task models are architecturally
+> incompatible with Canon-C's explicit control flow. Contain the mismatch
+> behind a single adapter file. Canon-C's lower layers (arena, slice,
+> result) remain usable inside these environments — just not as wrappers
+> around them.
+>
+> **Not applicable** — Unity, Criterion, greatest, Emscripten.
+> Testing frameworks run at build time, not as runtime dependencies in
+> your application. Emscripten is a compiler toolchain, not a linked
+> library. These do not require integration adapters.
 >
 > Canon-C provides the following tools for integration boundaries:
 >
