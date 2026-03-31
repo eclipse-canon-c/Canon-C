@@ -9,6 +9,33 @@
  * fold_defn.h in exactly one .c file.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * ARCHITECTURAL NOTE
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * fold is architecturally different from the other eight algo/ modules.
+ * In modules like filter, find, sort, etc., Level 1 is a generic function
+ * (algo_filter, algo_find, algo_sort) defined in *_impl.h with void*
+ * parameters and a linkage macro. Level 2 typed macros wrap Level 1.
+ *
+ * fold cannot follow this pattern because the accumulator type and element
+ * type are both caller-determined and may differ from each other. A generic
+ * void*-based algo_fold() function would require unsafe function pointer
+ * casts (casting typed fold functions to a void*-based signature), which
+ * is undefined behavior in C99.
+ *
+ * Therefore:
+ *   - Level 1 and Level 2 are unified as ALGO_FOLD / ALGO_FOLD_RESULT
+ *     macros that expand to direct for-loops with typed array indexing.
+ *   - Level 3 (DEFINE_ALGO_FOLD) generates typed slice functions with
+ *     void* acc_ptr (to allow arbitrary accumulator types) and typed
+ *     element pointers.
+ *   - fold_impl.h contains only the CANON_RESULT(bool, Error)
+ *     instantiation needed for fallible fold — not the core algorithm.
+ *
+ * This deviation is intentional and documented here for readers who have
+ * seen the consistent 3-level pattern in the other eight modules.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * QUICK START
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -34,14 +61,6 @@
  * int sum = 0;
  * result_bool_Error r = ALGO_FOLD_RESULT(&sum, vals, 4, int, sum_positive, NULL);
  * if (result_bool_Error_is_err(r)) { ... } // stopped at index 2
- * ```
- *
- * Fallible fold — C99 strict mode (CANON_NO_GNU_EXTENSIONS):
- * ```c
- * result_bool_Error r;
- * ALGO_FOLD_RESULT(&sum, vals, 4, int, sum_positive, NULL, r);
- * // Note the extra out-result parameter — required in C99 mode
- * if (result_bool_Error_is_err(r)) { ... }
  * ```
  *
  * Slice variant — typed, no void*:
@@ -75,7 +94,7 @@
  *   ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx, out_result) → void
  *     [C99 mode — writes result into pre-declared out_result variable]
  *
- * Vec convenience wrappers (for containers with .items and .len fields):
+ * Vec convenience wrappers:
  *   ALGO_FOLD_VEC(acc_ptr, vec, Type, fold_fn, ctx) → void
  *   ALGO_FOLD_RESULT_VEC(acc_ptr, vec, Type, fold_fn, ctx) → result_bool_Error [GNU]
  *   ALGO_FOLD_RESULT_VEC(acc_ptr, vec, Type, fold_fn, ctx, out_r) → void [C99]
@@ -88,41 +107,8 @@
  * PERFORMANCE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * Time complexity — all variants:
- *
- *   ALGO_FOLD / algo_fold_slice_##type (infallible):
- *     Always O(n) — every element is visited exactly once, n = len.
- *     No early exit — the accumulator receives every element.
- *     Best == Worst == O(n).
- *
- *   ALGO_FOLD_RESULT / algo_fold_result_slice_##type (fallible):
- *     Best case:  O(1) — first element causes fn to return Err
- *     Worst case: O(n) — all elements processed, all return Ok
- *     Average:    O(k) where k = index of first Err + 1
- *
- * Space complexity — all variants:
- *   O(1) — no heap allocation, no recursion, constant stack frame.
- *   The accumulator is caller-owned; fold writes through acc_ptr only.
- *
- * fn call count:
- *   Infallible: exactly n calls, always.
- *   Fallible: 1 (first element fails) to n (all succeed).
- *   fn is never called with a NULL acc_ptr or NULL elem pointer.
- *
- * Level comparison:
- *   ALGO_FOLD macro: expands to a direct for-loop with typed array
- *   indexing — zero overhead, no function pointer indirection at the
- *   outer loop level.
- *
- *   algo_fold_slice_##type: takes a void* acc_ptr to allow arbitrary
- *   accumulator types with a typed element pointer. The single indirect
- *   call per element (through fn) is the only overhead vs. inlined code.
- *   For hot paths where fn is known at compile time, the compiler can
- *   inline through the function pointer when LTO or static inline is used.
- *
- *   The fold operation itself does not copy elements — fn receives a
- *   const pointer to each element in place, so struct-sized elements
- *   incur no copy cost in the fold loop.
+ * Infallible: O(n) always. Fallible: O(1) best (first Err), O(n) worst.
+ * All variants: O(1) space, no allocation.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * @sa fold_mangle.h — name customization for slice variants
@@ -153,7 +139,6 @@
  * so CANON_RESULT(bool, Error) generates `result__Bool_Error` (double underscore).
  * The stable name `result_bool_Error` used throughout this header and in user
  * code is provided by the typedef and function-name aliases below.
- * Identical typedef re-declarations are valid in C99 and later.
  */
 #ifndef CANON_RESULT_BOOL_ERROR_COMPAT
 #define CANON_RESULT_BOOL_ERROR_COMPAT
@@ -181,29 +166,6 @@ typedef result__Bool_Error result_bool_Error;
    ALGO_FOLD — infallible fold over a C array
    ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * @def ALGO_FOLD(acc_ptr, array, len, Type, fold_fn, ctx)
- * @brief Type-safe infallible fold over a C array
- *
- * Applies fold_fn to each element left-to-right, accumulating into
- * *acc_ptr. The caller initializes *acc_ptr before the call.
- *
- * @param acc_ptr Pointer to accumulator (borrowed, mutable)
- * @param array   Input array of Type (borrowed, read-only)
- * @param len     Number of elements
- * @param Type    Element type
- * @param fold_fn void (*)(AccType*, const Type*, void*)
- * @param ctx     Optional context (borrowed, may be NULL)
- *
- * Performance:
- * - Time:  O(n) — visits every element exactly once, no early exit
- * - Space: O(1) — no allocation; accumulator is caller-owned
- * - fn calls: exactly n (0 when len == 0)
- *
- * @pre acc_ptr != NULL  — triggers require_msg
- * @pre array   != NULL  — triggers require_msg
- * @pre fold_fn != NULL  — triggers require_msg
- */
 #define ALGO_FOLD(acc_ptr, array, len, Type, fold_fn, ctx) \
     do { \
         require_msg((acc_ptr) != NULL, "ALGO_FOLD: acc_ptr cannot be NULL"); \
@@ -221,36 +183,6 @@ typedef result__Bool_Error result_bool_Error;
 
 #ifndef CANON_NO_GNU_EXTENSIONS
 
-/**
- * @def ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx)
- * @brief Fallible fold — returns result_bool_Error directly (GNU version)
- *
- * Requires GNU C statement expressions or C23.
- * Define CANON_NO_GNU_EXTENSIONS to use the C99 do-while variant instead.
- *
- * Stops on the first fold_fn that returns Err. The accumulator contains
- * the partial result up to the error point.
- *
- * @param acc_ptr Pointer to accumulator (borrowed, mutable)
- * @param array   Input array of Type (borrowed, read-only)
- * @param len     Number of elements
- * @param Type    Element type
- * @param fold_fn result_bool_Error (*)(AccType*, const Type*, void*)
- * @param ctx     Optional context (borrowed, may be NULL)
- *
- * @return result_bool_Error — Ok(true) if all elements processed, Err on failure
- *
- * Performance:
- * - Time best:  O(1) — first element causes fn to return Err
- * - Time worst: O(n) — all elements processed successfully
- * - Time avg:   O(k) where k = index of first Err + 1
- * - Space:      O(1) — no allocation
- * - fn calls:   1 (first fails) to n (all succeed)
- *
- * @pre acc_ptr != NULL  — triggers require_msg
- * @pre array   != NULL  — triggers require_msg
- * @pre fold_fn != NULL  — triggers require_msg
- */
 #define ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx) \
     ({ \
         require_msg((acc_ptr) != NULL, "ALGO_FOLD_RESULT: acc_ptr cannot be NULL"); \
@@ -267,41 +199,6 @@ typedef result__Bool_Error result_bool_Error;
 
 #else /* CANON_NO_GNU_EXTENSIONS — strict C99 */
 
-/**
- * @def ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx, out_result)
- * @brief Fallible fold — writes result into pre-declared variable (C99 version)
- *
- * This is the strict C99 variant of ALGO_FOLD_RESULT. It takes one extra
- * parameter: a pre-declared result_bool_Error variable that receives the
- * outcome. This avoids GNU statement expressions and unsafe function pointer
- * casts.
- *
- * Usage:
- * ```c
- * result_bool_Error r;
- * ALGO_FOLD_RESULT(&sum, arr, len, int, my_fn, NULL, r);
- * if (result_bool_Error_is_err(r)) { ... }
- * ```
- *
- * @param acc_ptr    Pointer to accumulator (borrowed, mutable)
- * @param array      Input array of Type (borrowed, read-only)
- * @param len        Number of elements
- * @param Type       Element type
- * @param fold_fn    result_bool_Error (*)(AccType*, const Type*, void*)
- * @param ctx        Optional context (borrowed, may be NULL)
- * @param out_result Pre-declared result_bool_Error variable — receives outcome
- *
- * Performance:
- * - Time best:  O(1) — first element causes fn to return Err
- * - Time worst: O(n) — all elements processed successfully
- * - Time avg:   O(k) where k = index of first Err + 1
- * - Space:      O(1) — no allocation
- * - fn calls:   1 (first fails) to n (all succeed)
- *
- * @pre acc_ptr    != NULL — triggers require_msg
- * @pre array      != NULL — triggers require_msg
- * @pre fold_fn    != NULL — triggers require_msg
- */
 #define ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx, out_result) \
     do { \
         require_msg((acc_ptr) != NULL, "ALGO_FOLD_RESULT: acc_ptr cannot be NULL"); \
@@ -319,26 +216,11 @@ typedef result__Bool_Error result_bool_Error;
 
 /* ════════════════════════════════════════════════════════════════════════════
    Vec convenience wrappers
-   ════════════════════════════════════════════════════════════════════════════
-   Work with any container that exposes .items (element pointer) and
-   .len (element count) fields. Includes data/vec.h typed vectors.
    ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * @def ALGO_FOLD_VEC(acc_ptr, vec, Type, fold_fn, ctx)
- * @brief Infallible fold over a container with .items and .len fields
- */
 #define ALGO_FOLD_VEC(acc_ptr, vec, Type, fold_fn, ctx) \
     ALGO_FOLD((acc_ptr), (vec).items, (vec).len, Type, (fold_fn), (ctx))
 
-/**
- * @def ALGO_FOLD_RESULT_VEC — fallible fold over a container with .items and .len
- *
- * GNU mode:  ALGO_FOLD_RESULT_VEC(acc_ptr, vec, Type, fold_fn, ctx)
- *            → returns result_bool_Error directly
- * C99 mode:  ALGO_FOLD_RESULT_VEC(acc_ptr, vec, Type, fold_fn, ctx, out_result)
- *            → writes into pre-declared out_result variable
- */
 #ifndef CANON_NO_GNU_EXTENSIONS
     #define ALGO_FOLD_RESULT_VEC(acc_ptr, vec, Type, fold_fn, ctx) \
         ALGO_FOLD_RESULT((acc_ptr), (vec).items, (vec).len, Type, (fold_fn), (ctx))
@@ -351,8 +233,6 @@ typedef result__Bool_Error result_bool_Error;
    DEFINE_ALGO_FOLD — typed slice variants per element type
    ════════════════════════════════════════════════════════════════════════════
    Requires DEFINE_SLICE(type) from core/slice.h.
-   Generates fully typed functions with no void* element pointer —
-   the compiler sees the actual element type at each call site.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -361,68 +241,23 @@ typedef result__Bool_Error result_bool_Error;
  * Prerequisites: DEFINE_SLICE(type) must have been called.
  *
  * Generated functions:
- *
  *   algo_fold_slice_##type(acc_ptr, sv, fn, ctx) → void
- *     Infallible fold. fn: void (*)(void*, const type*, void*)
- *
  *   algo_fold_result_slice_##type(acc_ptr, sv, fn, ctx) → result_bool_Error
- *     Fallible fold. fn: result_bool_Error (*)(void*, const type*, void*)
- *     Stops on first Err return from fn.
  *
  * Note on acc_ptr type: the accumulator type may differ from the element
  * type (e.g. folding int elements into a double sum). The fn parameter
- * is typed as void* acc to allow arbitrary accumulator types. Cast inside
+ * takes void* acc to allow arbitrary accumulator types. Cast inside
  * fn to the actual accumulator type.
  *
- * Empty slice safety: sv.ptr may be NULL when sv.len == 0. The loop never
- * executes when sv.len == 0. Only acc_ptr and fn are required non-NULL.
- *
- * Performance:
- *   algo_fold_slice_##type:
- *     Time:  O(n) — visits all n elements, no early exit
- *     Space: O(1) — no allocation; fn called with pointer into slice
- *     fn calls: exactly n (0 when sv.len == 0)
- *
- *   algo_fold_result_slice_##type:
- *     Time best:  O(1) — first element causes fn to return Err
- *     Time worst: O(n) — all elements return Ok
- *     Space: O(1) — no allocation
- *     fn calls: 1 to n
- *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
- *
- * Example:
- * ```c
- * DEFINE_SLICE(int)
- * DEFINE_ALGO_FOLD(int)
- *
- * void sum_ints(void* acc, const int* elem, void* ctx) {
- *     *(int*)acc += *elem;
- * }
- *
- * int arr[] = {1, 2, 3, 4, 5};
- * slice_int sv = slice_int_from(arr, 5);
- * int total = 0;
- * algo_fold_slice_int(&total, sv, sum_ints, NULL);
- * // total == 15
- *
- * // Fallible variant
- * result_bool_Error sum_positive(void* acc, const int* elem, void* ctx) {
- *     if (*elem < 0) return result_bool_Error_err(ERR_INVALID_ARG);
- *     *(int*)acc += *elem;
- *     return result_bool_Error_ok(true);
- * }
- * int sum = 0;
- * result_bool_Error r = algo_fold_result_slice_int(&sum, sv, sum_positive, NULL);
- * ```
  */
 #define DEFINE_ALGO_FOLD(type) \
 \
 static inline void ALGO_FOLD_SLICE_FN(type)( \
-    borrowed(void*)        acc_ptr, \
-    borrowed(slice_##type) sv, \
-    void (*fn)(void*, const type*, void*), \
-    borrowed(void*)        ctx) \
+    borrowed(void*)                             acc_ptr, \
+    borrowed(slice_##type)                      sv, \
+    borrowed(void (*)(void*, const type*, void*)) fn, \
+    borrowed(void*)                             ctx) \
 { \
     require_msg(acc_ptr != NULL, \
         "algo_fold_slice_" #type ": acc_ptr cannot be NULL"); \
@@ -436,10 +271,10 @@ static inline void ALGO_FOLD_SLICE_FN(type)( \
 } \
 \
 static inline result_bool_Error ALGO_FOLD_RESULT_SLICE_FN(type)( \
-    borrowed(void*)        acc_ptr, \
-    borrowed(slice_##type) sv, \
-    result_bool_Error (*fn)(void*, const type*, void*), \
-    borrowed(void*)        ctx) \
+    borrowed(void*)                                              acc_ptr, \
+    borrowed(slice_##type)                                       sv, \
+    borrowed(result_bool_Error (*)(void*, const type*, void*))   fn, \
+    borrowed(void*)                                              ctx) \
 { \
     require_msg(acc_ptr != NULL, \
         "algo_fold_result_slice_" #type ": acc_ptr cannot be NULL"); \
