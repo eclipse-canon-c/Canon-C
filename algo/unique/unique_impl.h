@@ -26,6 +26,13 @@
  * Empty and single-element inputs are trivially unique — the function
  * returns len immediately after the precondition checks.
  *
+ * Contract convention:
+ * ────────────────────────────────────────────────────────────────────────────
+ * algo_unique enforces array != NULL via require_msg (consistent with
+ * algo_any, algo_all, algo_filter, algo_find, algo_map, algo_reverse,
+ * algo_sort). The len <= 1 early return is a separate check AFTER the
+ * contract — a NULL array is always a programming error, regardless of len.
+ *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * unique_impl.h includes only:
@@ -75,7 +82,7 @@
  * the array with the same comparator before calling this function.
  *
  * Empty (len == 0) and single-element (len == 1) arrays are trivially unique —
- * the function returns len immediately. NULL array returns 0.
+ * the function returns len immediately.
  *
  * @param array     Pointer to first element (borrowed, modified in place)
  * @param len       Number of elements (0 and 1 are valid — returns len)
@@ -83,12 +90,13 @@
  * @param cmp       Comparator — returns 0 if elements are equal (borrowed)
  * @param ctx       Optional context passed to cmp (borrowed, may be NULL)
  *
- * @pre elem_size > 0  — triggers require_msg
- * @pre cmp != NULL    — triggers require_msg
+ * @pre array     != NULL — triggers require_msg
+ * @pre elem_size > 0     — triggers require_msg
+ * @pre cmp       != NULL — triggers require_msg
  *
  * @return New logical length in [0, len].
- *         Returns 0 if array is NULL.
- *         Returns len if len <= 1.
+ *         Returns 0 when len == 0.
+ *         Returns 1 when len == 1.
  *
  * @post array[0..return-1] contains no consecutive equal elements
  * @post Relative order of first occurrences is preserved
@@ -106,10 +114,11 @@ ALGO_UNIQUE_LINKAGE usize algo_unique(
     borrowed(algo_cmp_fn)   cmp,
     borrowed(void*)         ctx)
 {
-    require_msg(elem_size > 0,    "algo_unique: elem_size must be > 0");
+    require_msg(array     != NULL, "algo_unique: array cannot be NULL");
+    require_msg(elem_size > 0,     "algo_unique: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_unique: cmp cannot be NULL");
 
-    if (!array || len <= 1) return len;
+    if (len <= 1) return len;
 
     usize write = 1;
 
