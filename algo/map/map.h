@@ -66,6 +66,18 @@
  * fn is never called. No memory is read or written. No contract fires.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * DOUBLE INSTANTIATION GUARD
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * DEFINE_ALGO_MAP(in_type, out_type) generates an in-place variant
+ * algo_map_inplace_slice_##in_type that depends only on in_type. Calling
+ * DEFINE_ALGO_MAP(int, double) and DEFINE_ALGO_MAP(int, float) would
+ * generate algo_map_inplace_slice_int twice, causing a redefinition error.
+ * To prevent this, define CANON_ALGO_MAP_INPLACE_DEFINED_##in_type before
+ * the second call, or use the guard documented in the DEFINE_ALGO_MAP
+ * section below.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -85,56 +97,14 @@
  * PERFORMANCE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * Time complexity — all variants:
- *
- *   algo_map / ALGO_MAP_TYPED / algo_map_slice_##in##_##out:
- *     Always O(n) — every element is visited and fn is called exactly once,
- *     n = len (or min(sv_out.len, sv_in.len) for the slice variant).
- *     No early exit. Best == Worst == O(n).
- *
- *   algo_map_inplace / ALGO_MAP_INPLACE_TYPED / algo_map_inplace_slice_##type:
- *     Always O(n) — same guarantee; fn called exactly once per element.
- *     No early exit.
- *
- *   Special case: len == 0 (or either slice is empty):
- *     O(1) — fn is never called, returns immediately.
- *
- * Space complexity — all variants:
- *   O(1) — no heap allocation, no recursion, constant stack frame.
- *   algo_map writes through the caller-supplied output buffer; it does
- *   not allocate one.
- *
- * fn call count:
- *   Exactly n calls (0 when len == 0). fn is never called with a NULL
- *   pointer. Each call receives a valid output element slot and a valid
- *   input element.
- *
- * Level comparison:
- *   Level 1 — Generic: two stride multiplies per element (ptr_elem_const
- *             for input, ptr_elem for output) when in/out sizes differ.
- *   Level 2 — Typed macro: sizeof is a compile-time constant, eliminating
- *             the multiply in optimized builds.
- *   Level 3 — Typed slice: fn receives typed pointers directly; no void*
- *             casts at the call site, no stride multiply. Best codegen;
- *             preferred when both element types are known at instantiation.
- *   In-place variants (all levels): single stride multiply eliminated at
- *             level 2+; the output is the input buffer, so no separate
- *             output stride computation.
+ * All variants: O(n) time, O(1) space, fn called exactly n times.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * TRANSFORMATION FUNCTION SIGNATURES
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * Cross-type (algo_map, ALGO_MAP_TYPED, algo_map_slice_##in##_##out):
- *   void fn(void* out, const void* in)
- *   out points to the output element slot — write exactly one element.
- *   in  points to the input element — read-only, do not modify.
- *   Neither pointer may be retained beyond the call.
- *
- * In-place (algo_map_inplace, ALGO_MAP_INPLACE_TYPED, algo_map_inplace_slice_##type):
- *   void fn(void* elem)
- *   elem points to the element — read current value, write transformed result.
- *   The pointer must not be retained beyond the call.
+ * Cross-type:  void fn(void* out, const void* in)
+ * In-place:    void fn(void* elem)
  *
  * @sa map_mangle.h — name customization for slice variants
  * @sa map_decl.h   — forward declarations for separate compilation
@@ -154,7 +124,6 @@
 
 /*
  * Set linkage to static inline before pulling in the implementation.
- * This is the header-only mode — all functions are inlined at call sites.
  */
 #define ALGO_MAP_LINKAGE static inline
 
@@ -163,71 +132,14 @@
 #undef ALGO_MAP_LINKAGE
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Typed macros — recommended for direct array use
+   Typed macros
    ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * @def ALGO_MAP_TYPED(out, in, len, OutType, InType, fn)
- * @brief Type-safe map from InType array to OutType array
- *
- * Wraps algo_map() with automatic sizeof(OutType) and sizeof(InType),
- * eliminating manual elem_size arguments and reducing the chance of
- * sizeof mismatches.
- *
- * fn must have signature: void fn(void* out, const void* in)
- * Both out and in point to individual elements of their respective types.
- *
- * @param out     Output array of OutType (borrowed, writable)
- * @param in      Input array of InType (borrowed, read-only)
- * @param len     Number of elements to process (0 is valid — no-op)
- * @param OutType Output element type — used for sizeof and pointer arithmetic
- * @param InType  Input element type — used for sizeof and pointer arithmetic
- * @param fn      Transformation function: void (*)(void*, const void*) (borrowed)
- *
- * Performance:
- * - Time:  O(n) — fn called exactly n times (0 calls when len == 0)
- * - Space: O(1) — writes into caller-supplied output buffer
- *
- * @pre out != NULL, in != NULL, fn != NULL — enforced by algo_map contracts
- * @pre out and in point to buffers of at least len elements each
- * @pre out and in do not overlap
- *
- * @post out[i] = fn(in[i]) for all i in [0, len)
- * @post in is unchanged
- */
 #define ALGO_MAP_TYPED(out, in, len, OutType, InType, fn) \
     algo_map((out), (in), (len), \
         sizeof(OutType), sizeof(InType), \
         (algo_map_fn)(fn))
 
-/**
- * @def ALGO_MAP_INPLACE_TYPED(arr, len, Type, fn)
- * @brief Type-safe in-place map over a C array
- *
- * Wraps algo_map_inplace() with automatic sizeof(Type), eliminating
- * the manual elem_size argument.
- *
- * fn must have signature: void fn(void* elem)
- * elem points to an individual element of Type.
- *
- * @param arr  Array of Type (borrowed, modified in place)
- * @param len  Number of elements to process (0 is valid — no-op)
- * @param Type Element type — used for sizeof and pointer arithmetic
- * @param fn   In-place transformation: void (*)(void*) (borrowed)
- *
- * Performance:
- * - Time:  O(n) — fn called exactly n times (0 calls when len == 0)
- * - Space: O(1) — modifies array in place, no extra allocation
- *
- * @pre arr != NULL, fn != NULL — enforced by algo_map_inplace contracts
- * @pre arr points to a buffer of at least len elements
- *
- * @post arr[i] = fn(arr[i]) for all i in [0, len)
- * @post Original values are lost (overwritten)
- *
- * Warning: data is mutated in place. If the original must be preserved,
- * use ALGO_MAP_TYPED with a separate output buffer.
- */
 #define ALGO_MAP_INPLACE_TYPED(arr, len, Type, fn) \
     algo_map_inplace((arr), (len), sizeof(Type), \
         (algo_map_inplace_fn)(fn))
@@ -236,8 +148,11 @@
    DEFINE_ALGO_MAP — typed slice variants per element type pair
    ════════════════════════════════════════════════════════════════════════════
    Requires DEFINE_SLICE(in_type) and DEFINE_SLICE(out_type).
-   Generates fully typed functions accepting slice_##type directly.
-   No void* anywhere — the compiler sees the actual element types.
+
+   The in-place variant is guarded by CANON_ALGO_MAP_INPLACE_DEFINED_##in_type
+   to prevent redefinition when DEFINE_ALGO_MAP is called multiple times with
+   the same in_type but different out_types. The guard is automatically set
+   on first instantiation.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -249,68 +164,18 @@
  *
  * Generated functions:
  *   algo_map_slice_##in_type##_##out_type(sv_out, sv_in, fn) → void
- *     Transforms each element of sv_in through fn, writing to sv_out.
- *     Processes min(sv_out.len, sv_in.len) elements. Both slices are
- *     borrowed — caller retains ownership of all backing buffers.
- *
  *   algo_map_inplace_slice_##in_type(sv, fn) → void
- *     Applies fn to each element of sv in place. Useful when in_type and
- *     out_type are the same. Generated regardless of out_type — it depends
- *     only on in_type. Calling it when in_type != out_type is a type error.
+ *     (only generated on first call for a given in_type)
  *
- * The transformation functions receive typed pointers, not void*. The
- * compiler sees the exact element types at every call site.
- *
- * Cross-type fn signature:   void fn(out_type* out, const in_type* in)
- * In-place fn signature:     void fn(in_type* elem)
- *
- * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
- * slice.h invariants). The loop never executes when len == 0, so a
- * NULL ptr is safe.
- *
- * Performance:
- *   algo_map_slice_##in##_##out: O(min(sv_out.len, sv_in.len)) — all elements
- *   algo_map_inplace_slice_##in: O(sv.len) — all elements
- *   Both: O(1) space, fn called exactly that many times (0 if either is empty)
- *
- * @param in_type  Input element type — must match a prior DEFINE_SLICE(in_type) call
- * @param out_type Output element type — must match a prior DEFINE_SLICE(out_type) call
- *
- * Example:
- * ```c
- * DEFINE_SLICE(int)
- * DEFINE_SLICE(double)
- * DEFINE_ALGO_MAP(int, double)
- *
- * static void square(double* out, const int* in) {
- *     *out = (double)(*in) * (double)(*in);
- * }
- *
- * int    buf_in[]  = {1, 2, 3, 4, 5};
- * double buf_out[5] = {0};
- * slice_int    sv_in  = slice_int_from(buf_in,  5);
- * slice_double sv_out = slice_double_from(buf_out, 5);
- *
- * algo_map_slice_int_double(sv_out, sv_in, square);
- * // buf_out = {1.0, 4.0, 9.0, 16.0, 25.0}
- *
- * // In-place (same type only):
- * DEFINE_ALGO_MAP(int, int)
- * static void increment(int* elem) { (*elem)++; }
- * algo_map_inplace_slice_int(sv_in, increment);
- * // buf_in = {2, 3, 4, 5, 6}
- *
- * // Empty slice — no crash, no fn calls
- * slice_int empty = slice_int_empty();
- * algo_map_inplace_slice_int(empty, increment); // no-op
- * ```
+ * @param in_type  Input element type
+ * @param out_type Output element type
  */
 #define DEFINE_ALGO_MAP(in_type, out_type) \
 \
 static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
-    borrowed(slice_##out_type)                sv_out, \
-    borrowed(slice_##in_type)                 sv_in, \
-    void (*fn)(out_type*, const in_type*)) \
+    borrowed(slice_##out_type)                          sv_out, \
+    borrowed(slice_##in_type)                           sv_in, \
+    borrowed(void (*)(out_type*, const in_type*))        fn) \
 { \
     require_msg(fn != NULL, \
         "algo_map_slice_" #in_type "_" #out_type ": fn cannot be NULL"); \
@@ -320,9 +185,25 @@ static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
     } \
 } \
 \
+CANON_ALGO_MAP_INPLACE_IMPL_(in_type)
+
+/* Internal: conditionally generate the in-place variant once per in_type */
+#ifndef CANON_ALGO_MAP_INPLACE_GUARD_
+#define CANON_ALGO_MAP_INPLACE_GUARD_
+
+#define CANON_ALGO_MAP_INPLACE_IMPL_(in_type) \
+    CANON_ALGO_MAP_INPLACE_IMPL_INNER_(in_type, \
+        CANON_ALGO_MAP_INPLACE_DEFINED_##in_type)
+
+/* Two-level dispatch: if the guard macro is defined, emit nothing */
+#define CANON_ALGO_MAP_INPLACE_IMPL_INNER_(in_type, guard) \
+    CANON_ALGO_MAP_INPLACE_SELECT_(in_type, guard)
+
+/* Default: guard is not defined, so generate the function and set the guard */
+#define CANON_ALGO_MAP_INPLACE_SELECT_(in_type, guard) \
 static inline void ALGO_MAP_INPLACE_SLICE_FN(in_type)( \
-    borrowed(slice_##in_type)  sv, \
-    void (*fn)(in_type*)) \
+    borrowed(slice_##in_type)                   sv, \
+    borrowed(void (*)(in_type*))                 fn) \
 { \
     require_msg(fn != NULL, \
         "algo_map_inplace_slice_" #in_type ": fn cannot be NULL"); \
@@ -330,5 +211,7 @@ static inline void ALGO_MAP_INPLACE_SLICE_FN(in_type)( \
         fn(&sv.ptr[_i]); \
     } \
 }
+
+#endif /* CANON_ALGO_MAP_INPLACE_GUARD_ */
 
 #endif /* CANON_ALGO_MAP_H */
