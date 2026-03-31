@@ -55,11 +55,10 @@
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
  * algo_reverse() — len == 0 or len == 1: returns immediately, no-op.
- *                  No contracts fire. NULL array with len < 2 is also safe.
+ *                  No contracts fire beyond the standard preconditions.
  *
  * algo_is_palindrome() — len == 0 or len == 1: returns true.
  *                        Vacuous palindrome — no pair exists that could fail.
- *                        NULL array with len < 2 also returns true.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * SWAP BUFFER SIZE
@@ -165,18 +164,6 @@
 /**
  * @def ALGO_REVERSE_TYPED(array, len, Type)
  * @brief Type-safe in-place reversal of a C array
- *
- * Wraps algo_reverse() with automatic sizeof(Type), eliminating the manual
- * elem_size argument and reducing the chance of sizeof mismatches.
- *
- * @param array C array of Type (borrowed, modified in place)
- * @param len   Number of elements (0 and 1 are valid — no-op)
- * @param Type  Element type — used for sizeof only
- *
- * Performance: O(⌊n/2⌋) swaps, O(1) space. O(1) for len < 2.
- *
- * @pre sizeof(Type) <= ALGO_REVERSE_SWAP_BUF_SIZE — enforced by algo_reverse
- * @post array[i] and array[len-1-i] swapped for all i in [0, ⌊len/2⌋)
  */
 #define ALGO_REVERSE_TYPED(array, len, Type) \
     algo_reverse((array), (len), sizeof(Type))
@@ -184,19 +171,6 @@
 /**
  * @def ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx)
  * @brief Type-safe palindrome check over a C array
- *
- * Wraps algo_is_palindrome() with automatic sizeof(Type). Returns true for
- * empty and single-element arrays (vacuous palindrome).
- *
- * @param array C array of Type (borrowed, read-only)
- * @param len   Number of elements (0 and 1 are valid — returns true)
- * @param Type  Element type — used for sizeof only
- * @param cmp   Comparator: int (*)(const void*, const void*, void*) (borrowed)
- * @param ctx   Optional context (borrowed, may be NULL)
- *
- * Performance: O(1) best case, O(⌊n/2⌋) worst case, O(1) space.
- *
- * @return bool — true if all symmetric pairs compare equal, or len < 2
  */
 #define ALGO_IS_PALINDROME_TYPED(array, len, Type, cmp, ctx) \
     algo_is_palindrome((array), (len), sizeof(Type), \
@@ -223,17 +197,10 @@
  *     Returns true if sv reads the same forwards and backwards.
  *     Returns true when sv.len < 2 (vacuous palindrome).
  *
- * The two functions are structurally dual — same two-pointer traversal,
- * one mutates, one compares. Both are companions in the same module,
- * consistent with algo_any / algo_all in any_all.h.
- *
  * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
- * slice.h invariants). Both functions guard against len < 2 before
- * touching any element, so a NULL ptr with len == 0 is safe.
- *
- * Performance:
- *   algo_reverse_slice_##type:        O(⌊n/2⌋) swaps, O(1) space
- *   algo_is_palindrome_slice_##type:  O(1) best, O(⌊n/2⌋) worst, O(1) space
+ * slice.h invariants). Both functions guard against len < 2 after
+ * contract checks, so a NULL ptr with len == 0 triggers the contract
+ * for non-empty slices only.
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  *
@@ -268,7 +235,9 @@
 static inline void ALGO_REVERSE_SLICE_FN(type)( \
     borrowed(slice_##type) sv) \
 { \
-    if (!sv.ptr || sv.len < 2) return; \
+    require_msg(sv.len == 0 || sv.ptr != NULL, \
+        "algo_reverse_slice_" #type ": non-empty slice has NULL ptr"); \
+    if (sv.len < 2) return; \
     algo_reverse(sv.ptr, sv.len, sizeof(type)); \
 } \
 \
@@ -279,6 +248,9 @@ static inline bool ALGO_IS_PALINDROME_SLICE_FN(type)( \
 { \
     require_msg(cmp != NULL, \
         "algo_is_palindrome_slice_" #type ": cmp cannot be NULL"); \
+    require_msg(sv.len == 0 || sv.ptr != NULL, \
+        "algo_is_palindrome_slice_" #type ": non-empty slice has NULL ptr"); \
+    if (sv.len < 2) return true; \
     return algo_is_palindrome(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
 
