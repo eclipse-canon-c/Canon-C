@@ -25,6 +25,16 @@
  *   algo_reverse   mutates — swap at every pair
  *   algo_is_palindrome reads — compare at every pair, return false on mismatch
  *
+ * Contract convention:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Both functions enforce array != NULL via require_msg (consistent with
+ * algo_any, algo_all, algo_filter, algo_find, algo_map). The len < 2
+ * early return is a separate check AFTER the contract — a NULL array
+ * is always a programming error, regardless of len.
+ *
+ * Internal helpers in this file omit borrowed() annotations — ownership
+ * is enforced at the public API boundary only.
+ *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * reverse_impl.h includes only:
@@ -81,7 +91,7 @@
  * @param len       Number of elements (0 and 1 are valid — no-op)
  * @param elem_size Size in bytes of each element (must be > 0)
  *
- * @pre array     != NULL — if len >= 2; NULL with len < 2 is silently ignored
+ * @pre array     != NULL — triggers require_msg
  * @pre elem_size >  0    — triggers require_msg
  * @pre elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE — triggers require_msg
  *
@@ -98,12 +108,14 @@ ALGO_REVERSE_LINKAGE void algo_reverse(
     usize           len,
     usize           elem_size)
 {
+    require_msg(array     != NULL,
+        "algo_reverse: array cannot be NULL");
     require_msg(elem_size > 0,
         "algo_reverse: elem_size must be > 0");
     require_msg(elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE,
         "algo_reverse: elem_size exceeds ALGO_REVERSE_SWAP_BUF_SIZE");
 
-    if (!array || len < 2) return;
+    if (len < 2) return;
 
     u8  temp[ALGO_REVERSE_SWAP_BUF_SIZE];
     u8* left  = (u8*)array;
@@ -140,8 +152,9 @@ ALGO_REVERSE_LINKAGE void algo_reverse(
  * @param cmp       Comparator returning 0 if elements are equal (borrowed)
  * @param ctx       Optional context passed through to cmp (borrowed, may be NULL)
  *
- * @pre elem_size > 0  — triggers require_msg
- * @pre cmp != NULL    — triggers require_msg
+ * @pre array     != NULL — triggers require_msg
+ * @pre elem_size > 0     — triggers require_msg
+ * @pre cmp       != NULL — triggers require_msg
  *
  * @return true if all symmetric pairs compare equal, or len < 2
  *
@@ -156,10 +169,11 @@ ALGO_REVERSE_LINKAGE bool algo_is_palindrome(
     borrowed(algo_cmp_fn)   cmp,
     borrowed(void*)         ctx)
 {
-    require_msg(elem_size > 0,    "algo_is_palindrome: elem_size must be > 0");
+    require_msg(array     != NULL, "algo_is_palindrome: array cannot be NULL");
+    require_msg(elem_size > 0,     "algo_is_palindrome: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_is_palindrome: cmp cannot be NULL");
 
-    if (!array || len < 2) return true;
+    if (len < 2) return true;
 
     usize left_idx  = 0;
     usize right_idx = len - 1;
