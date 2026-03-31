@@ -5,7 +5,7 @@
  * This is the entry point for header-only usage. Including this file
  * generates statically-inlined implementations of all five search
  * functions, plus typed macro wrappers and the DEFINE_ALGO_SEARCH
- * instantiation macro.
+ * instantiation macro. 
  *
  * For separate compilation (external linkage), use search_decl.h in
  * headers and search_defn.h in exactly one .c file instead.
