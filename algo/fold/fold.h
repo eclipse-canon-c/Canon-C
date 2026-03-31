@@ -36,6 +36,16 @@
  * seen the consistent 3-level pattern in the other eight modules.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * OWNERSHIP ANNOTATIONS
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Function pointer parameters in DEFINE_ALGO_FOLD macros cannot use
+ * borrowed() because the function pointer types contain commas that
+ * break C preprocessor macro argument parsing. These fn parameters are
+ * semantically borrowed — they are not retained beyond the call.
+ * All other parameters use borrowed() as expected.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * QUICK START
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
@@ -80,9 +90,6 @@
  * Infallible: void fn(AccType* acc, const ElemType* elem, void* ctx)
  * Fallible:   result_bool_Error fn(AccType* acc, const ElemType* elem, void* ctx)
  *
- * The accumulator type and element type may differ — fold is not restricted
- * to same-type accumulation.
- *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -102,13 +109,6 @@
  * Typed slice instantiation (call DEFINE_ALGO_FOLD(type) first):
  *   algo_fold_slice_##type(acc_ptr, sv, fn, ctx) → void
  *   algo_fold_result_slice_##type(acc_ptr, sv, fn, ctx) → result_bool_Error
- *
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * PERFORMANCE
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- *
- * Infallible: O(n) always. Fallible: O(1) best (first Err), O(n) worst.
- * All variants: O(1) space, no allocation.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * @sa fold_mangle.h — name customization for slice variants
@@ -134,11 +134,7 @@
 #undef ALGO_FOLD_LINKAGE
 
 /*
- * C99 bool/bool mangling fix:
- * In C99, `bool` expands to `_Bool` before token-pasting inside CANON_RESULT,
- * so CANON_RESULT(bool, Error) generates `result__Bool_Error` (double underscore).
- * The stable name `result_bool_Error` used throughout this header and in user
- * code is provided by the typedef and function-name aliases below.
+ * C99 bool/bool mangling fix.
  */
 #ifndef CANON_RESULT_BOOL_ERROR_COMPAT
 #define CANON_RESULT_BOOL_ERROR_COMPAT
@@ -231,8 +227,6 @@ typedef result__Bool_Error result_bool_Error;
 
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_ALGO_FOLD — typed slice variants per element type
-   ════════════════════════════════════════════════════════════════════════════
-   Requires DEFINE_SLICE(type) from core/slice.h.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -240,24 +234,19 @@ typedef result__Bool_Error result_bool_Error;
  *
  * Prerequisites: DEFINE_SLICE(type) must have been called.
  *
- * Generated functions:
- *   algo_fold_slice_##type(acc_ptr, sv, fn, ctx) → void
- *   algo_fold_result_slice_##type(acc_ptr, sv, fn, ctx) → result_bool_Error
- *
- * Note on acc_ptr type: the accumulator type may differ from the element
- * type (e.g. folding int elements into a double sum). The fn parameter
- * takes void* acc to allow arbitrary accumulator types. Cast inside
- * fn to the actual accumulator type.
+ * Note: fn parameters cannot use borrowed() due to commas in function
+ * pointer types breaking preprocessor macro argument parsing. They are
+ * semantically borrowed — not retained beyond the call.
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  */
 #define DEFINE_ALGO_FOLD(type) \
 \
 static inline void ALGO_FOLD_SLICE_FN(type)( \
-    borrowed(void*)                             acc_ptr, \
-    borrowed(slice_##type)                      sv, \
-    borrowed(void (*)(void*, const type*, void*)) fn, \
-    borrowed(void*)                             ctx) \
+    borrowed(void*)        acc_ptr, \
+    borrowed(slice_##type) sv, \
+    void (*fn)(void*, const type*, void*), \
+    borrowed(void*)        ctx) \
 { \
     require_msg(acc_ptr != NULL, \
         "algo_fold_slice_" #type ": acc_ptr cannot be NULL"); \
@@ -271,10 +260,10 @@ static inline void ALGO_FOLD_SLICE_FN(type)( \
 } \
 \
 static inline result_bool_Error ALGO_FOLD_RESULT_SLICE_FN(type)( \
-    borrowed(void*)                                              acc_ptr, \
-    borrowed(slice_##type)                                       sv, \
-    borrowed(result_bool_Error (*)(void*, const type*, void*))   fn, \
-    borrowed(void*)                                              ctx) \
+    borrowed(void*)        acc_ptr, \
+    borrowed(slice_##type) sv, \
+    result_bool_Error (*fn)(void*, const type*, void*), \
+    borrowed(void*)        ctx) \
 { \
     require_msg(acc_ptr != NULL, \
         "algo_fold_result_slice_" #type ": acc_ptr cannot be NULL"); \
