@@ -7,7 +7,7 @@
  * a typed macro wrapper and the DEFINE_ALGO_UNIQUE instantiation macro.
  *
  * For separate compilation (external linkage), use unique_decl.h in
- * headers and unique_defn.h in exactly one .c file instead.
+ * headers and unique_defn.h in exactly one .c file instead. 
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * IMPORTANT: CONSECUTIVE DUPLICATES ONLY
