@@ -66,16 +66,28 @@
  * fn is never called. No memory is read or written. No contract fires.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * DOUBLE INSTANTIATION GUARD
+ * DOUBLE INSTANTIATION NOTE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
  * DEFINE_ALGO_MAP(in_type, out_type) generates an in-place variant
  * algo_map_inplace_slice_##in_type that depends only on in_type. Calling
- * DEFINE_ALGO_MAP(int, double) and DEFINE_ALGO_MAP(int, float) would
+ * DEFINE_ALGO_MAP(int, double) and DEFINE_ALGO_MAP(int, float) will
  * generate algo_map_inplace_slice_int twice, causing a redefinition error.
- * To prevent this, define CANON_ALGO_MAP_INPLACE_DEFINED_##in_type before
- * the second call, or use the guard documented in the DEFINE_ALGO_MAP
- * section below.
+ *
+ * To avoid this, use DEFINE_ALGO_MAP for the first call, then
+ * DEFINE_ALGO_MAP_CROSS for subsequent calls with the same in_type.
+ * Or use DEFINE_ALGO_MAP_INPLACE_ONLY and DEFINE_ALGO_MAP_CROSS
+ * separately for full control.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * OWNERSHIP ANNOTATIONS
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * Function pointer parameters in DEFINE_ALGO_MAP macros cannot use
+ * borrowed() because the function pointer types contain commas that
+ * break C preprocessor macro argument parsing. These fn parameters are
+ * semantically borrowed — they are not retained beyond the call.
+ * All other parameters use borrowed() as expected.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
@@ -89,22 +101,14 @@
  *   ALGO_MAP_TYPED(out, in, len, OutType, InType, fn)        → void
  *   ALGO_MAP_INPLACE_TYPED(arr, len, Type, fn)               → void
  *
- * Typed instantiation (call DEFINE_ALGO_MAP(in_type, out_type) first):
+ * Typed instantiation:
+ *   DEFINE_ALGO_MAP(in_type, out_type)     — cross-type + in-place
+ *   DEFINE_ALGO_MAP_CROSS(in_type, out_type) — cross-type only
+ *   DEFINE_ALGO_MAP_INPLACE_ONLY(in_type)    — in-place only
+ *
+ * Generated functions:
  *   algo_map_slice_##in_type##_##out_type(sv_out, sv_in, fn) → void
  *   algo_map_inplace_slice_##in_type(sv, fn)                 → void
- *
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * PERFORMANCE
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- *
- * All variants: O(n) time, O(1) space, fn called exactly n times.
- *
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * TRANSFORMATION FUNCTION SIGNATURES
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- *
- * Cross-type:  void fn(void* out, const void* in)
- * In-place:    void fn(void* elem)
  *
  * @sa map_mangle.h — name customization for slice variants
  * @sa map_decl.h   — forward declarations for separate compilation
@@ -145,37 +149,15 @@
         (algo_map_inplace_fn)(fn))
 
 /* ════════════════════════════════════════════════════════════════════════════
-   DEFINE_ALGO_MAP — typed slice variants per element type pair
-   ════════════════════════════════════════════════════════════════════════════
-   Requires DEFINE_SLICE(in_type) and DEFINE_SLICE(out_type).
-
-   The in-place variant is guarded by CANON_ALGO_MAP_INPLACE_DEFINED_##in_type
-   to prevent redefinition when DEFINE_ALGO_MAP is called multiple times with
-   the same in_type but different out_types. The guard is automatically set
-   on first instantiation.
+   DEFINE_ALGO_MAP_CROSS — cross-type slice variant only
    ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * @brief Generates map functions operating directly on typed slices
- *
- * Prerequisites:
- * - DEFINE_SLICE(in_type) must have been called
- * - DEFINE_SLICE(out_type) must have been called (may be same as in_type)
- *
- * Generated functions:
- *   algo_map_slice_##in_type##_##out_type(sv_out, sv_in, fn) → void
- *   algo_map_inplace_slice_##in_type(sv, fn) → void
- *     (only generated on first call for a given in_type)
- *
- * @param in_type  Input element type
- * @param out_type Output element type
- */
-#define DEFINE_ALGO_MAP(in_type, out_type) \
+#define DEFINE_ALGO_MAP_CROSS(in_type, out_type) \
 \
 static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
-    borrowed(slice_##out_type)                          sv_out, \
-    borrowed(slice_##in_type)                           sv_in, \
-    borrowed(void (*)(out_type*, const in_type*))        fn) \
+    borrowed(slice_##out_type)  sv_out, \
+    borrowed(slice_##in_type)   sv_in, \
+    void (*fn)(out_type*, const in_type*)) \
 { \
     require_msg(fn != NULL, \
         "algo_map_slice_" #in_type "_" #out_type ": fn cannot be NULL"); \
@@ -183,27 +165,17 @@ static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
     for (usize _i = 0; _i < _len; _i++) { \
         fn(&sv_out.ptr[_i], &sv_in.ptr[_i]); \
     } \
-} \
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_ALGO_MAP_INPLACE_ONLY — in-place slice variant only
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#define DEFINE_ALGO_MAP_INPLACE_ONLY(in_type) \
 \
-CANON_ALGO_MAP_INPLACE_IMPL_(in_type)
-
-/* Internal: conditionally generate the in-place variant once per in_type */
-#ifndef CANON_ALGO_MAP_INPLACE_GUARD_
-#define CANON_ALGO_MAP_INPLACE_GUARD_
-
-#define CANON_ALGO_MAP_INPLACE_IMPL_(in_type) \
-    CANON_ALGO_MAP_INPLACE_IMPL_INNER_(in_type, \
-        CANON_ALGO_MAP_INPLACE_DEFINED_##in_type)
-
-/* Two-level dispatch: if the guard macro is defined, emit nothing */
-#define CANON_ALGO_MAP_INPLACE_IMPL_INNER_(in_type, guard) \
-    CANON_ALGO_MAP_INPLACE_SELECT_(in_type, guard)
-
-/* Default: guard is not defined, so generate the function and set the guard */
-#define CANON_ALGO_MAP_INPLACE_SELECT_(in_type, guard) \
 static inline void ALGO_MAP_INPLACE_SLICE_FN(in_type)( \
-    borrowed(slice_##in_type)                   sv, \
-    borrowed(void (*)(in_type*))                 fn) \
+    borrowed(slice_##in_type)  sv, \
+    void (*fn)(in_type*)) \
 { \
     require_msg(fn != NULL, \
         "algo_map_inplace_slice_" #in_type ": fn cannot be NULL"); \
@@ -212,6 +184,12 @@ static inline void ALGO_MAP_INPLACE_SLICE_FN(in_type)( \
     } \
 }
 
-#endif /* CANON_ALGO_MAP_INPLACE_GUARD_ */
+/* ════════════════════════════════════════════════════════════════════════════
+   DEFINE_ALGO_MAP — both cross-type and in-place (convenience)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#define DEFINE_ALGO_MAP(in_type, out_type) \
+    DEFINE_ALGO_MAP_CROSS(in_type, out_type) \
+    DEFINE_ALGO_MAP_INPLACE_ONLY(in_type)
 
 #endif /* CANON_ALGO_MAP_H */
