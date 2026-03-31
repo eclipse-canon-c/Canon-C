@@ -83,7 +83,7 @@ The result is a set of semantic building blocks that improve readability, preser
 
 The long-term goal is for this taxonomy of C abstractions to become a **shared standard vocabulary** — a common foundation that allows C programs to communicate intent clearly, consistently, and safely.
 
-Canon-C is licensed under **MPL 2.0**.  
+Canon-C is licensed under **MPL 2.0**.  ( See Licence-MIT related issues at Licence-MIT file )
 
 > Using Canon-C headers unmodified in your project (commercial or non-commercial) does not trigger MPL requirements — only modifications to Canon-C files themselves do.
 
