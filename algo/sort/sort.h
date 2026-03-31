@@ -8,7 +8,7 @@
  * instantiation macro.
  *
  * For separate compilation (external linkage), use sort_decl.h in
- * headers and sort_defn.h in exactly one .c file instead.
+ * headers and sort_defn.h in exactly one .c file instead. 
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * QUICK START
