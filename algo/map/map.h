@@ -1,6 +1,6 @@
 /**
  * @file map.h
- * @brief Element-wise transformation over sequences
+ * @brief Element-wise transformation over sequences 
  *
  * This is the entry point for header-only usage. Including this file
  * generates statically-inlined implementations of algo_map and
