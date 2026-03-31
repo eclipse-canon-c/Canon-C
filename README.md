@@ -225,11 +225,23 @@ Generic and typed reusable algorithms, each implemented as a modular
 - Sorting (`sort/`), reversing (`reverse/`), uniqueness (`unique/`)
 - Predicate checks (`any_all/`), element location (`find/`)
 
-Each module provides three levels of use:
+Eight of the nine modules provide three levels of use:
 - **Generic** — `void*` + function pointer interface, works on any type
 - **Typed macro** — compile-time type safety, wraps the generic level
 - **Typed instantiation** — `DEFINE_ALGO_X(type)` stamps out fully typed
   slice variants with no `void*`, directly optimizable by the compiler
+
+`fold/` is the exception: the accumulator type and element type are both
+caller-determined and may differ, so a generic `void*`-based function
+would require unsafe function pointer casts. Instead, fold provides
+macro-based operations at Levels 1 and 2 (`ALGO_FOLD`, `ALGO_FOLD_RESULT`)
+and typed slice functions at Level 3 (`DEFINE_ALGO_FOLD`). The deviation
+is documented in `fold.h`.
+
+`map/` supports cross-type transformation (different input and output types).
+When multiple cross-type mappings share the same input type, use
+`DEFINE_ALGO_MAP` for the first and `DEFINE_ALGO_MAP_CROSS` for subsequent
+calls to avoid redefinition of the in-place variant.
 
 **Goal:** Apply operations to collections **predictably and generically**,
 with opt-in typed instantiation for cases where full type visibility matters.
