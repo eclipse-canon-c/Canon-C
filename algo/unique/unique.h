@@ -80,20 +80,7 @@
  * PERFORMANCE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
- * algo_unique / ALGO_UNIQUE_TYPED / algo_unique_slice_##type:
- *   Time:   O(n) — single pass; exactly n-1 comparisons for len >= 2;
- *           0 comparisons for len <= 1.
- *   Space:  O(1) — no allocation. At most n-1 element copies when every
- *           element is unique; 0 copies when all elements are equal (only
- *           write advances, but write == read self-copies are skipped).
- *   Best case:  O(1) — len <= 1 (immediate return)
- *   Worst case: O(n) — always, since every element is visited exactly once
- *   cmp calls:  exactly n-1 (for n >= 2), 0 otherwise
- *   Element copies: between 0 and n-1 depending on duplicate density
- *
- * Note: self-copies are avoided — when no duplicates have been seen,
- * write == read and the copy is skipped, so a fully-unique array has
- * zero element copies.
+ * O(n) time, O(1) space, exactly n-1 comparisons for len >= 2.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * API SUMMARY
@@ -116,8 +103,6 @@
  *   int cmp(const void* a, const void* b, void* ctx)
  *
  * Return 0 if elements are equal, any nonzero value otherwise.
- * a and b are never NULL — they always point to valid array elements.
- * ctx is the optional caller context passed through unchanged; may be NULL.
  *
  * @sa unique_mangle.h — name customization for slice variant
  * @sa unique_decl.h   — forward declaration for separate compilation
@@ -140,7 +125,6 @@
 
 /*
  * Set linkage to static inline before pulling in the implementation.
- * This is the header-only mode — algo_unique is inlined at call sites.
  */
 #define ALGO_UNIQUE_LINKAGE static inline
 
@@ -149,26 +133,9 @@
 #undef ALGO_UNIQUE_LINKAGE
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Typed macro — single consistent calling convention
+   Typed macro
    ════════════════════════════════════════════════════════════════════════════ */
 
-/**
- * @def ALGO_UNIQUE_TYPED(array, len, Type, cmp, ctx)
- * @brief Type-safe unique — removes consecutive duplicates, returns new length
- *
- * Wraps algo_unique() with automatic sizeof(Type), eliminating the manual
- * elem_size argument. Always returns usize — no GNU extensions required.
- *
- * Performance: O(n) time, O(1) space.
- *
- * @param array Array of Type (borrowed, modified in place)
- * @param len   Number of elements (0 and 1 are valid — returns len)
- * @param Type  Element type — used for sizeof only
- * @param cmp   Comparator: returns 0 if elements are equal (borrowed)
- * @param ctx   Optional context (borrowed, may be NULL)
- *
- * @return usize — new logical length after removing consecutive duplicates
- */
 #define ALGO_UNIQUE_TYPED(array, len, Type, cmp, ctx) \
     algo_unique((array), (usize)(len), sizeof(Type), \
         (algo_cmp_fn)(cmp), (ctx))
@@ -177,27 +144,14 @@
    DEFINE_ALGO_UNIQUE — typed slice variant per element type
    ════════════════════════════════════════════════════════════════════════════
    Requires DEFINE_SLICE(type) to have been called first.
-   Generates a fully typed function accepting slice_##type directly.
-   No void* anywhere — the compiler sees the actual element type.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * @brief Generates a unique function operating directly on slice_##type
  *
- * Prerequisites: DEFINE_SLICE(type) must have been called.
- *
- * Generated function:
- *   algo_unique_slice_##type(sv, cmp, ctx) → usize
- *     Removes consecutive duplicates from the backing array of sv in place.
- *     Returns the new logical length of the unique prefix.
- *     The slice view itself is NOT updated — the caller must assign the
- *     returned value back to sv.len (or their vec.len) after the call.
- *
- * Empty slice safety: sv.ptr may be NULL when sv.len == 0 (valid per
- * slice.h invariants). algo_unique returns len immediately when len <= 1,
- * so a NULL ptr with len == 0 is safe after the precondition checks.
- *
- * Performance: O(n) time, O(1) space.
+ * Slice wrapper enforces contracts (cmp non-NULL, non-empty slice has
+ * non-NULL ptr) before delegating, consistent with the contract pattern
+ * used across all algo/ modules.
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  *
@@ -223,6 +177,11 @@ static inline usize ALGO_UNIQUE_SLICE_FN(type)( \
     borrowed(algo_cmp_fn)   cmp, \
     borrowed(void*)         ctx) \
 { \
+    require_msg(cmp != NULL, \
+        "algo_unique_slice_" #type ": cmp cannot be NULL"); \
+    require_msg(sv.len == 0 || sv.ptr != NULL, \
+        "algo_unique_slice_" #type ": non-empty slice has NULL ptr"); \
+    if (sv.len <= 1) return sv.len; \
     return algo_unique(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
 
