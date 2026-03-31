@@ -3,7 +3,7 @@
  * @brief Functional reduction of sequences to single values (fold/reduce)
  *
  * This is the entry point for header-only usage. Provides both infallible
- * and fallible fold operations at three levels of type safety.
+ * and fallible fold operations at three levels of type safety. 
  *
  * For separate compilation, include fold_decl.h in headers and
  * fold_defn.h in exactly one .c file.
