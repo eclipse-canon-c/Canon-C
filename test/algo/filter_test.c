@@ -165,7 +165,7 @@ static void test_empty_input(void)
 
     /* Generic: len=0 → 0 written, out untouched */
     int dummy[1] = {1};
-    usize n = algo_filter(dummy, 0, sizeof(int), pred_positive, NULL, out, 4);
+    usize n = algo_filter(out, 4, dummy, 0, sizeof(int), pred_positive, NULL);
     EXPECT(n == 0);
     EXPECT(out[0] == 99); /* untouched */
 
@@ -175,7 +175,7 @@ static void test_empty_input(void)
 
     /* Typed slice: empty slice */
     slice_int empty = slice_int_empty();
-    n = algo_filter_slice_int(empty, out, 4, pred_positive, NULL);
+    n = algo_filter_slice_int(out, 4, empty, pred_positive, NULL);
     EXPECT(n == 0);
     EXPECT(out[0] == 99); /* still untouched */
 }
@@ -187,7 +187,7 @@ static void test_zero_cap(void)
     int out[4] = {99, 99, 99, 99};
 
     /* out_cap=0 → immediate return, no writes */
-    usize n = algo_filter(in, 3, sizeof(int), pred_positive, NULL, out, 0);
+    usize n = algo_filter(out, 0, in, 3, sizeof(int), pred_positive, NULL);
     EXPECT(n == 0);
     EXPECT(out[0] == 99);
 
@@ -197,7 +197,7 @@ static void test_zero_cap(void)
 
     /* Typed slice */
     slice_int sv = slice_int_from(in, 3);
-    n = algo_filter_slice_int(sv, out, 0, pred_positive, NULL);
+    n = algo_filter_slice_int(out, 0, sv, pred_positive, NULL);
     EXPECT(n == 0);
     EXPECT(out[0] == 99);
 }
@@ -208,7 +208,7 @@ static void test_all_match(void)
     int in[]  = {1, 2, 3, 4, 5};
     int out[5] = {0};
 
-    usize n = algo_filter(in, 5, sizeof(int), pred_positive, NULL, out, 5);
+    usize n = algo_filter(out, 5, in, 5, sizeof(int), pred_positive, NULL);
     EXPECT(n == 5);
     EXPECT(out[0] == 1 && out[1] == 2 && out[2] == 3 &&
            out[3] == 4 && out[4] == 5);
@@ -222,7 +222,7 @@ static void test_all_match(void)
     /* Typed slice */
     int out3[5] = {0};
     slice_int sv = slice_int_from(in, 5);
-    n = algo_filter_slice_int(sv, out3, 5, pred_positive, NULL);
+    n = algo_filter_slice_int(out3, 5, sv, pred_positive, NULL);
     EXPECT(n == 5);
     EXPECT(out3[0] == 1 && out3[4] == 5);
 }
@@ -234,14 +234,14 @@ static void test_none_match(void)
     int out[5] = {99, 99, 99, 99, 99};
 
     /* Looking for negatives — none exist */
-    usize n = algo_filter(in, 5, sizeof(int), pred_negative, NULL, out, 5);
+    usize n = algo_filter(out, 5, in, 5, sizeof(int), pred_negative, NULL);
     EXPECT(n == 0);
     EXPECT(out[0] == 99); /* untouched */
 
     /* Typed slice */
     int out2[5] = {99, 99, 99, 99, 99};
     slice_int sv = slice_int_from(in, 5);
-    n = algo_filter_slice_int(sv, out2, 5, pred_negative, NULL);
+    n = algo_filter_slice_int(out2, 5, sv, pred_negative, NULL);
     EXPECT(n == 0);
     EXPECT(out2[0] == 99);
 }
@@ -253,26 +253,26 @@ static void test_mixed(void)
     int out[6] = {0};
 
     /* Filter positives: {2, 4, 5} */
-    usize n = algo_filter(in, 6, sizeof(int), pred_positive, NULL, out, 6);
+    usize n = algo_filter(out, 6, in, 6, sizeof(int), pred_positive, NULL);
     EXPECT(n == 3);
     EXPECT(out[0] == 2 && out[1] == 4 && out[2] == 5);
 
     /* Filter negatives: {-1, -3} */
     int out2[6] = {0};
-    n = algo_filter(in, 6, sizeof(int), pred_negative, NULL, out2, 6);
+    n = algo_filter(out2, 6, in, 6, sizeof(int), pred_negative, NULL);
     EXPECT(n == 2);
     EXPECT(out2[0] == -1 && out2[1] == -3);
 
     /* Filter even: {2, 4, 0} */
     int out3[6] = {0};
-    n = algo_filter(in, 6, sizeof(int), pred_even, NULL, out3, 6);
+    n = algo_filter(out3, 6, in, 6, sizeof(int), pred_even, NULL);
     EXPECT(n == 3);
     EXPECT(out3[0] == 2 && out3[1] == 4 && out3[2] == 0);
 
     /* Typed slice */
     int out4[6] = {0};
     slice_int sv = slice_int_from(in, 6);
-    n = algo_filter_slice_int(sv, out4, 6, pred_positive, NULL);
+    n = algo_filter_slice_int(out4, 6, sv, pred_positive, NULL);
     EXPECT(n == 3);
     EXPECT(out4[0] == 2 && out4[1] == 4 && out4[2] == 5);
 }
@@ -284,7 +284,7 @@ static void test_truncation(void)
     int in[]  = {1, 2, 3, 4, 5};
     int out[2] = {0};
 
-    usize n = algo_filter(in, 5, sizeof(int), pred_positive, NULL, out, 2);
+    usize n = algo_filter(out, 2, in, 5, sizeof(int), pred_positive, NULL);
     EXPECT(n == 2);          /* return == out_cap signals possible truncation */
     EXPECT(out[0] == 1);     /* first match */
     EXPECT(out[1] == 2);     /* second match — stopped here */
@@ -292,7 +292,7 @@ static void test_truncation(void)
     /* Typed slice: same expectation */
     int out2[3] = {0};
     slice_int sv = slice_int_from(in, 5);
-    n = algo_filter_slice_int(sv, out2, 3, pred_positive, NULL);
+    n = algo_filter_slice_int(out2, 3, sv, pred_positive, NULL);
     EXPECT(n == 3);
     EXPECT(out2[0] == 1 && out2[1] == 2 && out2[2] == 3);
 
@@ -300,7 +300,7 @@ static void test_truncation(void)
      * With out_cap=2: get {2, 4}, truncated (6 not written) */
     int mixed[] = {-1, 2, -3, 4, -5, 6};
     int out3[2] = {0};
-    n = algo_filter(mixed, 6, sizeof(int), pred_positive, NULL, out3, 2);
+    n = algo_filter(out3, 2, mixed, 6, sizeof(int), pred_positive, NULL);
     EXPECT(n == 2);
     EXPECT(out3[0] == 2 && out3[1] == 4);
 }
@@ -312,7 +312,7 @@ static void test_exact_fit(void)
     int in[]  = {1, -1, 2, -2, 3};
     int out[3] = {0};
 
-    usize n = algo_filter(in, 5, sizeof(int), pred_positive, NULL, out, 3);
+    usize n = algo_filter(out, 3, in, 5, sizeof(int), pred_positive, NULL);
     EXPECT(n == 3);
     EXPECT(out[0] == 1 && out[1] == 2 && out[2] == 3);
     /* return == out_cap here, but all matching elements fit — caller must
@@ -327,21 +327,21 @@ static void test_context_parameter(void)
 
     /* Keep elements > 4 */
     int threshold = 4;
-    usize n = algo_filter(in, 6, sizeof(int), pred_gt_threshold, &threshold, out, 6);
+    usize n = algo_filter(out, 6, in, 6, sizeof(int), pred_gt_threshold, &threshold);
     EXPECT(n == 3);
     EXPECT(out[0] == 5 && out[1] == 8 && out[2] == 10);
 
     /* Keep elements > 7 */
     threshold = 7;
     int out2[6] = {0};
-    n = algo_filter(in, 6, sizeof(int), pred_gt_threshold, &threshold, out2, 6);
+    n = algo_filter(out2, 6, in, 6, sizeof(int), pred_gt_threshold, &threshold);
     EXPECT(n == 2);
     EXPECT(out2[0] == 8 && out2[1] == 10);
 
     /* Keep elements > 100 — none */
     threshold = 100;
     int out3[6] = {99};
-    n = algo_filter(in, 6, sizeof(int), pred_gt_threshold, &threshold, out3, 6);
+    n = algo_filter(out3, 6, in, 6, sizeof(int), pred_gt_threshold, &threshold);
     EXPECT(n == 0);
 }
 
@@ -352,7 +352,7 @@ static void test_stability(void)
     int in[]  = {3, -1, 1, -4, 2, -7, 5};
     int out[7] = {0};
 
-    usize n = algo_filter(in, 7, sizeof(int), pred_positive, NULL, out, 7);
+    usize n = algo_filter(out, 7, in, 7, sizeof(int), pred_positive, NULL);
     EXPECT(n == 4);
     EXPECT(out[0] == 3); /* first positive in input */
     EXPECT(out[1] == 1); /* second */
@@ -361,7 +361,7 @@ static void test_stability(void)
 
     /* Stability with evens: {3,-1,1,-4,2,-7,5} → evens are {-4, 2} */
     int out2[7] = {0};
-    n = algo_filter(in, 7, sizeof(int), pred_even, NULL, out2, 7);
+    n = algo_filter(out2, 7, in, 7, sizeof(int), pred_even, NULL);
     EXPECT(n == 2);
     EXPECT(out2[0] == -4 && out2[1] == 2);
 }
@@ -375,7 +375,7 @@ static void test_pred_call_count(void)
     int out[3] = {0};
 
     g_call_count = 0;
-    usize n = algo_filter(in, 5, sizeof(int), pred_positive_counting, NULL, out, 3);
+    usize n = algo_filter(out, 3, in, 5, sizeof(int), pred_positive_counting, NULL);
     EXPECT(n == 3);
     EXPECT(g_call_count == 3); /* stopped after writing 3rd match */
 
@@ -383,13 +383,13 @@ static void test_pred_call_count(void)
     int in2[]  = {-1, -2, -3, -4, -5};
     int out2[5] = {0};
     g_call_count = 0;
-    n = algo_filter(in2, 5, sizeof(int), pred_positive_counting, NULL, out2, 5);
+    n = algo_filter(out2, 5, in2, 5, sizeof(int), pred_positive_counting, NULL);
     EXPECT(n == 0);
     EXPECT(g_call_count == 5); /* checked all — none matched */
 
     /* out_cap=0: pred never called */
     g_call_count = 0;
-    n = algo_filter(in, 5, sizeof(int), pred_positive_counting, NULL, out, 0);
+    n = algo_filter(out, 0, in, 5, sizeof(int), pred_positive_counting, NULL);
     EXPECT(n == 0);
     EXPECT(g_call_count == 0);
 }
@@ -401,11 +401,11 @@ static void test_single_element(void)
     int neg[1] = {-3};
     int out[1] = {0};
 
-    EXPECT(algo_filter(pos, 1, sizeof(int), pred_positive, NULL, out, 1) == 1);
+    EXPECT(algo_filter(out, 1, pos, 1, sizeof(int), pred_positive, NULL) == 1);
     EXPECT(out[0] == 7);
 
     out[0] = 0;
-    EXPECT(algo_filter(neg, 1, sizeof(int), pred_positive, NULL, out, 1) == 0);
+    EXPECT(algo_filter(out, 1, neg, 1, sizeof(int), pred_positive, NULL) == 0);
     EXPECT(out[0] == 0); /* untouched */
 }
 
@@ -440,7 +440,7 @@ static void test_point_struct(void)
 
     /* Keep points where x > y: {5,1}, {7,4} */
     slice_Point sv = slice_Point_from(in, 5);
-    usize n = algo_filter_slice_Point(sv, out, 5, pred_point_x_gt_y, NULL);
+    usize n = algo_filter_slice_Point(out, 5, sv, pred_point_x_gt_y, NULL);
     EXPECT(n == 2);
     EXPECT(out[0].x == 5 && out[0].y == 1);
     EXPECT(out[1].x == 7 && out[1].y == 4);
@@ -450,12 +450,12 @@ static void test_point_struct(void)
     Point out2[3];
     memset(out2, 0, sizeof(out2));
     slice_Point sv2 = slice_Point_from(in2, 3);
-    n = algo_filter_slice_Point(sv2, out2, 3, pred_point_x_gt_y, NULL);
+    n = algo_filter_slice_Point(out2, 3, sv2, pred_point_x_gt_y, NULL);
     EXPECT(n == 0);
 
     /* Empty slice */
     slice_Point empty = slice_Point_empty();
-    n = algo_filter_slice_Point(empty, out, 5, pred_point_x_gt_y, NULL);
+    n = algo_filter_slice_Point(out, 5, empty, pred_point_x_gt_y, NULL);
     EXPECT(n == 0);
 }
 
@@ -466,13 +466,13 @@ static void test_always_predicates(void)
     int out[5] = {0};
 
     /* pred_always_true: all elements copied */
-    usize n = algo_filter(in, 5, sizeof(int), pred_always_true, NULL, out, 5);
+    usize n = algo_filter(out, 5, in, 5, sizeof(int), pred_always_true, NULL);
     EXPECT(n == 5);
     EXPECT(out[0] == 1 && out[4] == 5);
 
     /* pred_always_false: nothing copied */
     int out2[5] = {99, 99, 99, 99, 99};
-    n = algo_filter(in, 5, sizeof(int), pred_always_false, NULL, out2, 5);
+    n = algo_filter(out2, 5, in, 5, sizeof(int), pred_always_false, NULL);
     EXPECT(n == 0);
     EXPECT(out2[0] == 99);
 }
@@ -559,8 +559,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     u8 out[256];
     usize out_cap = sizeof(out);
 
-    usize n = algo_filter(data, size, sizeof(u8), pred_high_byte, NULL,
-                          out, out_cap);
+    usize n = algo_filter(out, out_cap, data, size, sizeof(u8),
+                          pred_high_byte, NULL);
 
     /* Invariant 1: return value <= out_cap */
     if (n > out_cap) __builtin_trap();
