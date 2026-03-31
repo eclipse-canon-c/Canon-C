@@ -23,6 +23,9 @@
  * ALGO_SORT_LINKAGE applies only to the two public functions: algo_sort
  * and algo_is_sorted.
  *
+ * Internal helpers omit borrowed() annotations — ownership is enforced
+ * at the public API boundary only.
+ *
  * Algorithm: stable hybrid insertion/merge sort
  * ────────────────────────────────────────────────────────────────────────────
  * algo_sort selects between two strategies based on len and temp availability:
@@ -37,6 +40,17 @@
  *
  * algo_is_sorted performs a single left-to-right pass, returning false on
  * the first adjacent pair that is out of order.
+ *
+ * Contract convention:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Both public functions enforce base != NULL via require_msg (consistent
+ * with algo_any, algo_all, algo_filter, algo_find, algo_map, algo_reverse).
+ * The len < 2 early return is a separate check AFTER the contract — a NULL
+ * base is always a programming error, regardless of len.
+ *
+ * algo_sort_swap enforces elem_size <= ALGO_SORT_SWAP_BUF_SIZE via
+ * require_msg (consistent with algo_reverse). Oversized elements are a
+ * contract violation, not a silent degradation path.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
@@ -78,31 +92,24 @@
 /**
  * @brief Swaps two elements of elem_size bytes
  *
- * Uses a fixed stack buffer of ALGO_SORT_SWAP_BUF_SIZE bytes for elements
- * that fit. Falls back to a byte-by-byte loop for larger elements — correct
- * but slower. The fallback is intentional: correctness over speed for
- * oversized elements that exceed the stack buffer.
+ * Uses a fixed stack buffer of ALGO_SORT_SWAP_BUF_SIZE bytes. Elements
+ * larger than the buffer trigger a contract failure — consistent with
+ * algo_reverse's ALGO_REVERSE_SWAP_BUF_SIZE contract.
  *
  * @param a         Pointer to first element (borrowed, modified in place)
  * @param b         Pointer to second element (borrowed, modified in place)
  * @param elem_size Size in bytes of each element
+ *
+ * @pre elem_size <= ALGO_SORT_SWAP_BUF_SIZE — triggers require_msg
  */
 static inline void algo_sort_swap(void* a, void* b, usize elem_size) {
+    require_msg(elem_size <= ALGO_SORT_SWAP_BUF_SIZE,
+        "algo_sort_swap: elem_size exceeds ALGO_SORT_SWAP_BUF_SIZE");
+
     u8 tmp[ALGO_SORT_SWAP_BUF_SIZE];
-    if (elem_size <= ALGO_SORT_SWAP_BUF_SIZE) {
-        mem_copy(tmp, a, elem_size);
-        mem_copy(a, b, elem_size);
-        mem_copy(b, tmp, elem_size);
-    } else {
-        /* byte-by-byte for oversized elements — rare, correctness over speed */
-        u8* pa = (u8*)a;
-        u8* pb = (u8*)b;
-        for (usize k = 0; k < elem_size; k++) {
-            u8 t  = pa[k];
-            pa[k] = pb[k];
-            pb[k] = t;
-        }
-    }
+    mem_copy(tmp, a, elem_size);
+    mem_copy(a, b, elem_size);
+    mem_copy(b, tmp, elem_size);
 }
 
 /**
@@ -254,8 +261,10 @@ static inline void algo_merge_sort_range(
  * @param temp_buffer Caller-provided scratch buffer of len * elem_size bytes,
  *                    or NULL to force insertion sort (borrowed)
  *
- * @pre elem_size > 0  — triggers require_msg
- * @pre cmp != NULL    — triggers require_msg
+ * @pre base      != NULL — triggers require_msg
+ * @pre elem_size > 0     — triggers require_msg
+ * @pre cmp       != NULL — triggers require_msg
+ * @pre elem_size <= ALGO_SORT_SWAP_BUF_SIZE — enforced by algo_sort_swap
  *
  * @post Array elements are in non-decreasing order according to cmp
  * @post Equal elements preserve their original relative order (stable)
@@ -274,10 +283,11 @@ ALGO_SORT_LINKAGE void algo_sort(
     borrowed(void*)         ctx,
     borrowed(void*)         temp_buffer)
 {
-    require_msg(elem_size > 0,   "algo_sort: elem_size must be > 0");
+    require_msg(base      != NULL, "algo_sort: base cannot be NULL");
+    require_msg(elem_size > 0,     "algo_sort: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_sort: cmp cannot be NULL");
 
-    if (!base || len < 2) return;
+    if (len < 2) return;
 
     if (len < 16 || !temp_buffer) {
         algo_insertion_sort_range(base, 0, len, elem_size, cmp, ctx);
@@ -304,8 +314,9 @@ ALGO_SORT_LINKAGE void algo_sort(
  * @param cmp       Comparator (borrowed)
  * @param ctx       Optional context passed to cmp (borrowed, may be NULL)
  *
- * @pre elem_size > 0  — triggers require_msg
- * @pre cmp != NULL    — triggers require_msg
+ * @pre base      != NULL — triggers require_msg
+ * @pre elem_size > 0     — triggers require_msg
+ * @pre cmp       != NULL — triggers require_msg
  *
  * @return true if sorted or len < 2, false on first out-of-order pair
  *
@@ -320,10 +331,11 @@ ALGO_SORT_LINKAGE bool algo_is_sorted(
     borrowed(algo_cmp_fn)   cmp,
     borrowed(void*)         ctx)
 {
-    require_msg(elem_size > 0,   "algo_is_sorted: elem_size must be > 0");
+    require_msg(base      != NULL, "algo_is_sorted: base cannot be NULL");
+    require_msg(elem_size > 0,     "algo_is_sorted: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_is_sorted: cmp cannot be NULL");
 
-    if (!base || len < 2) return true;
+    if (len < 2) return true;
 
     for (usize i = 1; i < len; i++) {
         if (cmp(ptr_elem_const(base, i - 1, elem_size),
