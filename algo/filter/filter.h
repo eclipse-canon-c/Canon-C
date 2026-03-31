@@ -22,7 +22,7 @@
  *
  * int in[]  = {-1, 2, -3, 4, 0, 5};
  * int out[6];
- * usize n = algo_filter(in, 6, sizeof(int), is_positive, NULL, out, 6);
+ * usize n = algo_filter(out, 6, in, 6, sizeof(int), is_positive, NULL);
  * // n == 3, out == {2, 4, 5}
  * ```
  *
@@ -38,9 +38,18 @@
  * DEFINE_ALGO_FILTER(int)
  *
  * slice_int sv = slice_int_from(in, 6);
- * usize n = algo_filter_slice_int(sv, out, 6, is_positive, NULL);
+ * usize n = algo_filter_slice_int(out, 6, sv, is_positive, NULL);
  * // n == 3, out == {2, 4, 5}
  * ```
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * PARAMETER ORDERING
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * algo_filter follows the C standard library destination-first convention
+ * (memcpy, algo_map): output buffer and capacity first, then input buffer
+ * and length. This is consistent across all Canon-C algo/ functions that
+ * produce output into a separate buffer.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * TRUNCATION BEHAVIOR
@@ -56,13 +65,13 @@
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
  * Generic:
- *   algo_filter(base, len, elem_size, pred, ctx, out, out_cap) → usize
+ *   algo_filter(out, out_cap, base, len, elem_size, pred, ctx) → usize
  *
  * Typed macro:
  *   ALGO_FILTER_TYPED(out, out_cap, in, in_len, Type, pred, ctx) → usize
  *
  * Typed instantiation (call DEFINE_ALGO_FILTER(type) first):
- *   algo_filter_slice_##type(sv, out, out_cap, pred, ctx) → usize
+ *   algo_filter_slice_##type(out, out_cap, sv, pred, ctx) → usize
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * PERFORMANCE
@@ -146,9 +155,8 @@
  * @def ALGO_FILTER_TYPED(out, out_cap, in, in_len, Type, pred, ctx)
  * @brief Type-safe filter from one C array into another
  *
- * Wraps algo_filter() with automatic sizeof(Type). The out_cap parameter
- * is explicit — never use sizeof(array)/sizeof(array[0]) here, as that
- * breaks when out is a pointer rather than an array.
+ * Wraps algo_filter() with automatic sizeof(Type). Follows the
+ * destination-first parameter convention (same as memcpy, algo_map).
  *
  * @param out     Output array of Type (borrowed, writable)
  * @param out_cap Maximum elements out can hold
@@ -162,9 +170,9 @@
  */
 #define ALGO_FILTER_TYPED(out, out_cap, in, in_len, Type, pred, ctx) \
     algo_filter( \
+        (out), (out_cap), \
         (in), (in_len), sizeof(Type), \
-        (algo_pred_fn)(pred), (ctx), \
-        (out), (out_cap))
+        (algo_pred_fn)(pred), (ctx))
 
 /* ════════════════════════════════════════════════════════════════════════════
    DEFINE_ALGO_FILTER — typed slice variants per element type
@@ -180,7 +188,10 @@
  * Prerequisites: DEFINE_SLICE(type) must have been called.
  *
  * Generated function:
- *   algo_filter_slice_##type(sv, out, out_cap, pred, ctx) → usize
+ *   algo_filter_slice_##type(out, out_cap, sv, pred, ctx) → usize
+ *
+ * Parameter order: output first (destination-first convention), then
+ * input slice, then predicate and context.
  *
  * Empty slice safety: sv.ptr may be NULL when sv.len == 0. The loop
  * never executes when sv.len == 0, so a NULL ptr is safe. A non-NULL
@@ -201,12 +212,12 @@
  * int in[]  = {1, 2, 3, 4, 5, 6};
  * int out[6];
  * slice_int sv = slice_int_from(in, 6);
- * usize n = algo_filter_slice_int(sv, out, 6, is_even, NULL);
+ * usize n = algo_filter_slice_int(out, 6, sv, is_even, NULL);
  * // n == 3, out == {2, 4, 6}
  *
  * // Empty slice — no crash, returns 0
  * slice_int empty = slice_int_empty();
- * usize m = algo_filter_slice_int(empty, out, 6, is_even, NULL); // 0
+ * usize m = algo_filter_slice_int(out, 6, empty, is_even, NULL); // 0
  * ```
  */
 #define DEFINE_ALGO_FILTER(type) \
@@ -217,17 +228,17 @@
  * Copies elements for which pred returns true into out, up to out_cap. \
  * Stops when out_cap elements are written. Relative order is preserved. \
  * \
- * @param sv      Input slice (borrowed, read-only) \
  * @param out     Output array of type (borrowed, writable) \
  * @param out_cap Maximum elements out can hold \
+ * @param sv      Input slice (borrowed, read-only) \
  * @param pred    Predicate function (algo_pred_fn) \
  * @param ctx     Optional context (borrowed, may be NULL) \
  * @return usize — number of elements written to out \
  */ \
 static inline usize ALGO_FILTER_SLICE_FN(type)( \
-    borrowed(slice_##type)  sv, \
     borrowed(type*)         out, \
     usize                   out_cap, \
+    borrowed(slice_##type)  sv, \
     borrowed(algo_pred_fn)  pred, \
     borrowed(void*)         ctx) \
 { \
