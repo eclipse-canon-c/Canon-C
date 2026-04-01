@@ -484,12 +484,12 @@ canon_c_test(
 canon_c_test(
     NAME time_test   
     SRC test/util/time_test.c   
-    INCLUDES core/primitives .
+    INCLUDES core/primitives core .
 )
 
 canon_c_test(
     NAME random_test 
     SRC test/util/random_test.c 
-    INCLUDES core/primitives . 
+    INCLUDES core/primitives core . 
     FUZZABLE
 )
