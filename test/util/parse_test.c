@@ -35,6 +35,7 @@
  *   literals. Float comparisons use explicit epsilon where needed.
  */
 
+#define CANON_CONTRACT_IMPL
 #include "util/parse.h"
 #include <stdio.h>
 #include <stdlib.h>
