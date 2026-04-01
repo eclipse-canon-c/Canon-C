@@ -13,8 +13,8 @@
  *
  * Coverage
  * ───────────────────────────────────────────────────────────────────────────
- *   random_seed         — seeding, reseeding, NULL safety
- *   random_u32          — core generation, determinism, NULL safety
+ *   random_seed         — seeding, reseeding, inc always odd
+ *   random_u32          — core generation, determinism, non-degeneracy
  *   random_range        — bounded [0, bound), bound==0, bound==1, bias check
  *   random_f64          — [0.0, 1.0) range
  *   random_bool         — produces both true and false
@@ -24,6 +24,12 @@
  *   struct size         — 16 bytes (two u64)
  *   determinism         — same seed+seq → identical sequence
  *   independent streams — different seq → different sequence
+ *
+ * Contract note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   NULL input to all random_* functions is a contract violation
+ *   (require_msg → abort). This is not tested here — contract violations
+ *   are tested separately via fork/signal in contract_test.c patterns.
  *
  * Portability note
  * ───────────────────────────────────────────────────────────────────────────
@@ -67,24 +73,6 @@ static int g_fail = 0;
                     __FILE__, __LINE__, #expr);                     \
         }                                                           \
     } while (0)
-
-/* =========================================================================
- * NULL safety
- * ====================================================================== */
-
-TEST(null_safety) {
-    /* All functions must handle NULL gracefully */
-    EXPECT(random_u32(NULL)  == 0);
-    EXPECT(random_f64(NULL)  == 0.0);
-    EXPECT(random_bool(NULL) == false);
-    EXPECT(random_range(NULL, 10)        == 0);
-    EXPECT(random_i32_range(NULL, 0, 10) == 0);
-    EXPECT(random_f32_range(NULL, 0.0f, 1.0f) == 0.0f);
-    EXPECT(random_f64_range(NULL, 0.0, 1.0)   == 0.0);
-
-    /* random_seed(NULL) must not crash */
-    random_seed(NULL, 42, 1);
-}
 
 /* =========================================================================
  * Struct layout
@@ -576,7 +564,6 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
 #else
 
 int main(void) {
-    RUN(null_safety);
     RUN(struct_size);
     RUN(determinism);
     RUN(reseed_restarts);
