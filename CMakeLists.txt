@@ -474,7 +474,12 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME split_test  SRC test/util/split_test.c  INCLUDES core/primitives .)
+canon_c_test(
+    NAME str_split_test 
+    SRC test/util/str_split_test.c 
+    INCLUDES core/primitives core semantics util . 
+    FUZZABLE
+)
 
 canon_c_test(
     NAME str_join_test 
