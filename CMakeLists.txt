@@ -473,7 +473,13 @@ canon_c_test(
 # canon_c_test(NAME intern_test SRC test/util/intern_test.c INCLUDES core/primitives .)
 # canon_c_test(NAME log_test    SRC test/util/log_test.c    INCLUDES core/primitives .)
 # canon_c_test(NAME file_test   SRC test/util/file_test.c   INCLUDES core/primitives .)
-# canon_c_test(NAME parse_test  SRC test/util/parse_test.c  INCLUDES core/primitives . FUZZABLE)
+
+canon_c_test(
+    NAME parse_test 
+    SRC test/util/parse_test.c 
+    INCLUDES core/primitives core semantics semantics/convenience data algo util .
+    FUZZABLE
+)
 
 canon_c_test(
     NAME time_test   
