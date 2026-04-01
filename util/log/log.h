@@ -1,13 +1,58 @@
 #ifndef CANON_UTIL_LOG_H
 #define CANON_UTIL_LOG_H
 
-#include <stdbool.h>
 #include <stdarg.h>
 #include <stdio.h>
 
 #include "core/primitives/types.h"
 #include "core/ownership.h"
+#include "semantics/result/result.h"
 #include "semantics/error.h"
+
+/* ────────────────────────────────────────────────────────────────────────────
+   result_bool_Error instantiation
+   ──────────────────────────────────────────────────────────────────────────
+
+   In C99, bool is a macro (#define bool _Bool), so CANON_RESULT(bool, Error)
+   would mangle to result__Bool_Error — not result_bool_Error. To get the
+   correct name, we use a typedef alias that is a plain identifier.
+
+   Guard: only instantiate if not already provided by another header. */
+
+#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
+#define CANON_RESULT_BOOL_ERROR_DEFINED
+
+#include <stdbool.h>
+
+typedef bool canon_bool_;
+
+/* Instantiate with the typedef, producing result_canon_bool__Error.
+ * Then typedef to the canonical name result_bool_Error and provide
+ * wrapper functions with the expected names. */
+CANON_RESULT(canon_bool_, Error)
+
+typedef result_canon_bool__Error result_bool_Error;
+
+static inline result_bool_Error result_bool_Error_ok(bool v) {
+    return result_canon_bool__Error_ok(v);
+}
+static inline result_bool_Error result_bool_Error_err(Error e) {
+    return result_canon_bool__Error_err(e);
+}
+static inline bool result_bool_Error_is_ok(result_bool_Error r) {
+    return result_canon_bool__Error_is_ok(r);
+}
+static inline bool result_bool_Error_is_err(result_bool_Error r) {
+    return result_canon_bool__Error_is_err(r);
+}
+static inline bool result_bool_Error_unwrap(result_bool_Error r) {
+    return result_canon_bool__Error_unwrap(r);
+}
+static inline Error result_bool_Error_unwrap_err(result_bool_Error r) {
+    return result_canon_bool__Error_unwrap_err(r);
+}
+
+#endif /* CANON_RESULT_BOOL_ERROR_DEFINED */
 
 /**
  * @file util/log/log.h
@@ -18,32 +63,20 @@
  * ignore) potential failures. No global state, no hidden configuration,
  * no silent drops.
  *
- * Core ideas:
- * ────────────────────────────────────────────────────────────────────────────
- * - Explicit over implicit — every log attempt returns success/failure
- * - Zero allocations — stack-only, no malloc/free anywhere
- * - No global state — caller fully controls output streams
- * - Three fixed severity levels (INFO/WARN/ERROR) — no runtime filtering
- * - Automatic flushing — logs are visible immediately
- * - Structured error codes — caller can branch on ERR_IO_FAILED,
- *   ERR_INVALID_ARG, etc. Use error_message() for human-readable strings
- *
  * Error handling rationale:
  * ────────────────────────────────────────────────────────────────────────────
  * NULL stream and NULL format are data errors (Err(ERR_INVALID_ARG)),
  * not contract violations. A logger that aborts your program on bad
- * input defeats its purpose. The caller decides what to do with the
- * failure — ignore it, retry to a fallback stream, or escalate.
+ * input defeats its purpose.
  *
  * Runtime dependency:
  * ────────────────────────────────────────────────────────────────────────────
- * This module depends on <stdio.h> (FILE*, vfprintf, fputs, fputc, fflush)
- * and <stdarg.h> (va_list). All Canon-C layers below util/ remain stdio-free.
+ * This module depends on <stdio.h> and <stdarg.h>. All Canon-C layers
+ * below util/ remain stdio-free.
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
- * - Reentrant but not thread-safe on the same FILE* stream
- * - Safe when: different threads use different streams, or external locking
+ * Reentrant but not thread-safe on the same FILE* stream.
  *
  * Error codes returned:
  * ────────────────────────────────────────────────────────────────────────────
@@ -56,11 +89,6 @@
 
 /**
  * @brief Logging severity levels
- *
- * Controls the prefix written before each message and the default
- * output stream used by the convenience functions:
- * - LOG_INFO / LOG_WARN → stdout
- * - LOG_ERROR           → stderr
  */
 typedef enum {
     LOG_INFO,   ///< "[INFO] "  → stdout
@@ -75,16 +103,11 @@ typedef enum {
 /**
  * @brief Low-level formatted logging with va_list (foundation function)
  *
- * All other logging functions delegate here.
- *
  * @param stream  Valid open FILE* (NULL → Err(ERR_INVALID_ARG))
  * @param level   Severity level — controls the written prefix only
  * @param fmt     printf-style format string (NULL → Err(ERR_INVALID_ARG))
  * @param args    va_list initialized by caller via va_start()
- *
- * @return Ok(true)              on full success
- *         Err(ERR_INVALID_ARG)  if stream or fmt is NULL
- *         Err(ERR_IO_FAILED)    if any write or flush fails
+ * @return Ok(true) on success, Err on failure
  */
 static inline result_bool_Error log_vfmt_to(
     borrowed(FILE*)       stream,
@@ -124,12 +147,6 @@ static inline result_bool_Error log_vfmt_to(
 
 /**
  * @brief Formatted logging to an explicit stream
- *
- * @param stream  Valid open FILE* (NULL → Err(ERR_INVALID_ARG))
- * @param level   Severity level
- * @param fmt     printf-style format string (NULL → Err(ERR_INVALID_ARG))
- * @param ...     Format arguments
- * @return Same as log_vfmt_to()
  */
 static inline result_bool_Error log_fmt_to(
     borrowed(FILE*)       stream,
@@ -146,14 +163,6 @@ static inline result_bool_Error log_fmt_to(
 
 /**
  * @brief Plain string logging to an explicit stream
- *
- * Prefer over log_fmt_to() for user-controlled strings — eliminates
- * format-string injection risk.
- *
- * @param stream  Valid open FILE* (NULL → Err(ERR_INVALID_ARG))
- * @param level   Severity level
- * @param msg     Null-terminated message (NULL → Err(ERR_INVALID_ARG))
- * @return Same as log_vfmt_to()
  */
 static inline result_bool_Error log_to(
     borrowed(FILE*)       stream,
@@ -167,8 +176,6 @@ static inline result_bool_Error log_to(
 
 /**
  * @brief Formatted logging to the default stream for the given level
- *
- * LOG_INFO / LOG_WARN → stdout, LOG_ERROR → stderr
  */
 static inline result_bool_Error log_fmt(
     log_level             level,
@@ -185,8 +192,6 @@ static inline result_bool_Error log_fmt(
 
 /**
  * @brief Plain string logging to the default stream for the given level
- *
- * LOG_INFO / LOG_WARN → stdout, LOG_ERROR → stderr
  */
 static inline result_bool_Error log_msg(
     log_level             level,
