@@ -13,13 +13,21 @@
  * Coverage
  * ───────────────────────────────────────────────────────────────────────────
  *   parse_skip_ws  — NULL, empty, all whitespace types, mixed, no whitespace
- *   parse_i64      — decimal, hex, octal, signs, overflow, NULL/empty,
- *                    endptr positioning, prefix parsing, leading whitespace
+ *   parse_i64      — decimal, hex, octal, signs, overflow, empty,
+ *                    endptr positioning, prefix parsing, whitespace rejection
  *   parse_u64      — decimal, hex, octal, rejects negative, overflow,
- *                    NULL/empty, endptr positioning
+ *                    empty, endptr positioning, whitespace rejection
  *   parse_f64      — decimal, scientific notation, hex float, inf, nan,
- *                    overflow/underflow still Ok, NULL/empty, endptr
+ *                    overflow/underflow still Ok, empty, endptr,
+ *                    whitespace rejection
  *   chained parsing — multi-value parse with skip_ws between values
+ *
+ * Contract note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   NULL input to parse_i64, parse_u64, parse_f64 is a contract violation
+ *   (require_msg → abort). This is not tested here — contract violations
+ *   are tested separately via fork/signal in contract_test.c patterns.
+ *   Empty string is a data error → Err(ERR_PARSE_FAILED).
  *
  * Portability note
  * ───────────────────────────────────────────────────────────────────────────
@@ -32,7 +40,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <float.h>
 
 /* =========================================================================
  * Portability: unused-function suppression
@@ -199,18 +206,14 @@ TEST(i64_overflow) {
 }
 
 /* =========================================================================
- * parse_i64 — error cases
+ * parse_i64 — error cases (data errors, not contract violations)
  * ====================================================================== */
 
 TEST(i64_errors) {
     const char* end;
     result_i64_Error r;
 
-    /* NULL input */
-    r = parse_i64(NULL, &end);
-    EXPECT(!result_i64_Error_is_ok(r));
-
-    /* Empty string */
+    /* Empty string → Err */
     r = parse_i64("", &end);
     EXPECT(!result_i64_Error_is_ok(r));
     EXPECT(end != NULL);
@@ -228,35 +231,19 @@ TEST(i64_errors) {
 }
 
 TEST(i64_null_endptr) {
-    /* endptr == NULL must not crash */
+    /* endptr == NULL must not crash (endptr is optional) */
     result_i64_Error r = parse_i64("42", NULL);
     EXPECT(result_i64_Error_is_ok(r));
     EXPECT(result_i64_Error_unwrap(r) == 42);
 
-    r = parse_i64(NULL, NULL);
+    /* Err case with NULL endptr */
+    r = parse_i64("", NULL);
     EXPECT(!result_i64_Error_is_ok(r));
 }
 
 /* =========================================================================
- * parse_i64 — prefix parsing and endptr
+ * parse_i64 — whitespace rejection
  * ====================================================================== */
-
-TEST(i64_prefix_parsing) {
-    const char* end;
-    result_i64_Error r;
-
-    /* Trailing non-digits */
-    r = parse_i64("123abc", &end);
-    EXPECT(result_i64_Error_is_ok(r));
-    EXPECT(result_i64_Error_unwrap(r) == 123);
-    EXPECT(*end == 'a');
-
-    /* Trailing whitespace */
-    r = parse_i64("456  ", &end);
-    EXPECT(result_i64_Error_is_ok(r));
-    EXPECT(result_i64_Error_unwrap(r) == 456);
-    EXPECT(*end == ' ');
-}
 
 TEST(i64_rejects_whitespace) {
     const char* end;
@@ -281,6 +268,27 @@ TEST(i64_rejects_whitespace) {
         EXPECT(result_i64_Error_is_ok(r));
         EXPECT(result_i64_Error_unwrap(r) == 42);
     }
+}
+
+/* =========================================================================
+ * parse_i64 — prefix parsing and endptr
+ * ====================================================================== */
+
+TEST(i64_prefix_parsing) {
+    const char* end;
+    result_i64_Error r;
+
+    /* Trailing non-digits */
+    r = parse_i64("123abc", &end);
+    EXPECT(result_i64_Error_is_ok(r));
+    EXPECT(result_i64_Error_unwrap(r) == 123);
+    EXPECT(*end == 'a');
+
+    /* Trailing whitespace */
+    r = parse_i64("456  ", &end);
+    EXPECT(result_i64_Error_is_ok(r));
+    EXPECT(result_i64_Error_unwrap(r) == 456);
+    EXPECT(*end == ' ');
 }
 
 /* =========================================================================
@@ -355,12 +363,11 @@ TEST(u64_errors) {
     const char* end;
     result_u64_Error r;
 
-    r = parse_u64(NULL, &end);
-    EXPECT(!result_u64_Error_is_ok(r));
-
+    /* Empty string → Err */
     r = parse_u64("", &end);
     EXPECT(!result_u64_Error_is_ok(r));
 
+    /* No valid digits */
     r = parse_u64("xyz", &end);
     EXPECT(!result_u64_Error_is_ok(r));
 
@@ -487,12 +494,11 @@ TEST(f64_errors) {
     const char* end;
     result_f64_Error r;
 
-    r = parse_f64(NULL, &end);
-    EXPECT(!result_f64_Error_is_ok(r));
-
+    /* Empty string → Err */
     r = parse_f64("", &end);
     EXPECT(!result_f64_Error_is_ok(r));
 
+    /* No valid prefix */
     r = parse_f64("abc", &end);
     EXPECT(!result_f64_Error_is_ok(r));
 
@@ -649,6 +655,9 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     memcpy(buf, data, len);
     buf[len] = '\0';
 
+    /* Skip empty input — contract requires s != NULL, and we always
+     * pass buf which is non-NULL, but empty string is a valid data error */
+
     /* Exercise all three parsers — verify Result invariants */
 
     {
@@ -675,7 +684,6 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
         result_f64_Error r = parse_f64(buf, &end);
         if (result_f64_Error_is_ok(r)) {
             f64 v = result_f64_Error_unwrap(r);
-            /* Must not be signaling NaN or otherwise invalid Result */
             (void)v;
             if (end == buf && buf[0] != '\0') __builtin_trap();
         } else {
@@ -711,8 +719,8 @@ int main(void) {
     RUN(i64_overflow);
     RUN(i64_errors);
     RUN(i64_null_endptr);
-    RUN(i64_prefix_parsing);
     RUN(i64_rejects_whitespace);
+    RUN(i64_prefix_parsing);
 
     /* parse_u64 */
     RUN(u64_decimal);
