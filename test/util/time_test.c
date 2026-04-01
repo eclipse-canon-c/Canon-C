@@ -31,6 +31,7 @@
  *   the loop body (C99).
  */
 
+#define CANON_CONTRACT_IMPL
 #include "util/time.h"
 #include <stdio.h>
 #include <stdlib.h>
