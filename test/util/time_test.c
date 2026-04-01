@@ -5,11 +5,18 @@
  * Coverage
  * ───────────────────────────────────────────────────────────────────────────
  *   stopwatch_start        — start / restart behaviour
- *   stopwatch_elapsed_ns   — nanosecond query, NULL safety, unstarted
+ *   stopwatch_elapsed_ns   — nanosecond query, unstarted
  *   stopwatch_elapsed_us   — microsecond query, unit consistency
  *   stopwatch_elapsed_ms   — millisecond query, unit consistency
  *   stopwatch_elapsed_sec  — fractional seconds query, unit consistency
- *   _stopwatch_now_ns      — monotonicity of underlying clock
+ *   canon_stopwatch_now_ns_ — monotonicity of underlying clock
+ *
+ * Contract note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   NULL input to stopwatch_start and stopwatch_elapsed_* is a contract
+ *   violation (require_msg → abort). This is not tested here — contract
+ *   violations are tested separately via fork/signal in contract_test.c
+ *   patterns.
  *
  * Timing strategy
  * ───────────────────────────────────────────────────────────────────────────
@@ -76,21 +83,6 @@ static void sleep_ms(u32 ms) {
 }
 
 /* =========================================================================
- * NULL safety — all query functions handle NULL gracefully
- * ====================================================================== */
-
-TEST(null_safety) {
-    /* All functions must return 0 when passed NULL */
-    EXPECT(stopwatch_elapsed_ns(NULL)  == 0);
-    EXPECT(stopwatch_elapsed_us(NULL)  == 0);
-    EXPECT(stopwatch_elapsed_ms(NULL)  == 0);
-    EXPECT(stopwatch_elapsed_sec(NULL) == 0.0);
-
-    /* stopwatch_start(NULL) must not crash */
-    stopwatch_start(NULL);
-}
-
-/* =========================================================================
  * Unstarted stopwatch — zero-initialised, never started
  * ====================================================================== */
 
@@ -143,17 +135,14 @@ TEST(unit_conversions) {
 
     /*
      * Queries are sequential, so each reads a slightly later time.
-     * Verify ordering: ns <= us*1000 <= ms*1000000 (each successive
-     * read is >= the previous). Also verify all are non-zero.
+     * Verify all are non-zero and reflect >= 10 ms (generous lower
+     * bound for 80 ms sleep).
      */
     EXPECT(ns  > 0);
     EXPECT(us  > 0);
     EXPECT(ms  > 0);
     EXPECT(sec > 0.0);
 
-    /* us should be roughly ns/1000 — but was read later, so us >= ns/1000 is not
-     * guaranteed across reads. Instead verify they are in the same ballpark:
-     * all should reflect >= 10 ms (generous lower bound for 80 ms sleep). */
     EXPECT(ns  >= 10u * 1000000ULL);
     EXPECT(us  >= 10u * 1000ULL);
     EXPECT(ms  >= 10u);
@@ -213,9 +202,9 @@ TEST(now_ns_monotonic) {
     u64 prev, curr;
     int i;
 
-    prev = _stopwatch_now_ns();
+    prev = canon_stopwatch_now_ns_();
     for (i = 0; i < 100; i++) {
-        curr = _stopwatch_now_ns();
+        curr = canon_stopwatch_now_ns_();
         EXPECT(curr >= prev);
         prev = curr;
     }
@@ -258,7 +247,6 @@ TEST(independent_instances) {
  * ====================================================================== */
 
 int main(void) {
-    RUN(null_safety);
     RUN(unstarted_returns_zero);
     RUN(elapsed_after_start);
     RUN(unit_conversions);
