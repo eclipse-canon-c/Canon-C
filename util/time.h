@@ -1,6 +1,18 @@
 #ifndef CANON_UTIL_TIME_H
 #define CANON_UTIL_TIME_H
 
+/* clock_gettime and CLOCK_MONOTONIC require _POSIX_C_SOURCE >= 199309L.
+ * Under strict -std=c99, glibc hides these symbols unless the feature-test
+ * macro is defined. This must appear before any system header inclusion. */
+#ifndef _WIN32
+    #ifndef _POSIX_C_SOURCE
+        #define _POSIX_C_SOURCE 199309L
+    #elif _POSIX_C_SOURCE < 199309L
+        #undef  _POSIX_C_SOURCE
+        #define _POSIX_C_SOURCE 199309L
+    #endif
+#endif
+
 #include "core/primitives/types.h"
 
 #ifdef _WIN32
