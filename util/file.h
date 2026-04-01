@@ -1,14 +1,17 @@
 #ifndef CANON_UTIL_FILE_H
 #define CANON_UTIL_FILE_H
 
+#include <stdbool.h>
+#include <stdio.h>
+
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
+#include "core/ownership.h"
 #include "core/memory.h"
 #include "core/arena.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
 #include "util/str/str.h"
-#include <stdio.h>
 
 /**
  * @file util/file.h
@@ -18,7 +21,7 @@
  * - Observable failures via Result<T,Error> and Option<T>
  * - Deterministic memory usage via arena allocation (preferred)
  * - Binary mode by default for cross-platform consistency
- * - No silent failures or hidden errno usage
+ * - Contracts for programming errors (NULL arguments)
  *
  * Runtime dependency:
  * ────────────────────────────────────────────────────────────────────────────
@@ -26,6 +29,14 @@
  * fread, fwrite, fflush, rename, remove). This is an intentional and
  * acknowledged coupling to the C runtime. All Canon-C layers below util/
  * remain stdio-free.
+ *
+ * Contracts:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - path must not be NULL — violated → contract abort
+ * - arena/scratch must not be NULL — violated → contract abort
+ * - content must not be NULL — violated → contract abort
+ * - I/O failures (file not found, write error, arena exhausted) are data
+ *   errors returned as None or Err — not contract violations
  *
  * Reading strategy:
  * ────────────────────────────────────────────────────────────────────────────
@@ -62,9 +73,11 @@
  * When CANON_NO_GNU_EXTENSIONS IS defined, all functions fall back to
  * explicit fclose() before every return. This is verbose but correct.
  *
- * Error handling:
- * - Option<T> for may-fail-without-details
- * - Result<T,Error> for operations needing error reason
+ * Side effects:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - File system operations (fopen, fwrite, rename, remove) modify external state
+ * - file_write_all_atomic() creates and removes a temporary ".tmp" file
+ * - file_exists() opens and immediately closes the file (TOCTOU advisory)
  *
  * @sa file_read_all_arena() — preferred zero-heap path (auto-selects strategy)
  * @sa file_read_all()       — persistent heap path (caller provides scratch arena)
@@ -83,11 +96,12 @@ CANON_RESULT(usize, Error)
  * @brief Cleanup function for __attribute__((cleanup)) on FILE* variables
  *
  * Called automatically when a FILE* variable goes out of scope.
- * NULL-safe — safe to call even if fopen() failed.
+ * NULL-safe by design — cleanup functions must handle the case where
+ * fopen() failed and the variable holds NULL.
  *
  * @remark Internal — do not call directly.
  */
-static inline void _file_auto_close(FILE** f) {
+static inline void canon_file_auto_close_(FILE** f) {
     if (f && *f) {
         fclose(*f);
         *f = NULL;
@@ -101,17 +115,10 @@ static inline void _file_auto_close(FILE** f) {
  * Uses __attribute__((cleanup)) when GNU extensions are available.
  * Falls back to a plain declaration when CANON_NO_GNU_EXTENSIONS is defined —
  * in that case, callers MUST fclose() manually before every return.
- *
- * Usage:
- * ```c
- * FILE_AUTOCLOSE(f, path, "rb");
- * if (!f) return option_charp_none();
- * // f is closed automatically on any return (GNU) or manually (no-GNU)
- * ```
  */
 #ifndef CANON_NO_GNU_EXTENSIONS
     #define FILE_AUTOCLOSE(name, path, mode) \
-        FILE* name __attribute__((cleanup(_file_auto_close))) = fopen(path, mode)
+        FILE* name __attribute__((cleanup(canon_file_auto_close_))) = fopen(path, mode)
 #else
     #define FILE_AUTOCLOSE(name, path, mode) \
         FILE* name = fopen(path, mode)
@@ -142,21 +149,20 @@ static inline void _file_auto_close(FILE** f) {
  * in FILE_READ_CHUNK_SIZE increments, then reclaims unused tail via
  * arena_mark/arena_reset_to.
  *
- * Contiguity guarantee: safe because a single arena_alloc() call always
- * returns one contiguous block. No multi-alloc chunk stitching is performed.
- *
- * Tail reclaim note: arena_reset_to() does not zero memory. The immediately
- * following arena_alloc() on a bump allocator returns the same base address.
- * This is documented behavior of Canon-C's arena — see arena.h.
- *
- * @param f     Open FILE* in binary read mode (non-seekable)
- * @param arena Arena with sufficient remaining space
+ * @param f     Open FILE* in binary read mode (must not be NULL — contract)
+ * @param arena Arena with sufficient remaining space (must not be NULL — contract)
  * @return Some(char*) pointing to null-terminated buffer on success
  *         None if arena has < 2 bytes remaining, or on read error
  *
  * @remark Internal — do not call directly. Use file_read_all_arena().
  */
-static inline option_charp _file_read_stream(FILE* f, Arena* arena) {
+static inline option_charp canon_file_read_stream_(
+    borrowed(FILE*)  f,
+    borrowed(Arena*) arena)
+{
+    require_msg(f     != NULL, "canon_file_read_stream_: f is NULL");
+    require_msg(arena != NULL, "canon_file_read_stream_: arena is NULL");
+
     usize available = arena_remaining(arena);
     if (available < 2) return option_charp_none();
 
@@ -209,17 +215,21 @@ static inline option_charp _file_read_stream(FILE* f, Arena* arena) {
  * FILE* is automatically closed on all return paths when GNU extensions
  * are available. See FILE_AUTOCLOSE for fallback behavior.
  *
- * @param path  Null-terminated file path
- * @param arena Valid initialized arena with sufficient space for file + 1 byte
+ * @param path  Null-terminated file path (must not be NULL — contract)
+ * @param arena Valid initialized arena with sufficient space (must not be NULL — contract)
  * @return Some(arena-owned char*) on success — null-terminated buffer
- *         None on any failure (file not found, arena exhausted, read error)
+ *         None on I/O failure (file not found, arena exhausted, read error)
  *
  * @remark Returned pointer MUST NOT be freed
  * @remark Binary mode ("rb") — no line-ending translation
  * @remark Buffer is valid until arena is reset or destroyed
  */
-static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
-    if (!path || !arena) return option_charp_none();
+static inline option_charp file_read_all_arena(
+    borrowed(const char*) path,
+    borrowed(Arena*)      arena)
+{
+    require_msg(path  != NULL, "file_read_all_arena: path is NULL");
+    require_msg(arena != NULL, "file_read_all_arena: arena is NULL");
 
     FILE_AUTOCLOSE(f, path, "rb");
     if (!f) return option_charp_none();
@@ -243,7 +253,7 @@ static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
         }
     }
 
-    return _file_read_stream(f, arena);
+    return canon_file_read_stream_(f, arena);
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -261,33 +271,21 @@ static inline option_charp file_read_all_arena(const char* path, Arena* arena) {
  *
  * Caller must free result with str_free().
  *
- * Example:
- * ```c
- * uint8_t scratch_buf[8192];
- * Arena scratch;
- * arena_init(&scratch, scratch_buf, sizeof(scratch_buf));
- *
- * option_charp result = file_read_all("config.txt", &scratch);
- * arena_reset(&scratch);
- *
- * if (option_charp_is_some(result)) {
- *     char* s = option_charp_unwrap(result);
- *     // use s...
- *     str_free(s);
- * }
- * ```
- *
- * @param path    Null-terminated file path
- * @param scratch Initialized arena sized for at least (file_size + 1 + alignment)
+ * @param path    Null-terminated file path (must not be NULL — contract)
+ * @param scratch Initialized arena sized for at least file_size + 1 (must not be NULL — contract)
  * @return Some(heap-owned char*) on success — null-terminated buffer
- *         None on any failure (file not found, arena too small, read error)
+ *         None on I/O failure (file not found, arena too small, read error)
  *
  * @remark Caller MUST free returned string with str_free()
- * @remark scratch arena content is unspecified after this call — reset or reuse freely
+ * @remark scratch arena content is unspecified after this call
  * @remark Binary mode ("rb")
  */
-static inline option_charp file_read_all(const char* path, Arena* scratch) {
-    if (!path || !scratch) return option_charp_none();
+static inline option_charp file_read_all(
+    borrowed(const char*) path,
+    borrowed(Arena*)      scratch)
+{
+    require_msg(path    != NULL, "file_read_all: path is NULL");
+    require_msg(scratch != NULL, "file_read_all: scratch is NULL");
 
     option_charp tmp = file_read_all_arena(path, scratch);
     if (option_charp_is_none(tmp)) return option_charp_none();
@@ -305,14 +303,17 @@ static inline option_charp file_read_all(const char* path, Arena* scratch) {
  * FILE* is automatically closed on all return paths when GNU extensions
  * are available. See FILE_AUTOCLOSE for fallback behavior.
  *
- * @param path    Null-terminated file path
- * @param content Null-terminated content to write
+ * @param path    Null-terminated file path (must not be NULL — contract)
+ * @param content Null-terminated content to write (must not be NULL — contract)
  * @return Ok(bytes written) on success
- *         Err(ERR_INVALID_ARG) if path or content is NULL
  *         Err(ERR_IO_FAILED) on file open or write failure
  */
-static inline result_usize_Error file_write_all(const char* path, const char* content) {
-    if (!path || !content) return RESULT_ERR(usize, ERR_INVALID_ARG);
+static inline result_usize_Error file_write_all(
+    borrowed(const char*) path,
+    borrowed(const char*) content)
+{
+    require_msg(path    != NULL, "file_write_all: path is NULL");
+    require_msg(content != NULL, "file_write_all: content is NULL");
 
     FILE_AUTOCLOSE(f, path, "wb");
     if (!f) return RESULT_ERR(usize, ERR_IO_FAILED);
@@ -345,15 +346,18 @@ static inline result_usize_Error file_write_all(const char* path, const char* co
  * FILE* is automatically closed on all return paths when GNU extensions
  * are available. See FILE_AUTOCLOSE for fallback behavior.
  *
- * @param path    Final file path
- * @param content Null-terminated content to write
+ * @param path    Final file path (must not be NULL — contract)
+ * @param content Null-terminated content to write (must not be NULL — contract)
  * @return Ok(bytes written) on success
- *         Err(ERR_INVALID_ARG) if path or content is NULL
  *         Err(ERR_BUFFER_TOO_SMALL) if path is too long for temp buffer
  *         Err(ERR_IO_FAILED) on write or rename failure
  */
-static inline result_usize_Error file_write_all_atomic(const char* path, const char* content) {
-    if (!path || !content) return RESULT_ERR(usize, ERR_INVALID_ARG);
+static inline result_usize_Error file_write_all_atomic(
+    borrowed(const char*) path,
+    borrowed(const char*) content)
+{
+    require_msg(path    != NULL, "file_write_all_atomic: path is NULL");
+    require_msg(content != NULL, "file_write_all_atomic: content is NULL");
 
     char tmp[FILE_MAX_PATH];
     usize path_len = str_len(path);
@@ -384,14 +388,14 @@ static inline result_usize_Error file_write_all_atomic(const char* path, const c
 /**
  * @brief Checks if file exists and is readable
  *
- * @param path Null-terminated file path
+ * @param path Null-terminated file path (must not be NULL — contract)
  * @return true if file exists and can be opened for reading, false otherwise
  *
  * @remark Result is advisory — file may be deleted between this check and use (TOCTOU).
  *         Do not use as a security gate; use only for diagnostic or optional logic.
  */
-static inline bool file_exists(const char* path) {
-    if (!path) return false;
+static inline bool file_exists(borrowed(const char*) path) {
+    require_msg(path != NULL, "file_exists: path is NULL");
     FILE* f = fopen(path, "rb");
     if (!f) return false;
     fclose(f);
