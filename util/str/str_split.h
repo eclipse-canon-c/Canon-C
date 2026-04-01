@@ -153,11 +153,13 @@ static inline usize str_split_keep_empty(
 
     if (max_parts == 0) return 0;
 
+    /* Empty string produces zero fields */
+    if (!*s) return 0;
+
     count = 0;
-    p     = s;
     start = s;
 
-    while (*p || start != p) {
+    for (p = s; ; ++p) {
         if (*p == delim || *p == '\0') {
             if (count < max_parts) {
                 parts_out[count++] = start;
@@ -165,10 +167,8 @@ static inline usize str_split_keep_empty(
                 break;
             }
             start = p + 1;
+            if (*p == '\0') break;
         }
-
-        if (*p == '\0') break;
-        ++p;
     }
 
     return count;
