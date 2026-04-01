@@ -7,7 +7,7 @@
 #include "core/arena.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
-#include "util/str/string.h"
+#include "util/str/str.h"
 #include <stdio.h>
 
 /**
