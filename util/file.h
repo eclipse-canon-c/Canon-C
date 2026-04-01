@@ -45,9 +45,10 @@
  *
  * Resource cleanup:
  * ────────────────────────────────────────────────────────────────────────────
- * All functions use __attribute__((cleanup)) on GCC/Clang when
- * CANON_NO_GNU_EXTENSIONS is NOT defined. MSVC falls through to the
- * plain declaration path automatically (no __attribute__ support).
+ * All internal functions use explicit fclose() via a single exit point
+ * (goto cleanup pattern) to guarantee file handle closure on every path,
+ * including early returns. This is portable across GCC, Clang, and MSVC
+ * without relying on __attribute__((cleanup)).
  *
  * Side effects:
  * ────────────────────────────────────────────────────────────────────────────
@@ -60,41 +61,6 @@
    Result type for write operations
    ──────────────────────────────────────────────────────────────────────────── */
 CANON_RESULT(usize, Error)
-
-/* ────────────────────────────────────────────────────────────────────────────
-   Internal: automatic FILE* cleanup
-   ──────────────────────────────────────────────────────────────────────────── */
-
-/**
- * @brief Cleanup function for __attribute__((cleanup)) on FILE* variables
- *
- * NULL-safe by design — cleanup functions must handle the case where
- * fopen() failed and the variable holds NULL.
- *
- * @remark Internal — do not call directly.
- */
-static inline void canon_file_auto_close_(FILE** f) {
-    if (f && *f) {
-        fclose(*f);
-        *f = NULL;
-    }
-}
-
-/**
- * @def FILE_AUTOCLOSE(name, path, mode)
- * @brief Declares a FILE* that is automatically closed on scope exit
- *
- * Uses __attribute__((cleanup)) on GCC/Clang when GNU extensions are enabled.
- * MSVC does not support __attribute__ — detected automatically via compiler check.
- * When cleanup is unavailable, callers MUST fclose() manually before every return.
- */
-#if !defined(CANON_NO_GNU_EXTENSIONS) && (defined(__GNUC__) || defined(__clang__))
-    #define FILE_AUTOCLOSE(name, path, mode) \
-        FILE* name __attribute__((cleanup(canon_file_auto_close_))) = fopen(path, mode)
-#else
-    #define FILE_AUTOCLOSE(name, path, mode) \
-        FILE* name = fopen(path, mode)
-#endif
 
 /* ────────────────────────────────────────────────────────────────────────────
    Internal: streaming fread fallback for non-seekable streams
@@ -112,6 +78,7 @@ static inline void canon_file_auto_close_(FILE** f) {
  * @return Some(char*) on success, None on error or insufficient arena space
  *
  * @remark Internal — use file_read_all_arena() instead.
+ * @remark Does NOT close f — caller is responsible for fclose.
  */
 static inline option_charp canon_file_read_stream_(
     borrowed(FILE*)  f,
@@ -177,28 +144,36 @@ static inline option_charp file_read_all_arena(
     require_msg(path  != NULL, "file_read_all_arena: path is NULL");
     require_msg(arena != NULL, "file_read_all_arena: arena is NULL");
 
-    FILE_AUTOCLOSE(f, path, "rb");
-    if (!f) return option_charp_none();
+    option_charp result = option_charp_none();
+
+    FILE* f = fopen(path, "rb");
+    if (!f) return result;
 
     if (fseek(f, 0, SEEK_END) == 0) {
         long len = ftell(f);
 
         if (len >= 0) {
-            if ((usize)len + 1 < (usize)len) return option_charp_none();
-            if (fseek(f, 0, SEEK_SET) != 0) return option_charp_none();
+            if ((usize)len + 1 < (usize)len) goto done;
+            if (fseek(f, 0, SEEK_SET) != 0) goto done;
 
             usize size = (usize)len + 1;
             char* buf  = (char*)arena_alloc(arena, size);
-            if (!buf) return option_charp_none();
+            if (!buf) goto done;
 
-            if (fread(buf, 1, (usize)len, f) != (usize)len) return option_charp_none();
+            if (fread(buf, 1, (usize)len, f) != (usize)len) goto done;
 
             buf[len] = '\0';
-            return option_charp_some(buf);
+            result = option_charp_some(buf);
+            goto done;
         }
     }
 
-    return canon_file_read_stream_(f, arena);
+    /* fseek failed — non-seekable stream, use streaming fallback */
+    result = canon_file_read_stream_(f, arena);
+
+done:
+    fclose(f);
+    return result;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -247,13 +222,20 @@ static inline result_usize_Error file_write_all(
     require_msg(path    != NULL, "file_write_all: path is NULL");
     require_msg(content != NULL, "file_write_all: content is NULL");
 
-    FILE_AUTOCLOSE(f, path, "wb");
+    FILE* f = fopen(path, "wb");
     if (!f) return result_usize_Error_err(ERR_IO_FAILED);
 
     usize len = str_len(content);
-    if (fwrite(content, 1, len, f) != len) return result_usize_Error_err(ERR_IO_FAILED);
+    result_usize_Error r;
 
-    return result_usize_Error_ok(len);
+    if (fwrite(content, 1, len, f) != len) {
+        r = result_usize_Error_err(ERR_IO_FAILED);
+    } else {
+        r = result_usize_Error_ok(len);
+    }
+
+    fclose(f);
+    return r;
 }
 
 /**
