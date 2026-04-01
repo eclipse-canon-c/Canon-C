@@ -4,7 +4,7 @@
 #include "core/primitives/types.h"
 #include "core/memory.h"
 #include "semantics/option/option.h"
-#include "util/str/string.h"
+#include "util/str/str.h"
 
 /**
  * @file util/str/str_join.h
