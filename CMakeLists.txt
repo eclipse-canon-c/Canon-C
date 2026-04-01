@@ -466,12 +466,17 @@ canon_c_test(
 # util/ tests                          — uncomment when ready (v1.3.0)
 # High-value fuzz targets: parse, string, stringbuf, hashmap
 # ---------------------------------------------------------------------------
-# canon_c_test(NAME string_test SRC test/util/string_test.c INCLUDES core/primitives . FUZZABLE)
+# canon_c_test(NAME str_test SRC test/util/string_test.c INCLUDES core/primitives . FUZZABLE)
 # canon_c_test(NAME split_test  SRC test/util/split_test.c  INCLUDES core/primitives .)
 # canon_c_test(NAME join_test   SRC test/util/join_test.c   INCLUDES core/primitives .)
 # canon_c_test(NAME view_test   SRC test/util/view_test.c   INCLUDES core/primitives .)
 # canon_c_test(NAME intern_test SRC test/util/intern_test.c INCLUDES core/primitives .)
-# canon_c_test(NAME log_test    SRC test/util/log_test.c    INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME log_test 
+    SRC test/util/log_test.c 
+    INCLUDES core/primitives core semantics util .
+)
 
 canon_c_test(
     NAME file_test 
