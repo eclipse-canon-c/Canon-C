@@ -256,7 +256,7 @@ at the boundary where `algo/` ends and application code begins. Every module
 returns `Result`, accepts explicit arenas, and follows the same ownership and
 lifetime conventions as the rest of Canon-C.
 
-- Strings: `string.h`, `str_split.h`, `str_join.h`, `str_view.h`, `intern.h`
+- Strings: `str.h`, `str_split.h`, `str_join.h`, `str_view.h`, `intern.h`
 - Logging: `log.h`, `log_macros.h`
 - File I/O, parsing, random number generation, timing
 
