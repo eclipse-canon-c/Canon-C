@@ -294,30 +294,30 @@ TEST(free_null) {
  * ====================================================================== */
 
 TEST(copy_into_fits) {
-    char buf[16];
+    char buf[16] = {0};
     EXPECT(str_copy_into(buf, sizeof(buf), "hello") == true);
     EXPECT(str_equals(buf, "hello"));
 }
 
 TEST(copy_into_overflow) {
-    char buf[4];
+    char buf[4] = {0};
     EXPECT(str_copy_into(buf, sizeof(buf), "hello") == false);
 }
 
 TEST(copy_into_exact) {
-    char buf[6]; /* "hello" + '\0' = 6 */
+    char buf[6] = {0}; /* "hello" + '\0' = 6 */
     EXPECT(str_copy_into(buf, sizeof(buf), "hello") == true);
     EXPECT(str_equals(buf, "hello"));
 }
 
 TEST(copy_into_empty_src) {
-    char buf[4];
+    char buf[4] = {0};
     EXPECT(str_copy_into(buf, sizeof(buf), "") == true);
     EXPECT(str_equals(buf, ""));
 }
 
 TEST(copy_into_zero_size) {
-    char buf[4];
+    char buf[4] = {0};
     EXPECT(str_copy_into(buf, 0, "hello") == false);
 }
 
@@ -326,30 +326,30 @@ TEST(copy_into_zero_size) {
  * ====================================================================== */
 
 TEST(concat_into_fits) {
-    char buf[32];
+    char buf[32] = {0};
     EXPECT(str_concat_into(buf, sizeof(buf), "hello", " world") == true);
     EXPECT(str_equals(buf, "hello world"));
 }
 
 TEST(concat_into_overflow) {
-    char buf[8];
+    char buf[8] = {0};
     EXPECT(str_concat_into(buf, sizeof(buf), "hello", " world") == false);
 }
 
 TEST(concat_into_exact) {
-    char buf[12]; /* "hello world" + '\0' = 12 */
+    char buf[12] = {0}; /* "hello world" + '\0' = 12 */
     EXPECT(str_concat_into(buf, sizeof(buf), "hello ", "world") == true);
     EXPECT(str_equals(buf, "hello world"));
 }
 
 TEST(concat_into_empty) {
-    char buf[16];
+    char buf[16] = {0};
     EXPECT(str_concat_into(buf, sizeof(buf), "", "") == true);
     EXPECT(str_equals(buf, ""));
 }
 
 TEST(concat_into_zero_size) {
-    char buf[4];
+    char buf[4] = {0};
     EXPECT(str_concat_into(buf, 0, "a", "b") == false);
 }
 
