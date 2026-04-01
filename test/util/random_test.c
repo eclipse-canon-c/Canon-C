@@ -38,6 +38,7 @@
  *   counts with generous tolerances to avoid CI flakiness.
  */
 
+#define CANON_CONTRACT_IMPL
 #include "util/random.h"
 #include <stdio.h>
 #include <stdlib.h>
