@@ -1,5 +1,5 @@
-#ifndef CANON_UTIL_STRING_H
-#define CANON_UTIL_STRING_H
+#ifndef CANON_UTIL_STR_H
+#define CANON_UTIL_STR_H
 
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
@@ -15,6 +15,13 @@
  * buffer-based operations, along with pure predicate functions for string
  * comparison and checking.
  *
+ * Naming convention:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Functions in this module operate on null-terminated const char* strings.
+ * core/slice.h defines str_starts_with(str_t, str_t) and str_ends_with(str_t, str_t)
+ * for slice-based operations. To avoid naming collisions, this module uses
+ * cstr_starts_with / cstr_ends_with for the const char* variants.
+ *
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
@@ -24,13 +31,6 @@
  * - Works on any architecture
  *
  * Thread-safety: Functions are reentrant and thread-safe. No shared state.
- *
- * Performance:
- * ────────────────────────────────────────────────────────────────────────────
- * - Time complexity: O(n) where n = string length for most operations
- * - Space complexity: O(1) for borrowed operations, O(n) for owned
- * - Owned operations: one mem_alloc per allocation
- * - Borrowed operations: zero allocations
  *
  * Ownership model:
  * ────────────────────────────────────────────────────────────────────────────
@@ -44,24 +44,59 @@
  *    - Caller provides buffer
  *    - Returns bool (success/failure)
  *    - Zero allocations
- *
- * @sa util/str/str_split.h  — non-mutating string splitting
- * @sa util/str/str_join.h   — string joining
- * @sa util/str/str_view.h   — immutable borrowed string view
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
    option_charp — canonical owned string Option type
    ──────────────────────────────────────────────────────────────────────────── */
 
-/**
- * @brief Typedef for heap-owned char pointer — enables CANON_OPTION instantiation
- *
- * option_charp is the canonical return type for all str_alloc_* functions.
- * It makes non-ownership and allocation explicit at every call site.
- */
 typedef char* charp;
 CANON_OPTION(charp)
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Primitive string operations — must be defined before use below
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Returns length of null-terminated string (excluding null terminator)
+ *
+ * @param s Null-terminated string (NULL → 0)
+ * @return Number of characters before null terminator
+ */
+static inline usize str_len(const char* s) {
+    if (!s) return 0;
+    usize len = 0;
+    while (s[len]) len++;
+    return len;
+}
+
+/**
+ * @brief Lexicographic comparison of two null-terminated strings
+ *
+ * @param a First string (must not be NULL)
+ * @param b Second string (must not be NULL)
+ * @return <0 if a < b, 0 if equal, >0 if a > b
+ */
+static inline int str_compare(const char* a, const char* b) {
+    if (!a || !b) return a ? 1 : (b ? -1 : 0);
+    while (*a && *a == *b) { a++; b++; }
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+}
+
+/**
+ * @brief Lexicographic comparison of at most n characters
+ *
+ * @param a First string (must not be NULL)
+ * @param b Second string (must not be NULL)
+ * @param n Maximum number of characters to compare
+ * @return <0 if a < b, 0 if equal, >0 if a > b
+ */
+static inline int str_ncompare(const char* a, const char* b, usize n) {
+    if (!a || !b || n == 0) return (!a && !b) ? 0 : (a ? 1 : -1);
+    while (n > 0 && *a && *a == *b) { a++; b++; n--; }
+    if (n == 0) return 0;
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
    Owned strings — heap allocation (caller must free with str_free)
@@ -75,8 +110,6 @@ CANON_OPTION(charp)
  *         None on NULL input or allocation failure
  *
  * @remark Caller MUST free with str_free()
- *
- * Performance: O(n)
  */
 static inline option_charp str_alloc_copy(const char* s) {
     if (!s) return option_charp_none();
@@ -96,8 +129,6 @@ static inline option_charp str_alloc_copy(const char* s) {
  *         None on NULL input or allocation failure
  *
  * @remark Caller MUST free with str_free()
- *
- * Performance: O(n)
  */
 static inline option_charp str_alloc_concat(const char* a, const char* b) {
     if (!a || !b) return option_charp_none();
@@ -120,8 +151,6 @@ static inline option_charp str_alloc_concat(const char* a, const char* b) {
  *         None on NULL input, invalid range, or allocation failure
  *
  * @remark Caller MUST free with str_free()
- *
- * Performance: O(n)
  */
 static inline option_charp str_alloc_sub(const char* s, usize start, usize len) {
     if (!s) return option_charp_none();
@@ -139,10 +168,6 @@ static inline option_charp str_alloc_sub(const char* s, usize start, usize len) 
  * @brief Frees a string allocated by any str_alloc_* function
  *
  * NULL-safe — calling with NULL is a no-op.
- *
- * @param s Pointer to owned string (NULL-safe)
- *
- * Performance: O(1)
  */
 static inline void str_free(char* s) {
     mem_free(s);
@@ -155,15 +180,7 @@ static inline void str_free(char* s) {
 /**
  * @brief Safely copies source string into fixed-size buffer
  *
- * All-or-nothing — copies only if source fits completely (including null
- * terminator).
- *
- * @param dest      Writable destination buffer
- * @param dest_size Size of buffer in bytes (including null terminator)
- * @param src       Null-terminated source string
- * @return true on successful full copy, false if would overflow or invalid input
- *
- * Performance: O(n)
+ * All-or-nothing — copies only if source fits completely.
  */
 static inline bool str_copy_into(char* dest, usize dest_size, const char* src) {
     if (!dest || dest_size == 0 || !src) return false;
@@ -177,14 +194,6 @@ static inline bool str_copy_into(char* dest, usize dest_size, const char* src) {
  * @brief Safely concatenates two strings into fixed-size buffer
  *
  * All-or-nothing — concatenates only if result fits completely.
- *
- * @param dest      Writable destination buffer
- * @param dest_size Size of buffer in bytes (including null terminator)
- * @param a         First null-terminated string
- * @param b         Second null-terminated string
- * @return true on successful full concatenation, false if would overflow
- *
- * Performance: O(n)
  */
 static inline bool str_concat_into(char* dest, usize dest_size, const char* a, const char* b) {
     if (!dest || dest_size == 0 || !a || !b) return false;
@@ -202,12 +211,6 @@ static inline bool str_concat_into(char* dest, usize dest_size, const char* a, c
 
 /**
  * @brief Checks if two null-terminated strings are equal
- *
- * @param a First string (may be NULL)
- * @param b Second string (may be NULL)
- * @return true if strings are identical (including both NULL), false otherwise
- *
- * Performance: O(n)
  */
 static inline bool str_equals(const char* a, const char* b) {
     if (a == b) return true;
@@ -216,15 +219,12 @@ static inline bool str_equals(const char* a, const char* b) {
 }
 
 /**
- * @brief Checks if string starts with given prefix
+ * @brief Checks if null-terminated string starts with given prefix
  *
- * @param s      String to check (may be NULL)
- * @param prefix Prefix to look for (may be NULL)
- * @return true if s begins with prefix (empty prefix → always true)
- *
- * Performance: O(n)
+ * Named cstr_starts_with to avoid collision with str_starts_with(str_t, str_t)
+ * defined in core/slice.h for slice-based strings.
  */
-static inline bool str_starts_with(const char* s, const char* prefix) {
+static inline bool cstr_starts_with(const char* s, const char* prefix) {
     if (!s || !prefix) return false;
     const usize prefix_len = str_len(prefix);
     if (prefix_len == 0) return true;
@@ -232,15 +232,12 @@ static inline bool str_starts_with(const char* s, const char* prefix) {
 }
 
 /**
- * @brief Checks if string ends with given suffix
+ * @brief Checks if null-terminated string ends with given suffix
  *
- * @param s      String to check (may be NULL)
- * @param suffix Suffix to look for (may be NULL)
- * @return true if s ends with suffix, false otherwise
- *
- * Performance: O(n)
+ * Named cstr_ends_with to avoid collision with str_ends_with(str_t, str_t)
+ * defined in core/slice.h for slice-based strings.
  */
-static inline bool str_ends_with(const char* s, const char* suffix) {
+static inline bool cstr_ends_with(const char* s, const char* suffix) {
     if (!s || !suffix) return false;
     const usize s_len = str_len(s);
     const usize suffix_len = str_len(suffix);
@@ -248,4 +245,4 @@ static inline bool str_ends_with(const char* s, const char* suffix) {
     return str_compare(s + s_len - suffix_len, suffix) == 0;
 }
 
-#endif /* CANON_UTIL_STRING_H */
+#endif /* CANON_UTIL_STR_H */
