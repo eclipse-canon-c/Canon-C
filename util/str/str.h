@@ -7,7 +7,7 @@
 #include "semantics/option/option.h"
 
 /**
- * @file util/str/string.h
+ * @file util/str/str.h
  * @brief Safe, explicit and ownership-aware string utilities
  *
  * Provides modern string manipulation utilities with clear ownership semantics
