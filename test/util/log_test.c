@@ -15,11 +15,7 @@
  * Strategy
  * ───────────────────────────────────────────────────────────────────────────
  *   Output is captured via tmpfile() — write to it, rewind, read back,
- *   verify content. This is portable across all platforms.
- *
- * Portability note
- * ───────────────────────────────────────────────────────────────────────────
- *   Loop variables are declared before the loop body (C99).
+ *   verify content. All tmpfile() calls are NULL-guarded.
  */
 
 #define CANON_CONTRACT_IMPL
@@ -61,18 +57,18 @@ static int g_fail = 0;
     } while (0)
 
 /* =========================================================================
- * Helper: read tmpfile contents into buffer
+ * Helper: read tmpfile contents into buffer (NULL-safe)
  * ====================================================================== */
 
 static int read_tmpfile(FILE* f, char* buf, int bufsize) {
     int len;
+    if (!f) { buf[0] = '\0'; return 0; }
     rewind(f);
     len = (int)fread(buf, 1, (size_t)(bufsize - 1), f);
     buf[len] = '\0';
     return len;
 }
 
-/* Helper: check if buf contains substr */
 static bool contains(const char* buf, const char* substr) {
     return strstr(buf, substr) != NULL;
 }
@@ -89,6 +85,7 @@ TEST(null_stream) {
 
 TEST(null_fmt) {
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_fmt_to(f, LOG_INFO, NULL);
     EXPECT(result_bool_Error_is_err(r));
     EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
@@ -101,6 +98,7 @@ TEST(null_fmt) {
 
 TEST(null_msg) {
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_to(f, LOG_INFO, NULL);
     EXPECT(result_bool_Error_is_err(r));
     EXPECT(result_bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
@@ -114,6 +112,7 @@ TEST(null_msg) {
 TEST(prefix_info) {
     char buf[256];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_fmt_to(f, LOG_INFO, "hello");
     EXPECT(result_bool_Error_is_ok(r));
     read_tmpfile(f, buf, sizeof(buf));
@@ -125,6 +124,7 @@ TEST(prefix_info) {
 TEST(prefix_warn) {
     char buf[256];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_fmt_to(f, LOG_WARN, "caution");
     EXPECT(result_bool_Error_is_ok(r));
     read_tmpfile(f, buf, sizeof(buf));
@@ -136,6 +136,7 @@ TEST(prefix_warn) {
 TEST(prefix_error) {
     char buf[256];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_fmt_to(f, LOG_ERROR, "failure");
     EXPECT(result_bool_Error_is_ok(r));
     read_tmpfile(f, buf, sizeof(buf));
@@ -151,6 +152,7 @@ TEST(prefix_error) {
 TEST(formatted_output) {
     char buf[256];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_fmt_to(f, LOG_INFO, "count=%d name=%s", 42, "test");
     EXPECT(result_bool_Error_is_ok(r));
     read_tmpfile(f, buf, sizeof(buf));
@@ -167,10 +169,13 @@ TEST(newline_termination) {
     char buf[256];
     int len;
     FILE* f = tmpfile();
-    log_fmt_to(f, LOG_INFO, "line");
+    if (!f) { EXPECT(false); return; }
+    (void)log_fmt_to(f, LOG_INFO, "line");
     len = read_tmpfile(f, buf, sizeof(buf));
     EXPECT(len > 0);
-    EXPECT(buf[len - 1] == '\n');
+    if (len > 0) {
+        EXPECT(buf[len - 1] == '\n');
+    }
     fclose(f);
 }
 
@@ -181,6 +186,7 @@ TEST(newline_termination) {
 TEST(plain_string) {
     char buf[256];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_to(f, LOG_WARN, "plain message");
     EXPECT(result_bool_Error_is_ok(r));
     read_tmpfile(f, buf, sizeof(buf));
@@ -194,7 +200,6 @@ TEST(plain_string) {
  * ====================================================================== */
 
 TEST(log_msg_ok) {
-    /* Can't easily capture stdout/stderr, just verify return value */
     result_bool_Error r = log_msg(LOG_INFO, "msg test");
     EXPECT(result_bool_Error_is_ok(r));
 }
@@ -221,10 +226,11 @@ TEST(log_fmt_ok) {
 TEST(multiple_lines) {
     char buf[1024];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
 
-    log_fmt_to(f, LOG_INFO,  "first");
-    log_fmt_to(f, LOG_WARN,  "second");
-    log_fmt_to(f, LOG_ERROR, "third");
+    (void)log_fmt_to(f, LOG_INFO,  "first");
+    (void)log_fmt_to(f, LOG_WARN,  "second");
+    (void)log_fmt_to(f, LOG_ERROR, "third");
 
     read_tmpfile(f, buf, sizeof(buf));
     EXPECT(contains(buf, "[INFO] first"));
@@ -240,6 +246,7 @@ TEST(multiple_lines) {
 TEST(empty_message) {
     char buf[256];
     FILE* f = tmpfile();
+    if (!f) { EXPECT(false); return; }
     result_bool_Error r = log_to(f, LOG_INFO, "");
     EXPECT(result_bool_Error_is_ok(r));
     read_tmpfile(f, buf, sizeof(buf));
@@ -263,7 +270,6 @@ TEST(error_messages) {
  * ====================================================================== */
 
 TEST(macros_compile) {
-    /* These must compile and not crash — result is discarded */
     LOG_INFO("info macro");
     LOG_WARN("warn macro");
     LOG_ERROR("error macro");
@@ -280,7 +286,6 @@ TEST(macros_compile) {
     LOG_WARN_CHECKED("checked %d", 5);
     LOG_ERROR_CHECKED("checked %d", 6);
 
-    /* If we got here, nothing crashed */
     EXPECT(true);
 }
 
@@ -289,36 +294,25 @@ TEST(macros_compile) {
  * ====================================================================== */
 
 int main(void) {
-    /* NULL handling */
     RUN(null_stream);
     RUN(null_fmt);
     RUN(null_msg);
 
-    /* Prefix correctness */
     RUN(prefix_info);
     RUN(prefix_warn);
     RUN(prefix_error);
 
-    /* Formatted output */
     RUN(formatted_output);
     RUN(newline_termination);
-
-    /* Plain string */
     RUN(plain_string);
 
-    /* Default stream routing */
     RUN(log_msg_ok);
     RUN(log_msg_null);
     RUN(log_fmt_ok);
 
-    /* Multiple lines */
     RUN(multiple_lines);
-
-    /* Edge cases */
     RUN(empty_message);
     RUN(error_messages);
-
-    /* Macros */
     RUN(macros_compile);
 
     printf("\nlog_test: %d passed, %d failed\n", g_pass, g_fail);
