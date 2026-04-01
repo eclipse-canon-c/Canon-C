@@ -472,7 +472,12 @@ canon_c_test(
 # canon_c_test(NAME view_test   SRC test/util/view_test.c   INCLUDES core/primitives .)
 # canon_c_test(NAME intern_test SRC test/util/intern_test.c INCLUDES core/primitives .)
 # canon_c_test(NAME log_test    SRC test/util/log_test.c    INCLUDES core/primitives .)
-# canon_c_test(NAME file_test   SRC test/util/file_test.c   INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME file_test 
+    SRC test/util/file_test.c 
+    INCLUDES core/primitives core semantics semantics/convenience data algo util .
+)
 
 canon_c_test(
     NAME parse_test 
