@@ -14,6 +14,8 @@
 #endif
 
 #include "core/primitives/types.h"
+#include "core/primitives/contract.h"
+#include "core/ownership.h"
 
 #ifdef _WIN32
     #include <windows.h>
@@ -61,8 +63,13 @@
  * - Monotonic time — safe for intervals, timeouts, and benchmarking
  * - Simple API — start + measure, no pause/resume complexity
  * - Explicit control — caller decides when to start or restart
- * - Null-safe — graceful handling of NULL pointers throughout
+ * - Contracts — NULL pointer is a programming error (require_msg)
  * - Overflow-safe — u64 nanoseconds wraps after ~584 years
+ *
+ * Contracts:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - sw (Stopwatch pointer) must not be NULL — violated → contract abort
+ * - An unstarted stopwatch (start == 0) returns 0 from all query functions
  *
  * Monotonic vs wall-clock:
  * ────────────────────────────────────────────────────────────────────────────
@@ -110,7 +117,7 @@ typedef struct {
  *
  * @remark Internal — use stopwatch_start() and stopwatch_elapsed_ns() instead.
  */
-static inline u64 _stopwatch_now_ns(void) {
+static inline u64 canon_stopwatch_now_ns_(void) {
 #ifdef _WIN32
     LARGE_INTEGER freq, counter;
     QueryPerformanceFrequency(&freq);
@@ -133,11 +140,11 @@ static inline u64 _stopwatch_now_ns(void) {
  * Records the current monotonic time as the reference point.
  * Calling again on a running stopwatch resets the measurement.
  *
- * @param sw Valid Stopwatch pointer (NULL-safe: no-op)
+ * @param sw Valid Stopwatch pointer (must not be NULL — contract)
  */
-static inline void stopwatch_start(Stopwatch* sw) {
-    if (!sw) return;
-    sw->start = _stopwatch_now_ns();
+static inline void stopwatch_start(borrowed(Stopwatch*) sw) {
+    require_msg(sw != NULL, "stopwatch_start: sw is NULL");
+    sw->start = canon_stopwatch_now_ns_();
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -147,41 +154,43 @@ static inline void stopwatch_start(Stopwatch* sw) {
 /**
  * @brief Returns elapsed time since last start in nanoseconds
  *
- * @param sw Valid Stopwatch pointer (NULL or not started → 0)
- * @return Nanoseconds elapsed since last stopwatch_start() call
+ * @param sw Valid Stopwatch pointer (must not be NULL — contract)
+ * @return Nanoseconds elapsed since last stopwatch_start() call,
+ *         or 0 if stopwatch has not been started (start == 0)
  */
-static inline u64 stopwatch_elapsed_ns(const Stopwatch* sw) {
-    if (!sw || sw->start == 0) return 0;
-    return _stopwatch_now_ns() - sw->start;
+static inline u64 stopwatch_elapsed_ns(borrowed(const Stopwatch*) sw) {
+    require_msg(sw != NULL, "stopwatch_elapsed_ns: sw is NULL");
+    if (sw->start == 0) return 0;
+    return canon_stopwatch_now_ns_() - sw->start;
 }
 
 /**
  * @brief Returns elapsed time since last start in microseconds
  *
- * @param sw Valid Stopwatch pointer (NULL or not started → 0)
+ * @param sw Valid Stopwatch pointer (must not be NULL — contract)
  * @return Microseconds elapsed (truncated, not rounded)
  */
-static inline u64 stopwatch_elapsed_us(const Stopwatch* sw) {
+static inline u64 stopwatch_elapsed_us(borrowed(const Stopwatch*) sw) {
     return stopwatch_elapsed_ns(sw) / 1000ULL;
 }
 
 /**
  * @brief Returns elapsed time since last start in milliseconds
  *
- * @param sw Valid Stopwatch pointer (NULL or not started → 0)
+ * @param sw Valid Stopwatch pointer (must not be NULL — contract)
  * @return Milliseconds elapsed (truncated, not rounded)
  */
-static inline u64 stopwatch_elapsed_ms(const Stopwatch* sw) {
+static inline u64 stopwatch_elapsed_ms(borrowed(const Stopwatch*) sw) {
     return stopwatch_elapsed_ns(sw) / 1000000ULL;
 }
 
 /**
  * @brief Returns elapsed time since last start as fractional seconds
  *
- * @param sw Valid Stopwatch pointer (NULL or not started → 0.0)
+ * @param sw Valid Stopwatch pointer (must not be NULL — contract)
  * @return Seconds elapsed with sub-second precision
  */
-static inline f64 stopwatch_elapsed_sec(const Stopwatch* sw) {
+static inline f64 stopwatch_elapsed_sec(borrowed(const Stopwatch*) sw) {
     return (f64)stopwatch_elapsed_ns(sw) / 1e9;
 }
 
