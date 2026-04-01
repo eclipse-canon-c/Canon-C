@@ -1,11 +1,15 @@
 #ifndef CANON_UTIL_PARSE_H
 #define CANON_UTIL_PARSE_H
 
-#include "core/primitives/types.h"
-#include "semantics/result/result.h"
-#include "semantics/error.h"
+#include <stdbool.h>
 #include <errno.h>
 #include <stdlib.h>
+
+#include "core/primitives/types.h"
+#include "core/primitives/contract.h"
+#include "core/ownership.h"
+#include "semantics/result/result.h"
+#include "semantics/error.h"
 
 /**
  * @file util/parse.h
@@ -18,7 +22,7 @@
  * Portability:
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
- * - Depends on Canon-C core modules (types, result, error)
+ * - Depends on Canon-C core modules (types, contract, ownership, result, error)
  * - Uses standard strto* functions (strtoll, strtoull, strtod) via <stdlib.h>
  * - errno via <errno.h> — thread-local in C11/POSIX environments
  * - No platform-specific features
@@ -45,13 +49,19 @@
  * - Whitespace explicit — caller controls when/if to skip whitespace
  * - Full standard library support — hex (0x), octal (0), scientific notation
  * - Overflow detection — invalid values never silently accepted
- * - Null-safe — graceful handling of NULL/empty inputs
+ * - Contracts — NULL input is a programming error (require_msg), not a data error
+ *
+ * Contracts:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - s (input string) must not be NULL — violated → contract abort
+ * - endptr is optional — NULL endptr is valid (caller does not need remainder)
+ * - Empty string ("") is a data error → Err(ERR_PARSE_FAILED)
  *
  * Result-based error handling:
  * ────────────────────────────────────────────────────────────────────────────
  * All functions return Result<T, Error>:
  * - Ok(value):              parsing succeeded, value is valid
- * - Err(ERR_PARSE_FAILED):  invalid format, overflow, or empty input
+ * - Err(ERR_PARSE_FAILED):  empty input, invalid format, whitespace, or overflow
  *
  * Prefix parsing and endptr pattern:
  * ────────────────────────────────────────────────────────────────────────────
@@ -82,6 +92,7 @@
  * Whitespace handling:
  * ────────────────────────────────────────────────────────────────────────────
  * Functions do NOT automatically skip leading whitespace.
+ * Leading whitespace is explicitly rejected as ERR_PARSE_FAILED.
  * Use parse_skip_ws() explicitly when needed.
  *
  * Number format support:
@@ -104,6 +115,13 @@
  * These aliases are defined in core/primitives/types.h and are used here
  * instead of int64_t/uint64_t/double to satisfy CANON_RESULT name mangling
  * requirements — type names must be valid C identifiers.
+ *
+ * Side effects:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - errno is set to 0 before each strto* call and checked afterward.
+ *   This is necessary to distinguish overflow from valid input — strtoll,
+ *   strtoull, and strtod communicate overflow exclusively through errno.
+ *   Callers who depend on a prior errno value should save it before calling.
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
@@ -138,7 +156,7 @@ CANON_RESULT(f64, Error)
  *
  * @remark Internal — use parse_skip_ws() at call sites.
  */
-static inline bool _parse_is_whitespace(char c) {
+static inline bool canon_parse_is_ws_(char c) {
     switch (c) {
         case ' ': case '\t': case '\n': case '\r':
         case '\f': case '\v':
@@ -161,9 +179,9 @@ static inline bool _parse_is_whitespace(char c) {
  * @param s Input string (may be NULL)
  * @return Pointer to first non-whitespace character, or to '\0' at end
  */
-static inline const char* parse_skip_ws(const char* s) {
+static inline const char* parse_skip_ws(borrowed(const char*) s) {
     if (!s) return s;
-    while (*s && _parse_is_whitespace(*s)) ++s;
+    while (*s && canon_parse_is_ws_(*s)) ++s;
     return s;
 }
 
@@ -175,23 +193,29 @@ static inline const char* parse_skip_ws(const char* s) {
  * @brief Parses a signed 64-bit integer from the start of a string
  *
  * Supports decimal, hexadecimal (0x/0X), and octal (0) via base-0
- * auto-detection. Does NOT skip leading whitespace — use parse_skip_ws()
- * first if needed.
+ * auto-detection. Does NOT skip leading whitespace — leading whitespace
+ * is explicitly rejected. Use parse_skip_ws() first if needed.
  *
- * @param s       Null-terminated input string — must not be NULL
+ * @param s       Null-terminated input string (must not be NULL — contract)
  * @param endptr  Optional — set to first unparsed character on return;
- *                set to s on failure
+ *                set to s on failure. NULL is valid (remainder not needed).
  * @return Ok(i64)              on success
- *         Err(ERR_PARSE_FAILED) on NULL/empty input, invalid format, or overflow
+ *         Err(ERR_PARSE_FAILED) on empty input, whitespace, invalid format,
+ *                               or overflow
  */
-static inline result_i64_Error parse_i64(const char* s, const char** endptr) {
-    if (!s || !*s) {
+static inline result_i64_Error parse_i64(
+    borrowed(const char*) s,
+    const char**          endptr)
+{
+    require_msg(s != NULL, "parse_i64: input string is NULL");
+
+    if (!*s || canon_parse_is_ws_(*s)) {
         if (endptr) *endptr = s;
         return result_i64_Error_err(ERR_PARSE_FAILED);
     }
 
     char* eptr;
-    errno = 0;
+    errno = 0;  /* reset before strto* — overflow detected via errno */
     i64 val = (i64)strtoll(s, &eptr, 0);
 
     if (eptr == s || errno == ERANGE) {
@@ -212,17 +236,22 @@ static inline result_i64_Error parse_i64(const char* s, const char** endptr) {
  *
  * Supports decimal, hexadecimal (0x/0X), and octal (0) via base-0
  * auto-detection. Explicitly rejects a leading '-' sign — negative values
- * are never silently wrapped.
+ * are never silently wrapped. Does NOT skip leading whitespace.
  *
- * @param s       Null-terminated input string — must not be NULL
+ * @param s       Null-terminated input string (must not be NULL — contract)
  * @param endptr  Optional — set to first unparsed character on return;
- *                set to s on failure
+ *                set to s on failure. NULL is valid (remainder not needed).
  * @return Ok(u64)              on success
- *         Err(ERR_PARSE_FAILED) on NULL/empty input, negative sign,
+ *         Err(ERR_PARSE_FAILED) on empty input, whitespace, negative sign,
  *                               invalid format, or overflow
  */
-static inline result_u64_Error parse_u64(const char* s, const char** endptr) {
-    if (!s || !*s) {
+static inline result_u64_Error parse_u64(
+    borrowed(const char*) s,
+    const char**          endptr)
+{
+    require_msg(s != NULL, "parse_u64: input string is NULL");
+
+    if (!*s || canon_parse_is_ws_(*s)) {
         if (endptr) *endptr = s;
         return result_u64_Error_err(ERR_PARSE_FAILED);
     }
@@ -233,7 +262,7 @@ static inline result_u64_Error parse_u64(const char* s, const char** endptr) {
     }
 
     char* eptr;
-    errno = 0;
+    errno = 0;  /* reset before strto* — overflow detected via errno */
     u64 val = (u64)strtoull(s, &eptr, 0);
 
     if (eptr == s || errno == ERANGE) {
@@ -255,15 +284,21 @@ static inline result_u64_Error parse_u64(const char* s, const char** endptr) {
  * Supports decimal notation, scientific notation (e/E), hex floats (0x, C99),
  * and special values (inf, -inf, nan). Overflow → ±HUGE_VAL (still Ok).
  * Underflow → ±0.0 (still Ok). Only returns Err if no valid prefix found.
+ * Does NOT skip leading whitespace.
  *
- * @param s       Null-terminated input string — must not be NULL
+ * @param s       Null-terminated input string (must not be NULL — contract)
  * @param endptr  Optional — set to first unparsed character on return;
- *                set to s on failure
+ *                set to s on failure. NULL is valid (remainder not needed).
  * @return Ok(f64)              on success
- *         Err(ERR_PARSE_FAILED) on NULL/empty input or no valid prefix
+ *         Err(ERR_PARSE_FAILED) on empty input, whitespace, or no valid prefix
  */
-static inline result_f64_Error parse_f64(const char* s, const char** endptr) {
-    if (!s || !*s) {
+static inline result_f64_Error parse_f64(
+    borrowed(const char*) s,
+    const char**          endptr)
+{
+    require_msg(s != NULL, "parse_f64: input string is NULL");
+
+    if (!*s || canon_parse_is_ws_(*s)) {
         if (endptr) *endptr = s;
         return result_f64_Error_err(ERR_PARSE_FAILED);
     }
