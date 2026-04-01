@@ -481,4 +481,9 @@ canon_c_test(
     INCLUDES core/primitives .
 )
 
-# canon_c_test(NAME random_test SRC test/util/random_test.c INCLUDES core/primitives .)
+canon_c_test(
+    NAME random_test 
+    SRC test/util/random_test.c 
+    INCLUDES core/primitives . 
+    FUZZABLE
+)
