@@ -475,7 +475,14 @@ canon_c_test(
 )
 
 # canon_c_test(NAME split_test  SRC test/util/split_test.c  INCLUDES core/primitives .)
-# canon_c_test(NAME join_test   SRC test/util/join_test.c   INCLUDES core/primitives .)
+
+canon_c_test(
+    NAME str_join_test 
+    SRC test/util/str_join_test.c 
+    INCLUDES core/primitives core semantics util . 
+    FUZZABLE
+)
+
 # canon_c_test(NAME view_test   SRC test/util/view_test.c   INCLUDES core/primitives .)
 # canon_c_test(NAME intern_test SRC test/util/intern_test.c INCLUDES core/primitives .)
 
