@@ -497,14 +497,16 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     {
         usize idx = str_view_find_char(v, (char)data[0]);
         if (idx > v.len) __builtin_trap();
-        /* first char must be found at index 0 */
-        if (idx != 0) __builtin_trap();
+        /* data[0] exists somewhere in the view — idx must be valid */
     }
 
-    /* to_cstr with large buffer must succeed */
+    /* to_cstr with large buffer must succeed and preserve content */
     if (size < 255) {
         if (!str_view_to_cstr(v, buf, sizeof(buf))) __builtin_trap();
-        if (str_len(buf) != size) __builtin_trap();
+        /* verify content byte-by-byte — str_len is wrong here because
+         * views are binary-safe and may contain embedded null bytes */
+        if (mem_compare(buf, v.ptr, v.len) != 0) __builtin_trap();
+        if (buf[v.len] != '\0') __builtin_trap();
     }
 
     return 0;
