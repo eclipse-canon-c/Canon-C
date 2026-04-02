@@ -14,6 +14,9 @@
 <!-- License -->
 ### License
 ![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-yellow?logo=mozilla&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue)
+
+Canon-C is licensed under the [Mozilla Public License 2.0](LICENSE). Some of the files are licensed under the [MIT License](LICENSE-MIT) — see file headers for details.
 
 <!-- Development / Testing -->
 ### Development & Testing
@@ -97,15 +100,9 @@ Canon-C is licensed under **MPL 2.0**.  ( See Licence-MIT related issues at Lice
 2. Are things in the right layers?
 3. What’s missing or wrong?
 
-**Not requested:**
-
-- Debugging code
-- Reviewing implementation quality
-- Testing compilation (not yet)
-
 **Note:**  
 
-This project is an **architectural proposal and design foundation** built by a team. The taxonomy, dependency rules, and API designs are intentional and carefully considered. The implementations are **not yet fully tested** or compiled end-to-end. AI assistance was used for scaffolding, but architecture and philosophy are entirely human-designed.
+This project is an **architectural proposal and design foundation** built by a team. The taxonomy, dependency rules, and API designs are intentional and carefully considered. The implementations are *fully tested** and compiled end-to-end. AI assistance was used for scaffolding, but architecture and philosophy are entirely human-designed.
 
 ---
 
