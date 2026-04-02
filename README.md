@@ -16,8 +16,6 @@
 ![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-yellow?logo=mozilla&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue)
 
-Canon-C is licensed under the [Mozilla Public License 2.0](LICENSE). Some of the files are licensed under the [MIT License](LICENSE-MIT) — see file headers for details.
-
 <!-- Development / Testing -->
 ### Development & Testing
 ![GCC](https://img.shields.io/badge/GCC-Dev%2FTest-orange)
