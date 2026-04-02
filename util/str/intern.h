@@ -1,7 +1,11 @@
 #ifndef CANON_UTIL_INTERN_H
 #define CANON_UTIL_INTERN_H
 
+#include <stdbool.h>
+
 #include "core/primitives/types.h"
+#include "core/primitives/contract.h"
+#include "core/ownership.h"
 #include "core/memory.h"
 #include "core/arena.h"
 #include "util/str/str_view.h"
@@ -14,6 +18,7 @@
  * All returned views point into the arena — lifetime = arena lifetime.
  *
  * Core properties:
+ * ────────────────────────────────────────────────────────────────────────────
  * - Zero-copy views — returns str_view_t (ptr + len)
  * - Arena-backed — no heap unless you use a heap arena
  * - Deterministic — fixed capacity, no resizing
@@ -21,14 +26,13 @@
  * - Empty string & NULL handled efficiently
  * - Thread-safe if arena access is synchronized
  *
- * Usage pattern:
+ * Contracts:
  * ────────────────────────────────────────────────────────────────────────────
- *   InternPool pool;
- *   intern_pool_init(&pool, arena, 1024);
- *   str_view_t s1 = intern_string(&pool, "hello");
- *   str_view_t s2 = intern_string(&pool, "hello"); // same pointer as s1
- *
- * When full: returns str_view_null() — caller must handle.
+ * - pool must not be NULL — violated → contract abort
+ * - arena must not be NULL — violated → contract abort
+ * - capacity must be > 0 — violated → contract abort
+ * - Pool full or arena exhausted are data errors → returns str_view_null()
+ * - NULL input string in intern_string is valid → normalized to ""
  *
  * Load factor:
  * ────────────────────────────────────────────────────────────────────────────
@@ -41,6 +45,13 @@
  * All interned string data lives in the arena. Returned str_view_t values
  * are valid only as long as the arena is alive and has not been reset.
  * Do NOT free individual views — they are not heap-allocated.
+ *
+ * Usage pattern:
+ * ────────────────────────────────────────────────────────────────────────────
+ *   InternPool pool;
+ *   intern_pool_init(&pool, &arena, 1024);
+ *   str_view_t s1 = intern_string(&pool, "hello");
+ *   str_view_t s2 = intern_string(&pool, "hello"); // same pointer as s1
  */
 
 /**
@@ -60,19 +71,15 @@ typedef struct {
 /**
  * @brief Computes FNV-1a hash of a byte sequence
  *
- * Returns a non-zero hash suitable for use as a slot index seed.
- * The value 0 is remapped to 1 to avoid collision with the empty-slot
- * sentinel (entries with ptr == NULL and hash == 0).
- *
- * @param s   Pointer to byte data
- * @param len Number of bytes
- * @return Non-zero 64-bit hash
+ * Returns a non-zero hash. The value 0 is remapped to 1 to avoid
+ * collision with the empty-slot sentinel.
  *
  * @remark Internal — do not call directly.
  */
-static inline u64 _intern_hash(const char* s, usize len) {
+static inline u64 canon_intern_hash_(borrowed(const char*) s, usize len) {
     u64 h = 14695981039346656037ULL;
-    for (usize i = 0; i < len; i++) {
+    usize i;
+    for (i = 0; i < len; i++) {
         h ^= (u64)(unsigned char)s[i];
         h *= 1099511628211ULL;
     }
@@ -86,53 +93,60 @@ static inline u64 _intern_hash(const char* s, usize len) {
 /**
  * @brief Interns a null-terminated string — returns shared view
  *
- * If the string already exists in the pool → returns the existing view
- * (same ptr, guaranteed pointer equality for the same content).
+ * If the string already exists → returns the existing view (pointer equality).
  * If new → allocates a null-terminated copy in the arena and stores the view.
  * If pool is full or arena allocation fails → returns str_view_null().
  *
  * NULL input is normalized to empty string "".
  *
- * @param pool Valid initialized InternPool — must not be NULL
+ * @param pool Valid initialized InternPool (must not be NULL — contract)
  * @param s    Null-terminated string to intern (NULL → treated as "")
- * @return Shared str_view_t pointing into the arena on success
- *         str_view_null() if pool is full or arena allocation fails
+ * @return Shared str_view_t on success, str_view_null() on pool full / arena exhausted
  *
- * @remark Returned view is valid only as long as the backing arena is alive
- * @remark Do NOT free the returned view — it is not heap-allocated
- * @remark Pointer equality (intern_equals) is valid only for views from the
- *         same pool
+ * @remark Returned view valid only while backing arena is alive
+ * @remark Pointer equality (intern_equals) valid only within same pool
  */
-static inline str_view_t intern_string(InternPool* pool, const char* s) {
-    if (!pool || !pool->arena || !pool->entries) return str_view_null();
+static inline str_view_t intern_string(
+    borrowed(InternPool*)  pool,
+    borrowed(const char*)  s)
+{
+    usize len, probes, index;
+    u64 hash;
+
+    require_msg(pool          != NULL, "intern_string: pool is NULL");
+    require_msg(pool->arena   != NULL, "intern_string: pool->arena is NULL");
+    require_msg(pool->entries != NULL, "intern_string: pool->entries is NULL");
 
     if (!s) s = "";
 
-    usize len    = str_len(s);
-    u64   hash   = _intern_hash(s, len);
-    usize index  = (usize)(hash % pool->capacity);
-    usize probes = 0;
+    len    = str_len(s);
+    hash   = canon_intern_hash_(s, len);
+    index  = (usize)(hash % pool->capacity);
+    probes = 0;
 
     while (probes < pool->capacity) {
         str_view_t* entry = &pool->entries[index];
 
         if (entry->ptr == NULL) {
             /* Empty slot — insert new entry */
+            char* copy;
+
             if (pool->count >= pool->capacity) return str_view_null();
 
-            char* copy = (char*)arena_alloc(pool->arena, len + 1);
+            copy = (char*)arena_alloc(pool->arena, len + 1);
             if (!copy) return str_view_null();
 
             mem_copy(copy, s, len);
             copy[len] = '\0';
 
-            *entry = (str_view_t){ copy, len };
+            entry->ptr = copy;
+            entry->len = len;
             pool->count++;
             return *entry;
         }
 
         /* Occupied slot — check for match */
-        if (entry->len == len && mem_equal(entry->ptr, s, len)) {
+        if (entry->len == len && mem_compare(entry->ptr, s, len) == 0) {
             return *entry;
         }
 
@@ -152,33 +166,36 @@ static inline str_view_t intern_string(InternPool* pool, const char* s) {
  * @brief Initializes a string interning pool backed by an arena
  *
  * Allocates the hash table from the arena and zero-initializes all slots.
- * Optionally pre-interns the empty string so that intern_string(pool, "")
- * always returns a consistent non-null view.
+ * Pre-interns the empty string so intern_string(pool, "") always returns
+ * a consistent non-null view.
  *
- * @param pool     Pool struct to initialize — must not be NULL
- * @param arena    Arena that will own all interned string data — must not be NULL
- * @param capacity Number of unique string slots (power of 2 recommended)
- * @return true on success, false if arena allocation fails or arguments invalid
+ * @param pool     Pool struct to initialize (must not be NULL — contract)
+ * @param arena    Arena for all interned data (must not be NULL — contract)
+ * @param capacity Number of unique string slots (must be > 0 — contract)
+ * @return true on success, false if arena allocation fails
  *
- * @remark capacity == 0 is invalid — returns false
- * @remark Pool is valid only as long as arena is alive and has not been reset
+ * @remark Pool valid only while arena is alive and not reset
  */
-static inline bool intern_pool_init(InternPool* pool, Arena* arena, usize capacity) {
-    if (!pool || !arena || capacity == 0) return false;
+static inline bool intern_pool_init(
+    borrowed(InternPool*)  pool,
+    borrowed(Arena*)       arena,
+    usize                  capacity)
+{
+    str_view_t* entries;
 
-    str_view_t* entries = (str_view_t*)arena_alloc(
-        arena, capacity * sizeof(str_view_t)
-    );
+    require_msg(pool     != NULL, "intern_pool_init: pool is NULL");
+    require_msg(arena    != NULL, "intern_pool_init: arena is NULL");
+    require_msg(capacity  > 0,    "intern_pool_init: capacity is 0");
+
+    entries = (str_view_t*)arena_alloc(arena, capacity * sizeof(str_view_t));
     if (!entries) return false;
 
-    mem_zero(entries, capacity * sizeof(str_view_t));
+    mem_set(entries, 0, capacity * sizeof(str_view_t));
 
-    *pool = (InternPool){
-        .arena    = arena,
-        .entries  = entries,
-        .capacity = capacity,
-        .count    = 0
-    };
+    pool->arena    = arena;
+    pool->entries  = entries;
+    pool->capacity = capacity;
+    pool->count    = 0;
 
     /* Pre-intern empty string — intern_string is defined above */
     intern_string(pool, "");
@@ -195,10 +212,6 @@ static inline bool intern_pool_init(InternPool* pool, Arena* arena, usize capaci
  *
  * Since interned strings are deduplicated, pointer equality is sufficient
  * and O(1). Only valid for views obtained from the same pool.
- *
- * @param a First interned view
- * @param b Second interned view
- * @return true if both views point to the same interned string
  */
 static inline bool intern_equals(str_view_t a, str_view_t b) {
     return a.ptr == b.ptr;
@@ -207,24 +220,24 @@ static inline bool intern_equals(str_view_t a, str_view_t b) {
 /**
  * @brief Returns the number of unique strings currently interned
  *
- * @param pool Pool to query (NULL-safe — returns 0)
- * @return Current interned string count
+ * @param pool Pool to query (must not be NULL — contract)
  */
-static inline usize intern_count(const InternPool* pool) {
-    return pool ? pool->count : 0;
+static inline usize intern_count(borrowed(const InternPool*) pool) {
+    require_msg(pool != NULL, "intern_count: pool is NULL");
+    return pool->count;
 }
 
 /**
  * @brief Returns the current load factor of the pool (count / capacity)
  *
- * Values above 0.7 indicate the pool is approaching capacity and
- * probe chains are likely growing. Consider a larger capacity.
+ * Values above 0.7 indicate probe chains are likely growing.
  *
- * @param pool Pool to query (NULL-safe — returns 0.0)
+ * @param pool Pool to query (must not be NULL — contract)
  * @return Load factor in [0.0, 1.0]
  */
-static inline f64 intern_load_factor(const InternPool* pool) {
-    if (!pool || pool->capacity == 0) return 0.0;
+static inline f64 intern_load_factor(borrowed(const InternPool*) pool) {
+    require_msg(pool != NULL, "intern_load_factor: pool is NULL");
+    if (pool->capacity == 0) return 0.0;
     return (f64)pool->count / (f64)pool->capacity;
 }
 
