@@ -488,7 +488,13 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME view_test   SRC test/util/view_test.c   INCLUDES core/primitives .)
+canon_c_test(
+    NAME str_view_test 
+    SRC test/util/str_view_test.c 
+    INCLUDES core/primitives core semantics util . 
+    FUZZABLE
+)
+
 # canon_c_test(NAME intern_test SRC test/util/intern_test.c INCLUDES core/primitives .)
 
 canon_c_test(
