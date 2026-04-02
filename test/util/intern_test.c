@@ -1,6 +1,6 @@
 /**
  * @file intern_test.c
- * @brief Unit tests for util/intern.h
+ * @brief Unit tests for util/str/intern.h
  *
  * Coverage
  * ───────────────────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@
  */
 
 #define CANON_CONTRACT_IMPL
-#include "util/intern.h"
+#include "util/str/intern.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
