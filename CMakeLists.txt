@@ -495,7 +495,11 @@ canon_c_test(
     FUZZABLE
 )
 
-# canon_c_test(NAME intern_test SRC test/util/intern_test.c INCLUDES core/primitives .)
+canon_c_test(
+    NAME intern_test 
+    SRC test/util/intern_test.c 
+    INCLUDES core/primitives core semantics util .
+)
 
 canon_c_test(
     NAME log_test 
