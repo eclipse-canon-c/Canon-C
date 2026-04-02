@@ -11,7 +11,7 @@
 #include "util/str/str_view.h"
 
 /**
- * @file util/intern/intern.h
+ * @file util/str/intern.h
  * @brief Minimal string interning — returns shared immutable str_view_t
  *
  * Interning maps unique strings to a single shared copy.
