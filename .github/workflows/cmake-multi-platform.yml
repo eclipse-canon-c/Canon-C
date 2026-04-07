@@ -638,7 +638,7 @@ jobs:
   #
   #    This job is advisory — it does not fail the build. Its purpose
   #    is to track MISRA compliance progress and identify deviations
-  #    that must be documented in docs/misra_deviations.md.
+  #    that must be documented in docs/deviations.md.
   #
   #    NOTE: Canon-C is header-only. Cppcheck scans .c files by default
   #    when given a directory. We use find to locate .h files explicitly.
@@ -709,7 +709,7 @@ jobs:
           echo "  Required:             ${REQUIRED}"
           echo "  Advisory:             ${ADVISORY}"
           echo ""
-          echo "  Deviations documented in: docs/misra_deviations.md"
+          echo "  Deviations documented in: docs/deviations.md"
           echo "==============================================="
 
           # Advisory only — do not fail the build.
