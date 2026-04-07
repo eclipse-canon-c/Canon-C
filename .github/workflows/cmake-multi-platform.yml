@@ -13,6 +13,7 @@ on:
 #   static-analysis — clang-tidy (Linux only) + Cppcheck (all platforms)
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
+#   frama-c         — Linux only, formal verification (WP proofs + Eva)
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
 #   Dr. Memory crashes internally on Windows Server 2022 (the current
@@ -21,6 +22,31 @@ on:
 #   or workaround as of the time of writing. Memory safety on Windows is
 #   covered by the MSVC build with /W4 /WX and by Valgrind on Linux.
 #   Re-enable dr-memory when upstream ships a compatible release.
+#
+# ---------------------------------------------------------------------------
+# Certification evidence map
+#
+# The CI pipeline produces artifacts relevant to the following standards.
+# Canon-C does not claim conformance — it produces evidence that downstream
+# projects can incorporate into their certification packages.
+#
+#   Evidence type         │ CI job           │ Standards served
+#   ──────────────────────┼──────────────────┼──────────────────────────────
+#   Unit test pass/fail   │ build            │ All (base requirement)
+#   Compiler warnings     │ build (/W4, -Wall)│ MISRA compliance evidence
+#   Static analysis       │ static-analysis  │ DO-178C, ISO 26262, IEC 61508
+#   Memory safety         │ valgrind         │ All (absence of leaks/UB)
+#   Robustness (fuzz)     │ fuzzing          │ DO-178C (robustness testing)
+#   Absence of RTE (proof)│ frama-c WP       │ DO-178C, ISO 26262 ASIL C+
+#   Value range analysis  │ frama-c Eva      │ IEC 62304, EN 50128
+#   Contract verification │ frama-c WP       │ All (requirement traceability)
+#
+# NOT yet covered by this CI (required for full certification):
+#   - MC/DC coverage measurement (gcov + lcov, or BullseyeCoverage)
+#   - MISRA C compliance (requires commercial tool: Polyspace, LDRA, or
+#     PC-lint; clang-tidy covers a subset but is not a qualified MISRA checker)
+#   - Requirements traceability matrix (documentation, not CI)
+#   - Tool qualification reports (per-standard, per-tool)
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -338,3 +364,276 @@ jobs:
       - name: Run fuzz targets
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config Debug --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 5. Formal verification — Frama-C (Linux only)
+  #
+  #    Two-phase analysis on every annotated header:
+  #
+  #    Phase 1 — WP (Weakest Precondition)
+  #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
+  #      Proves absence of runtime errors via -wp-rte: overflows, invalid
+  #      shifts, null derefs, division by zero. Mathematical proof —
+  #      if WP says "Valid", the property holds for ALL possible inputs.
+  #
+  #    Phase 2 — Eva (Evolved Value Analysis)
+  #      Abstract interpretation over all reachable execution paths.
+  #      Catches issues WP may miss: unreachable code, value range
+  #      violations, implicit precondition assumptions. No annotations
+  #      required — Eva infers from the code itself.
+  #
+  #    Together: WP proves contracts are correct, Eva proves nothing
+  #    was missed. Both must pass.
+  #
+  #    Annotations live in headers as /*@ ... */ comments — invisible
+  #    to GCC/Clang/MSVC. Zero impact on existing builds and tests.
+  #
+  #    Follows Canon-C's dependency rule bottom-up:
+  #    core/primitives → core → semantics → data → algo → util
+  #
+  #    Certification evidence produced:
+  #      - Absence of runtime errors (all standards)
+  #      - Contract verification (requirement traceability)
+  #      - Value range correctness (IEC 62304, EN 50128)
+  #      - Formal proof artifacts (DO-178C objective substitution)
+  # -------------------------------------------------------------------------
+  frama-c:
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: framac/frama-c:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── core/primitives — WP (contract proofs + RTE absence) ──────────
+      - name: "WP: core/primitives"
+        run: |
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo \
+            -wp-timeout 30 \
+            -warn-unsigned-overflow \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG \
+              -D__GNUC__=0 \
+              -UCANON_BITS_MSVC" \
+            core/primitives/bits.h \
+            core/primitives/checked.h \
+            core/primitives/ptr.h \
+            core/primitives/compare.h
+
+      # ── core/primitives — Eva (value range analysis) ──────────────────
+      - name: "Eva: core/primitives"
+        run: |
+          frama-c -eva \
+            -eva-precision 3 \
+            -warn-unsigned-overflow \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG \
+              -D__GNUC__=0 \
+              -UCANON_BITS_MSVC" \
+            core/primitives/bits.h \
+            core/primitives/checked.h \
+            core/primitives/ptr.h \
+            core/primitives/compare.h
+
+      # ── core — WP ────────────────────────────────────────────────────
+      # Uncomment when core/ headers are annotated with ACSL contracts
+      #
+      # - name: "WP: core"
+      #   run: |
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 30 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       core/arena.h \
+      #       core/slice.h \
+      #       core/memory.h \
+      #       core/pool.h \
+      #       core/region.h
+      #
+      # - name: "Eva: core"
+      #   run: |
+      #     frama-c -eva \
+      #       -eva-precision 3 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       core/arena.h \
+      #       core/slice.h \
+      #       core/memory.h \
+      #       core/pool.h \
+      #       core/region.h
+
+      # ── semantics — WP ───────────────────────────────────────────────
+      # Uncomment when semantics/ headers are annotated with ACSL contracts
+      #
+      # - name: "WP: semantics"
+      #   run: |
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 30 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I semantics \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       semantics/borrow.h \
+      #       semantics/diag.h \
+      #       semantics/error.h
+      #
+      # - name: "Eva: semantics"
+      #   run: |
+      #     frama-c -eva \
+      #       -eva-precision 3 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I semantics \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       semantics/borrow.h \
+      #       semantics/diag.h \
+      #       semantics/error.h
+
+      # ── data (direct headers) — WP ───────────────────────────────────
+      # Uncomment when data/ direct headers are annotated
+      # array.h, range.h, stringbuf.h, bitset.h, priority_queue.h
+      # are proven directly — no verification drivers needed
+      #
+      # - name: "WP: data (direct)"
+      #   run: |
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 30 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I semantics \
+      #         -I data \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       data/array.h \
+      #       data/range.h \
+      #       data/stringbuf.h \
+      #       data/bitset.h \
+      #       data/priority_queue.h
+
+      # ── data (macro modules) — WP via verification drivers ───────────
+      # Uncomment when vec_impl.h, deque_impl.h, hashmap_impl.h are
+      # annotated and verify/ drivers exist
+      #
+      # - name: "WP: data (macro modules)"
+      #   run: |
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 30 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I semantics \
+      #         -I data \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       verify/data/verify_vec_int.c \
+      #       verify/data/verify_deque_int.c \
+      #       verify/data/verify_hashmap_int.c
+
+      # ── algo — WP via verification drivers ───────────────────────────
+      # Uncomment when algo/*_impl.h files are annotated and
+      # verify/algo/ drivers exist
+      #
+      # - name: "WP: algo"
+      #   run: |
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 30 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I semantics \
+      #         -I data \
+      #         -I algo \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       verify/algo/verify_map_int.c \
+      #       verify/algo/verify_filter_int.c \
+      #       verify/algo/verify_fold_int.c \
+      #       verify/algo/verify_find_int.c \
+      #       verify/algo/verify_sort_int.c \
+      #       verify/algo/verify_search_int.c \
+      #       verify/algo/verify_any_all_int.c \
+      #       verify/algo/verify_unique_int.c \
+      #       verify/algo/verify_reverse_int.c
+
+      # ── util — WP ───────────────────────────────────────────────────
+      # Uncomment when util/ headers are annotated
+      #
+      # - name: "WP: util"
+      #   run: |
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 30 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I semantics \
+      #         -I data \
+      #         -I algo \
+      #         -I util \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG \
+      #         -D__GNUC__=0 \
+      #         -UCANON_BITS_MSVC" \
+      #       util/str.h \
+      #       util/str_split.h \
+      #       util/str_join.h \
+      #       util/str_view.h \
+      #       util/parse.h \
+      #       util/random.h \
+      #       util/time.h
