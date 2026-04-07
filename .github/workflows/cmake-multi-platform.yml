@@ -15,7 +15,7 @@ on:
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
 #                     DISABLED until ACSL annotations are added to headers
-#   coverage        — Linux only, branch coverage measurement (MC/DC path)
+#   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #   misra           — Linux only, MISRA C:2012 advisory analysis
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
@@ -43,11 +43,10 @@ on:
 #   Absence of RTE (proof)| frama-c WP       | DO-178C, ISO 26262 ASIL C+
 #   Value range analysis  | frama-c Eva      | IEC 62304, EN 50128
 #   Contract verification | frama-c WP       | All (requirement traceability)
-#   Branch coverage       | coverage         | DO-178C, ISO 26262 ASIL B+
+#   MC/DC coverage        | coverage         | DO-178C Level A/B, ISO 26262
 #   MISRA C compliance    | misra            | All safety standards
 #
 # NOT yet covered by this CI (required for full certification):
-#   - True MC/DC via gcc -fcondition-coverage (requires GCC 14+)
 #   - Qualified MISRA checker (Polyspace, LDRA, or PC-lint)
 #   - Requirements traceability matrix (docs/traceability.md — manual)
 #   - Tool qualification reports (docs/tool_qualification/ — manual)
@@ -520,21 +519,24 @@ jobs:
   #     # those instead of the headers directly.
 
   # -------------------------------------------------------------------------
-  # 6. Coverage — branch coverage measurement (Linux only)
+  # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
-  #    Measures branch-level coverage using gcov + lcov. This is a
-  #    necessary subset of MC/DC (Modified Condition/Decision Coverage).
+  #    Measures Modified Condition/Decision Coverage using GCC 14's
+  #    -fcondition-coverage flag and gcov-14 --conditions. This is
+  #    true MC/DC — the highest coverage metric required by any
+  #    safety standard.
   #
-  #    For true MC/DC required by DO-178C Level A/B:
-  #    switch to gcc -fcondition-coverage (GCC 14+) when available on
-  #    the CI runner, or use a commercial tool (VectorCAST, LDRA).
+  #    MC/DC requires that every Boolean sub-expression independently
+  #    affects the decision outcome. For Canon-C, most conditions are
+  #    simple single-condition decisions, so MC/DC ≈ branch coverage.
   #
   #    The HTML report artifact is uploadable certification evidence.
   #
   #    Certification evidence produced:
-  #      - Branch coverage percentage (all standards)
+  #      - MC/DC coverage percentage (DO-178C Level A/B, ISO 26262 ASIL C/D)
+  #      - Branch coverage percentage (DO-178C Level C, ISO 26262 ASIL B)
   #      - Per-file coverage breakdown (auditor review)
-  #      - Uncovered branch identification (test gap analysis)
+  #      - Uncovered condition identification (test gap analysis)
   # -------------------------------------------------------------------------
   coverage:
     needs: build
@@ -543,15 +545,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install lcov
-        run: sudo apt-get install -y lcov
+      - name: Install GCC 14 and lcov
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 lcov
 
-      - name: Configure CMake with coverage instrumentation
+      - name: Configure CMake with MC/DC coverage instrumentation
         run: |
           cmake -B build \
-            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_C_COMPILER=gcc-14 \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_FLAGS="--coverage -fprofile-arcs -ftest-coverage" \
+            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage" \
             -DENABLE_SANITIZERS=OFF \
             -S "${{ github.workspace }}"
 
@@ -562,18 +566,18 @@ jobs:
         working-directory: build
         run: ctest --build-config Debug --output-on-failure
 
-      - name: Collect coverage data
+      - name: Collect branch coverage data (lcov)
         run: |
           lcov --capture \
             --directory build \
             --output-file coverage_raw.info \
             --rc branch_coverage=1 \
-            --ignore-errors unused
+            --ignore-errors unused \
+            --gcov-tool gcov-14
 
           # Remove test files — coverage is for Canon-C library headers
           # only, not test harnesses. --ignore-errors unused suppresses
-          # errors when an exclude pattern matches nothing (e.g. /usr/*
-          # is absent because headers are inlined into test TUs).
+          # errors when an exclude pattern matches nothing.
           lcov --remove coverage_raw.info \
             '/usr/*' \
             '*/test/*' \
@@ -581,12 +585,76 @@ jobs:
             --rc branch_coverage=1 \
             --ignore-errors unused
 
+      - name: Collect MC/DC condition coverage (gcov-14 --conditions)
+        run: |
+          cd build
+          MCDC_TOTAL=0
+          MCDC_COVERED=0
+
+          for gcda in $(find . -name "*.gcda" | sort); do
+            gcov-14 --conditions "$gcda" 2>/dev/null
+          done > gcov_output.txt 2>&1
+
+          # Extract condition coverage for library headers only
+          grep -E "^File|^Condition" gcov_output.txt | paste - - | \
+            grep -v "/test/" | \
+            sed "s|File '${{ github.workspace }}/||;s|'||g" | \
+            tee mcdc_per_file.txt
+
+          # Calculate totals from per-file MC/DC data
+          python3 << 'PYEOF'
+          import re
+          from collections import defaultdict
+
+          best = {}
+          with open("mcdc_per_file.txt") as f:
+              for line in f:
+                  parts = line.strip().split("\t")
+                  if len(parts) < 2:
+                      continue
+                  filename = parts[0].strip()
+                  m = re.search(r"([\d.]+)% of (\d+)", parts[1])
+                  if not m:
+                      continue
+                  pct = float(m.group(1))
+                  total = int(m.group(2))
+                  hit = int(total * pct / 100 + 0.5)
+                  if filename not in best or total > best[filename][2] or \
+                     (total == best[filename][2] and pct > best[filename][0]):
+                      best[filename] = (pct, hit, total)
+
+          results = [(v[0], v[1], v[2], v[2]-v[1], k) for k, v in best.items()]
+          results.sort()
+
+          total_hit = sum(r[1] for r in results)
+          total_all = sum(r[2] for r in results)
+          overall = 100.0 * total_hit / total_all if total_all else 0
+
+          print()
+          print("=" * 85)
+          print("  Canon-C MC/DC Condition Coverage (GCC 14 -fcondition-coverage)")
+          print("=" * 85)
+          print(f"  {'File':<50} {'MC/DC%':>8} {'Hit':>5} {'Total':>6} {'Missed':>7}")
+          print("-" * 85)
+          for pct, hit, total, missed, f in results:
+              print(f"  {f:<50} {pct:>7.1f}% {hit:>5} {total:>6} {missed:>7}")
+          print("-" * 85)
+          print(f"  {'TOTAL':<50} {overall:>7.1f}% {total_hit:>5} {total_all:>6} {total_all-total_hit:>7}")
+          print("=" * 85)
+
+          # Write summary for threshold check
+          with open("mcdc_summary.txt", "w") as out:
+              out.write(f"{overall:.1f}\n")
+              out.write(f"{total_hit}\n")
+              out.write(f"{total_all}\n")
+          PYEOF
+
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
             --output-directory coverage_html \
             --branch-coverage \
-            --title "Canon-C Branch Coverage" \
+            --title "Canon-C MC/DC Coverage" \
             --legend \
             --demangle-cpp \
             --ignore-errors unused
@@ -595,9 +663,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage_html/
+          path: |
+            coverage_html/
+            build/mcdc_per_file.txt
 
-      - name: Print coverage summary
+      - name: Print branch coverage summary
         run: |
           echo "==============================================="
           echo "  Canon-C Branch Coverage Summary"
@@ -606,19 +676,26 @@ jobs:
             --rc branch_coverage=1
           echo "==============================================="
 
-      - name: Enforce branch coverage threshold
+      - name: Enforce coverage threshold
         run: |
+          # Branch coverage threshold
           BRANCH_COV=$(lcov --summary coverage.info \
             --rc branch_coverage=1 2>&1 | \
             grep "branches" | grep -oP '[\d.]+%' | head -1 | tr -d '%')
 
           echo "Branch coverage: ${BRANCH_COV}%"
 
+          # MC/DC coverage from gcov-14 --conditions
+          if [ -f build/mcdc_summary.txt ]; then
+            MCDC_COV=$(head -1 build/mcdc_summary.txt)
+            echo "MC/DC coverage:  ${MCDC_COV}%"
+          fi
+
           # Threshold progression plan:
-          #   Phase 1 (current): 70% — establish baseline
+          #   Phase 1 (current): 70% — baseline established
           #   Phase 2: 80% — after gap analysis and test additions
-          #   Phase 3: 90% — certification readiness
-          #   Phase 4: 95%+ — full MC/DC with gcc -fcondition-coverage
+          #   Phase 3: 90% — certification readiness (DO-178C Level C)
+          #   Phase 4: 95%+ — certification readiness (DO-178C Level A/B)
           THRESHOLD=70
 
           if [ "$(echo "${BRANCH_COV} < ${THRESHOLD}" | bc -l)" -eq 1 ]; then
