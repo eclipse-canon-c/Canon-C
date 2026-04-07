@@ -33,6 +33,6 @@ for correctness only. Coverage is a side effect of functional testing.
 
 | Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | Notes                              |
 |------------|---------|--------|---------|--------|-----------|----------|------------------------------------|
-| 2026-04-07 | 669d6a7 | #668   | v1.2.0  | 95.9%  | 99.6%     | 74.3%    | Baseline — no coverage-driven tests |
+| 2026-04-07 | 669d6a7 | #668   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | Baseline — no coverage-driven tests |
 
 ---
