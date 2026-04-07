@@ -14,6 +14,8 @@ on:
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
+#   coverage        — Linux only, branch coverage measurement (MC/DC path)
+#   misra           — Linux only, MISRA C:2012 advisory analysis
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
 #   Dr. Memory crashes internally on Windows Server 2022 (the current
@@ -30,23 +32,25 @@ on:
 # Canon-C does not claim conformance — it produces evidence that downstream
 # projects can incorporate into their certification packages.
 #
-#   Evidence type         │ CI job           │ Standards served
-#   ──────────────────────┼──────────────────┼──────────────────────────────
-#   Unit test pass/fail   │ build            │ All (base requirement)
-#   Compiler warnings     │ build (/W4, -Wall)│ MISRA compliance evidence
-#   Static analysis       │ static-analysis  │ DO-178C, ISO 26262, IEC 61508
-#   Memory safety         │ valgrind         │ All (absence of leaks/UB)
-#   Robustness (fuzz)     │ fuzzing          │ DO-178C (robustness testing)
-#   Absence of RTE (proof)│ frama-c WP       │ DO-178C, ISO 26262 ASIL C+
-#   Value range analysis  │ frama-c Eva      │ IEC 62304, EN 50128
-#   Contract verification │ frama-c WP       │ All (requirement traceability)
+#   Evidence type         | CI job           | Standards served
+#   ----------------------|------------------|------------------------------
+#   Unit test pass/fail   | build            | All (base requirement)
+#   Compiler warnings     | build (/W4,-Wall)| MISRA compliance evidence
+#   Static analysis       | static-analysis  | DO-178C, ISO 26262, IEC 61508
+#   Memory safety         | valgrind         | All (absence of leaks/UB)
+#   Robustness (fuzz)     | fuzzing          | DO-178C (robustness testing)
+#   Absence of RTE (proof)| frama-c WP       | DO-178C, ISO 26262 ASIL C+
+#   Value range analysis  | frama-c Eva      | IEC 62304, EN 50128
+#   Contract verification | frama-c WP       | All (requirement traceability)
+#   Branch coverage       | coverage         | DO-178C, ISO 26262 ASIL B+
+#   MISRA C compliance    | misra            | All safety standards
 #
 # NOT yet covered by this CI (required for full certification):
-#   - MC/DC coverage measurement (gcov + lcov, or BullseyeCoverage)
-#   - MISRA C compliance (requires commercial tool: Polyspace, LDRA, or
-#     PC-lint; clang-tidy covers a subset but is not a qualified MISRA checker)
-#   - Requirements traceability matrix (documentation, not CI)
-#   - Tool qualification reports (per-standard, per-tool)
+#   - True MC/DC via gcc -fcondition-coverage (requires GCC 14+)
+#   - Qualified MISRA checker (Polyspace, LDRA, or PC-lint)
+#   - Requirements traceability matrix (docs/traceability.md — manual)
+#   - Tool qualification reports (docs/tool_qualification/ — manual)
+#   - CompCert production build (formal compiler verification)
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -389,7 +393,7 @@ jobs:
   #    to GCC/Clang/MSVC. Zero impact on existing builds and tests.
   #
   #    Follows Canon-C's dependency rule bottom-up:
-  #    core/primitives → core → semantics → data → algo → util
+  #    core/primitives -> core -> semantics -> data -> algo -> util
   #
   #    Certification evidence produced:
   #      - Absence of runtime errors (all standards)
@@ -406,7 +410,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── core/primitives — WP (contract proofs + RTE absence) ──────────
+      # -- core/primitives — WP (contract proofs + RTE absence) -----------
       - name: "WP: core/primitives"
         run: |
           frama-c -wp -wp-rte \
@@ -426,7 +430,7 @@ jobs:
             core/primitives/ptr.h \
             core/primitives/compare.h
 
-      # ── core/primitives — Eva (value range analysis) ──────────────────
+      # -- core/primitives — Eva (value range analysis) -------------------
       - name: "Eva: core/primitives"
         run: |
           frama-c -eva \
@@ -445,7 +449,7 @@ jobs:
             core/primitives/ptr.h \
             core/primitives/compare.h
 
-      # ── core — WP ────────────────────────────────────────────────────
+      # -- core — WP -----------------------------------------------------
       # Uncomment when core/ headers are annotated with ACSL contracts
       #
       # - name: "WP: core"
@@ -487,8 +491,8 @@ jobs:
       #       core/pool.h \
       #       core/region.h
 
-      # ── semantics — WP ───────────────────────────────────────────────
-      # Uncomment when semantics/ headers are annotated with ACSL contracts
+      # -- semantics — WP ------------------------------------------------
+      # Uncomment when semantics/ headers are annotated
       #
       # - name: "WP: semantics"
       #   run: |
@@ -527,10 +531,8 @@ jobs:
       #       semantics/diag.h \
       #       semantics/error.h
 
-      # ── data (direct headers) — WP ───────────────────────────────────
+      # -- data (direct headers) — WP ------------------------------------
       # Uncomment when data/ direct headers are annotated
-      # array.h, range.h, stringbuf.h, bitset.h, priority_queue.h
-      # are proven directly — no verification drivers needed
       #
       # - name: "WP: data (direct)"
       #   run: |
@@ -554,9 +556,8 @@ jobs:
       #       data/bitset.h \
       #       data/priority_queue.h
 
-      # ── data (macro modules) — WP via verification drivers ───────────
-      # Uncomment when vec_impl.h, deque_impl.h, hashmap_impl.h are
-      # annotated and verify/ drivers exist
+      # -- data (macro modules) — WP via verification drivers -------------
+      # Uncomment when verify/ drivers exist
       #
       # - name: "WP: data (macro modules)"
       #   run: |
@@ -578,9 +579,8 @@ jobs:
       #       verify/data/verify_deque_int.c \
       #       verify/data/verify_hashmap_int.c
 
-      # ── algo — WP via verification drivers ───────────────────────────
-      # Uncomment when algo/*_impl.h files are annotated and
-      # verify/algo/ drivers exist
+      # -- algo — WP via verification drivers -----------------------------
+      # Uncomment when verify/algo/ drivers exist
       #
       # - name: "WP: algo"
       #   run: |
@@ -609,7 +609,7 @@ jobs:
       #       verify/algo/verify_unique_int.c \
       #       verify/algo/verify_reverse_int.c
 
-      # ── util — WP ───────────────────────────────────────────────────
+      # -- util — WP -----------------------------------------------------
       # Uncomment when util/ headers are annotated
       #
       # - name: "WP: util"
@@ -637,3 +637,190 @@ jobs:
       #       util/parse.h \
       #       util/random.h \
       #       util/time.h
+
+  # -------------------------------------------------------------------------
+  # 6. Coverage — branch coverage measurement (Linux only)
+  #
+  #    Measures branch-level coverage using gcov + lcov. This is a
+  #    necessary subset of MC/DC (Modified Condition/Decision Coverage).
+  #
+  #    For true MC/DC required by DO-178C Level A/B:
+  #    switch to gcc -fcondition-coverage (GCC 14+) when available on
+  #    the CI runner, or use a commercial tool (VectorCAST, LDRA).
+  #
+  #    The HTML report artifact is uploadable certification evidence.
+  #
+  #    Certification evidence produced:
+  #      - Branch coverage percentage (all standards)
+  #      - Per-file coverage breakdown (auditor review)
+  #      - Uncovered branch identification (test gap analysis)
+  # -------------------------------------------------------------------------
+  coverage:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install lcov
+        run: sudo apt-get install -y lcov
+
+      - name: Configure CMake with coverage instrumentation
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="--coverage -fprofile-arcs -ftest-coverage" \
+            -DENABLE_SANITIZERS=OFF \
+            -S "${{ github.workspace }}"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run tests
+        working-directory: build
+        run: ctest --build-config Debug --output-on-failure
+
+      - name: Collect coverage data
+        run: |
+          lcov --capture \
+            --directory build \
+            --output-file coverage_raw.info \
+            --rc lcov_branch_coverage=1
+
+          # Remove system headers and test files — coverage is for
+          # Canon-C library headers only, not test harnesses
+          lcov --remove coverage_raw.info \
+            '/usr/*' \
+            '*/test/*' \
+            --output-file coverage.info \
+            --rc lcov_branch_coverage=1
+
+      - name: Generate HTML coverage report
+        run: |
+          genhtml coverage.info \
+            --output-directory coverage_html \
+            --branch-coverage \
+            --title "Canon-C Branch Coverage" \
+            --legend \
+            --demangle-cpp
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage_html/
+
+      - name: Print coverage summary
+        run: |
+          echo "==============================================="
+          echo "  Canon-C Branch Coverage Summary"
+          echo "==============================================="
+          lcov --summary coverage.info \
+            --rc lcov_branch_coverage=1
+          echo "==============================================="
+
+      - name: Enforce branch coverage threshold
+        run: |
+          BRANCH_COV=$(lcov --summary coverage.info \
+            --rc lcov_branch_coverage=1 2>&1 | \
+            grep "branches" | grep -oP '[\d.]+%' | head -1 | tr -d '%')
+
+          echo "Branch coverage: ${BRANCH_COV}%"
+
+          # Threshold progression plan:
+          #   Phase 1 (current): 70% — establish baseline
+          #   Phase 2: 80% — after gap analysis and test additions
+          #   Phase 3: 90% — certification readiness
+          #   Phase 4: 95%+ — full MC/DC with gcc -fcondition-coverage
+          THRESHOLD=70
+
+          if [ "$(echo "${BRANCH_COV} < ${THRESHOLD}" | bc -l)" -eq 1 ]; then
+            echo "FAIL: Branch coverage ${BRANCH_COV}% is below threshold ${THRESHOLD}%"
+            exit 1
+          else
+            echo "PASS: Branch coverage ${BRANCH_COV}% meets threshold ${THRESHOLD}%"
+          fi
+
+  # -------------------------------------------------------------------------
+  # 7. MISRA C:2012 advisory analysis (Linux only)
+  #
+  #    Uses Cppcheck's MISRA addon for preliminary compliance checking.
+  #    This is NOT a qualified MISRA checker — it covers approximately
+  #    60-70% of MISRA C:2012 rules. For certification, replace with
+  #    a qualified tool: Polyspace, LDRA, PC-lint, or Parasoft C/C++test.
+  #
+  #    This job is advisory — it does not fail the build. Its purpose
+  #    is to track MISRA compliance progress and identify deviations
+  #    that must be documented in docs/misra_deviations.md.
+  #
+  #    Certification evidence produced:
+  #      - MISRA violation report (all safety standards)
+  #      - Deviation tracking (auditor review)
+  # -------------------------------------------------------------------------
+  misra:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Cppcheck
+        run: sudo apt-get install -y cppcheck
+
+      - name: Run MISRA C:2012 analysis on library headers
+        shell: bash
+        run: |
+          # Analyze library headers only — not test files.
+          # Test code intentionally violates MISRA rules (e.g. testing
+          # boundary conditions, deliberate null pointer checks).
+          cppcheck \
+            --addon=misra \
+            --std=c99 \
+            --suppress=missingIncludeSystem \
+            --suppress=toomanyconfigs \
+            -I "${{ github.workspace }}/core/primitives" \
+            -I "${{ github.workspace }}/core" \
+            -I "${{ github.workspace }}/semantics" \
+            -I "${{ github.workspace }}/data" \
+            -I "${{ github.workspace }}/algo" \
+            -I "${{ github.workspace }}/util" \
+            -I "${{ github.workspace }}" \
+            "${{ github.workspace }}/core/primitives" \
+            "${{ github.workspace }}/core" \
+            "${{ github.workspace }}/semantics" \
+            "${{ github.workspace }}/data" \
+            "${{ github.workspace }}/algo" \
+            "${{ github.workspace }}/util" \
+            2>&1 | tee misra_report.txt
+
+          echo ""
+          echo "==============================================="
+          echo "  MISRA C:2012 Summary"
+          echo "==============================================="
+
+          TOTAL=$(grep -c "\[misra-" misra_report.txt 2>/dev/null || echo "0")
+          REQUIRED=$(grep -c "Required" misra_report.txt 2>/dev/null || echo "0")
+          ADVISORY=$(grep -c "Advisory" misra_report.txt 2>/dev/null || echo "0")
+          MANDATORY=$(grep -c "Mandatory" misra_report.txt 2>/dev/null || echo "0")
+
+          echo "  Total violations:     ${TOTAL}"
+          echo "  Mandatory:            ${MANDATORY}"
+          echo "  Required:             ${REQUIRED}"
+          echo "  Advisory:             ${ADVISORY}"
+          echo ""
+          echo "  Deviations documented in: docs/misra_deviations.md"
+          echo "==============================================="
+
+          # Advisory only — do not fail the build.
+          # When MISRA compliance is mature, uncomment to enforce:
+          # if [ "${MANDATORY}" -gt 0 ]; then
+          #   echo "FAIL: ${MANDATORY} mandatory MISRA violations found"
+          #   exit 1
+          # fi
+
+      - name: Upload MISRA report
+        uses: actions/upload-artifact@v4
+        with:
+          name: misra-report
+          path: misra_report.txt
