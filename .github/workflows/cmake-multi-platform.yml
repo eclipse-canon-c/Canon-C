@@ -14,6 +14,7 @@ on:
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
+#                     DISABLED until ACSL annotations are added to headers
 #   coverage        — Linux only, branch coverage measurement (MC/DC path)
 #   misra           — Linux only, MISRA C:2012 advisory analysis
 #
@@ -372,6 +373,9 @@ jobs:
   # -------------------------------------------------------------------------
   # 5. Formal verification — Frama-C (Linux only)
   #
+  #    DISABLED — uncomment when ACSL annotations are added to headers.
+  #    Frama-C has nothing to prove without /*@ ... */ contracts.
+  #
   #    Two-phase analysis on every annotated header:
   #
   #    Phase 1 — WP (Weakest Precondition)
@@ -400,243 +404,120 @@ jobs:
   #      - Contract verification (requirement traceability)
   #      - Value range correctness (IEC 62304, EN 50128)
   #      - Formal proof artifacts (DO-178C objective substitution)
+  #
+  #    Installation note:
+  #      framac/frama-c Docker Hub images use version tags (e.g. 29.0),
+  #      not "latest". Install via opam instead for reliability.
   # -------------------------------------------------------------------------
-  frama-c:
-    needs: build
-    runs-on: ubuntu-latest
-    container:
-      image: framac/frama-c:latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # -- core/primitives — WP (contract proofs + RTE absence) -----------
-      - name: "WP: core/primitives"
-        run: |
-          frama-c -wp -wp-rte \
-            -wp-prover alt-ergo \
-            -wp-timeout 30 \
-            -warn-unsigned-overflow \
-            -cpp-extra-args=" \
-              -I core/primitives \
-              -I core \
-              -I . \
-              -DCANON_NO_REQUIRE \
-              -DNDEBUG \
-              -D__GNUC__=0 \
-              -UCANON_BITS_MSVC" \
-            core/primitives/bits.h \
-            core/primitives/checked.h \
-            core/primitives/ptr.h \
-            core/primitives/compare.h
-
-      # -- core/primitives — Eva (value range analysis) -------------------
-      - name: "Eva: core/primitives"
-        run: |
-          frama-c -eva \
-            -eva-precision 3 \
-            -warn-unsigned-overflow \
-            -cpp-extra-args=" \
-              -I core/primitives \
-              -I core \
-              -I . \
-              -DCANON_NO_REQUIRE \
-              -DNDEBUG \
-              -D__GNUC__=0 \
-              -UCANON_BITS_MSVC" \
-            core/primitives/bits.h \
-            core/primitives/checked.h \
-            core/primitives/ptr.h \
-            core/primitives/compare.h
-
-      # -- core — WP -----------------------------------------------------
-      # Uncomment when core/ headers are annotated with ACSL contracts
-      #
-      # - name: "WP: core"
-      #   run: |
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 30 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       core/arena.h \
-      #       core/slice.h \
-      #       core/memory.h \
-      #       core/pool.h \
-      #       core/region.h
-      #
-      # - name: "Eva: core"
-      #   run: |
-      #     frama-c -eva \
-      #       -eva-precision 3 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       core/arena.h \
-      #       core/slice.h \
-      #       core/memory.h \
-      #       core/pool.h \
-      #       core/region.h
-
-      # -- semantics — WP ------------------------------------------------
-      # Uncomment when semantics/ headers are annotated
-      #
-      # - name: "WP: semantics"
-      #   run: |
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 30 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I semantics \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       semantics/borrow.h \
-      #       semantics/diag.h \
-      #       semantics/error.h
-      #
-      # - name: "Eva: semantics"
-      #   run: |
-      #     frama-c -eva \
-      #       -eva-precision 3 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I semantics \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       semantics/borrow.h \
-      #       semantics/diag.h \
-      #       semantics/error.h
-
-      # -- data (direct headers) — WP ------------------------------------
-      # Uncomment when data/ direct headers are annotated
-      #
-      # - name: "WP: data (direct)"
-      #   run: |
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 30 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I semantics \
-      #         -I data \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       data/array.h \
-      #       data/range.h \
-      #       data/stringbuf.h \
-      #       data/bitset.h \
-      #       data/priority_queue.h
-
-      # -- data (macro modules) — WP via verification drivers -------------
-      # Uncomment when verify/ drivers exist
-      #
-      # - name: "WP: data (macro modules)"
-      #   run: |
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 30 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I semantics \
-      #         -I data \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       verify/data/verify_vec_int.c \
-      #       verify/data/verify_deque_int.c \
-      #       verify/data/verify_hashmap_int.c
-
-      # -- algo — WP via verification drivers -----------------------------
-      # Uncomment when verify/algo/ drivers exist
-      #
-      # - name: "WP: algo"
-      #   run: |
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 30 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I semantics \
-      #         -I data \
-      #         -I algo \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       verify/algo/verify_map_int.c \
-      #       verify/algo/verify_filter_int.c \
-      #       verify/algo/verify_fold_int.c \
-      #       verify/algo/verify_find_int.c \
-      #       verify/algo/verify_sort_int.c \
-      #       verify/algo/verify_search_int.c \
-      #       verify/algo/verify_any_all_int.c \
-      #       verify/algo/verify_unique_int.c \
-      #       verify/algo/verify_reverse_int.c
-
-      # -- util — WP -----------------------------------------------------
-      # Uncomment when util/ headers are annotated
-      #
-      # - name: "WP: util"
-      #   run: |
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 30 \
-      #       -warn-unsigned-overflow \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I semantics \
-      #         -I data \
-      #         -I algo \
-      #         -I util \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG \
-      #         -D__GNUC__=0 \
-      #         -UCANON_BITS_MSVC" \
-      #       util/str.h \
-      #       util/str_split.h \
-      #       util/str_join.h \
-      #       util/str_view.h \
-      #       util/parse.h \
-      #       util/random.h \
-      #       util/time.h
+  # frama-c:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install Frama-C
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y opam gcc
+  #         opam init -y --disable-sandboxing --bare
+  #         opam switch create frama-c ocaml-base-compiler.4.14.2
+  #         eval $(opam env)
+  #         opam install -y frama-c
+  #         echo "$(opam var bin)" >> $GITHUB_PATH
+  #
+  #     # -- core/primitives — WP (contract proofs + RTE absence) ---------
+  #     - name: "WP: core/primitives"
+  #       run: |
+  #         eval $(opam env --switch=frama-c)
+  #         frama-c -wp -wp-rte \
+  #           -wp-prover alt-ergo \
+  #           -wp-timeout 30 \
+  #           -warn-unsigned-overflow \
+  #           -cpp-extra-args=" \
+  #             -I core/primitives \
+  #             -I core \
+  #             -I . \
+  #             -DCANON_NO_REQUIRE \
+  #             -DNDEBUG \
+  #             -D__GNUC__=0 \
+  #             -UCANON_BITS_MSVC" \
+  #           core/primitives/bits.h \
+  #           core/primitives/checked.h \
+  #           core/primitives/ptr.h \
+  #           core/primitives/compare.h
+  #
+  #     # -- core/primitives — Eva (value range analysis) -----------------
+  #     - name: "Eva: core/primitives"
+  #       run: |
+  #         eval $(opam env --switch=frama-c)
+  #         frama-c -eva \
+  #           -eva-precision 3 \
+  #           -warn-unsigned-overflow \
+  #           -cpp-extra-args=" \
+  #             -I core/primitives \
+  #             -I core \
+  #             -I . \
+  #             -DCANON_NO_REQUIRE \
+  #             -DNDEBUG \
+  #             -D__GNUC__=0 \
+  #             -UCANON_BITS_MSVC" \
+  #           core/primitives/bits.h \
+  #           core/primitives/checked.h \
+  #           core/primitives/ptr.h \
+  #           core/primitives/compare.h
+  #
+  #     # -- core — WP ----------------------------------------------------
+  #     # Uncomment when core/ headers are annotated with ACSL contracts
+  #     #
+  #     # - name: "WP: core"
+  #     #   run: |
+  #     #     eval $(opam env --switch=frama-c)
+  #     #     frama-c -wp -wp-rte \
+  #     #       -wp-prover alt-ergo \
+  #     #       -wp-timeout 30 \
+  #     #       -warn-unsigned-overflow \
+  #     #       -cpp-extra-args=" \
+  #     #         -I core/primitives \
+  #     #         -I core \
+  #     #         -I . \
+  #     #         -DCANON_NO_REQUIRE \
+  #     #         -DNDEBUG \
+  #     #         -D__GNUC__=0 \
+  #     #         -UCANON_BITS_MSVC" \
+  #     #       core/arena.h \
+  #     #       core/slice.h \
+  #     #       core/memory.h \
+  #     #       core/pool.h \
+  #     #       core/region.h
+  #     #
+  #     # - name: "Eva: core"
+  #     #   run: |
+  #     #     eval $(opam env --switch=frama-c)
+  #     #     frama-c -eva \
+  #     #       -eva-precision 3 \
+  #     #       -warn-unsigned-overflow \
+  #     #       -cpp-extra-args=" \
+  #     #         -I core/primitives \
+  #     #         -I core \
+  #     #         -I . \
+  #     #         -DCANON_NO_REQUIRE \
+  #     #         -DNDEBUG \
+  #     #         -D__GNUC__=0 \
+  #     #         -UCANON_BITS_MSVC" \
+  #     #       core/arena.h \
+  #     #       core/slice.h \
+  #     #       core/memory.h \
+  #     #       core/pool.h \
+  #     #       core/region.h
+  #
+  #     # -- semantics, data, algo, util — add as annotated ---------------
+  #     # Follow the same pattern: uncomment WP + Eva steps per layer
+  #     # as ACSL annotations are written.
+  #     #
+  #     # For macro-instantiated modules (vec, deque, option, result, algo):
+  #     # create verify/ directory with driver files and point frama-c at
+  #     # those instead of the headers directly.
 
   # -------------------------------------------------------------------------
   # 6. Coverage — branch coverage measurement (Linux only)
@@ -686,15 +567,19 @@ jobs:
           lcov --capture \
             --directory build \
             --output-file coverage_raw.info \
-            --rc lcov_branch_coverage=1
+            --rc branch_coverage=1 \
+            --ignore-errors unused
 
-          # Remove system headers and test files — coverage is for
-          # Canon-C library headers only, not test harnesses
+          # Remove test files — coverage is for Canon-C library headers
+          # only, not test harnesses. --ignore-errors unused suppresses
+          # errors when an exclude pattern matches nothing (e.g. /usr/*
+          # is absent because headers are inlined into test TUs).
           lcov --remove coverage_raw.info \
             '/usr/*' \
             '*/test/*' \
             --output-file coverage.info \
-            --rc lcov_branch_coverage=1
+            --rc branch_coverage=1 \
+            --ignore-errors unused
 
       - name: Generate HTML coverage report
         run: |
@@ -703,7 +588,8 @@ jobs:
             --branch-coverage \
             --title "Canon-C Branch Coverage" \
             --legend \
-            --demangle-cpp
+            --demangle-cpp \
+            --ignore-errors unused
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -717,13 +603,13 @@ jobs:
           echo "  Canon-C Branch Coverage Summary"
           echo "==============================================="
           lcov --summary coverage.info \
-            --rc lcov_branch_coverage=1
+            --rc branch_coverage=1
           echo "==============================================="
 
       - name: Enforce branch coverage threshold
         run: |
           BRANCH_COV=$(lcov --summary coverage.info \
-            --rc lcov_branch_coverage=1 2>&1 | \
+            --rc branch_coverage=1 2>&1 | \
             grep "branches" | grep -oP '[\d.]+%' | head -1 | tr -d '%')
 
           echo "Branch coverage: ${BRANCH_COV}%"
@@ -754,6 +640,9 @@ jobs:
   #    is to track MISRA compliance progress and identify deviations
   #    that must be documented in docs/misra_deviations.md.
   #
+  #    NOTE: Canon-C is header-only. Cppcheck scans .c files by default
+  #    when given a directory. We use find to locate .h files explicitly.
+  #
   #    Certification evidence produced:
   #      - MISRA violation report (all safety standards)
   #      - Deviation tracking (auditor review)
@@ -771,12 +660,28 @@ jobs:
       - name: Run MISRA C:2012 analysis on library headers
         shell: bash
         run: |
-          # Analyze library headers only — not test files.
-          # Test code intentionally violates MISRA rules (e.g. testing
-          # boundary conditions, deliberate null pointer checks).
+          # Canon-C is header-only — find all .h files in library
+          # directories. Test files are excluded (they intentionally
+          # violate MISRA rules for boundary testing).
+          HEADERS=$(find \
+            "${{ github.workspace }}/core" \
+            "${{ github.workspace }}/semantics" \
+            "${{ github.workspace }}/data" \
+            "${{ github.workspace }}/algo" \
+            "${{ github.workspace }}/util" \
+            -name "*.h" -type f 2>/dev/null | sort)
+
+          if [ -z "$HEADERS" ]; then
+            echo "No header files found — skipping MISRA analysis"
+            exit 0
+          fi
+
+          echo "Found $(echo "$HEADERS" | wc -l) header files to analyze"
+
           cppcheck \
             --addon=misra \
             --std=c99 \
+            --language=c \
             --suppress=missingIncludeSystem \
             --suppress=toomanyconfigs \
             -I "${{ github.workspace }}/core/primitives" \
@@ -786,12 +691,7 @@ jobs:
             -I "${{ github.workspace }}/algo" \
             -I "${{ github.workspace }}/util" \
             -I "${{ github.workspace }}" \
-            "${{ github.workspace }}/core/primitives" \
-            "${{ github.workspace }}/core" \
-            "${{ github.workspace }}/semantics" \
-            "${{ github.workspace }}/data" \
-            "${{ github.workspace }}/algo" \
-            "${{ github.workspace }}/util" \
+            $HEADERS \
             2>&1 | tee misra_report.txt
 
           echo ""
