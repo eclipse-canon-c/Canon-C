@@ -487,29 +487,31 @@ For what Canon-C intentionally omits, established C libraries exist:
 > once at startup with `contract_set_handler()` pointing to your UART
 > or fault handler, and stdio is never reached again from the entire
 > core layer. The second entry point is rendering functions that use
-> FILE*. diag_print() and log.h use fprintf — avoid these on bare-metal.
-> Use diag_render() instead: it writes the same output into a
-> caller-supplied char[] buffer with no FILE* dependency, and the caller
-> sends that buffer to UART, CAN, flash, or whatever the platform provides..
-> Everything else in Canon-C that includes `<stdio.h>` does so only for `vsnprintf` in
-> optional formatting functions — skip those call sites and the
-> dependency is inert on toolchains with stub stdio support (newlib,
-> picolibc).
+> `FILE*`. `diag_print()` and `log.h` use `fprintf` — avoid these on
+> bare-metal. Use `diag_render()` instead: it writes the same output
+> into a caller-supplied `char[]` buffer with no `FILE*` dependency,
+> and the caller sends that buffer to UART, CAN, flash, or whatever
+> the platform provides. Everything else in Canon-C that includes
+> `<stdio.h>` does so only for `snprintf` in optional formatting
+> functions — skip those call sites and the dependency is inert on
+> toolchains with stub stdio support (newlib, picolibc).
 >
 > **malloc / free**
-> Any Canon-C header that performs dynamic allocation — `core/memory.h`,
-> `core/arena.h`, `core/pool.h`, and everything in `data/convenience/`
-> — includes `<stdlib.h>` for `malloc`, `realloc`, and `free`. The fix
-> is architectural: `#define malloc`, `realloc`, and `free` to your RTOS
-> allocator (e.g. FreeRTOS's `pvPortMalloc`/`pvPortReAlloc`/`vPortFree`)
-> before including any Canon-C header. This single redefinition propagates
-> through the entire dependency chain automatically — every layer built
-> on `memory.h` inherits the fix without further changes.
+> `core/memory.h` includes `<stdlib.h>` and provides `mem_alloc()` /
+> `mem_free()` as explicit wrappers over `malloc` / `free`.
+> `core/arena.h` and `core/pool.h` include `memory.h` but never call
+> `malloc` — they operate entirely on caller-supplied buffers. The heap
+> dependency is only active if your code calls `mem_alloc()`,
+> `mem_alloc_type()`, or `mem_alloc_array()` directly. Everything in
+> `data/convenience/` (dynvec, smallvec, dynstring) uses heap allocation
+> internally.
 >
-> Alternatively, avoid `data/convenience/` entirely on bare-metal and use
-> the fixed-capacity `data/` collections instead, passing your own
-> stack or arena-backed buffers. These have no hidden allocation and no
-> stdlib dependency beyond what `core/memory.h` already requires.
+> On bare-metal, if you avoid `mem_alloc()` and `data/convenience/`, no
+> `malloc` is ever reached. If you do need heap allocation, `#define
+> malloc`, `realloc`, and `free` to your RTOS allocator (e.g. FreeRTOS's
+> `pvPortMalloc` / `pvPortReAlloc` / `vPortFree`) before including any
+> Canon-C header. This single redefinition propagates through the entire
+> dependency chain automatically.
 >
 > **What requires no mitigation at all**
 > `core/primitives/` (types, limits, bits, checked, ptr, compare),
