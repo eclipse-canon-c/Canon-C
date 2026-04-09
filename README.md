@@ -486,10 +486,12 @@ For what Canon-C intentionally omits, established C libraries exist:
 > handler in `core/primitives/contract.h` uses `fprintf` — replace it
 > once at startup with `contract_set_handler()` pointing to your UART
 > or fault handler, and stdio is never reached again from the entire
-> core layer. The second entry point is rendering functions like
-> `diag_print()` and `log.h` — avoid these entirely on bare-metal and
-> write directly to your platform output instead. Everything else in
-> Canon-C that includes `<stdio.h>` does so only for `vsnprintf` in
+> core layer. The second entry point is rendering functions that use
+> FILE*. diag_print() and log.h use fprintf — avoid these on bare-metal.
+> Use diag_render() instead: it writes the same output into a
+> caller-supplied char[] buffer with no FILE* dependency, and the caller
+> sends that buffer to UART, CAN, flash, or whatever the platform provides..
+> Everything else in Canon-C that includes `<stdio.h>` does so only for `vsnprintf` in
 > optional formatting functions — skip those call sites and the
 > dependency is inert on toolchains with stub stdio support (newlib,
 > picolibc).
