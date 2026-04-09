@@ -514,11 +514,13 @@ For what Canon-C intentionally omits, established C libraries exist:
 > dependency chain automatically.
 >
 > **What requires no mitigation at all**
-> `core/primitives/` (types, limits, bits, checked, ptr, compare),
-> `core/slice.h`, `core/ownership.h`, `core/region.h`, and `core/scope.h`
-> pull in only freestanding headers (`<stdint.h>`, `<stddef.h>`,
-> `<limits.h>`, `<stdbool.h>`) and are safe on any target without
-> modification.
+> `core/primitives/types.h`, `core/primitives/limits.h`,
+> `core/primitives/bits.h`, `core/primitives/checked.h`,
+> `core/primitives/compare.h`, and `core/scope.h` pull in only
+> freestanding headers (`<stdint.h>`, `<stddef.h>`, `<limits.h>`,
+> `<stdbool.h>`) and are safe on any target without modification.
+> All other `core/` headers include `contract.h` — they require the
+> handler replacement described above.
 
 ---
 
