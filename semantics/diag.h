@@ -472,6 +472,9 @@ static inline Error diag_latest_code(const Diag *d)
  *
  * No trailing newline after the last frame beyond what each line already has.
  *
+ * On bare-metal targets where FILE* is unavailable, use diag_render()
+ * instead — same output format, writes to a caller-supplied buffer.
+ *
  * Time:  O(N × M) — iterates all frames, fprintf per frame.
  * Space: O(1) — no buffers, writes directly to stream.
  *
