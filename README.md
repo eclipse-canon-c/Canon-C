@@ -39,6 +39,7 @@
 ### Formal Verification
 ![Frama-C](https://img.shields.io/badge/Frama--C-Configurable-lightgrey)
 ![MC/DC](https://img.shields.io/badge/MC--DC-Configurable-lightgrey)
+![aiT WCET](https://img.shields.io/badge/aiT%20WCET-Configurable-lightgrey)
 
 <!-- Production / Certification -->
 ### Production & Certification
