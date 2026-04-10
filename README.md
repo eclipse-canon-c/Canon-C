@@ -35,8 +35,8 @@
 ![Cppcheck](https://img.shields.io/badge/Cppcheck-Configurable-lightgrey)
 ![Polyspace/LDRA](https://img.shields.io/badge/Polyspace%2FLDRA-Configurable-lightgrey)
 
-<!-- Formal Verification -->
-### Formal Verification
+<!-- Formal Verification & Timing Analysis -->
+### Formal Verification & Timing Analysis
 ![Frama-C](https://img.shields.io/badge/Frama--C-Configurable-lightgrey)
 ![MC/DC](https://img.shields.io/badge/MC--DC-Configurable-lightgrey)
 ![aiT WCET](https://img.shields.io/badge/aiT%20WCET-Configurable-lightgrey)
