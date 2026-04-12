@@ -36,10 +36,27 @@
  * - Nesting is explicit and caller-managed — no implicit propagation
  * - No global state anywhere in this file
  *
+ * LIFO cleanup is region.h's own mechanism:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Region maintains its own runtime array of {fn, ctx} cleanup hooks
+ * registered via region_register() and walked in reverse order by
+ * region_end(). This is independent of core/scope.h — region's LIFO
+ * ordering is a runtime property of the hook array, not a compile-time
+ * property of any macro. The two headers solve different problems:
+ *
+ *   core/scope.h  — inline cleanup expression paired with a single block,
+ *                   zero runtime state, fires on normal exit and continue.
+ *
+ *   core/region.h — runtime-registered multi-hook cleanup, arena attachment,
+ *                   lifetime ID for borrow validation, fires unconditionally
+ *                   on region_end() regardless of how the caller reached it.
+ *
  * What region is NOT:
  * ────────────────────────────────────────────────────────────────────────────
  * - Not an allocator (use core/arena.h)
- * - Not automatic RAII (use core/scope.h for that pattern)
+ * - Not automatic — region_end() must be called explicitly on every exit
+ *   path, or wrapped in a goto-cleanup block. For functions with early
+ *   returns, use the goto cleanup pattern (see core/scope.h documentation).
  * - Not compiler-enforced (C99 — semantic contract, not structural)
  * - Not thread-local (stack-local; don't share across threads)
  * - Not a garbage collector
@@ -101,6 +118,7 @@
  *   // Basic lifetime boundary
  *   Region r;
  *   region_begin(&r);
+ *   // ... work ...
  *   region_end(&r);
  *
  *   // Arena-attached — arena reset on end
@@ -126,11 +144,39 @@
  *   region_set_parent(&inner, &outer); // informational only
  *   region_end(&inner);
  *   region_end(&outer);
+ *
+ *   // Combining region with DEFER for run-to-completion blocks:
+ *   // DEFER fires region_end() on the block's normal exit. Do not use
+ *   // this pattern for functions that may return or goto out of the
+ *   // block on error paths — DEFER does not cover those exits, and
+ *   // region_end() would be silently skipped. For error-handled
+ *   // functions, use the goto cleanup pattern instead.
+ *   Region r;
+ *   region_begin(&r);
+ *   DEFER(region_end(&r)) {
+ *       region_attach_arena(&r, &scratch);
+ *       // ... run-to-completion work ...
+ *   }
+ *
+ *   // For functions with error paths, use goto cleanup:
+ *   Region r;
+ *   int    rc = 0;
+ *   region_begin(&r);
+ *   region_attach_arena(&r, &scratch);
+ *
+ *   if (step_one(&r)   != OK) { rc = ERR_ONE;   goto done; }
+ *   if (step_two(&r)   != OK) { rc = ERR_TWO;   goto done; }
+ *   if (step_three(&r) != OK) { rc = ERR_THREE; goto done; }
+ *
+ * done:
+ *   region_end(&r);
+ *   return rc;
  * @endcode
  *
  * @sa core/arena.h   — bump allocator; attach to a region for scoped allocation
  * @sa core/slice.h   — bytes_t / str_t used with region lifetimes
- * @sa core/scope.h   — RAII-style cleanup for simpler single-resource cases
+ * @sa core/scope.h   — DEFER(expr) { body } for inline run-to-completion
+ *                     cleanup; complementary to region, not a replacement
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -487,63 +533,58 @@ static inline void region_assert_borrow_valid(const Region* r, region_id_t borro
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   REGION_SCOPE — optional automatic region_end via scope.h
-   ════════════════════════════════════════════════════════════════════════════ */
+   Note on automatic region_end
 
-/**
- * @def REGION_SCOPE(name)
- * @brief Declares a Region that is automatically ended at scope exit
- *
- * Requires scope.h (SCOPE_DEFER) to be included first.
- * If scope.h is absent, expands to region_begin(&name) only —
- * region_end() must be called manually.
- *
- * Thread-safe: region_begin() uses the stack address as ID.
- *
- * @param name  Variable name for the Region
- *
- * @code
- *   #include "core/scope.h"
- *   #include "core/region.h"
- *
- *   void my_function(void) {
- *       REGION_SCOPE(r);
- *       region_attach_arena(&r, &scratch);
- *       // ... work ...
- *   } // region_end(&r) called automatically
- * @endcode
- */
-#ifdef CANON_CORE_SCOPE_H
-    #define REGION_SCOPE(name) \
-        Region name;           \
-        region_begin(&name);   \
-        SCOPE_DEFER(region_end(&name))
-#else
-    #define REGION_SCOPE(name) \
-        Region name;           \
-        region_begin(&name)    /* remember: call region_end(&name) manually */
-#endif
+   Earlier versions of this header provided a REGION_SCOPE(name) macro that
+   declared a Region and relied on core/scope.h's old SCOPE_DEFER { block }
+   form to call region_end() at scope exit. Both the macro it depended on
+   and the implicit semantics it promised have been removed:
 
-/* ════════════════════════════════════════════════════════════════════════════
-   Build configuration summary
-   ════════════════════════════════════════════════════════════════════════════
+     1. scope.h's SCOPE_DEFER { block } form could not deliver scope-exit
+        semantics in pure C99 (cleanup ran at declaration, not at exit).
+        It has been replaced with DEFER(expr) { body }, which delivers
+        correct scope-exit semantics for normal fall-through and continue,
+        but NOT for break, return, or outward goto.
 
-   Development (default):
-     Assertions:      debug only (NDEBUG disables ensure_msg)
-     Parent tracking: enabled
-     gcc -o myapp main.c
+     2. region_end() is load-bearing — it calls registered hooks, resets
+        the attached arena, and invalidates all borrows stamped with this
+        region's ID. Silently skipping it on an early return is exactly
+        the kind of bug region.h exists to prevent.
 
-   Release:
-     Assertions:      compiled away
-     Parent tracking: enabled
-     gcc -DNDEBUG -o myapp main.c
+     3. A REGION_SCOPE macro built on DEFER would silently inherit DEFER's
+        exit-method limits, meaning region_end() would not fire on any
+        early return or outward goto from inside the scope. This is the
+        same category of bug the old header suffered from, in new clothes.
 
-   Certified (DO-178C / ISO 26262 / IEC 61508):
-     Assertions:      always-on via CANON_STRICT
-     Parent tracking: stripped via CANON_NO_REGION_PARENT
-     Struct layout:   minimal and fully provable
-     gcc -DCANON_STRICT -DCANON_NO_REGION_PARENT -o myapp main.c
+   The honest replacement is explicit. Call region_begin() and region_end()
+   directly. For functions where the region's body runs to completion,
+   wrap region_end() in a DEFER so the pairing is lexically visible:
 
+       Region r;
+       region_begin(&r);
+       DEFER(region_end(&r)) {
+           // run-to-completion work
+       }
+
+   For functions with error-return paths, use the goto cleanup pattern.
+   region_end() at the bottom of the function in a single cleanup block
+   is the auditable, certification-friendly shape, and it fires on every
+   exit path including returns:
+
+       Region r;
+       int    rc = 0;
+       region_begin(&r);
+
+       if (step_one(&r)   != OK) { rc = ERR_ONE;   goto done; }
+       if (step_two(&r)   != OK) { rc = ERR_TWO;   goto done; }
+       rc = step_three(&r);
+
+   done:
+       region_end(&r);
+       return rc;
+
+   Both patterns are first-class in Canon-C. Use the one that matches
+   the function's exit structure.
    ════════════════════════════════════════════════════════════════════════════ */
 
 #endif /* CANON_CORE_REGION_H */
