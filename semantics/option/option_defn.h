@@ -573,11 +573,13 @@ DEFINE_OPTION_FUNCTIONS(, float)
 // ────────────────────────────────────────────────────────────────────────────
 
 // Override Some() to assert non-NULL before wrapping.
-// require() is provided by contract.h (included transitively via option_impl.h).
+// require_msg() is provided by contract.h (included transitively via
+// option_impl.h). It takes a condition and a string literal message; on
+// violation it routes through canon_contract_handler (see contract.h).
 #undef IMPL_OPTION_SOME
 #define IMPL_OPTION_SOME(_t, _topt, _param) \
     { \
-        require((_param) != NULL, "option_some: NULL pointer not allowed"); \
+        require_msg((_param) != NULL, "option_some: NULL pointer not allowed"); \
         return (_topt){ .has_value = true, .value = (_param) }; \
     }
 
