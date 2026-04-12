@@ -205,14 +205,19 @@ static void test_defer_in_loop(void)
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Realistic: file open/close with DEFER
+   Realistic: file open/close with DEFER.
+   Uses a relative filename so it works in the test binary's CWD on any
+   platform. Hardcoding `/tmp/...` would break on Windows, which has no
+   `/tmp` directory.
    ════════════════════════════════════════════════════════════════════════ */
 static void test_real_file(void)
 {
+    const char* path = "scope_defer_test.tmp";
+
     FILE* f = NULL;
     int wrote = 0;
     DEFER(f && fclose(f)) {
-        f = fopen("/tmp/scope_defer_test", "w");
+        f = fopen(path, "w");
         if (!f) break;
         fputs("hello", f);
         wrote = 1;
@@ -220,7 +225,7 @@ static void test_real_file(void)
     EXPECT(wrote == 1);
 
     /* Verify the file is actually closed and flushed */
-    FILE* g = fopen("/tmp/scope_defer_test", "r");
+    FILE* g = fopen(path, "r");
     EXPECT(g != NULL);
     char buf[16] = {0};
     if (g) {
@@ -229,7 +234,7 @@ static void test_real_file(void)
         fclose(g);
     }
     EXPECT(strcmp(buf, "hello") == 0);
-    remove("/tmp/scope_defer_test");
+    remove(path);
 }
 
 /* ════════════════════════════════════════════════════════════════════════
