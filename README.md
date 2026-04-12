@@ -459,11 +459,13 @@ For what Canon-C intentionally omits, established C libraries exist:
 >   with release for external handles when the work runs to completion.
 >   For adapter functions with error-return paths — the common case when
 >   wrapping libraries like SQLite or libuv, where almost every API call
->   can fail — use the `goto cleanup;` pattern instead. `DEFER` does not
->   fire on `return`, `break`, or outward `goto`, and adapter functions
->   almost always need cleanup on error exits. The two patterns are
->   complementary: `DEFER` for run-to-completion blocks, `goto cleanup;`
->   for error-handled functions.
+>   can fail — use the standard C99 `goto cleanup;` idiom instead. `DEFER`
+>   does not fire on `return`, `break`, or outward `goto`, and adapter
+>   functions almost always need cleanup on error exits. `DEFER` is
+>   Canon-C's contribution (a C99-portable macro for run-to-completion
+>   cleanup); `goto cleanup;` is plain C and needs no library support.
+>   Canon-C recommends the combination because each tool fits a different
+>   shape of function.
 >
 > - `semantics/diag.h` — attach context to external failures as they
 >   propagate. "SQLite failed → while writing record → during sync" with
@@ -655,13 +657,13 @@ DEFER(arena_reset_to(&arena, mark)) {
 No hidden allocations. No malloc scattered across the codebase.
 Lifetime boundaries are visible at the site where they are declared.
 
-`DEFER` handles run-to-completion blocks like this cleanly — the body
-runs straight through, the cleanup expression fires at the closing
-brace. For functions whose body has error-return paths *after* a
-resource has been acquired, use the `goto cleanup;` pattern shown
-next instead. `DEFER` does not fire on `return`, `break`, or outward
-`goto`, so functions with error exits need the `goto cleanup;` shape
-to guarantee cleanup on every path.
+`DEFER` (from `core/scope.h`) handles run-to-completion blocks like
+this cleanly — the body runs straight through, the cleanup expression
+fires at the closing brace. For functions whose body has error-return
+paths *after* a resource has been acquired, use the `goto cleanup;`
+idiom shown in the next example instead. `DEFER` does not fire on
+`return`, `break`, or outward `goto`, so functions with error exits
+need a different shape to guarantee cleanup on every path.
 
 ---
 
@@ -699,9 +701,13 @@ int load_calibration(const char* path) {
 ```
 ```c
 /* WITH Canon-C — one cleanup block, every exit routed through it */
-#include "core/scope.h"
+#define CANON_CONTRACT_IMPL
+#include "core/ownership.h"
+#include "core/primitives/contract.h"
 
 int load_calibration(borrowed(const char*) path) {
+    require_msg(path != NULL, "load_calibration: path is NULL");
+
     int   rc  = 0;
     FILE* f   = NULL;
     void* buf = NULL;
@@ -729,20 +735,46 @@ every exit path through a single `goto done`. Adding a new error path
 later means adding one line — the `goto done` automatically routes
 through the existing cleanup. Nothing to remember, nothing to forget.
 
-**Use `DEFER` for run-to-completion blocks** — arena checkpoints,
-critical sections, lock guards, timing brackets, ISR state save/restore.
-Cases where the body runs straight through without error-return paths
-inside it.
+**`DEFER` for run-to-completion blocks — arena checkpoints, critical
+sections, lock guards, timing brackets, ISR state save/restore.** Cases
+where the body runs straight through without error-return paths inside
+it. `DEFER` is Canon-C's contribution, supplied by `core/scope.h` — a
+C99-portable macro that pairs cleanup with acquisition for the case
+plain C was missing a clean idiom for.
 
-**Use `goto cleanup;` for error-handled functions** — any function
-where an error path can exit *after* a resource has been acquired.
-This includes most I/O code, hardware state machines with rollback,
-and adapter functions wrapping external libraries.
+**`goto cleanup;` for error-handled functions — any function where an
+error path can exit *after* a resource has been acquired.** This
+includes most I/O code, hardware state machines with rollback, and
+adapter functions wrapping external libraries. `goto cleanup;` is not
+a Canon-C feature — it is plain C99 and needs no header, no macro, no
+library support. Canon-C recommends it because it is already the right
+tool for that shape of function, proven at scale in the Linux kernel,
+glibc, and every major C codebase that handles errors carefully.
 
-The two are complementary, not alternatives. A single function may
-use both: `goto cleanup;` for the outer error-handled structure,
-`DEFER` for a straight-line inner block such as a scratch arena
-checkpoint.
+The two are complementary: one supplied by Canon-C for the case the
+language was missing, one supplied by the language for the case Canon-C
+should not reinvent. A single function may use both — `goto cleanup;`
+for the outer error-handled structure, `DEFER` for a straight-line
+inner block such as a scratch arena checkpoint.
+
+**Contracts versus error propagation — two tools, two categories of
+failure.** Notice that the example above uses `require_msg(path != NULL, ...)`
+at the top *and* `if (!f) { rc = ERR_OPEN; goto done; }` further down.
+These are not redundant — they check different categories of failure.
+`require_msg` (from `core/primitives/contract.h`) is for **programmer
+errors**: NULL pointers where NULL is forbidden, preconditions the
+caller promised to honor, invariants that must hold if the code is
+correct. If a contract fires, the program has a bug and `require_msg`
+panics to stop before damage spreads. Runtime failures are different:
+`fopen` returning NULL, allocation failing, a hardware register not
+responding, a checksum not matching. These are **not bugs** — they are
+real conditions a correct program must handle. For those, propagate
+the failure as a value through `Result` or `goto cleanup`, and let the
+caller decide what to do. Using `require_msg` for a recoverable runtime
+failure converts an error into a crash; using `goto cleanup` for a
+contract violation hides a bug behind an error code. The rule is
+simple: **if the failure means your code has a bug, use a contract.
+If the failure means reality didn't cooperate, propagate the error.**
 
 ---
 
