@@ -566,7 +566,7 @@
     //       log_fatal("Canon-C: %s at %s:%d (%s)",
     //                 expr, file, line, msg ? msg : "");
     //       system_reset();
-    //       for (;;) { /* unreachable */ }
+    //       for (;;) { }  // unreachable
     //   }
     //
     //   int main(void) {
