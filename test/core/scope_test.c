@@ -1,301 +1,273 @@
 /**
  * @file scope_test.c
- * @brief Tests for scope.h — RAII-style deferred cleanup macros
+ * @brief Tests for scope.h DEFER macro.
  *
- * Tests what SCOPE_DEFER actually guarantees:
- *   - The deferred block executes exactly once
- *   - It executes when the enclosing scope exits (normal end, return,
- *     break, continue)
- *   - Multiple SCOPE_DEFERs in the same scope all execute
- *   - The defer alias works when CANON_NO_DEFER_ALIAS is not defined
- *
- * Note on LIFO ordering:
- *   SCOPE_DEFER expands to two nested for-loops. Within a single flat
- *   scope, execution order depends on where each SCOPE_DEFER appears —
- *   the last one declared executes last (normal for-loop sequencing),
- *   not first. LIFO order as in Go/Zig requires compiler support or
- *   a stack-based runtime — this macro cannot provide it in pure C99.
- *   Tests here verify the actual observable behavior.
+ * Every test here is designed to FAIL if the macro regressed to
+ * immediate execution or if any documented exit-method behavior broke.
+ * The key test is test_defer_runs_after_body — that single test would
+ * have caught the original broken scope.h in five seconds.
  */
 
-#include "core/scope.h"
-
+#include "scope.h"
 #include <stdio.h>
 #include <string.h>
 
-/* ── Harness ─────────────────────────────────────────────────────────────── */
-
 static int g_failed = 0;
+#define EXPECT(cond) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); \
+        g_failed++; \
+    } \
+} while (0)
 
-#define EXPECT(cond)                                             \
-    do {                                                         \
-        if (!(cond)) {                                           \
-            fprintf(stderr, "FAIL %s:%d  %s\n",                 \
-                    __FILE__, __LINE__, #cond);                  \
-            g_failed++;                                          \
-        }                                                        \
-    } while (0)
+#define EXPECT_SEQ(arr, expected, n) do { \
+    int _ok = 1; \
+    if ((int)(sizeof(arr)/sizeof((arr)[0])) < (n)) _ok = 0; \
+    for (int _i = 0; _i < (n) && _ok; _i++) \
+        if ((arr)[_i] != (expected)[_i]) _ok = 0; \
+    if (!_ok) { \
+        fprintf(stderr, "FAIL %s:%d  seq mismatch: got [", __FILE__, __LINE__); \
+        for (int _i = 0; _i < (n); _i++) \
+            fprintf(stderr, "%d%s", (arr)[_i], _i+1<(n)?",":""); \
+        fprintf(stderr, "] want ["); \
+        for (int _i = 0; _i < (n); _i++) \
+            fprintf(stderr, "%d%s", (expected)[_i], _i+1<(n)?",":""); \
+        fprintf(stderr, "]\n"); \
+        g_failed++; \
+    } \
+} while (0)
 
-/* ── Shared state ────────────────────────────────────────────────────────── */
+static int seq[32];
+static int seqn = 0;
+static void rec(int v) { seq[seqn++] = v; }
+static void seq_reset(void) { seqn = 0; memset(seq, 0, sizeof(seq)); }
 
-static int g_counter   = 0;
-static int g_seq[8];
-static int g_seq_count = 0;
-
-/* ── SCOPE_DEFER — basic: block executes ─────────────────────────────────── */
-
-static void test_defer_basic(void)
+/* ════════════════════════════════════════════════════════════════════════
+   THE CRITICAL TEST — would have caught the original broken scope.h
+   Cleanup must run AFTER the body, not at declaration.
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_defer_runs_after_body(void)
 {
-    g_counter = 0;
-    {
-        SCOPE_DEFER { g_counter = 1; }
+    seq_reset();
+    rec(1);
+    DEFER(rec(3)) {
+        rec(2);
     }
-    EXPECT(g_counter == 1);
+    int want[] = {1, 2, 3};
+    EXPECT_SEQ(seq, want, 3);
 }
 
-static void test_defer_executes_once(void)
+/* Variation: multiple body statements, cleanup runs after all of them */
+static void test_defer_after_multiple_statements(void)
 {
-    g_counter = 0;
-    {
-        SCOPE_DEFER { g_counter++; }
+    seq_reset();
+    DEFER(rec(99)) {
+        rec(1);
+        rec(2);
+        rec(3);
     }
-    EXPECT(g_counter == 1);
+    int want[] = {1, 2, 3, 99};
+    EXPECT_SEQ(seq, want, 4);
 }
 
-/* ── SCOPE_DEFER — multiple in same scope all execute ───────────────────── */
-
-static void test_defer_multiple_all_execute(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Cleanup must fire on normal exit (baseline)
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_normal_exit(void)
 {
-    g_seq_count = 0;
-    {
-        SCOPE_DEFER { g_seq[g_seq_count++] = 1; }
-        SCOPE_DEFER { g_seq[g_seq_count++] = 2; }
-        SCOPE_DEFER { g_seq[g_seq_count++] = 3; }
+    int cleanup_ran = 0;
+    DEFER(cleanup_ran = 1) {
+        /* nothing */
     }
-    /* All three ran */
-    EXPECT(g_seq_count == 3);
+    EXPECT(cleanup_ran == 1);
 }
 
-static void test_defer_two_both_execute(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Cleanup must fire on `continue` (continue jumps to for-increment)
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_continue_fires_cleanup(void)
 {
-    int a = 0;
-    int b = 0;
-    {
-        SCOPE_DEFER { a = 1; }
-        SCOPE_DEFER { b = 1; }
-    }
-    EXPECT(a == 1);
-    EXPECT(b == 1);
-}
-
-/* ── SCOPE_DEFER — executes on early return ──────────────────────────────── */
-
-static int helper_with_return(int x, int* side_effect)
-{
-    *side_effect = 0;
-    {
-        SCOPE_DEFER { *side_effect = 1; }
-        if (x > 0) {
-            return x;
+    int fires = 0;
+    for (int i = 0; i < 3; i++) {
+        DEFER(fires++) {
+            continue;
         }
+    }
+    EXPECT(fires == 3);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Cleanup must NOT fire on break (documented limitation)
+   We test this so that if C99 semantics ever change, we notice.
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_break_skips_cleanup(void)
+{
+    int cleanup_ran = 0;
+    for (int i = 0; i < 1; i++) {
+        DEFER(cleanup_ran = 1) {
+            break;
+        }
+    }
+    EXPECT(cleanup_ran == 0);  /* documented: break skips cleanup */
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Cleanup must NOT fire on return (documented limitation)
+   ════════════════════════════════════════════════════════════════════════ */
+static int g_return_cleanup = 0;
+static int helper_return(void)
+{
+    DEFER(g_return_cleanup = 1) {
+        return 42;
     }
     return 0;
 }
-
-static void test_defer_early_return(void)
+static void test_return_skips_cleanup(void)
 {
-    int side = 0;
-    int ret  = helper_with_return(5, &side);
-    EXPECT(ret  == 5);
-    EXPECT(side == 1);
+    g_return_cleanup = 0;
+    int r = helper_return();
+    EXPECT(r == 42);
+    EXPECT(g_return_cleanup == 0);  /* documented */
 }
 
-static void test_defer_normal_return(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Cleanup must NOT fire on goto out (documented limitation)
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_goto_skips_cleanup(void)
 {
-    int side = 0;
-    int ret  = helper_with_return(-1, &side);
-    EXPECT(ret  == 0);
-    EXPECT(side == 1);
-}
-
-/* ── SCOPE_DEFER — executes on break ─────────────────────────────────────── */
-
-static void test_defer_break(void)
-{
-    g_counter = 0;
-    for (int i = 0; i < 3; i++) {
-        SCOPE_DEFER { g_counter++; }
-        if (i == 1) break;
+    int cleanup_ran = 0;
+    DEFER(cleanup_ran = 1) {
+        goto out;
     }
-    /* ran for i=0 and i=1 (break) */
-    EXPECT(g_counter == 2);
+out:
+    EXPECT(cleanup_ran == 0);  /* documented */
 }
 
-/* ── SCOPE_DEFER — executes on continue ─────────────────────────────────── */
-
-static void test_defer_continue(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Multiple DEFER in same scope — unique variable names via __LINE__
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_multiple_defer_same_scope(void)
 {
-    g_counter = 0;
-    for (int i = 0; i < 3; i++) {
-        SCOPE_DEFER { g_counter++; }
-        if (i == 1) continue;
-    }
-    EXPECT(g_counter == 3);
-}
-
-/* ── SCOPE_DEFER — executes every loop iteration ────────────────────────── */
-
-static void test_defer_loop_iterations(void)
-{
-    g_counter = 0;
-    for (int i = 0; i < 5; i++) {
-        SCOPE_DEFER { g_counter++; }
-    }
-    EXPECT(g_counter == 5);
-}
-
-/* ── SCOPE_DEFER — nested scopes independent ─────────────────────────────── */
-
-static void test_defer_nested_scopes(void)
-{
-    int outer_ran = 0;
-    int inner_ran = 0;
-    {
-        SCOPE_DEFER { outer_ran = 1; }
-        {
-            SCOPE_DEFER { inner_ran = 1; }
+    seq_reset();
+    DEFER(rec(10)) {
+        DEFER(rec(20)) {
+            rec(1);
         }
-        EXPECT(inner_ran == 1);   /* inner already ran */
+        /* rec(20) fires here */
+        rec(2);
     }
-    EXPECT(outer_ran == 1);
-    EXPECT(inner_ran == 1);
+    /* rec(10) fires here */
+    int want[] = {1, 20, 2, 10};
+    EXPECT_SEQ(seq, want, 4);
 }
 
-/* ── SCOPE_DEFER — resource simulation ──────────────────────────────────── */
-
-static int g_resource_open  = 0;
-static int g_resource_freed = 0;
-
-static void resource_open_fn(void)  { g_resource_open = 1; }
-static void resource_close_fn(void) { g_resource_open = 0; g_resource_freed = 1; }
-
-static void test_defer_resource_cleanup(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Nesting — three levels deep, check LIFO-ish order for nested DEFERs
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_three_level_nesting(void)
 {
-    g_resource_open  = 0;
-    g_resource_freed = 0;
-    {
-        resource_open_fn();
-        SCOPE_DEFER { resource_close_fn(); }
+    seq_reset();
+    DEFER(rec(30)) {
+        DEFER(rec(20)) {
+            DEFER(rec(10)) {
+                rec(1);
+            }
+            rec(2);
+        }
+        rec(3);
     }
-    EXPECT(g_resource_open  == 0);
-    EXPECT(g_resource_freed == 1);
+    int want[] = {1, 10, 2, 20, 3, 30};
+    EXPECT_SEQ(seq, want, 6);
 }
 
-/* ── SCOPE_DEFER — two resources both cleaned up ─────────────────────────── */
-
-static int g_res_a = 0;
-static int g_res_b = 0;
-
-static void test_defer_two_resources(void)
+/* ════════════════════════════════════════════════════════════════════════
+   DEFER inside a loop — cleanup runs every iteration
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_defer_in_loop(void)
 {
-    g_res_a = 1;
-    g_res_b = 1;
-    {
-        SCOPE_DEFER { g_res_a = 0; }
-        SCOPE_DEFER { g_res_b = 0; }
+    int cleanup_count = 0;
+    for (int i = 0; i < 5; i++) {
+        DEFER(cleanup_count++) {
+            /* body */
+        }
     }
-    EXPECT(g_res_a == 0);
-    EXPECT(g_res_b == 0);
+    EXPECT(cleanup_count == 5);
 }
 
-/* ── SCOPE_DEFER — body executes exactly once ────────────────────────────── */
-
-static void test_defer_body_once(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Realistic: file open/close with DEFER
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_real_file(void)
 {
-    g_counter = 0;
-    {
-        SCOPE_DEFER { g_counter++; }
+    FILE* f = NULL;
+    int wrote = 0;
+    DEFER(f && fclose(f)) {
+        f = fopen("/tmp/scope_defer_test", "w");
+        if (!f) break;
+        fputs("hello", f);
+        wrote = 1;
     }
-    EXPECT(g_counter == 1);
+    EXPECT(wrote == 1);
 
-    /* Entering the same block again does not re-run old defers */
-    {
-        SCOPE_DEFER { g_counter++; }
+    /* Verify the file is actually closed and flushed */
+    FILE* g = fopen("/tmp/scope_defer_test", "r");
+    EXPECT(g != NULL);
+    char buf[16] = {0};
+    if (g) {
+        size_t r = fread(buf, 1, 15, g);
+        (void)r;
+        fclose(g);
     }
-    EXPECT(g_counter == 2);
+    EXPECT(strcmp(buf, "hello") == 0);
+    remove("/tmp/scope_defer_test");
 }
 
-/* ── SCOPE_DEFER — at end of function ───────────────────────────────────── */
-
-static int g_end_ran = 0;
-
-static void helper_end_of_function(void)
+/* ════════════════════════════════════════════════════════════════════════
+   Comma-operator for multi-step cleanup
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_comma_cleanup(void)
 {
-    SCOPE_DEFER { g_end_ran = 1; }
-}
-
-static void test_defer_end_of_function(void)
-{
-    g_end_ran = 0;
-    helper_end_of_function();
-    EXPECT(g_end_ran == 1);
-}
-
-/* ── defer alias ─────────────────────────────────────────────────────────── */
-
-static void test_defer_alias(void)
-{
-#ifdef CANON_NO_DEFER_ALIAS
-    EXPECT(1);
-#else
-    g_counter = 0;
-    {
-        defer { g_counter = 99; }
+    int a = 0, b = 0, c = 0;
+    DEFER((a = 1, b = 2, c = 3)) {
+        EXPECT(a == 0 && b == 0 && c == 0);
     }
-    EXPECT(g_counter == 99);
-#endif
+    EXPECT(a == 1);
+    EXPECT(b == 2);
+    EXPECT(c == 3);
 }
 
-/* ── Entry point ─────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════════════
+   DEFER body observes cleanup has NOT yet happened
+   ════════════════════════════════════════════════════════════════════════ */
+static void test_body_before_cleanup(void)
+{
+    int flag = 0;
+    DEFER(flag = 1) {
+        EXPECT(flag == 0);  /* cleanup hasn't run yet */
+    }
+    EXPECT(flag == 1);      /* now it has */
+}
 
 int main(void)
 {
-    /* basic execution */
-    test_defer_basic();
-    test_defer_executes_once();
-
-    /* multiple defers */
-    test_defer_multiple_all_execute();
-    test_defer_two_both_execute();
-
-    /* early return */
-    test_defer_early_return();
-    test_defer_normal_return();
-
-    /* loop control */
-    test_defer_break();
-    test_defer_continue();
-    test_defer_loop_iterations();
-
-    /* nested scopes */
-    test_defer_nested_scopes();
-
-    /* resource simulation */
-    test_defer_resource_cleanup();
-    test_defer_two_resources();
-
-    /* misc */
-    test_defer_body_once();
-    test_defer_end_of_function();
-
-    /* alias */
-    test_defer_alias();
+    test_defer_runs_after_body();          /* the critical test */
+    test_defer_after_multiple_statements();
+    test_normal_exit();
+    test_continue_fires_cleanup();
+    test_break_skips_cleanup();
+    test_return_skips_cleanup();
+    test_goto_skips_cleanup();
+    test_multiple_defer_same_scope();
+    test_three_level_nesting();
+    test_defer_in_loop();
+    test_real_file();
+    test_comma_cleanup();
+    test_body_before_cleanup();
 
     if (g_failed == 0) {
-        printf("OK  scope_test  (all assertions passed)\n");
+        printf("OK  scope_test  all assertions passed\n");
         return 0;
     }
-    fprintf(stderr, "FAILED  scope_test  (%d assertion(s) failed)\n",
-            g_failed);
+    fprintf(stderr, "FAILED  %d assertion(s)\n", g_failed);
     return 1;
 }
