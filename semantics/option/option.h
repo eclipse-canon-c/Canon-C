@@ -57,24 +57,38 @@
  * - Typical: 2–16 bytes depending on type and alignment
  * - Stack-allocated; no heap involvement
  *
- * Panic behaviour (platform-specific):
+ * Panic behaviour (customised via contract.h):
  * ────────────────────────────────────────────────────────────────────────────
- * Functions marked "or panic" (unwrap, expect) call CANON_PANIC() on failure.
- * The default implementation of CANON_PANIC() is:
+ * Functions marked "or panic" (unwrap, expect, and the strict mutation ops
+ * on NULL pointers) route through Canon-C's shared contract handler defined
+ * in core/primitives/contract.h. The default handler prints a diagnostic to
+ * stderr and calls abort(). Install a custom handler at program start via
+ * contract_set_handler():
  *
- *   #ifndef NDEBUG   →  assert(0 && message)   (debug builds)
- *   #ifdef  NDEBUG   →  abort()                (release builds)
+ *   static void my_embedded_handler(const char* file, int line,
+ *                                   const char* func, const char* expr,
+ *                                   const char* msg) {
+ *       log_fatal("Canon-C: %s at %s:%d", expr, file, line);
+ *       system_reset();
+ *   }
  *
- * You can override this for your platform before including this header:
+ *   int main(void) {
+ *       contract_set_handler(my_embedded_handler);
+ *       // ...
+ *   }
  *
- *   // Example: log then reset for embedded target
- *   #define CANON_PANIC(msg) do { log_fatal(msg); system_reset(); } while(0)
- *   #include "option.h"
+ * The same handler is shared across every Canon-C module (Result, Option,
+ * arena, ...) — one installation covers the whole library. Call once during
+ * program initialisation before spawning threads; the handler slot is not
+ * thread-safe to write.
  *
  * For safety-certified builds (DO-178C, ISO 26262, IEC 62304) you MUST
- * provide a CANON_PANIC() that satisfies your platform's failure-handling
- * requirements.  The default abort()/assert(0) is intentionally simple; do
- * not rely on it in production without review.
+ * install a handler that satisfies your platform's failure-handling
+ * requirements. The default stderr+abort() pair is intentionally simple
+ * and is not suitable for bare-metal or freestanding targets.
+ *
+ * See contract.h for the full panic contract, the build flags CANON_STRICT
+ * and CANON_NO_REQUIRE, and the enforcement matrix.
  *
  * Combinator function signatures (explicit):
  * ────────────────────────────────────────────────────────────────────────────
@@ -110,7 +124,7 @@
  * ✓ Prefer unwrap_or / get / filter over raw unwrap in production code
  * ✓ Use expect() with descriptive messages for invariant violations
  * ✓ Combine with Result<T,E> for comprehensive error handling
- * ✓ Override CANON_PANIC() before including this header in certified builds
+ * ✓ Install a contract handler via contract_set_handler() in certified builds
  *
  * Anti-patterns to avoid:
  * ────────────────────────────────────────────────────────────────────────────
@@ -138,32 +152,17 @@
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
-   PANIC HOOK (OVERRIDE BEFORE INCLUDING THIS HEADER)
-   ════════════════════════════════════════════════════════════════════════════ */
+   PANIC ROUTING
+   ────────────────────────────────────────────────────────────────────────────
+   Option does not define its own panic hook. All contract violations —
+   unwrap() on None, expect() on None, NULL pointers to get()/replace()/take()
+   — route through canon_contract_handler in core/primitives/contract.h.
 
-/**
- * @brief Failure handler invoked by unwrap() and expect() on None.
- *
- * Default behaviour:
- *   - Debug builds (NDEBUG not defined): assert(0 && msg)
- *   - Release builds (NDEBUG defined):   abort()
- *
- * Override before including this header to customise for your platform.
- * The macro receives a string literal message and must not return.
- *
- * Example (embedded reset):
- *   #define CANON_PANIC(msg) do { log_fatal(msg); system_reset(); } while(0)
- *   #include "option.h"
- */
-#ifndef CANON_PANIC
-#  ifndef NDEBUG
-#    include <assert.h>
-#    define CANON_PANIC(msg) assert(0 && (msg))
-#  else
-#    include <stdlib.h>
-#    define CANON_PANIC(msg) abort()
-#  endif
-#endif
+   To customise panic behaviour for your platform, install a handler at
+   program start with contract_set_handler(). One handler covers every
+   Canon-C module. See contract.h for the full contract and build flags
+   (CANON_STRICT, CANON_NO_REQUIRE).
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /* ════════════════════════════════════════════════════════════════════════════
    SIMPLE USER API – CEREMONY-FREE INTERFACE
@@ -202,12 +201,14 @@
  * ── Unsafe extraction (check first or use expect) ───────────────────────────
  *   option_T_unwrap(o) → T
  *     Returns the contained value.
- *     Calls CANON_PANIC() if None.  Do not use in production without a prior
- *     is_some check or a proof that None cannot occur.
+ *     Triggers a contract violation (see contract.h) if None. Do not use
+ *     in production without a prior is_some check or a proof that None
+ *     cannot occur.
  *
  *   option_T_expect(o, msg) → T
- *     Like unwrap but calls CANON_PANIC(msg) with a descriptive message.
- *     Prefer this over unwrap for invariant assertions.
+ *     Like unwrap but the contract handler receives the caller-supplied
+ *     message for diagnostics. Prefer this over unwrap for invariant
+ *     assertions.
  *
  * ── Combinators ─────────────────────────────────────────────────────────────
  * All combinators treat None as a no-op and return None unchanged.
@@ -554,14 +555,27 @@
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // Example 9: Custom panic hook for certified / embedded builds
+    // Example 9: Custom panic handler for certified / embedded builds
     // ────────────────────────────────────────────────────────────────────────
-    // Define CANON_PANIC *before* including option.h:
+    // Install a contract handler at program start. The same handler covers
+    // every Canon-C module, not just Option:
     //
-    //   #define CANON_PANIC(msg) do { log_fatal(msg); system_reset(); } while(0)
-    //   #include "option.h"
+    //   static void embedded_panic(const char* file, int line,
+    //                              const char* func, const char* expr,
+    //                              const char* msg) {
+    //       log_fatal("Canon-C: %s at %s:%d (%s)",
+    //                 expr, file, line, msg ? msg : "");
+    //       system_reset();
+    //       for (;;) { /* unreachable */ }
+    //   }
     //
-    // The macro must not return.  It receives a string literal.
+    //   int main(void) {
+    //       contract_set_handler(embedded_panic);
+    //       // ...
+    //   }
+    //
+    // The handler must not return. See contract.h for details and for the
+    // CANON_STRICT / CANON_NO_REQUIRE build flags.
 */
 
 #endif /* CANON_SEMANTICS_OPTION_H */
