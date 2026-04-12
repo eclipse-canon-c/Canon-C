@@ -489,8 +489,14 @@ static void test_point_all_functions(void)
     Point neg = {-1, -1};
     result_Point_MyError ok_r  = result_Point_MyError_ok(p);
     result_Point_MyError err_r = result_Point_MyError_err(ERR_INVALID);
-    Point                out;
-    MyError              eout;
+    /* Zero-initialise out and eout at declaration so that cppcheck's
+     * dataflow analyser does not report uninitvar warnings on the reads
+     * that follow get_ok()/get_err() calls. cppcheck does not model the
+     * out-pointer writes inside those functions. At runtime the values
+     * are always overwritten before they are read, so zero-init costs
+     * nothing and keeps the warning clean. */
+    Point                out  = {0, 0};
+    MyError              eout = ERR_NONE;
 
     /* is_ok / is_err */
     EXPECT(result_Point_MyError_is_ok(ok_r));
