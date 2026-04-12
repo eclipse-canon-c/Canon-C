@@ -97,15 +97,25 @@ static void test_continue_fires_cleanup(void)
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   Cleanup must NOT fire on break (documented limitation)
+   Cleanup must NOT fire on break (documented limitation).
    We test this so that if C99 semantics ever change, we notice.
+
+   Note: the `break`, `return`, and `goto` statements in the next three
+   tests are gated behind `always_true` — a `volatile int` the optimizer
+   cannot prove nonzero. At runtime this is always taken (always_true
+   is initialized to 1 and never written), so behavior is unchanged,
+   but it defeats MSVC's C4702 "unreachable code" warning which would
+   otherwise fire on the code after the DEFER block. The tests verify
+   the exact same property they would without the gate.
    ════════════════════════════════════════════════════════════════════════ */
+static volatile int always_true = 1;
+
 static void test_break_skips_cleanup(void)
 {
     int cleanup_ran = 0;
     for (int i = 0; i < 1; i++) {
         DEFER(cleanup_ran = 1) {
-            break;
+            if (always_true) break;
         }
     }
     EXPECT(cleanup_ran == 0);  /* documented: break skips cleanup */
@@ -118,7 +128,7 @@ static int g_return_cleanup = 0;
 static int helper_return(void)
 {
     DEFER(g_return_cleanup = 1) {
-        return 42;
+        if (always_true) return 42;
     }
     return 0;
 }
@@ -137,7 +147,7 @@ static void test_goto_skips_cleanup(void)
 {
     int cleanup_ran = 0;
     DEFER(cleanup_ran = 1) {
-        goto out;
+        if (always_true) goto out;
     }
 out:
     EXPECT(cleanup_ran == 0);  /* documented */
