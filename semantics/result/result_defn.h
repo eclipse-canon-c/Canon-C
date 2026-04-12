@@ -307,7 +307,7 @@
  * Like unwrap(), but crashes with a caller-supplied message.
  *
  * Performance: O(1) time, O(1) space (assertion + union access)
- * Contract: require(r.is_ok, msg) — aborts with msg if Err
+ * Contract: require_msg(r.is_ok, msg) — aborts with msg if Err
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -612,7 +612,7 @@ DEFINE_RESULT_FUNCTIONS(, float, error)   // NOTE: NOT DEFINE_RESULT_ALL
 
 // IMPL contract: replacement must expand to { ... } with NO trailing semicolon.
 
-#include "result_impl.h"   // pulls in CANON_PANIC and default IMPL_* macros
+#include "result_impl.h"   // pulls in contract.h (require_msg) and default IMPL_* macros
 
 typedef enum { ERR_NONE, ERR_NULL } ptr_error;
 typedef void* void_ptr;
@@ -620,13 +620,13 @@ typedef void* void_ptr;
 #undef IMPL_RESULT_OK
 #define IMPL_RESULT_OK(_t, _e, _tres, _param) \
     { \
-        require((_param) != NULL, "result_ok: NULL pointer not allowed"); \
+        require_msg((_param) != NULL, "result_ok: NULL pointer not allowed"); \
         return (_tres){ .is_ok = true, .val.ok = (_param) }; \
     }
 
 #include "result_defn.h"
 DEFINE_RESULT_ALL(static inline, void_ptr, ptr_error)
-// result_void_ptr_ptr_error_ok(NULL) now panics via require().
+// result_void_ptr_ptr_error_ok(NULL) now panics via require_msg().
 */
 
 #endif /* CANON_RESULT_DEFN_H */
