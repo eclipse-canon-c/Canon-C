@@ -172,7 +172,7 @@ Builds on primitives for **fundamental memory management**:
 - Linear bump allocator (`arena.h`)
 - Fixed-size object pools (`pool.h`)
 - Slice views (`slice.h`) and region-based lifetimes (`region.h`)
-- RAII-style deferred cleanup (`scope.h`)
+- Scope-bound defer for cleanup pairing (`scope.h`)
 - Ownership and borrowing annotations (`ownership.h`)
 - Low-level memory utilities (`memory.h`)
 
@@ -455,9 +455,15 @@ For what Canon-C intentionally omits, established C libraries exist:
 >   mpack, miniz, and LMDB's `MDB_val`. The `{ptr, len}` layout is
 >   compatible with most C buffer conventions without copying.
 >
-> - `core/scope.h` — use RAII cleanup macros to ensure external handles
->   are closed at scope exit. Prevents resource leaks when multiple
->   early-return paths exist.
+> - `core/scope.h` — use `DEFER(cleanup_expr) { body }` to pair acquisition
+>   with release for external handles when the work runs to completion.
+>   For adapter functions with error-return paths — the common case when
+>   wrapping libraries like SQLite or libuv, where almost every API call
+>   can fail — use the `goto cleanup;` pattern instead. `DEFER` does not
+>   fire on `return`, `break`, or outward `goto`, and adapter functions
+>   almost always need cleanup on error exits. The two patterns are
+>   complementary: `DEFER` for run-to-completion blocks, `goto cleanup;`
+>   for error-handled functions.
 >
 > - `semantics/diag.h` — attach context to external failures as they
 >   propagate. "SQLite failed → while writing record → during sync" with
@@ -516,12 +522,15 @@ For what Canon-C intentionally omits, established C libraries exist:
 >
 > **What requires no mitigation at all**
 > `core/primitives/types.h`, `core/primitives/limits.h`,
-> `core/primitives/bits.h`, `core/primitives/checked.h`,
-> `core/primitives/compare.h`, and `core/scope.h` pull in only
-> freestanding headers (`<stdint.h>`, `<stddef.h>`, `<limits.h>`,
-> `<stdbool.h>`) and are safe on any target without modification.
-> All other `core/` headers include `contract.h` — they require the
-> handler replacement described above.
+> `core/primitives/bits.h`, `core/primitives/checked.h`, and
+> `core/primitives/compare.h` pull in only freestanding headers
+> (`<stdint.h>`, `<stddef.h>`, `<limits.h>`, `<stdbool.h>`) and are
+> safe on any target without modification. `core/scope.h` is the most
+> portable header in Canon-C — it has zero header dependencies at all,
+> not even freestanding ones, and is safe on any target including
+> bare-metal and freestanding environments with no libc. All other
+> `core/` headers include `contract.h` — they require the handler
+> replacement described above.
 
 ---
 
@@ -623,7 +632,7 @@ void process(void) {
 }
 ```
 ```c
-/* WITH Canon-C — lifetime boundary is visible where it is declared */
+/* WITH Canon-C — cleanup is paired with acquisition, visible at the site */
 #include "core/arena.h"
 #include "core/scope.h"
 
@@ -631,22 +640,109 @@ u8    backing[4096];
 Arena arena;
 arena_init(&arena, backing, sizeof(backing));
 
-{
-    ArenaMark mark = arena_mark(&arena);
-    defer { arena_reset_to(&arena, mark); }
-
-    /* all allocations here are released at scope exit */
+ArenaMark mark = arena_mark(&arena);
+DEFER(arena_reset_to(&arena, mark)) {
+    /* allocations made in this block live until the block ends */
     void* tmp = arena_alloc(&arena, 256);
 
-    /* ... */
-
-} /* arena_reset_to() called automatically — no manual free */
+    /* ... work that runs to completion ... */
+}
+/* arena reset to `mark` here — no manual free */
 
 /* ... 500 lines later, same arena, still predictable ... */
 ```
 
 No hidden allocations. No malloc scattered across the codebase.
 Lifetime boundaries are visible at the site where they are declared.
+
+`DEFER` handles run-to-completion blocks like this cleanly — the body
+runs straight through, the cleanup expression fires at the closing
+brace. For functions whose body has error-return paths *after* a
+resource has been acquired, use the `goto cleanup;` pattern shown
+next instead. `DEFER` does not fire on `return`, `break`, or outward
+`goto`, so functions with error exits need the `goto cleanup;` shape
+to guarantee cleanup on every path.
+
+---
+
+### Error-handled cleanup — one exit, all resources released
+```c
+/* WITHOUT Canon-C — cleanup scattered across every exit path */
+int load_calibration(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f) return -1;
+
+    void* buf = malloc(4096);
+    if (!buf) {
+        fclose(f);              /* must remember f */
+        return -1;
+    }
+
+    if (fread(buf, 1, 4096, f) != 4096) {
+        free(buf);              /* must remember buf */
+        fclose(f);              /* must remember f */
+        return -1;
+    }
+
+    if (!verify_crc(buf)) {
+        free(buf);              /* must remember buf */
+        fclose(f);              /* must remember f */
+        return -1;
+    }
+
+    apply(buf);
+
+    free(buf);
+    fclose(f);
+    return 0;
+}
+```
+```c
+/* WITH Canon-C — one cleanup block, every exit routed through it */
+#include "core/scope.h"
+
+int load_calibration(borrowed(const char*) path) {
+    int   rc  = 0;
+    FILE* f   = NULL;
+    void* buf = NULL;
+
+    f = fopen(path, "r");
+    if (!f) { rc = ERR_OPEN; goto done; }
+
+    buf = malloc(4096);
+    if (!buf) { rc = ERR_ALLOC; goto done; }
+
+    if (fread(buf, 1, 4096, f) != 4096) { rc = ERR_IO;  goto done; }
+    if (!verify_crc(buf))                { rc = ERR_CRC; goto done; }
+
+    apply(buf);
+
+done:
+    if (buf) free(buf);
+    if (f)   fclose(f);
+    return rc;
+}
+```
+
+One cleanup block, listed in reverse acquisition order, reached by
+every exit path through a single `goto done`. Adding a new error path
+later means adding one line — the `goto done` automatically routes
+through the existing cleanup. Nothing to remember, nothing to forget.
+
+**Use `DEFER` for run-to-completion blocks** — arena checkpoints,
+critical sections, lock guards, timing brackets, ISR state save/restore.
+Cases where the body runs straight through without error-return paths
+inside it.
+
+**Use `goto cleanup;` for error-handled functions** — any function
+where an error path can exit *after* a resource has been acquired.
+This includes most I/O code, hardware state machines with rollback,
+and adapter functions wrapping external libraries.
+
+The two are complementary, not alternatives. A single function may
+use both: `goto cleanup;` for the outer error-handled structure,
+`DEFER` for a straight-line inner block such as a scratch arena
+checkpoint.
 
 ---
 
@@ -836,9 +932,8 @@ region_assert_borrow_valid(&r, rid);
 /* ... work with name ... */
 
 region_end(&r);
-/* arena reset automatically   */
-/* cleanup hooks fired LIFO    */
-/* name is now invalid — region is closed */
+/* arena reset, cleanup hooks fired in reverse registration order */
+/* name is now invalid — region is closed                         */
 
 /* ... 500 lines later ... */
 
