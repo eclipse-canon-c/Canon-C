@@ -162,6 +162,38 @@
 
 
 /* ════════════════════════════════════════════════════════════════════════════
+   CONSISTENCY SELF-CHECK  (compile-time, opt-in)
+   ────────────────────────────────────────────────────────────────────────────
+   If CANON_RESULT_MANGLE_CHECK is defined before inclusion, verify that
+   MANGLE_RESULT_TYPE and MANGLE_RESULT_STRUCT_TAG are either both overridden
+   or both left at their defaults. Overriding one without the other produces
+   a compile error rather than a silent mismatch.
+
+   IMPORTANT: this check must run BEFORE the default #ifndef fallbacks below,
+   because after the fallbacks run both macros are always defined (either by
+   the user's override or by the fallback itself) and the check would be
+   unable to distinguish the two cases. Keep this block at the top of the
+   file, above every #ifndef MANGLE_RESULT_* / #define MANGLE_RESULT_* pair.
+
+   Usage:
+     #define CANON_RESULT_MANGLE_CHECK
+     #include "result_mangle.h"
+   ════════════════════════════════════════════════════════════════════════════ */
+#ifdef CANON_RESULT_MANGLE_CHECK
+#  if defined(MANGLE_RESULT_TYPE) && !defined(MANGLE_RESULT_STRUCT_TAG)
+#    error "Canon-C: MANGLE_RESULT_TYPE was overridden but " \
+           "MANGLE_RESULT_STRUCT_TAG was not.  Override both or " \
+           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
+#  endif
+#  if !defined(MANGLE_RESULT_TYPE) && defined(MANGLE_RESULT_STRUCT_TAG)
+#    error "Canon-C: MANGLE_RESULT_STRUCT_TAG was overridden but " \
+           "MANGLE_RESULT_TYPE was not.  Override both or " \
+           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
+#  endif
+#endif /* CANON_RESULT_MANGLE_CHECK */
+
+
+/* ════════════════════════════════════════════════════════════════════════════
    TYPE NAMES
    ════════════════════════════════════════════════════════════════════════════ */
 
@@ -458,29 +490,8 @@
 
 
 /* ════════════════════════════════════════════════════════════════════════════
-   CONSISTENCY SELF-CHECK  (compile-time, opt-in)
-   ════════════════════════════════════════════════════════════════════════════
-   If CANON_RESULT_MANGLE_CHECK is defined before inclusion, the preprocessor
-   verifies that MANGLE_RESULT_TYPE and MANGLE_RESULT_STRUCT_TAG are either
-   both overridden or both left at their defaults.  Overriding one without
-   the other produces a compile error rather than a silent mismatch.
-
-   Usage:
-     #define CANON_RESULT_MANGLE_CHECK
-     #include "result_mangle.h"
+   END OF MANGLING MACROS
    ════════════════════════════════════════════════════════════════════════════ */
-#ifdef CANON_RESULT_MANGLE_CHECK
-#  if defined(MANGLE_RESULT_TYPE) && !defined(MANGLE_RESULT_STRUCT_TAG)
-#    error "Canon-C: MANGLE_RESULT_TYPE was overridden but " \
-           "MANGLE_RESULT_STRUCT_TAG was not.  Override both or " \
-           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
-#  endif
-#  if !defined(MANGLE_RESULT_TYPE) && defined(MANGLE_RESULT_STRUCT_TAG)
-#    error "Canon-C: MANGLE_RESULT_STRUCT_TAG was overridden but " \
-           "MANGLE_RESULT_TYPE was not.  Override both or " \
-           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
-#  endif
-#endif /* CANON_RESULT_MANGLE_CHECK */
 
 
 #endif /* CANON_SEMANTICS_RESULT_RESULT_MANGLE_H */
