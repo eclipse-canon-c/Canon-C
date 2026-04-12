@@ -162,35 +162,33 @@
 
 
 /* ════════════════════════════════════════════════════════════════════════════
-   CONSISTENCY SELF-CHECK  (compile-time, opt-in)
+   CONSISTENCY NOTE  (documentation only — no preprocessor logic)
    ────────────────────────────────────────────────────────────────────────────
-   If CANON_RESULT_MANGLE_CHECK is defined before inclusion, verify that
-   MANGLE_RESULT_TYPE and MANGLE_RESULT_STRUCT_TAG are either both overridden
-   or both left at their defaults. Overriding one without the other produces
-   a compile error rather than a silent mismatch.
+   MANGLE_RESULT_TYPE and MANGLE_RESULT_STRUCT_TAG are paired: the typedef
+   references the struct tag, so if you override one you MUST override the
+   other. Mismatching them does not silently go wrong — the compiler will
+   produce a struct-tag / typedef mismatch diagnostic — but that diagnostic
+   is harder to read than this note.
 
-   IMPORTANT: this check must run BEFORE the default #ifndef fallbacks below,
-   because after the fallbacks run both macros are always defined (either by
-   the user's override or by the fallback itself) and the check would be
-   unable to distinguish the two cases. Keep this block at the top of the
-   file, above every #ifndef MANGLE_RESULT_* / #define MANGLE_RESULT_* pair.
+   Earlier versions of this file attempted to enforce the pairing with an
+   opt-in compile-time check gated on CANON_RESULT_MANGLE_CHECK:
 
-   Usage:
-     #define CANON_RESULT_MANGLE_CHECK
-     #include "result_mangle.h"
+       #ifdef CANON_RESULT_MANGLE_CHECK
+       #  if defined(MANGLE_RESULT_TYPE) && !defined(MANGLE_RESULT_STRUCT_TAG)
+       #    error "..."
+       #  endif
+       ...
+
+   That approach was removed because static analyzers (cppcheck in
+   particular) explore every #ifdef branch independently and will trigger
+   the #error on configurations that cannot occur in real compilation,
+   producing cascading false positives on every CANON_RESULT(...) call
+   site. The compiler's native struct-tag diagnostic is good enough for
+   the narrow case the check was guarding against, so no runtime or
+   compile-time logic is needed here — only this documentation.
+
+   If you override MANGLE_RESULT_TYPE, also override MANGLE_RESULT_STRUCT_TAG.
    ════════════════════════════════════════════════════════════════════════════ */
-#ifdef CANON_RESULT_MANGLE_CHECK
-#  if defined(MANGLE_RESULT_TYPE) && !defined(MANGLE_RESULT_STRUCT_TAG)
-#    error "Canon-C: MANGLE_RESULT_TYPE was overridden but " \
-           "MANGLE_RESULT_STRUCT_TAG was not.  Override both or " \
-           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
-#  endif
-#  if !defined(MANGLE_RESULT_TYPE) && defined(MANGLE_RESULT_STRUCT_TAG)
-#    error "Canon-C: MANGLE_RESULT_STRUCT_TAG was overridden but " \
-           "MANGLE_RESULT_TYPE was not.  Override both or " \
-           "remove CANON_RESULT_MANGLE_CHECK to suppress this check."
-#  endif
-#endif /* CANON_RESULT_MANGLE_CHECK */
 
 
 /* ════════════════════════════════════════════════════════════════════════════
