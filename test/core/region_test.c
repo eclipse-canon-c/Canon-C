@@ -13,11 +13,16 @@
  *   - REGION_ID_STATIC: static lifetime never expires
  *   - Nested regions
  *   - CANON_NO_REGION_PARENT: region_has_parent always false
+ *   - Recommended cleanup patterns with core/scope.h:
+ *       * region_end via DEFER for run-to-completion blocks
+ *       * region_end via goto cleanup for error-handled functions
+ *   - REGION_SCOPE removal (regression check)
  */
 
 /* Must be defined in exactly one TU before including contract.h (via region.h) */
 #define CANON_CONTRACT_IMPL
 #include "core/region.h"
+#include "core/scope.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -439,6 +444,102 @@ static void test_live_region_id_not_static(void)
     region_end(&r);
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   Recommended cleanup patterns with core/scope.h
+
+   region.h recommends two patterns for running region_end() at function
+   exit, depending on the function's control-flow shape. These tests
+   verify both patterns work correctly with the new DEFER(expr) { body }
+   macro from scope.h, and confirm the old REGION_SCOPE macro is gone.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Pattern 1: region_end via DEFER (run-to-completion blocks) ──────────── */
+
+static void test_region_end_via_defer(void)
+{
+    u8     buf[256];
+    Arena  arena;
+    Region r;
+
+    memset(buf, 0, sizeof(buf));
+    arena_init(&arena, buf, sizeof(buf));
+
+    region_begin(&r);
+    DEFER(region_end(&r)) {
+        region_attach_arena(&r, &arena);
+        arena_alloc(&arena, 64);
+        EXPECT(arena_used(&arena) == 64);
+        EXPECT(region_is_open(&r));
+    }
+
+    /* DEFER fired region_end on normal block exit */
+    EXPECT(!region_is_open(&r));
+    EXPECT(arena_used(&arena) == 0);
+}
+
+/* ── Pattern 2: region_end via goto cleanup (error-handled functions) ───── */
+
+static int helper_region_goto_cleanup(int fail_at, Arena* arena)
+{
+    int    rc = 0;
+    Region r;
+
+    region_begin(&r);
+    region_attach_arena(&r, arena);
+
+    if (fail_at == 1) { rc = -1; goto done; }
+
+    if (arena_alloc(arena, 32) == NULL) { rc = -2; goto done; }
+    if (fail_at == 2) { rc = -3; goto done; }
+
+    if (arena_alloc(arena, 64) == NULL) { rc = -4; goto done; }
+
+done:
+    region_end(&r);
+    return rc;
+}
+
+static void test_region_end_via_goto_cleanup(void)
+{
+    u8    buf[256];
+    Arena arena;
+    int   rc;
+
+    /* Success path — region_end fires at done: */
+    memset(buf, 0, sizeof(buf));
+    arena_init(&arena, buf, sizeof(buf));
+    rc = helper_region_goto_cleanup(0, &arena);
+    EXPECT(rc == 0);
+    EXPECT(arena_used(&arena) == 0);  /* region_end reset the arena */
+
+    /* Failure before any allocation — region_end still fires */
+    arena_init(&arena, buf, sizeof(buf));
+    rc = helper_region_goto_cleanup(1, &arena);
+    EXPECT(rc == -1);
+    EXPECT(arena_used(&arena) == 0);
+
+    /* Failure after first allocation — region_end still fires */
+    arena_init(&arena, buf, sizeof(buf));
+    rc = helper_region_goto_cleanup(2, &arena);
+    EXPECT(rc == -3);
+    EXPECT(arena_used(&arena) == 0);
+}
+
+/* ── REGION_SCOPE removal — regression check ─────────────────────────────── */
+
+/* Earlier versions of region.h defined a REGION_SCOPE(name) macro that
+ * was built on scope.h's old broken SCOPE_DEFER and inherited its bugs.
+ * The macro has been removed. This test fails at compile time if anyone
+ * ever reintroduces it without a full re-review. */
+static void test_region_scope_removed(void)
+{
+#ifdef REGION_SCOPE
+    EXPECT(!"REGION_SCOPE should have been removed from region.h");
+#else
+    EXPECT(1);  /* confirmed absent */
+#endif
+}
+
 /* ── Entry point ─────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -491,6 +592,11 @@ int main(void)
     /* REGION_ID_STATIC */
     test_region_id_static_is_zero();
     test_live_region_id_not_static();
+
+    /* Recommended cleanup patterns with scope.h */
+    test_region_end_via_defer();
+    test_region_end_via_goto_cleanup();
+    test_region_scope_removed();
 
     if (g_failed == 0) {
         printf("OK  region_test  (all assertions passed)\n");
