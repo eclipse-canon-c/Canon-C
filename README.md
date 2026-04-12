@@ -618,7 +618,7 @@ immediately knows who owns what.
 
 ---
 
-### Arena — lifetime is explicit and controlled
+### Cleanup — pairing acquisition with release
 ```c
 /* WITHOUT Canon-C — allocations are scattered, lifetimes implicit */
 void process(void) {
@@ -659,15 +659,14 @@ Lifetime boundaries are visible at the site where they are declared.
 
 `DEFER` (from `core/scope.h`) handles run-to-completion blocks like
 this cleanly — the body runs straight through, the cleanup expression
-fires at the closing brace. For functions whose body has error-return
-paths *after* a resource has been acquired, use the `goto cleanup;`
-idiom shown in the next example instead. `DEFER` does not fire on
-`return`, `break`, or outward `goto`, so functions with error exits
-need a different shape to guarantee cleanup on every path.
+fires at the closing brace. But most real functions have error-return
+paths *after* a resource has been acquired, and `DEFER` does not fire
+on `return`, `break`, or outward `goto`. For those functions, the
+standard C99 `goto cleanup;` idiom is what Canon-C recommends — not
+as a library feature, but because it is already the right tool for
+that shape of function. Here is what it looks like paired with
+`require_msg` for the precondition check:
 
----
-
-### Error-handled cleanup — one exit, all resources released
 ```c
 /* WITHOUT Canon-C — cleanup scattered across every exit path */
 int load_calibration(const char* path) {
@@ -735,27 +734,18 @@ every exit path through a single `goto done`. Adding a new error path
 later means adding one line — the `goto done` automatically routes
 through the existing cleanup. Nothing to remember, nothing to forget.
 
-**`DEFER` for run-to-completion blocks — arena checkpoints, critical
-sections, lock guards, timing brackets, ISR state save/restore.** Cases
-where the body runs straight through without error-return paths inside
-it. `DEFER` is Canon-C's contribution, supplied by `core/scope.h` — a
-C99-portable macro that pairs cleanup with acquisition for the case
-plain C was missing a clean idiom for.
-
-**`goto cleanup;` for error-handled functions — any function where an
-error path can exit *after* a resource has been acquired.** This
-includes most I/O code, hardware state machines with rollback, and
-adapter functions wrapping external libraries. `goto cleanup;` is not
-a Canon-C feature — it is plain C99 and needs no header, no macro, no
-library support. Canon-C recommends it because it is already the right
-tool for that shape of function, proven at scale in the Linux kernel,
-glibc, and every major C codebase that handles errors carefully.
-
-The two are complementary: one supplied by Canon-C for the case the
-language was missing, one supplied by the language for the case Canon-C
-should not reinvent. A single function may use both — `goto cleanup;`
-for the outer error-handled structure, `DEFER` for a straight-line
-inner block such as a scratch arena checkpoint.
+**`DEFER` and `goto cleanup;` are complementary, not alternatives.**
+`DEFER` is Canon-C's contribution, supplied by `core/scope.h` — a
+C99-portable macro that pairs cleanup with acquisition for
+run-to-completion blocks where the body runs straight through without
+error-return paths. `goto cleanup;` is plain C99 and needs no header,
+no macro, no library support. Canon-C recommends it for error-handled
+functions because it is already the right tool for that shape, proven
+at scale in the Linux kernel, glibc, and every major C codebase that
+handles errors carefully. Canon-C did not invent it and does not
+reinvent it. A single function may use both — `goto cleanup;` for the
+outer error-handled structure, `DEFER` for a straight-line inner block
+such as a scratch arena checkpoint.
 
 **Contracts versus error propagation — two tools, two categories of
 failure.** Notice that the example above uses `require_msg(path != NULL, ...)`
@@ -769,12 +759,22 @@ panics to stop before damage spreads. Runtime failures are different:
 `fopen` returning NULL, allocation failing, a hardware register not
 responding, a checksum not matching. These are **not bugs** — they are
 real conditions a correct program must handle. For those, propagate
-the failure as a value through `Result` or `goto cleanup`, and let the
-caller decide what to do. Using `require_msg` for a recoverable runtime
-failure converts an error into a crash; using `goto cleanup` for a
-contract violation hides a bug behind an error code. The rule is
-simple: **if the failure means your code has a bug, use a contract.
-If the failure means reality didn't cooperate, propagate the error.**
+the failure to the caller as a value — most Canon-C functions do this
+with `Result<T, Error>` in the return type (shown in the next example),
+pairing it with `goto cleanup;` inside the function body when resources
+need to be released before the Result leaves. `Result` is how the
+failure *leaves* the function; `goto cleanup;` is how the function
+*tears down* its state before the Result leaves. The two roles are
+orthogonal — one is about call signatures, the other is about internal
+control flow — and a well-written function with both error paths and
+resources to release will usually use both together.
+
+Using `require_msg` for a recoverable runtime failure converts an
+error into a crash; using `Result` for a contract violation hides a
+bug behind an error value. The rule for picking between contracts and
+error propagation is simple: **if the failure means your code has a
+bug, use a contract. If the failure means reality didn't cooperate,
+propagate the error through `Result`.**
 
 ---
 
