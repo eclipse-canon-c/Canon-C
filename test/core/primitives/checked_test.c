@@ -17,6 +17,14 @@
  *   checked_add_isize / checked_sub_isize / checked_mul_isize
  *   checked_min  / checked_max     / checked_clamp
  *
+ * MC/DC coverage note
+ * ───────────────────────────────────────────────────────────────────────────
+ *   The CI coverage job compiles this file with -DCANON_CHECKED_FORCE_FALLBACK,
+ *   which forces checked.h to use its portable fallback branches instead of
+ *   __builtin_*_overflow. The fallback branches in checked_mul_isize contain
+ *   short-circuit conditions that need near-miss vs overflow pairs to reach
+ *   full MC/DC — see checked_mul_isize_quadrants_op below.
+ *
  * Portability note
  * ───────────────────────────────────────────────────────────────────────────
  *   No 0b binary literals (C23/GNU extension). Loop variables declared
@@ -295,6 +303,52 @@ TEST(checked_add_isize_op) {
 }
 
 /* =========================================================================
+ * checked_add_isize — MC/DC short-circuit coverage for fallback path
+ *
+ * The fallback in checked_add_isize has two short-circuit conditions:
+ *   if (a > 0 && b > 0 && b > (CANON_ISIZE_MAX - a)) return false;
+ *   if (a < 0 && b < 0 && b < (CANON_ISIZE_MIN - a)) return false;
+ *
+ * MC/DC requires each condition to independently affect the outcome.
+ * These tests target the "near-miss" case (all three true → overflow)
+ * versus "just fits" (third condition false → no overflow).
+ * ====================================================================== */
+
+TEST(checked_add_isize_mcdc) {
+    isize result = 0;
+
+    /* (+, +) short-circuit — first condition false */
+    EXPECT(checked_add_isize(0, CANON_ISIZE_MAX, &result) == true &&
+           result == CANON_ISIZE_MAX);
+
+    /* (+, +) short-circuit — second condition false */
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX, 0, &result) == true &&
+           result == CANON_ISIZE_MAX);
+
+    /* (+, +) — third condition false (exact fit, b == MAX - a) */
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX / 2, CANON_ISIZE_MAX - (CANON_ISIZE_MAX / 2), &result) == true &&
+           result == CANON_ISIZE_MAX);
+
+    /* (+, +) — all three true (overflow by 1) */
+    EXPECT(checked_add_isize(CANON_ISIZE_MAX / 2 + 1, CANON_ISIZE_MAX - (CANON_ISIZE_MAX / 2), &result) == false);
+
+    /* (-, -) short-circuit — first condition false (already covered, but pair for symmetry) */
+    EXPECT(checked_add_isize(0, CANON_ISIZE_MIN, &result) == true &&
+           result == CANON_ISIZE_MIN);
+
+    /* (-, -) short-circuit — second condition false */
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN, 0, &result) == true &&
+           result == CANON_ISIZE_MIN);
+
+    /* (-, -) — third condition false (exact fit, b == MIN - a) */
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN / 2, CANON_ISIZE_MIN - (CANON_ISIZE_MIN / 2), &result) == true &&
+           result == CANON_ISIZE_MIN);
+
+    /* (-, -) — all three true (underflow by 1) */
+    EXPECT(checked_add_isize(CANON_ISIZE_MIN / 2 - 1, CANON_ISIZE_MIN - (CANON_ISIZE_MIN / 2), &result) == false);
+}
+
+/* =========================================================================
  * checked_sub_isize
  * ====================================================================== */
 
@@ -323,6 +377,39 @@ TEST(checked_sub_isize_op) {
     EXPECT(checked_sub_isize(CANON_ISIZE_MAX, -1, &result) == false);
     EXPECT(checked_sub_isize(CANON_ISIZE_MIN, CANON_ISIZE_MAX, &result) == false);
     EXPECT(checked_sub_isize(CANON_ISIZE_MAX, CANON_ISIZE_MIN, &result) == false);
+}
+
+/* =========================================================================
+ * checked_sub_isize — MC/DC short-circuit coverage for fallback path
+ *
+ * The fallback in checked_sub_isize has two short-circuit conditions:
+ *   if (b > 0 && a < (CANON_ISIZE_MIN + b)) return false;
+ *   if (b < 0 && a > (CANON_ISIZE_MAX + b)) return false;
+ *
+ * Each needs near-miss vs overflow pairs to reach full MC/DC.
+ * ====================================================================== */
+
+TEST(checked_sub_isize_mcdc) {
+    isize result = 0;
+
+    /* b > 0 branch — first condition false (b == 0) */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN, 0, &result) == true &&
+           result == CANON_ISIZE_MIN);
+
+    /* b > 0 branch — second condition false (exact fit, a == MIN + b) */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN + 5, 5, &result) == true &&
+           result == CANON_ISIZE_MIN);
+
+    /* b > 0 branch — both true (underflow by 1) */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MIN + 4, 5, &result) == false);
+
+    /* b < 0 branch — first condition false (b == 0, same call as above) */
+    /* b < 0 branch — second condition false (exact fit, a == MAX + b) */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MAX - 5, -5, &result) == true &&
+           result == CANON_ISIZE_MAX);
+
+    /* b < 0 branch — both true (overflow by 1) */
+    EXPECT(checked_sub_isize(CANON_ISIZE_MAX - 4, -5, &result) == false);
 }
 
 /* =========================================================================
@@ -372,6 +459,90 @@ TEST(checked_mul_isize_op) {
     EXPECT(checked_mul_isize(-100, 200, &result)  == true && result == -20000);
     EXPECT(checked_mul_isize(100, -200, &result)  == true && result == -20000);
     EXPECT(checked_mul_isize(-100, -200, &result) == true && result == 20000);
+}
+
+/* =========================================================================
+ * checked_mul_isize — MC/DC four-quadrant coverage for fallback path
+ *
+ * The fallback in checked_mul_isize has four sign-quadrant checks:
+ *   if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;  (+,+)
+ *   if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;  (-,-)
+ *   if (a > 0 && b < 0 && b < (CANON_ISIZE_MIN / a)) return false;  (+,-)
+ *   if (a < 0 && b > 0 && a < (CANON_ISIZE_MIN / b)) return false;  (-,+)
+ *
+ * Each quadrant needs: first cond false, second cond false, third cond
+ * false (just fits), and all three true (overflow by 1). The existing
+ * tests cover (+,+) and (-,-) overflow via ISIZE_MAX*2 and ISIZE_MIN*MIN,
+ * but (+,-) and (-,+) near-miss pairs are missing.
+ *
+ * Also verifies the "just fits" cases where division-based check exactly
+ * allows the result — these are the boundary values for MC/DC.
+ * ====================================================================== */
+
+TEST(checked_mul_isize_quadrants) {
+    isize result = 0;
+    isize half_max = CANON_ISIZE_MAX / 2;
+    isize half_min = CANON_ISIZE_MIN / 2;
+
+    /* (+, +) — just fits: a == MAX/b */
+    EXPECT(checked_mul_isize(half_max, 2, &result) == true &&
+           result == half_max * 2);
+
+    /* (+, +) — one past: a == MAX/b + 1 */
+    EXPECT(checked_mul_isize(half_max + 2, 2, &result) == false);
+
+    /* (-, -) — just fits */
+    EXPECT(checked_mul_isize(half_min + 1, -2, &result) == true);
+
+    /* (-, -) — one past (|a| > MAX/|b|) */
+    EXPECT(checked_mul_isize(half_min, -3, &result) == false);
+
+    /* (+, -) — just fits: b == MIN/a */
+    EXPECT(checked_mul_isize(2, half_min, &result) == true &&
+           result == 2 * half_min);
+
+    /* (+, -) — one past: b < MIN/a */
+    EXPECT(checked_mul_isize(2, half_min - 1, &result) == false);
+
+    /* (-, +) — just fits: a == MIN/b */
+    EXPECT(checked_mul_isize(half_min, 2, &result) == true &&
+           result == half_min * 2);
+
+    /* (-, +) — one past: a < MIN/b */
+    EXPECT(checked_mul_isize(half_min - 1, 2, &result) == false);
+
+    /* Additional sanity: small magnitudes never overflow regardless of signs */
+    EXPECT(checked_mul_isize(3, -4, &result)  == true && result == -12);
+    EXPECT(checked_mul_isize(-3, 4, &result)  == true && result == -12);
+    EXPECT(checked_mul_isize(-3, -4, &result) == true && result == 12);
+    EXPECT(checked_mul_isize(3, 4, &result)   == true && result == 12);
+}
+
+/* =========================================================================
+ * checked_mul (usize) — MC/DC short-circuit for fallback path
+ *
+ * The fallback has: if (a == 0 || b == 0) { *result = 0; return true; }
+ * followed by the division-based overflow check. Need cases that
+ * exercise each side of the || independently and the division check.
+ * ====================================================================== */
+
+TEST(checked_mul_mcdc) {
+    usize result = 0;
+
+    /* First operand zero — short-circuits out */
+    EXPECT(checked_mul(0, 42, &result) == true && result == 0);
+
+    /* Second operand zero — first condition false, second true */
+    EXPECT(checked_mul(42, 0, &result) == true && result == 0);
+
+    /* Both non-zero, no overflow — reaches division check, passes */
+    EXPECT(checked_mul(2, 3, &result) == true && result == 6);
+
+    /* Both non-zero, exact boundary — MAX/2 * 2 == MAX-1 (even) or MAX (odd) */
+    EXPECT(checked_mul(CANON_USIZE_MAX / 2, 2, &result) == true);
+
+    /* Both non-zero, one past boundary — overflow detected by division */
+    EXPECT(checked_mul(CANON_USIZE_MAX / 2 + 1, 3, &result) == false);
 }
 
 /* =========================================================================
@@ -590,10 +761,14 @@ int main(void) {
 
     RUN(checked_mul_op);
     RUN(checked_mul_typed_op);
+    RUN(checked_mul_mcdc);
 
     RUN(checked_add_isize_op);
+    RUN(checked_add_isize_mcdc);
     RUN(checked_sub_isize_op);
+    RUN(checked_sub_isize_mcdc);
     RUN(checked_mul_isize_op);
+    RUN(checked_mul_isize_quadrants);
 
     RUN(checked_min_op);
     RUN(checked_max_op);
