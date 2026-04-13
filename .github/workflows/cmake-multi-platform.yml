@@ -449,6 +449,7 @@ jobs:
           frama-c -wp -wp-rte \
             -wp-prover alt-ergo,z3 \
             -wp-timeout 120 \
+            -wp-split \
             -cpp-extra-args=" \
               -I core/primitives \
               -I core \
