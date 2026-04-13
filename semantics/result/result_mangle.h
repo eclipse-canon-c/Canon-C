@@ -1,6 +1,6 @@
 /* semantics/result/result_mangle.h */
-#ifndef CANON_SEMANTICS_RESULT_RESULT_MANGLE_H
-#define CANON_SEMANTICS_RESULT_RESULT_MANGLE_H
+#ifndef CANON_SEMANTICS_RESULT_MANGLE_H
+#define CANON_SEMANTICS_RESULT_MANGLE_H
 
 /**
  * @file result_mangle.h
@@ -492,4 +492,4 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 
-#endif /* CANON_SEMANTICS_RESULT_RESULT_MANGLE_H */
+#endif /* CANON_SEMANTICS_RESULT_MANGLE_H */
