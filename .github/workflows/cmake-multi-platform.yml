@@ -354,13 +354,15 @@ jobs:
   #    bits.h, ptr.h, compare.h and the core/ layer are annotated, add
   #    them to the file list in the WP and Eva steps below.
   #
-  #    Installation: uses the 'frama-c' apt package from Ubuntu Noble
-  #    (Frama-C 27.1 Cobalt) together with alt-ergo and why3. Install
-  #    completes in ~2 minutes. The opam-based alternative rebuilds the
-  #    OCaml compiler from source and takes 30-60 minutes per run,
-  #    which is unnecessary — Frama-C 27.1 supports every feature
-  #    Canon-C uses (ACSL 1.x, WP contracts with behaviors, Eva, and
-  #    the __FRAMAC__ preprocessor hook).
+  #    Installation: opam with aggressive caching.
+  #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
+  #    repositories (it was available through 22.04 Jammy). The only
+  #    reliable install path on current runners is opam, which builds
+  #    OCaml and Frama-C from source. Without caching, this takes
+  #    30-60 minutes every run. With the cache below, the first run
+  #    pays that cost once and every subsequent run restores a ready
+  #    switch in ~30 seconds. The cache key includes OCAML_VERSION
+  #    and FRAMAC_VERSION so bumping either forces a clean rebuild.
   #
   #    Two-phase analysis:
   #
@@ -392,18 +394,52 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
+    env:
+      OCAML_VERSION: "4.14.2"
+      FRAMAC_VERSION: "29.0"
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Frama-C
+      - name: Install system dependencies for opam and Frama-C
         run: |
           sudo apt-get update
-          sudo apt-get install -y frama-c alt-ergo why3
+          sudo apt-get install -y \
+            opam \
+            m4 \
+            pkg-config \
+            libgmp-dev \
+            zlib1g-dev \
+            autoconf \
+            autotools-dev
+
+      - name: Cache opam switch
+        id: cache-opam
+        uses: actions/cache@v4
+        with:
+          path: ~/.opam
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-v1
+          restore-keys: |
+            opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-
+
+      - name: Initialise opam (cache miss only)
+        if: steps.cache-opam.outputs.cache-hit != 'true'
+        run: |
+          opam init -y --disable-sandboxing --bare
+          opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
+          eval $(opam env --switch=frama-c)
+          opam install -y frama-c.${FRAMAC_VERSION} alt-ergo why3
+
+      - name: Activate opam environment
+        run: |
+          eval $(opam env --switch=frama-c)
+          echo "$(opam var --switch=frama-c bin)" >> $GITHUB_PATH
           frama-c -version
           alt-ergo --version
 
       - name: "WP: core/primitives/checked.h"
         run: |
+          eval $(opam env --switch=frama-c)
           frama-c -wp -wp-rte \
             -wp-prover alt-ergo \
             -wp-timeout 60 \
@@ -418,6 +454,7 @@ jobs:
 
       - name: "Eva: core/primitives/checked.h"
         run: |
+          eval $(opam env --switch=frama-c)
           frama-c -eva \
             -eva-precision 3 \
             -warn-unsigned-overflow \
@@ -434,6 +471,7 @@ jobs:
       #
       # - name: "WP: core/primitives/bits.h"
       #   run: |
+      #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo \
       #       -wp-timeout 60 \
@@ -448,6 +486,7 @@ jobs:
       #
       # - name: "WP: core/primitives/ptr.h"
       #   run: |
+      #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo \
       #       -wp-timeout 60 \
@@ -462,6 +501,7 @@ jobs:
       #
       # - name: "WP: core/primitives/compare.h"
       #   run: |
+      #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo \
       #       -wp-timeout 60 \
