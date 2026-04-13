@@ -14,8 +14,12 @@ on:
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
-#                     DISABLED until ACSL annotations are added to headers
+#                     Currently scoped to core/primitives/checked.h only.
+#                     Additional headers will be added as they are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
+#                     Uses -DCANON_CHECKED_FORCE_FALLBACK so the fallback
+#                     paths in checked.h are measurable (builtins expand to
+#                     single instructions with no branches for gcov to see).
 #   misra           — Linux only, MISRA C:2012 advisory analysis
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
@@ -372,10 +376,18 @@ jobs:
   # -------------------------------------------------------------------------
   # 5. Formal verification — Frama-C (Linux only)
   #
-  #    DISABLED — uncomment when ACSL annotations are added to headers.
-  #    Frama-C has nothing to prove without /*@ ... */ contracts.
+  #    Scope: core/primitives/checked.h ONLY.
   #
-  #    Two-phase analysis on every annotated header:
+  #    checked.h is the first Canon-C header to receive full ACSL contracts
+  #    (every unsigned function plus checked_add_isize / checked_sub_isize).
+  #    checked_mul_isize currently carries only \valid(result) — its four
+  #    sign-quadrant division check does not map cleanly to a small number
+  #    of behaviors and will be annotated in a later pass.
+  #
+  #    When bits.h, ptr.h, compare.h and the core/ layer are annotated,
+  #    add them to the file list in both steps below.
+  #
+  #    Two-phase analysis:
   #
   #    Phase 1 — WP (Weakest Precondition)
   #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
@@ -392,14 +404,12 @@ jobs:
   #    Together: WP proves contracts are correct, Eva proves nothing
   #    was missed. Both must pass.
   #
-  #    Annotations live in headers as /*@ ... */ comments — invisible
-  #    to GCC/Clang/MSVC. Zero impact on existing builds and tests.
-  #
-  #    Follows Canon-C's dependency rule bottom-up:
-  #    core/primitives -> core -> semantics -> data -> algo -> util
+  #    The __FRAMAC__ macro is automatically defined by Frama-C's
+  #    preprocessor. checked.h uses this to force the fallback path
+  #    (WP has no semantics for __builtin_*_overflow).
   #
   #    Certification evidence produced:
-  #      - Absence of runtime errors (all standards)
+  #      - Absence of runtime errors in checked.h (all standards)
   #      - Contract verification (requirement traceability)
   #      - Value range correctness (IEC 62304, EN 50128)
   #      - Formal proof artifacts (DO-178C objective substitution)
@@ -408,115 +418,105 @@ jobs:
   #      framac/frama-c Docker Hub images use version tags (e.g. 29.0),
   #      not "latest". Install via opam instead for reliability.
   # -------------------------------------------------------------------------
-  # frama-c:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Install Frama-C
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install -y opam gcc
-  #         opam init -y --disable-sandboxing --bare
-  #         opam switch create frama-c ocaml-base-compiler.4.14.2
-  #         eval $(opam env)
-  #         opam install -y frama-c
-  #         echo "$(opam var bin)" >> $GITHUB_PATH
-  #
-  #     # -- core/primitives — WP (contract proofs + RTE absence) ---------
-  #     - name: "WP: core/primitives"
-  #       run: |
-  #         eval $(opam env --switch=frama-c)
-  #         frama-c -wp -wp-rte \
-  #           -wp-prover alt-ergo \
-  #           -wp-timeout 30 \
-  #           -warn-unsigned-overflow \
-  #           -cpp-extra-args=" \
-  #             -I core/primitives \
-  #             -I core \
-  #             -I . \
-  #             -DCANON_NO_REQUIRE \
-  #             -DNDEBUG \
-  #             -D__GNUC__=0 \
-  #             -UCANON_BITS_MSVC" \
-  #           core/primitives/bits.h \
-  #           core/primitives/checked.h \
-  #           core/primitives/ptr.h \
-  #           core/primitives/compare.h
-  #
-  #     # -- core/primitives — Eva (value range analysis) -----------------
-  #     - name: "Eva: core/primitives"
-  #       run: |
-  #         eval $(opam env --switch=frama-c)
-  #         frama-c -eva \
-  #           -eva-precision 3 \
-  #           -warn-unsigned-overflow \
-  #           -cpp-extra-args=" \
-  #             -I core/primitives \
-  #             -I core \
-  #             -I . \
-  #             -DCANON_NO_REQUIRE \
-  #             -DNDEBUG \
-  #             -D__GNUC__=0 \
-  #             -UCANON_BITS_MSVC" \
-  #           core/primitives/bits.h \
-  #           core/primitives/checked.h \
-  #           core/primitives/ptr.h \
-  #           core/primitives/compare.h
-  #
-  #     # -- core — WP ----------------------------------------------------
-  #     # Uncomment when core/ headers are annotated with ACSL contracts
-  #     #
-  #     # - name: "WP: core"
-  #     #   run: |
-  #     #     eval $(opam env --switch=frama-c)
-  #     #     frama-c -wp -wp-rte \
-  #     #       -wp-prover alt-ergo \
-  #     #       -wp-timeout 30 \
-  #     #       -warn-unsigned-overflow \
-  #     #       -cpp-extra-args=" \
-  #     #         -I core/primitives \
-  #     #         -I core \
-  #     #         -I . \
-  #     #         -DCANON_NO_REQUIRE \
-  #     #         -DNDEBUG \
-  #     #         -D__GNUC__=0 \
-  #     #         -UCANON_BITS_MSVC" \
-  #     #       core/arena.h \
-  #     #       core/slice.h \
-  #     #       core/memory.h \
-  #     #       core/pool.h \
-  #     #       core/region.h
-  #     #
-  #     # - name: "Eva: core"
-  #     #   run: |
-  #     #     eval $(opam env --switch=frama-c)
-  #     #     frama-c -eva \
-  #     #       -eva-precision 3 \
-  #     #       -warn-unsigned-overflow \
-  #     #       -cpp-extra-args=" \
-  #     #         -I core/primitives \
-  #     #         -I core \
-  #     #         -I . \
-  #     #         -DCANON_NO_REQUIRE \
-  #     #         -DNDEBUG \
-  #     #         -D__GNUC__=0 \
-  #     #         -UCANON_BITS_MSVC" \
-  #     #       core/arena.h \
-  #     #       core/slice.h \
-  #     #       core/memory.h \
-  #     #       core/pool.h \
-  #     #       core/region.h
-  #
-  #     # -- semantics, data, algo, util — add as annotated ---------------
-  #     # Follow the same pattern: uncomment WP + Eva steps per layer
-  #     # as ACSL annotations are written.
-  #     #
-  #     # For macro-instantiated modules (vec, deque, option, result, algo):
-  #     # create verify/ directory with driver files and point frama-c at
-  #     # those instead of the headers directly.
+  frama-c:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Frama-C
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y opam gcc
+          opam init -y --disable-sandboxing --bare
+          opam switch create frama-c ocaml-base-compiler.4.14.2
+          eval $(opam env)
+          opam install -y frama-c
+          echo "$(opam var bin)" >> $GITHUB_PATH
+
+      - name: "WP: core/primitives/checked.h"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo \
+            -wp-timeout 60 \
+            -warn-unsigned-overflow \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/primitives/checked.h
+
+      - name: "Eva: core/primitives/checked.h"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -eva \
+            -eva-precision 3 \
+            -warn-unsigned-overflow \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/primitives/checked.h
+
+      # -- Next headers to annotate (bottom-up within core/primitives) --
+      # Uncomment each block below as ACSL annotations are added.
+      #
+      # - name: "WP: core/primitives/bits.h"
+      #   run: |
+      #     eval $(opam env --switch=frama-c)
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 60 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG" \
+      #       core/primitives/bits.h
+      #
+      # - name: "WP: core/primitives/ptr.h"
+      #   run: |
+      #     eval $(opam env --switch=frama-c)
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 60 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG" \
+      #       core/primitives/ptr.h
+      #
+      # - name: "WP: core/primitives/compare.h"
+      #   run: |
+      #     eval $(opam env --switch=frama-c)
+      #     frama-c -wp -wp-rte \
+      #       -wp-prover alt-ergo \
+      #       -wp-timeout 60 \
+      #       -warn-unsigned-overflow \
+      #       -cpp-extra-args=" \
+      #         -I core/primitives \
+      #         -I core \
+      #         -I . \
+      #         -DCANON_NO_REQUIRE \
+      #         -DNDEBUG" \
+      #       core/primitives/compare.h
+      #
+      # -- core layer ----------------------------------------------------
+      # Uncomment when core/ headers are annotated with ACSL contracts.
+      # For macro-instantiated modules (vec, deque, option, result, algo):
+      # create verify/ driver files and point frama-c at those instead
+      # of the headers directly.
 
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
@@ -529,6 +529,13 @@ jobs:
   #    MC/DC requires that every Boolean sub-expression independently
   #    affects the decision outcome. For Canon-C, most conditions are
   #    simple single-condition decisions, so MC/DC ≈ branch coverage.
+  #
+  #    -DCANON_CHECKED_FORCE_FALLBACK is passed so the fallback paths
+  #    in checked.h are exercised. Without this flag, GCC expands
+  #    __builtin_*_overflow to single instructions with no branches,
+  #    the #else fallback blocks become dead code, and gcov reports
+  #    0% MC/DC on them. Forcing the fallback makes coverage measure
+  #    the same code Frama-C is proving — the two tracks stay consistent.
   #
   #    The HTML report artifact is uploadable certification evidence.
   #
@@ -555,7 +562,7 @@ jobs:
           cmake -B build \
             -DCMAKE_C_COMPILER=gcc-14 \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage" \
+            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK" \
             -DENABLE_SANITIZERS=OFF \
             -S "${{ github.workspace }}"
 
