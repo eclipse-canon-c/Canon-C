@@ -5,7 +5,7 @@
  * Covers:
  *   - borrowed_ptr: from, null, get, is_valid, eq
  *   - borrowed_str: from, from_cstr, empty, get, is_valid, len, eq, slice
- *   - borrowed_bytes: from, from_cbytes, empty, get, len, is_valid, slice
+ *   - borrowed_bytes: from, from_cbytes, empty, get, len, is_valid, eq, slice
  *   - DEFINE_BORROWED_SLICE(int): from, empty, get, len, is_valid, at, slice,
  *     as_bytes (including overflow guard path)
  *   - NULL-safety: is_valid, len, at, slice, as_bytes — functions that accept
@@ -14,6 +14,8 @@
  *     NULL in tests — that is the correct behavior to verify.
  *   - Source tag round-trip (stored, not dereferenced)
  *   - borrowed_bytes_slice clamping and edge cases
+ *   - borrowed_bytes_eq: content equality, length mismatch, empty regions,
+ *     same-pointer short-circuit, partial overlap, source tag ignored
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random (start, end, len) triples into borrowed_bytes_slice and
@@ -350,6 +352,90 @@ static void test_bytes_is_valid_null_b(void)
     EXPECT(!borrowed_bytes_is_valid(NULL));
 }
 
+/* ── borrowed_bytes_eq ────────────────────────────────────────────────────── */
+
+static void test_bytes_eq_same_content(void)
+{
+    u8             buf_a[4] = {0x01, 0x02, 0x03, 0x04};
+    u8             buf_b[4] = {0x01, 0x02, 0x03, 0x04};
+    borrowed_bytes a = borrowed_bytes_from(buf_a, 4, buf_a);
+    borrowed_bytes b = borrowed_bytes_from(buf_b, 4, (const void *)0x1); /* diff source */
+    EXPECT(borrowed_bytes_eq(a, b)); /* source ignored */
+}
+
+static void test_bytes_eq_different_content(void)
+{
+    u8             buf_a[4] = {0x01, 0x02, 0x03, 0x04};
+    u8             buf_b[4] = {0x01, 0x02, 0x03, 0xFF};
+    borrowed_bytes a = borrowed_bytes_from(buf_a, 4, NULL);
+    borrowed_bytes b = borrowed_bytes_from(buf_b, 4, NULL);
+    EXPECT(!borrowed_bytes_eq(a, b));
+}
+
+static void test_bytes_eq_different_lengths(void)
+{
+    u8             buf[4] = {0x01, 0x02, 0x03, 0x04};
+    borrowed_bytes a = borrowed_bytes_from(buf, 3, NULL);
+    borrowed_bytes b = borrowed_bytes_from(buf, 4, NULL);
+    EXPECT(!borrowed_bytes_eq(a, b));
+}
+
+static void test_bytes_eq_both_empty(void)
+{
+    borrowed_bytes a = borrowed_bytes_empty();
+    borrowed_bytes b = borrowed_bytes_empty();
+    EXPECT(borrowed_bytes_eq(a, b)); /* vacuously equal */
+}
+
+static void test_bytes_eq_zero_length_different_ptrs(void)
+{
+    /* Two zero-length views with different (non-NULL) ptrs must be equal —
+     * zero-length comparison is vacuously true regardless of ptr value.    */
+    u8             buf_a[1] = {0};
+    u8             buf_b[1] = {0};
+    borrowed_bytes a = borrowed_bytes_from(buf_a, 0, NULL);
+    borrowed_bytes b = borrowed_bytes_from(buf_b, 0, NULL);
+    EXPECT(borrowed_bytes_eq(a, b));
+}
+
+static void test_bytes_eq_same_ptr_same_len(void)
+{
+    /* Same pointer — short-circuit path, no memcmp call. */
+    u8             buf[4] = {0xAA, 0xBB, 0xCC, 0xDD};
+    borrowed_bytes a = borrowed_bytes_from(buf, 4, NULL);
+    borrowed_bytes b = borrowed_bytes_from(buf, 4, NULL);
+    EXPECT(borrowed_bytes_eq(a, b));
+}
+
+static void test_bytes_eq_partial_overlap(void)
+{
+    /* buf[0..2) vs buf[1..3): same length, overlapping but different content */
+    u8             buf[4]  = {0x01, 0x02, 0x03, 0x04};
+    borrowed_bytes a = borrowed_bytes_from(buf,     2, NULL);
+    borrowed_bytes b = borrowed_bytes_from(buf + 1, 2, NULL);
+    EXPECT(!borrowed_bytes_eq(a, b));
+}
+
+static void test_bytes_eq_single_byte_match(void)
+{
+    u8             x = 0xAB;
+    u8             y = 0xAB;
+    borrowed_bytes a = borrowed_bytes_from(&x, 1, NULL);
+    borrowed_bytes b = borrowed_bytes_from(&y, 1, NULL);
+    EXPECT(borrowed_bytes_eq(a, b));
+}
+
+static void test_bytes_eq_single_byte_mismatch(void)
+{
+    u8             x = 0xAB;
+    u8             y = 0xAC;
+    borrowed_bytes a = borrowed_bytes_from(&x, 1, NULL);
+    borrowed_bytes b = borrowed_bytes_from(&y, 1, NULL);
+    EXPECT(!borrowed_bytes_eq(a, b));
+}
+
+/* ── borrowed_bytes_slice ─────────────────────────────────────────────────── */
+
 static void test_bytes_slice_middle(void)
 {
     u8             buf[8] = {0, 1, 2, 3, 4, 5, 6, 7};
@@ -624,6 +710,19 @@ int main(void)
     test_bytes_is_valid_non_null();
     test_bytes_is_valid_empty();
     test_bytes_is_valid_null_b();
+
+    /* borrowed_bytes_eq */
+    test_bytes_eq_same_content();
+    test_bytes_eq_different_content();
+    test_bytes_eq_different_lengths();
+    test_bytes_eq_both_empty();
+    test_bytes_eq_zero_length_different_ptrs();
+    test_bytes_eq_same_ptr_same_len();
+    test_bytes_eq_partial_overlap();
+    test_bytes_eq_single_byte_match();
+    test_bytes_eq_single_byte_mismatch();
+
+    /* borrowed_bytes_slice */
     test_bytes_slice_middle();
     test_bytes_slice_full_range();
     test_bytes_slice_clamps_end();
