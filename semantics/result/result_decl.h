@@ -1,6 +1,6 @@
 // semantics/result/result_decl.h
-#ifndef CANON_RESULT_DECL_H
-#define CANON_RESULT_DECL_H
+#ifndef CANON_SEMANTICS_RESULT_DECL_H
+#define CANON_SEMANTICS_RESULT_DECL_H
 
 /*
  * result_decl.h only needs name-mangling macros at declaration time.
@@ -16,7 +16,7 @@
  */
 #include <stdbool.h>
 
-#ifndef CANON_RESULT_MANGLE_H
+#ifndef CANON_SEMANTICS_RESULT_MANGLE_H
 #  include "result_mangle.h"
 #endif
 
@@ -69,19 +69,19 @@
  *   r.val.ok   r.val.err
  *
  * If your toolchain supports C11 or accepts anonymous unions as an extension,
- * define CANON_RESULT_ANON_UNION before including this header to opt in:
+ * define CANON_SEMANTICS_RESULT_ANON_UNION before including this header to opt in:
  *   r.ok   r.err
  *
- * CANON_RESULT_ANON_UNION — layout alignment requirement:
+ * CANON_SEMANTICS_RESULT_ANON_UNION — layout alignment requirement:
  * ────────────────────────────────────────────────────────────────────────────
  * result_decl.h (DECLARE_RESULT_STRUCT) and result_impl.h (IMPL_RESULT_STRUCT,
- * used by DEFINE_RESULT_STRUCT) both branch on CANON_RESULT_ANON_UNION to
+ * used by DEFINE_RESULT_STRUCT) both branch on CANON_SEMANTICS_RESULT_ANON_UNION to
  * select their union layout. Both files must be compiled with the same setting
  * of this flag in every translation unit that uses a given Result type pair,
  * or the struct layouts will differ between the declaration and the definition
  * — a silent ABI break.
  *
- * The safest approach is to set (or not set) CANON_RESULT_ANON_UNION in a
+ * The safest approach is to set (or not set) CANON_SEMANTICS_RESULT_ANON_UNION in a
  * project-wide prefix header rather than per-file, so that all translation
  * units always agree.
  *
@@ -130,23 +130,23 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*
- * CANON_RESULT_UNION_BODY_ — selects named vs anonymous union layout.
+ * CANON_SEMANTICS_RESULT_UNION_BODY_ — selects named vs anonymous union layout.
  *
  * This macro mirrors IMPL_RESULT_UNION_ in result_impl.h. Both must select
  * the same layout, which they do because both branch on the same flag
- * (CANON_RESULT_ANON_UNION). See the "layout alignment requirement" note in
+ * (CANON_SEMANTICS_RESULT_ANON_UNION). See the "layout alignment requirement" note in
  * the file-level documentation above.
  *
- * When CANON_RESULT_ANON_UNION is defined:
+ * When CANON_SEMANTICS_RESULT_ANON_UNION is defined:
  *   union { _t ok; _e err; };         — anonymous, access as r.ok / r.err
  * When absent (default):
  *   union { _t ok; _e err; } val;     — named,     access as r.val.ok / r.val.err
  */
-#ifdef CANON_RESULT_ANON_UNION
-#  define CANON_RESULT_UNION_BODY_(_t, _e) \
+#ifdef CANON_SEMANTICS_RESULT_ANON_UNION
+#  define CANON_SEMANTICS_RESULT_UNION_BODY_(_t, _e) \
        union { _t ok; _e err; };
 #else
-#  define CANON_RESULT_UNION_BODY_(_t, _e) \
+#  define CANON_SEMANTICS_RESULT_UNION_BODY_(_t, _e) \
        union { _t ok; _e err; } val;
 #endif
 
@@ -198,7 +198,7 @@
  * @brief Declare the Result<T, E> struct layout
  *
  * Emits the complete struct definition. The union member is named (.val)
- * in strict C99 mode, or anonymous when CANON_RESULT_ANON_UNION is defined.
+ * in strict C99 mode, or anonymous when CANON_SEMANTICS_RESULT_ANON_UNION is defined.
  *
  * Must not be emitted more than once per (T, E) pair in the same translation
  * unit. DECLARE_RESULT_ALL calls this; the corresponding .c file must use
@@ -216,7 +216,7 @@
  *   //       union { int ok; error err; } val;
  *   //   };
  *
- * Example (with CANON_RESULT_ANON_UNION, C11/extension):
+ * Example (with CANON_SEMANTICS_RESULT_ANON_UNION, C11/extension):
  *   // Emits:
  *   //   struct result_int_error_s {
  *   //       bool is_ok;
@@ -229,7 +229,7 @@
 #define DECLARE_RESULT_STRUCT(_t, _e) \
     struct MANGLE_RESULT_STRUCT_TAG(_t, _e) { \
         bool is_ok; \
-        CANON_RESULT_UNION_BODY_(_t, _e) \
+        CANON_SEMANTICS_RESULT_UNION_BODY_(_t, _e) \
     };
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -677,12 +677,12 @@ DECLARE_RESULT_ALL(extern, voidptr, int)
 
 // Only if your compiler supports anonymous unions (C11 or documented extension).
 // Set this flag in a project-wide prefix header so all TUs agree on the layout.
-#define CANON_RESULT_ANON_UNION
+#define CANON_SEMANTICS_RESULT_ANON_UNION
 #include "result_decl.h"
 typedef enum { ERR_NONE } error;
 DECLARE_RESULT_ALL(extern, int, error)
 // Now r.ok and r.err work directly (no r.val.ok) — but ONLY if result_impl.h
-// was also compiled with CANON_RESULT_ANON_UNION set in the same TU.
+// was also compiled with CANON_SEMANTICS_RESULT_ANON_UNION set in the same TU.
 */
 
-#endif /* CANON_RESULT_DECL_H */
+#endif /* CANON_SEMANTICS_RESULT_DECL_H */
