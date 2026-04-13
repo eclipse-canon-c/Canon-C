@@ -31,6 +31,15 @@
  * - Performance: Compiler builtins compile to single instructions when available
  * - Portability: Fallback implementations work everywhere
  *
+ * Formal verification:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Every function in this header carries an ACSL contract suitable for
+ * Frama-C WP. Contracts specify behaviors (`no_overflow` / `overflow`)
+ * that are complete and disjoint, enabling `-wp-rte` to prove absence
+ * of runtime errors in the fallback path. When Frama-C is running,
+ * `__FRAMAC__` is defined automatically and the fallback path is forced
+ * (builtins cannot be modeled by WP).
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - All operations: O(1) — constant time arithmetic and bitwise operations
@@ -75,15 +84,26 @@
 #define CANON_CORE_PRIMITIVES_CHECKED_H
 
 #include "types.h"
-#include "limits.h"    /* CANON_ISIZE_MAX, CANON_ISIZE_MIN — needed by signed fallbacks */
+#include "limits.h"    /* CANON_ISIZE_MAX, CANON_ISIZE_MIN, CANON_USIZE_MAX */
 
 /* ============================================================================
  * Compiler Builtin Detection
+ *
+ * Frama-C cannot model __builtin_add_overflow and friends — WP has no
+ * semantics for them. When Frama-C is running (__FRAMAC__ is defined
+ * automatically), force the fallback path so every function has real C
+ * code to prove. This also applies when a downstream build explicitly
+ * wants to verify or measure the fallback path via -DCANON_CHECKED_FORCE_FALLBACK.
  * ========================================================================= */
 
 #if defined(__GNUC__) || defined(__clang__)
     #define CANON_HAS_BUILTIN_OVERFLOW 1
 #else
+    #define CANON_HAS_BUILTIN_OVERFLOW 0
+#endif
+
+#if defined(__FRAMAC__) || defined(CANON_CHECKED_FORCE_FALLBACK)
+    #undef  CANON_HAS_BUILTIN_OVERFLOW
     #define CANON_HAS_BUILTIN_OVERFLOW 0
 #endif
 
@@ -94,6 +114,9 @@
  * caller passes a NULL output pointer. In release builds it compiles away
  * completely. Uses contract.h's require_msg when available; falls back to
  * a plain assert so the header stays self-contained.
+ *
+ * Under Frama-C, the ACSL `requires \valid(result)` clause makes runtime
+ * checks unnecessary — WP proves the precondition statically.
  * ========================================================================= */
 
 #if defined(CANON_CONTRACT_H)          /* contract.h already included */
@@ -141,6 +164,19 @@
  *
  * @sa checked_sub(), checked_mul()
  */
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes a <= CANON_USIZE_MAX - b;
+        ensures \result == \true;
+        ensures *result == a + b;
+    behavior overflow:
+        assumes a >  CANON_USIZE_MAX - b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_add(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -151,6 +187,19 @@ static inline bool checked_add(usize a, usize b, usize* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes (integer)a + (integer)b <= 0xFF;
+        ensures \result == \true;
+        ensures *result == a + b;
+    behavior overflow:
+        assumes (integer)a + (integer)b > 0xFF;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_add_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -162,6 +211,19 @@ static inline bool checked_add_u8(u8 a, u8 b, u8* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes (integer)a + (integer)b <= 0xFFFF;
+        ensures \result == \true;
+        ensures *result == a + b;
+    behavior overflow:
+        assumes (integer)a + (integer)b > 0xFFFF;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_add_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -173,6 +235,19 @@ static inline bool checked_add_u16(u16 a, u16 b, u16* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes (integer)a + (integer)b <= 0xFFFFFFFF;
+        ensures \result == \true;
+        ensures *result == a + b;
+    behavior overflow:
+        assumes (integer)a + (integer)b > 0xFFFFFFFF;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_add_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -184,6 +259,19 @@ static inline bool checked_add_u32(u32 a, u32 b, u32* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes a <= 0xFFFFFFFFFFFFFFFF - b;
+        ensures \result == \true;
+        ensures *result == a + b;
+    behavior overflow:
+        assumes a >  0xFFFFFFFFFFFFFFFF - b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -217,6 +305,19 @@ static inline bool checked_add_u64(u64 a, u64 b, u64* result) {
  * }
  * ```
  */
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_underflow:
+        assumes a >= b;
+        ensures \result == \true;
+        ensures *result == a - b;
+    behavior underflow:
+        assumes a <  b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_sub(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -227,6 +328,19 @@ static inline bool checked_sub(usize a, usize b, usize* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_underflow:
+        assumes a >= b;
+        ensures \result == \true;
+        ensures *result == a - b;
+    behavior underflow:
+        assumes a <  b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_sub_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -237,6 +351,19 @@ static inline bool checked_sub_u8(u8 a, u8 b, u8* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_underflow:
+        assumes a >= b;
+        ensures \result == \true;
+        ensures *result == a - b;
+    behavior underflow:
+        assumes a <  b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_sub_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -247,6 +374,19 @@ static inline bool checked_sub_u16(u16 a, u16 b, u16* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_underflow:
+        assumes a >= b;
+        ensures \result == \true;
+        ensures *result == a - b;
+    behavior underflow:
+        assumes a <  b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_sub_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -257,6 +397,19 @@ static inline bool checked_sub_u32(u32 a, u32 b, u32* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_underflow:
+        assumes a >= b;
+        ensures \result == \true;
+        ensures *result == a - b;
+    behavior underflow:
+        assumes a <  b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_sub_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -303,6 +456,25 @@ static inline bool checked_sub_u64(u64 a, u64 b, u64* result) {
  *
  * @sa checked_add(), checked_sub()
  */
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior zero:
+        assumes a == 0 || b == 0;
+        ensures \result == \true;
+        ensures *result == 0;
+    behavior no_overflow:
+        assumes a != 0 && b != 0;
+        assumes a <= CANON_USIZE_MAX / b;
+        ensures \result == \true;
+        ensures *result == a * b;
+    behavior overflow:
+        assumes a != 0 && b != 0;
+        assumes a >  CANON_USIZE_MAX / b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_mul(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -317,6 +489,19 @@ static inline bool checked_mul(usize a, usize b, usize* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes (integer)a * (integer)b <= 0xFF;
+        ensures \result == \true;
+        ensures *result == a * b;
+    behavior overflow:
+        assumes (integer)a * (integer)b > 0xFF;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_mul_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -328,6 +513,19 @@ static inline bool checked_mul_u8(u8 a, u8 b, u8* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes (integer)a * (integer)b <= 0xFFFF;
+        ensures \result == \true;
+        ensures *result == a * b;
+    behavior overflow:
+        assumes (integer)a * (integer)b > 0xFFFF;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_mul_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -339,6 +537,19 @@ static inline bool checked_mul_u16(u16 a, u16 b, u16* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior no_overflow:
+        assumes (integer)a * (integer)b <= 0xFFFFFFFF;
+        ensures \result == \true;
+        ensures *result == a * b;
+    behavior overflow:
+        assumes (integer)a * (integer)b > 0xFFFFFFFF;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_mul_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -350,6 +561,25 @@ static inline bool checked_mul_u32(u32 a, u32 b, u32* result) {
 #endif
 }
 
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior zero:
+        assumes a == 0 || b == 0;
+        ensures \result == \true;
+        ensures *result == 0;
+    behavior no_overflow:
+        assumes a != 0 && b != 0;
+        assumes a <= 0xFFFFFFFFFFFFFFFF / b;
+        ensures \result == \true;
+        ensures *result == a * b;
+    behavior overflow:
+        assumes a != 0 && b != 0;
+        assumes a >  0xFFFFFFFFFFFFFFFF / b;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -366,6 +596,12 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
 
 /* ============================================================================
  * Signed Arithmetic
+ *
+ * Note on checked_mul_isize: this function is NOT yet annotated with ACSL.
+ * Its fallback logic involves ISIZE_MIN special cases and four sign-quadrant
+ * division-based checks that do not map cleanly to a small set of behaviors.
+ * It will be annotated in a later pass once the unsigned family and signed
+ * add/sub are proven. Until then, it carries only a \valid(result) precondition.
  * ========================================================================= */
 
 /**
@@ -381,6 +617,23 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
  *
  * @remark Fallback checks bounds BEFORE adding to avoid signed overflow UB.
  *         Signed integer overflow is undefined behavior in C.
+ */
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior pos_overflow:
+        assumes a > 0 && b > 0 && b > CANON_ISIZE_MAX - a;
+        ensures \result == \false;
+    behavior neg_overflow:
+        assumes a < 0 && b < 0 && b < CANON_ISIZE_MIN - a;
+        ensures \result == \false;
+    behavior no_overflow:
+        assumes !(a > 0 && b > 0 && b > CANON_ISIZE_MAX - a);
+        assumes !(a < 0 && b < 0 && b < CANON_ISIZE_MIN - a);
+        ensures \result == \true;
+        ensures *result == a + b;
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline bool checked_add_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
@@ -414,6 +667,23 @@ static inline bool checked_add_isize(isize a, isize b, isize* result) {
  *
  * @remark Fallback checks bounds BEFORE subtracting to avoid signed overflow UB.
  */
+/*@
+    requires \valid(result);
+    assigns  *result;
+    behavior neg_underflow:
+        assumes b > 0 && a < CANON_ISIZE_MIN + b;
+        ensures \result == \false;
+    behavior pos_overflow:
+        assumes b < 0 && a > CANON_ISIZE_MAX + b;
+        ensures \result == \false;
+    behavior no_overflow:
+        assumes !(b > 0 && a < CANON_ISIZE_MIN + b);
+        assumes !(b < 0 && a > CANON_ISIZE_MAX + b);
+        ensures \result == \true;
+        ensures *result == a - b;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline bool checked_sub_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
 #if CANON_HAS_BUILTIN_OVERFLOW
@@ -446,6 +716,12 @@ static inline bool checked_sub_isize(isize a, isize b, isize* result) {
  * @remark Fallback checks bounds BEFORE multiplying to avoid signed overflow UB.
  *         Signed integer overflow is undefined behavior in C — `a * b` must
  *         never be evaluated if it would overflow.
+ *
+ * @note ACSL contract deferred — see section header comment above.
+ */
+/*@
+    requires \valid(result);
+    assigns  *result;
  */
 static inline bool checked_mul_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
