@@ -449,7 +449,6 @@ jobs:
           frama-c -wp -wp-rte \
             -wp-prover alt-ergo,z3 \
             -wp-timeout 120 \
-            -warn-unsigned-overflow \
             -cpp-extra-args=" \
               -I core/primitives \
               -I core \
@@ -474,13 +473,19 @@ jobs:
       # -- Next headers to annotate (bottom-up within core/primitives) --
       # Uncomment each block as ACSL annotations are added.
       #
+      # Note: -warn-unsigned-overflow is intentionally NOT used. C defines
+      # unsigned arithmetic as modular (wraparound is well-defined), and
+      # several Canon-C primitives (notably checked.h's fallback paths)
+      # rely on this. -wp-rte still proves absence of signed overflow,
+      # division by zero, invalid shifts, null derefs, and out-of-bounds
+      # access — all the actual runtime errors you want to rule out.
+      #
       # - name: "WP: core/primitives/bits.h"
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo,z3 \
       #       -wp-timeout 120 \
-      #       -warn-unsigned-overflow \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
       #         -I core \
@@ -495,7 +500,6 @@ jobs:
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo,z3 \
       #       -wp-timeout 120 \
-      #       -warn-unsigned-overflow \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
       #         -I core \
@@ -510,7 +514,6 @@ jobs:
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo,z3 \
       #       -wp-timeout 120 \
-      #       -warn-unsigned-overflow \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
       #         -I core \
