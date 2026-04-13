@@ -1,12 +1,12 @@
 // semantics/result/result_defn.h
-#ifndef CANON_RESULT_DEFN_H
-#define CANON_RESULT_DEFN_H
+#ifndef CANON_SEMANTICS_RESULT_DEFN_H
+#define CANON_SEMANTICS_RESULT_DEFN_H
 
-#ifndef CANON_RESULT_MANGLE_H
+#ifndef CANON_SEMANTICS_RESULT_MANGLE_H
 #  include "result_mangle.h"
 #endif
 
-#ifndef CANON_RESULT_IMPL_H
+#ifndef CANON_SEMANTICS_RESULT_IMPL_H
 #  include "result_impl.h"
 #endif
 
@@ -629,4 +629,4 @@ DEFINE_RESULT_ALL(static inline, void_ptr, ptr_error)
 // result_void_ptr_ptr_error_ok(NULL) now panics via require_msg().
 */
 
-#endif /* CANON_RESULT_DEFN_H */
+#endif /* CANON_SEMANTICS_RESULT_DEFN_H */
