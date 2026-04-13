@@ -1,6 +1,6 @@
 // semantics/result/result_impl.h
-#ifndef CANON_RESULT_IMPL_H
-#define CANON_RESULT_IMPL_H
+#ifndef CANON_SEMANTICS_RESULT_IMPL_H
+#define CANON_SEMANTICS_RESULT_IMPL_H
 
 #include <stdbool.h>
 
@@ -580,4 +580,4 @@
             IMPL_RESULT_ERR_FIELD_(_r2)); \
     }
 
-#endif /* CANON_RESULT_IMPL_H */
+#endif /* CANON_SEMANTICS_RESULT_IMPL_H */
