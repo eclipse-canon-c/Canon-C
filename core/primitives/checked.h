@@ -173,6 +173,7 @@
         ensures *result == a + b;
     behavior overflow:
         assumes a >  CANON_USIZE_MAX - b;
+        ensures *result < a;
         ensures \result == \false;
     complete behaviors;
     disjoint behaviors;
@@ -268,6 +269,7 @@ static inline bool checked_add_u32(u32 a, u32 b, u32* result) {
         ensures *result == a + b;
     behavior overflow:
         assumes a >  0xFFFFFFFFFFFFFFFF - b;
+        ensures *result < a;
         ensures \result == \false;
     complete behaviors;
     disjoint behaviors;
