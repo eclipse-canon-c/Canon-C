@@ -422,7 +422,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-v3
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-cvc5-v4
           restore-keys: |
             opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-
 
@@ -433,7 +433,7 @@ jobs:
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
-            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3
+            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3 cvc5
 
       - name: Activate opam environment and configure Why3 provers
         run: |
@@ -447,7 +447,7 @@ jobs:
         run: |
           eval $(opam env --switch=frama-c)
           frama-c -wp -wp-rte \
-            -wp-prover alt-ergo,z3 \
+            -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
             -wp-split \
             -cpp-extra-args=" \
@@ -485,7 +485,7 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3 \
+      #       -wp-prover alt-ergo,z3,cvc5 \
       #       -wp-timeout 120 \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
@@ -499,7 +499,7 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3 \
+      #       -wp-prover alt-ergo,z3,cvc5 \
       #       -wp-timeout 120 \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
@@ -513,7 +513,7 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3 \
+      #       -wp-prover alt-ergo,z3,cvc5 \
       #       -wp-timeout 120 \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
