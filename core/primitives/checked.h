@@ -597,11 +597,12 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
 /* ============================================================================
  * Signed Arithmetic
  *
- * Note on checked_mul_isize: this function is NOT yet annotated with ACSL.
- * Its fallback logic involves ISIZE_MIN special cases and four sign-quadrant
- * division-based checks that do not map cleanly to a small set of behaviors.
- * It will be annotated in a later pass once the unsigned family and signed
- * add/sub are proven. Until then, it carries only a \valid(result) precondition.
+ * All three signed functions (add, sub, mul) carry full ACSL contracts.
+ * checked_mul_isize uses the clean mathematical-integer form to specify
+ * overflow as a single mathematical product bound rather than enumerating
+ * the four sign quadrants — WP does nonlinear integer reasoning and may
+ * need a longer timeout (-wp-timeout 120) or the z3 backend in addition
+ * to alt-ergo for this function specifically.
  * ========================================================================= */
 
 /**
@@ -717,11 +718,34 @@ static inline bool checked_sub_isize(isize a, isize b, isize* result) {
  *         Signed integer overflow is undefined behavior in C — `a * b` must
  *         never be evaluated if it would overflow.
  *
- * @note ACSL contract deferred — see section header comment above.
+ * @note The contract uses ACSL's mathematical-integer type `(integer)` to
+ *       specify the overflow condition as a single bound on the true product,
+ *       independent of the four-quadrant division gymnastics the fallback
+ *       performs. This is cleaner to read but asks WP to prove that the
+ *       division-based code implements the mathematical bound correctly —
+ *       nonlinear reasoning that may require -wp-timeout 120 or
+ *       -wp-prover alt-ergo,z3 to close.
  */
 /*@
     requires \valid(result);
     assigns  *result;
+    behavior zero:
+        assumes a == 0 || b == 0;
+        ensures \result == \true;
+        ensures *result == 0;
+    behavior no_overflow:
+        assumes a != 0 && b != 0;
+        assumes (integer)a * (integer)b >= CANON_ISIZE_MIN;
+        assumes (integer)a * (integer)b <= CANON_ISIZE_MAX;
+        ensures \result == \true;
+        ensures *result == a * b;
+    behavior overflow:
+        assumes a != 0 && b != 0;
+        assumes (integer)a * (integer)b < CANON_ISIZE_MIN
+             || (integer)a * (integer)b > CANON_ISIZE_MAX;
+        ensures \result == \false;
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline bool checked_mul_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
