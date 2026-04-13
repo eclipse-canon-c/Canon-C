@@ -6,6 +6,7 @@
 #include "core/primitives/checked.h"    /* checked_mul                  */
 #include "core/slice.h"                 /* str_t, cbytes_t, slice_##type */
 #include "core/ownership.h"             /* borrowed(T) annotation style  */
+#include <string.h>                     /* memcmp — used by borrowed_bytes_eq */
 
 /**
  * @file semantics/borrow.h
@@ -49,9 +50,29 @@
  *   // s becomes invalid after: stringbuf_clear(&sb),
  *   //   arena_reset(sb.arena), free(sb), etc.
  *
- * The source field is a debug tag. Pass &owning_struct as source.
- * It is never dereferenced by this header — for human / debugger inspection
- * only.
+ * Source tag lifetime warning:
+ * --------------------------------------------------------------------------
+ * The source field stores the address of the owning object as a debug tag.
+ * It is NEVER dereferenced by this header, but it can itself become a
+ * dangling pointer if the owning object is destroyed while a borrowed value
+ * is still in scope:
+ *
+ *   borrowed_str name;
+ *   {
+ *       MyStruct obj = {0};
+ *       name = borrowed_str_from_cstr("hello", &obj);
+ *   }
+ *   // obj destroyed — name.source is now a dangling pointer.
+ *   // name.str.ptr may still be valid (e.g. if it points to a string literal)
+ *   // but name.source points to freed stack memory.
+ *   // Do NOT pass name.source to a debugger or dereference it here.
+ *
+ * This is a known, unavoidable limitation of storing a raw address without
+ * compiler-enforced lifetime tracking. The source tag is a human aid, not
+ * a safety mechanism. Never dereference source outside of the owning
+ * object's lifetime. In practice, if you pass &owning_struct as source and
+ * pass the borrowed value only to functions called from the same scope,
+ * the tag is always valid at the point of inspection.
  *
  * NULL-safety contract:
  * --------------------------------------------------------------------------
@@ -68,7 +89,7 @@
  * --------------------------------------------------------------------------
  * borrowed_ptr_eq   — pointer identity (a.ptr == b.ptr).
  * borrowed_str_eq   — content equality via str_equal (same as strcmp-equal).
- * borrowed_bytes_eq — content equality (same bytes, same length).
+ * borrowed_bytes_eq — content equality via memcmp (same bytes, same length).
  * These differ because the underlying types have different natural equality.
  * Source tags are always ignored by all _eq functions.
  *
@@ -76,6 +97,7 @@
  * --------------------------------------------------------------------------
  * borrow.h lives in semantics/ and may include core/ only.
  * No data/, util/, or other semantics/ headers.
+ * <string.h> is included for memcmp used in borrowed_bytes_eq.
  *
  * Portability:
  * --------------------------------------------------------------------------
@@ -124,10 +146,15 @@
  *   - ptr may be NULL (absent borrow).
  *   - source is a debug-only tag; it is never dereferenced.
  *   - The object at ptr must outlive this struct.
+ *
+ * @warning source can itself become a dangling pointer if the owning object
+ *          is destroyed while this struct is still in scope. See "Source tag
+ *          lifetime warning" in the file-level documentation.
  */
 typedef struct {
     const void *ptr;    /**< Borrowed pointer — do NOT free. */
-    const void *source; /**< Owning object's address (debug tag only). */
+    const void *source; /**< Owning object's address (debug tag only).
+                             Never dereference outside owning object's lifetime. */
 } borrowed_ptr;
 
 /**
@@ -210,10 +237,15 @@ static inline bool borrowed_ptr_eq(borrowed_ptr a, borrowed_ptr b)
  *
  * Wraps str_t. The character data is NOT null-terminated in general.
  * Do NOT free str.ptr — it is owned by source.
+ *
+ * @warning source can itself become a dangling pointer if the owning object
+ *          is destroyed while this struct is still in scope. See "Source tag
+ *          lifetime warning" in the file-level documentation.
  */
 typedef struct {
     str_t        str;    /**< Borrowed string view — do NOT free str.ptr. */
-    const void  *source; /**< Owning object's address (debug tag only). */
+    const void  *source; /**< Owning object's address (debug tag only).
+                              Never dereference outside owning object's lifetime. */
 } borrowed_str;
 
 /**
@@ -339,10 +371,15 @@ static inline borrowed_str borrowed_str_slice(borrowed_str b,
  * @brief Non-owning read-only byte region with explicit borrowing intent.
  *
  * Wraps cbytes_t. Do NOT free bytes.ptr — it is owned by source.
+ *
+ * @warning source can itself become a dangling pointer if the owning object
+ *          is destroyed while this struct is still in scope. See "Source tag
+ *          lifetime warning" in the file-level documentation.
  */
 typedef struct {
     cbytes_t     bytes;  /**< Borrowed byte view — do NOT free bytes.ptr. */
-    const void  *source; /**< Owning object's address (debug tag only). */
+    const void  *source; /**< Owning object's address (debug tag only).
+                              Never dereference outside owning object's lifetime. */
 } borrowed_bytes;
 
 /**
@@ -427,6 +464,42 @@ static inline usize borrowed_bytes_len(const borrowed_bytes *b)
 static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
 {
     return (b != NULL) && (b->bytes.ptr != NULL);
+}
+
+/**
+ * @brief Returns non-zero (true) if both byte regions have equal content.
+ *
+ * Equality is content-based via memcmp — lengths must match and every byte
+ * must be identical. Source tags are intentionally ignored, consistent with
+ * all other _eq functions in this header.
+ *
+ * Two empty regions (len == 0) are always equal regardless of ptr value,
+ * consistent with memcmp semantics (zero-length comparison is vacuously true).
+ *
+ * Two regions that share the same ptr and len are equal without calling
+ * memcmp (short-circuit for performance).
+ *
+ * @param a First borrowed_bytes (by value).
+ * @param b Second borrowed_bytes (by value).
+ * @return  1 if regions have equal length and identical byte content,
+ *          0 otherwise.
+ */
+static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
+{
+    if (a.bytes.len != b.bytes.len) {
+        return false;
+    }
+    if (a.bytes.len == 0) {
+        return true; /* vacuously equal — no bytes to compare */
+    }
+    if (a.bytes.ptr == b.bytes.ptr) {
+        return true; /* same pointer, same length — identical by definition */
+    }
+    if (a.bytes.ptr == NULL || b.bytes.ptr == NULL) {
+        return false; /* one NULL, one non-NULL, same length>0 — impossible
+                         by construction but guard for safety               */
+    }
+    return memcmp(a.bytes.ptr, b.bytes.ptr, a.bytes.len) == 0;
 }
 
 /**
