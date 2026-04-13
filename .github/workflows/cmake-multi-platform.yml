@@ -411,14 +411,18 @@ jobs:
             libgmp-dev \
             zlib1g-dev \
             autoconf \
-            autotools-dev
+            autotools-dev \
+            graphviz \
+            libcairo2-dev \
+            libgtk-3-dev \
+            libgtksourceview-3.0-dev
 
       - name: Cache opam switch
         id: cache-opam
         uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-v1
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-v2
           restore-keys: |
             opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-
 
@@ -428,7 +432,8 @@ jobs:
           opam init -y --disable-sandboxing --bare
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
-          opam install -y frama-c.${FRAMAC_VERSION} alt-ergo why3
+          opam install -y --confirm-level=unsafe-yes --assume-depexts \
+            frama-c.${FRAMAC_VERSION} alt-ergo why3
 
       - name: Activate opam environment
         run: |
