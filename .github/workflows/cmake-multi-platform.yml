@@ -423,13 +423,21 @@ jobs:
         with:
           path: ~/.opam
           key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-cvc5-v4
-          restore-keys: |
-            opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-
 
       - name: Initialise opam (cache miss only)
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
-          opam init -y --disable-sandboxing --bare
+          # Wipe any partial state from a previous failed run.
+          # Without restore-keys this should never happen, but belt-and-braces:
+          # if ~/.opam exists with a partial install, GitHub Actions can still
+          # serve it via internal cache mechanisms in some edge cases.
+          rm -rf ~/.opam
+
+          # --bare: don't create a default switch (we make our own below)
+          # --no-setup: don't ask about shell integration (non-interactive)
+          # --disable-sandboxing: required on GitHub runners (no bwrap setup)
+          opam init -y --bare --no-setup --disable-sandboxing
+
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
