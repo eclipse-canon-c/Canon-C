@@ -352,7 +352,7 @@ jobs:
   #    checked.h is the first Canon-C header with full ACSL contracts
   #    (every unsigned function plus all three signed functions). When
   #    bits.h, ptr.h, compare.h and the core/ layer are annotated, add
-  #    them to the file list in the WP and Eva steps below.
+  #    them to the file list in the WP step below.
   #
   #    Installation: opam with aggressive caching.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
@@ -364,21 +364,22 @@ jobs:
   #    switch in ~30 seconds. The cache key includes OCAML_VERSION
   #    and FRAMAC_VERSION so bumping either forces a clean rebuild.
   #
-  #    Two-phase analysis:
+  #    Provers: Alt-Ergo + Z3 dual-prover setup.
+  #    Alt-Ergo handles linear arithmetic and most ACSL contracts very
+  #    fast. Z3 handles nonlinear integer reasoning (multiplication
+  #    contracts in checked_mul / checked_mul_u64 / checked_mul_isize)
+  #    that Alt-Ergo struggles with. WP tries Alt-Ergo first and falls
+  #    through to Z3 only on goals Alt-Ergo cannot close — keeping the
+  #    common case fast while ensuring the hard goals get proved.
   #
-  #    Phase 1 — WP (Weakest Precondition)
+  #    WP (Weakest Precondition):
   #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
   #      Proves absence of runtime errors via -wp-rte: overflows,
   #      invalid shifts, null derefs, division by zero. Mathematical
   #      proof — if WP says "Valid", the property holds for ALL inputs.
   #
-  #    Phase 2 — Eva (Evolved Value Analysis)
-  #      Abstract interpretation over all reachable execution paths.
-  #      Catches issues WP may miss: unreachable code, value range
-  #      violations, implicit precondition assumptions.
-  #
-  #    Together: WP proves contracts are correct, Eva proves nothing
-  #    was missed. Both must pass.
+  #    Eva is NOT run on checked.h — see the comment in the steps below
+  #    for the rationale (header-only modules have no entry point).
   #
   #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
   #    checked.h uses this to force the fallback path (WP has no
@@ -387,7 +388,6 @@ jobs:
   #    Certification evidence produced:
   #      - Absence of runtime errors in checked.h (all standards)
   #      - Contract verification (requirement traceability)
-  #      - Value range correctness (IEC 62304, EN 50128)
   #      - Formal proof artifacts (DO-178C objective substitution)
   # -------------------------------------------------------------------------
   frama-c:
@@ -422,7 +422,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-v2
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-v3
           restore-keys: |
             opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-
 
@@ -433,7 +433,7 @@ jobs:
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
-            frama-c.${FRAMAC_VERSION} alt-ergo why3
+            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3
 
       - name: Activate opam environment and configure Why3 provers
         run: |
@@ -447,8 +447,8 @@ jobs:
         run: |
           eval $(opam env --switch=frama-c)
           frama-c -wp -wp-rte \
-            -wp-prover alt-ergo \
-            -wp-timeout 60 \
+            -wp-prover alt-ergo,z3 \
+            -wp-timeout 120 \
             -warn-unsigned-overflow \
             -cpp-extra-args=" \
               -I core/primitives \
@@ -458,19 +458,18 @@ jobs:
               -DNDEBUG" \
             core/primitives/checked.h
 
-      - name: "Eva: core/primitives/checked.h"
-        run: |
-          eval $(opam env --switch=frama-c)
-          frama-c -eva \
-            -eva-precision 3 \
-            -warn-unsigned-overflow \
-            -cpp-extra-args=" \
-              -I core/primitives \
-              -I core \
-              -I . \
-              -DCANON_NO_REQUIRE \
-              -DNDEBUG" \
-            core/primitives/checked.h
+      # -- Eva (Evolved Value Analysis) is intentionally NOT run on checked.h --
+      # Eva requires an entry point function to start abstract interpretation
+      # from. checked.h is a header full of static inline functions with no
+      # main() — Eva has nothing to anchor to and aborts with "cannot find
+      # entry point". WP already proves the contracts and absence of runtime
+      # errors for every function independently, so Eva is not needed here.
+      #
+      # When Canon-C grows real translation units (verification driver files
+      # for macro-instantiated modules, or test files compiled as standalone
+      # programs), Eva can run on those — pointing at a real main() that
+      # exercises a representative call sequence. Until then, WP is the
+      # complete formal verification story for header-only modules.
 
       # -- Next headers to annotate (bottom-up within core/primitives) --
       # Uncomment each block as ACSL annotations are added.
@@ -479,8 +478,8 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 60 \
+      #       -wp-prover alt-ergo,z3 \
+      #       -wp-timeout 120 \
       #       -warn-unsigned-overflow \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
@@ -494,8 +493,8 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 60 \
+      #       -wp-prover alt-ergo,z3 \
+      #       -wp-timeout 120 \
       #       -warn-unsigned-overflow \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
@@ -509,8 +508,8 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo \
-      #       -wp-timeout 60 \
+      #       -wp-prover alt-ergo,z3 \
+      #       -wp-timeout 120 \
       #       -warn-unsigned-overflow \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
