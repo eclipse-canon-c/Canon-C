@@ -29,32 +29,6 @@ on:
 #   or workaround as of the time of writing. Memory safety on Windows is
 #   covered by the MSVC build with /W4 /WX and by Valgrind on Linux.
 #   Re-enable dr-memory when upstream ships a compatible release.
-#
-# ---------------------------------------------------------------------------
-# Certification evidence map
-#
-# The CI pipeline produces artifacts relevant to the following standards.
-# Canon-C does not claim conformance — it produces evidence that downstream
-# projects can incorporate into their certification packages.
-#
-#   Evidence type         | CI job           | Standards served
-#   ----------------------|------------------|------------------------------
-#   Unit test pass/fail   | build            | All (base requirement)
-#   Compiler warnings     | build (/W4,-Wall)| MISRA compliance evidence
-#   Static analysis       | static-analysis  | DO-178C, ISO 26262, IEC 61508
-#   Memory safety         | valgrind         | All (absence of leaks/UB)
-#   Robustness (fuzz)     | fuzzing          | DO-178C (robustness testing)
-#   Absence of RTE (proof)| frama-c WP       | DO-178C, ISO 26262 ASIL C+
-#   Value range analysis  | frama-c Eva      | IEC 62304, EN 50128
-#   Contract verification | frama-c WP       | All (requirement traceability)
-#   MC/DC coverage        | coverage         | DO-178C Level A/B, ISO 26262
-#   MISRA C compliance    | misra            | All safety standards
-#
-# NOT yet covered by this CI (required for full certification):
-#   - Qualified MISRA checker (Polyspace, LDRA, or PC-lint)
-#   - Requirements traceability matrix (docs/traceability.md — manual)
-#   - Tool qualification reports (docs/tool_qualification/ — manual)
-#   - CompCert production build (formal compiler verification)
 # ---------------------------------------------------------------------------
 
 jobs:
@@ -133,9 +107,6 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 2. Static analysis
-  #
-  #    clang-tidy — Linux only, tight explicit check allowlist
-  #    Cppcheck   — all platforms, warnings only (style/info suppressed)
   # -------------------------------------------------------------------------
   static-analysis:
     needs: build
@@ -378,45 +349,44 @@ jobs:
   #
   #    Scope: core/primitives/checked.h ONLY.
   #
-  #    checked.h is the first Canon-C header to receive full ACSL contracts
-  #    (every unsigned function plus checked_add_isize / checked_sub_isize).
-  #    checked_mul_isize currently carries only \valid(result) — its four
-  #    sign-quadrant division check does not map cleanly to a small number
-  #    of behaviors and will be annotated in a later pass.
+  #    checked.h is the first Canon-C header with full ACSL contracts
+  #    (every unsigned function plus all three signed functions). When
+  #    bits.h, ptr.h, compare.h and the core/ layer are annotated, add
+  #    them to the file list in the WP and Eva steps below.
   #
-  #    When bits.h, ptr.h, compare.h and the core/ layer are annotated,
-  #    add them to the file list in both steps below.
+  #    Installation: uses the 'frama-c' apt package from Ubuntu Noble
+  #    (Frama-C 27.1 Cobalt) together with alt-ergo and why3. Install
+  #    completes in ~2 minutes. The opam-based alternative rebuilds the
+  #    OCaml compiler from source and takes 30-60 minutes per run,
+  #    which is unnecessary — Frama-C 27.1 supports every feature
+  #    Canon-C uses (ACSL 1.x, WP contracts with behaviors, Eva, and
+  #    the __FRAMAC__ preprocessor hook).
   #
   #    Two-phase analysis:
   #
   #    Phase 1 — WP (Weakest Precondition)
   #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
-  #      Proves absence of runtime errors via -wp-rte: overflows, invalid
-  #      shifts, null derefs, division by zero. Mathematical proof —
-  #      if WP says "Valid", the property holds for ALL possible inputs.
+  #      Proves absence of runtime errors via -wp-rte: overflows,
+  #      invalid shifts, null derefs, division by zero. Mathematical
+  #      proof — if WP says "Valid", the property holds for ALL inputs.
   #
   #    Phase 2 — Eva (Evolved Value Analysis)
   #      Abstract interpretation over all reachable execution paths.
   #      Catches issues WP may miss: unreachable code, value range
-  #      violations, implicit precondition assumptions. No annotations
-  #      required — Eva infers from the code itself.
+  #      violations, implicit precondition assumptions.
   #
   #    Together: WP proves contracts are correct, Eva proves nothing
   #    was missed. Both must pass.
   #
-  #    The __FRAMAC__ macro is automatically defined by Frama-C's
-  #    preprocessor. checked.h uses this to force the fallback path
-  #    (WP has no semantics for __builtin_*_overflow).
+  #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
+  #    checked.h uses this to force the fallback path (WP has no
+  #    semantics for __builtin_*_overflow).
   #
   #    Certification evidence produced:
   #      - Absence of runtime errors in checked.h (all standards)
   #      - Contract verification (requirement traceability)
   #      - Value range correctness (IEC 62304, EN 50128)
   #      - Formal proof artifacts (DO-178C objective substitution)
-  #
-  #    Installation note:
-  #      framac/frama-c Docker Hub images use version tags (e.g. 29.0),
-  #      not "latest". Install via opam instead for reliability.
   # -------------------------------------------------------------------------
   frama-c:
     needs: build
@@ -428,16 +398,12 @@ jobs:
       - name: Install Frama-C
         run: |
           sudo apt-get update
-          sudo apt-get install -y opam gcc
-          opam init -y --disable-sandboxing --bare
-          opam switch create frama-c ocaml-base-compiler.4.14.2
-          eval $(opam env)
-          opam install -y frama-c
-          echo "$(opam var bin)" >> $GITHUB_PATH
+          sudo apt-get install -y frama-c alt-ergo why3
+          frama-c -version
+          alt-ergo --version
 
       - name: "WP: core/primitives/checked.h"
         run: |
-          eval $(opam env --switch=frama-c)
           frama-c -wp -wp-rte \
             -wp-prover alt-ergo \
             -wp-timeout 60 \
@@ -452,7 +418,6 @@ jobs:
 
       - name: "Eva: core/primitives/checked.h"
         run: |
-          eval $(opam env --switch=frama-c)
           frama-c -eva \
             -eva-precision 3 \
             -warn-unsigned-overflow \
@@ -465,11 +430,10 @@ jobs:
             core/primitives/checked.h
 
       # -- Next headers to annotate (bottom-up within core/primitives) --
-      # Uncomment each block below as ACSL annotations are added.
+      # Uncomment each block as ACSL annotations are added.
       #
       # - name: "WP: core/primitives/bits.h"
       #   run: |
-      #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo \
       #       -wp-timeout 60 \
@@ -484,7 +448,6 @@ jobs:
       #
       # - name: "WP: core/primitives/ptr.h"
       #   run: |
-      #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo \
       #       -wp-timeout 60 \
@@ -499,7 +462,6 @@ jobs:
       #
       # - name: "WP: core/primitives/compare.h"
       #   run: |
-      #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
       #       -wp-prover alt-ergo \
       #       -wp-timeout 60 \
@@ -511,24 +473,9 @@ jobs:
       #         -DCANON_NO_REQUIRE \
       #         -DNDEBUG" \
       #       core/primitives/compare.h
-      #
-      # -- core layer ----------------------------------------------------
-      # Uncomment when core/ headers are annotated with ACSL contracts.
-      # For macro-instantiated modules (vec, deque, option, result, algo):
-      # create verify/ driver files and point frama-c at those instead
-      # of the headers directly.
 
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
-  #
-  #    Measures Modified Condition/Decision Coverage using GCC 14's
-  #    -fcondition-coverage flag and gcov-14 --conditions. This is
-  #    true MC/DC — the highest coverage metric required by any
-  #    safety standard.
-  #
-  #    MC/DC requires that every Boolean sub-expression independently
-  #    affects the decision outcome. For Canon-C, most conditions are
-  #    simple single-condition decisions, so MC/DC ≈ branch coverage.
   #
   #    -DCANON_CHECKED_FORCE_FALLBACK is passed so the fallback paths
   #    in checked.h are exercised. Without this flag, GCC expands
@@ -536,14 +483,6 @@ jobs:
   #    the #else fallback blocks become dead code, and gcov reports
   #    0% MC/DC on them. Forcing the fallback makes coverage measure
   #    the same code Frama-C is proving — the two tracks stay consistent.
-  #
-  #    The HTML report artifact is uploadable certification evidence.
-  #
-  #    Certification evidence produced:
-  #      - MC/DC coverage percentage (DO-178C Level A/B, ISO 26262 ASIL C/D)
-  #      - Branch coverage percentage (DO-178C Level C, ISO 26262 ASIL B)
-  #      - Per-file coverage breakdown (auditor review)
-  #      - Uncovered condition identification (test gap analysis)
   # -------------------------------------------------------------------------
   coverage:
     needs: build
@@ -582,9 +521,6 @@ jobs:
             --ignore-errors unused \
             --gcov-tool gcov-14
 
-          # Remove test files — coverage is for Canon-C library headers
-          # only, not test harnesses. --ignore-errors unused suppresses
-          # errors when an exclude pattern matches nothing.
           lcov --remove coverage_raw.info \
             '/usr/*' \
             '*/test/*' \
@@ -595,20 +531,16 @@ jobs:
       - name: Collect MC/DC condition coverage (gcov-14 --conditions)
         run: |
           cd build
-          MCDC_TOTAL=0
-          MCDC_COVERED=0
 
           for gcda in $(find . -name "*.gcda" | sort); do
             gcov-14 --conditions "$gcda" 2>/dev/null
           done > gcov_output.txt 2>&1
 
-          # Extract condition coverage for library headers only
           grep -E "^File|^Condition" gcov_output.txt | paste - - | \
             grep -v "/test/" | \
             sed "s|File '${{ github.workspace }}/||;s|'||g" | \
             tee mcdc_per_file.txt
 
-          # Calculate totals from per-file MC/DC data
           python3 << 'PYEOF'
           import re
           from collections import defaultdict
@@ -649,7 +581,6 @@ jobs:
           print(f"  {'TOTAL':<50} {overall:>7.1f}% {total_hit:>5} {total_all:>6} {total_all-total_hit:>7}")
           print("=" * 85)
 
-          # Write summary for threshold check
           with open("mcdc_summary.txt", "w") as out:
               out.write(f"{overall:.1f}\n")
               out.write(f"{total_hit}\n")
@@ -685,14 +616,12 @@ jobs:
 
       - name: Enforce coverage threshold
         run: |
-          # Branch coverage threshold
           BRANCH_COV=$(lcov --summary coverage.info \
             --rc branch_coverage=1 2>&1 | \
             grep "branches" | grep -oP '[\d.]+%' | head -1 | tr -d '%')
 
           echo "Branch coverage: ${BRANCH_COV}%"
 
-          # MC/DC coverage from gcov-14 --conditions
           if [ -f build/mcdc_summary.txt ]; then
             MCDC_COV=$(head -1 build/mcdc_summary.txt)
             echo "MC/DC coverage:  ${MCDC_COV}%"
@@ -724,12 +653,14 @@ jobs:
   #    is to track MISRA compliance progress and identify deviations
   #    that must be documented in docs/deviations.md.
   #
-  #    NOTE: Canon-C is header-only. Cppcheck scans .c files by default
-  #    when given a directory. We use find to locate .h files explicitly.
-  #
-  #    Certification evidence produced:
-  #      - MISRA violation report (all safety standards)
-  #      - Deviation tracking (auditor review)
+  #    Suppressions:
+  #      - misra-config:*_impl.h — macro-templated implementation headers
+  #        (hashmap_impl.h, deque_impl.h, etc.) emit [misra-config]
+  #        errors because Cppcheck cannot resolve macro-instantiated
+  #        type names (e.g. HASHMAP_SLOT_NAME) without an instantiation
+  #        context. This is a tool limitation, not a code defect.
+  #        Qualified MISRA checkers handle this correctly via full
+  #        preprocessor-aware analysis.
   # -------------------------------------------------------------------------
   misra:
     needs: build
@@ -744,9 +675,6 @@ jobs:
       - name: Run MISRA C:2012 analysis on library headers
         shell: bash
         run: |
-          # Canon-C is header-only — find all .h files in library
-          # directories. Test files are excluded (they intentionally
-          # violate MISRA rules for boundary testing).
           HEADERS=$(find \
             "${{ github.workspace }}/core" \
             "${{ github.workspace }}/semantics" \
@@ -768,6 +696,7 @@ jobs:
             --language=c \
             --suppress=missingIncludeSystem \
             --suppress=toomanyconfigs \
+            "--suppress=misra-config:*_impl.h" \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -783,23 +712,21 @@ jobs:
           echo "  MISRA C:2012 Summary"
           echo "==============================================="
 
-          TOTAL=$(grep -c "\[misra-" misra_report.txt 2>/dev/null || echo "0")
-          REQUIRED=$(grep -c "Required" misra_report.txt 2>/dev/null || echo "0")
-          ADVISORY=$(grep -c "Advisory" misra_report.txt 2>/dev/null || echo "0")
-          MANDATORY=$(grep -c "Mandatory" misra_report.txt 2>/dev/null || echo "0")
-
-          echo "  Total violations:     ${TOTAL}"
-          echo "  Mandatory:            ${MANDATORY}"
-          echo "  Required:             ${REQUIRED}"
-          echo "  Advisory:             ${ADVISORY}"
+          TOTAL=$(grep -c "\[misra-" misra_report.txt || true)
+          echo "  Total violations: ${TOTAL}"
+          echo ""
+          echo "  NOTE: Rule category breakdown (Mandatory/Required/Advisory)"
+          echo "  requires a MISRA rule lookup table and is not produced by"
+          echo "  Cppcheck alone. For certification, use a qualified tool"
+          echo "  (Polyspace, LDRA, PC-lint) that emits categorized output."
           echo ""
           echo "  Deviations documented in: docs/deviations.md"
           echo "==============================================="
 
-          # Advisory only — do not fail the build.
+          # Advisory only — does not fail the build.
           # When MISRA compliance is mature, uncomment to enforce:
-          # if [ "${MANDATORY}" -gt 0 ]; then
-          #   echo "FAIL: ${MANDATORY} mandatory MISRA violations found"
+          # if [ "${TOTAL}" -gt 0 ]; then
+          #   echo "FAIL: ${TOTAL} MISRA violations found"
           #   exit 1
           # fi
 
