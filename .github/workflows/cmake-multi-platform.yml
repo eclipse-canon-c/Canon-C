@@ -435,12 +435,13 @@ jobs:
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
             frama-c.${FRAMAC_VERSION} alt-ergo why3
 
-      - name: Activate opam environment
+      - name: Activate opam environment and configure Why3 provers
         run: |
           eval $(opam env --switch=frama-c)
           echo "$(opam var --switch=frama-c bin)" >> $GITHUB_PATH
           frama-c -version
           alt-ergo --version
+          why3 config detect
 
       - name: "WP: core/primitives/checked.h"
         run: |
