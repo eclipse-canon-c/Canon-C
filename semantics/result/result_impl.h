@@ -371,6 +371,13 @@
  * Performance: O(1) time, O(1) space (assertion + union access)
  * Contract: aborts printing _msg if Result is Err
  *
+ * Note on (void)(_msg): _msg is only referenced inside require_msg, which
+ * expands to a no-op when CANON_NO_REQUIRE is defined (used by the coverage
+ * CI job to keep MC/DC measurement aligned with the WP proof). Without the
+ * cast, the generated function would fail under -Wunused-parameter -Werror
+ * because the `const char* msg` parameter would become unreferenced in the
+ * expanded body. The cast generates no code and is invisible to the prover.
+ *
  * @param _t   The value type
  * @param _e   The error type
  * @param _r   The Result to extract from
@@ -378,6 +385,7 @@
  */
 #define IMPL_RESULT_EXPECT(_t, _e, _r, _msg) \
     { \
+        (void)(_msg); \
         require_msg((_r).is_ok, (_msg)); \
         return IMPL_RESULT_OK_FIELD_(_r); \
     }
