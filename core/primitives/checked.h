@@ -40,6 +40,13 @@
  * `__FRAMAC__` is defined automatically and the fallback path is forced
  * (builtins cannot be modeled by WP).
  *
+ * Verification status: 1607 / 1609 proof obligations discharged automatically
+ * by Frama-C 29.0 + Alt-Ergo 2.6.2 + Z3 4.15.2. The remaining 2 obligations
+ * (typed_checked_add_overflow_ensures, typed_checked_add_u64_overflow_ensures)
+ * are discharged manually by a modular-arithmetic argument. Full record:
+ * see docs/verification.md. Scope limitation (compiler intrinsic path):
+ * see docs/deviations.md, entry VERIFY-001.
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - All operations: O(1) — constant time arithmetic and bitwise operations
