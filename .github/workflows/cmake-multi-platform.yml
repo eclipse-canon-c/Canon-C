@@ -630,7 +630,17 @@ jobs:
 
       - name: Run tests
         working-directory: build
-        run: ctest --build-config Debug --output-on-failure
+        # contract_test is excluded here: the coverage build defines
+        # CANON_NO_REQUIRE, which compiles require()/require_msg() into
+        # ((void)0). contract_test's entire purpose is to verify that
+        # those macros fire when preconditions are violated, so with
+        # the macros disabled every assertion in the test fails by
+        # design. contract_test still runs (and passes) in every other
+        # CI job — build, valgrind, fuzzing — where CANON_NO_REQUIRE is
+        # not defined. Excluding it here is honest about what the
+        # coverage build measures: the fallback path of the Canon-C
+        # library headers, not the assertion infrastructure itself.
+        run: ctest --build-config Debug --output-on-failure --exclude-regex '^contract_test$'
 
       - name: Collect branch coverage data (lcov)
         run: |
