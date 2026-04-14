@@ -605,11 +605,23 @@ jobs:
           sudo apt-get install -y gcc-14 lcov
 
       - name: Configure CMake with MC/DC coverage instrumentation
+        # CANON_CHECKED_FORCE_FALLBACK: exercise the same fallback path WP
+        #   verifies (otherwise GCC expands __builtin_*_overflow to single
+        #   instructions with no branches for gcov to see).
+        # CANON_NO_REQUIRE: compiles CHECKED_ASSERT_RESULT(result) out to
+        #   nothing. Without this, every function contains a runtime NULL
+        #   assertion whose NULL branch is structurally unreachable (the
+        #   ACSL `requires \valid(result)` clause proves it for every
+        #   caller), yet gcov counts it as an uncovered branch. Defining
+        #   CANON_NO_REQUIRE removes the assertion from the preprocessed
+        #   source, keeping MC/DC measurement focused on real branches.
+        #   The frama-c job passes the same flag for the same reason, so
+        #   the WP and coverage evidence streams stay aligned.
         run: |
           cmake -B build \
             -DCMAKE_C_COMPILER=gcc-14 \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK" \
+            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_NO_REQUIRE" \
             -DENABLE_SANITIZERS=OFF \
             -S "${{ github.workspace }}"
 
@@ -694,6 +706,47 @@ jobs:
               out.write(f"{total_hit}\n")
               out.write(f"{total_all}\n")
           PYEOF
+
+      - name: "Debug: per-line MC/DC detail for checked.h"
+        # Temporary diagnostic step. Dumps the full gcov --conditions output
+        # for checked.h so we can see which specific lines have uncovered
+        # condition outcomes. Used to drive tests to 100% MC/DC coverage.
+        # Remove this step once checked.h reaches 100% and stays there.
+        run: |
+          cd build
+
+          # Find the .gcda file for checked_test (the translation unit that
+          # exercises checked.h) and run gcov on it with verbose condition
+          # output, which includes per-line "condition outcomes not covered"
+          # annotations in the generated .gcov file.
+          CHECKED_GCDA=$(find . -name "checked_test*.gcda" | head -1)
+
+          if [ -z "$CHECKED_GCDA" ]; then
+            echo "ERROR: could not locate checked_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+
+          echo "Running gcov on: $CHECKED_GCDA"
+          gcov-14 --conditions --all-blocks "$CHECKED_GCDA" 2>&1 | \
+            grep -A 200 "checked.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for checked.h ==="
+          find . -name "checked.h.gcov" -exec echo "Found: {}" \;
+
+          CHECKED_GCOV=$(find . -name "checked.h.gcov" | head -1)
+          if [ -n "$CHECKED_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $CHECKED_GCOV ==="
+            cat "$CHECKED_GCOV"
+          else
+            echo "No checked.h.gcov file generated — trying alternative approach"
+            # Look in the per-object gcov directories
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*checked* 2>/dev/null || true
+            done
+          fi
 
       - name: Generate HTML coverage report
         run: |
