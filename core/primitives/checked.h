@@ -124,9 +124,27 @@
  *
  * Under Frama-C, the ACSL `requires \valid(result)` clause makes runtime
  * checks unnecessary — WP proves the precondition statically.
+ *
+ * CANON_NO_REQUIRE handling
+ * ─────────────────────────────────────────────────────────────────────────
+ * When CANON_NO_REQUIRE is defined (the project-wide opt-out for
+ * always-on precondition checks; see contract.h), CHECKED_ASSERT_RESULT
+ * collapses to ((void)0) regardless of NDEBUG or whether contract.h is
+ * included. This case must be tested FIRST so that downstream builds that
+ * disable assertions also disable this one — otherwise the 18 NULL guards
+ * remain in the preprocessed source and inflate the branch-coverage
+ * denominator with conditions that the ACSL `requires \valid(result)`
+ * clause has already proven unreachable. The coverage CI job uses this
+ * flag to keep the MC/DC measurement aligned with the WP proof.
  * ========================================================================= */
 
-#if defined(CANON_CONTRACT_H)          /* contract.h already included */
+#if defined(CANON_NO_REQUIRE)
+    /* Project-wide opt-out — CHECKED_ASSERT_RESULT becomes a no-op so its
+     * NULL branch does not appear in the preprocessed source. The ACSL
+     * `requires \valid(result)` clause provides the corresponding
+     * static guarantee under Frama-C. */
+    #define CHECKED_ASSERT_RESULT(ptr) ((void)0)
+#elif defined(CANON_CONTRACT_H)        /* contract.h already included */
     #define CHECKED_ASSERT_RESULT(ptr) \
         require_msg((ptr) != (void*)0, "checked: result pointer must not be NULL")
 #elif !defined(NDEBUG)
