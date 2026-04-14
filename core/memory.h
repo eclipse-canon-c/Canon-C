@@ -340,6 +340,12 @@ static inline void mem_swap(void* a, void* b, usize size) {
  */
 static inline void mem_swap_buf(void* a, void* b, usize size,
                                 void* scratch, usize scratch_len) {
+    /* scratch_len is referenced only by require_msg below. Under
+     * -DCANON_NO_REQUIRE (used by the coverage CI job to keep MC/DC
+     * measurement aligned with the WP proof), require_msg expands to
+     * nothing and scratch_len becomes unreferenced. The explicit cast
+     * silences -Wunused-parameter -Werror without generating any code. */
+    (void)scratch_len;
     if (!a || !b || !scratch || size == 0) return;
     require_msg(scratch_len >= size,             "mem_swap_buf: scratch buffer too small");
     require_msg(!mem_regions_overlap(a, b,       size), "mem_swap_buf: a and b overlap");
