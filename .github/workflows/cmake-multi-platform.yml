@@ -666,15 +666,53 @@ jobs:
             gcov-14 --conditions "$gcda" 2>/dev/null
           done > gcov_output.txt 2>&1
 
-          grep -E "^File|^Condition" gcov_output.txt | paste - - | \
+          # Pair each "File '...'" line with the FIRST subsequent
+          # "Condition outcomes covered:" line, then reset.
+          #
+          # Why awk and not 'paste - -':
+          # gcov sometimes emits a File line with no following Condition
+          # line (header has no compound conditions), or vice versa, or
+          # with intervening "Lines executed:" lines. paste - - blindly
+          # zips two streams together; if one line is missing anywhere,
+          # every subsequent pair is shifted by one and every file from
+          # that point on gets attributed someone else's coverage. This
+          # is a real bug we hit: checked.h ended up displaying slice.h's
+          # numbers because of one missing pair earlier in the stream.
+          #
+          # awk tracks state explicitly: remember the most recent File
+          # line, emit a (File, Condition) pair only when we actually
+          # see a Condition, then forget the File so a stray Condition
+          # line later cannot be misattributed.
+          awk '
+            /^File / {
+              current = $0
+              sub(/^File /, "", current)
+              gsub(/'\''/, "", current)
+              have_file = 1
+              next
+            }
+            /^Condition outcomes covered:/ {
+              if (have_file) {
+                print current "\t" $0
+                have_file = 0
+              }
+            }
+          ' gcov_output.txt | \
             grep -v "/test/" | \
-            sed "s|File '${{ github.workspace }}/||;s|'||g" | \
+            sed "s|${{ github.workspace }}/||" | \
             tee mcdc_per_file.txt
 
           python3 << 'PYEOF'
           import re
-          from collections import defaultdict
 
+          # For each library header we may see multiple gcov sections —
+          # one per test binary that includes the header. Each section
+          # reports condition coverage from the perspective of that
+          # specific translation unit, so different sections can have
+          # different denominators (a TU that only uses 2 functions of
+          # checked.h reports a smaller "total" than a TU that uses all
+          # 18). Across sections we want the entry with the LARGEST
+          # total — that's the most complete view of the file.
           best = {}
           with open("mcdc_per_file.txt") as f:
               for line in f:
@@ -688,9 +726,14 @@ jobs:
                   pct = float(m.group(1))
                   total = int(m.group(2))
                   hit = int(total * pct / 100 + 0.5)
-                  if filename not in best or total > best[filename][2] or \
-                     (total == best[filename][2] and pct > best[filename][0]):
+                  if filename not in best:
                       best[filename] = (pct, hit, total)
+                  else:
+                      # Prefer the entry with the largest total. Among
+                      # ties prefer the higher percentage (better view).
+                      cur_pct, cur_hit, cur_total = best[filename]
+                      if total > cur_total or (total == cur_total and pct > cur_pct):
+                          best[filename] = (pct, hit, total)
 
           results = [(v[0], v[1], v[2], v[2]-v[1], k) for k, v in best.items()]
           results.sort()
