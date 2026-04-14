@@ -519,6 +519,81 @@ TEST(checked_mul_isize_quadrants) {
 }
 
 /* =========================================================================
+ * checked_mul_isize — MC/DC gap closer for the (a == 1 && b == ISIZE_MIN)
+ * special-case guard
+ *
+ * The fallback path in checked_mul_isize contains the line
+ *     if (a == 1 && b == CANON_ISIZE_MIN) { ... return true; }
+ * (and similarly for (a == -1 && b == ISIZE_MIN), handled elsewhere).
+ *
+ * The two branch outcomes we need, beyond what quadrants_op already covers:
+ *   - a == 1, b != ISIZE_MIN  → first subcondition true, second false
+ *   - a != 1, b == ISIZE_MIN  → first subcondition false (with b == ISIZE_MIN
+ *                                 so the compound short-circuit is fully exercised)
+ * Both are normal-path no-overflow multiplications, but they nail down the
+ * MC/DC independence of each subcondition in the &&.
+ * ====================================================================== */
+
+TEST(checked_mul_isize_one_min_guard) {
+    isize result = 0;
+
+    /* a == 1, b == ISIZE_MIN: the special case itself (exact path) */
+    EXPECT(checked_mul_isize(1, CANON_ISIZE_MIN, &result) == true &&
+           result == CANON_ISIZE_MIN);
+
+    /* a == 1, b != ISIZE_MIN: first subcondition true, second false.
+     * Identity multiplication; b ranges over several values to be safe. */
+    EXPECT(checked_mul_isize(1, 0, &result)                == true && result == 0);
+    EXPECT(checked_mul_isize(1, 1, &result)                == true && result == 1);
+    EXPECT(checked_mul_isize(1, -1, &result)               == true && result == -1);
+    EXPECT(checked_mul_isize(1, CANON_ISIZE_MAX, &result)  == true && result == CANON_ISIZE_MAX);
+    EXPECT(checked_mul_isize(1, CANON_ISIZE_MIN + 1, &result) == true &&
+           result == CANON_ISIZE_MIN + 1);
+
+    /* a != 1, b == ISIZE_MIN: first subcondition false with the same b.
+     * a == 0 is safe (zero short-circuit), a == -1 overflows (INT_MIN negation). */
+    EXPECT(checked_mul_isize(0, CANON_ISIZE_MIN, &result)  == true && result == 0);
+    EXPECT(checked_mul_isize(-1, CANON_ISIZE_MIN, &result) == false);
+}
+
+/* =========================================================================
+ * checked_mul_u64 — MC/DC gap closer for the (a == 0 || b == 0) shortcut
+ *
+ * The fallback path in checked_mul_u64 has:
+ *     if (a == 0 || b == 0) { *result = 0; return true; }
+ * The existing checked_mul_mcdc test above exercises this for checked_mul
+ * (usize), but checked_mul_u64 is a distinct function and needs its own
+ * coverage of the same pattern. This test hits all four MC/DC pairs on
+ * the || specifically for the u64 overload.
+ * ====================================================================== */
+
+TEST(checked_mul_u64_mcdc) {
+    u64 result = 0;
+
+    /* a == 0, b == 0: both true (pair: neither independently matters) */
+    EXPECT(checked_mul_u64(0, 0, &result) == true && result == 0);
+
+    /* a == 0, b != 0: first true, second false — first subcondition
+     * independently decides the outcome */
+    EXPECT(checked_mul_u64(0, 42, &result) == true && result == 0);
+    EXPECT(checked_mul_u64(0, 0xFFFFFFFFFFFFFFFFULL, &result) == true && result == 0);
+
+    /* a != 0, b == 0: first false, second true — second subcondition
+     * independently decides the outcome */
+    EXPECT(checked_mul_u64(42, 0, &result) == true && result == 0);
+    EXPECT(checked_mul_u64(0xFFFFFFFFFFFFFFFFULL, 0, &result) == true && result == 0);
+
+    /* Both non-zero, no overflow: reaches division check, passes */
+    EXPECT(checked_mul_u64(2, 3, &result) == true && result == 6);
+
+    /* Both non-zero, exact boundary */
+    EXPECT(checked_mul_u64(0xFFFFFFFFFFFFFFFFULL / 2, 2, &result) == true);
+
+    /* Both non-zero, overflow */
+    EXPECT(checked_mul_u64(0xFFFFFFFFFFFFFFFFULL / 2 + 1, 3, &result) == false);
+}
+
+/* =========================================================================
  * checked_mul (usize) — MC/DC short-circuit for fallback path
  *
  * The fallback has: if (a == 0 || b == 0) { *result = 0; return true; }
@@ -762,6 +837,7 @@ int main(void) {
     RUN(checked_mul_op);
     RUN(checked_mul_typed_op);
     RUN(checked_mul_mcdc);
+    RUN(checked_mul_u64_mcdc);
 
     RUN(checked_add_isize_op);
     RUN(checked_add_isize_mcdc);
@@ -769,6 +845,7 @@ int main(void) {
     RUN(checked_sub_isize_mcdc);
     RUN(checked_mul_isize_op);
     RUN(checked_mul_isize_quadrants);
+    RUN(checked_mul_isize_one_min_guard);
 
     RUN(checked_min_op);
     RUN(checked_max_op);
