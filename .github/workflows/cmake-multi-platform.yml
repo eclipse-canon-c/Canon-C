@@ -415,14 +415,17 @@ jobs:
             graphviz \
             libcairo2-dev \
             libgtk-3-dev \
-            libgtksourceview-3.0-dev
+            libgtksourceview-3.0-dev \
+            cmake \
+            python3-tomli \
+            python3-pyparsing
 
       - name: Cache opam switch
         id: cache-opam
         uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-cvc5-v4
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-cvc5-v5
 
       - name: Initialise opam (cache miss only)
         if: steps.cache-opam.outputs.cache-hit != 'true'
