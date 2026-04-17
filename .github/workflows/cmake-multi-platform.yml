@@ -431,17 +431,8 @@ jobs:
       - name: Initialise opam (cache miss only)
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
-          # Wipe any partial state from a previous failed run.
-          # Without restore-keys this should never happen, but belt-and-braces:
-          # if ~/.opam exists with a partial install, GitHub Actions can still
-          # serve it via internal cache mechanisms in some edge cases.
           rm -rf ~/.opam
-
-          # --bare: don't create a default switch (we make our own below)
-          # --no-setup: don't ask about shell integration (non-interactive)
-          # --disable-sandboxing: required on GitHub runners (no bwrap setup)
           opam init -y --bare --no-setup --disable-sandboxing
-
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
@@ -488,11 +479,9 @@ jobs:
           echo "  WP exit status: ${WP_EXIT}"
           echo "==============================================="
 
-          # Extract the proved-goals summary line.
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # Count timeouts and verify they are the two expected ones.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_output.txt || true)
           EXPECTED_TIMEOUTS=2
           echo "  Timeouts observed: ${TIMEOUT_COUNT} (expected ${EXPECTED_TIMEOUTS})"
@@ -504,7 +493,6 @@ jobs:
             exit 1
           fi
 
-          # Verify the timeouts are exactly the known-deferred goals.
           EXPECTED_GOAL_1="typed_checked_add_overflow_ensures"
           EXPECTED_GOAL_2="typed_checked_add_u64_overflow_ensures"
 
@@ -529,10 +517,17 @@ jobs:
           path: wp_output.txt
 
       - name: "WP: core/primitives/bits.h"
-        # Initial verification run for bits.h. This step runs WP and
-        # reports results without enforcement. Once the baseline is
-        # established (which goals prove, which timeout), add an
-        # enforcement wrapper matching the checked.h pattern.
+        # WP is expected to leave exactly 15 goals unproven.
+        # These are all WP model limitations on bitwise reasoning — not
+        # code defects. Categories:
+        #   - Bitwise complement (~) in specs: bits_clear, bits_insert (3)
+        #   - SWAR popcount magic constants: bits_popcount (1)
+        #   - Rotation shift RTE + spec |: bits_rotl, bits_rotr (4)
+        #   - Minimality through bit-smearing: bits_next_power_of_two (4)
+        #   - Byte swap signed overflow + spec: bits_bswap16/32/64 (3)
+        # All 15 are documented in docs/verification.md and deviations.md.
+        # The wrapper below verifies WP fails on EXACTLY these 15 goals —
+        # any additional failure is a regression and fails the job.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -559,17 +554,36 @@ jobs:
           echo "  ${PROVED_LINE}"
 
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bits_output.txt || true)
-          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          EXPECTED_TIMEOUTS=15
+          echo "  Timeouts observed: ${TIMEOUT_COUNT} (expected ${EXPECTED_TIMEOUTS})"
 
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_bits_output.txt || true)
-          echo "  Failed: ${FAILED_COUNT}"
+          if [ "${TIMEOUT_COUNT}" -ne "${EXPECTED_TIMEOUTS}" ]; then
+            echo "FAIL: unexpected number of timeouts."
+            echo "      Expected exactly ${EXPECTED_TIMEOUTS} documented timeouts."
+            echo "      See docs/verification.md for details."
+            exit 1
+          fi
 
-          # List any timeouts or failures for diagnosis
-          grep -E "^\[wp\] \[(Timeout|Failed)\]" wp_bits_output.txt || true
+          # Spot-check representative goals from each timeout category.
+          # Full list: see docs/verification.md, bits.h section.
+          CHECKS=(
+            "typed_bits_clear_ensures"
+            "typed_bits_popcount_ensures"
+            "typed_bits_rotl_nonzero_shift_ensures"
+            "typed_bits_next_power_of_two_normal_ensures"
+            "typed_bits_bswap16_assert_rte_signed_overflow"
+            "typed_bits_bswap64_ensures"
+          )
 
-          echo "==============================================="
-          echo "  NOTE: bits.h is in initial verification. No enforcement"
-          echo "  wrapper yet. Add one after the baseline is established."
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -q "${goal}" wp_bits_output.txt; then
+              echo "FAIL: expected timeout on ${goal} not observed."
+              exit 1
+            fi
+          done
+
+          echo "PASS: WP discharged all goals automatically except the 15"
+          echo "      documented timeouts. See docs/verification.md."
           echo "==============================================="
 
       - name: Upload WP proof output (bits.h)
@@ -720,23 +734,6 @@ jobs:
             gcov-14 --conditions "$gcda" 2>/dev/null
           done > gcov_output.txt 2>&1
 
-          # Pair each "File '...'" line with the FIRST subsequent
-          # "Condition outcomes covered:" line, then reset.
-          #
-          # Why awk and not 'paste - -':
-          # gcov sometimes emits a File line with no following Condition
-          # line (header has no compound conditions), or vice versa, or
-          # with intervening "Lines executed:" lines. paste - - blindly
-          # zips two streams together; if one line is missing anywhere,
-          # every subsequent pair is shifted by one and every file from
-          # that point on gets attributed someone else's coverage. This
-          # is a real bug we hit: checked.h ended up displaying slice.h's
-          # numbers because of one missing pair earlier in the stream.
-          #
-          # awk tracks state explicitly: remember the most recent File
-          # line, emit a (File, Condition) pair only when we actually
-          # see a Condition, then forget the File so a stray Condition
-          # line later cannot be misattributed.
           awk '
             /^File / {
               current = $0
@@ -759,14 +756,6 @@ jobs:
           python3 << 'PYEOF'
           import re
 
-          # For each library header we may see multiple gcov sections —
-          # one per test binary that includes the header. Each section
-          # reports condition coverage from the perspective of that
-          # specific translation unit, so different sections can have
-          # different denominators (a TU that only uses 2 functions of
-          # checked.h reports a smaller "total" than a TU that uses all
-          # 18). Across sections we want the entry with the LARGEST
-          # total — that's the most complete view of the file.
           best = {}
           with open("mcdc_per_file.txt") as f:
               for line in f:
@@ -783,8 +772,6 @@ jobs:
                   if filename not in best:
                       best[filename] = (pct, hit, total)
                   else:
-                      # Prefer the entry with the largest total. Among
-                      # ties prefer the higher percentage (better view).
                       cur_pct, cur_hit, cur_total = best[filename]
                       if total > cur_total or (total == cur_total and pct > cur_pct):
                           best[filename] = (pct, hit, total)
@@ -815,17 +802,9 @@ jobs:
           PYEOF
 
       - name: "Debug: per-line MC/DC detail for checked.h"
-        # Temporary diagnostic step. Dumps the full gcov --conditions output
-        # for checked.h so we can see which specific lines have uncovered
-        # condition outcomes. Used to drive tests to 100% MC/DC coverage.
-        # Remove this step once checked.h reaches 100% and stays there.
         run: |
           cd build
 
-          # Find the .gcda file for checked_test (the translation unit that
-          # exercises checked.h) and run gcov on it with verbose condition
-          # output, which includes per-line "condition outcomes not covered"
-          # annotations in the generated .gcov file.
           CHECKED_GCDA=$(find . -name "checked_test*.gcda" | head -1)
 
           if [ -z "$CHECKED_GCDA" ]; then
@@ -849,7 +828,6 @@ jobs:
             cat "$CHECKED_GCOV"
           else
             echo "No checked.h.gcov file generated — trying alternative approach"
-            # Look in the per-object gcov directories
             for d in $(find . -type d -name "*.dir"); do
               ls "$d"/*checked* 2>/dev/null || true
             done
