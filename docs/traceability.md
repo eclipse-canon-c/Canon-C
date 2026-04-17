@@ -44,6 +44,9 @@
 |--------------------|--------------------------------------------------------------|
 | **Date**           | 2026-04-17                                                   |
 | **Version**        | v1.3.0                                                       |
+| **Commit**         | 972eb6c                                                      |
+| **CI run**         | Canon-C CI #743                                              |
+| **CI job**         | coverage                                                     |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
 | **Build type**     | Debug                                                        |
@@ -98,8 +101,9 @@ Headers at 100% MC/DC (no coverage-driven tests — correctness tests only):
 `search_impl.h`, `any_all_impl.h`, `unique_impl.h`, `checked.h`
 
 checked.h reached 100% MC/DC (64/64) after the checked_mul_isize
-refactor on 2026-04-17, which lifted identity cases before the
-ISIZE_MIN guard to eliminate a structurally unreachable branch.
+refactor on 2026-04-17 (commit 972eb6c, CI #743), which lifted identity
+cases before the ISIZE_MIN guard to eliminate a structurally unreachable
+branch.
 
 ### History
 
@@ -108,6 +112,6 @@ ISIZE_MIN guard to eliminate a structurally unreachable branch.
 | 2026-04-07 | 669d6a7 | #668   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | —      | Baseline — branch coverage only                                         |
 | 2026-04-07 | 0a22f76 | #677   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | 74.3%  | First MC/DC measurement (GCC 14.2.0)                                    |
 | 2026-04-14 | 24c69cc | #739   | v1.3.0  | 95.5%  | 99.6%     | 83.9%    | 83.1%  | CANON_NO_REQUIRE + CANON_CHECKED_FORCE_FALLBACK flags added             |
-| 2026-04-17 |         |        | v1.3.0  | 95.5%  | 99.6%     | 84.0%    | 83.1%  | checked_mul_isize refactor; checked.h → 100% MC/DC; WP artifact upload  |
+| 2026-04-17 | 972eb6c | #743   | v1.3.0  | 95.5%  | 99.6%     | 84.0%    | 83.1%  | checked_mul_isize refactor; checked.h → 100% MC/DC; WP artifact upload  |
 
 ---
