@@ -743,6 +743,12 @@ static inline bool checked_sub_isize(isize a, isize b, isize* result) {
  *         Signed integer overflow is undefined behavior in C — `a * b` must
  *         never be evaluated if it would overflow.
  *
+ * @note Identity cases (a == 1, b == 1) are handled first so that
+ *       ISIZE_MIN * 1 and 1 * ISIZE_MIN succeed without entering the
+ *       ISIZE_MIN overflow guard. This also eliminates structurally
+ *       unreachable branches in the ISIZE_MIN block, achieving 100%
+ *       MC/DC on the fallback path.
+ *
  * @note The contract uses ACSL's mathematical-integer type `(integer)` to
  *       specify the overflow condition as a single bound on the true product,
  *       independent of the four-quadrant division gymnastics the fallback
@@ -782,15 +788,22 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
         return true;
     }
     /*
+     * Identity cases: multiplying by 1 always succeeds.
+     * Handled before the ISIZE_MIN guard so that ISIZE_MIN * 1 and
+     * 1 * ISIZE_MIN succeed without special-casing inside the guard.
+     * This also eliminates the structurally unreachable branch that
+     * previously existed when identity checks were nested inside
+     * the (a == ISIZE_MIN || b == ISIZE_MIN) block.
+     */
+    if (a == 1) { *result = b; return true; }
+    if (b == 1) { *result = a; return true; }
+    /*
      * ISIZE_MIN is a special case: its negation is unrepresentable.
-     * The division-based checks below cannot catch ISIZE_MIN * -1 because
-     * -ISIZE_MIN overflows before the comparison is evaluated.
-     * Handle all ISIZE_MIN cases explicitly: ISIZE_MIN * 1 and 1 * ISIZE_MIN
-     * are the only non-zero multiplications that fit.
+     * With identity cases already handled above, the only remaining
+     * non-zero, non-identity multiplications involving ISIZE_MIN
+     * all overflow (e.g. ISIZE_MIN * 2, ISIZE_MIN * -1, etc.).
      */
     if (a == CANON_ISIZE_MIN || b == CANON_ISIZE_MIN) {
-        if (a == CANON_ISIZE_MIN && b ==  1) { *result = CANON_ISIZE_MIN; return true; }
-        if (a ==  1 && b == CANON_ISIZE_MIN) { *result = CANON_ISIZE_MIN; return true; }
         return false;
     }
     /*
