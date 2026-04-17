@@ -15,6 +15,7 @@ with ACSL contracts, enforced in CI on every push to master.
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified                                        |
+| **Baseline commit**    | 972eb6c (Canon-C CI #743)                       |
 | **Functions**          | 18 of 18 annotated and proved                  |
 | **Proof obligations**  | 1539 / 1541 discharged automatically            |
 | **Manually discharged**| 2 (see below)                                   |
@@ -25,7 +26,7 @@ with ACSL contracts, enforced in CI on every push to master.
 | **MC/DC coverage**     | 100% (64/64 condition outcomes)                 |
 | **Line coverage**      | 100% (81/81)                                    |
 | **Function coverage**  | 100% (18/18)                                    |
-| **CI artifact**        | `wp-proof-output` (full per-goal breakdown)     |
+| **CI artifact**        | `wp-proof-checked` (full per-goal breakdown)    |
 
 ### What is proved
 
@@ -92,7 +93,7 @@ returns `false`. QED.
 **Verification**: The CI wrapper explicitly checks that exactly these
 two goals time out and no others. Any additional timeout is a regression
 and fails the build. The full WP output is uploaded as the
-`wp-proof-output` CI artifact for auditor inspection.
+`wp-proof-checked` CI artifact for auditor inspection.
 
 **Future work**: Investigate adding an ACSL ghost lemma encoding the
 modular-arithmetic relationship to allow Alt-Ergo or Z3 to close the
@@ -164,17 +165,17 @@ on the goals listed above.
 The following headers are planned for ACSL annotation and WP proof,
 in dependency order (bottom-up within each layer):
 
-### core/primitives/ (next)
+### core/primitives/ (current)
 
-| Header       | Status     | Notes                                    |
-|--------------|------------|------------------------------------------|
-| checked.h    | ✅ Verified | 1539/1541 automatic, 2 manual            |
-| bits.h       | Planned    | Bitwise ops, 100% MC/DC already          |
-| compare.h    | Planned    | Total ordering, 100% MC/DC already       |
-| ptr.h        | Planned    | Alignment and pointer arithmetic          |
-| types.h      | N/A        | Type definitions only, no logic to prove  |
-| limits.h     | N/A        | Constant definitions only                 |
-| contract.h   | N/A        | Assertion infrastructure, not provable    |
+| Header       | Status         | Notes                                    |
+|--------------|----------------|------------------------------------------|
+| checked.h    | ✅ Verified     | 1539/1541 automatic, 2 manual            |
+| bits.h       | 🔄 In progress | ACSL annotated, initial WP run pending   |
+| compare.h    | Planned        | Total ordering, 100% MC/DC already       |
+| ptr.h        | Planned        | Alignment and pointer arithmetic          |
+| types.h      | N/A            | Type definitions only, no logic to prove  |
+| limits.h     | N/A            | Constant definitions only                 |
+| contract.h   | N/A            | Assertion infrastructure, not provable    |
 
 ### core/ (after core/primitives/ complete)
 
