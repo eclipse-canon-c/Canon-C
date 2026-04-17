@@ -14,12 +14,15 @@ on:
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
-#                     Currently scoped to core/primitives/checked.h only.
-#                     Additional headers will be added as they are annotated.
+#                     Currently scoped to core/primitives/checked.h and
+#                     core/primitives/bits.h. Additional headers will be
+#                     added as they are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
-#                     Uses -DCANON_CHECKED_FORCE_FALLBACK so the fallback
-#                     paths in checked.h are measurable (builtins expand to
-#                     single instructions with no branches for gcov to see).
+#                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
+#                     -DCANON_BITS_FORCE_FALLBACK so the fallback paths
+#                     in checked.h and bits.h are measurable (builtins
+#                     expand to single instructions with no branches for
+#                     gcov to see).
 #   misra           — Linux only, MISRA C:2012 advisory analysis
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
@@ -347,12 +350,13 @@ jobs:
   # -------------------------------------------------------------------------
   # 5. Formal verification — Frama-C (Linux only)
   #
-  #    Scope: core/primitives/checked.h ONLY.
+  #    Scope: core/primitives/checked.h and core/primitives/bits.h.
   #
   #    checked.h is the first Canon-C header with full ACSL contracts
-  #    (every unsigned function plus all three signed functions). When
-  #    bits.h, ptr.h, compare.h and the core/ layer are annotated, add
-  #    them to the file list in the WP step below.
+  #    (every unsigned function plus all three signed functions). bits.h
+  #    is the second, covering portable bit manipulation with fallback
+  #    paths. When ptr.h, compare.h and the core/ layer are annotated,
+  #    add them to the file list in the WP steps below.
   #
   #    Installation: opam with aggressive caching.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
@@ -378,15 +382,15 @@ jobs:
   #      invalid shifts, null derefs, division by zero. Mathematical
   #      proof — if WP says "Valid", the property holds for ALL inputs.
   #
-  #    Eva is NOT run on checked.h — see the comment in the steps below
+  #    Eva is NOT run on checked.h or bits.h — see the comment below
   #    for the rationale (header-only modules have no entry point).
   #
   #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
-  #    checked.h uses this to force the fallback path (WP has no
-  #    semantics for __builtin_*_overflow).
+  #    checked.h and bits.h use this to force the fallback path (WP
+  #    has no semantics for compiler builtins).
   #
   #    Certification evidence produced:
-  #      - Absence of runtime errors in checked.h (all standards)
+  #      - Absence of runtime errors (all standards)
   #      - Contract verification (requirement traceability)
   #      - Formal proof artifacts (DO-178C objective substitution)
   # -------------------------------------------------------------------------
@@ -427,8 +431,17 @@ jobs:
       - name: Initialise opam (cache miss only)
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
+          # Wipe any partial state from a previous failed run.
+          # Without restore-keys this should never happen, but belt-and-braces:
+          # if ~/.opam exists with a partial install, GitHub Actions can still
+          # serve it via internal cache mechanisms in some edge cases.
           rm -rf ~/.opam
+
+          # --bare: don't create a default switch (we make our own below)
+          # --no-setup: don't ask about shell integration (non-interactive)
+          # --disable-sandboxing: required on GitHub runners (no bwrap setup)
           opam init -y --bare --no-setup --disable-sandboxing
+
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
@@ -475,9 +488,11 @@ jobs:
           echo "  WP exit status: ${WP_EXIT}"
           echo "==============================================="
 
+          # Extract the proved-goals summary line.
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_output.txt || true)
           echo "  ${PROVED_LINE}"
 
+          # Count timeouts and verify they are the two expected ones.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_output.txt || true)
           EXPECTED_TIMEOUTS=2
           echo "  Timeouts observed: ${TIMEOUT_COUNT} (expected ${EXPECTED_TIMEOUTS})"
@@ -489,6 +504,7 @@ jobs:
             exit 1
           fi
 
+          # Verify the timeouts are exactly the known-deferred goals.
           EXPECTED_GOAL_1="typed_checked_add_overflow_ensures"
           EXPECTED_GOAL_2="typed_checked_add_u64_overflow_ensures"
 
@@ -505,12 +521,63 @@ jobs:
           echo "      verified obligations documented in docs/verification.md."
           echo "==============================================="
 
-      - name: Upload WP proof output
+      - name: Upload WP proof output (checked.h)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wp-proof-output
+          name: wp-proof-checked
           path: wp_output.txt
+
+      - name: "WP: core/primitives/bits.h"
+        # Initial verification run for bits.h. This step runs WP and
+        # reports results without enforcement. Once the baseline is
+        # established (which goals prove, which timeout), add an
+        # enforcement wrapper matching the checked.h pattern.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/primitives/bits.h 2>&1 | tee wp_bits_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (bits.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_bits_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bits_output.txt || true)
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_bits_output.txt || true)
+          echo "  Failed: ${FAILED_COUNT}"
+
+          # List any timeouts or failures for diagnosis
+          grep -E "^\[wp\] \[(Timeout|Failed)\]" wp_bits_output.txt || true
+
+          echo "==============================================="
+          echo "  NOTE: bits.h is in initial verification. No enforcement"
+          echo "  wrapper yet. Add one after the baseline is established."
+          echo "==============================================="
+
+      - name: Upload WP proof output (bits.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-bits
+          path: wp_bits_output.txt
 
       # -- Eva (Evolved Value Analysis) is intentionally NOT run on checked.h --
       # Eva requires an entry point function to start abstract interpretation
@@ -535,26 +602,13 @@ jobs:
       # division by zero, invalid shifts, null derefs, and out-of-bounds
       # access — all the actual runtime errors you want to rule out.
       #
-      # - name: "WP: core/primitives/bits.h"
-      #   run: |
-      #     eval $(opam env --switch=frama-c)
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3,cvc5 \
-      #       -wp-timeout 120 \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG" \
-      #       core/primitives/bits.h
-      #
       # - name: "WP: core/primitives/ptr.h"
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3,cvc5 \
+      #       -wp-prover alt-ergo,z3 \
       #       -wp-timeout 120 \
+      #       -wp-split \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
       #         -I core \
@@ -567,8 +621,9 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3,cvc5 \
+      #       -wp-prover alt-ergo,z3 \
       #       -wp-timeout 120 \
+      #       -wp-split \
       #       -cpp-extra-args=" \
       #         -I core/primitives \
       #         -I core \
@@ -580,12 +635,13 @@ jobs:
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
-  #    -DCANON_CHECKED_FORCE_FALLBACK is passed so the fallback paths
-  #    in checked.h are exercised. Without this flag, GCC expands
-  #    __builtin_*_overflow to single instructions with no branches,
-  #    the #else fallback blocks become dead code, and gcov reports
-  #    0% MC/DC on them. Forcing the fallback makes coverage measure
-  #    the same code Frama-C is proving — the two tracks stay consistent.
+  #    -DCANON_CHECKED_FORCE_FALLBACK and -DCANON_BITS_FORCE_FALLBACK are
+  #    passed so the fallback paths in checked.h and bits.h are exercised.
+  #    Without these flags, GCC expands builtins to single instructions
+  #    with no branches, the #else fallback blocks become dead code, and
+  #    gcov reports 0% MC/DC on them. Forcing the fallback makes coverage
+  #    measure the same code Frama-C is proving — the two tracks stay
+  #    consistent.
   # -------------------------------------------------------------------------
   coverage:
     needs: build
@@ -603,6 +659,9 @@ jobs:
         # CANON_CHECKED_FORCE_FALLBACK: exercise the same fallback path WP
         #   verifies (otherwise GCC expands __builtin_*_overflow to single
         #   instructions with no branches for gcov to see).
+        # CANON_BITS_FORCE_FALLBACK: same rationale for bits.h — forces the
+        #   portable fallback paths for popcount, clz, ctz, and bswap
+        #   instead of compiler builtins.
         # CANON_NO_REQUIRE: compiles CHECKED_ASSERT_RESULT(result) out to
         #   nothing. Without this, every function contains a runtime NULL
         #   assertion whose NULL branch is structurally unreachable (the
@@ -616,7 +675,7 @@ jobs:
           cmake -B build \
             -DCMAKE_C_COMPILER=gcc-14 \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_NO_REQUIRE" \
+            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_BITS_FORCE_FALLBACK -DCANON_NO_REQUIRE" \
             -DENABLE_SANITIZERS=OFF \
             -S "${{ github.workspace }}"
 
@@ -661,6 +720,23 @@ jobs:
             gcov-14 --conditions "$gcda" 2>/dev/null
           done > gcov_output.txt 2>&1
 
+          # Pair each "File '...'" line with the FIRST subsequent
+          # "Condition outcomes covered:" line, then reset.
+          #
+          # Why awk and not 'paste - -':
+          # gcov sometimes emits a File line with no following Condition
+          # line (header has no compound conditions), or vice versa, or
+          # with intervening "Lines executed:" lines. paste - - blindly
+          # zips two streams together; if one line is missing anywhere,
+          # every subsequent pair is shifted by one and every file from
+          # that point on gets attributed someone else's coverage. This
+          # is a real bug we hit: checked.h ended up displaying slice.h's
+          # numbers because of one missing pair earlier in the stream.
+          #
+          # awk tracks state explicitly: remember the most recent File
+          # line, emit a (File, Condition) pair only when we actually
+          # see a Condition, then forget the File so a stray Condition
+          # line later cannot be misattributed.
           awk '
             /^File / {
               current = $0
@@ -683,6 +759,14 @@ jobs:
           python3 << 'PYEOF'
           import re
 
+          # For each library header we may see multiple gcov sections —
+          # one per test binary that includes the header. Each section
+          # reports condition coverage from the perspective of that
+          # specific translation unit, so different sections can have
+          # different denominators (a TU that only uses 2 functions of
+          # checked.h reports a smaller "total" than a TU that uses all
+          # 18). Across sections we want the entry with the LARGEST
+          # total — that's the most complete view of the file.
           best = {}
           with open("mcdc_per_file.txt") as f:
               for line in f:
@@ -699,6 +783,8 @@ jobs:
                   if filename not in best:
                       best[filename] = (pct, hit, total)
                   else:
+                      # Prefer the entry with the largest total. Among
+                      # ties prefer the higher percentage (better view).
                       cur_pct, cur_hit, cur_total = best[filename]
                       if total > cur_total or (total == cur_total and pct > cur_pct):
                           best[filename] = (pct, hit, total)
@@ -729,9 +815,17 @@ jobs:
           PYEOF
 
       - name: "Debug: per-line MC/DC detail for checked.h"
+        # Temporary diagnostic step. Dumps the full gcov --conditions output
+        # for checked.h so we can see which specific lines have uncovered
+        # condition outcomes. Used to drive tests to 100% MC/DC coverage.
+        # Remove this step once checked.h reaches 100% and stays there.
         run: |
           cd build
 
+          # Find the .gcda file for checked_test (the translation unit that
+          # exercises checked.h) and run gcov on it with verbose condition
+          # output, which includes per-line "condition outcomes not covered"
+          # annotations in the generated .gcov file.
           CHECKED_GCDA=$(find . -name "checked_test*.gcda" | head -1)
 
           if [ -z "$CHECKED_GCDA" ]; then
@@ -755,6 +849,7 @@ jobs:
             cat "$CHECKED_GCOV"
           else
             echo "No checked.h.gcov file generated — trying alternative approach"
+            # Look in the per-object gcov directories
             for d in $(find . -type d -name "*.dir"); do
               ls "$d"/*checked* 2>/dev/null || true
             done
