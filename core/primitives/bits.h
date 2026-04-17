@@ -40,6 +40,11 @@
  * All functions are pure (assigns \nothing) — they take values by copy
  * and return results without modifying any memory.
  *
+ * ACSL precedence note: In ACSL (as in C), `==` binds tighter than `&`,
+ * `^`, and `|`. All ensures clauses that use bitwise operators on the
+ * RHS of `==` wrap the entire RHS in parentheses to avoid the classic
+ * `\result == a & b` → `(\result == a) & b` mis-parse.
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - All operations: O(1) — constant time bitwise operations
@@ -155,7 +160,7 @@
 /*@
     requires bit < 64;
     assigns  \nothing;
-    ensures  \result <==> ((value >> bit) & 1) == 1;
+    ensures  \result <==> (((value >> bit) & 1) == 1);
  */
 static inline bool bits_test(u64 value, u32 bit) {
     return (value >> bit) & 1;
@@ -259,7 +264,7 @@ static inline u64 bits_toggle(u64 value, u32 bit) {
  *
  * @param value Value to extract from
  * @param start Starting bit position (0 = LSB)
- * @param count Number of bits to extract (0-64)
+ * @param count Number of bits to extract (1-64)
  *
  * @return Extracted bits, right-justified
  *
@@ -284,7 +289,7 @@ static inline u64 bits_toggle(u64 value, u32 bit) {
         ensures \result == value >> start;
     behavior normal:
         assumes 0 < count < 64;
-        ensures \result == (value >> start) & (((u64)1 << count) - 1);
+        ensures \result == ((value >> start) & (((u64)1 << count) - 1));
     complete behaviors;
     disjoint behaviors;
  */
@@ -304,7 +309,7 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
  * @param dst Destination value
  * @param src Source bits (only low `count` bits are used)
  * @param start Starting bit position in dst
- * @param count Number of bits to insert (0-64)
+ * @param count Number of bits to insert
  *
  * @return dst with the specified bits replaced by the low `count` bits of src
  *
@@ -331,13 +336,15 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
     behavior normal:
         assumes 0 < count < 64;
         ensures \let mask = (((u64)1 << count) - 1) << start;
-                \result == (dst & ~mask) | ((src << start) & mask);
+                \result == ((dst & ~mask) | ((src << start) & mask));
     complete behaviors;
     disjoint behaviors;
  */
 static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
     if (count == 0) return dst;
     if (count >= 64) {
+        /* All 64 bits are replaced; shift src into position.
+         * dst is fully overwritten — no bits of dst are preserved. */
         return src << start;
     }
     u64 mask = ((1ULL << count) - 1) << start;
@@ -482,7 +489,7 @@ static inline u32 bits_clz(u64 value) {
     behavior nonzero:
         assumes value != 0;
         ensures 0 <= \result <= 63;
-        ensures (value >> \result) & 1;
+        ensures ((value >> \result) & 1) == 1;
         ensures (value & (((u64)1 << \result) - 1)) == 0;
     complete behaviors;
     disjoint behaviors;
@@ -534,7 +541,7 @@ static inline u32 bits_ctz(u64 value) {
     behavior nonzero:
         assumes value != 0;
         ensures 1 <= \result <= 64;
-        ensures (value >> (\result - 1)) & 1;
+        ensures ((value >> (\result - 1)) & 1) == 1;
         ensures (value & (((u64)1 << (\result - 1)) - 1)) == 0;
     complete behaviors;
     disjoint behaviors;
@@ -596,12 +603,24 @@ static inline u32 bits_fls(u64 value) {
  * @return Rotated u64 value
  *
  * @remark shift >= 64 is automatically masked: effective shift = shift & 63
+ * @remark These functions always operate on the full 64-bit width.
+ *         For narrower rotations (e.g. 8-bit), mask the result yourself:
+ *         bits_rotl(val, 2) & 0xFF  — but note this is not a true 8-bit
+ *         rotation (high bits from the upper 56 bits may bleed in).
+ *         Use a dedicated narrow helper for correct narrow rotations.
  *
- * Example:
+ * Example (full u64):
  * ```c
  * u64 val = 0x8000000000000001ULL;  // MSB and LSB set
  * u64 rot = bits_rotl(val, 1);
- * // → 0x0000000000000003ULL
+ * // → 0x0000000000000003ULL  (MSB wraps to bit 0, bit 0 shifts to bit 1)
+ * ```
+ *
+ * Example (illustrative 8-bit behavior — mask result yourself):
+ * ```c
+ * u64 val = 0b10110001;
+ * u64 rot = bits_rotl(val, 2) & 0xFF;  // → 0b11000110
+ * //   high bits 10 wrap to low end → 0b11000110
  * ```
  *
  * @sa bits_rotr()
@@ -613,8 +632,8 @@ static inline u32 bits_fls(u64 value) {
         ensures \result == value;
     behavior nonzero_shift:
         assumes (shift & 63) != 0;
-        ensures \let s = (u32)(shift & 63);
-                \result == (value << s) | (value >> (64 - s));
+        ensures \let s = shift & 63;
+                \result == ((value << s) | (value >> (64 - s)));
     complete behaviors;
     disjoint behaviors;
  */
@@ -636,12 +655,22 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
  * @return Rotated u64 value
  *
  * @remark shift >= 64 is automatically masked: effective shift = shift & 63
+ * @remark These functions always operate on the full 64-bit width.
+ *         For a true narrow rotation (e.g. 8-bit rotr by 2):
+ *         ((narrow >> 2) | (narrow << 6)) & 0xFF
  *
- * Example:
+ * Example (full u64):
  * ```c
  * u64 val = 0x8000000000000001ULL;  // MSB and LSB set
  * u64 rot = bits_rotr(val, 1);
- * // → 0xC000000000000000ULL
+ * // → 0xC000000000000000ULL  (LSB wraps to MSB, MSB shifts to bit 62)
+ * ```
+ *
+ * Example (illustrative 8-bit behavior — use narrow formula above for
+ * correct results):
+ * ```c
+ * u8 narrow = 0b10110001;
+ * u8 rot = ((narrow >> 2) | (narrow << 6)) & 0xFF;  // → 0b01101100
  * ```
  *
  * @sa bits_rotl()
@@ -653,8 +682,8 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
         ensures \result == value;
     behavior nonzero_shift:
         assumes (shift & 63) != 0;
-        ensures \let s = (u32)(shift & 63);
-                \result == (value >> s) | (value << (64 - s));
+        ensures \let s = shift & 63;
+                \result == ((value >> s) | (value << (64 - s)));
     complete behaviors;
     disjoint behaviors;
  */
@@ -803,10 +832,10 @@ static inline u16 bits_bswap16(u16 value) {
  */
 /*@
     assigns \nothing;
-    ensures \result == ((value & 0x000000FFu) << 24) |
-                       ((value & 0x0000FF00u) <<  8) |
-                       ((value & 0x00FF0000u) >>  8) |
-                       ((value & 0xFF000000u) >> 24);
+    ensures \result == (((value & 0x000000FFu) << 24) |
+                        ((value & 0x0000FF00u) <<  8) |
+                        ((value & 0x00FF0000u) >>  8) |
+                        ((value & 0xFF000000u) >> 24));
  */
 static inline u32 bits_bswap32(u32 value) {
 #if CANON_BITS_GNUC
@@ -839,14 +868,14 @@ static inline u32 bits_bswap32(u32 value) {
  */
 /*@
     assigns \nothing;
-    ensures \result == ((value & 0x00000000000000FFULL) << 56) |
-                       ((value & 0x000000000000FF00ULL) << 40) |
-                       ((value & 0x0000000000FF0000ULL) << 24) |
-                       ((value & 0x00000000FF000000ULL) <<  8) |
-                       ((value & 0x000000FF00000000ULL) >>  8) |
-                       ((value & 0x0000FF0000000000ULL) >> 24) |
-                       ((value & 0x00FF000000000000ULL) >> 40) |
-                       ((value & 0xFF00000000000000ULL) >> 56);
+    ensures \result == (((value & 0x00000000000000FFULL) << 56) |
+                        ((value & 0x000000000000FF00ULL) << 40) |
+                        ((value & 0x0000000000FF0000ULL) << 24) |
+                        ((value & 0x00000000FF000000ULL) <<  8) |
+                        ((value & 0x000000FF00000000ULL) >>  8) |
+                        ((value & 0x0000FF0000000000ULL) >> 24) |
+                        ((value & 0x00FF000000000000ULL) >> 40) |
+                        ((value & 0xFF00000000000000ULL) >> 56));
  */
 static inline u64 bits_bswap64(u64 value) {
 #if CANON_BITS_GNUC
