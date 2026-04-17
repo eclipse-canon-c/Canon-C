@@ -29,6 +29,17 @@
  * - Performance: Builtins compile to single instructions (popcnt, bsf, etc.)
  * - Type-safe: Separate functions for different integer sizes
  *
+ * Formal verification:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Every function in this header carries an ACSL contract suitable for
+ * Frama-C WP. When Frama-C is running, `__FRAMAC__` is defined
+ * automatically and the fallback path is forced (builtins cannot be
+ * modeled by WP). The same fallback path can be forced in normal builds
+ * via `-DCANON_BITS_FORCE_FALLBACK` for coverage measurement.
+ *
+ * All functions are pure (assigns \nothing) — they take values by copy
+ * and return results without modifying any memory.
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - All operations: O(1) — constant time bitwise operations
@@ -97,6 +108,26 @@
 #endif
 
 /* ============================================================================
+ * Frama-C / Fallback Override
+ *
+ * Frama-C cannot model compiler builtins (__builtin_popcountll,
+ * __builtin_clzll, __builtin_ctzll, __builtin_bswap*, etc.) — WP has
+ * no semantics for them. When Frama-C is running (__FRAMAC__ is defined
+ * automatically), force the fallback path so every function has real C
+ * code to prove. This also applies when a downstream build explicitly
+ * wants to verify or measure the fallback path via -DCANON_BITS_FORCE_FALLBACK.
+ * The coverage CI job uses this flag to keep MC/DC measurement aligned
+ * with the WP proof, same as CANON_CHECKED_FORCE_FALLBACK for checked.h.
+ * ========================================================================= */
+
+#if defined(__FRAMAC__) || defined(CANON_BITS_FORCE_FALLBACK)
+    #undef  CANON_BITS_GNUC
+    #define CANON_BITS_GNUC 0
+    #undef  CANON_BITS_MSVC
+    #define CANON_BITS_MSVC 0
+#endif
+
+/* ============================================================================
  * Basic Bit Operations (Single Bit)
  * ========================================================================= */
 
@@ -108,7 +139,7 @@
  *
  * @return true if bit is set (1), false if clear (0)
  *
- * @pre bit must be < 64 (not checked — UB if violated)
+ * @pre bit must be < 64
  *
  * @remark Compiles to: (value >> bit) & 1
  *
@@ -120,6 +151,11 @@
  * ```
  *
  * @sa bits_set(), bits_clear()
+ */
+/*@
+    requires bit < 64;
+    assigns  \nothing;
+    ensures  \result <==> ((value >> bit) & 1) == 1;
  */
 static inline bool bits_test(u64 value, u32 bit) {
     return (value >> bit) & 1;
@@ -133,7 +169,7 @@ static inline bool bits_test(u64 value, u32 bit) {
  *
  * @return Value with bit set
  *
- * @pre bit must be < 64 (not checked — UB if violated)
+ * @pre bit must be < 64
  *
  * @remark Compiles to: value | (1ULL << bit)
  *
@@ -144,6 +180,11 @@ static inline bool bits_test(u64 value, u32 bit) {
  * ```
  *
  * @sa bits_clear(), bits_toggle()
+ */
+/*@
+    requires bit < 64;
+    assigns  \nothing;
+    ensures  \result == (value | ((u64)1 << bit));
  */
 static inline u64 bits_set(u64 value, u32 bit) {
     return value | (1ULL << bit);
@@ -157,7 +198,7 @@ static inline u64 bits_set(u64 value, u32 bit) {
  *
  * @return Value with bit cleared
  *
- * @pre bit must be < 64 (not checked — UB if violated)
+ * @pre bit must be < 64
  *
  * @remark Compiles to: value & ~(1ULL << bit)
  *
@@ -168,6 +209,11 @@ static inline u64 bits_set(u64 value, u32 bit) {
  * ```
  *
  * @sa bits_set(), bits_toggle()
+ */
+/*@
+    requires bit < 64;
+    assigns  \nothing;
+    ensures  \result == (value & ~((u64)1 << bit));
  */
 static inline u64 bits_clear(u64 value, u32 bit) {
     return value & ~(1ULL << bit);
@@ -181,7 +227,7 @@ static inline u64 bits_clear(u64 value, u32 bit) {
  *
  * @return Value with bit flipped
  *
- * @pre bit must be < 64 (not checked — UB if violated)
+ * @pre bit must be < 64
  *
  * @remark Compiles to: value ^ (1ULL << bit)
  *
@@ -191,6 +237,11 @@ static inline u64 bits_clear(u64 value, u32 bit) {
  * flags = bits_toggle(flags, 0);  // → 0b1011
  * flags = bits_toggle(flags, 0);  // → 0b1010
  * ```
+ */
+/*@
+    requires bit < 64;
+    assigns  \nothing;
+    ensures  \result == (value ^ ((u64)1 << bit));
  */
 static inline u64 bits_toggle(u64 value, u32 bit) {
     return value ^ (1ULL << bit);
@@ -208,11 +259,11 @@ static inline u64 bits_toggle(u64 value, u32 bit) {
  *
  * @param value Value to extract from
  * @param start Starting bit position (0 = LSB)
- * @param count Number of bits to extract (1-64)
+ * @param count Number of bits to extract (0-64)
  *
  * @return Extracted bits, right-justified
  *
- * @pre start + count must be <= 64 (not checked — UB if violated)
+ * @pre start must be < 64
  *
  * Example:
  * ```c
@@ -221,6 +272,21 @@ static inline u64 bits_toggle(u64 value, u32 bit) {
  * ```
  *
  * @sa bits_insert()
+ */
+/*@
+    requires start < 64;
+    assigns  \nothing;
+    behavior zero_count:
+        assumes count == 0;
+        ensures \result == 0;
+    behavior full_width:
+        assumes count >= 64;
+        ensures \result == value >> start;
+    behavior normal:
+        assumes 0 < count < 64;
+        ensures \result == (value >> start) & (((u64)1 << count) - 1);
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline u64 bits_extract(u64 value, u32 start, u32 count) {
     if (count == 0) return 0;
@@ -238,12 +304,11 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
  * @param dst Destination value
  * @param src Source bits (only low `count` bits are used)
  * @param start Starting bit position in dst
- * @param count Number of bits to insert
+ * @param count Number of bits to insert (0-64)
  *
  * @return dst with the specified bits replaced by the low `count` bits of src
  *
- * @pre start must be < 64 (not checked — UB if violated)
- * @pre count must be > 0 and <= 64 (not checked — UB if violated)
+ * @pre start must be < 64
  *
  * Example:
  * ```c
@@ -254,11 +319,25 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
  *
  * @sa bits_extract()
  */
+/*@
+    requires start < 64;
+    assigns  \nothing;
+    behavior zero_count:
+        assumes count == 0;
+        ensures \result == dst;
+    behavior full_width:
+        assumes count >= 64;
+        ensures \result == src << start;
+    behavior normal:
+        assumes 0 < count < 64;
+        ensures \let mask = (((u64)1 << count) - 1) << start;
+                \result == (dst & ~mask) | ((src << start) & mask);
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
     if (count == 0) return dst;
     if (count >= 64) {
-        /* All 64 bits are replaced; shift src into position.
-         * dst is fully overwritten — no bits of dst are preserved. */
         return src << start;
     }
     u64 mask = ((1ULL << count) - 1) << start;
@@ -282,6 +361,10 @@ static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
  * @remark With MSVC builtins: 1 instruction (__popcnt64)
  * @remark Without builtins: ~20 instructions (parallel bit counting)
  *
+ * @note The fallback uses the SWAR (SIMD Within A Register) parallel
+ *       bit-counting algorithm. WP may require extended timeouts or
+ *       additional prover backends for the multiplication step.
+ *
  * Example:
  * ```c
  * u32 bits = 0b10110101;
@@ -289,6 +372,12 @@ static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
  * ```
  *
  * @sa bits_clz(), bits_ctz()
+ */
+/*@
+    assigns \nothing;
+    ensures 0 <= \result <= 64;
+    ensures value == 0 ==> \result == 0;
+    ensures value != 0 ==> \result > 0;
  */
 static inline u32 bits_popcount(u64 value) {
 #if CANON_BITS_GNUC
@@ -326,6 +415,19 @@ static inline u32 bits_popcount(u64 value) {
  * ```
  *
  * @sa bits_ctz(), bits_fls()
+ */
+/*@
+    assigns \nothing;
+    behavior zero:
+        assumes value == 0;
+        ensures \result == 64;
+    behavior nonzero:
+        assumes value != 0;
+        ensures 0 <= \result <= 63;
+        ensures (integer)value >= ((integer)1 << (63 - \result));
+        ensures (integer)value <  ((integer)1 << (64 - \result));
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline u32 bits_clz(u64 value) {
     if (value == 0) return 64;
@@ -372,6 +474,19 @@ static inline u32 bits_clz(u64 value) {
  *
  * @sa bits_clz(), bits_ffs()
  */
+/*@
+    assigns \nothing;
+    behavior zero:
+        assumes value == 0;
+        ensures \result == 64;
+    behavior nonzero:
+        assumes value != 0;
+        ensures 0 <= \result <= 63;
+        ensures (value >> \result) & 1;
+        ensures (value & (((u64)1 << \result) - 1)) == 0;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline u32 bits_ctz(u64 value) {
     if (value == 0) return 64;
 #if CANON_BITS_GNUC
@@ -411,6 +526,19 @@ static inline u32 bits_ctz(u64 value) {
  *
  * @sa bits_ctz(), bits_fls()
  */
+/*@
+    assigns \nothing;
+    behavior zero:
+        assumes value == 0;
+        ensures \result == 0;
+    behavior nonzero:
+        assumes value != 0;
+        ensures 1 <= \result <= 64;
+        ensures (value >> (\result - 1)) & 1;
+        ensures (value & (((u64)1 << (\result - 1)) - 1)) == 0;
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline u32 bits_ffs(u64 value) {
     if (value == 0) return 0;
     return bits_ctz(value) + 1;
@@ -434,6 +562,19 @@ static inline u32 bits_ffs(u64 value) {
  *
  * @sa bits_clz(), bits_ffs()
  */
+/*@
+    assigns \nothing;
+    behavior zero:
+        assumes value == 0;
+        ensures \result == 0;
+    behavior nonzero:
+        assumes value != 0;
+        ensures 1 <= \result <= 64;
+        ensures (integer)value >= ((integer)1 << (\result - 1));
+        ensures (integer)value <  ((integer)1 << \result);
+    complete behaviors;
+    disjoint behaviors;
+ */
 static inline u32 bits_fls(u64 value) {
     if (value == 0) return 0;
     return 64 - bits_clz(value);
@@ -455,27 +596,27 @@ static inline u32 bits_fls(u64 value) {
  * @return Rotated u64 value
  *
  * @remark shift >= 64 is automatically masked: effective shift = shift & 63
- * @remark These functions always operate on the full 64-bit width.
- *         For narrower rotations (e.g. 8-bit), mask the result yourself:
- *         bits_rotl(val, 2) & 0xFF  — but note this is not a true 8-bit
- *         rotation (high bits from the upper 56 bits may bleed in).
- *         Use a dedicated narrow helper for correct narrow rotations.
  *
- * Example (full u64):
+ * Example:
  * ```c
  * u64 val = 0x8000000000000001ULL;  // MSB and LSB set
  * u64 rot = bits_rotl(val, 1);
- * // → 0x0000000000000003ULL  (MSB wraps to bit 0, bit 0 shifts to bit 1)
- * ```
- *
- * Example (illustrative 8-bit behavior — mask result yourself):
- * ```c
- * u64 val = 0b10110001;
- * u64 rot = bits_rotl(val, 2) & 0xFF;  // → 0b11000110
- * //   high bits 10 wrap to low end → 0b11000110
+ * // → 0x0000000000000003ULL
  * ```
  *
  * @sa bits_rotr()
+ */
+/*@
+    assigns \nothing;
+    behavior zero_shift:
+        assumes (shift & 63) == 0;
+        ensures \result == value;
+    behavior nonzero_shift:
+        assumes (shift & 63) != 0;
+        ensures \let s = (u32)(shift & 63);
+                \result == (value << s) | (value >> (64 - s));
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline u64 bits_rotl(u64 value, u32 shift) {
     shift &= 63;
@@ -495,25 +636,27 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
  * @return Rotated u64 value
  *
  * @remark shift >= 64 is automatically masked: effective shift = shift & 63
- * @remark These functions always operate on the full 64-bit width.
- *         For a true narrow rotation (e.g. 8-bit rotr by 2):
- *         ((narrow >> 2) | (narrow << 6)) & 0xFF
  *
- * Example (full u64):
+ * Example:
  * ```c
  * u64 val = 0x8000000000000001ULL;  // MSB and LSB set
  * u64 rot = bits_rotr(val, 1);
- * // → 0xC000000000000000ULL  (LSB wraps to MSB, MSB shifts to bit 62)
- * ```
- *
- * Example (illustrative 8-bit behavior — use narrow formula above for
- * correct results):
- * ```c
- * u8 narrow = 0b10110001;
- * u8 rot = ((narrow >> 2) | (narrow << 6)) & 0xFF;  // → 0b01101100
+ * // → 0xC000000000000000ULL
  * ```
  *
  * @sa bits_rotl()
+ */
+/*@
+    assigns \nothing;
+    behavior zero_shift:
+        assumes (shift & 63) == 0;
+        ensures \result == value;
+    behavior nonzero_shift:
+        assumes (shift & 63) != 0;
+        ensures \let s = (u32)(shift & 63);
+                \result == (value >> s) | (value << (64 - s));
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline u64 bits_rotr(u64 value, u32 shift) {
     shift &= 63;
@@ -546,6 +689,10 @@ static inline u64 bits_rotr(u64 value, u32 shift) {
  *
  * @sa bits_next_power_of_two()
  */
+/*@
+    assigns \nothing;
+    ensures \result <==> (value != 0 && (value & (value - 1)) == 0);
+ */
 static inline bool bits_is_power_of_two(u64 value) {
     return value != 0 && (value & (value - 1)) == 0;
 }
@@ -572,6 +719,23 @@ static inline bool bits_is_power_of_two(u64 value) {
  * ```
  *
  * @sa bits_is_power_of_two()
+ */
+/*@
+    assigns \nothing;
+    behavior zero:
+        assumes value == 0;
+        ensures \result == 0;
+    behavior overflow:
+        assumes value > ((u64)1 << 63);
+        ensures \result == 0;
+    behavior normal:
+        assumes 0 < value <= ((u64)1 << 63);
+        ensures \result >= value;
+        ensures \result != 0;
+        ensures (\result & (\result - 1)) == 0;
+        ensures \result / 2 < value;
+    complete behaviors;
+    disjoint behaviors;
  */
 static inline u64 bits_next_power_of_two(u64 value) {
     if (value == 0) return 0;
@@ -607,6 +771,10 @@ static inline u64 bits_next_power_of_two(u64 value) {
  * u16 rev = bits_bswap16(val);  // → 0x3412
  * ```
  */
+/*@
+    assigns \nothing;
+    ensures \result == (u16)((value >> 8) | (value << 8));
+ */
 static inline u16 bits_bswap16(u16 value) {
 #if CANON_BITS_GNUC
     return __builtin_bswap16(value);
@@ -632,6 +800,13 @@ static inline u16 bits_bswap16(u16 value) {
  * u32 val = 0x12345678;
  * u32 rev = bits_bswap32(val);  // → 0x78563412
  * ```
+ */
+/*@
+    assigns \nothing;
+    ensures \result == ((value & 0x000000FFu) << 24) |
+                       ((value & 0x0000FF00u) <<  8) |
+                       ((value & 0x00FF0000u) >>  8) |
+                       ((value & 0xFF000000u) >> 24);
  */
 static inline u32 bits_bswap32(u32 value) {
 #if CANON_BITS_GNUC
@@ -661,6 +836,17 @@ static inline u32 bits_bswap32(u32 value) {
  * u64 val = 0x0102030405060708ULL;
  * u64 rev = bits_bswap64(val);  // → 0x0807060504030201ULL
  * ```
+ */
+/*@
+    assigns \nothing;
+    ensures \result == ((value & 0x00000000000000FFULL) << 56) |
+                       ((value & 0x000000000000FF00ULL) << 40) |
+                       ((value & 0x0000000000FF0000ULL) << 24) |
+                       ((value & 0x00000000FF000000ULL) <<  8) |
+                       ((value & 0x000000FF00000000ULL) >>  8) |
+                       ((value & 0x0000FF0000000000ULL) >> 24) |
+                       ((value & 0x00FF000000000000ULL) >> 40) |
+                       ((value & 0xFF00000000000000ULL) >> 56);
  */
 static inline u64 bits_bswap64(u64 value) {
 #if CANON_BITS_GNUC
