@@ -38,32 +38,76 @@
 | **Scope**          | Library headers only — test files excluded                   |
 | **Test binaries**  | 51                                                           |
 
+### Current Measurement
+
+| Field              | Value                                                        |
+|--------------------|--------------------------------------------------------------|
+| **Date**           | 2026-04-17                                                   |
+| **Version**        | v1.3.0                                                       |
+| **Branch**         | master                                                       |
+| **Compiler**       | GCC 14.2.0                                                   |
+| **Build type**     | Debug                                                        |
+| **Flags**          | `--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_NO_REQUIRE` |
+| **Tool**           | gcov-14 --conditions (MC/DC) + lcov (branch)                |
+| **Runner**         | ubuntu-latest (GitHub Actions)                               |
+| **Scope**          | Library headers only — test files excluded                   |
+| **Test binaries**  | 51 (contract_test excluded from coverage build)              |
+
 ### Results
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.9%      | 2289       | 2388       |
+| Lines      | 95.5%      | 2082       | 2180       |
 | Functions  | 99.6%      | 499        | 501        |
-| Branches   | 74.3%      | 1542       | 2074       |
-| MC/DC      | 74.3%      | 1380       | 1858       |
+| Branches   | 84.0%      | 1340       | 1596       |
+| MC/DC      | 83.1%      | 1301       | 1566       |
 
-Baseline measurement — no coverage-driven tests. All tests written
-for correctness only. Coverage is a side effect of functional testing.
+### Methodology changes since baseline
 
-Branch coverage and MC/DC are identical because Canon-C's conditions
-are predominantly simple single-condition decisions (`if (ptr == NULL)`,
-`if (count > capacity)`), not compound Boolean expressions. This is a
-design quality signal — simple conditions are easier to verify, test,
-and prove.
+Two coverage flags were added after the baseline measurement:
 
-Three library headers achieved 100% MC/DC without coverage-driven
-testing: `bits.h`, `compare.h`, `error.h`.
+**CANON_CHECKED_FORCE_FALLBACK** (added 2026-04-14): Forces the portable
+fallback path in checked.h instead of compiler builtins. Without this,
+GCC expands `__builtin_*_overflow` to single instructions with no
+branches for gcov to see. The fallback path is the same code Frama-C
+proves — the coverage and verification evidence streams stay aligned.
+
+**CANON_NO_REQUIRE** (added 2026-04-14): Compiles `require_msg()` to
+`((void)0)`, removing NULL-check branches that the ACSL
+`requires \valid(result)` clause has already proved unreachable under
+Frama-C. Without this flag, every `require_msg` in every header adds
+a branch whose false-side is structurally unreachable in correct code,
+inflating the coverage denominator with conditions no test can
+meaningfully exercise. contract_test is excluded from the coverage
+build for the same reason — it tests the assertion infrastructure
+itself, which is compiled out when CANON_NO_REQUIRE is defined.
+contract_test still runs in all other CI jobs (build, valgrind, fuzzing).
+
+These changes reduced the branch/MC/DC denominator (from 2074/1858 to
+1596/1566) by removing proved-unreachable branches. The numerator also
+decreased slightly because some of those removed branches were being
+hit. The net effect is a higher percentage that more accurately
+reflects coverage of real, reachable logic.
+
+### Notable per-header results
+
+Headers at 100% MC/DC (no coverage-driven tests — correctness tests only):
+
+`bits.h`, `compare.h`, `error.h`, `str_view.h`, `time.h`,
+`map_impl.h`, `filter_impl.h`, `find_impl.h`, `reverse_impl.h`,
+`search_impl.h`, `any_all_impl.h`, `unique_impl.h`, `checked.h`
+
+checked.h reached 100% MC/DC (64/64) after the checked_mul_isize
+refactor on 2026-04-17, which lifted identity cases before the
+ISIZE_MIN guard to eliminate a structurally unreachable branch.
 
 ### History
 
-| Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | MC/DC  | Notes                               |
-|------------|---------|--------|---------|--------|-----------|----------|--------|---------------------------------------|
-| 2026-04-07 | 669d6a7 | #668   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | —      | Baseline — branch coverage only       |
-| 2026-04-07 | 0a22f76 | #677   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | 74.3%  | First MC/DC measurement (GCC 14.2.0)  |
+| Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | MC/DC  | Notes                                                                    |
+|------------|---------|--------|---------|--------|-----------|----------|--------|--------------------------------------------------------------------------|
+| 2026-04-07 | 669d6a7 | #668   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | —      | Baseline — branch coverage only                                         |
+| 2026-04-07 | 0a22f76 | #677   | v1.3.0  | 95.9%  | 99.6%     | 74.3%    | 74.3%  | First MC/DC measurement (GCC 14.2.0)                                    |
+| 2026-04-14 | 24c69cc | #739   | v1.3.0  | 95.5%  | 99.6%     | 83.9%    | 83.1%  | CANON_NO_REQUIRE + CANON_CHECKED_FORCE_FALLBACK flags added             |
+| 2026-04-17 |         |        | v1.3.0  | 95.5%  | 99.6%     | 84.0%    | 83.1%  | checked_mul_isize refactor; checked.h → 100% MC/DC; WP artifact upload  |
 
 ---
