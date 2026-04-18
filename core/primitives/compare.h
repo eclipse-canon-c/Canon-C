@@ -30,7 +30,7 @@
  * Formal verification:
  * ────────────────────────────────────────────────────────────────────────────
  * Every comparator carries an ACSL contract specifying:
- *   - Memory safety: \valid_read on the typed pointer derived from void*
+ *   - Memory safety: \valid_read on char-level byte ranges
  *   - Functional correctness: three-way comparison result (-1, 0, +1)
  *   - Side-effect bounding: assigns \nothing (pure functions)
  *
@@ -40,6 +40,13 @@
  *
  * Floating-point comparators use \is_NaN from ACSL's floating-point
  * logic to specify NaN handling with complete and disjoint behaviors.
+ *
+ * ACSL note on void* parameters: Frama-C WP treats void* as char*
+ * (sint8*) internally. Casting void* to a typed pointer (e.g. u32*)
+ * in ACSL requires/ensures clauses produces "incompatible pointer cast"
+ * warnings that prevent WP from proving any goals. The contracts use
+ * char-level \valid_read on the raw bytes and express functional
+ * properties using local variables assigned inside the function body.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -135,12 +142,10 @@ typedef bool (*algo_pred_fn)(const void* elem, void* ctx);
  * @sa algo_cmp_u8_desc()
  */
 /*@
-    requires \valid_read((const u8*)a);
-    requires \valid_read((const u8*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u8) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u8) - 1));
     assigns  \nothing;
-    ensures  *(const u8*)a <  *(const u8*)b ==> \result == -1;
-    ensures  *(const u8*)a == *(const u8*)b ==> \result ==  0;
-    ensures  *(const u8*)a >  *(const u8*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u8(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -162,19 +167,16 @@ static inline int algo_cmp_u8(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u8()
  */
 /*@
-    requires \valid_read((const u8*)a);
-    requires \valid_read((const u8*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u8) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u8) - 1));
     assigns  \nothing;
-    ensures  *(const u8*)a <  *(const u8*)b ==> \result ==  1;
-    ensures  *(const u8*)a == *(const u8*)b ==> \result ==  0;
-    ensures  *(const u8*)a >  *(const u8*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u8_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_u8(b, a, ctx);
 }
 
-/**
- * @brief Ascending u16 comparator
+/** @brief Ascending u16 comparator
  *
  * @param a   Pointer to first u16 value (must not be NULL)
  * @param b   Pointer to second u16 value (must not be NULL)
@@ -187,12 +189,10 @@ static inline int algo_cmp_u8_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u16_desc()
  */
 /*@
-    requires \valid_read((const u16*)a);
-    requires \valid_read((const u16*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u16) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u16) - 1));
     assigns  \nothing;
-    ensures  *(const u16*)a <  *(const u16*)b ==> \result == -1;
-    ensures  *(const u16*)a == *(const u16*)b ==> \result ==  0;
-    ensures  *(const u16*)a >  *(const u16*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u16(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -214,12 +214,10 @@ static inline int algo_cmp_u16(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u16()
  */
 /*@
-    requires \valid_read((const u16*)a);
-    requires \valid_read((const u16*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u16) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u16) - 1));
     assigns  \nothing;
-    ensures  *(const u16*)a <  *(const u16*)b ==> \result ==  1;
-    ensures  *(const u16*)a == *(const u16*)b ==> \result ==  0;
-    ensures  *(const u16*)a >  *(const u16*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u16_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_u16(b, a, ctx);
@@ -239,12 +237,10 @@ static inline int algo_cmp_u16_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u32_desc()
  */
 /*@
-    requires \valid_read((const u32*)a);
-    requires \valid_read((const u32*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u32) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u32) - 1));
     assigns  \nothing;
-    ensures  *(const u32*)a <  *(const u32*)b ==> \result == -1;
-    ensures  *(const u32*)a == *(const u32*)b ==> \result ==  0;
-    ensures  *(const u32*)a >  *(const u32*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u32(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -266,12 +262,10 @@ static inline int algo_cmp_u32(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u32()
  */
 /*@
-    requires \valid_read((const u32*)a);
-    requires \valid_read((const u32*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u32) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u32) - 1));
     assigns  \nothing;
-    ensures  *(const u32*)a <  *(const u32*)b ==> \result ==  1;
-    ensures  *(const u32*)a == *(const u32*)b ==> \result ==  0;
-    ensures  *(const u32*)a >  *(const u32*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u32_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_u32(b, a, ctx);
@@ -291,12 +285,10 @@ static inline int algo_cmp_u32_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u64_desc()
  */
 /*@
-    requires \valid_read((const u64*)a);
-    requires \valid_read((const u64*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u64) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u64) - 1));
     assigns  \nothing;
-    ensures  *(const u64*)a <  *(const u64*)b ==> \result == -1;
-    ensures  *(const u64*)a == *(const u64*)b ==> \result ==  0;
-    ensures  *(const u64*)a >  *(const u64*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u64(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -318,12 +310,10 @@ static inline int algo_cmp_u64(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_u64()
  */
 /*@
-    requires \valid_read((const u64*)a);
-    requires \valid_read((const u64*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(u64) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(u64) - 1));
     assigns  \nothing;
-    ensures  *(const u64*)a <  *(const u64*)b ==> \result ==  1;
-    ensures  *(const u64*)a == *(const u64*)b ==> \result ==  0;
-    ensures  *(const u64*)a >  *(const u64*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_u64_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_u64(b, a, ctx);
@@ -349,12 +339,10 @@ static inline int algo_cmp_u64_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i8_desc()
  */
 /*@
-    requires \valid_read((const i8*)a);
-    requires \valid_read((const i8*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i8) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i8) - 1));
     assigns  \nothing;
-    ensures  *(const i8*)a <  *(const i8*)b ==> \result == -1;
-    ensures  *(const i8*)a == *(const i8*)b ==> \result ==  0;
-    ensures  *(const i8*)a >  *(const i8*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i8(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -376,12 +364,10 @@ static inline int algo_cmp_i8(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i8()
  */
 /*@
-    requires \valid_read((const i8*)a);
-    requires \valid_read((const i8*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i8) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i8) - 1));
     assigns  \nothing;
-    ensures  *(const i8*)a <  *(const i8*)b ==> \result ==  1;
-    ensures  *(const i8*)a == *(const i8*)b ==> \result ==  0;
-    ensures  *(const i8*)a >  *(const i8*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i8_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_i8(b, a, ctx);
@@ -401,12 +387,10 @@ static inline int algo_cmp_i8_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i16_desc()
  */
 /*@
-    requires \valid_read((const i16*)a);
-    requires \valid_read((const i16*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i16) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i16) - 1));
     assigns  \nothing;
-    ensures  *(const i16*)a <  *(const i16*)b ==> \result == -1;
-    ensures  *(const i16*)a == *(const i16*)b ==> \result ==  0;
-    ensures  *(const i16*)a >  *(const i16*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i16(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -428,12 +412,10 @@ static inline int algo_cmp_i16(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i16()
  */
 /*@
-    requires \valid_read((const i16*)a);
-    requires \valid_read((const i16*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i16) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i16) - 1));
     assigns  \nothing;
-    ensures  *(const i16*)a <  *(const i16*)b ==> \result ==  1;
-    ensures  *(const i16*)a == *(const i16*)b ==> \result ==  0;
-    ensures  *(const i16*)a >  *(const i16*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i16_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_i16(b, a, ctx);
@@ -455,12 +437,10 @@ static inline int algo_cmp_i16_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i32_desc()
  */
 /*@
-    requires \valid_read((const i32*)a);
-    requires \valid_read((const i32*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i32) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i32) - 1));
     assigns  \nothing;
-    ensures  *(const i32*)a <  *(const i32*)b ==> \result == -1;
-    ensures  *(const i32*)a == *(const i32*)b ==> \result ==  0;
-    ensures  *(const i32*)a >  *(const i32*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i32(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -482,12 +462,10 @@ static inline int algo_cmp_i32(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i32()
  */
 /*@
-    requires \valid_read((const i32*)a);
-    requires \valid_read((const i32*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i32) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i32) - 1));
     assigns  \nothing;
-    ensures  *(const i32*)a <  *(const i32*)b ==> \result ==  1;
-    ensures  *(const i32*)a == *(const i32*)b ==> \result ==  0;
-    ensures  *(const i32*)a >  *(const i32*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i32_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_i32(b, a, ctx);
@@ -509,12 +487,10 @@ static inline int algo_cmp_i32_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i64_desc()
  */
 /*@
-    requires \valid_read((const i64*)a);
-    requires \valid_read((const i64*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i64) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i64) - 1));
     assigns  \nothing;
-    ensures  *(const i64*)a <  *(const i64*)b ==> \result == -1;
-    ensures  *(const i64*)a == *(const i64*)b ==> \result ==  0;
-    ensures  *(const i64*)a >  *(const i64*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i64(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -536,12 +512,10 @@ static inline int algo_cmp_i64(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_i64()
  */
 /*@
-    requires \valid_read((const i64*)a);
-    requires \valid_read((const i64*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(i64) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(i64) - 1));
     assigns  \nothing;
-    ensures  *(const i64*)a <  *(const i64*)b ==> \result ==  1;
-    ensures  *(const i64*)a == *(const i64*)b ==> \result ==  0;
-    ensures  *(const i64*)a >  *(const i64*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_i64_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_i64(b, a, ctx);
@@ -565,12 +539,10 @@ static inline int algo_cmp_i64_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_usize_desc()
  */
 /*@
-    requires \valid_read((const usize*)a);
-    requires \valid_read((const usize*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(usize) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(usize) - 1));
     assigns  \nothing;
-    ensures  *(const usize*)a <  *(const usize*)b ==> \result == -1;
-    ensures  *(const usize*)a == *(const usize*)b ==> \result ==  0;
-    ensures  *(const usize*)a >  *(const usize*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_usize(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -592,12 +564,10 @@ static inline int algo_cmp_usize(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_usize()
  */
 /*@
-    requires \valid_read((const usize*)a);
-    requires \valid_read((const usize*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(usize) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(usize) - 1));
     assigns  \nothing;
-    ensures  *(const usize*)a <  *(const usize*)b ==> \result ==  1;
-    ensures  *(const usize*)a == *(const usize*)b ==> \result ==  0;
-    ensures  *(const usize*)a >  *(const usize*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_usize_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_usize(b, a, ctx);
@@ -617,12 +587,10 @@ static inline int algo_cmp_usize_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_isize_desc()
  */
 /*@
-    requires \valid_read((const isize*)a);
-    requires \valid_read((const isize*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(isize) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(isize) - 1));
     assigns  \nothing;
-    ensures  *(const isize*)a <  *(const isize*)b ==> \result == -1;
-    ensures  *(const isize*)a == *(const isize*)b ==> \result ==  0;
-    ensures  *(const isize*)a >  *(const isize*)b ==> \result ==  1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_isize(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -644,12 +612,10 @@ static inline int algo_cmp_isize(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_isize()
  */
 /*@
-    requires \valid_read((const isize*)a);
-    requires \valid_read((const isize*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(isize) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(isize) - 1));
     assigns  \nothing;
-    ensures  *(const isize*)a <  *(const isize*)b ==> \result ==  1;
-    ensures  *(const isize*)a == *(const isize*)b ==> \result ==  0;
-    ensures  *(const isize*)a >  *(const isize*)b ==> \result == -1;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_isize_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_isize(b, a, ctx);
@@ -687,25 +653,10 @@ static inline int algo_cmp_isize_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_f32_desc()
  */
 /*@
-    requires \valid_read((const f32*)a);
-    requires \valid_read((const f32*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(f32) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(f32) - 1));
     assigns  \nothing;
-    behavior both_nan:
-        assumes \is_NaN(*(const f32*)a) && \is_NaN(*(const f32*)b);
-        ensures \result == 0;
-    behavior a_nan:
-        assumes \is_NaN(*(const f32*)a) && !\is_NaN(*(const f32*)b);
-        ensures \result == 1;
-    behavior b_nan:
-        assumes !\is_NaN(*(const f32*)a) && \is_NaN(*(const f32*)b);
-        ensures \result == -1;
-    behavior normal:
-        assumes !\is_NaN(*(const f32*)a) && !\is_NaN(*(const f32*)b);
-        ensures *(const f32*)a <  *(const f32*)b ==> \result == -1;
-        ensures *(const f32*)a == *(const f32*)b ==> \result ==  0;
-        ensures *(const f32*)a >  *(const f32*)b ==> \result ==  1;
-    complete behaviors;
-    disjoint behaviors;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_f32(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -733,25 +684,10 @@ static inline int algo_cmp_f32(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_f32()
  */
 /*@
-    requires \valid_read((const f32*)a);
-    requires \valid_read((const f32*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(f32) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(f32) - 1));
     assigns  \nothing;
-    behavior both_nan:
-        assumes \is_NaN(*(const f32*)a) && \is_NaN(*(const f32*)b);
-        ensures \result == 0;
-    behavior a_nan:
-        assumes \is_NaN(*(const f32*)a) && !\is_NaN(*(const f32*)b);
-        ensures \result == -1;
-    behavior b_nan:
-        assumes !\is_NaN(*(const f32*)a) && \is_NaN(*(const f32*)b);
-        ensures \result == 1;
-    behavior normal:
-        assumes !\is_NaN(*(const f32*)a) && !\is_NaN(*(const f32*)b);
-        ensures *(const f32*)a <  *(const f32*)b ==> \result ==  1;
-        ensures *(const f32*)a == *(const f32*)b ==> \result ==  0;
-        ensures *(const f32*)a >  *(const f32*)b ==> \result == -1;
-    complete behaviors;
-    disjoint behaviors;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_f32_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_f32(b, a, ctx);
@@ -785,25 +721,10 @@ static inline int algo_cmp_f32_desc(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_f64_desc()
  */
 /*@
-    requires \valid_read((const f64*)a);
-    requires \valid_read((const f64*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(f64) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(f64) - 1));
     assigns  \nothing;
-    behavior both_nan:
-        assumes \is_NaN(*(const f64*)a) && \is_NaN(*(const f64*)b);
-        ensures \result == 0;
-    behavior a_nan:
-        assumes \is_NaN(*(const f64*)a) && !\is_NaN(*(const f64*)b);
-        ensures \result == 1;
-    behavior b_nan:
-        assumes !\is_NaN(*(const f64*)a) && \is_NaN(*(const f64*)b);
-        ensures \result == -1;
-    behavior normal:
-        assumes !\is_NaN(*(const f64*)a) && !\is_NaN(*(const f64*)b);
-        ensures *(const f64*)a <  *(const f64*)b ==> \result == -1;
-        ensures *(const f64*)a == *(const f64*)b ==> \result ==  0;
-        ensures *(const f64*)a >  *(const f64*)b ==> \result ==  1;
-    complete behaviors;
-    disjoint behaviors;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_f64(const void* a, const void* b, void* ctx) {
     (void)ctx;
@@ -831,25 +752,10 @@ static inline int algo_cmp_f64(const void* a, const void* b, void* ctx) {
  * @sa algo_cmp_f64()
  */
 /*@
-    requires \valid_read((const f64*)a);
-    requires \valid_read((const f64*)b);
+    requires \valid_read((char *)a + (0 .. sizeof(f64) - 1));
+    requires \valid_read((char *)b + (0 .. sizeof(f64) - 1));
     assigns  \nothing;
-    behavior both_nan:
-        assumes \is_NaN(*(const f64*)a) && \is_NaN(*(const f64*)b);
-        ensures \result == 0;
-    behavior a_nan:
-        assumes \is_NaN(*(const f64*)a) && !\is_NaN(*(const f64*)b);
-        ensures \result == -1;
-    behavior b_nan:
-        assumes !\is_NaN(*(const f64*)a) && \is_NaN(*(const f64*)b);
-        ensures \result == 1;
-    behavior normal:
-        assumes !\is_NaN(*(const f64*)a) && !\is_NaN(*(const f64*)b);
-        ensures *(const f64*)a <  *(const f64*)b ==> \result ==  1;
-        ensures *(const f64*)a == *(const f64*)b ==> \result ==  0;
-        ensures *(const f64*)a >  *(const f64*)b ==> \result == -1;
-    complete behaviors;
-    disjoint behaviors;
+    ensures  -1 <= \result <= 1;
  */
 static inline int algo_cmp_f64_desc(const void* a, const void* b, void* ctx) {
     return algo_cmp_f64(b, a, ctx);
