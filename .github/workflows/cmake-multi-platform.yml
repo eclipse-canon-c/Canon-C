@@ -14,9 +14,9 @@ on:
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
-#                     Currently scoped to core/primitives/checked.h and
-#                     core/primitives/bits.h. Additional headers will be
-#                     added as they are annotated.
+#                     Currently scoped to core/primitives/checked.h,
+#                     core/primitives/bits.h, and core/primitives/compare.h.
+#                     Additional headers will be added as they are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
 #                     -DCANON_BITS_FORCE_FALLBACK so the fallback paths
@@ -350,13 +350,16 @@ jobs:
   # -------------------------------------------------------------------------
   # 5. Formal verification — Frama-C (Linux only)
   #
-  #    Scope: core/primitives/checked.h and core/primitives/bits.h.
+  #    Scope: core/primitives/checked.h, core/primitives/bits.h, and
+  #    core/primitives/compare.h.
   #
   #    checked.h is the first Canon-C header with full ACSL contracts
   #    (every unsigned function plus all three signed functions). bits.h
   #    is the second, covering portable bit manipulation with fallback
-  #    paths. When ptr.h, compare.h and the core/ layer are annotated,
-  #    add them to the file list in the WP steps below.
+  #    paths. compare.h is the third, covering three-way comparators
+  #    for all Canon primitive types including floating-point with NaN
+  #    handling. When ptr.h and the core/ layer are annotated, add them
+  #    to the file list in the WP steps below.
   #
   #    Installation: opam with aggressive caching.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
@@ -382,12 +385,13 @@ jobs:
   #      invalid shifts, null derefs, division by zero. Mathematical
   #      proof — if WP says "Valid", the property holds for ALL inputs.
   #
-  #    Eva is NOT run on checked.h or bits.h — see the comment below
-  #    for the rationale (header-only modules have no entry point).
+  #    Eva is NOT run on these headers — see the comment below for the
+  #    rationale (header-only modules have no entry point).
   #
   #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
   #    checked.h and bits.h use this to force the fallback path (WP
-  #    has no semantics for compiler builtins).
+  #    has no semantics for compiler builtins). compare.h has no
+  #    builtins — all code paths are verified directly.
   #
   #    Certification evidence produced:
   #      - Absence of runtime errors (all standards)
@@ -593,6 +597,57 @@ jobs:
           name: wp-proof-bits
           path: wp_bits_output.txt
 
+      - name: "WP: core/primitives/compare.h"
+        # Initial verification run for compare.h. This step runs WP and
+        # reports results without enforcement. Once the baseline is
+        # established (which goals prove, which timeout), add an
+        # enforcement wrapper matching the checked.h/bits.h pattern.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/primitives/compare.h 2>&1 | tee wp_compare_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (compare.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_compare_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_compare_output.txt || true)
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_compare_output.txt || true)
+          echo "  Failed: ${FAILED_COUNT}"
+
+          # List any timeouts or failures for diagnosis
+          grep -E "^\[wp\] \[(Timeout|Failed)\]" wp_compare_output.txt || true
+
+          echo "==============================================="
+          echo "  NOTE: compare.h is in initial verification. No enforcement"
+          echo "  wrapper yet. Add one after the baseline is established."
+          echo "==============================================="
+
+      - name: Upload WP proof output (compare.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-compare
+          path: wp_compare_output.txt
+
       # -- Eva (Evolved Value Analysis) is intentionally NOT run on checked.h --
       # Eva requires an entry point function to start abstract interpretation
       # from. checked.h is a header full of static inline functions with no
@@ -630,21 +685,6 @@ jobs:
       #         -DCANON_NO_REQUIRE \
       #         -DNDEBUG" \
       #       core/primitives/ptr.h
-      #
-      # - name: "WP: core/primitives/compare.h"
-      #   run: |
-      #     eval $(opam env --switch=frama-c)
-      #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3 \
-      #       -wp-timeout 120 \
-      #       -wp-split \
-      #       -cpp-extra-args=" \
-      #         -I core/primitives \
-      #         -I core \
-      #         -I . \
-      #         -DCANON_NO_REQUIRE \
-      #         -DNDEBUG" \
-      #       core/primitives/compare.h
 
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
