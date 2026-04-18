@@ -620,10 +620,19 @@ jobs:
         # reports results without enforcement. Once the baseline is
         # established (which goals prove, which timeout), add an
         # enforcement wrapper matching the checked.h/bits.h pattern.
+        #
+        # -wp-model Typed+Cast: compare.h takes void* parameters and
+        # casts them to typed pointers inside the function body. WP's
+        # default Typed memory model treats void* as char* (sint8*) and
+        # flags incompatible pointer casts, preventing mem_access RTE
+        # goals from being proved. Typed+Cast relaxes the model to
+        # allow pointer casts between compatible-sized types, which is
+        # exactly what these comparators do (void* → const u32*, etc.).
         run: |
           eval $(opam env --switch=frama-c)
           set +e
           frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
             -wp-prover alt-ergo,z3 \
             -wp-timeout 120 \
             -wp-split \
