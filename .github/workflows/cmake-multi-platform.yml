@@ -616,10 +616,9 @@ jobs:
           path: wp_bits_output.txt
 
       - name: "WP: core/primitives/compare.h"
-        # Initial verification run for compare.h. This step runs WP and
-        # reports results without enforcement. Once the baseline is
-        # established (which goals prove, which timeout), add an
-        # enforcement wrapper matching the checked.h/bits.h pattern.
+        # compare.h achieved 208/208 (100%) with Typed+Cast model.
+        # All 28 comparator functions are fully proved — functional
+        # correctness, RTE absence, and assigns \nothing.
         #
         # -wp-model Typed+Cast: compare.h takes void* parameters and
         # casts them to typed pointers inside the function body. WP's
@@ -628,6 +627,7 @@ jobs:
         # goals from being proved. Typed+Cast relaxes the model to
         # allow pointer casts between compatible-sized types, which is
         # exactly what these comparators do (void* → const u32*, etc.).
+        # See docs/deviations.md, entry VERIFY-005.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -655,17 +655,28 @@ jobs:
           echo "  ${PROVED_LINE}"
 
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_compare_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_compare_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected 0)"
 
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_compare_output.txt || true)
-          echo "  Failed: ${FAILED_COUNT}"
+          if [ "${UNPROVED_COUNT}" -ne 0 ]; then
+            echo "FAIL: compare.h should have 0 unproved goals."
+            echo "      Found ${UNPROVED_COUNT} unproved goals — this is a regression."
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_compare_output.txt || true
+            exit 1
+          fi
 
-          # List any timeouts or failures for diagnosis
-          grep -E "^\[wp\] \[(Timeout|Failed)\]" wp_compare_output.txt || true
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "208 / 208" ]; then
+            echo "WARNING: proved count changed from expected 208 / 208."
+            echo "         This may indicate added or removed functions."
+          fi
 
-          echo "==============================================="
-          echo "  NOTE: compare.h is in initial verification. No enforcement"
-          echo "  wrapper yet. Add one after the baseline is established."
+          echo "PASS: compare.h fully verified — 208/208 goals proved,"
+          echo "      0 timeouts. All 28 comparators proved correct."
           echo "==============================================="
 
       - name: Upload WP proof output (compare.h)
