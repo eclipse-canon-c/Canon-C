@@ -521,7 +521,9 @@ jobs:
           path: wp_output.txt
 
       - name: "WP: core/primitives/bits.h"
-        # WP is expected to leave exactly 15 goals unproven.
+        # WP is expected to leave exactly 15 goals unproven (as Timeout
+        # or Unknown — WP may classify the same goal differently across
+        # runs depending on solver heuristics).
         # These are all WP model limitations on bitwise reasoning — not
         # code defects. Categories:
         #   - Bitwise complement (~) in specs: bits_clear, bits_insert (3)
@@ -557,18 +559,34 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_bits_output.txt || true)
           echo "  ${PROVED_LINE}"
 
+          # Count unproved goals: Timeout + Unknown (WP may classify the
+          # same goal as either depending on solver heuristics per run).
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bits_output.txt || true)
-          EXPECTED_TIMEOUTS=15
-          echo "  Timeouts observed: ${TIMEOUT_COUNT} (expected ${EXPECTED_TIMEOUTS})"
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_bits_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          EXPECTED_UNPROVED=15
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
 
-          if [ "${TIMEOUT_COUNT}" -ne "${EXPECTED_TIMEOUTS}" ]; then
-            echo "FAIL: unexpected number of timeouts."
-            echo "      Expected exactly ${EXPECTED_TIMEOUTS} documented timeouts."
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
             echo "      See docs/verification.md for details."
             exit 1
           fi
 
-          # Spot-check representative goals from each timeout category.
+          # Verify the proved count matches expectations (746 of 761).
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "746 / 761" ]; then
+            echo "WARNING: proved count changed from expected 746 / 761."
+            echo "         This may indicate a new timeout or a newly proved goal."
+            echo "         Review the output and update the enforcement wrapper."
+          fi
+
+          # Spot-check representative goals from each unproved category.
+          # These may appear as [Timeout] or [Unknown] — check both.
           # Full list: see docs/verification.md, bits.h section.
           CHECKS=(
             "typed_bits_clear_ensures"
@@ -580,14 +598,14 @@ jobs:
           )
 
           for goal in "${CHECKS[@]}"; do
-            if ! grep -q "${goal}" wp_bits_output.txt; then
-              echo "FAIL: expected timeout on ${goal} not observed."
+            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_bits_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
           done
 
           echo "PASS: WP discharged all goals automatically except the 15"
-          echo "      documented timeouts. See docs/verification.md."
+          echo "      documented unproved goals. See docs/verification.md."
           echo "==============================================="
 
       - name: Upload WP proof output (bits.h)
