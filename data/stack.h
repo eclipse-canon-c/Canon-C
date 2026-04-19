@@ -19,11 +19,29 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Zero overhead — every function is a direct vec passthrough
  * - LIFO semantics only — no enqueue, no front-access (use deque for that)
+ * - Three-tier push API: Result (full diagnostics), try (bool), unchecked (void)
  * - result__Bool_Error from push/pop — matches vec and queue
  * - Option variants for pop and peek — no out-param required
  * - Caller owns the buffer (stack memory, arena, static, heap)
  * - Fixed capacity is intentional — real-time safe, deterministic
  * - All pointer parameters annotated with borrowed() per ownership.h conventions
+ *
+ * Push API tiers:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - push(s, item):
+ *     Returns result__Bool_Error with specific error codes.
+ *     Use when you need to know WHY the push failed (NULL arg vs full).
+ *
+ * - try_push(s, item):
+ *     Returns bool — true on success, false on any failure.
+ *     Use in normal code paths where only pass/fail matters.
+ *     No Result construction overhead.
+ *
+ * - push_unchecked(s, item):
+ *     Returns void — no checks in release builds.
+ *     Preconditions enforced by ensure_msg() in debug builds only.
+ *     Use in ISRs and tight loops where you have already verified
+ *     the stack is not full via is_full().
  *
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
@@ -68,7 +86,10 @@
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - push / pop:                      O(1) — no allocation
+ * - push:                            O(1) — no allocation
+ * - try_push:                        O(1) — no allocation, no Result
+ * - push_unchecked:                  O(1) — zero overhead in release
+ * - pop / pop_option:                O(1)
  * - peek / peek_option:              O(1)
  * - len / capacity / remaining:      O(1)
  * - is_empty / is_full:              O(1)
@@ -95,6 +116,16 @@
  *
  * int val;
  * canon_stack_int_pop(&s, &val);   // val = 20 (LIFO)
+ *
+ * // Bool variant — no Result overhead
+ * if (!canon_stack_int_try_push(&s, 42)) {
+ *     // stack is full or NULL — handle gracefully
+ * }
+ *
+ * // Unchecked variant — ISR hot path (caller guarantees not full)
+ * if (!canon_stack_int_is_full(&s)) {
+ *     canon_stack_int_push_unchecked(&s, frame);
+ * }
  *
  * // Option variant — no out-param needed
  * option_int top = canon_stack_int_pop_option(&s);   // Some(10)
@@ -126,6 +157,7 @@
  * - Recursive descent parser state
  * - Backtracking algorithms (DFS frontier)
  * - Call stack simulation
+ * - ISR context save/restore (push_unchecked in interrupt handler)
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
@@ -160,8 +192,16 @@
  * - canon_stack_##type##_is_empty(s)                → bool
  * - canon_stack_##type##_is_full(s)                 → bool
  *
- * Push / pop (Result variants):
+ * Push (Result variant — full diagnostics):
  * - canon_stack_##type##_push(s, item)              → result__Bool_Error
+ *
+ * Push (bool variant — no Result overhead):
+ * - canon_stack_##type##_try_push(s, item)          → bool
+ *
+ * Push (unchecked variant — debug-only assertions):
+ * - canon_stack_##type##_push_unchecked(s, item)    → void
+ *
+ * Pop (Result variant):
  * - canon_stack_##type##_pop(s, out)                → result__Bool_Error
  *
  * Pop (Option variant):
@@ -223,7 +263,7 @@ linkage void canon_stack_##type##_init( \
 } \
 \
 /** \
- * @brief Pushes an item onto the top of the stack \
+ * @brief Pushes an item onto the top of the stack, returns Result \
  * \
  * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
  * @param item Value to push \
@@ -240,6 +280,50 @@ linkage result__Bool_Error canon_stack_##type##_push( \
     borrowed(canon_stack_##type*) s, type item) \
 { \
     return MANGLE_VEC_PUSH(type)(s, item); \
+} \
+\
+/** \
+ * @brief Pushes an item onto the top of the stack, returns bool (no Result overhead) \
+ * \
+ * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param item Value to push \
+ * @return true on success, false if s == NULL, s->items == NULL, or stack is full \
+ * \
+ * @remark O(1) time, O(1) space — no allocation, no Result construction \
+ * @remark Preferred over push in hot paths where only pass/fail matters \
+ * \
+ * @sa canon_stack_##type##_push — Result variant with specific error codes \
+ * @sa canon_stack_##type##_push_unchecked — unchecked variant for maximum throughput \
+ */ \
+linkage bool canon_stack_##type##_try_push( \
+    borrowed(canon_stack_##type*) s, type item) \
+{ \
+    return MANGLE_VEC_TRY_PUSH(type)(s, item); \
+} \
+\
+/** \
+ * @brief Pushes an item onto the top of the stack without any checking (fast path) \
+ * \
+ * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param item Value to push \
+ * \
+ * @pre s != NULL \
+ * @pre s->items != NULL \
+ * @pre Stack is not full — caller must guarantee this \
+ * \
+ * @note Preconditions enforced by ensure_msg() in debug builds only. \
+ *       Undefined behavior in release builds if violated. \
+ * \
+ * @remark O(1) time, O(1) space — zero overhead in release builds \
+ * @remark Use in ISRs and tight loops where you have already checked is_full \
+ * \
+ * @sa canon_stack_##type##_push — Result variant with full diagnostics \
+ * @sa canon_stack_##type##_try_push — bool variant with runtime checks \
+ */ \
+linkage void canon_stack_##type##_push_unchecked( \
+    borrowed(canon_stack_##type*) s, type item) \
+{ \
+    MANGLE_VEC_PUSH_UNCHECKED(type)(s, item); \
 } \
 \
 /** \
@@ -459,6 +543,8 @@ typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
 \
 extern void                canon_stack_##type##_init(borrowed(canon_stack_##type*) s, borrowed(type*) buffer, usize capacity); \
 extern result__Bool_Error  canon_stack_##type##_push(borrowed(canon_stack_##type*) s, type item); \
+extern bool                canon_stack_##type##_try_push(borrowed(canon_stack_##type*) s, type item); \
+extern void                canon_stack_##type##_push_unchecked(borrowed(canon_stack_##type*) s, type item); \
 extern result__Bool_Error  canon_stack_##type##_pop(borrowed(canon_stack_##type*) s, borrowed(type*) out); \
 extern option_##type       canon_stack_##type##_pop_option(borrowed(canon_stack_##type*) s); \
 extern bool                canon_stack_##type##_peek(borrowed(const canon_stack_##type*) s, borrowed(type*) out); \
