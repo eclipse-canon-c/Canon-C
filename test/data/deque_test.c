@@ -7,6 +7,8 @@
  *   - Constructor: init(), empty()
  *   - Queries: len(), capacity(), remaining(), is_empty(), is_full()
  *   - Push: push_front(), push_back() — success and ERR_CAPACITY_EXCEEDED
+ *   - Push: try_push_front(), try_push_back() — bool variants
+ *   - Push: push_front_unchecked(), push_back_unchecked() — unchecked variants
  *   - Pop:  pop_front(), pop_back()  — success and ERR_INVALID_STATE
  *   - Pop option: pop_front_option(), pop_back_option()
  *   - Peek: peek_front(), peek_back() — non-mutating
@@ -233,6 +235,139 @@ static void test_push_front_full_returns_err(void)
     result__Bool_Error r = canon_deque_int_push_front(&d, 3);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
+}
+
+/* ── try_push_back / try_push_front ──────────────────────────────────────── */
+
+static void test_try_push_back_success(void)
+{
+    int buf[4];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 4);
+
+    EXPECT(canon_deque_int_try_push_back(&d, 1));
+    EXPECT(canon_deque_int_try_push_back(&d, 2));
+    EXPECT(canon_deque_int_try_push_back(&d, 3));
+
+    EXPECT(canon_deque_int_len(&d) == 3);
+
+    int out = 0;
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 1);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 2);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 3);
+}
+
+static void test_try_push_back_full_returns_false(void)
+{
+    int buf[2];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 2);
+
+    EXPECT(canon_deque_int_try_push_back(&d, 1));
+    EXPECT(canon_deque_int_try_push_back(&d, 2));
+    EXPECT(!canon_deque_int_try_push_back(&d, 3));
+
+    EXPECT(canon_deque_int_len(&d) == 2);
+}
+
+static void test_try_push_front_success(void)
+{
+    int buf[4];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 4);
+
+    EXPECT(canon_deque_int_try_push_front(&d, 10));
+    EXPECT(canon_deque_int_try_push_front(&d, 20));
+
+    /* front-to-back: 20, 10 */
+    int out = 0;
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 20);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 10);
+}
+
+static void test_try_push_front_full_returns_false(void)
+{
+    int buf[2];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 2);
+
+    EXPECT(canon_deque_int_try_push_front(&d, 1));
+    EXPECT(canon_deque_int_try_push_front(&d, 2));
+    EXPECT(!canon_deque_int_try_push_front(&d, 3));
+
+    EXPECT(canon_deque_int_len(&d) == 2);
+}
+
+static void test_try_push_null_returns_false(void)
+{
+    EXPECT(!canon_deque_int_try_push_back(NULL, 1));
+    EXPECT(!canon_deque_int_try_push_front(NULL, 1));
+}
+
+/* ── push_back_unchecked / push_front_unchecked ──────────────────────────── */
+
+static void test_push_back_unchecked_success(void)
+{
+    int buf[4];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 4);
+
+    canon_deque_int_push_back_unchecked(&d, 10);
+    canon_deque_int_push_back_unchecked(&d, 20);
+    canon_deque_int_push_back_unchecked(&d, 30);
+
+    EXPECT(canon_deque_int_len(&d) == 3);
+
+    int out = 0;
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 10);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 20);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 30);
+}
+
+static void test_push_front_unchecked_success(void)
+{
+    int buf[4];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 4);
+
+    canon_deque_int_push_front_unchecked(&d, 10);
+    canon_deque_int_push_front_unchecked(&d, 20);
+    canon_deque_int_push_front_unchecked(&d, 30);
+
+    /* front-to-back: 30, 20, 10 */
+    EXPECT(canon_deque_int_len(&d) == 3);
+
+    int out = 0;
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 30);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 20);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 10);
+}
+
+static void test_push_unchecked_wraparound(void)
+{
+    int buf[4];
+    canon_deque_int d;
+    canon_deque_int_init(&d, buf, 4);
+
+    /* Fill and drain to move head/tail forward */
+    canon_deque_int_push_back_unchecked(&d, 1);
+    canon_deque_int_push_back_unchecked(&d, 2);
+    int out = 0;
+    canon_deque_int_pop_front(&d, &out);
+    canon_deque_int_pop_front(&d, &out);
+
+    /* Now push_back_unchecked should wrap around correctly */
+    canon_deque_int_push_back_unchecked(&d, 3);
+    canon_deque_int_push_back_unchecked(&d, 4);
+    canon_deque_int_push_back_unchecked(&d, 5);
+    canon_deque_int_push_back_unchecked(&d, 6);
+
+    EXPECT(canon_deque_int_is_full(&d));
+
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 3);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 4);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 5);
+    canon_deque_int_pop_front(&d, &out); EXPECT(out == 6);
 }
 
 /* ── pop on empty ────────────────────────────────────────────────────────── */
@@ -566,35 +701,26 @@ static void test_swap_self(void)
 
 /* ── Ring buffer wrap-around ─────────────────────────────────────────────── */
 
-/*
- * This is the most critical correctness test for a ring buffer.
- * We fill the buffer, drain half, then push more — forcing head/tail
- * to wrap around the backing array boundary.
- */
 static void test_wraparound_push_back_pop_front(void)
 {
     int buf[4];
     canon_deque_int d;
     canon_deque_int_init(&d, buf, 4);
 
-    /* Fill: [0]=1 [1]=2 [2]=3 [3]=4, head=0 tail=0 (full) */
     canon_deque_int_push_back(&d, 1);
     canon_deque_int_push_back(&d, 2);
     canon_deque_int_push_back(&d, 3);
     canon_deque_int_push_back(&d, 4);
 
-    /* Drain two: head moves to 2 */
     int out = 0;
     canon_deque_int_pop_front(&d, &out); EXPECT(out == 1);
     canon_deque_int_pop_front(&d, &out); EXPECT(out == 2);
 
-    /* Push two more — tail wraps: buf[0]=5, buf[1]=6 */
     canon_deque_int_push_back(&d, 5);
     canon_deque_int_push_back(&d, 6);
 
     EXPECT(canon_deque_int_is_full(&d));
 
-    /* Drain all — should come out in FIFO order: 3,4,5,6 */
     canon_deque_int_pop_front(&d, &out); EXPECT(out == 3);
     canon_deque_int_pop_front(&d, &out); EXPECT(out == 4);
     canon_deque_int_pop_front(&d, &out); EXPECT(out == 5);
@@ -613,16 +739,13 @@ static void test_wraparound_push_front_pop_back(void)
     canon_deque_int_push_front(&d, 3);
     canon_deque_int_push_front(&d, 2);
     canon_deque_int_push_front(&d, 1);
-    /* front-to-back: 1,2,3,4 */
 
     int out = 0;
     canon_deque_int_pop_back(&d, &out); EXPECT(out == 4);
     canon_deque_int_pop_back(&d, &out); EXPECT(out == 3);
 
-    /* Push two more to the front — head wraps */
     canon_deque_int_push_front(&d, 0);
     canon_deque_int_push_front(&d, -1);
-    /* front-to-back: -1, 0, 1, 2 */
 
     EXPECT(canon_deque_int_is_full(&d));
 
@@ -653,7 +776,6 @@ static void test_sliding_window(void)
         canon_deque_int_push_back(&d, stream[i]);
     }
 
-    /* Window should hold last 3: 30, 40, 50 */
     EXPECT(canon_deque_int_len(&d) == 3);
 
     int out = 0;
@@ -689,11 +811,6 @@ static void test_len_remaining_invariant(void)
 
 /* ── struct type: Point — exercises all generated code for a second type ─── */
 
-/*
- * These tests exist to exercise the full generated API for Point so that
- * -Wunused-function does not fire. Each generated function must be called
- * at least once per instantiation.
- */
 static void test_struct_all_functions(void)
 {
     Point buf[4];
@@ -705,21 +822,32 @@ static void test_struct_all_functions(void)
     Point b    = {3, 4};
     Point c    = {5, 6};
 
-    /* empty() constructor */
     canon_deque_Point empty_d = canon_deque_Point_empty();
     EXPECT(canon_deque_Point_len(&empty_d)      == 0);
     EXPECT(canon_deque_Point_capacity(&empty_d) == 0);
 
-    /* push_back + push_front */
     canon_deque_Point_push_back(&d, b);
     canon_deque_Point_push_front(&d, a);
     canon_deque_Point_push_back(&d, c);
-    /* front-to-back: a, b, c */
 
     EXPECT(canon_deque_Point_len(&d)       == 3);
     EXPECT(canon_deque_Point_remaining(&d) == 1);
     EXPECT(!canon_deque_Point_is_empty(&d));
     EXPECT(!canon_deque_Point_is_full(&d));
+
+    /* try_push / push_unchecked on Point */
+    EXPECT(canon_deque_Point_try_push_back(&d, zero));
+    EXPECT(canon_deque_Point_is_full(&d));
+    EXPECT(!canon_deque_Point_try_push_front(&d, zero));
+
+    Point pout = zero;
+    canon_deque_Point_pop_back(&d, &pout); /* remove the zero we just pushed */
+
+    canon_deque_Point_push_back_unchecked(&d, zero);
+    canon_deque_Point_pop_back(&d, &pout); /* remove it again */
+
+    canon_deque_Point_push_front_unchecked(&d, zero);
+    canon_deque_Point_pop_front(&d, &pout); /* remove it */
 
     /* peek_front / peek_back */
     Point peeked = zero;
@@ -730,7 +858,7 @@ static void test_struct_all_functions(void)
     EXPECT(canon_deque_Point_peek_back(&d, &peeked));
     EXPECT(point_eq(peeked, c));
 
-    /* peek_front_option / peek_back_option */
+    /* peek options */
     option_Point pfo = canon_deque_Point_peek_front_option(&d);
     EXPECT(option_Point_is_some(pfo));
     EXPECT(point_eq(option_Point_unwrap(pfo), a));
@@ -747,7 +875,7 @@ static void test_struct_all_functions(void)
     canon_deque_Point_pop_back(&d, &out);
     EXPECT(point_eq(out, c));
 
-    /* pop_front_option / pop_back_option */
+    /* pop options */
     option_Point pfo2 = canon_deque_Point_pop_front_option(&d);
     EXPECT(option_Point_is_some(pfo2));
     EXPECT(point_eq(option_Point_unwrap(pfo2), b));
@@ -760,7 +888,7 @@ static void test_struct_all_functions(void)
     none_opt = canon_deque_Point_pop_back_option(&d);
     EXPECT(option_Point_is_none(none_opt));
 
-    /* Refill and test swap */
+    /* swap */
     Point buf2[4];
     canon_deque_Point d2;
     canon_deque_Point_init(&d2, buf2, 4);
@@ -780,16 +908,10 @@ static void test_struct_all_functions(void)
     EXPECT(canon_deque_Point_is_empty(&d2));
 }
 
-/* ── Suppress unused option API functions ────────────────────────────────────
- *
- * CANON_OPTION generates the full combinator API (map, filter, eq, etc.).
- * Deque tests only use is_some, is_none, unwrap, some, none — the remaining
- * generated functions are suppressed here to prevent -Wunused-function errors.
- * This follows the same pattern as option_test.c's fuzz suppress block.
- */
+/* ── Suppress unused option API functions ──────────────────────────────────── */
+
 static void deque_suppress_unused_option_fns(void)
 {
-    /* int option combinators not exercised by deque tests */
     (void)option_int_get;
     (void)option_int_unwrap_or;
     (void)option_int_expect;
@@ -801,7 +923,6 @@ static void deque_suppress_unused_option_fns(void)
     (void)option_int_replace;
     (void)option_int_take;
     (void)option_int_eq;
-    /* Point option combinators not exercised by deque tests */
     (void)option_Point_get;
     (void)option_Point_unwrap_or;
     (void)option_Point_expect;
@@ -835,6 +956,18 @@ int main(void)
     /* capacity exceeded */
     test_push_back_full_returns_err();
     test_push_front_full_returns_err();
+
+    /* try_push */
+    test_try_push_back_success();
+    test_try_push_back_full_returns_false();
+    test_try_push_front_success();
+    test_try_push_front_full_returns_false();
+    test_try_push_null_returns_false();
+
+    /* push_unchecked */
+    test_push_back_unchecked_success();
+    test_push_front_unchecked_success();
+    test_push_unchecked_wraparound();
 
     /* pop on empty */
     test_pop_front_empty_returns_err();
@@ -897,15 +1030,8 @@ int main(void)
 
 /* ── Fuzz entry point ────────────────────────────────────────────────────── */
 
-/*
- * Suppress unused-function warnings for helpers and generated API functions
- * not exercised in the fuzz entry point.
- *
- * int option combinators — fuzz path only uses is_some and is_none:
- */
 static void deque_fuzz_suppress_unused(void)
 {
-    /* int option API not used in fuzz path */
     (void)option_int_get;
     (void)option_int_unwrap;
     (void)option_int_unwrap_or;
@@ -919,12 +1045,10 @@ static void deque_fuzz_suppress_unused(void)
     (void)option_int_take;
     (void)option_int_eq;
 
-    /* int deque functions not used in fuzz path */
     (void)canon_deque_int_empty;
     (void)canon_deque_int_capacity;
     (void)canon_deque_int_swap;
 
-    /* Point is not fuzzed — suppress entire Point API */
     (void)point_eq;
     (void)option_Point_some;
     (void)option_Point_none;
@@ -951,6 +1075,10 @@ static void deque_fuzz_suppress_unused(void)
     (void)canon_deque_Point_is_full;
     (void)canon_deque_Point_push_back;
     (void)canon_deque_Point_push_front;
+    (void)canon_deque_Point_try_push_back;
+    (void)canon_deque_Point_try_push_front;
+    (void)canon_deque_Point_push_back_unchecked;
+    (void)canon_deque_Point_push_front_unchecked;
     (void)canon_deque_Point_pop_front;
     (void)canon_deque_Point_pop_back;
     (void)canon_deque_Point_pop_front_option;
@@ -964,37 +1092,32 @@ static void deque_fuzz_suppress_unused(void)
 }
 
 /*
- * Input layout (consumed in order, excess ignored):
+ * Input layout:
  *   [0..1]   capacity selector — maps to 1, 2, 4, or 8
- *   [2..N]   operation stream — each byte selects an operation and its value:
- *              high nibble: operation index (0-9)
+ *   [2..N]   operation stream — each byte selects an operation and value:
+ *              high nibble: operation index (0-12)
  *              low  nibble: element value (0-15)
  *
  * Operations:
- *   0 — push_back(value)
- *   1 — push_front(value)
- *   2 — pop_front
- *   3 — pop_back
- *   4 — peek_front
- *   5 — peek_back
- *   6 — pop_front_option
- *   7 — pop_back_option
- *   8 — peek_front_option
- *   9 — clear
- *
- * Invariants checked after every operation:
- *   - len + remaining == capacity (always)
- *   - is_empty iff len == 0
- *   - is_full  iff len == capacity
- *   - pop/peek on empty must return Err / false / None — never crash
- *   - push when full must return Err — never write
- *   - FIFO order: push_back + pop_front preserves insertion order
+ *   0  — push_back(value)
+ *   1  — push_front(value)
+ *   2  — pop_front
+ *   3  — pop_back
+ *   4  — peek_front
+ *   5  — peek_back
+ *   6  — pop_front_option
+ *   7  — pop_back_option
+ *   8  — peek_front_option / peek_back_option
+ *   9  — clear
+ *   10 — try_push_back(value)
+ *   11 — try_push_front(value)
+ *   12 — push_back_unchecked / push_front_unchecked (only if not full)
  */
 
 int LLVMFuzzerTestOneInput(const u8 *data, usize size)
 {
     static const usize cap_table[4] = {1, 2, 4, 8};
-    int backing[8]; /* max capacity */
+    int backing[8];
     canon_deque_int d;
 
     (void)deque_fuzz_suppress_unused;
@@ -1004,24 +1127,16 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
     usize cap = cap_table[data[0] % 4u];
     canon_deque_int_init(&d, backing, cap);
 
-    /* Reference FIFO to verify ordering (bounded by cap) */
     int  ref[8];
     usize ref_head = 0;
     usize ref_size = 0;
-    /*
-     * ref_dirty: set whenever push_front or pop_back is called, because those
-     * operations break the push_back-only FIFO assumption the ref tracks.
-     * When dirty, ordering checks are skipped — only structural invariants
-     * (len, remaining, is_empty, is_full) are verified. Cleared on clear().
-     */
     bool ref_dirty = false;
 
     for (usize i = 1; i < size; i++) {
         u8    byte  = data[i];
-        u8    op    = (u8)(byte >> 4u) % 10u;
+        u8    op    = (u8)(byte >> 4u) % 13u;
         int   val   = (int)(byte & 0x0Fu);
 
-        /* Invariant after every operation */
         #define CHECK_INVARIANTS()                                            \
             do {                                                              \
                 usize len = canon_deque_int_len(&d);                          \
@@ -1038,7 +1153,6 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 usize before = canon_deque_int_len(&d);
                 result__Bool_Error r = canon_deque_int_push_back(&d, val);
                 if (before >= cap) {
-                    /* Was full before push — must fail */
                     if (result__Bool_Error_is_ok(r))     __builtin_trap();
                 } else {
                     if (!result__Bool_Error_is_ok(r))    __builtin_trap();
@@ -1053,8 +1167,6 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 result__Bool_Error r = canon_deque_int_push_front(&d, val);
                 if (!result__Bool_Error_is_ok(r) &&
                     canon_deque_int_len(&d) < cap)      __builtin_trap();
-                /* push_front inserts at the front — ref only tracks push_back
-                 * order, so mark it dirty to disable ordering checks */
                 ref_dirty = true;
                 ref_head  = 0;
                 ref_size  = 0;
@@ -1069,10 +1181,6 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                         if (out != expected)            __builtin_trap();
                         ref_head = (ref_head + 1) % cap;
                         ref_size--;
-                    } else if (!ref_dirty && ref_size == 0) {
-                        /* pop succeeded but ref is empty — deque had stale
-                         * elements; this can happen after mixed ops, just
-                         * skip the value check */
                     }
                 }
                 break;
@@ -1080,7 +1188,6 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
             case 3: { /* pop_back */
                 int out = 0;
                 canon_deque_int_pop_back(&d, &out);
-                /* pop_back removes from the back, invalidating the FIFO ref */
                 ref_dirty = true;
                 ref_head  = 0;
                 ref_size  = 0;
@@ -1092,7 +1199,6 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 usize len = canon_deque_int_len(&d);
                 if (ok  && len == 0)                    __builtin_trap();
                 if (!ok && len >  0)                    __builtin_trap();
-                /* peek must not change length */
                 if (canon_deque_int_len(&d) != len)     __builtin_trap();
                 break;
             }
@@ -1136,7 +1242,6 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                     if (option_int_is_none(pf))         __builtin_trap();
                     if (option_int_is_none(pb))         __builtin_trap();
                 }
-                /* peek must not mutate */
                 if (canon_deque_int_len(&d) != before)  __builtin_trap();
                 break;
             }
@@ -1146,7 +1251,42 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 if (canon_deque_int_len(&d) != 0)       __builtin_trap();
                 ref_head  = 0;
                 ref_size  = 0;
-                ref_dirty = false; /* clean state — FIFO tracking can resume */
+                ref_dirty = false;
+                break;
+            }
+            case 10: { /* try_push_back */
+                usize before = canon_deque_int_len(&d);
+                bool ok = canon_deque_int_try_push_back(&d, val);
+                if (before >= cap) {
+                    if (ok)                              __builtin_trap();
+                } else {
+                    if (!ok)                             __builtin_trap();
+                    if (ref_size < cap) {
+                        ref[(ref_head + ref_size) % cap] = val;
+                        ref_size++;
+                    }
+                }
+                break;
+            }
+            case 11: { /* try_push_front */
+                bool ok = canon_deque_int_try_push_front(&d, val);
+                if (!ok && canon_deque_int_len(&d) < cap) __builtin_trap();
+                ref_dirty = true;
+                ref_head  = 0;
+                ref_size  = 0;
+                break;
+            }
+            case 12: { /* push_back_unchecked / push_front_unchecked */
+                if (!canon_deque_int_is_full(&d)) {
+                    if (val & 1) {
+                        canon_deque_int_push_back_unchecked(&d, val);
+                    } else {
+                        canon_deque_int_push_front_unchecked(&d, val);
+                    }
+                    ref_dirty = true;
+                    ref_head  = 0;
+                    ref_size  = 0;
+                }
                 break;
             }
             default:
