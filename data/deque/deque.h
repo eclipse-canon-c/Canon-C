@@ -16,7 +16,8 @@
  * - Fixed capacity — no automatic growth
  * - Ring buffer — O(1) push/pop at both front and back
  * - Caller owns the buffer (stack, arena, static, heap)
- * - All push/pop operations return Result<bool, Error>
+ * - Three-tier push API: Result (full diagnostics), try (bool), unchecked (void)
+ * - All pop operations return Result<bool, Error>
  * - Option variants provided for pop and peek
  * - No hidden allocations, no surprise resizes
  *
@@ -36,16 +37,35 @@
  * - Fixed capacity is intentional — real-time safe, deterministic
  * - For auto-growing deques, build a wrapper using dynvec.h
  *
+ * Push API tiers:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - push_front / push_back:
+ *     Returns result__Bool_Error with specific error codes.
+ *     Use when you need to know WHY the push failed (NULL arg vs full).
+ *
+ * - try_push_front / try_push_back:
+ *     Returns bool — true on success, false on any failure.
+ *     Use in normal code paths where only pass/fail matters.
+ *     No Result construction overhead.
+ *
+ * - push_front_unchecked / push_back_unchecked:
+ *     Returns void — no checks in release builds.
+ *     Preconditions enforced by ensure_msg() in debug builds only.
+ *     Use in ISRs and tight loops where you have already verified
+ *     the deque is not full via is_full().
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - push_front / push_back:  O(1), no allocation
- * - pop_front / pop_back:    O(1)
- * - peek_front / peek_back:  O(1)
+ * - push_front / push_back:              O(1), no allocation
+ * - try_push_front / try_push_back:      O(1), no allocation, no Result
+ * - push_front_unchecked / _unchecked:   O(1), zero overhead in release
+ * - pop_front / pop_back:                O(1)
+ * - peek_front / peek_back:              O(1)
  * - len / capacity / remaining / is_empty / is_full: O(1)
- * - clear:                   O(1)
- * - swap:                    O(1)
- * - struct size:             sizeof(type*) + 4*sizeof(usize)
- * - element overhead:        0 bytes beyond sizeof(type) per element
+ * - clear:                               O(1)
+ * - swap:                                O(1)
+ * - struct size:                         sizeof(type*) + 4*sizeof(usize)
+ * - element overhead:                    0 bytes beyond sizeof(type) per element
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -77,6 +97,16 @@
  * int val;
  * canon_deque_int_pop_front(&d, &val);  // val = 5
  * canon_deque_int_pop_back(&d, &val);   // val = 10
+ *
+ * // Bool variant — no Result overhead
+ * if (!canon_deque_int_try_push_back(&d, 42)) {
+ *     // deque is full or NULL — handle gracefully
+ * }
+ *
+ * // Unchecked variant — ISR hot path (caller guarantees not full)
+ * if (!canon_deque_int_is_full(&d)) {
+ *     canon_deque_int_push_back_unchecked(&d, sensor_reading);
+ * }
  *
  * // Option variants — no out-param needed
  * option_int front = canon_deque_int_pop_front_option(&d);
@@ -116,6 +146,7 @@
  * - Undo/redo stacks (push_back, pop_back to undo, push_back again to redo)
  * - BFS frontier buffers
  * - Rate-limiting / token buckets
+ * - ISR data ingestion (push_back_unchecked in interrupt, pop_front in main loop)
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
