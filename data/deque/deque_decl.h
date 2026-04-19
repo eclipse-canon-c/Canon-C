@@ -91,9 +91,17 @@ extern usize MANGLE_DEQUE_REMAINING(type)(borrowed(const MANGLE_DEQUE_TYPE(type)
 extern bool  MANGLE_DEQUE_IS_EMPTY(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
 extern bool  MANGLE_DEQUE_IS_FULL(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
 \
-/* Push */ \
+/* Push — Result variants */ \
 extern result__Bool_Error MANGLE_DEQUE_PUSH_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
 extern result__Bool_Error MANGLE_DEQUE_PUSH_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+\
+/* Push — bool variants (no Result overhead) */ \
+extern bool MANGLE_DEQUE_TRY_PUSH_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+extern bool MANGLE_DEQUE_TRY_PUSH_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+\
+/* Push — unchecked variants (debug-only assertions) */ \
+extern void MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
+extern void MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
 \
 /* Pop — Result variants */ \
 extern result__Bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
