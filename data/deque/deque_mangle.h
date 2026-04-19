@@ -200,7 +200,7 @@
    ════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Name of the push-to-front function
+ * @brief Name of the Result-returning push-to-front function
  *
  * Default: canon_deque_##type##_push_front
  */
@@ -209,12 +209,48 @@
 #endif
 
 /**
- * @brief Name of the push-to-back function
+ * @brief Name of the Result-returning push-to-back function
  *
  * Default: canon_deque_##type##_push_back
  */
 #ifndef MANGLE_DEQUE_PUSH_BACK
     #define MANGLE_DEQUE_PUSH_BACK(type)            canon_deque_##type##_push_back
+#endif
+
+/**
+ * @brief Name of the bool-returning push-to-front function (no Result overhead)
+ *
+ * Default: canon_deque_##type##_try_push_front
+ */
+#ifndef MANGLE_DEQUE_TRY_PUSH_FRONT
+    #define MANGLE_DEQUE_TRY_PUSH_FRONT(type)       canon_deque_##type##_try_push_front
+#endif
+
+/**
+ * @brief Name of the bool-returning push-to-back function (no Result overhead)
+ *
+ * Default: canon_deque_##type##_try_push_back
+ */
+#ifndef MANGLE_DEQUE_TRY_PUSH_BACK
+    #define MANGLE_DEQUE_TRY_PUSH_BACK(type)        canon_deque_##type##_try_push_back
+#endif
+
+/**
+ * @brief Name of the unchecked push-to-front function (no bounds check, fast path)
+ *
+ * Default: canon_deque_##type##_push_front_unchecked
+ */
+#ifndef MANGLE_DEQUE_PUSH_FRONT_UNCHECKED
+    #define MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type) canon_deque_##type##_push_front_unchecked
+#endif
+
+/**
+ * @brief Name of the unchecked push-to-back function (no bounds check, fast path)
+ *
+ * Default: canon_deque_##type##_push_back_unchecked
+ */
+#ifndef MANGLE_DEQUE_PUSH_BACK_UNCHECKED
+    #define MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)  canon_deque_##type##_push_back_unchecked
 #endif
 
 /* ════════════════════════════════════════════════════════════════
