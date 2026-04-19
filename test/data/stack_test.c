@@ -6,6 +6,8 @@
  *   - canon_stack_int_init()            — valid initialization
  *   - canon_stack_int_push()            — success, capacity exceeded,
  *                                         NULL args (ERR_INVALID_ARG)
+ *   - canon_stack_int_try_push()        — bool variant, success + full + NULL
+ *   - canon_stack_int_push_unchecked()  — unchecked variant, success
  *   - canon_stack_int_pop()             — LIFO order, empty stack
  *                                         (ERR_INVALID_STATE), NULL args
  *   - canon_stack_int_pop_option()      — Some / None
@@ -20,7 +22,8 @@
  * Fuzz entry point (CANON_FUZZING):
  *   - ref[32] parallel array tracks LIFO ground truth
  *   - ref_top tracks stack depth
- *   - Verifies push, pop, peek, pop_option against ref after every operation
+ *   - Verifies push, try_push, push_unchecked, pop, peek, pop_option
+ *     against ref after every operation
  *   - Structural invariants: len + remaining == capacity,
  *     is_empty/is_full consistency, peek matches top of ref
  */
@@ -140,6 +143,66 @@ static void test_push_null_args(void)
     result__Bool_Error r = canon_stack_int_push(NULL, 42);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+}
+
+/* ── try_push ────────────────────────────────────────────────────────────── */
+
+static void test_try_push_success(void)
+{
+    int buf[4];
+    canon_stack_int s;
+    canon_stack_int_init(&s, buf, 4);
+
+    EXPECT(canon_stack_int_try_push(&s, 1));
+    EXPECT(canon_stack_int_try_push(&s, 2));
+    EXPECT(canon_stack_int_try_push(&s, 3));
+
+    EXPECT(canon_stack_int_len(&s) == 3);
+
+    /* LIFO order preserved */
+    int out = 0;
+    canon_stack_int_pop(&s, &out); EXPECT(out == 3);
+    canon_stack_int_pop(&s, &out); EXPECT(out == 2);
+    canon_stack_int_pop(&s, &out); EXPECT(out == 1);
+}
+
+static void test_try_push_full_returns_false(void)
+{
+    int buf[2];
+    canon_stack_int s;
+    canon_stack_int_init(&s, buf, 2);
+
+    EXPECT(canon_stack_int_try_push(&s, 1));
+    EXPECT(canon_stack_int_try_push(&s, 2));
+    EXPECT(!canon_stack_int_try_push(&s, 3));
+
+    EXPECT(canon_stack_int_len(&s) == 2);
+}
+
+static void test_try_push_null_returns_false(void)
+{
+    EXPECT(!canon_stack_int_try_push(NULL, 1));
+}
+
+/* ── push_unchecked ──────────────────────────────────────────────────────── */
+
+static void test_push_unchecked_success(void)
+{
+    int buf[4];
+    canon_stack_int s;
+    canon_stack_int_init(&s, buf, 4);
+
+    canon_stack_int_push_unchecked(&s, 10);
+    canon_stack_int_push_unchecked(&s, 20);
+    canon_stack_int_push_unchecked(&s, 30);
+
+    EXPECT(canon_stack_int_len(&s) == 3);
+
+    /* LIFO order preserved */
+    int out = 0;
+    canon_stack_int_pop(&s, &out); EXPECT(out == 30);
+    canon_stack_int_pop(&s, &out); EXPECT(out == 20);
+    canon_stack_int_pop(&s, &out); EXPECT(out == 10);
 }
 
 /* ── pop — empty stack ───────────────────────────────────────────────────── */
@@ -361,30 +424,40 @@ static void test_struct_type(void)
     r = canon_stack_Frame_push(&s, f3); EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(canon_stack_Frame_len(&s) == 3);
 
-    /* peek_option — non-destructive, returns top (f3) */
+    /* try_push on Frame */
+    EXPECT(canon_stack_Frame_try_push(&s, (Frame){4, 400}));
+    EXPECT(canon_stack_Frame_is_full(&s));
+    EXPECT(!canon_stack_Frame_try_push(&s, (Frame){5, 500}));
+
+    /* Drain one and test push_unchecked on Frame */
+    Frame out_frame = {0, 0};
+    canon_stack_Frame_pop(&s, &out_frame); /* removes {4, 400} */
+    canon_stack_Frame_push_unchecked(&s, (Frame){5, 500});
+
+    /* peek_option — non-destructive, returns top ({5, 500}) */
     option_Frame peek = canon_stack_Frame_peek_option(&s);
     EXPECT(option_Frame_is_some(peek));
-    EXPECT(option_Frame_unwrap(peek).id == 3);
-    EXPECT(canon_stack_Frame_len(&s) == 3);
+    EXPECT(option_Frame_unwrap(peek).id == 5);
+    EXPECT(canon_stack_Frame_len(&s) == 4);
 
     /* peek — out-param variant */
     Frame top = {0, 0};
     EXPECT(canon_stack_Frame_peek(&s, &top));
-    EXPECT(top.id == 3);
+    EXPECT(top.id == 5);
 
-    /* LIFO pop via option — f3 first */
+    /* LIFO pop via option — {5, 500} first */
     option_Frame o;
     o = canon_stack_Frame_pop_option(&s);
     EXPECT(option_Frame_is_some(o));
-    EXPECT(option_Frame_unwrap(o).id == 3);
+    EXPECT(option_Frame_unwrap(o).id == 5);
 
-    /* LIFO pop via out-param — f2 next */
-    Frame out_frame = {0, 0};
+    /* LIFO pop via out-param — f3 next */
+    out_frame = (Frame){0, 0};
     r = canon_stack_Frame_pop(&s, &out_frame);
     EXPECT(result__Bool_Error_is_ok(r));
-    EXPECT(out_frame.id == 2);
+    EXPECT(out_frame.id == 3);
 
-    EXPECT(canon_stack_Frame_len(&s) == 1);
+    EXPECT(canon_stack_Frame_len(&s) == 2);
 
     /* clear */
     canon_stack_Frame_clear(&s);
@@ -510,6 +583,15 @@ int main(void)
     test_lifo_ordering();
     test_push_capacity_exceeded();
     test_push_null_args();
+
+    /* try_push */
+    test_try_push_success();
+    test_try_push_full_returns_false();
+    test_try_push_null_returns_false();
+
+    /* push_unchecked */
+    test_push_unchecked_success();
+
     test_pop_empty();
     test_pop_null_args();
     test_pop_option();
@@ -540,6 +622,8 @@ static void stack_fuzz_suppress_unused(void)
     /* Frame type not used in fuzz path */
     (void)canon_stack_Frame_init;
     (void)canon_stack_Frame_push;
+    (void)canon_stack_Frame_try_push;
+    (void)canon_stack_Frame_push_unchecked;
     (void)canon_stack_Frame_pop;
     (void)canon_stack_Frame_pop_option;
     (void)canon_stack_Frame_peek;
@@ -676,7 +760,7 @@ static void stack_fuzz_suppress_unused(void)
  * Input layout:
  *   [0]    capacity selector — maps to cap_table[data[0] % 4]
  *   [1..N] operation stream — each byte:
- *            high nibble: operation index (0–4)
+ *            high nibble: operation index (0–6)
  *            low  nibble: value to push (0–15)
  *
  * Operations:
@@ -685,9 +769,11 @@ static void stack_fuzz_suppress_unused(void)
  *   2 — pop_option — same verification, option variant
  *   3 — peek_option — verify non-destructive, matches top of ref
  *   4 — clear — resets stack and reference
+ *   5 — try_push(value) — bool variant
+ *   6 — push_unchecked(value) — only if not full
  *
  * Reference model:
- *   ref[32]   — array holding pushed values in order
+ *   ref[16]   — array holding pushed values in order
  *   ref_top   — index of the next free slot (== depth of stack)
  *
  * Invariants checked after every operation:
@@ -741,7 +827,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     for (usize i = 1; i < size; i++) {
         u8  byte = data[i];
-        u8  op   = (u8)(byte >> 4u) % 5u;
+        u8  op   = (u8)(byte >> 4u) % 7u;
         int val  = (int)(byte & 0x0Fu); /* 0–15 */
 
         switch (op) {
@@ -800,6 +886,24 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
                 canon_stack_int_clear(&s);
                 ref_top = 0;
                 if (!canon_stack_int_is_empty(&s)) __builtin_trap();
+                break;
+            }
+
+            case 5: { /* try_push */
+                bool ok = canon_stack_int_try_push(&s, val);
+                if (ok) {
+                    if (ref_top >= cap) __builtin_trap();
+                    ref[ref_top++] = val;
+                }
+                break;
+            }
+
+            case 6: { /* push_unchecked — only if not full */
+                if (!canon_stack_int_is_full(&s)) {
+                    canon_stack_int_push_unchecked(&s, val);
+                    if (ref_top >= cap) __builtin_trap();
+                    ref[ref_top++] = val;
+                }
                 break;
             }
 
