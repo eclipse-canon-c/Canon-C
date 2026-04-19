@@ -315,24 +315,17 @@ static void test_queries(void)
 
 static void test_ring_wrap_around(void)
 {
-    /*
-     * Enqueue 128 values through a cap=8 queue by interleaving
-     * enqueue and dequeue — exercises the ring-buffer wrap-around path
-     * that deque_impl.h uses for head/tail management.
-     */
     int buf[8];
     canon_queue_int q;
     canon_queue_int_init(&q, buf, 8);
 
     for (int round = 0; round < 16; round++) {
-        /* Fill to capacity */
         for (int i = 0; i < 8; i++) {
             result__Bool_Error r = canon_queue_int_enqueue(&q, round * 8 + i);
             EXPECT(result__Bool_Error_is_ok(r));
         }
         EXPECT(canon_queue_int_is_full(&q));
 
-        /* Drain in FIFO order */
         for (int i = 0; i < 8; i++) {
             int out = 0;
             result__Bool_Error r = canon_queue_int_dequeue(&q, &out);
@@ -367,24 +360,20 @@ static void test_struct_type(void)
     r = canon_queue_Msg_enqueue(&q, m3); EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(canon_queue_Msg_len(&q) == 3);
 
-    /* peek_option — non-destructive */
     option_Msg peek = canon_queue_Msg_peek_option(&q);
     EXPECT(option_Msg_is_some(peek));
     EXPECT(option_Msg_unwrap(peek).id == 1);
     EXPECT(canon_queue_Msg_len(&q) == 3);
 
-    /* peek — out-param variant */
     Msg top = {0, 0};
     EXPECT(canon_queue_Msg_peek(&q, &top));
     EXPECT(top.id == 1);
 
-    /* FIFO dequeue via option */
     option_Msg o;
     o = canon_queue_Msg_dequeue_option(&q);
     EXPECT(option_Msg_is_some(o));
     EXPECT(option_Msg_unwrap(o).id == 1);
 
-    /* FIFO dequeue via out-param */
     Msg out_msg = {0, 0};
     r = canon_queue_Msg_dequeue(&q, &out_msg);
     EXPECT(result__Bool_Error_is_ok(r));
@@ -392,12 +381,10 @@ static void test_struct_type(void)
 
     EXPECT(canon_queue_Msg_len(&q) == 1);
 
-    /* clear */
     canon_queue_Msg_clear(&q);
     EXPECT(canon_queue_Msg_is_empty(&q));
     EXPECT(option_Msg_is_none(canon_queue_Msg_dequeue_option(&q)));
 
-    /* capacity exceeded */
     canon_queue_Msg_enqueue(&q, m1);
     canon_queue_Msg_enqueue(&q, m2);
     canon_queue_Msg_enqueue(&q, m3);
@@ -462,6 +449,10 @@ static void queue_suppress_unused(void)
     (void)canon_deque_int_peek_back_option;
     (void)canon_deque_int_empty;
     (void)canon_deque_int_swap;
+    (void)canon_deque_int_try_push_front;
+    (void)canon_deque_int_try_push_back;
+    (void)canon_deque_int_push_front_unchecked;
+    (void)canon_deque_int_push_back_unchecked;
     (void)canon_deque_Msg_push_front;
     (void)canon_deque_Msg_pop_back;
     (void)canon_deque_Msg_pop_back_option;
@@ -469,6 +460,10 @@ static void queue_suppress_unused(void)
     (void)canon_deque_Msg_peek_back_option;
     (void)canon_deque_Msg_empty;
     (void)canon_deque_Msg_swap;
+    (void)canon_deque_Msg_try_push_front;
+    (void)canon_deque_Msg_try_push_back;
+    (void)canon_deque_Msg_push_front_unchecked;
+    (void)canon_deque_Msg_push_back_unchecked;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -530,6 +525,10 @@ static void queue_fuzz_suppress_unused(void)
     (void)canon_deque_int_peek_back_option;
     (void)canon_deque_int_empty;
     (void)canon_deque_int_swap;
+    (void)canon_deque_int_try_push_front;
+    (void)canon_deque_int_try_push_back;
+    (void)canon_deque_int_push_front_unchecked;
+    (void)canon_deque_int_push_back_unchecked;
     (void)canon_deque_Msg_push_front;
     (void)canon_deque_Msg_pop_back;
     (void)canon_deque_Msg_pop_back_option;
@@ -537,6 +536,10 @@ static void queue_fuzz_suppress_unused(void)
     (void)canon_deque_Msg_peek_back_option;
     (void)canon_deque_Msg_empty;
     (void)canon_deque_Msg_swap;
+    (void)canon_deque_Msg_try_push_front;
+    (void)canon_deque_Msg_try_push_back;
+    (void)canon_deque_Msg_push_front_unchecked;
+    (void)canon_deque_Msg_push_back_unchecked;
 
     /* option_int combinators not used in fuzz path */
     (void)option_int_is_none;
