@@ -81,9 +81,17 @@
  * - canon_deque_##type##_is_empty(d)                 → bool
  * - canon_deque_##type##_is_full(d)                  → bool
  *
- * Push:
+ * Push (Result variants — full diagnostics):
  * - canon_deque_##type##_push_front(d, item)         → result_bool_Error
  * - canon_deque_##type##_push_back(d, item)          → result_bool_Error
+ *
+ * Push (bool variants — no Result overhead):
+ * - canon_deque_##type##_try_push_front(d, item)     → bool
+ * - canon_deque_##type##_try_push_back(d, item)      → bool
+ *
+ * Push (unchecked variants — debug-only assertions):
+ * - canon_deque_##type##_push_front_unchecked(d, item) → void
+ * - canon_deque_##type##_push_back_unchecked(d, item)  → void
  *
  * Pop (Result variants):
  * - canon_deque_##type##_pop_front(d, out)           → result_bool_Error
@@ -134,6 +142,12 @@ IMPL_DEQUE_IS_FULL(linkage,   MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_IS_FULL(type
 \
 IMPL_DEQUE_PUSH_FRONT(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PUSH_FRONT(type), type) \
 IMPL_DEQUE_PUSH_BACK(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PUSH_BACK(type),  type) \
+\
+IMPL_DEQUE_TRY_PUSH_FRONT(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_TRY_PUSH_FRONT(type), type) \
+IMPL_DEQUE_TRY_PUSH_BACK(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_TRY_PUSH_BACK(type),  type) \
+\
+IMPL_DEQUE_PUSH_FRONT_UNCHECKED(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type), type) \
+IMPL_DEQUE_PUSH_BACK_UNCHECKED(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type),  type) \
 \
 IMPL_DEQUE_POP_FRONT(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_FRONT(type), type) \
 IMPL_DEQUE_POP_BACK(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_POP_BACK(type),  type) \
