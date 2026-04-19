@@ -6,6 +6,8 @@
  *   - canon_queue_int_init()              — valid initialization
  *   - canon_queue_int_enqueue()           — success, capacity exceeded,
  *                                           NULL args (ERR_INVALID_ARG)
+ *   - canon_queue_int_try_enqueue()       — bool variant, success + full + NULL
+ *   - canon_queue_int_enqueue_unchecked() — unchecked variant, success + wraparound
  *   - canon_queue_int_dequeue()           — FIFO order, empty queue
  *                                           (ERR_INVALID_STATE), NULL args
  *   - canon_queue_int_dequeue_option()    — Some / None
@@ -20,8 +22,8 @@
  * Fuzz entry point (CANON_FUZZING):
  *   - ref[16] parallel array tracks ground truth FIFO ordering
  *   - ref_head / ref_tail / ref_len maintain queue state
- *   - Verifies enqueue, dequeue, peek, dequeue_option against ref after
- *     every operation
+ *   - Verifies enqueue, try_enqueue, enqueue_unchecked, dequeue, peek,
+ *     dequeue_option against ref after every operation
  *   - Structural invariants: len + remaining == capacity,
  *     is_empty/is_full consistency
  */
@@ -141,6 +143,93 @@ static void test_enqueue_null_args(void)
     result__Bool_Error r = canon_queue_int_enqueue(NULL, 42);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+}
+
+/* ── try_enqueue ─────────────────────────────────────────────────────────── */
+
+static void test_try_enqueue_success(void)
+{
+    int buf[4];
+    canon_queue_int q;
+    canon_queue_int_init(&q, buf, 4);
+
+    EXPECT(canon_queue_int_try_enqueue(&q, 1));
+    EXPECT(canon_queue_int_try_enqueue(&q, 2));
+    EXPECT(canon_queue_int_try_enqueue(&q, 3));
+
+    EXPECT(canon_queue_int_len(&q) == 3);
+
+    /* FIFO order preserved */
+    int out = 0;
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 1);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 2);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 3);
+}
+
+static void test_try_enqueue_full_returns_false(void)
+{
+    int buf[2];
+    canon_queue_int q;
+    canon_queue_int_init(&q, buf, 2);
+
+    EXPECT(canon_queue_int_try_enqueue(&q, 1));
+    EXPECT(canon_queue_int_try_enqueue(&q, 2));
+    EXPECT(!canon_queue_int_try_enqueue(&q, 3));
+
+    EXPECT(canon_queue_int_len(&q) == 2);
+}
+
+static void test_try_enqueue_null_returns_false(void)
+{
+    EXPECT(!canon_queue_int_try_enqueue(NULL, 1));
+}
+
+/* ── enqueue_unchecked ───────────────────────────────────────────────────── */
+
+static void test_enqueue_unchecked_success(void)
+{
+    int buf[4];
+    canon_queue_int q;
+    canon_queue_int_init(&q, buf, 4);
+
+    canon_queue_int_enqueue_unchecked(&q, 10);
+    canon_queue_int_enqueue_unchecked(&q, 20);
+    canon_queue_int_enqueue_unchecked(&q, 30);
+
+    EXPECT(canon_queue_int_len(&q) == 3);
+
+    /* FIFO order preserved */
+    int out = 0;
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 10);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 20);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 30);
+}
+
+static void test_enqueue_unchecked_wraparound(void)
+{
+    int buf[4];
+    canon_queue_int q;
+    canon_queue_int_init(&q, buf, 4);
+
+    /* Fill and drain to move head/tail forward */
+    canon_queue_int_enqueue_unchecked(&q, 1);
+    canon_queue_int_enqueue_unchecked(&q, 2);
+    int out = 0;
+    canon_queue_int_dequeue(&q, &out);
+    canon_queue_int_dequeue(&q, &out);
+
+    /* Now enqueue_unchecked should wrap around correctly */
+    canon_queue_int_enqueue_unchecked(&q, 3);
+    canon_queue_int_enqueue_unchecked(&q, 4);
+    canon_queue_int_enqueue_unchecked(&q, 5);
+    canon_queue_int_enqueue_unchecked(&q, 6);
+
+    EXPECT(canon_queue_int_is_full(&q));
+
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 3);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 4);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 5);
+    canon_queue_int_dequeue(&q, &out); EXPECT(out == 6);
 }
 
 /* ── dequeue — empty queue ───────────────────────────────────────────────── */
@@ -360,31 +449,46 @@ static void test_struct_type(void)
     r = canon_queue_Msg_enqueue(&q, m3); EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(canon_queue_Msg_len(&q) == 3);
 
+    /* try_enqueue on Msg */
+    EXPECT(canon_queue_Msg_try_enqueue(&q, (Msg){4, 40}));
+    EXPECT(canon_queue_Msg_is_full(&q));
+    EXPECT(!canon_queue_Msg_try_enqueue(&q, (Msg){5, 50}));
+
+    /* Drain one and test enqueue_unchecked on Msg */
+    Msg out_msg = {0, 0};
+    canon_queue_Msg_dequeue(&q, &out_msg);
+    canon_queue_Msg_enqueue_unchecked(&q, (Msg){5, 50});
+
     option_Msg peek = canon_queue_Msg_peek_option(&q);
     EXPECT(option_Msg_is_some(peek));
-    EXPECT(option_Msg_unwrap(peek).id == 1);
-    EXPECT(canon_queue_Msg_len(&q) == 3);
+    EXPECT(option_Msg_unwrap(peek).id == 2);
+    EXPECT(canon_queue_Msg_len(&q) == 4);
 
+    /* peek — out-param variant */
     Msg top = {0, 0};
     EXPECT(canon_queue_Msg_peek(&q, &top));
-    EXPECT(top.id == 1);
+    EXPECT(top.id == 2);
 
+    /* FIFO dequeue via option */
     option_Msg o;
     o = canon_queue_Msg_dequeue_option(&q);
     EXPECT(option_Msg_is_some(o));
-    EXPECT(option_Msg_unwrap(o).id == 1);
+    EXPECT(option_Msg_unwrap(o).id == 2);
 
-    Msg out_msg = {0, 0};
+    /* FIFO dequeue via out-param */
+    out_msg = (Msg){0, 0};
     r = canon_queue_Msg_dequeue(&q, &out_msg);
     EXPECT(result__Bool_Error_is_ok(r));
-    EXPECT(out_msg.id == 2);
+    EXPECT(out_msg.id == 3);
 
-    EXPECT(canon_queue_Msg_len(&q) == 1);
+    EXPECT(canon_queue_Msg_len(&q) == 2);
 
+    /* clear */
     canon_queue_Msg_clear(&q);
     EXPECT(canon_queue_Msg_is_empty(&q));
     EXPECT(option_Msg_is_none(canon_queue_Msg_dequeue_option(&q)));
 
+    /* capacity exceeded */
     canon_queue_Msg_enqueue(&q, m1);
     canon_queue_Msg_enqueue(&q, m2);
     canon_queue_Msg_enqueue(&q, m3);
@@ -476,6 +580,16 @@ int main(void)
     test_fifo_ordering();
     test_enqueue_capacity_exceeded();
     test_enqueue_null_args();
+
+    /* try_enqueue */
+    test_try_enqueue_success();
+    test_try_enqueue_full_returns_false();
+    test_try_enqueue_null_returns_false();
+
+    /* enqueue_unchecked */
+    test_enqueue_unchecked_success();
+    test_enqueue_unchecked_wraparound();
+
     test_dequeue_empty();
     test_dequeue_null_args();
     test_dequeue_option();
@@ -506,6 +620,8 @@ static void queue_fuzz_suppress_unused(void)
     /* Struct type not used in fuzz path */
     (void)canon_queue_Msg_init;
     (void)canon_queue_Msg_enqueue;
+    (void)canon_queue_Msg_try_enqueue;
+    (void)canon_queue_Msg_enqueue_unchecked;
     (void)canon_queue_Msg_dequeue;
     (void)canon_queue_Msg_dequeue_option;
     (void)canon_queue_Msg_peek;
@@ -589,7 +705,7 @@ static void queue_fuzz_suppress_unused(void)
     (void)result__Bool_Error_or;
     (void)result__Bool_Error_eq;
 
-    /* int queue capacity/remaining not used in fuzz path */
+    /* int queue functions not used in fuzz path */
     (void)canon_queue_int_capacity;
     (void)canon_queue_int_remaining;
     (void)canon_queue_int_is_full;
@@ -600,7 +716,7 @@ static void queue_fuzz_suppress_unused(void)
  * Input layout:
  *   [0]    capacity selector — maps to cap_table[data[0] % 4]
  *   [1..N] operation stream — each byte:
- *            high nibble: operation index (0–4)
+ *            high nibble: operation index (0–6)
  *            low  nibble: value to enqueue (0–15)
  *
  * Operations:
@@ -609,6 +725,8 @@ static void queue_fuzz_suppress_unused(void)
  *   2 — dequeue_option — same verification, option variant
  *   3 — peek_option — verify non-destructive, matches front of ref
  *   4 — clear — resets queue and reference
+ *   5 — try_enqueue(value) — bool variant
+ *   6 — enqueue_unchecked(value) — only if not full
  *
  * Reference model:
  *   ref[16]         — circular array holding enqueued values
@@ -668,7 +786,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     for (usize i = 1; i < size; i++) {
         u8  byte = data[i];
-        u8  op   = (u8)(byte >> 4u) % 5u;
+        u8  op   = (u8)(byte >> 4u) % 7u;
         int val  = (int)(byte & 0x0Fu); /* 0–15 */
 
         switch (op) {
@@ -676,12 +794,10 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             case 0: { /* enqueue */
                 result__Bool_Error r = canon_queue_int_enqueue(&q, val);
                 if (result__Bool_Error_is_ok(r)) {
-                    /* queue accepted it — ref must have room */
                     if (ref_len >= cap) __builtin_trap();
                     ref[(ref_head + ref_len) % 16] = val;
                     ref_len++;
                 }
-                /* ERR_CAPACITY_EXCEEDED when full — not a trap */
                 break;
             }
 
@@ -694,7 +810,6 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
                     ref_head = (ref_head + 1) % 16;
                     ref_len--;
                 } else {
-                    /* must fail only when empty */
                     if (ref_len != 0)                     __builtin_trap();
                 }
                 break;
@@ -733,6 +848,26 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
                 ref_head = 0;
                 ref_len  = 0;
                 if (!canon_queue_int_is_empty(&q)) __builtin_trap();
+                break;
+            }
+
+            case 5: { /* try_enqueue */
+                bool ok = canon_queue_int_try_enqueue(&q, val);
+                if (ok) {
+                    if (ref_len >= cap) __builtin_trap();
+                    ref[(ref_head + ref_len) % 16] = val;
+                    ref_len++;
+                }
+                break;
+            }
+
+            case 6: { /* enqueue_unchecked — only if not full */
+                if (!canon_queue_int_is_full(&q)) {
+                    canon_queue_int_enqueue_unchecked(&q, val);
+                    if (ref_len >= cap) __builtin_trap();
+                    ref[(ref_head + ref_len) % 16] = val;
+                    ref_len++;
+                }
                 break;
             }
 
