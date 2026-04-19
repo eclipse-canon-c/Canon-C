@@ -22,6 +22,7 @@
  * - Preconditions use require_msg(), debug invariants use ensure_msg()
  * - CANON_DEQUE_MAX_CAPACITY enforced at init time
  * - Option variants provided for pop and peek alongside Result/bool variants
+ * - Three-tier push API: Result (full diagnostics), try (bool), unchecked (void)
  * - All pointer parameters annotated with borrowed() per ownership.h conventions
  *
  * Ring buffer invariant:
@@ -280,11 +281,11 @@ linkage bool fn(borrowed(const DequeType*) d) { \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Push operations
+   Push operations — Result tier (full diagnostics)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Inserts element at the front of the deque (O(1) ring buffer step)
+ * @brief Inserts element at the front of the deque, returns Result
  *
  * Generated function signature:
  * ```c
@@ -310,7 +311,7 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
 }
 
 /**
- * @brief Inserts element at the back of the deque (O(1) ring buffer step)
+ * @brief Inserts element at the back of the deque, returns Result
  *
  * Generated function signature:
  * ```c
@@ -333,6 +334,128 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
     d->tail = (d->tail + 1) % d->capacity; \
     d->size++; \
     return result__Bool_Error_ok(true); \
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Push operations — try tier (bool, no Result overhead)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Inserts element at the front, returns bool (no Result overhead)
+ *
+ * Generated function signature:
+ * ```c
+ * bool fn(borrowed(DequeType*) d, type item);
+ * ```
+ *
+ * @post Returns false if d == NULL, d->buffer == NULL, or d is full
+ * @post On true: item is at buffer[new_head], d->size incremented by 1
+ *
+ * @remark O(1) time, O(1) space — no allocation, no Result construction
+ * @remark Preferred over push_front in hot paths where only pass/fail matters
+ *
+ * @sa IMPL_DEQUE_PUSH_FRONT — Result variant with specific error codes
+ * @sa IMPL_DEQUE_PUSH_FRONT_UNCHECKED — unchecked variant for maximum throughput
+ */
+#define IMPL_DEQUE_TRY_PUSH_FRONT(linkage, DequeType, fn, type) \
+linkage bool fn(borrowed(DequeType*) d, type item) { \
+    if (!d || !d->buffer || d->size >= d->capacity) return false; \
+    d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
+    d->buffer[d->head] = item; \
+    d->size++; \
+    return true; \
+}
+
+/**
+ * @brief Inserts element at the back, returns bool (no Result overhead)
+ *
+ * Generated function signature:
+ * ```c
+ * bool fn(borrowed(DequeType*) d, type item);
+ * ```
+ *
+ * @post Returns false if d == NULL, d->buffer == NULL, or d is full
+ * @post On true: item written at buffer[old_tail], tail advanced, size incremented
+ *
+ * @remark O(1) time, O(1) space — no allocation, no Result construction
+ * @remark Preferred over push_back in hot paths where only pass/fail matters
+ *
+ * @sa IMPL_DEQUE_PUSH_BACK — Result variant with specific error codes
+ * @sa IMPL_DEQUE_PUSH_BACK_UNCHECKED — unchecked variant for maximum throughput
+ */
+#define IMPL_DEQUE_TRY_PUSH_BACK(linkage, DequeType, fn, type) \
+linkage bool fn(borrowed(DequeType*) d, type item) { \
+    if (!d || !d->buffer || d->size >= d->capacity) return false; \
+    d->buffer[d->tail] = item; \
+    d->tail = (d->tail + 1) % d->capacity; \
+    d->size++; \
+    return true; \
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Push operations — unchecked tier (void, debug-only assertions)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Inserts element at the front without any checking (fast path)
+ *
+ * Generated function signature:
+ * ```c
+ * void fn(borrowed(DequeType*) d, type item);
+ * ```
+ *
+ * @pre d != NULL
+ * @pre d->buffer != NULL
+ * @pre d->size < d->capacity — caller must guarantee this
+ *
+ * @note Preconditions enforced by ensure_msg() in debug builds only.
+ *       Undefined behavior in release builds if violated.
+ *
+ * @remark O(1) time, O(1) space — zero overhead in release builds
+ * @remark Use in ISRs and tight loops where you have already checked is_full
+ *
+ * @sa IMPL_DEQUE_PUSH_FRONT — Result variant with full diagnostics
+ * @sa IMPL_DEQUE_TRY_PUSH_FRONT — bool variant with runtime checks
+ */
+#define IMPL_DEQUE_PUSH_FRONT_UNCHECKED(linkage, DequeType, fn, type) \
+linkage void fn(borrowed(DequeType*) d, type item) { \
+    ensure_msg(d != NULL,              #fn ": d cannot be NULL"); \
+    ensure_msg(d->buffer != NULL,      #fn ": d->buffer cannot be NULL"); \
+    ensure_msg(d->size < d->capacity,  #fn ": deque is full"); \
+    d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
+    d->buffer[d->head] = item; \
+    d->size++; \
+}
+
+/**
+ * @brief Inserts element at the back without any checking (fast path)
+ *
+ * Generated function signature:
+ * ```c
+ * void fn(borrowed(DequeType*) d, type item);
+ * ```
+ *
+ * @pre d != NULL
+ * @pre d->buffer != NULL
+ * @pre d->size < d->capacity — caller must guarantee this
+ *
+ * @note Preconditions enforced by ensure_msg() in debug builds only.
+ *       Undefined behavior in release builds if violated.
+ *
+ * @remark O(1) time, O(1) space — zero overhead in release builds
+ * @remark Use in ISRs and tight loops where you have already checked is_full
+ *
+ * @sa IMPL_DEQUE_PUSH_BACK — Result variant with full diagnostics
+ * @sa IMPL_DEQUE_TRY_PUSH_BACK — bool variant with runtime checks
+ */
+#define IMPL_DEQUE_PUSH_BACK_UNCHECKED(linkage, DequeType, fn, type) \
+linkage void fn(borrowed(DequeType*) d, type item) { \
+    ensure_msg(d != NULL,              #fn ": d cannot be NULL"); \
+    ensure_msg(d->buffer != NULL,      #fn ": d->buffer cannot be NULL"); \
+    ensure_msg(d->size < d->capacity,  #fn ": deque is full"); \
+    d->buffer[d->tail] = item; \
+    d->tail = (d->tail + 1) % d->capacity; \
+    d->size++; \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
