@@ -19,11 +19,29 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Zero overhead — every function is a direct deque passthrough
  * - FIFO semantics only — no front-insert, no back-pop (use deque for that)
+ * - Three-tier enqueue API: Result (full diagnostics), try (bool), unchecked (void)
  * - result__Bool_Error from enqueue/dequeue — matches deque and vec
  * - Option variants for dequeue and peek — no out-param required
  * - Caller owns the buffer (stack, arena, static, heap)
  * - Fixed capacity is intentional — real-time safe, deterministic
  * - All pointer parameters annotated with borrowed() per ownership.h conventions
+ *
+ * Enqueue API tiers:
+ * ────────────────────────────────────────────────────────────────────────────
+ * - enqueue(q, item):
+ *     Returns result__Bool_Error with specific error codes.
+ *     Use when you need to know WHY the enqueue failed (NULL arg vs full).
+ *
+ * - try_enqueue(q, item):
+ *     Returns bool — true on success, false on any failure.
+ *     Use in normal code paths where only pass/fail matters.
+ *     No Result construction overhead.
+ *
+ * - enqueue_unchecked(q, item):
+ *     Returns void — no checks in release builds.
+ *     Preconditions enforced by ensure_msg() in debug builds only.
+ *     Use in ISRs and tight loops where you have already verified
+ *     the queue is not full via is_full().
  *
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
@@ -68,7 +86,10 @@
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
- * - enqueue / dequeue:       O(1) — ring buffer step, no allocation
+ * - enqueue:                 O(1) — ring buffer step, no allocation
+ * - try_enqueue:             O(1) — no allocation, no Result
+ * - enqueue_unchecked:       O(1) — zero overhead in release
+ * - dequeue:                 O(1)
  * - peek:                    O(1)
  * - len / capacity / remaining / is_empty / is_full: O(1)
  * - clear:                   O(1)
@@ -94,6 +115,16 @@
  *
  * int val;
  * canon_queue_int_dequeue(&q, &val);  // val = 10 (FIFO)
+ *
+ * // Bool variant — no Result overhead
+ * if (!canon_queue_int_try_enqueue(&q, 42)) {
+ *     // queue is full or NULL — handle gracefully
+ * }
+ *
+ * // Unchecked variant — ISR hot path (caller guarantees not full)
+ * if (!canon_queue_int_is_full(&q)) {
+ *     canon_queue_int_enqueue_unchecked(&q, sensor_reading);
+ * }
  *
  * // Option variant — no out-param needed
  * option_int next = canon_queue_int_dequeue_option(&q);  // Some(20)
@@ -125,6 +156,7 @@
  * - Message passing between components
  * - Producer-consumer bounded buffers
  * - Rate-limited event queues
+ * - ISR data ingestion (enqueue_unchecked in interrupt, dequeue in main loop)
  *
  * NOT suitable for:
  * ────────────────────────────────────────────────────────────────────────────
@@ -158,8 +190,16 @@
  * - canon_queue_##type##_is_empty(q)                → bool
  * - canon_queue_##type##_is_full(q)                 → bool
  *
- * Enqueue / dequeue (Result variants):
+ * Enqueue (Result variant — full diagnostics):
  * - canon_queue_##type##_enqueue(q, item)           → result__Bool_Error
+ *
+ * Enqueue (bool variant — no Result overhead):
+ * - canon_queue_##type##_try_enqueue(q, item)       → bool
+ *
+ * Enqueue (unchecked variant — debug-only assertions):
+ * - canon_queue_##type##_enqueue_unchecked(q, item) → void
+ *
+ * Dequeue (Result variant):
  * - canon_queue_##type##_dequeue(q, out)            → result__Bool_Error
  *
  * Dequeue (Option variant):
@@ -221,7 +261,7 @@ linkage void canon_queue_##type##_init( \
 } \
 \
 /** \
- * @brief Adds an item to the back of the queue (enqueue) \
+ * @brief Adds an item to the back of the queue (enqueue), returns Result \
  * \
  * FIFO ordering: items are dequeued in the order they were enqueued. \
  * \
@@ -240,6 +280,50 @@ linkage result__Bool_Error canon_queue_##type##_enqueue( \
     borrowed(canon_queue_##type*) q, type item) \
 { \
     return MANGLE_DEQUE_PUSH_BACK(type)(q, item); \
+} \
+\
+/** \
+ * @brief Adds an item to the back of the queue, returns bool (no Result overhead) \
+ * \
+ * @param q    borrowed(canon_queue_##type*) — initialized queue instance \
+ * @param item Value to add \
+ * @return true on success, false if q == NULL, q->buffer == NULL, or queue is full \
+ * \
+ * @remark O(1) time, O(1) space — no allocation, no Result construction \
+ * @remark Preferred over enqueue in hot paths where only pass/fail matters \
+ * \
+ * @sa canon_queue_##type##_enqueue — Result variant with specific error codes \
+ * @sa canon_queue_##type##_enqueue_unchecked — unchecked variant for maximum throughput \
+ */ \
+linkage bool canon_queue_##type##_try_enqueue( \
+    borrowed(canon_queue_##type*) q, type item) \
+{ \
+    return MANGLE_DEQUE_TRY_PUSH_BACK(type)(q, item); \
+} \
+\
+/** \
+ * @brief Adds an item to the back of the queue without any checking (fast path) \
+ * \
+ * @param q    borrowed(canon_queue_##type*) — initialized queue instance \
+ * @param item Value to add \
+ * \
+ * @pre q != NULL \
+ * @pre q->buffer != NULL \
+ * @pre Queue is not full — caller must guarantee this \
+ * \
+ * @note Preconditions enforced by ensure_msg() in debug builds only. \
+ *       Undefined behavior in release builds if violated. \
+ * \
+ * @remark O(1) time, O(1) space — zero overhead in release builds \
+ * @remark Use in ISRs and tight loops where you have already checked is_full \
+ * \
+ * @sa canon_queue_##type##_enqueue — Result variant with full diagnostics \
+ * @sa canon_queue_##type##_try_enqueue — bool variant with runtime checks \
+ */ \
+linkage void canon_queue_##type##_enqueue_unchecked( \
+    borrowed(canon_queue_##type*) q, type item) \
+{ \
+    MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)(q, item); \
 } \
 \
 /** \
@@ -467,6 +551,8 @@ typedef MANGLE_DEQUE_TYPE(type) canon_queue_##type; \
 \
 extern void                canon_queue_##type##_init(borrowed(canon_queue_##type*) q, borrowed(type*) buffer, usize capacity); \
 extern result__Bool_Error  canon_queue_##type##_enqueue(borrowed(canon_queue_##type*) q, type item); \
+extern bool                canon_queue_##type##_try_enqueue(borrowed(canon_queue_##type*) q, type item); \
+extern void                canon_queue_##type##_enqueue_unchecked(borrowed(canon_queue_##type*) q, type item); \
 extern result__Bool_Error  canon_queue_##type##_dequeue(borrowed(canon_queue_##type*) q, borrowed(type*) out); \
 extern option_##type       canon_queue_##type##_dequeue_option(borrowed(canon_queue_##type*) q); \
 extern bool                canon_queue_##type##_peek(borrowed(const canon_queue_##type*) q, borrowed(type*) out); \
