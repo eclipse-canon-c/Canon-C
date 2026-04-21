@@ -118,7 +118,7 @@ core/ → semantics/ → data/ → algo/ → util/
 **Rules:**
 
 - Modules are organized by **semantic depth**, not feature count. Lower layers define unavoidable mechanics; higher layers build meaning on top.
-- Lower ( The lowest is Core ) layers may be used by higher ( The highest is Util ) layers, but **upward or circular dependencies are strictly forbidden**.
+- Lower ( The lowest is "core" ) layers may be used by higher ( The highest is "util" ) layers, but **upward or circular dependencies are strictly forbidden**.
 - Each module must be independently usable.
   
 This ensures **explicitness** and prevents hidden behaviors or fragile dependencies.
