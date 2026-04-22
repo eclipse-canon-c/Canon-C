@@ -43,8 +43,8 @@
  * ----------------------------------------------------------------------------
  * Every function in this header carries an ACSL contract suitable for
  * Frama-C WP. The Typed+Cast memory model is required because ptr.h
- * performs void* to u8* casts extensively for byte-level pointer arithmetic
- * (same rationale as compare.h - see VERIFY-005).
+ * performs void-to-u8 pointer casts extensively for byte-level pointer
+ * arithmetic (same rationale as compare.h - see VERIFY-005).
  *
  * Some ensures clauses are intentionally weaker than the full functional
  * specification - they prove the formula but not all mathematical
@@ -306,9 +306,9 @@ static inline bool is_aligned(usize n, usize align) {
  *
  * @note The ensures clause specifies the formula only. The mathematical
  *       consequences (result is a multiple of align, result >= n, result
- *       - n < align) are not provable through WP's integer theory across
- *       the bitwise AND. Verified by testing and MC/DC coverage.
- *       See VERIFY-006 in docs/deviations.md.
+ *       minus n is less than align) are not provable through WP's integer
+ *       theory across the bitwise AND. Verified by testing and MC/DC
+ *       coverage. See VERIFY-006 in docs/deviations.md.
  *
  * Example:
  * @code
@@ -428,16 +428,16 @@ static inline usize align_padding(usize n, usize align) {
  * @remark Useful for arena bump allocation: align the cursor before stamping
  *         an object with nontrivial alignment
  *
- * @note The nonnull behavior does not prove \result != \null because WP
- *       cannot track non-null through the uintptr_t round-trip. This is
- *       the same model limitation that affects all void*/u8* round-trips
- *       in ptr.h. VERIFY-006.
+ * @note The nonnull behavior does not prove the result is non-NULL because
+ *       WP cannot track non-null through the uintptr_t round-trip. This is
+ *       the same model limitation that affects all void-to-u8 pointer
+ *       round-trips in ptr.h. VERIFY-006.
  *
  * Example:
  * @code
- *   void* raw     = arena->cur;
- *   void* aligned = ptr_align_up(raw, 16);
- *   arena->cur    = ptr_offset(aligned, sizeof(MyStruct));
+ *   void *raw     = arena_cur;
+ *   void *aligned = ptr_align_up(raw, 16);
+ *   arena_cur     = ptr_offset(aligned, sizeof(MyStruct));
  * @endcode
  *
  * @sa ptr_align_down(), ptr_is_aligned(), align_up()
@@ -478,8 +478,8 @@ static inline void* ptr_align_up(void* p, usize align) {
  *
  * Example:
  * @code
- *   void* p         = some_pointer_into_a_buffer;
- *   void* page_base = ptr_align_down(p, 4096);
+ *   void *p         = some_pointer_into_a_buffer;
+ *   void *page_base = ptr_align_down(p, 4096);
  * @endcode
  *
  * @sa ptr_align_up(), ptr_is_aligned(), align_down()
@@ -559,9 +559,9 @@ static inline bool ptr_is_aligned(const void* p, usize align) {
  *
  * Example:
  * @code
- *   usize pad    = ptr_align_padding(arena->cur, 16);
+ *   usize pad    = ptr_align_padding(arena_cur, 16);
  *   usize needed = pad + object_size;
- *   if (arena_remaining(arena) < needed) return OUT_OF_MEMORY;
+ *   if (arena_remaining < needed) return OUT_OF_MEMORY;
  * @endcode
  *
  * @sa ptr_align_up(), align_padding()
@@ -610,13 +610,13 @@ static inline usize ptr_align_padding(const void* p, usize align) {
  *         for typed element access
  * @remark Overflow is caught by ensure_msg() in debug builds
  *
- * @note The nonnull behavior does not prove \result != \null because WP
- *       cannot track non-null through u8* pointer arithmetic. VERIFY-006.
+ * @note The nonnull behavior does not prove the result is non-NULL because
+ *       WP cannot track non-null through u8 pointer arithmetic. VERIFY-006.
  *
  * Example:
  * @code
- *   void* next = ptr_offset(base, 64);
- *   u8*   tail = ptr_offset(header, sizeof(Header));
+ *   void *next = ptr_offset(base, 64);
+ *   u8   *tail = ptr_offset(header, sizeof(Header));
  * @endcode
  *
  * @sa ptr_offset_const(), ptr_retreat(), ptr_elem()
@@ -655,7 +655,7 @@ static inline void* ptr_offset(void* p, usize n) {
  *
  * Example:
  * @code
- *   const void* payload = ptr_offset_const(packet, sizeof(Header));
+ *   const void *payload = ptr_offset_const(packet, sizeof(Header));
  * @endcode
  *
  * @sa ptr_offset()
@@ -698,7 +698,7 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
  *
  * Example:
  * @code
- *   void* header = ptr_retreat(payload, sizeof(Header));
+ *   void *header = ptr_retreat(payload, sizeof(Header));
  * @endcode
  *
  * @sa ptr_offset(), ptr_diff()
@@ -740,8 +740,8 @@ static inline void* ptr_retreat(void* p, usize n) {
  *
  * Example:
  * @code
- *   isize used      = ptr_diff(arena->cur, arena->start);
- *   isize remaining = ptr_diff(arena->end, arena->cur);
+ *   isize used      = ptr_diff(cur, start);
+ *   isize remaining = ptr_diff(end, cur);
  * @endcode
  *
  * @sa ptr_span(), ptr_offset()
@@ -778,8 +778,8 @@ static inline isize ptr_diff(const void* to, const void* from) {
  *
  * Example:
  * @code
- *   usize remaining = ptr_span(arena->end, arena->cur);
- *   usize used      = ptr_span(arena->cur, arena->start);
+ *   usize remaining = ptr_span(end, cur);
+ *   usize used      = ptr_span(cur, start);
  * @endcode
  *
  * @sa ptr_diff(), ptr_in_range()
@@ -915,7 +915,8 @@ static inline bool ptr_range_in_range(const void*  p,
 /**
  * @brief Compute pointer to element i in a flat array at base
  *
- * Equivalent to &((T*)base)[i] without requiring a typed pointer.
+ * Equivalent to taking the address of the i-th element in a typed array,
+ * but works through a void pointer so callers can use it generically.
  *
  * @param base      Pointer to array start (must NOT be NULL)
  * @param index     Element index (zero-based)
@@ -933,8 +934,8 @@ static inline bool ptr_range_in_range(const void*  p,
  *
  * Example:
  * @code
- *   void* slot = ptr_elem(pool->buffer, 3, sizeof(MyStruct));
- *   MyStruct* item = (MyStruct*)slot;
+ *   void *slot = ptr_elem(pool_buffer, 3, sizeof(MyStruct));
+ *   MyStruct *item = (MyStruct *)slot;
  * @endcode
  *
  * @sa ptr_elem_const(), ptr_offset()
@@ -971,7 +972,7 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
  *
  * Example:
  * @code
- *   const void* slot = ptr_elem_const(data, 10, sizeof(Record));
+ *   const void *slot = ptr_elem_const(data, 10, sizeof(Record));
  * @endcode
  *
  * @sa ptr_elem()
@@ -1006,11 +1007,11 @@ static inline const void* ptr_elem_const(const void* base, usize index, usize el
  * @return p if p != NULL, otherwise fallback
  *
  * @remark Null-tolerant: NULL primary -> fallback returned
- * @remark Useful for replacing x = p ? p : default idioms at call sites
+ * @remark Useful for replacing ternary idioms at call sites
  *
  * Example:
  * @code
- *   void* buf = ptr_or(user_supplied, internal_default);
+ *   void *buf = ptr_or(user_supplied, internal_default);
  * @endcode
  *
  * @sa ptr_or_const(), ptr_is_valid()
@@ -1042,7 +1043,7 @@ static inline void* ptr_or(void* p, void* fallback) {
  *
  * Example:
  * @code
- *   const char* name = ptr_or_const(config->name, "default");
+ *   const char *name = ptr_or_const(config_name, "default");
  * @endcode
  *
  * @sa ptr_or()
@@ -1143,8 +1144,8 @@ static inline bool ptr_is_valid(const void* p) {
  * Example:
  * @code
  *   typedef struct { int x; Node node; } MyItem;
- *   Node*   node_ptr = list_pop(&list);
- *   MyItem* item     = PTR_CONTAINER_OF(node_ptr, MyItem, node);
+ *   Node    *node_ptr = list_pop(&list);
+ *   MyItem  *item     = PTR_CONTAINER_OF(node_ptr, MyItem, node);
  * @endcode
  *
  * @sa PTR_OFFSET_OF()
