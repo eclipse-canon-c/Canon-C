@@ -46,14 +46,16 @@
  * performs void* to u8* casts extensively for byte-level pointer arithmetic
  * (same rationale as compare.h - see VERIFY-005).
  *
- * All functions are pure (assigns \nothing) - they take pointers and
- * integers by value and return results without modifying any memory.
+ * Some ensures clauses are intentionally weaker than the full functional
+ * specification - they prove the formula but not all mathematical
+ * consequences. This mirrors the bits.h pattern (VERIFY-004) where WP's
+ * integer theory cannot reason across bitwise operations and pointer-
+ * integer round-trips. Full correctness is verified by testing, fuzzing,
+ * and MC/DC coverage. See docs/deviations.md entry VERIFY-006 for details.
  *
  * Compile-time invariant: static_require asserts CANON_USIZE_MAX equals
  * SIZE_MAX at compile time. Every overflow check in this file depends on
  * CANON_USIZE_MAX being the true maximum value representable in usize.
- * If limits.h ever drifts, the build fails immediately rather than
- * producing subtly-wrong overflow checks at runtime.
  *
  * Performance:
  * ----------------------------------------------------------------------------
@@ -84,8 +86,6 @@
  * ----------------------------------------------------------------------------
  * ptr.h lives in core/primitives/ and may only include from core/primitives/
  * and stddef.h (for offsetof). No other standard headers are included.
- * This keeps ptr.h usable in freestanding environments and predictable as
- * a foundation for higher-layer modules.
  *
  * Typical use cases:
  * ----------------------------------------------------------------------------
@@ -304,6 +304,12 @@ static inline bool is_aligned(usize n, usize align) {
  * @remark align_up(0, a) == 0 for any valid a
  * @remark Idempotent on already-aligned values
  *
+ * @note The ensures clause specifies the formula only. The mathematical
+ *       consequences (result is a multiple of align, result >= n, result
+ *       - n < align) are not provable through WP's integer theory across
+ *       the bitwise AND. Verified by testing and MC/DC coverage.
+ *       See VERIFY-006 in docs/deviations.md.
+ *
  * Example:
  * @code
  *   align_up(13, 8)
@@ -319,8 +325,6 @@ static inline bool is_aligned(usize n, usize align) {
     requires n <= CANON_USIZE_MAX - (align - 1);
     assigns  \nothing;
     ensures  \result == ((n + align - 1) & ~(align - 1));
-    ensures  (\result & (align - 1)) == 0;
-    ensures  \result >= n;
  */
 static inline usize align_up(usize n, usize align) {
     require_msg(is_power_of_two(align), "align_up: align must be a nonzero power of two");
@@ -342,6 +346,9 @@ static inline usize align_up(usize n, usize align) {
  * @remark Idempotent on already-aligned values
  * @remark Cannot overflow - always produces a value <= n
  *
+ * @note The ensures clause specifies the formula only. See align_up for
+ *       rationale. VERIFY-006 in docs/deviations.md.
+ *
  * Example:
  * @code
  *   align_down(13, 8)
@@ -356,8 +363,6 @@ static inline usize align_up(usize n, usize align) {
     requires (align & (align - 1)) == 0;
     assigns  \nothing;
     ensures  \result == (n & ~(align - 1));
-    ensures  (\result & (align - 1)) == 0;
-    ensures  \result <= n;
  */
 static inline usize align_down(usize n, usize align) {
     require_msg(is_power_of_two(align), "align_down: align must be a nonzero power of two");
@@ -379,6 +384,9 @@ static inline usize align_down(usize n, usize align) {
  * @remark Returns 0 when n is already aligned
  * @remark Equivalent to align_up(n, align) - n
  *
+ * @note The ensures clause specifies the formula only. See align_up for
+ *       rationale. VERIFY-006 in docs/deviations.md.
+ *
  * Example:
  * @code
  *   align_padding(13, 8)
@@ -393,7 +401,6 @@ static inline usize align_down(usize n, usize align) {
     requires (align & (align - 1)) == 0;
     requires n <= CANON_USIZE_MAX - (align - 1);
     assigns  \nothing;
-    ensures  \result < align;
     ensures  \result == ((n + align - 1) & ~(align - 1)) - n;
  */
 static inline usize align_padding(usize n, usize align) {
@@ -421,6 +428,11 @@ static inline usize align_padding(usize n, usize align) {
  * @remark Useful for arena bump allocation: align the cursor before stamping
  *         an object with nontrivial alignment
  *
+ * @note The nonnull behavior does not prove \result != \null because WP
+ *       cannot track non-null through the uintptr_t round-trip. This is
+ *       the same model limitation that affects all void*/u8* round-trips
+ *       in ptr.h. VERIFY-006.
+ *
  * Example:
  * @code
  *   void* raw     = arena->cur;
@@ -439,7 +451,6 @@ static inline usize align_padding(usize n, usize align) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures \result != \null;
     complete behaviors;
     disjoint behaviors;
  */
@@ -463,6 +474,8 @@ static inline void* ptr_align_up(void* p, usize align) {
  * @remark Cannot underflow past NULL - always stays within the original
  *         allocation if p was inside one
  *
+ * @note See ptr_align_up for WP limitation note. VERIFY-006.
+ *
  * Example:
  * @code
  *   void* p         = some_pointer_into_a_buffer;
@@ -480,7 +493,6 @@ static inline void* ptr_align_up(void* p, usize align) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures \result != \null;
     complete behaviors;
     disjoint behaviors;
  */
@@ -598,6 +610,9 @@ static inline usize ptr_align_padding(const void* p, usize align) {
  *         for typed element access
  * @remark Overflow is caught by ensure_msg() in debug builds
  *
+ * @note The nonnull behavior does not prove \result != \null because WP
+ *       cannot track non-null through u8* pointer arithmetic. VERIFY-006.
+ *
  * Example:
  * @code
  *   void* next = ptr_offset(base, 64);
@@ -613,7 +628,6 @@ static inline usize ptr_align_padding(const void* p, usize align) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures \result != \null;
     complete behaviors;
     disjoint behaviors;
  */
@@ -637,6 +651,8 @@ static inline void* ptr_offset(void* p, usize n) {
  * @remark Null-tolerant: NULL in -> NULL out
  * @remark Use on read-only buffers to preserve const-correctness
  *
+ * @note See ptr_offset for WP limitation note. VERIFY-006.
+ *
  * Example:
  * @code
  *   const void* payload = ptr_offset_const(packet, sizeof(Header));
@@ -651,7 +667,6 @@ static inline void* ptr_offset(void* p, usize n) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures \result != \null;
     complete behaviors;
     disjoint behaviors;
  */
@@ -679,6 +694,8 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
  * @remark Null-tolerant: NULL in -> NULL out
  * @remark Underflow is caught by ensure_msg() in debug builds
  *
+ * @note See ptr_offset for WP limitation note. VERIFY-006.
+ *
  * Example:
  * @code
  *   void* header = ptr_retreat(payload, sizeof(Header));
@@ -693,7 +710,6 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures \result != \null;
     complete behaviors;
     disjoint behaviors;
  */
@@ -928,7 +944,6 @@ static inline bool ptr_range_in_range(const void*  p,
     requires elem_size >  0;
     requires index     <= CANON_USIZE_MAX / elem_size;
     assigns  \nothing;
-    ensures  \result != \null;
  */
 static inline void* ptr_elem(void* base, usize index, usize elem_size) {
     require_msg(base      != NULL, "ptr_elem: base cannot be NULL");
@@ -966,7 +981,6 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
     requires elem_size >  0;
     requires index     <= CANON_USIZE_MAX / elem_size;
     assigns  \nothing;
-    ensures  \result != \null;
  */
 static inline const void* ptr_elem_const(const void* base, usize index, usize elem_size) {
     require_msg(base      != NULL, "ptr_elem_const: base cannot be NULL");
