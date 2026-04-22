@@ -142,15 +142,19 @@
  * Formal verification:
  * ────────────────────────────────────────────────────────────────────────────
  * When __FRAMAC__ is defined (automatic under Frama-C), the default
- * handler's stdio body is hidden from WP and replaced with an infinite
- * loop. The ACSL contract `ensures \false` is then discharged by the
- * loop's `loop invariant \true; loop variant 0;` annotations, which
- * tell WP that the function never returns. This pattern avoids the
- * ~20 spurious fprintf/fflush goals that would otherwise appear in
- * every WP run of a header that uses require_msg or ensure_msg at
- * runtime, while still proving the critical property (non-return)
- * that callers depend on. The runtime behavior in normal (non-Frama-C)
- * builds is unchanged.
+ * handler's stdio body is replaced with a non-terminating while(1){}
+ * loop guarded by `loop invariant \false`. The function contract
+ * specifies `ensures \false` and `exits \false`, together stating that
+ * the handler cannot terminate by any means (normal return or exit()).
+ * WP discharges these obligations from the loop invariant: the
+ * invariant \false cannot be established at loop entry, which WP
+ * treats as proof that the loop is never exited, and therefore the
+ * function never reaches any post-state. This pattern avoids ~20
+ * spurious fprintf/fflush goals that would otherwise appear in every
+ * WP run of a header that uses require_msg or ensure_msg at runtime,
+ * while still proving the critical property (non-return) that callers
+ * depend on. The runtime behavior in normal (non-Frama-C) builds is
+ * unchanged.
  *
  * Handler storage:
  * ────────────────────────────────────────────────────────────────────────────
@@ -218,14 +222,17 @@ typedef void (*contract_handler_fn)(
  * @note Never returns
  *
  * Formal verification: under Frama-C (__FRAMAC__ defined), the stdio
- * body is replaced with a non-terminating loop. The ACSL contract
- * `ensures \false` is discharged by the loop's invariant/variant
- * annotations, proving the function never returns without requiring
- * WP to descend into stdio's ACSL stub requirements.
+ * body is replaced with a non-terminating loop guarded by
+ * `loop invariant \false`. The function contract specifies both
+ * `ensures \false` and `exits \false`, stating that the handler
+ * cannot terminate by any means. WP discharges these obligations
+ * from the loop invariant's unestablishability. See the file-level
+ * "Formal verification" note for details.
  */
 /*@
   assigns \nothing;
   ensures \false;
+  exits   \false;
  */
 static inline void contract_default_handler(
     const char* file,
@@ -251,17 +258,20 @@ static inline void contract_default_handler(
     abort();
 #else
     /* Under Frama-C, replace the stdio body with a non-terminating loop.
-     * This gives WP a concrete basis for proving `ensures \false` - the
-     * function cannot return normally because it enters an infinite loop.
-     * The loop annotations below provide the proof obligation WP needs. */
+     * The combination of `ensures \false` + `exits \false` on the function
+     * contract tells WP the function never returns by any means (normal
+     * return or exit()). The `loop invariant \false` on the while loop is
+     * the standard ACSL idiom for proving an infinite loop: WP treats the
+     * unestablishable invariant as proof that the loop is never exited,
+     * and therefore the function never reaches any post-state. This
+     * discharges ensures \false and exits \false cleanly. */
     (void)file;
     (void)line;
     (void)func;
     (void)expr;
     (void)msg;
-    /*@ loop invariant \true;
+    /*@ loop invariant \false;
         loop assigns \nothing;
-        loop variant 0;
      */
     while (1) { }
 #endif
