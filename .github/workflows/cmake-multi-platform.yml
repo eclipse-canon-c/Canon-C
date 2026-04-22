@@ -364,7 +364,7 @@ jobs:
   #    discipline. When the rest of core/ is annotated, add them to the
   #    file list in the WP steps below.
   #
-  #    Installation: opam with aggressive caching.
+  #    Installation: opam with aggressive caching + cvc5 from GitHub.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
   #    repositories (it was available through 22.04 Jammy). The only
   #    reliable install path on current runners is opam, which builds
@@ -374,15 +374,15 @@ jobs:
   #    switch in ~30 seconds. The cache key includes OCAML_VERSION
   #    and FRAMAC_VERSION so bumping either forces a clean rebuild.
   #
-  #    System prerequisites: The opam packages cvc5 and alt-ergo both
-  #    pull in Python-based build helpers. cvc5 specifically requires
-  #    conf-python3-tomli, which does `import tomli` from the system
-  #    Python — Ubuntu 24.04 does not ship python3-tomli by default
-  #    and the --assume-depexts flag tells opam to skip system-level
-  #    installs. The apt step below installs python3-tomli and cmake
-  #    explicitly so cvc5 can configure and build. Without these, the
-  #    opam install aborts on the first cache miss and none of the
-  #    WP steps ever run.
+  #    CVC5 binary: The opam `cvc5` package (1.3.0) ships only the
+  #    OCaml library bindings — not the CLI binary that why3 needs
+  #    for `-wp-prover cvc5`. We download the prebuilt CLI binary
+  #    from the official cvc5 GitHub release and install it to
+  #    /usr/local/bin. This is outside the opam cache (the cache
+  #    covers ~/.opam, not /usr/local) so the download happens on
+  #    every CI run, but at ~20 MB it adds only a few seconds.
+  #    Keeping cvc5 outside opam is actually cleaner because it
+  #    decouples the binary version from opam's build constraints.
   #
   #    Provers: Alt-Ergo + Z3 + CVC5 triple-prover setup.
   #    Alt-Ergo handles linear arithmetic and most ACSL contracts very
@@ -397,14 +397,13 @@ jobs:
   #
   #    CVC5 auto-detection: why3 config detect does NOT auto-register
   #    cvc5 1.3.0 because why3 1.7.2's prover-detection regex expects
-  #    cvc5 version 1.0.x. The cvc5 binary is installed and cvc5 IS in
-  #    why3 1.7.2's known-provers list (from list-supported-provers),
-  #    so we register it manually with `why3 config add-prover`, which
-  #    stores the prover under a [partial_prover] section with
-  #    manual = true. This is the same workaround used for alt-ergo and
-  #    z3 (which are auto-detected but flagged as "unrecognized version"
-  #    and accepted anyway). See why3 manpage "5. The Why3 Tools" for
-  #    the add-prover syntax reference.
+  #    cvc5 version 1.0.x. However, the CVC5 family IS in why3 1.7.2's
+  #    known-provers list (confirmed via `why3 config list-supported-
+  #    provers`), so we register it manually with `why3 config
+  #    add-prover`, which stores the prover under a [partial_prover]
+  #    section with manual = true. This is the same workaround used
+  #    for Alt-Ergo and Z3 (which are auto-detected but flagged as
+  #    "unrecognized version" and accepted anyway).
   #
   #    WP (Weakest Precondition):
   #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
@@ -436,16 +435,15 @@ jobs:
     env:
       OCAML_VERSION: "4.14.2"
       FRAMAC_VERSION: "29.0"
+      CVC5_VERSION: "1.2.1"
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies for opam and Frama-C
-        # cmake and python3-tomli are required for cvc5's opam build:
-        # conf-python3-tomli runs `import tomli` during package configure
-        # and conf-cmake needs cmake available in PATH. Both are absent
-        # from the stock ubuntu-latest runner. Without them the opam
-        # install aborts on cache miss and the WP steps never run.
+        # The opam cvc5 package is removed from this install list (see
+        # the separate CVC5 CLI installation step below for rationale).
+        # python3-tomli was a cvc5-opam-specific build dep — also removed.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -461,16 +459,25 @@ jobs:
             libgtk-3-dev \
             libgtksourceview-3.0-dev \
             cmake \
-            python3-tomli
+            wget
 
       - name: Cache opam switch
         id: cache-opam
         uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-cvc5-v7
+          # Cache key bumped to v8 because the cvc5 opam package was removed.
+          # The old v7 cache contains the library-only cvc5 build which we
+          # no longer need. v8 cache will be smaller and faster to restore.
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-v8
 
       - name: Initialise opam (cache miss only)
+        # cvc5 is NO LONGER installed via opam here. The opam cvc5.1.3.0
+        # package ships only OCaml library bindings, not the CLI binary
+        # that why3 needs for `-wp-prover cvc5`. We fetch the official
+        # prebuilt cvc5 binary from GitHub releases in a separate step
+        # below. Removing cvc5 from opam also shrinks the cache and
+        # eliminates the conf-python3-tomli dependency chain.
         if: steps.cache-opam.outputs.cache-hit != 'true'
         run: |
           rm -rf ~/.opam
@@ -478,30 +485,60 @@ jobs:
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
-            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3 cvc5
+            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3
+
+      - name: Install cvc5 CLI binary from GitHub releases
+        # The opam `cvc5` package installs OCaml bindings, not a CLI
+        # binary. WP + why3 need the standalone `cvc5` executable.
+        # We fetch it from the official cvc5 GitHub release and
+        # install to /usr/local/bin, which is on PATH by default.
+        #
+        # Version pinned to CVC5_VERSION env var so CI remains
+        # deterministic. Bumping the version is a one-line change
+        # that doesn't require cache invalidation (this install
+        # runs outside the opam cache).
+        #
+        # The download is ~20-30 MB and takes a few seconds. We do
+        # this on every run (cache hit or miss) because the binary
+        # lives outside ~/.opam — but it's cheap enough that this
+        # isn't worth optimizing further.
+        run: |
+          CVC5_URL="https://github.com/cvc5/cvc5/releases/download/cvc5-${CVC5_VERSION}/cvc5-Linux-x86_64-static.zip"
+          echo "Downloading cvc5 ${CVC5_VERSION} from ${CVC5_URL}"
+          wget -q "${CVC5_URL}" -O /tmp/cvc5.zip
+          unzip -q /tmp/cvc5.zip -d /tmp/cvc5-release
+          # The zip extracts to a directory like cvc5-Linux-x86_64-static/bin/cvc5
+          CVC5_EXTRACTED=$(find /tmp/cvc5-release -name cvc5 -type f | head -1)
+          if [ -z "${CVC5_EXTRACTED}" ]; then
+            echo "ERROR: cvc5 binary not found in downloaded archive"
+            echo "Archive contents:"
+            find /tmp/cvc5-release -type f
+            exit 1
+          fi
+          echo "Found cvc5 binary at: ${CVC5_EXTRACTED}"
+          sudo cp "${CVC5_EXTRACTED}" /usr/local/bin/cvc5
+          sudo chmod +x /usr/local/bin/cvc5
+          echo "Installed cvc5 to /usr/local/bin/cvc5"
+          /usr/local/bin/cvc5 --version | head -3
 
       - name: Activate opam environment and configure Why3 provers
         # why3 config detect auto-registers Alt-Ergo 2.6.3 and Z3 4.15.2
         # (with "version not recognized" warnings because the installed
         # versions are newer than why3 1.7.2's detection regex). It does
-        # NOT auto-register cvc5 1.3.0 — same root cause (newer version
-        # than regex knows), but for cvc5 the result is silent rejection
-        # rather than acceptance-with-warning. We work around this with
-        # `why3 config add-prover`, which bypasses version detection and
-        # stores the prover under [partial_prover] with manual = true.
+        # NOT auto-register cvc5 because why3's version regex is tuned
+        # to cvc5 1.0.x. We work around this with `why3 config add-prover`,
+        # which bypasses version detection and stores the prover under
+        # [partial_prover] with manual = true.
         #
-        # Robustness: this step uses `set +e` plus explicit error
-        # handling around the cvc5 diagnostics so a transient issue with
-        # the cvc5 binary (missing, unexecutable, library problems)
-        # doesn't kill the entire job. If cvc5 registration fails, the
-        # WP steps continue with Alt-Ergo + Z3 only, same as the CI
-        # behavior before cvc5 was introduced. This degrades gracefully.
+        # cvc5 binary location: /usr/local/bin/cvc5 (installed in the
+        # previous step from the official GitHub release). why3 needs
+        # an absolute path for add-prover, and /usr/local/bin is on
+        # PATH by default.
         #
-        # CVC5 binary location: resolved from opam's bin directory
-        # rather than $PATH because `eval $(opam env)` populates PATH
-        # only within the current subshell, while `echo ... >> $GITHUB_PATH`
-        # populates PATH for SUBSEQUENT steps. Looking up cvc5 via opam
-        # var avoids any PATH-ordering confusion within this step.
+        # Robustness: `set +e` and explicit error handling keep this
+        # step from failing catastrophically if cvc5 registration fails.
+        # The WP steps then fall back to Alt-Ergo + Z3 only, same as
+        # before cvc5 was introduced.
         run: |
           set +e
           eval $(opam env --switch=frama-c)
@@ -513,14 +550,13 @@ jobs:
           frama-c -version
           alt-ergo --version
 
-          CVC5_BIN="${OPAM_BIN}/cvc5"
+          CVC5_BIN="/usr/local/bin/cvc5"
           if [ -x "${CVC5_BIN}" ]; then
             echo "cvc5 binary: ${CVC5_BIN}"
             "${CVC5_BIN}" --version | head -5
           else
             echo "WARN: cvc5 binary not found at ${CVC5_BIN}"
-            echo "      Directory listing of ${OPAM_BIN}:"
-            ls "${OPAM_BIN}" | grep -i cvc || echo "      no cvc* binary found"
+            echo "      WP will run without cvc5"
           fi
 
           echo ""
@@ -535,9 +571,23 @@ jobs:
           if [ -x "${CVC5_BIN}" ]; then
             echo ""
             echo "--- Manual cvc5 registration (add-prover) ---"
-            why3 config add-prover cvc5 "${CVC5_BIN}" cvc5 \
-              && echo "cvc5 registered successfully" \
-              || echo "WARN: why3 config add-prover cvc5 failed — WP will run without cvc5"
+            # Try common cvc5 prover family names. why3's prover family
+            # naming has varied across versions; try lowercase first, then
+            # uppercase, fall through gracefully if both fail.
+            REGISTERED=0
+            for FAMILY_NAME in cvc5 CVC5; do
+              echo "Attempting: why3 config add-prover ${FAMILY_NAME} ${CVC5_BIN} cvc5"
+              if why3 config add-prover "${FAMILY_NAME}" "${CVC5_BIN}" cvc5 2>&1; then
+                echo "cvc5 registered successfully under family name '${FAMILY_NAME}'"
+                REGISTERED=1
+                break
+              else
+                echo "Registration with family name '${FAMILY_NAME}' failed, trying next..."
+              fi
+            done
+            if [ "${REGISTERED}" -ne 1 ]; then
+              echo "WARN: all cvc5 registration attempts failed — WP will run without cvc5"
+            fi
           else
             echo ""
             echo "--- Skipping manual cvc5 registration (binary missing) ---"
