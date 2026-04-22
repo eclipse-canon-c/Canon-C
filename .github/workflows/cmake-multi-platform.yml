@@ -388,12 +388,23 @@ jobs:
   #    Alt-Ergo handles linear arithmetic and most ACSL contracts very
   #    fast. Z3 handles nonlinear integer reasoning (multiplication
   #    contracts in checked_mul / checked_mul_u64 / checked_mul_isize)
-  #    that Alt-Ergo struggles with. CVC5 was added as a tertiary
-  #    prover after ptr.h verification — it has stronger bitvector and
-  #    modular-arithmetic reasoning than Z3 in some cases and may close
-  #    goals the other two cannot. WP tries Alt-Ergo first, falls
-  #    through to Z3, then to CVC5 — keeping the common case fast while
-  #    giving the hard goals three chances before timing out.
+  #    that Alt-Ergo struggles with. CVC5 is a tertiary prover that
+  #    may close VERIFY-006 goals the other two cannot — it has
+  #    stronger bitvector and modular-arithmetic reasoning than Z3
+  #    in some cases. WP tries Alt-Ergo first, falls through to Z3,
+  #    then to CVC5 — keeping the common case fast while giving hard
+  #    goals three chances before timing out.
+  #
+  #    CVC5 auto-detection: why3 config detect does NOT auto-register
+  #    cvc5 1.3.0 because why3 1.7.2's prover-detection regex expects
+  #    cvc5 version 1.0.x. The cvc5 binary is installed and cvc5 IS in
+  #    why3 1.7.2's known-provers list (from list-supported-provers),
+  #    so we register it manually with `why3 config add-prover`, which
+  #    stores the prover under a [partial_prover] section with
+  #    manual = true. This is the same workaround used for alt-ergo and
+  #    z3 (which are auto-detected but flagged as "unrecognized version"
+  #    and accepted anyway). See why3 manpage "5. The Why3 Tools" for
+  #    the add-prover syntax reference.
   #
   #    WP (Weakest Precondition):
   #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
@@ -470,12 +481,49 @@ jobs:
             frama-c.${FRAMAC_VERSION} alt-ergo why3 z3 cvc5
 
       - name: Activate opam environment and configure Why3 provers
+        # why3 config detect auto-registers Alt-Ergo 2.6.3 and Z3 4.15.2
+        # (with "version not recognized" warnings because the installed
+        # versions are newer than why3 1.7.2's detection regex). It does
+        # NOT auto-register cvc5 1.3.0 — same root cause (newer version
+        # than regex knows), but for cvc5 the result is silent rejection
+        # rather than acceptance-with-warning. We work around this with
+        # `why3 config add-prover`, which bypasses version detection and
+        # stores the prover under [partial_prover] with manual = true.
+        #
+        # The `|| echo ...` pattern on the add-prover call keeps the
+        # step green if registration fails — the subsequent WP runs will
+        # just silently skip cvc5 (as they do today without this block).
+        # Combined with the Alt-Ergo/Z3 fallback already in -wp-prover,
+        # this means the CI degrades gracefully if cvc5 integration
+        # breaks in a future opam or why3 update.
+        #
+        # The echo blocks surrounding each step produce visible anchors
+        # in the CI log so a reviewer can quickly confirm whether cvc5
+        # is registered without scrolling through detection output.
         run: |
           eval $(opam env --switch=frama-c)
           echo "$(opam var --switch=frama-c bin)" >> $GITHUB_PATH
           frama-c -version
           alt-ergo --version
+          cvc5 --version
+          echo ""
+          echo "--- Supported prover families (grep cvc5 for confirmation) ---"
+          why3 config list-supported-provers 2>&1 | grep -i cvc5 \
+            || echo "cvc5 family not found in why3 supported-provers list"
+          echo ""
+          echo "--- Auto-detect provers (why3 config detect) ---"
           why3 config detect
+          echo ""
+          echo "--- Manual cvc5 registration (add-prover) ---"
+          why3 config add-prover cvc5 "$(which cvc5)" cvc5 \
+            || echo "WARN: why3 config add-prover cvc5 failed — WP will run without cvc5"
+          echo ""
+          echo "--- Registered provers after manual add (why3 config list-provers) ---"
+          why3 config list-provers 2>&1 || true
+          echo ""
+          echo "--- Registered prover sections in why3.conf ---"
+          grep -E '^\[(partial_)?prover\]|^name = |^version = ' ~/.why3.conf \
+            2>/dev/null || echo "(why3.conf not found or no prover sections)"
 
       - name: "WP: core/primitives/checked.h"
         # WP is expected to leave exactly 2 goals unproven:
@@ -721,17 +769,18 @@ jobs:
         # the same soundness argument as VERIFY-005.
         #
         # INFO mode for now: the step reports proof counts but does not
-        # fail on unexpected count. The expected baseline from CI #788
-        # was 1732 / 1741 proved with 9 unproved goals (all documented
-        # in VERIFY-006). With CVC5 added to the prover list, the count
-        # may change — CVC5 has stronger bitvector reasoning than Z3
-        # and may close some of the VERIFY-006 goals. After the first
-        # CI run with CVC5, calibrate the enforcement wrapper to the
-        # new stable count (matching the bits.h strict-enforcement
-        # pattern).
+        # fail on unexpected count. Previous baselines:
+        #   - Without CVC5 (CI #788):     1732 / 1741 proved,  9 unproved
+        #   - Without CVC5 (contract fix): 1729 / 1739 proved, 10 unproved
+        # With CVC5 now registered manually, this run tests whether CVC5
+        # can close any of the remaining VERIFY-006 goals (align_*
+        # formula ensures, ptr_align_* call-chain, contract handler
+        # non-termination). Once the count stabilizes, calibrate the
+        # enforcement wrapper to the new stable count (matching the
+        # bits.h strict-enforcement pattern).
         #
         # To calibrate:
-        #   1. Read PROVED count and UNPROVED count from first CVC5 run
+        #   1. Read PROVED count and UNPROVED count from this run
         #   2. Update VERIFY-006 goal list in deviations.md if CVC5
         #      closed any previously-unproved goals
         #   3. Update verification.md ptr.h section with new count
@@ -772,11 +821,16 @@ jobs:
           echo "  Failed:   ${FAILED_COUNT}"
           echo "  Total unproved: ${UNPROVED_COUNT}"
           echo ""
-          echo "  Previous baseline (without CVC5): 1732 / 1741 proved,"
-          echo "  9 unproved goals documented in VERIFY-006."
+          echo "  Previous baseline (without CVC5): 1729 / 1739 proved,"
+          echo "  10 unproved goals documented in VERIFY-006."
           echo "  INFO mode: reporting only. After CVC5 run stabilizes,"
           echo "  update VERIFY-006 if any goals now close, then replace"
           echo "  this with a strict enforcement wrapper (bits.h pattern)."
+          echo ""
+          echo "  CVC5 diagnostic: check whether CVC5 was actually invoked."
+          echo "  If the line below shows a nonzero count, CVC5 is working."
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_ptr_output.txt || true)
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           echo "==============================================="
 
       - name: Upload WP proof output (ptr.h)
