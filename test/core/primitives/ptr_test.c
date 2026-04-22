@@ -43,8 +43,10 @@
  *   ptr_retreat()         — NULL passthrough, backward retreat
  *   ptr_diff()            — positive, negative, zero distances (no NULL)
  *   ptr_span()            — unsigned distance, equal pointers (no NULL)
- *   ptr_in_range()        — NULL args, inside, at start, at end, outside
- *   ptr_range_in_range()  — NULL args, fits, overflow-safe boundary
+ *   ptr_in_range()        — NULL args, inside, at start, at end, outside,
+ *                           pointer-before-region (MC/DC)
+ *   ptr_range_in_range()  — NULL args, fits, overflow-safe boundary,
+ *                           pointer-before-region (MC/DC)
  *   ptr_elem()            — index 0, 1, last; elem_size 1, N (no NULL base)
  *   ptr_elem_const()      — same as ptr_elem for const pointers
  *   ptr_or()              — non-NULL returns p, NULL returns fallback
@@ -517,6 +519,64 @@ static CANON_MAYBE_UNUSED void test_bounds_checking(void) {
 }
 
 /* =========================================================================
+ * test_ptr_range_before_start
+ *
+ * Targets the two uncovered MC/DC conditions identified by gcov-14
+ * --conditions in CI (see WP run 24774469091):
+ *
+ *   - Line 850 (ptr_in_range):       (const u8*)p >= (const u8*)region_start
+ *                                    -> false branch uncovered
+ *   - Line 900 (ptr_range_in_range): pb < rs
+ *                                    -> true branch uncovered
+ *
+ * Both represent the "pointer strictly before region start" case with ALL
+ * pointers non-NULL (the NULL short-circuit paths are already covered by
+ * test_bounds_checking above). We use a single stack buffer and address
+ * a sub-range inside it to stay within a single allocation — pointer
+ * comparisons across distinct allocations are undefined behavior in C,
+ * so two separate arrays would not be a valid test.
+ *
+ * After adding this test, ptr.h reaches 100% MC/DC (42/42), up from
+ * 95.24% (40/42).
+ *
+ * Initialization: buf is memset'd for the same reason as test_bounds_checking
+ * — GCC's -Wmaybe-uninitialized can't see through the function calls to
+ * prove no reads happen. See file-level "Note on buf initialization".
+ * ====================================================================== */
+
+static CANON_MAYBE_UNUSED void test_ptr_range_before_start(void) {
+    unsigned char buf[16];
+    const void* before_start;
+    const void* region_start;
+    const void* region_end;
+    const void* inside;
+    memset(buf, 0, sizeof(buf));
+
+    /* Candidate pointer buf[0] is strictly before the region [buf[4], buf[12]).
+     * All three pointers live inside the same allocation (buf), so the
+     * comparisons inside ptr_in_range and ptr_range_in_range are defined. */
+    before_start = (const void*)(buf);
+    region_start = (const void*)(buf + 4);
+    region_end   = (const void*)(buf + 12);
+    inside       = (const void*)(buf + 5);
+
+    /* ptr_in_range: all pointers non-NULL, p < region_start.
+     * Exercises the previously-uncovered false branch of
+     * (p >= region_start). */
+    EXPECT_FALSE(ptr_in_range(before_start, region_start, region_end));
+
+    /* ptr_range_in_range: all pointers non-NULL, pb < rs.
+     * Exercises the previously-uncovered true branch of (pb < rs). */
+    EXPECT_FALSE(ptr_range_in_range(before_start, 2, region_start, region_end));
+
+    /* Sanity: same calls with an in-region pointer succeed. Confirms the
+     * test is exercising the intended code paths rather than short-
+     * circuiting on some unrelated precondition. */
+    EXPECT_TRUE(ptr_in_range(inside, region_start, region_end));
+    EXPECT_TRUE(ptr_range_in_range(inside, 2, region_start, region_end));
+}
+
+/* =========================================================================
  * ptr_elem / ptr_elem_const
  *
  * Null-intolerant: NULL base is a contract violation (not tested here).
@@ -818,6 +878,7 @@ int main(void) {
     test_ptr_arithmetic();
     test_ptr_diff_span();
     test_bounds_checking();
+    test_ptr_range_before_start();
     test_ptr_elem();
     test_ptr_null_safety();
     test_offset_of();
