@@ -8,110 +8,109 @@
  * arithmetic with named operations that document intent at the call site.
  *
  * Core ideas:
- * ────────────────────────────────────────────────────────────────────────────
- * - Explicitness: All pointer arithmetic is named — no raw `+` on void*/char*
- * - Alignment safety: Every alignment operation is explicit — no silent
+ * ----------------------------------------------------------------------------
+ * - Explicitness: All pointer arithmetic is named - no raw + on void or char*
+ * - Alignment safety: Every alignment operation is explicit - no silent
  *   padding assumptions
- * - NULL discipline: Every function documents its NULL behavior — null-tolerant
+ * - NULL discipline: Every function documents its NULL behavior - null-tolerant
  *   or null-intolerant (see "NULL handling" below)
- * - Overflow safety: Arithmetic is overflow-checked before it happens — no
+ * - Overflow safety: Arithmetic is overflow-checked before it happens - no
  *   silent wraparound on offsets
- * - Type neutrality: All operations work on void* or u8* — no type puns needed
+ * - Type neutrality: All operations work on void* or u8* - no type puns needed
  *
  * NULL handling:
- * ────────────────────────────────────────────────────────────────────────────
+ * ----------------------------------------------------------------------------
  * Canon-C categorizes functions by whether NULL has meaningful semantics:
  *
- *   Null-tolerant — NULL is a valid input with a defined safe response.
+ *   Null-tolerant - NULL is a valid input with a defined safe response.
  *     These functions preserve NULL or return a safe default. Use them
  *     freely in code paths where NULL propagation is expected.
- *     Examples: ptr_offset(NULL, n)     → NULL
- *               ptr_is_aligned(NULL, a) → false
- *               ptr_align_padding(NULL) → 0
- *               ptr_or(NULL, fb)        → fb
+ *     Examples: ptr_offset(NULL, n)     -> NULL
+ *               ptr_is_aligned(NULL, a) -> false
+ *               ptr_align_padding(NULL) -> 0
+ *               ptr_or(NULL, fb)        -> fb
  *
- *   Null-intolerant — NULL is a contract violation (programmer error).
+ *   Null-intolerant - NULL is a contract violation (programmer error).
  *     These functions trigger require_msg() when given NULL because the
  *     operation has no meaningful answer for NULL input.
- *     Examples: ptr_elem     requires base != NULL
- *               ptr_span     requires ordered pointers
- *               ptr_diff     requires same-allocation pointers
+ *     Examples: ptr_elem requires base != NULL
+ *               ptr_span requires ordered pointers
+ *               ptr_diff requires same-allocation pointers
  *
  * Each function's behavior is documented explicitly in its @pre clause.
  *
  * Formal verification:
- * ────────────────────────────────────────────────────────────────────────────
+ * ----------------------------------------------------------------------------
  * Every function in this header carries an ACSL contract suitable for
  * Frama-C WP. The Typed+Cast memory model is required because ptr.h
- * performs void* → u8* casts extensively for byte-level pointer arithmetic
- * (same rationale as compare.h — see VERIFY-005).
+ * performs void* to u8* casts extensively for byte-level pointer arithmetic
+ * (same rationale as compare.h - see VERIFY-005).
  *
- * All functions are pure (assigns \nothing) — they take pointers and
+ * All functions are pure (assigns \nothing) - they take pointers and
  * integers by value and return results without modifying any memory.
  *
  * Compile-time invariant: static_require asserts CANON_USIZE_MAX equals
  * SIZE_MAX at compile time. Every overflow check in this file depends on
- * CANON_USIZE_MAX being the true maximum value representable in usize —
- * if limits.h ever drifts, the build fails immediately rather than
+ * CANON_USIZE_MAX being the true maximum value representable in usize.
+ * If limits.h ever drifts, the build fails immediately rather than
  * producing subtly-wrong overflow checks at runtime.
  *
  * Performance:
- * ────────────────────────────────────────────────────────────────────────────
- * - All operations: O(1) — constant time pointer/integer operations
- * - Every function is static inline → zero call overhead
- * - Compilers reduce every operation here to 1–3 machine instructions
+ * ----------------------------------------------------------------------------
+ * - All operations: O(1) - constant time pointer/integer operations
+ * - Every function is static inline, zero call overhead
+ * - Compilers reduce every operation here to 1-3 machine instructions
  * - Alignment operations compile to a single AND (align_down) or
  *   ADD+AND (align_up)
  * - Pointer arithmetic compiles to a single LEA or ADD instruction
  * - No heap allocation, no hidden branches, no runtime dispatch
  *
  * Thread-safety:
- * ────────────────────────────────────────────────────────────────────────────
+ * ----------------------------------------------------------------------------
  * All functions are pure or operate on caller-supplied pointers.
- * No shared mutable state — fully thread-safe.
+ * No shared mutable state - fully thread-safe.
  *
  * Portability:
- * ────────────────────────────────────────────────────────────────────────────
+ * ----------------------------------------------------------------------------
  * - Requires C99 or later (inline functions, stdint.h via types.h)
  * - Assumes flat address space (true for all hosted and most embedded targets)
  * - Pointer-to-integer conversion uses uintptr_t (via types.h)
  * - No platform-specific intrinsics
- * - Only includes <stddef.h> from the standard library (for offsetof)
+ * - Only includes stddef.h from the standard library (for offsetof)
  * - PACKED, CACHE_ALIGNED, ALIGNAS use GCC/Clang attributes when available,
  *   degrade to no-ops in strict C99 mode (see attribute-specific docs)
  *
  * Dependency rule:
- * ────────────────────────────────────────────────────────────────────────────
+ * ----------------------------------------------------------------------------
  * ptr.h lives in core/primitives/ and may only include from core/primitives/
- * and <stddef.h> (for offsetof). No other standard headers are included.
+ * and stddef.h (for offsetof). No other standard headers are included.
  * This keeps ptr.h usable in freestanding environments and predictable as
  * a foundation for higher-layer modules.
  *
  * Typical use cases:
- * ────────────────────────────────────────────────────────────────────────────
- * - Arena bump allocation: void* next = ptr_align_up(arena->cur, align);
- *                          arena->cur = ptr_offset(next, size);
- * - Pool block indexing:   void* slot = ptr_elem(pool->buffer, i, block_size);
- * - Slice construction:    usize len = ptr_span(end, start);
- * - Bounds checking:       if (!ptr_in_range(p, buf, buf + sz)) return error;
- * - Alignment checks:      if (!ptr_is_aligned(ptr, 16)) ...
- * - Intrusive containers:  MyItem* item = PTR_CONTAINER_OF(node_ptr,
- *                                                         MyItem, node);
- * - Size rounding:         usize padded = align_up(size, ALIGN_OF(double));
+ * ----------------------------------------------------------------------------
+ * - Arena bump allocation: ptr_align_up + ptr_offset
+ * - Pool block indexing:   ptr_elem(buffer, i, block_size)
+ * - Slice construction:    ptr_span(end, start)
+ * - Bounds checking:       ptr_in_range(p, buf, buf + sz)
+ * - Alignment checks:      ptr_is_aligned(ptr, 16)
+ * - Intrusive containers:  PTR_CONTAINER_OF(node_ptr, MyItem, node)
+ * - Size rounding:         align_up(size, ALIGN_OF(double))
  *
  * NOT suitable for:
- * ────────────────────────────────────────────────────────────────────────────
+ * ----------------------------------------------------------------------------
  * - Pointer comparisons across different allocations (UB in C)
  * - Raw pointer arithmetic in performance-critical SIMD code (use intrinsics)
  * - Cross-segment addressing on segmented architectures (flat-address
- *   assumption doesn't hold)
+ *   assumption does not hold)
  * - Security-sensitive bounds checks where a malicious caller supplies
- *   region_start/region_end (the comparison semantics assume same allocation)
+ *   region_start and region_end (the comparison semantics assume same
+ *   allocation)
  *
- * @sa types.h    — uintptr_t, usize, isize, u8 definitions
- * @sa limits.h   — CANON_USIZE_MAX, CANON_CACHE_LINE
- * @sa contract.h — require_msg(), ensure_msg(), static_require
- * @sa checked.h  — overflow-checked arithmetic used by ptr_elem
+ * @sa types.h
+ * @sa limits.h
+ * @sa contract.h
+ * @sa checked.h
  */
 
 #ifndef CANON_CORE_PRIMITIVES_PTR_H
@@ -134,17 +133,17 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
 /* ============================================================================
  * Compiler Attributes
  *
- * PACKED        — removes all padding between struct members
- * CACHE_ALIGNED — aligns to cache line size (from limits.h)
- * ALIGNAS(n)    — aligns to exactly n bytes
+ * PACKED        - removes all padding between struct members
+ * CACHE_ALIGNED - aligns to cache line size (from limits.h)
+ * ALIGNAS(n)    - aligns to exactly n bytes
  *
  * Disabled when CANON_NO_GNU_EXTENSIONS is defined (strict C99 mode).
  *
- * IMPORTANT — correctness risk in strict C99 mode:
+ * IMPORTANT - correctness risk in strict C99 mode:
  * When CANON_NO_GNU_EXTENSIONS is defined, these attributes expand to
  * nothing. If your code RELIES on packing (network protocols, hardware
  * register layouts, on-wire formats) or cache-line alignment (false
- * sharing avoidance, SIMD alignment requirements), the attribute's
+ * sharing avoidance, SIMD alignment requirements), the attributes
  * absence silently changes struct layout and may cause correctness bugs.
  *
  * If you use PACKED for layout-critical structs, either:
@@ -158,9 +157,9 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
 #   define CACHE_ALIGNED   __attribute__((aligned(CANON_CACHE_LINE)))
 #   define ALIGNAS(n)      __attribute__((aligned(n)))
 #else
-#   define PACKED          /* no packing in strict C99 mode — see comment above */
-#   define CACHE_ALIGNED   /* no cache alignment in strict C99 mode */
-#   define ALIGNAS(n)      /* no explicit alignment in strict C99 mode */
+#   define PACKED
+#   define CACHE_ALIGNED
+#   define ALIGNAS(n)
 #endif
 
 /* ============================================================================
@@ -171,10 +170,10 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
  * @def ALIGN_OF(type)
  * @brief Compile-time alignment requirement of a type (in bytes)
  *
- * Uses C11 `_Alignof` when available; falls back to the offsetof trick
+ * Uses C11 _Alignof when available; falls back to the offsetof trick
  * on C99. The fallback is well-defined: it computes the offset of the
  * first member after a char in an anonymous struct, which equals the
- * member's alignment.
+ * members alignment.
  *
  * @param type C type whose alignment is queried
  *
@@ -186,10 +185,10 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
  *         the warning, or compile with C11.
  *
  * Example:
- * ```c
- * usize a = ALIGN_OF(double);    // typically 8
- * usize p = ALIGN_OF(void*);     // 4 on 32-bit, 8 on 64-bit
- * ```
+ * @code
+ *   usize a = ALIGN_OF(double);
+ *   usize p = ALIGN_OF(void*);
+ * @endcode
  *
  * @sa ALIGN_MAX()
  */
@@ -211,14 +210,14 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
  *
  * @return Larger of a and b
  *
- * @remark Evaluates arguments twice — pass compile-time constants only.
+ * @remark Evaluates arguments twice - pass compile-time constants only.
  *         Passing expressions with side effects produces those side
  *         effects twice.
  *
  * Example:
- * ```c
- * usize worst = ALIGN_MAX(ALIGN_OF(int), ALIGN_OF(double));  // 8 typically
- * ```
+ * @code
+ *   usize worst = ALIGN_MAX(ALIGN_OF(int), ALIGN_OF(double));
+ * @endcode
  *
  * @sa ALIGN_OF()
  */
@@ -242,11 +241,11 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
  * @remark Zero is explicitly not a power of two
  *
  * Example:
- * ```c
- * is_power_of_two(16)  // → true
- * is_power_of_two(15)  // → false
- * is_power_of_two(0)   // → false
- * ```
+ * @code
+ *   is_power_of_two(16)
+ *   is_power_of_two(15)
+ *   is_power_of_two(0)
+ * @endcode
  *
  * @sa is_aligned(), align_up(), ptr_is_aligned()
  */
@@ -271,11 +270,11 @@ static inline bool is_power_of_two(usize n) {
  * @remark Compiles to: (n & (align - 1)) == 0
  *
  * Example:
- * ```c
- * is_aligned(16, 8)  // → true   (16 = 2 * 8)
- * is_aligned(17, 8)  // → false  (17 = 16 + 1)
- * is_aligned(0,  8)  // → true   (0 is aligned to anything)
- * ```
+ * @code
+ *   is_aligned(16, 8)
+ *   is_aligned(17, 8)
+ *   is_aligned(0,  8)
+ * @endcode
  *
  * @sa align_up(), align_down(), ptr_is_aligned()
  */
@@ -299,18 +298,18 @@ static inline bool is_aligned(usize n, usize align) {
  * @return Smallest multiple of align that is >= n
  *
  * @pre is_power_of_two(align)
- * @pre n <= CANON_USIZE_MAX - (align - 1)  (prevents overflow)
+ * @pre n <= CANON_USIZE_MAX - (align - 1) prevents overflow
  *
  * @remark Compiles to: (n + align - 1) & ~(align - 1)
  * @remark align_up(0, a) == 0 for any valid a
  * @remark Idempotent on already-aligned values
  *
  * Example:
- * ```c
- * align_up(13, 8)  // → 16
- * align_up(16, 8)  // → 16  (already aligned)
- * align_up( 0, 8)  // → 0
- * ```
+ * @code
+ *   align_up(13, 8)
+ *   align_up(16, 8)
+ *   align_up( 0, 8)
+ * @endcode
  *
  * @sa align_down(), align_padding(), ptr_align_up()
  */
@@ -341,14 +340,14 @@ static inline usize align_up(usize n, usize align) {
  * @remark Compiles to: n & ~(align - 1)
  * @remark align_down(0, a) == 0 for any valid a
  * @remark Idempotent on already-aligned values
- * @remark Cannot overflow — always produces a value <= n
+ * @remark Cannot overflow - always produces a value <= n
  *
  * Example:
- * ```c
- * align_down(13, 8)  // → 8
- * align_down(16, 8)  // → 16  (already aligned)
- * align_down( 7, 8)  // → 0
- * ```
+ * @code
+ *   align_down(13, 8)
+ *   align_down(16, 8)
+ *   align_down( 7, 8)
+ * @endcode
  *
  * @sa align_up(), align_padding(), ptr_align_down()
  */
@@ -374,18 +373,18 @@ static inline usize align_down(usize n, usize align) {
  * @return Padding bytes such that (n + result) is a multiple of align
  *
  * @pre is_power_of_two(align)
- * @pre n <= CANON_USIZE_MAX - (align - 1)  (inherited from align_up)
+ * @pre n <= CANON_USIZE_MAX - (align - 1) inherited from align_up
  *
  * @remark Always returns a value in [0, align - 1]
  * @remark Returns 0 when n is already aligned
- * @remark Equivalent to: align_up(n, align) - n
+ * @remark Equivalent to align_up(n, align) - n
  *
  * Example:
- * ```c
- * align_padding(13, 8)  // → 3   (13 + 3 = 16)
- * align_padding(16, 8)  // → 0   (already aligned)
- * align_padding( 0, 8)  // → 0
- * ```
+ * @code
+ *   align_padding(13, 8)
+ *   align_padding(16, 8)
+ *   align_padding( 0, 8)
+ * @endcode
  *
  * @sa align_up(), align_down(), ptr_align_padding()
  */
@@ -418,16 +417,16 @@ static inline usize align_padding(usize n, usize align) {
  *
  * @pre is_power_of_two(align)
  *
- * @remark Null-tolerant: NULL in → NULL out
+ * @remark Null-tolerant: NULL in -> NULL out
  * @remark Useful for arena bump allocation: align the cursor before stamping
  *         an object with nontrivial alignment
  *
  * Example:
- * ```c
- * void* raw     = arena->cur;
- * void* aligned = ptr_align_up(raw, 16);  // align for SIMD
- * arena->cur    = ptr_offset(aligned, sizeof(MyStruct));
- * ```
+ * @code
+ *   void* raw     = arena->cur;
+ *   void* aligned = ptr_align_up(raw, 16);
+ *   arena->cur    = ptr_offset(aligned, sizeof(MyStruct));
+ * @endcode
  *
  * @sa ptr_align_down(), ptr_is_aligned(), align_up()
  */
@@ -460,15 +459,15 @@ static inline void* ptr_align_up(void* p, usize align) {
  *
  * @pre is_power_of_two(align)
  *
- * @remark Null-tolerant: NULL in → NULL out
- * @remark Cannot underflow past NULL — always stays within the original
+ * @remark Null-tolerant: NULL in -> NULL out
+ * @remark Cannot underflow past NULL - always stays within the original
  *         allocation if p was inside one
  *
  * Example:
- * ```c
- * void* p         = /* some pointer into a buffer */;
- * void* page_base = ptr_align_down(p, 4096);  // round to page boundary
- * ```
+ * @code
+ *   void* p         = some_pointer_into_a_buffer;
+ *   void* page_base = ptr_align_down(p, 4096);
+ * @endcode
  *
  * @sa ptr_align_up(), ptr_is_aligned(), align_down()
  */
@@ -502,16 +501,16 @@ static inline void* ptr_align_down(void* p, usize align) {
  *
  * @pre is_power_of_two(align)
  *
- * @remark Null-tolerant: NULL in → false out
+ * @remark Null-tolerant: NULL in -> false out
  * @remark Useful as a precondition check before SIMD loads, DMA transfers,
  *         or other operations with alignment requirements
  *
  * Example:
- * ```c
- * if (!ptr_is_aligned(buf, 16)) {
- *     return ERROR_UNALIGNED_BUFFER;  // required for SIMD load
- * }
- * ```
+ * @code
+ *   if (!ptr_is_aligned(buf, 16)) {
+ *       return ERROR_UNALIGNED_BUFFER;
+ *   }
+ * @endcode
  *
  * @sa ptr_align_up(), ptr_align_down(), is_aligned()
  */
@@ -543,15 +542,15 @@ static inline bool ptr_is_aligned(const void* p, usize align) {
  *
  * @pre is_power_of_two(align)
  *
- * @remark Null-tolerant: NULL in → 0 out
+ * @remark Null-tolerant: NULL in -> 0 out
  * @remark Useful for computing arena fragmentation or reservation sizes
  *
  * Example:
- * ```c
- * usize pad    = ptr_align_padding(arena->cur, 16);
- * usize needed = pad + object_size;
- * if (arena_remaining(arena) < needed) return OUT_OF_MEMORY;
- * ```
+ * @code
+ *   usize pad    = ptr_align_padding(arena->cur, 16);
+ *   usize needed = pad + object_size;
+ *   if (arena_remaining(arena) < needed) return OUT_OF_MEMORY;
+ * @endcode
  *
  * @sa ptr_align_up(), align_padding()
  */
@@ -576,10 +575,10 @@ static inline usize ptr_align_padding(const void* p, usize align) {
 /* ============================================================================
  * Pointer Arithmetic
  *
- * ptr_offset / ptr_offset_const : null-tolerant — NULL in → NULL out
- * ptr_retreat                   : null-tolerant — NULL in → NULL out
- * ptr_diff                      : null-intolerant — contract violation on NULL
- * ptr_span                      : null-intolerant — contract violation on NULL
+ * ptr_offset / ptr_offset_const : null-tolerant, NULL in -> NULL out
+ * ptr_retreat                   : null-tolerant, NULL in -> NULL out
+ * ptr_diff                      : null-intolerant, contract violation on NULL
+ * ptr_span                      : null-intolerant, contract violation on NULL
  *
  * Overflow/underflow is caught by ensure_msg() in debug builds.
  * ========================================================================= */
@@ -594,16 +593,16 @@ static inline usize ptr_align_padding(const void* p, usize align) {
  *
  * @pre (uintptr_t)p + n does not overflow the address space
  *
- * @remark Null-tolerant: NULL in → NULL out
- * @remark Byte-wise advance regardless of pointed-to type — use ptr_elem
+ * @remark Null-tolerant: NULL in -> NULL out
+ * @remark Byte-wise advance regardless of pointed-to type - use ptr_elem
  *         for typed element access
  * @remark Overflow is caught by ensure_msg() in debug builds
  *
  * Example:
- * ```c
- * void* next = ptr_offset(base, 64);          // byte cursor
- * u8*   tail = ptr_offset(header, sizeof(Header)); // skip over fixed prefix
- * ```
+ * @code
+ *   void* next = ptr_offset(base, 64);
+ *   u8*   tail = ptr_offset(header, sizeof(Header));
+ * @endcode
  *
  * @sa ptr_offset_const(), ptr_retreat(), ptr_elem()
  */
@@ -635,13 +634,13 @@ static inline void* ptr_offset(void* p, usize n) {
  *
  * @pre (uintptr_t)p + n does not overflow the address space
  *
- * @remark Null-tolerant: NULL in → NULL out
+ * @remark Null-tolerant: NULL in -> NULL out
  * @remark Use on read-only buffers to preserve const-correctness
  *
  * Example:
- * ```c
- * const void* payload = ptr_offset_const(packet, sizeof(Header));
- * ```
+ * @code
+ *   const void* payload = ptr_offset_const(packet, sizeof(Header));
+ * @endcode
  *
  * @sa ptr_offset()
  */
@@ -671,19 +670,19 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
  *
  * @return p - n (byte-wise), or NULL if p == NULL
  *
- * @pre (uintptr_t)p >= n  (prevents address-space underflow)
+ * @pre (uintptr_t)p >= n prevents address-space underflow
  *
  * @warning This checks only that the raw address does not underflow zero.
  *          It does NOT verify that the result stays within the same
  *          allocation. The caller is responsible for that invariant.
  *
- * @remark Null-tolerant: NULL in → NULL out
+ * @remark Null-tolerant: NULL in -> NULL out
  * @remark Underflow is caught by ensure_msg() in debug builds
  *
  * Example:
- * ```c
- * void* header = ptr_retreat(payload, sizeof(Header));
- * ```
+ * @code
+ *   void* header = ptr_retreat(payload, sizeof(Header));
+ * @endcode
  *
  * @sa ptr_offset(), ptr_diff()
  */
@@ -706,7 +705,7 @@ static inline void* ptr_retreat(void* p, usize n) {
 }
 
 /**
- * @brief Compute signed byte distance from `from` to `to`  (to - from)
+ * @brief Compute signed byte distance from from to to (to - from)
  *
  * @param to   End pointer
  * @param from Start pointer
@@ -718,16 +717,16 @@ static inline void* ptr_retreat(void* p, usize n) {
  * @pre from != NULL
  * @pre Both pointers are in the same allocation (or one-past-end).
  *      Subtracting pointers from different allocations is undefined
- *      behavior in C — Canon-C cannot detect this at runtime but
+ *      behavior in C - Canon-C cannot detect this at runtime but
  *      requires the caller to honor it.
  *
  * @remark Null-intolerant: passing NULL is a contract violation
  *
  * Example:
- * ```c
- * isize used      = ptr_diff(arena->cur, arena->start);
- * isize remaining = ptr_diff(arena->end, arena->cur);
- * ```
+ * @code
+ *   isize used      = ptr_diff(arena->cur, arena->start);
+ *   isize remaining = ptr_diff(arena->end, arena->cur);
+ * @endcode
  *
  * @sa ptr_span(), ptr_offset()
  */
@@ -744,7 +743,7 @@ static inline isize ptr_diff(const void* to, const void* from) {
 }
 
 /**
- * @brief Compute unsigned byte distance from `from` to `to`
+ * @brief Compute unsigned byte distance from from to to
  *
  * @param to   End pointer (must be >= from)
  * @param from Start pointer
@@ -753,8 +752,8 @@ static inline isize ptr_diff(const void* to, const void* from) {
  *
  * @pre to   != NULL
  * @pre from != NULL
- * @pre to >= from  (checked by require_msg)
- * @pre Both pointers are in the same allocation (caller responsibility —
+ * @pre to >= from (checked by require_msg)
+ * @pre Both pointers are in the same allocation (caller responsibility,
  *      pointer comparison across allocations is undefined behavior)
  *
  * @remark Null-intolerant: passing NULL is a contract violation
@@ -762,10 +761,10 @@ static inline isize ptr_diff(const void* to, const void* from) {
  *         it catches inverted arguments at the require_msg check
  *
  * Example:
- * ```c
- * usize remaining = ptr_span(arena->end, arena->cur);
- * usize used      = ptr_span(arena->cur, arena->start);
- * ```
+ * @code
+ *   usize remaining = ptr_span(arena->end, arena->cur);
+ *   usize used      = ptr_span(arena->cur, arena->start);
+ * @endcode
  *
  * @sa ptr_diff(), ptr_in_range()
  */
@@ -802,19 +801,19 @@ static inline usize ptr_span(const void* to, const void* from) {
  *         (including when any argument is NULL)
  *
  * @pre All three pointers are in the same allocation for defined behavior.
- *      Pointer comparisons across allocations are undefined in C — Canon-C
+ *      Pointer comparisons across allocations are undefined in C - Canon-C
  *      cannot enforce this at runtime.
  *
- * @remark Null-tolerant: any NULL argument → false
+ * @remark Null-tolerant: any NULL argument -> false
  * @remark Half-open range: region_end itself is NOT included (standard
  *         C convention for iterator-like endpoints)
  *
  * Example:
- * ```c
- * if (!ptr_in_range(user_ptr, buf, buf + buf_size)) {
- *     return ERROR_POINTER_OUT_OF_RANGE;
- * }
- * ```
+ * @code
+ *   if (!ptr_in_range(user_ptr, buf, buf + buf_size)) {
+ *       return ERROR_POINTER_OUT_OF_RANGE;
+ *   }
+ * @endcode
  *
  * @sa ptr_range_in_range(), ptr_span()
  */
@@ -849,18 +848,18 @@ static inline bool ptr_in_range(const void*  p,
  *
  * @pre All pointers are in the same allocation for defined behavior.
  *
- * @remark Null-tolerant: any NULL pointer argument → false
+ * @remark Null-tolerant: any NULL pointer argument -> false
  * @remark Overflow-safe: never computes p + len directly. Uses
- *         `len > (region_end - p)` to avoid pointer overflow.
+ *         len > (region_end - p) to avoid pointer overflow.
  * @remark A zero-length range at an in-range pointer returns true
  *         (consistent with half-open interval semantics)
  *
  * Example:
- * ```c
- * if (!ptr_range_in_range(user_ptr, user_len, buf, buf + buf_size)) {
- *     return ERROR_RANGE_OUT_OF_BOUNDS;
- * }
- * ```
+ * @code
+ *   if (!ptr_range_in_range(user_ptr, user_len, buf, buf + buf_size)) {
+ *       return ERROR_RANGE_OUT_OF_BOUNDS;
+ *   }
+ * @endcode
  *
  * @sa ptr_in_range()
  */
@@ -890,7 +889,7 @@ static inline bool ptr_range_in_range(const void*  p,
 /* ============================================================================
  * Typed Element Access (Null-Intolerant)
  *
- * NULL base is a contract violation — indexing into a nonexistent array
+ * NULL base is a contract violation - indexing into a nonexistent array
  * has no meaningful answer, so this is a programmer error, not a case
  * where NULL should propagate.
  *
@@ -900,7 +899,7 @@ static inline bool ptr_range_in_range(const void*  p,
 /**
  * @brief Compute pointer to element i in a flat array at base
  *
- * Equivalent to `&((T*)base)[i]` without requiring a typed pointer.
+ * Equivalent to &((T*)base)[i] without requiring a typed pointer.
  *
  * @param base      Pointer to array start (must NOT be NULL)
  * @param index     Element index (zero-based)
@@ -908,7 +907,7 @@ static inline bool ptr_range_in_range(const void*  p,
  *
  * @return Pointer to the i-th element
  *
- * @pre base      != NULL  (contract violation if NULL — indexing into a
+ * @pre base      != NULL (contract violation if NULL - indexing into a
  *                          nonexistent array has no meaningful answer)
  * @pre elem_size > 0
  * @pre index * elem_size does not overflow usize
@@ -917,10 +916,10 @@ static inline bool ptr_range_in_range(const void*  p,
  * @remark Useful for iterating generic containers without type-punning
  *
  * Example:
- * ```c
- * void* slot = ptr_elem(pool->buffer, 3, sizeof(MyStruct));
- * MyStruct* item = (MyStruct*)slot;
- * ```
+ * @code
+ *   void* slot = ptr_elem(pool->buffer, 3, sizeof(MyStruct));
+ *   MyStruct* item = (MyStruct*)slot;
+ * @endcode
  *
  * @sa ptr_elem_const(), ptr_offset()
  */
@@ -948,7 +947,7 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
  *
  * @return Const pointer to the i-th element
  *
- * @pre base      != NULL  (contract violation if NULL)
+ * @pre base      != NULL (contract violation if NULL)
  * @pre elem_size > 0
  * @pre index * elem_size does not overflow usize
  *
@@ -956,9 +955,9 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
  * @remark Use for read-only access to const arrays
  *
  * Example:
- * ```c
- * const void* slot = ptr_elem_const(data, 10, sizeof(Record));
- * ```
+ * @code
+ *   const void* slot = ptr_elem_const(data, 10, sizeof(Record));
+ * @endcode
  *
  * @sa ptr_elem()
  */
@@ -992,13 +991,13 @@ static inline const void* ptr_elem_const(const void* base, usize index, usize el
  *
  * @return p if p != NULL, otherwise fallback
  *
- * @remark Null-tolerant: NULL primary → fallback returned
- * @remark Useful for replacing `x = p ? p : default` idioms at call sites
+ * @remark Null-tolerant: NULL primary -> fallback returned
+ * @remark Useful for replacing x = p ? p : default idioms at call sites
  *
  * Example:
- * ```c
- * void* buf = ptr_or(user_supplied, internal_default);
- * ```
+ * @code
+ *   void* buf = ptr_or(user_supplied, internal_default);
+ * @endcode
  *
  * @sa ptr_or_const(), ptr_is_valid()
  */
@@ -1025,12 +1024,12 @@ static inline void* ptr_or(void* p, void* fallback) {
  *
  * @return p if p != NULL, otherwise fallback
  *
- * @remark Null-tolerant: NULL primary → fallback returned
+ * @remark Null-tolerant: NULL primary -> fallback returned
  *
  * Example:
- * ```c
- * const char* name = ptr_or_const(config->name, "default");
- * ```
+ * @code
+ *   const char* name = ptr_or_const(config->name, "default");
+ * @endcode
  *
  * @sa ptr_or()
  */
@@ -1061,9 +1060,9 @@ static inline const void* ptr_or_const(const void* p, const void* fallback) {
  *         expressions to make the intent unambiguous
  *
  * Example:
- * ```c
- * require_msg(ptr_is_valid(ctx), "ptr_is_valid: ctx cannot be NULL");
- * ```
+ * @code
+ *   require_msg(ptr_is_valid(ctx), "ctx cannot be NULL");
+ * @endcode
  *
  * @sa ptr_or()
  */
@@ -1078,7 +1077,7 @@ static inline bool ptr_is_valid(const void* p) {
 /* ============================================================================
  * Struct Introspection Macros
  *
- * Both delegate to offsetof() from <stddef.h> (included at top of file),
+ * Both delegate to offsetof() from stddef.h (included at top of file),
  * avoiding the undefined null-pointer dereference of a hand-rolled version.
  * ========================================================================= */
 
@@ -1097,9 +1096,9 @@ static inline bool ptr_is_valid(const void* p) {
  * @remark Cast to usize for type consistency with the rest of Canon-C
  *
  * Example:
- * ```c
- * usize off = PTR_OFFSET_OF(MyStruct, next);
- * ```
+ * @code
+ *   usize off = PTR_OFFSET_OF(MyStruct, next);
+ * @endcode
  *
  * @sa PTR_CONTAINER_OF()
  */
@@ -1110,8 +1109,8 @@ static inline bool ptr_is_valid(const void* p) {
  * @def PTR_CONTAINER_OF(ptr, type, member)
  * @brief Recover the enclosing struct pointer from a member pointer
  *
- * Given a pointer to `member` inside a `type`, returns a pointer to
- * the containing `type` instance. Used for intrusive data structures
+ * Given a pointer to member inside a type, returns a pointer to
+ * the containing type instance. Used for intrusive data structures
  * where nodes are embedded directly in user structs.
  *
  * @param ptr    Pointer to the member field
@@ -1120,79 +1119,23 @@ static inline bool ptr_is_valid(const void* p) {
  *
  * @return Pointer to the containing struct
  *
- * @warning The caller must ensure `ptr` actually points to a `member`
- *          inside a `type` instance. This macro performs no validation —
+ * @warning The caller must ensure ptr actually points to a member
+ *          inside a type instance. This macro performs no validation -
  *          passing an unrelated pointer produces undefined behavior.
  *
  * @remark Canonical intrusive-container pattern used by Linux kernel
  *         lists, ThreadX queues, and similar embedded systems code
  *
  * Example:
- * ```c
- * typedef struct { int x; Node node; } MyItem;
- * Node*   node_ptr = list_pop(&list);
- * MyItem* item     = PTR_CONTAINER_OF(node_ptr, MyItem, node);
- * printf("%d\n", item->x);
- * ```
+ * @code
+ *   typedef struct { int x; Node node; } MyItem;
+ *   Node*   node_ptr = list_pop(&list);
+ *   MyItem* item     = PTR_CONTAINER_OF(node_ptr, MyItem, node);
+ * @endcode
  *
  * @sa PTR_OFFSET_OF()
  */
 #define PTR_CONTAINER_OF(ptr, type, member) \
     ((type*)((u8*)(ptr) - PTR_OFFSET_OF(type, member)))
-
-/* ============================================================================
- * Usage Examples (documentation only)
- * ========================================================================= */
-
-/*
-// Arena bump allocator
-void* arena_alloc(Arena* a, usize size, usize align) {
-    void* aligned = ptr_align_up(a->cur, align);
-    void* next    = ptr_offset(aligned, size);
-    if (!ptr_in_range(next, a->start, a->end)) return NULL;
-    a->cur = next;
-    return aligned;
-}
-
-// Pool block indexing
-void* pool_block(Pool* p, usize i) {
-    return ptr_elem(p->buffer, i, p->block_size);
-}
-
-// Slice length from pointers
-usize slice_length(const void* start, const void* end) {
-    return ptr_span(end, start);
-}
-
-// SIMD alignment precondition
-void simd_add(float* dst, const float* a, const float* b, usize n) {
-    require_msg(ptr_is_aligned(dst, 16), "simd_add: dst must be 16-aligned");
-    require_msg(ptr_is_aligned(a,   16), "simd_add: a must be 16-aligned");
-    require_msg(ptr_is_aligned(b,   16), "simd_add: b must be 16-aligned");
-    // ... SIMD loads ...
-}
-
-// Intrusive linked list traversal
-typedef struct Node { struct Node* next; } Node;
-typedef struct { int value; Node link; } Item;
-
-void print_items(Node* head) {
-    for (Node* n = head; n != NULL; n = n->next) {
-        Item* item = PTR_CONTAINER_OF(n, Item, link);
-        printf("%d\n", item->value);
-    }
-}
-
-// Safe default fallback
-Config* get_config(Config* user) {
-    static Config default_config = { /* ... */ };
-    return ptr_or(user, &default_config);
-}
-
-// Page-aligned address for page table walk
-void* page_base(void* addr) {
-    return ptr_align_down(addr, 4096);
-}
-*/
 
 #endif /* CANON_CORE_PRIMITIVES_PTR_H */
