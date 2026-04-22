@@ -15,7 +15,8 @@ on:
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
 #                     Currently scoped to core/primitives/checked.h,
-#                     core/primitives/bits.h, and core/primitives/compare.h.
+#                     core/primitives/bits.h, core/primitives/compare.h,
+#                     and core/primitives/ptr.h.
 #                     Additional headers will be added as they are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
@@ -350,16 +351,18 @@ jobs:
   # -------------------------------------------------------------------------
   # 5. Formal verification — Frama-C (Linux only)
   #
-  #    Scope: core/primitives/checked.h, core/primitives/bits.h, and
-  #    core/primitives/compare.h.
+  #    Scope: core/primitives/checked.h, core/primitives/bits.h,
+  #    core/primitives/compare.h, and core/primitives/ptr.h.
   #
   #    checked.h is the first Canon-C header with full ACSL contracts
   #    (every unsigned function plus all three signed functions). bits.h
   #    is the second, covering portable bit manipulation with fallback
   #    paths. compare.h is the third, covering three-way comparators
   #    for all Canon primitive types including floating-point with NaN
-  #    handling. When ptr.h and the core/ layer are annotated, add them
-  #    to the file list in the WP steps below.
+  #    handling. ptr.h is the fourth, covering explicit pointer
+  #    arithmetic, alignment, and bounds checking with NULL-handling
+  #    discipline. When the rest of core/ is annotated, add them to the
+  #    file list in the WP steps below.
   #
   #    Installation: opam with aggressive caching.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
@@ -390,8 +393,8 @@ jobs:
   #
   #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
   #    checked.h and bits.h use this to force the fallback path (WP
-  #    has no semantics for compiler builtins). compare.h has no
-  #    builtins — all code paths are verified directly.
+  #    has no semantics for compiler builtins). compare.h and ptr.h
+  #    have no builtins — all code paths are verified directly.
   #
   #    Certification evidence produced:
   #      - Absence of runtime errors (all standards)
@@ -686,6 +689,75 @@ jobs:
           name: wp-proof-compare
           path: wp_compare_output.txt
 
+      - name: "WP: core/primitives/ptr.h"
+        # ptr.h uses Typed+Cast memory model for the same reason as
+        # compare.h — the header performs void* to u8* casts for
+        # byte-level pointer arithmetic. The default Typed memory
+        # model rejects these casts; Typed+Cast allows them under
+        # the same soundness argument as VERIFY-005.
+        #
+        # INFO mode for the first run: the step reports proof counts
+        # but does not fail on unexpected count. After the first CI
+        # run you can read the actual unproved goal count from the
+        # wp-proof-ptr artifact, document it in docs/deviations.md
+        # as VERIFY-006 and docs/verification.md, then replace this
+        # block with a strict enforcement wrapper that fails on
+        # regression (matching the bits.h pattern).
+        #
+        # To calibrate:
+        #   1. Read PROVED count and UNPROVED count from first run
+        #   2. Document unproved goals (if any) in deviations.md
+        #   3. Add entry to verification.md for ptr.h
+        #   4. Replace the INFO-mode block below with strict enforcement
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/primitives/ptr.h 2>&1 | tee wp_ptr_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (ptr.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_ptr_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_ptr_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_ptr_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_ptr_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT}"
+          echo ""
+          echo "  INFO mode: reporting only. After reviewing the output"
+          echo "  and documenting unproved goals in docs/deviations.md,"
+          echo "  replace this with a strict enforcement wrapper that"
+          echo "  fails on unexpected regression (matching bits.h pattern)."
+          echo "==============================================="
+
+      - name: Upload WP proof output (ptr.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-ptr
+          path: wp_ptr_output.txt
+
       # -- Eva (Evolved Value Analysis) is intentionally NOT run on checked.h --
       # Eva requires an entry point function to start abstract interpretation
       # from. checked.h is a header full of static inline functions with no
@@ -699,7 +771,7 @@ jobs:
       # exercises a representative call sequence. Until then, WP is the
       # complete formal verification story for header-only modules.
 
-      # -- Next headers to annotate (bottom-up within core/primitives) --
+      # -- Next headers to annotate (bottom-up within core/) --
       # Uncomment each block as ACSL annotations are added.
       #
       # Note: -warn-unsigned-overflow is intentionally NOT used. C defines
@@ -709,7 +781,7 @@ jobs:
       # division by zero, invalid shifts, null derefs, and out-of-bounds
       # access — all the actual runtime errors you want to rule out.
       #
-      # - name: "WP: core/primitives/ptr.h"
+      # - name: "WP: core/slice.h"
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
@@ -722,7 +794,7 @@ jobs:
       #         -I . \
       #         -DCANON_NO_REQUIRE \
       #         -DNDEBUG" \
-      #       core/primitives/ptr.h
+      #       core/slice.h
 
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
@@ -911,6 +983,44 @@ jobs:
             done
           fi
 
+      - name: "Debug: per-line MC/DC detail for ptr.h"
+        # Identifies which specific conditions in ptr.h are uncovered.
+        # ptr.h is currently at 95.2% MC/DC (40/42) — this step shows
+        # the exact 2 conditions that aren't exercised so you can decide
+        # whether to add targeted tests or document them as structurally
+        # unreachable under CANON_NO_REQUIRE. Mirrors the checked.h debug
+        # step above.
+        run: |
+          cd build
+
+          PTR_GCDA=$(find . -name "ptr_test*.gcda" | head -1)
+
+          if [ -z "$PTR_GCDA" ]; then
+            echo "ERROR: could not locate ptr_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+
+          echo "Running gcov on: $PTR_GCDA"
+          gcov-14 --conditions --all-blocks "$PTR_GCDA" 2>&1 | \
+            grep -A 200 "ptr.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for ptr.h ==="
+          find . -name "ptr.h.gcov" -exec echo "Found: {}" \;
+
+          PTR_GCOV=$(find . -name "ptr.h.gcov" | head -1)
+          if [ -n "$PTR_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $PTR_GCOV ==="
+            cat "$PTR_GCOV"
+          else
+            echo "No ptr.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*ptr* 2>/dev/null || true
+            done
+          fi
+
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
@@ -952,11 +1062,11 @@ jobs:
           fi
 
           # Threshold progression plan:
-          #   Phase 1 (current): 70% — baseline established
-          #   Phase 2: 80% — after gap analysis and test additions
-          #   Phase 3: 90% — certification readiness (DO-178C Level C)
-          #   Phase 4: 95%+ — certification readiness (DO-178C Level A/B)
-          THRESHOLD=70
+          #   Phase 1 (complete): 70% — baseline established
+          #   Phase 2 (current):  80% — post-bits.h and compare.h verification
+          #   Phase 3:            90% — certification readiness (DO-178C Level C)
+          #   Phase 4:            95%+ — certification readiness (DO-178C Level A/B)
+          THRESHOLD=80
 
           if [ "$(echo "${BRANCH_COV} < ${THRESHOLD}" | bc -l)" -eq 1 ]; then
             echo "FAIL: Branch coverage ${BRANCH_COV}% is below threshold ${THRESHOLD}%"
