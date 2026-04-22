@@ -490,40 +490,71 @@ jobs:
         # `why3 config add-prover`, which bypasses version detection and
         # stores the prover under [partial_prover] with manual = true.
         #
-        # The `|| echo ...` pattern on the add-prover call keeps the
-        # step green if registration fails — the subsequent WP runs will
-        # just silently skip cvc5 (as they do today without this block).
-        # Combined with the Alt-Ergo/Z3 fallback already in -wp-prover,
-        # this means the CI degrades gracefully if cvc5 integration
-        # breaks in a future opam or why3 update.
+        # Robustness: this step uses `set +e` plus explicit error
+        # handling around the cvc5 diagnostics so a transient issue with
+        # the cvc5 binary (missing, unexecutable, library problems)
+        # doesn't kill the entire job. If cvc5 registration fails, the
+        # WP steps continue with Alt-Ergo + Z3 only, same as the CI
+        # behavior before cvc5 was introduced. This degrades gracefully.
         #
-        # The echo blocks surrounding each step produce visible anchors
-        # in the CI log so a reviewer can quickly confirm whether cvc5
-        # is registered without scrolling through detection output.
+        # CVC5 binary location: resolved from opam's bin directory
+        # rather than $PATH because `eval $(opam env)` populates PATH
+        # only within the current subshell, while `echo ... >> $GITHUB_PATH`
+        # populates PATH for SUBSEQUENT steps. Looking up cvc5 via opam
+        # var avoids any PATH-ordering confusion within this step.
         run: |
+          set +e
           eval $(opam env --switch=frama-c)
-          echo "$(opam var --switch=frama-c bin)" >> $GITHUB_PATH
+          OPAM_BIN="$(opam var --switch=frama-c bin)"
+          echo "${OPAM_BIN}" >> $GITHUB_PATH
+          export PATH="${OPAM_BIN}:${PATH}"
+
+          echo "--- Versions ---"
           frama-c -version
           alt-ergo --version
-          cvc5 --version
+
+          CVC5_BIN="${OPAM_BIN}/cvc5"
+          if [ -x "${CVC5_BIN}" ]; then
+            echo "cvc5 binary: ${CVC5_BIN}"
+            "${CVC5_BIN}" --version | head -5
+          else
+            echo "WARN: cvc5 binary not found at ${CVC5_BIN}"
+            echo "      Directory listing of ${OPAM_BIN}:"
+            ls "${OPAM_BIN}" | grep -i cvc || echo "      no cvc* binary found"
+          fi
+
           echo ""
           echo "--- Supported prover families (grep cvc5 for confirmation) ---"
           why3 config list-supported-provers 2>&1 | grep -i cvc5 \
             || echo "cvc5 family not found in why3 supported-provers list"
+
           echo ""
           echo "--- Auto-detect provers (why3 config detect) ---"
           why3 config detect
-          echo ""
-          echo "--- Manual cvc5 registration (add-prover) ---"
-          why3 config add-prover cvc5 "$(which cvc5)" cvc5 \
-            || echo "WARN: why3 config add-prover cvc5 failed — WP will run without cvc5"
+
+          if [ -x "${CVC5_BIN}" ]; then
+            echo ""
+            echo "--- Manual cvc5 registration (add-prover) ---"
+            why3 config add-prover cvc5 "${CVC5_BIN}" cvc5 \
+              && echo "cvc5 registered successfully" \
+              || echo "WARN: why3 config add-prover cvc5 failed — WP will run without cvc5"
+          else
+            echo ""
+            echo "--- Skipping manual cvc5 registration (binary missing) ---"
+          fi
+
           echo ""
           echo "--- Registered provers after manual add (why3 config list-provers) ---"
           why3 config list-provers 2>&1 || true
+
           echo ""
           echo "--- Registered prover sections in why3.conf ---"
           grep -E '^\[(partial_)?prover\]|^name = |^version = ' ~/.why3.conf \
             2>/dev/null || echo "(why3.conf not found or no prover sections)"
+
+          # Force exit 0 — this step is diagnostic configuration only;
+          # any individual command failure has been handled above.
+          exit 0
 
       - name: "WP: core/primitives/checked.h"
         # WP is expected to leave exactly 2 goals unproven:
