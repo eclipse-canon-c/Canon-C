@@ -64,6 +64,19 @@
  *   through ptr_is_aligned() and ptr_align_up() which use it internally.
  *   The ALIGN_MAX() macro is tested with concrete constant values instead.
  *
+ * Note on buf initialization
+ * ───────────────────────────────────────────────────────────────────────────
+ *   Several tests below call memset(buf, 0, sizeof(buf)) on local buffers
+ *   even though the test code never reads buf's contents — it only takes
+ *   addresses into the buffer and passes those pointers to ptr.h functions
+ *   that compare or arithmetic on the pointer values without dereferencing
+ *   the underlying storage. Taking addresses into uninitialized storage is
+ *   defined C behavior, but GCC's -Wmaybe-uninitialized flow analysis
+ *   isn't precise enough to see through the function calls and confirm no
+ *   read happens. Under -Werror it flags the derived pointer variables as
+ *   potentially uninitialized. The memset is a workaround for the analyzer,
+ *   not a C correctness requirement.
+ *
  * Portability note
  * ───────────────────────────────────────────────────────────────────────────
  *   No 0b literals. Variables declared before use (C99).
@@ -416,15 +429,19 @@ static CANON_MAYBE_UNUSED void test_ptr_arithmetic(void) {
  * ====================================================================== */
 
 static CANON_MAYBE_UNUSED void test_ptr_diff_span(void) {
-    /* Stack-allocated buffer; pointers below point into it so GCC/Clang
-     * can see data flow from a known allocation (avoiding spurious
-     * "maybe uninitialized" diagnostics on pointers derived from buf).
-     * buf is deliberately left uninitialized — we don't read its contents,
-     * only take addresses inside it, which is defined behavior. */
+    /* Initialize buf to work around GCC's -Wmaybe-uninitialized.
+     * See file-level "Note on buf initialization" for the rationale:
+     * the code never reads buf's contents, only takes addresses into
+     * it, but GCC's flow analysis isn't precise enough to see that.
+     * Under -Werror the warning becomes fatal. */
     unsigned char buf[128];
-    void* start = (void*)(buf);
-    void* mid   = (void*)(buf + 64);
-    void* end   = (void*)(buf + 128);
+    void* start;
+    void* mid;
+    void* end;
+    memset(buf, 0, sizeof(buf));
+    start = (void*)(buf);
+    mid   = (void*)(buf + 64);
+    end   = (void*)(buf + 128);
 
     /* ptr_diff: signed distance */
     EXPECT_EQ(ptr_diff(start, start), 0);
@@ -452,11 +469,18 @@ static CANON_MAYBE_UNUSED void test_ptr_diff_span(void) {
  * ====================================================================== */
 
 static CANON_MAYBE_UNUSED void test_bounds_checking(void) {
+    /* Initialize buf to work around GCC's -Wmaybe-uninitialized.
+     * See file-level "Note on buf initialization" for the rationale. */
     unsigned char buf[64];
-    void* start = (void*)(buf);
-    void* end   = (void*)(buf + 64);
-    void* mid   = (void*)(buf + 32);
-    void* last  = (void*)(buf + 63);
+    void* start;
+    void* end;
+    void* mid;
+    void* last;
+    memset(buf, 0, sizeof(buf));
+    start = (void*)(buf);
+    end   = (void*)(buf + 64);
+    mid   = (void*)(buf + 32);
+    last  = (void*)(buf + 63);
 
     /* NULL args — null-tolerant convention returns false */
     EXPECT_FALSE(ptr_in_range(NULL,  start, end));
@@ -552,9 +576,14 @@ static CANON_MAYBE_UNUSED void test_ptr_elem(void) {
  * ====================================================================== */
 
 static CANON_MAYBE_UNUSED void test_ptr_null_safety(void) {
+    /* Initialize buf to work around GCC's -Wmaybe-uninitialized.
+     * See file-level "Note on buf initialization" for the rationale. */
     unsigned char buf[8];
-    void* p        = (void*)buf;
-    void* fallback = (void*)(buf + 4);
+    void* p;
+    void* fallback;
+    memset(buf, 0, sizeof(buf));
+    p        = (void*)buf;
+    fallback = (void*)(buf + 4);
 
     /* ptr_or */
     EXPECT_PTR_EQ(ptr_or(p,    fallback), p);
