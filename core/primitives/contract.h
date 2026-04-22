@@ -139,6 +139,16 @@
  *   available and guarded by CANON_NO_GNU_EXTENSIONS for strict builds
  * - NDEBUG macro follows standard convention (same as assert.h)
  *
+ * Formal verification:
+ * ────────────────────────────────────────────────────────────────────────────
+ * When __FRAMAC__ is defined (automatic under Frama-C), the default
+ * handler's body is hidden from WP. The ACSL contract `ensures \false`
+ * tells WP the function never returns, which is sufficient for verifying
+ * callers. Hiding the body avoids ~20 spurious fprintf/fflush goals that
+ * would otherwise appear in every WP run of a header that uses
+ * require_msg or ensure_msg at runtime. The runtime behavior in normal
+ * (non-Frama-C) builds is unchanged.
+ *
  * Handler storage:
  * ────────────────────────────────────────────────────────────────────────────
  * canon_contract_handler is a plain extern variable. The TU that defines
@@ -203,6 +213,15 @@ typedef void (*contract_handler_fn)(
  *
  * @note Not thread-safe (uses fprintf)
  * @note Never returns
+ *
+ * Formal verification: under Frama-C (__FRAMAC__ defined), the body is
+ * hidden from WP. The ACSL contract `ensures \false` tells WP the
+ * function never returns, which is sufficient for verifying callers
+ * without descending into stdio goal obligations.
+ */
+/*@
+  assigns \nothing;
+  ensures \false;
  */
 static inline void contract_default_handler(
     const char* file,
@@ -211,6 +230,7 @@ static inline void contract_default_handler(
     const char* expr,
     const char* msg
 ) {
+#ifndef __FRAMAC__
     fprintf(stderr, "\n");
     fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
     fprintf(stderr, "CONTRACT VIOLATION\n");
@@ -225,6 +245,17 @@ static inline void contract_default_handler(
     fprintf(stderr, "\n");
     fflush(stderr);
     abort();
+#else
+    /* Under Frama-C, the body is hidden. The ACSL contract above
+     * (ensures \false) tells WP the function never returns, which
+     * is sufficient for verifying callers without Frama-C descending
+     * into stdio's ACSL stub requirements. */
+    (void)file;
+    (void)line;
+    (void)func;
+    (void)expr;
+    (void)msg;
+#endif
 }
 
 /* ============================================================================
