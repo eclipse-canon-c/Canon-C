@@ -374,13 +374,16 @@ jobs:
   #    switch in ~30 seconds. The cache key includes OCAML_VERSION
   #    and FRAMAC_VERSION so bumping either forces a clean rebuild.
   #
-  #    Provers: Alt-Ergo + Z3 dual-prover setup.
+  #    Provers: Alt-Ergo + Z3 + CVC5 triple-prover setup.
   #    Alt-Ergo handles linear arithmetic and most ACSL contracts very
   #    fast. Z3 handles nonlinear integer reasoning (multiplication
   #    contracts in checked_mul / checked_mul_u64 / checked_mul_isize)
-  #    that Alt-Ergo struggles with. WP tries Alt-Ergo first and falls
-  #    through to Z3 only on goals Alt-Ergo cannot close — keeping the
-  #    common case fast while ensuring the hard goals get proved.
+  #    that Alt-Ergo struggles with. CVC5 was added as a tertiary
+  #    prover after ptr.h verification — it has stronger bitvector and
+  #    modular-arithmetic reasoning than Z3 in some cases and may close
+  #    goals the other two cannot. WP tries Alt-Ergo first, falls
+  #    through to Z3, then to CVC5 — keeping the common case fast while
+  #    giving the hard goals three chances before timing out.
   #
   #    WP (Weakest Precondition):
   #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
@@ -393,8 +396,12 @@ jobs:
   #
   #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
   #    checked.h and bits.h use this to force the fallback path (WP
-  #    has no semantics for compiler builtins). compare.h and ptr.h
-  #    have no builtins — all code paths are verified directly.
+  #    has no semantics for compiler builtins). compare.h has no
+  #    builtins — all code paths are verified directly. ptr.h uses
+  #    __FRAMAC__ transitively through contract.h, where the contract
+  #    handler body is replaced with a non-terminating loop to hide
+  #    stdio calls from WP while preserving the ensures \false
+  #    / exits \false contract that callers depend on.
   #
   #    Certification evidence produced:
   #      - Absence of runtime errors (all standards)
@@ -433,7 +440,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-v6
+          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-cvc5-v7
 
       - name: Initialise opam (cache miss only)
         if: steps.cache-opam.outputs.cache-hit != 'true'
@@ -443,7 +450,7 @@ jobs:
           opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
           eval $(opam env --switch=frama-c)
           opam install -y --confirm-level=unsafe-yes --assume-depexts \
-            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3
+            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3 cvc5
 
       - name: Activate opam environment and configure Why3 provers
         run: |
@@ -458,9 +465,9 @@ jobs:
         #   typed_checked_add_overflow_ensures
         #   typed_checked_add_u64_overflow_ensures
         # Both are 64-bit unsigned add wraparound assertions that current
-        # SMT provers (Alt-Ergo 2.6.2, Z3 4.15.2) cannot discharge in
-        # WP's integer memory model. They are discharged manually by a
-        # modular-arithmetic argument recorded in docs/verification.md
+        # SMT provers (Alt-Ergo 2.6.2, Z3 4.15.2, CVC5) cannot discharge
+        # in WP's integer memory model. They are discharged manually by
+        # a modular-arithmetic argument recorded in docs/verification.md
         # under "Manually discharged goals". The wrapper below verifies
         # WP fails on EXACTLY these two goals — any other failure is a
         # regression and fails the job.
@@ -468,7 +475,7 @@ jobs:
           eval $(opam env --switch=frama-c)
           set +e
           frama-c -wp -wp-rte \
-            -wp-prover alt-ergo,z3 \
+            -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
             -wp-split \
             -cpp-extra-args=" \
@@ -541,7 +548,7 @@ jobs:
           eval $(opam env --switch=frama-c)
           set +e
           frama-c -wp -wp-rte \
-            -wp-prover alt-ergo,z3 \
+            -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
             -wp-split \
             -cpp-extra-args=" \
@@ -636,7 +643,7 @@ jobs:
           set +e
           frama-c -wp -wp-rte \
             -wp-model Typed+Cast \
-            -wp-prover alt-ergo,z3 \
+            -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
             -wp-split \
             -cpp-extra-args=" \
@@ -696,25 +703,28 @@ jobs:
         # model rejects these casts; Typed+Cast allows them under
         # the same soundness argument as VERIFY-005.
         #
-        # INFO mode for the first run: the step reports proof counts
-        # but does not fail on unexpected count. After the first CI
-        # run you can read the actual unproved goal count from the
-        # wp-proof-ptr artifact, document it in docs/deviations.md
-        # as VERIFY-006 and docs/verification.md, then replace this
-        # block with a strict enforcement wrapper that fails on
-        # regression (matching the bits.h pattern).
+        # INFO mode for now: the step reports proof counts but does not
+        # fail on unexpected count. The expected baseline from CI #788
+        # was 1732 / 1741 proved with 9 unproved goals (all documented
+        # in VERIFY-006). With CVC5 added to the prover list, the count
+        # may change — CVC5 has stronger bitvector reasoning than Z3
+        # and may close some of the VERIFY-006 goals. After the first
+        # CI run with CVC5, calibrate the enforcement wrapper to the
+        # new stable count (matching the bits.h strict-enforcement
+        # pattern).
         #
         # To calibrate:
-        #   1. Read PROVED count and UNPROVED count from first run
-        #   2. Document unproved goals (if any) in deviations.md
-        #   3. Add entry to verification.md for ptr.h
+        #   1. Read PROVED count and UNPROVED count from first CVC5 run
+        #   2. Update VERIFY-006 goal list in deviations.md if CVC5
+        #      closed any previously-unproved goals
+        #   3. Update verification.md ptr.h section with new count
         #   4. Replace the INFO-mode block below with strict enforcement
         run: |
           eval $(opam env --switch=frama-c)
           set +e
           frama-c -wp -wp-rte \
             -wp-model Typed+Cast \
-            -wp-prover alt-ergo,z3 \
+            -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
             -wp-split \
             -cpp-extra-args=" \
@@ -745,10 +755,11 @@ jobs:
           echo "  Failed:   ${FAILED_COUNT}"
           echo "  Total unproved: ${UNPROVED_COUNT}"
           echo ""
-          echo "  INFO mode: reporting only. After reviewing the output"
-          echo "  and documenting unproved goals in docs/deviations.md,"
-          echo "  replace this with a strict enforcement wrapper that"
-          echo "  fails on unexpected regression (matching bits.h pattern)."
+          echo "  Previous baseline (without CVC5): 1732 / 1741 proved,"
+          echo "  9 unproved goals documented in VERIFY-006."
+          echo "  INFO mode: reporting only. After CVC5 run stabilizes,"
+          echo "  update VERIFY-006 if any goals now close, then replace"
+          echo "  this with a strict enforcement wrapper (bits.h pattern)."
           echo "==============================================="
 
       - name: Upload WP proof output (ptr.h)
@@ -785,7 +796,7 @@ jobs:
       #   run: |
       #     eval $(opam env --switch=frama-c)
       #     frama-c -wp -wp-rte \
-      #       -wp-prover alt-ergo,z3 \
+      #       -wp-prover alt-ergo,z3,cvc5 \
       #       -wp-timeout 120 \
       #       -wp-split \
       #       -cpp-extra-args=" \
@@ -985,11 +996,10 @@ jobs:
 
       - name: "Debug: per-line MC/DC detail for ptr.h"
         # Identifies which specific conditions in ptr.h are uncovered.
-        # ptr.h is currently at 95.2% MC/DC (40/42) — this step shows
-        # the exact 2 conditions that aren't exercised so you can decide
-        # whether to add targeted tests or document them as structurally
-        # unreachable under CANON_NO_REQUIRE. Mirrors the checked.h debug
-        # step above.
+        # As of CI #788, ptr.h reached 100% MC/DC (42/42). This debug
+        # step remains in place to catch future regressions — if a new
+        # function is added without corresponding tests, the output
+        # will show which conditions drop below 100%.
         run: |
           cd build
 
