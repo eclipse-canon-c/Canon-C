@@ -374,6 +374,16 @@ jobs:
   #    switch in ~30 seconds. The cache key includes OCAML_VERSION
   #    and FRAMAC_VERSION so bumping either forces a clean rebuild.
   #
+  #    System prerequisites: The opam packages cvc5 and alt-ergo both
+  #    pull in Python-based build helpers. cvc5 specifically requires
+  #    conf-python3-tomli, which does `import tomli` from the system
+  #    Python — Ubuntu 24.04 does not ship python3-tomli by default
+  #    and the --assume-depexts flag tells opam to skip system-level
+  #    installs. The apt step below installs python3-tomli and cmake
+  #    explicitly so cvc5 can configure and build. Without these, the
+  #    opam install aborts on the first cache miss and none of the
+  #    WP steps ever run.
+  #
   #    Provers: Alt-Ergo + Z3 + CVC5 triple-prover setup.
   #    Alt-Ergo handles linear arithmetic and most ACSL contracts very
   #    fast. Z3 handles nonlinear integer reasoning (multiplication
@@ -420,6 +430,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies for opam and Frama-C
+        # cmake and python3-tomli are required for cvc5's opam build:
+        # conf-python3-tomli runs `import tomli` during package configure
+        # and conf-cmake needs cmake available in PATH. Both are absent
+        # from the stock ubuntu-latest runner. Without them the opam
+        # install aborts on cache miss and the WP steps never run.
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -433,7 +448,9 @@ jobs:
             graphviz \
             libcairo2-dev \
             libgtk-3-dev \
-            libgtksourceview-3.0-dev
+            libgtksourceview-3.0-dev \
+            cmake \
+            python3-tomli
 
       - name: Cache opam switch
         id: cache-opam
