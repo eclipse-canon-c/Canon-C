@@ -19,9 +19,29 @@
  * Design rules:
  * - All pointer arithmetic is named — no raw `+` on void* or char*
  * - Alignment is always explicit — no silent padding assumptions
- * - Null is always checked — no silent UB on NULL input
+ * - NULL handling is always defined — see "NULL handling" below
  * - Overflow is caught before it happens — no wraparound on offsets
  * - All operations work on void* or u8* — no type puns needed
+ *
+ * NULL handling:
+ * Canon-C categorizes functions by whether NULL has meaningful semantics:
+ *
+ *   Null-tolerant  — NULL is a valid input with a defined safe response.
+ *     These functions preserve NULL or return a safe default. Use them
+ *     freely in code paths where NULL propagation is expected.
+ *     Examples: ptr_offset(NULL, n)     → NULL
+ *               ptr_is_aligned(NULL, a) → false
+ *               ptr_align_padding(NULL) → 0
+ *               ptr_or(NULL, fb)        → fb
+ *
+ *   Null-intolerant — NULL is a contract violation (programmer error).
+ *     These functions trigger require_msg() when given NULL because the
+ *     operation has no meaningful answer for NULL input.
+ *     Examples: ptr_elem requires base != NULL
+ *               ptr_span requires ordered pointers
+ *               ptr_diff requires same-allocation pointers
+ *
+ * Each function's behavior is documented explicitly in its @pre clause.
  *
  * Dependency rule:
  * ptr.h lives in core/primitives/ and may only include from core/primitives/
@@ -39,7 +59,7 @@
  *
  * Performance:
  * All functions are static inline — zero call overhead.
- * Compilers reduce every operation here to 1–3 instructions.
+ * Compilers reduce every operation here to 1-3 instructions.
  *
  * Quick start:
  * ```c
@@ -57,6 +77,13 @@
  * @sa core/memory.h — safe memcpy/memmove wrappers
  */
 
+/* Ensure limits.h provides CANON_USIZE_MAX consistent with SIZE_MAX.
+ * Every overflow check in this file depends on CANON_USIZE_MAX being
+ * the true maximum value representable in usize. If limits.h ever
+ * drifts, catch it at compile time rather than at runtime. */
+static_require(CANON_USIZE_MAX == SIZE_MAX,
+               canon_usize_max_matches_size_max);
+
 /* ── Compiler attributes ─────────────────────────────────────────────────────
  *
  * PACKED        — removes all padding between struct members
@@ -65,16 +92,24 @@
  *
  * Disabled when CANON_NO_GNU_EXTENSIONS is defined (strict C99 mode).
  *
- * Note: these live here rather than a separate attrs.h because ptr.h is the
- * sole low-level layout header. If the project grows a dedicated attrs.h,
- * move them there and include it from here.
+ * IMPORTANT — correctness risk in strict C99 mode:
+ * When CANON_NO_GNU_EXTENSIONS is defined, these attributes expand to
+ * nothing. If your code RELIES on packing (network protocols, hardware
+ * register layouts, on-wire formats) or cache-line alignment (false
+ * sharing avoidance, SIMD alignment requirements), the attribute's
+ * absence silently changes struct layout and may cause correctness bugs.
+ *
+ * If you use PACKED for layout-critical structs, either:
+ *   1. Commit to compiling with GNU extensions available, or
+ *   2. Use explicit byte-level serialization (read/write individual
+ *      fields with memcpy) instead of trusting struct layout.
  * ─────────────────────────────────────────────────────────────────────────── */
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(CANON_NO_GNU_EXTENSIONS)
 #   define PACKED          __attribute__((packed))
 #   define CACHE_ALIGNED   __attribute__((aligned(CANON_CACHE_LINE)))
 #   define ALIGNAS(n)      __attribute__((aligned(n)))
 #else
-#   define PACKED          /* no packing in strict C99 mode */
+#   define PACKED          /* no packing in strict C99 mode — see comment above */
 #   define CACHE_ALIGNED   /* no cache alignment in strict C99 mode */
 #   define ALIGNAS(n)      /* no explicit alignment in strict C99 mode */
 #endif
@@ -110,6 +145,8 @@
  *
  * Useful when computing alignment for unions or generic containers
  * whose members have different natural alignments.
+ *
+ * Note: evaluates arguments twice. Pass compile-time constants only.
  *
  * Example:
  *   usize worst = ALIGN_MAX(ALIGN_OF(int), ALIGN_OF(double));
@@ -186,7 +223,7 @@ static inline usize align_padding(usize n, usize align) {
 
 /* ── Pointer alignment ───────────────────────────────────────────────────────
  *
- * All functions are NULL-safe: NULL in → NULL (or false/0) out.
+ * Null-tolerant: NULL in → NULL (or false/0) out.
  * ─────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -238,10 +275,10 @@ static inline usize ptr_align_padding(const void* p, usize align) {
 
 /* ── Pointer arithmetic ──────────────────────────────────────────────────────
  *
- * ptr_offset / ptr_offset_const : advance forward by n bytes
- * ptr_retreat                   : retreat backward by n bytes
- * ptr_diff                      : signed byte distance (to - from)
- * ptr_span                      : unsigned byte distance, requires to >= from
+ * ptr_offset / ptr_offset_const : null-tolerant — NULL in → NULL out
+ * ptr_retreat                   : null-tolerant — NULL in → NULL out
+ * ptr_diff                      : null-intolerant — contract violation on NULL
+ * ptr_span                      : null-intolerant — contract violation on NULL
  *
  * Overflow/underflow is caught by ensure_msg() in debug builds.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -291,26 +328,37 @@ static inline void* ptr_retreat(void* p, usize n) {
  *
  * Positive if to > from, negative if to < from, zero if equal.
  *
- * @pre Both pointers are in the same allocation (or one-past-end)
- * @note NULL inputs produce implementation-defined results — callers must
- *       ensure both pointers are valid.
+ * @pre to != NULL
+ * @pre from != NULL
+ * @pre Both pointers are in the same allocation (or one-past-end).
+ *      Subtracting pointers from different allocations is undefined
+ *      behavior in C — Canon-C cannot detect this at runtime but
+ *      requires the caller to honor it.
  *
  * Example:
  *   isize used = ptr_diff(arena->cur, arena->start);
  */
 static inline isize ptr_diff(const void* to, const void* from) {
+    require_msg(to   != NULL, "ptr_diff: 'to' is NULL");
+    require_msg(from != NULL, "ptr_diff: 'from' is NULL");
     return (isize)((const u8*)to - (const u8*)from);
 }
 
 /**
  * @brief Unsigned byte distance from `from` to `to`
  *
+ * @pre to   != NULL
+ * @pre from != NULL
  * @pre to >= from  (checked by require_msg)
+ * @pre Both pointers are in the same allocation (caller responsibility —
+ *      pointer comparison across allocations is undefined behavior)
  *
  * Example:
  *   usize remaining = ptr_span(arena->end, arena->cur);
  */
 static inline usize ptr_span(const void* to, const void* from) {
+    require_msg(to   != NULL, "ptr_span: 'to' is NULL");
+    require_msg(from != NULL, "ptr_span: 'from' is NULL");
     require_msg((const u8*)to >= (const u8*)from,
                 "ptr_span: 'to' must be >= 'from'");
     return (usize)((const u8*)to - (const u8*)from);
@@ -318,7 +366,7 @@ static inline usize ptr_span(const void* to, const void* from) {
 
 /* ── Bounds checking ─────────────────────────────────────────────────────────
  *
- * All functions return false on any NULL argument.
+ * Null-tolerant: all functions return false on any NULL argument.
  * ─────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -363,7 +411,9 @@ static inline bool ptr_range_in_range(const void*  p,
 
 /* ── Typed element access ────────────────────────────────────────────────────
  *
- * ptr_elem / ptr_elem_const : pointer to element i in a flat array
+ * Null-intolerant: NULL base is a contract violation. Indexing into a
+ * nonexistent array has no meaningful answer — this is a programmer error,
+ * not a case where NULL should propagate.
  *
  * The index * elem_size multiply is overflow-checked before use.
  * ─────────────────────────────────────────────────────────────────────────── */
@@ -373,7 +423,8 @@ static inline bool ptr_range_in_range(const void*  p,
  *
  * Equivalent to &((T*)base)[i] without requiring a typed pointer.
  *
- * @pre base != NULL
+ * @pre base      != NULL  (contract violation if NULL — indexing into a
+ *                          nonexistent array has no meaningful answer)
  * @pre elem_size > 0
  * @pre index * elem_size does not overflow usize
  *
@@ -390,6 +441,10 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
 
 /**
  * @brief Const variant of ptr_elem
+ *
+ * @pre base      != NULL  (contract violation if NULL)
+ * @pre elem_size > 0
+ * @pre index * elem_size does not overflow usize
  */
 static inline const void* ptr_elem_const(const void* base, usize index, usize elem_size) {
     require_msg(base      != NULL, "ptr_elem_const: base cannot be NULL");
@@ -399,7 +454,11 @@ static inline const void* ptr_elem_const(const void* base, usize index, usize el
     return ptr_offset_const(base, index * elem_size);
 }
 
-/* ── Null safety ─────────────────────────────────────────────────────────────*/
+/* ── Null safety ─────────────────────────────────────────────────────────────
+ *
+ * Null-tolerant utility functions — NULL is a valid input with a defined
+ * safe response. Use freely in code paths where NULL propagation is expected.
+ * ─────────────────────────────────────────────────────────────────────────── */
 
 /**
  * @brief Returns p if non-NULL, otherwise fallback
