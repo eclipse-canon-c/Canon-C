@@ -22,6 +22,7 @@ CANON_OPTION(isize)
  * - Not an infinite generator — iteration count is always pre-calculable
  * - [start, end) semantics — start inclusive, end exclusive (Python/C++ style)
  * - step > 0: ascending; step < 0: descending; step == 0: normalized to +1
+ * - step == ISIZE_MIN: rejected at construction (cannot be negated safely)
  * - Overflow-safe: uses checked_add_isize() to detect and saturate on overflow
  * - Empty ranges are valid and safe (e.g. range_make(5, 3, 1))
  *
@@ -55,6 +56,19 @@ CANON_OPTION(isize)
  * - range_make(5, 5, 1)   → (empty)
  * - range_make(5, 3, 1)   → (empty — start >= end with positive step)
  * - range_make(3, 5, -1)  → (empty — start <= end with negative step)
+ *
+ * ISIZE_MIN step constraint:
+ * ────────────────────────────────────────────────────────────────────────────
+ * range_make() rejects step == ISIZE_MIN via require_msg(). This is necessary
+ * because range_len() and other internal operations need to compute the
+ * absolute value of step using -step, which is undefined behavior in C when
+ * step == ISIZE_MIN (the result -ISIZE_MIN is not representable in isize).
+ *
+ * In practice this is not a real-world limitation — ISIZE_MIN as a step
+ * value would mean "decrement by the largest representable negative number
+ * each iteration," which produces at most one or two iterations before
+ * overflow regardless. The constraint catches the corner case at the
+ * construction site rather than producing UB inside range_len.
  *
  * Quick start:
  * ```c
@@ -96,12 +110,15 @@ CANON_OPTION(isize)
  * - end:     Exclusive bound (iteration stops when current reaches/crosses this)
  * - step:    Increment per step (positive = ascending, negative = descending)
  *
- * Invariants:
+ * Invariants (when constructed via range_make):
  * - step != 0 (normalized to +1 if 0 is provided at construction)
+ * - step != ISIZE_MIN (rejected at construction)
  * - If step > 0: empty when current >= end
  * - If step < 0: empty when current <= end
  *
  * Do not modify fields directly during iteration — use range_next() only.
+ * Constructing a range struct directly bypassing range_make() is undefined
+ * behavior; the invariants above must hold.
  */
 typedef struct {
     isize current; ///< Next value to be returned by range_next()
@@ -118,15 +135,19 @@ typedef struct {
  *
  * @param start Starting value (inclusive)
  * @param end   Exclusive end bound
- * @param step  Increment/decrement per step (0 normalized to +1)
+ * @param step  Increment/decrement per step (0 normalized to +1, ISIZE_MIN rejected)
  * @return Initialized range ready for iteration
  *
  * Behavior by step direction:
  * - step > 0: generates start, start+step, ... while current < end
  * - step < 0: generates start, start+step, ... while current > end
  * - step == 0: normalized to step = 1 (ascending by 1)
+ * - step == ISIZE_MIN: rejected via require_msg() — cannot be negated safely
+ *
+ * @pre step != ISIZE_MIN (checked via require_msg)
  *
  * @post result.step != 0
+ * @post result.step != ISIZE_MIN
  * @post Empty ranges are valid and safe — range_has_next() returns false immediately
  *
  * Performance:
@@ -134,6 +155,8 @@ typedef struct {
  * - Space: O(1)
  */
 static inline range range_make(isize start, isize end, isize step) {
+    require_msg(step != CANON_ISIZE_MIN,
+                "range_make: step cannot be ISIZE_MIN (would overflow on negation)");
     if (step == 0) step = 1;
     return (range){ .current = start, .end = end, .step = step };
 }
@@ -274,6 +297,12 @@ static inline bool range_is_valid(const range* r) {
  * (diff-1)/abs_step + 1 is at most ISIZE_MAX, which always fits in
  * usize without overflow. The result is exact.
  *
+ * Note on abs_step computation:
+ * The negation -r->step is safe here because range_make() rejects
+ * step == ISIZE_MIN at construction. Any range constructed through
+ * the public API has step in [ISIZE_MIN+1, ISIZE_MAX], for which
+ * -step is always representable.
+ *
  * Examples:
  * - range_len(&range_make(0, 10, 1))  → 10
  * - range_len(&range_make(0, 10, 2))  → 5
@@ -287,6 +316,7 @@ static inline bool range_is_valid(const range* r) {
 static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) return 0;
 
+    /* Safe: range_make() rejects step == ISIZE_MIN, so -step is representable */
     isize abs_step = r->step > 0 ? r->step : -r->step;
     isize diff     = r->step > 0 ? (r->end - r->current)
                                  : (r->current - r->end);
