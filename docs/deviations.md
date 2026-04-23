@@ -1,384 +1,295 @@
-# Canon-C Deviations
+# Deviations Record
 
-This document catalogs deliberate deviations from automatic verification
-and coverage targets. Each entry is a concrete, justified departure from
-"tool says valid" — recorded so that certification reviewers, downstream
-adopters, and future maintainers can trace the reasoning.
+## Overview
 
-Entries fall into three categories:
-
-1. **VERIFY-nnn** — Formal verification deviations (Frama-C WP goals
-   that require manual justification).
-2. **MCDC-nnn** — MC/DC coverage deviations (conditions that cannot be
-   exercised at runtime despite being reachable in the ACSL-proven
-   contract model).
-3. **MISRA-CFG-nnn** — MISRA C:2012 configuration deviations (project-
-   wide decisions that systematically affect how MISRA rules apply).
-
-Every entry documents: what is deviated, why it is deviated, what
-compensating evidence exists, and how a reviewer can verify the
-compensating evidence without re-running the full tool chain.
+This document records all deviations from full compliance in Canon-C's
+verification, coverage, and MISRA analysis. Each deviation has a unique
+ID, rationale, and mitigation strategy.
 
 ---
 
-## VERIFY-001 — checked.h: 2 manually discharged 64-bit overflow goals
+## VERIFY-001: Compiler Intrinsic Path Not Verified
 
-**Scope.** `core/primitives/checked.h`
-**Tool.** Frama-C 29.0 + WP, Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1
-**Goals.**
-- `typed_checked_add_overflow_ensures`
-- `typed_checked_add_u64_overflow_ensures`
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-001 |
+| **Date**       | 2026-04-17 |
+| **Scope**      | checked.h, bits.h |
+| **Category**   | Formal verification scope |
 
-**Status.** 1539 of 1541 goals discharged automatically (99.87%). The
-2 remaining goals are manually discharged.
+**Description**: When `__GNUC__` or `__clang__` is defined, checked.h
+uses `__builtin_*_overflow` intrinsics and bits.h uses
+`__builtin_popcountll`, `__builtin_clzll`, `__builtin_ctzll`, and
+`__builtin_bswap*`. These paths are not verified by Frama-C WP because
+WP has no semantics for compiler builtins. The `__FRAMAC__` preprocessor
+guard forces the fallback path during verification.
 
-**Nature of the deviation.** Both goals are ensures clauses on the
-overflow branch of 64-bit unsigned addition fallback paths. They
-assert that when `a + b` wraps around, the function returns `false`.
-The property holds mathematically — unsigned wraparound is well-defined
-in C99 §6.2.5¶9 — but WP's integer memory model requires the SMT
-solver to reason about modular arithmetic across the fallback code's
-comparison-after-addition pattern (`*result = a + b; return *result >= a;`).
-None of Alt-Ergo 2.6.3, Z3 4.15.2, or CVC5 1.2.1 close these two
-goals within the 120-second timeout.
+Note: compare.h and ptr.h have no compiler builtins — all code paths
+are verified directly.
 
-**Manual proof argument.** For unsigned 64-bit `a, b`:
+**Rationale**: The builtin path is semantically equivalent to the
+fallback path — both implement the same mathematical operation. GCC and
+Clang's builtins are extensively tested by compiler test suites and
+used in millions of production codebases. The fallback path is the one
+that needs verification because it contains hand-written arithmetic
+that could have subtle bugs.
 
-Let `S = a + b mod 2^64`. If `a + b` fits in u64 (no overflow), then
-`S = a + b >= a` (since `b >= 0`), so the function returns `true` with
-`*result = a + b`. If `a + b >= 2^64` (overflow), then `S = a + b - 2^64`.
-Because `b < 2^64`, we have `a + b - 2^64 < a`, so `S < a`, so the
-function returns `false`. The ensures clause on the overflow branch
-therefore holds by the definition of unsigned wraparound.
-
-**Compensating evidence.**
-- Exhaustive test: `test/core/primitives/checked_test.c` covers
-  boundary cases including `UINT64_MAX + 1`, `UINT64_MAX + UINT64_MAX`,
-  zero-boundary, and random sampling.
-- MC/DC coverage: 100% (64/64) on checked.h — every condition in the
-  fallback path is exercised with independence.
-- Fuzz testing: `test/fuzz/checked_fuzz.c` runs 4 hours nightly with
-  libFuzzer; no divergence between `checked_*` and `__builtin_*_overflow`
-  results to date.
-
-**How to verify.** Run the CI `frama-c` job; look for the
-`[wp] [Timeout]` lines naming the two goals above. Run the CI
-`coverage` job; verify `checked.h: 100.0% (64/64)` in the MC/DC
-summary table. Re-read the manual argument above against the fallback
-source at `core/primitives/checked.h:205-213` and `:300-308`.
+**Mitigation**: The fallback path is fully verified by WP. The builtin
+path is tested by the same test suite (100% MC/DC on both checked.h
+and bits.h) and validated by sanitizers (ASan, UBSan) in Debug builds.
+The CI coverage job uses `-DCANON_CHECKED_FORCE_FALLBACK` and
+`-DCANON_BITS_FORCE_FALLBACK` to measure the fallback path, keeping
+the coverage and verification evidence streams aligned.
 
 ---
 
-## VERIFY-002 — checked.h: MC/DC NULL-pointer branches
+## VERIFY-002: Manually Discharged Goals (checked.h)
 
-**Scope.** `core/primitives/checked.h`
-**Goals.** Structurally unreachable NULL-pointer branches in
-`CHECKED_ASSERT_RESULT(result)`.
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-002 |
+| **Date**       | 2026-04-17 |
+| **Scope**      | checked.h — `checked_add`, `checked_add_u64` |
+| **Category**   | Formal verification completeness |
 
-**Nature of the deviation.** Each `checked_*` function begins with
-`CHECKED_ASSERT_RESULT(result)`, which in debug builds expands to a
-runtime NULL check on the output pointer. Under the ACSL contract,
-every caller has already proven `\valid(result)` statically — the
-NULL branch is therefore structurally unreachable in any call site
-that passes WP verification.
+**Description**: Two proof obligations are not discharged by any
+automated prover:
+1. `typed_checked_add_overflow_ensures`
+2. `typed_checked_add_u64_overflow_ensures`
 
-**Resolution.** The coverage build defines `CANON_NO_REQUIRE`, which
-compiles `CHECKED_ASSERT_RESULT` to `((void)0)`. This removes the
-unreachable branches from the preprocessed source so that MC/DC
-measurement reflects real branches only. The same flag is passed to
-the frama-c job to keep WP and coverage evidence streams aligned.
+Both assert that 64-bit unsigned addition wraparound is detected
+correctly by the `*result >= a` check.
 
-**Compensating evidence.**
-- `test/core/primitives/contract_test.c` verifies that
-  `require_msg()` (and therefore `CHECKED_ASSERT_RESULT` under
-  `!NDEBUG`) actually fires when called with NULL.
-- The contract_test is excluded from the coverage job (`CANON_NO_REQUIRE`
-  disables it), but runs in every other CI job where assertions are live.
+**Rationale**: WP's integer memory model requires modular-arithmetic
+reasoning (`(a + b) mod 2^64`) that current SMT solvers cannot
+perform. The two goals are demonstrated triple-prover-resistant —
+Alt-Ergo 2.6.3, Z3 4.15.2, and CVC5 1.2.1 all time out at 120s. They
+are discharged by a manual proof recorded in docs/verification.md.
 
-**How to verify.** Check that `.github/workflows/ci.yml` defines
-`CANON_NO_REQUIRE` in both `coverage` and `frama-c` jobs. Run
-`contract_test` locally with assertions enabled; observe it fires.
-Review `CHECKED_ASSERT_RESULT` definition at `core/primitives/checked.h:141-155`.
+**Mitigation**: Manual proof by modular-arithmetic argument (see
+verification.md, "Manually discharged goals"). CI enforces that
+exactly these two goals time out and no others — any additional
+timeout is a regression.
 
 ---
 
-## VERIFY-003 — bits.h: Bitwise complement and SWAR ensures clauses
+## VERIFY-003: WP Timeout Goals (bits.h)
 
-**Scope.** `core/primitives/bits.h`
-**Tool.** Frama-C 29.0 + WP, Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1
-**Goals (4 of 15 in VERIFY-003/004 combined).**
-- `typed_bits_clear_ensures`
-- `typed_bits_insert_full_width_ensures_part2`
-- `typed_bits_insert_normal_ensures_part3`
-- `typed_bits_popcount_ensures`
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-003 |
+| **Date**       | 2026-04-17 |
+| **Scope**      | bits.h — 15 goals across 9 functions |
+| **Category**   | Formal verification completeness |
 
-**Nature of the deviation.** These four goals require WP's integer
-theory to reason across bitwise complement (`~`) or SWAR popcount
-magic constants (`0x5555...`, `0x3333...`, `0x0f0f...`). WP represents
-bitwise operators as uninterpreted functions by default; relating
-their results to integer-theory arithmetic (required by the ensures
-formula) needs specialized decision procedures that none of the three
-configured SMT provers handle in 120 seconds.
+**Description**: 15 of 761 proof obligations (2.0%) time out or return
+Unknown under WP with Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 at
+120-second timeout. All are WP model limitations on bitwise reasoning,
+not code defects. The unproved goals fall into five categories:
 
-**Manual proof argument.** All four properties are textbook. For
-example, `bits_popcount(x)` equals the number of set bits in x — a
-property that follows by induction over the SWAR sequence (see
-Hacker's Delight Chapter 5). Each step halves the bit-group width
-while preserving the total count. The final reduction to 8 bits
-followed by `(x * 0x0101...) >> 56` extracts the sum.
+1. **Bitwise complement** (3): `bits_clear`, `bits_insert` — WP
+   cannot connect C's `~x` operator to the XOR-based ACSL spec.
+2. **SWAR popcount** (1): `bits_popcount` — parallel bit-counting
+   with magic constants exceeds SMT bitvector reasoning.
+3. **Rotation** (4): `bits_rotl`, `bits_rotr` — RTE shift checks
+   and bitwise OR in spec.
+4. **Minimality** (4): `bits_next_power_of_two` — the
+   `result / 2 < value` property through bit-smearing.
+5. **Byte swap** (3): `bits_bswap16` signed overflow from u16→int
+   promotion, `bits_bswap32`/`bits_bswap64` multi-term OR specs.
 
-**Compensating evidence.**
-- 100% MC/DC (52/52) on bits.h, measured with
-  `-DCANON_BITS_FORCE_FALLBACK`.
-- Exhaustive test vectors for each function in
-  `test/core/primitives/bits_test.c` covering zero, all-ones, single-bit,
-  powers of two, and boundary values.
-- Cross-check: each fallback result is compared against the GCC builtin
-  (`__builtin_popcountll`, etc.) in the test harness.
+Note: Some goals may appear as `[Unknown]` instead of `[Timeout]`
+across runs — WP solver heuristics are nondeterministic. The CI
+enforcement counts both combined.
 
-**How to verify.** Review the four fallback implementations against
-standard references. MC/DC evidence in CI `coverage` artifact.
+Full goal list: see docs/verification.md, bits.h section.
 
----
+**Rationale**: These are fundamental limitations of WP's integer
+theory and current SMT solvers' bitwise reasoning capabilities, not
+weaknesses in the code. The triple-prover configuration confirms this
+is not a prover-strength issue — CVC5's bitvector reasoning was
+specifically expected to help here, yet it closes none of the 15
+goals.
 
-## VERIFY-004 — bits.h: Rotation, power-of-two, and byte-swap ensures
-
-**Scope.** `core/primitives/bits.h`
-**Tool.** Frama-C 29.0 + WP, Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1
-**Goals (11 of 15 in VERIFY-003/004 combined).**
-- `typed_bits_rotl_assert_rte_shift_2`
-- `typed_bits_rotl_nonzero_shift_ensures_part2`
-- `typed_bits_rotr_assert_rte_shift_2`
-- `typed_bits_rotr_nonzero_shift_ensures_part2`
-- `typed_bits_next_power_of_two_normal_ensures_part3`
-- `typed_bits_next_power_of_two_normal_ensures_2_part3`
-- `typed_bits_next_power_of_two_normal_ensures_3_part3`
-- `typed_bits_next_power_of_two_normal_ensures_4_part3`
-- `typed_bits_bswap16_assert_rte_signed_overflow`
-- `typed_bits_bswap32_ensures`
-- `typed_bits_bswap64_ensures`
-
-**Nature of the deviation.** Rotation goals combine a shift-count RTE
-check with a bitwise OR in the ensures clause. Next-power-of-two goals
-specify minimality through a bit-smearing algorithm. Byte-swap goals
-relate a sequence of shifts and masks to the reversed-byte value.
-All share the same root cause as VERIFY-003: WP's integer theory
-cannot bridge bitwise operations and arithmetic equality within the
-configured solver budgets.
-
-**Manual proof argument.** Each follows a textbook construction
-(Hacker's Delight Chapter 3 for rotation, Chapter 7 for power-of-two
-and byte-swap). The ACSL contracts carry the formula; the manual
-argument establishes that the C source implements that formula
-exactly.
-
-**Compensating evidence.** Same as VERIFY-003: 100% MC/DC on bits.h,
-exhaustive test vectors, cross-check against builtins.
+**Mitigation**: CI enforces exactly 15 unproved goals on the named
+goals. Any additional unproved goal is a regression and fails the
+build. All 18 functions have 100% MC/DC coverage (52/52 condition
+outcomes) and pass fuzzing.
 
 ---
 
-## VERIFY-005 — compare.h: Typed+Cast memory model required
+## VERIFY-004: Weakened Specs (bits.h — CLZ, CTZ, popcount)
 
-**Scope.** `core/primitives/compare.h`
-**Tool.** Frama-C 29.0 + WP, Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1
-**Goals.** 208 of 208 proved (100%) — this entry documents a
-**model configuration** deviation, not an unproved-goal deviation.
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-004 |
+| **Date**       | 2026-04-17 |
+| **Scope**      | bits.h — `bits_clz`, `bits_ctz`, `bits_popcount` |
+| **Category**   | Formal verification spec strength |
 
-**Nature of the deviation.** compare.h's 28 comparator functions take
-`const void*` parameters and cast them to typed pointers inside the
-function body (e.g. `const u32* pa = (const u32*)a;`). WP's default
-`Typed` memory model treats `void*` as `sint8*` (`char*`) and emits
-warnings — and in some cases refuses to prove memory-access RTE
-goals — when casting to `uint32*` or other incompatible pointer types.
+**Description**: Three functions have ACSL contracts weaker than
+the full functional specification:
 
-**Resolution.** The compare.h WP step runs with `-wp-model Typed+Cast`,
-which allows pointer casts between types of compatible size. This is
-sound for compare.h because: (1) every cast target type has the same
-size as the object the caller actually supplied (the caller contract
-is `p points to a valid T`), and (2) the function reads bytes in
-native alignment, not with unaligned accesses.
+- `bits_clz`: Spec proves range (0–63 for nonzero, 64 for zero)
+  but not the mathematical bound
+  `value >= 2^(63-result) && value < 2^(64-result)`.
+- `bits_ctz`: Spec proves range (0–63 for nonzero, 64 for zero)
+  but not `(value >> result) & 1 == 1`.
+- `bits_popcount`: Spec proves range (0–64) but not
+  `result == number of 1-bits in value`.
 
-**Soundness argument.** ISO C99 §6.3.2.3¶7 permits pointer conversions
-between object types provided the result is correctly aligned for the
-target type. Canon-C comparator callers are responsible for passing
-correctly-aligned pointers — this is an explicit precondition in every
-comparator's @pre clause. WP's Typed+Cast model exactly captures this
-discipline: casts are allowed but alignment is not assumed, so misuse
-would still generate a memory-access RTE at the call site.
+**Rationale**: The binary search CLZ/CTZ generates one sub-goal per
+possible return value (0–63), each requiring WP to trace the
+cascading mask-and-shift logic through 6 conditional branches. The
+SWAR popcount uses magic constants and multiplication that have no
+axiomatic representation in WP's theory.
 
-**Compensating evidence.**
-- 208/208 goals proved with Typed+Cast (no deviations beyond the model
-  choice itself).
-- 100% MC/DC (8/8) on compare.h.
-- Cross-check testing in `test/core/primitives/compare_test.c`.
-- No callers known to pass misaligned pointers in the Canon-C codebase;
-  slice.h, vec.h, and pool.h allocators all produce aligned storage.
-
-**How to verify.** The CI `frama-c` job logs show `[wp] Proved goals:
-208 / 208` on compare.h. Review the `-wp-model Typed+Cast` argument
-in `.github/workflows/ci.yml`. Read the alignment preconditions on
-each comparator's `@pre` clause in `core/primitives/compare.h`.
+**Mitigation**: The weak specs still prove absence of runtime errors
+and correct range bounds. Full functional correctness is verified by
+testing (100% MC/DC, 100% line coverage) and fuzzing. The `bits_ffs`
+and `bits_fls` functions inherit the same range-only specs.
 
 ---
 
-## VERIFY-006 — ptr.h: 10 manually discharged pointer/align/handler goals
+## VERIFY-005: WP Memory Model Override (compare.h)
 
-**Scope.** `core/primitives/ptr.h` (with `core/primitives/contract.h`
-contract handler annotations)
-**Tool.** Frama-C 29.0 + WP with `-wp-model Typed+Cast`, Alt-Ergo 2.6.3
-+ Z3 4.15.2 + CVC5 1.2.1
-**Status.** 1729 of 1739 goals discharged automatically (99.43%). The
-10 remaining goals are manually discharged.
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-005 |
+| **Date**       | 2026-04-18 |
+| **Scope**      | compare.h — all 28 comparator functions |
+| **Category**   | Formal verification configuration |
 
-**Nature of the deviation.** The 10 unproved goals are demonstrated
-**triple-prover-resistant**: no combination of Alt-Ergo 2.6.3,
-Z3 4.15.2, and CVC5 1.2.1 closes them within 120 seconds. This is a
-stronger certification statement than dual-prover resistance; the
-goals are genuinely limited by WP's encoding and integer theory, not
-by prover strength. They fall into four categories:
+**Description**: compare.h is verified with `-wp-model Typed+Cast`
+instead of WP's default `Typed` memory model. This is required because
+every comparator takes `const void*` parameters and casts them to typed
+pointers inside the function body (e.g. `*(const u32*)a`). With the
+default `Typed` model, WP treats `void*` as `char*` (sint8*) and all
+RTE mem_access goals become unprovable due to incompatible pointer cast
+warnings.
 
-### Category 1: Transitive checked.h overflow (2 goals)
+**Rationale**: `Typed+Cast` is a standard Frama-C WP model designed
+for exactly this use case — C generic interfaces that pass data through
+`void*`. The model is sound under the assumption that callers pass
+correctly-typed pointers, which is guaranteed by the comparator API
+contract (each comparator documents the expected pointer type). This
+is the same pattern used by `qsort`, `bsearch`, and every C standard
+library generic interface.
 
-- `typed_cast_checked_add_overflow_ensures`
-- `typed_cast_checked_add_u64_overflow_ensures`
-
-These are the same 2 goals documented in VERIFY-001, re-emitted in the
-ptr.h proof run because ptr.h includes checked.h. The manual argument
-from VERIFY-001 applies verbatim; no new analysis is needed here.
-
-### Category 2: Align formula ensures clauses (3 goals)
-
-- `typed_cast_align_up_ensures`
-- `typed_cast_align_down_ensures`
-- `typed_cast_align_padding_ensures`
-
-The ensures clauses specify the exact formula: for example,
-`align_up(n, a) == ((n + a - 1) & ~(a - 1))`. WP's integer theory
-cannot reason across the bitwise AND with complement (`~(a - 1)`)
-relative to arithmetic multiples-of-a equality. The manual argument:
-when `a` is a power of two, `~(a - 1)` has exactly the bits at
-positions >= log2(a) set, so ANDing with it clears the low log2(a)
-bits — which is the arithmetic definition of rounding down to a
-multiple of a. Hacker's Delight §3-1 records the construction
-formally.
-
-### Category 3: ptr_align_* call-chain preconditions (3 goals)
-
-- `typed_cast_ptr_align_up_call_align_up_requires_3`
-- `typed_cast_ptr_align_padding_call_align_padding_requires_3`
-- `typed_cast_ptr_align_padding_nonnull_ensures_part2`
-
-These arise when ptr.h call sites reconstruct align_up / align_padding
-preconditions through pointer-to-integer casts. Requires clause 3 on
-align_up is `n <= CANON_USIZE_MAX - (align - 1)`, and the caller has
-cast `(uintptr_t)p` to `usize`. WP under Typed+Cast cannot prove that
-the uintptr_t round-trip preserves the bound — a model-limitation
-consequence of allowing pointer casts at all. The manual argument:
-ISO C99 §6.3.2.3 guarantees that `(uintptr_t)p` produces a value
-representable in usize (since `sizeof(uintptr_t) == sizeof(usize)` on
-every platform Canon-C supports), and the bound follows from the
-flat-address-space assumption documented in ptr.h's header comment.
-
-The `ptr_align_padding_nonnull_ensures_part2` goal is a transitive
-consequence: it asks that the non-null return value is < align, which
-again requires reasoning across the pointer-integer round-trip.
-
-### Category 4: Contract handler non-termination (2 goals)
-
-- `typed_cast_contract_default_handler_loop_invariant_established`
-- `typed_cast_contract_default_handler_terminates`
-
-Under the `__FRAMAC__` preprocessor guard, `contract.h` replaces the
-body of `contract_default_handler` with `while(1) {}` — the standard
-ACSL idiom for a non-returning function. The ACSL contract declares
-`ensures \false` and `exits \false`. WP correctly recognizes that the
-function does not terminate (the `terminates` goal is unprovable, by
-construction) and cannot establish a loop invariant at entry to a
-loop that executes zero or more iterations toward `\false` (the
-`loop_invariant_established` goal is also unprovable, by construction).
-
-This is **not a code defect**. The two unproved goals are the
-mathematical statement of the handler's non-returning contract. Any
-caller that invokes the handler relies on this exact non-termination
-semantics (the handler is expected to abort, panic, or enter an
-infinite diagnostic loop). The ACSL contract is intentional and
-correct.
-
-**Compensating evidence.**
-- 100% MC/DC (42/42) on ptr.h.
-- Exhaustive alignment test vectors in `test/core/primitives/ptr_test.c`
-  covering all `align_*` and `ptr_align_*` functions with representative
-  alignment values (1, 2, 4, 8, 16, 4096) and boundary inputs.
-- Call-chain test coverage: every ptr.h function that transitively
-  calls align_up, align_padding, or checked_* is exercised in tests.
-- Contract handler behavior is tested by the `contract_test` suite
-  under `!NDEBUG`; under `__FRAMAC__` the `while(1)` body is unreachable
-  at runtime (testing happens in non-Frama-C builds).
-
-**How to verify.**
-- CI `frama-c` job: look for `[wp] Proved goals: 1729 / 1739` and the
-  10 `[Timeout]` lines naming the goals above.
-- CI `coverage` job: verify `ptr.h: 100.0% (42/42)` in the MC/DC
-  summary.
-- Read the manual proof arguments above against the source at:
-  - `core/primitives/ptr.h:322-408` (align_up, align_down, align_padding)
-  - `core/primitives/ptr.h:445-585` (ptr_align_*)
-  - `core/primitives/contract.h` (contract_default_handler, under
-    `__FRAMAC__` guard)
+**Mitigation**: compare.h achieves 208/208 proved goals (100%) with
+`Typed+Cast`. The flag is applied only to compare.h and ptr.h (see
+VERIFY-006) — checked.h and bits.h use the default `Typed` model.
+The difference is documented in the CI YAML and in this deviations
+record. All 28 comparators have 100% MC/DC coverage (8/8 condition
+outcomes) and pass fuzzing.
 
 ---
 
-## MCDC-001 — contract.h: Unreachable assertion branches
+## VERIFY-006: Manually Discharged Goals (ptr.h)
 
-**Scope.** `core/primitives/contract.h`
-**Status.** 0 of 2 conditions hit (0% MC/DC) in the coverage build.
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-006 |
+| **Date**       | 2026-04-23 |
+| **Scope**      | ptr.h — 10 goals across 4 categories |
+| **Category**   | Formal verification completeness |
 
-**Nature of the deviation.** contract.h contains the NULL-check branch
-of `require_msg()`. Under `CANON_NO_REQUIRE` (which the coverage build
-defines), the macro expands to `((void)0)` and the branch is removed
-from the preprocessed source entirely. gcov still reports the 2
-conditions as "missed" because the source file contains them, even
-though the preprocessed translation unit does not.
+**Description**: 10 of 1739 proof obligations (0.57%) are not
+discharged by any prover in the triple-prover configuration (Alt-Ergo
+2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a 120-second timeout and
+`-wp-model Typed+Cast`. All 10 are triple-prover-resistant. The goals
+fall into four categories:
 
-**Resolution.** This is a cosmetic artifact of gcov's source-file
-view vs preprocessed-translation-unit view. The same code is exercised
-100% by `contract_test` in other CI jobs (where `CANON_NO_REQUIRE` is
-not defined). No action required beyond documenting it here.
+1. **Transitive checked.h overflow** (2): `typed_cast_checked_add_overflow_ensures`,
+   `typed_cast_checked_add_u64_overflow_ensures` — same goals as
+   VERIFY-002, re-emitted in the ptr.h proof run because ptr.h includes
+   checked.h.
+2. **Align formula ensures** (3): `typed_cast_align_up_ensures`,
+   `typed_cast_align_down_ensures`, `typed_cast_align_padding_ensures`
+   — WP integer theory cannot bridge bitwise AND with complement
+   (`~(a - 1)`) and arithmetic multiples-of-a equality.
+3. **ptr_align_* call-chain preconditions** (3):
+   `typed_cast_ptr_align_up_call_align_up_requires_3`,
+   `typed_cast_ptr_align_padding_call_align_padding_requires_3`,
+   `typed_cast_ptr_align_padding_nonnull_ensures_part2` — call sites
+   reconstruct `align_up` / `align_padding` preconditions through
+   `(uintptr_t)p` casts; WP under Typed+Cast cannot prove the
+   uintptr_t round-trip preserves integer bounds.
+4. **Contract handler non-termination** (2):
+   `typed_cast_contract_default_handler_loop_invariant_established`,
+   `typed_cast_contract_default_handler_terminates` — under `__FRAMAC__`,
+   `contract.h` replaces the handler body with `while(1) {}` carrying
+   `ensures \false` + `exits \false`. These goals are intended-unprovable:
+   they are the mathematical statement of the handler's non-returning
+   contract.
 
-**How to verify.** Compare `contract.h` coverage in CI `coverage`
-artifact against `contract_test` execution in the `build` job.
+Full goal list and per-category manual proof arguments: see
+docs/verification.md, ptr.h section.
+
+**Rationale**: Categories 1–3 are WP integer-theory and memory-model
+limitations — the same class of limitation as VERIFY-002 (modular
+arithmetic) and VERIFY-003 (bitwise/arithmetic bridging). Category 4
+is the deliberate ACSL idiom for non-returning functions; the
+"unproved" status is the intended expression of the contract. The
+triple-prover configuration strengthens the evidence: CVC5's bitvector
+and modular-arithmetic reasoning was specifically expected to help on
+categories 1–3, yet closes none of them.
+
+**Mitigation**: CI enforces exactly 10 unproved goals with the named
+goal list. Any additional unproved goal or missing expected goal is a
+regression and fails the build. ptr.h achieves 100% MC/DC coverage
+(42/42 condition outcomes). Exhaustive alignment test vectors in
+`test/core/primitives/ptr_test.c` cover all `align_*` and `ptr_align_*`
+functions with representative alignments (1, 2, 4, 8, 16, 4096) and
+boundary inputs. Contract handler behavior is tested by `contract_test`
+under `!NDEBUG`.
 
 ---
 
-## MISRA-CFG-001 — Cppcheck MISRA addon scope
+## MCDC-001: Coverage Flags Methodology
 
-**Scope.** `.github/workflows/ci.yml`, `misra` job
-**Status.** Advisory reporting only.
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-001 |
+| **Date**       | 2026-04-14 |
+| **Scope**      | Coverage CI job |
+| **Category**   | Coverage measurement methodology |
 
-**Nature of the deviation.** The CI `misra` job uses Cppcheck's MISRA
-C:2012 addon, which covers approximately 60-70% of MISRA rules. The
-job is configured as advisory (does not fail the build) because:
+**Description**: The coverage CI job uses three preprocessor flags
+that change the code under measurement:
+- `-DCANON_CHECKED_FORCE_FALLBACK`: Forces checked.h fallback path
+- `-DCANON_BITS_FORCE_FALLBACK`: Forces bits.h fallback path
+- `-DCANON_NO_REQUIRE`: Removes `require_msg()` NULL checks
 
-1. Qualified MISRA compliance requires a qualified tool (Polyspace,
-   LDRA, PC-lint, Parasoft C/C++test). Cppcheck's addon is not
-   qualified for certification.
-2. Macro-templated implementation headers (e.g. `hashmap_impl.h`,
-   `deque_impl.h`) emit `misra-config` errors because Cppcheck cannot
-   resolve macro-instantiated type names without instantiation
-   context. These are tool limitations, not code defects.
+These flags reduce the branch/MC/DC denominator by removing
+structurally unreachable branches.
 
-**Resolution plan.** When Canon-C moves toward formal certification,
-the MISRA job will be replaced with a qualified tool run. The
-deviations catalog will be restructured at that point to track
-category-by-category compliance (Mandatory / Required / Advisory)
-against the qualified tool's output.
+**Rationale**: The flags align the coverage measurement with the
+formal verification scope. WP proves the fallback path; coverage
+measures the fallback path.
 
-**How to verify.** Review the `misra` job configuration in
-`.github/workflows/ci.yml`. Check the suppressions list against the
-`*_impl.h` pattern.
+**Mitigation**: The flags are documented in the CI YAML, in
+traceability.md, and here. The `contract_test` binary is excluded
+from the coverage build but runs in all other CI jobs.
 
 ---
 
-*Last updated: 2026-04-23, CI #795 (commit debb202).*
-*Triple-prover baseline: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1.*
-*Combined proof statistics: 4222/4249 automatic (99.36%), 27 documented deviations.*
+## MISRA-CFG-001: Cppcheck MISRA Configuration Limitation
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-CFG-001 |
+| **Date**       | 2026-04-07 |
+| **Scope**      | MISRA CI job — `*_impl.h` headers |
+| **Category**   | MISRA analysis tool limitation |
+
+**Description**: Cppcheck's MISRA addon emits `[misra-config]` errors
+on macro-templated implementation headers because it cannot resolve
+macro-instantiated type names without an instantiation context.
+
+**Rationale**: This is a tool limitation, not a code defect. Qualified
+MISRA checkers handle this correctly.
+
+**Mitigation**: The `--suppress=misra-config:*_impl.h` flag suppresses
+these false positives. The MISRA CI job is advisory — it does not fail
+the build.
