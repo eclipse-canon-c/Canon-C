@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-04-18                                                   |
+| **Date**           | 2026-04-23                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 2f33389                                                      |
-| **CI run**         | Canon-C CI #761                                              |
+| **Commit**         | debb202                                                      |
+| **CI run**         | Canon-C CI #795                                              |
 | **CI job**         | coverage                                                     |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -60,10 +60,10 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.6%      | 2109       | 2207       |
+| Lines      | 96.1%      | 2123       | 2209       |
 | Functions  | 99.6%      | 499        | 501        |
-| Branches   | 84.2%      | 1364       | 1620       |
-| MC/DC      | 83.3%      | 1325       | 1590       |
+| Branches   | 84.3%      | 1365       | 1619       |
+| MC/DC      | 83.5%      | 1327       | 1590       |
 
 ### Methodology changes since baseline
 
@@ -83,9 +83,27 @@ from the coverage build for the same reason.
 
 Headers at 100% MC/DC:
 
-`bits.h`, `compare.h`, `error.h`, `str_view.h`, `time.h`,
-`map_impl.h`, `filter_impl.h`, `find_impl.h`, `reverse_impl.h`,
-`search_impl.h`, `any_all_impl.h`, `unique_impl.h`, `checked.h`
+`bits.h`, `checked.h`, `compare.h`, `ptr.h`, `error.h`, `str_view.h`,
+`time.h`, `map_impl.h`, `filter_impl.h`, `find_impl.h`, `reverse_impl.h`,
+`search_impl.h`, `any_all_impl.h`, `unique_impl.h`
+
+## Formal verification status
+
+Per-header formal verification state as of CI #795 (see
+`docs/verification.md` for full per-header detail):
+
+| Header     | Functions | Proof obligations | Proved (auto) | Unproved | Deviation    |
+|------------|-----------|-------------------|---------------|----------|--------------|
+| checked.h  | 18        | 1541              | 1539 (99.87%) | 2        | VERIFY-002   |
+| bits.h     | 18        |  761              |  746 (98.03%) | 15       | VERIFY-003/4 |
+| compare.h  | 28        |  208              |  208 (100%)   | 0        | VERIFY-005   |
+| ptr.h      | 26        | 1739              | 1729 (99.43%) | 10       | VERIFY-006   |
+| **Total**  | **90**    | **4249**          | **4222 (99.36%)** | **27** |            |
+
+**Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
+`-wp-timeout 120`). All 27 unproved goals are demonstrated
+triple-prover-resistant and carry written manual-proof arguments in
+`docs/deviations.md`.
 
 ### History
 
@@ -97,5 +115,6 @@ Headers at 100% MC/DC:
 | 2026-04-17 | 972eb6c | #743   | v1.3.0  | 95.5%  | 99.6%     | 84.0%    | 83.1%  | checked_mul_isize refactor; checked.h → 100% MC/DC; WP artifact upload  |
 | 2026-04-17 | 7efd1c7 | #752   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | bits.h ACSL contracts; WP 746/761; CANON_BITS_FORCE_FALLBACK added       |
 | 2026-04-18 | 2f33389 | #761   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | compare.h ACSL contracts; WP 208/208 (100%); Typed+Cast model            |
+| 2026-04-23 | debb202 | #795   | v1.3.0  | 96.1%  | 99.6%     | 84.3%    | 83.5%  | ptr.h ACSL contracts; WP 1729/1739; triple-prover with CVC5 1.2.1        |
 
 ---
