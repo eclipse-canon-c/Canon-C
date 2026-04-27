@@ -11,9 +11,9 @@ Combined verification status across all annotated headers:
 | Metric               | Value                                          |
 |----------------------|-------------------------------------------------|
 | **Headers verified** | 4 (checked.h, bits.h, compare.h, ptr.h)        |
-| **Functions**        | 90 annotated and verified                      |
-| **Total obligations**| 4249                                            |
-| **Proved automatic** | 4222 (99.36%)                                   |
+| **Functions**        | 102 annotated and verified                     |
+| **Total obligations**| 4463                                            |
+| **Proved automatic** | 4436 (99.40%)                                   |
 | **Unproved**         | 27 (all documented, see per-header sections)    |
 | **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)|
 
@@ -26,18 +26,37 @@ Combined verification status across all annotated headers:
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified                                        |
-| **Baseline commit**    | debb202 (Canon-C CI #795)                       |
-| **Functions**          | 18 of 18 annotated and proved                  |
-| **Proof obligations**  | 1539 / 1541 discharged automatically            |
+| **Baseline commit**    | c3df659 (Canon-C CI #804)                       |
+| **Functions**          | 30 of 30 annotated and proved                  |
+| **Proof obligations**  | 1753 / 1755 discharged automatically            |
 | **Manually discharged**| 2 (see below)                                   |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120`         |
-| **CI enforcement**     | Yes — any drift from expected results fails CI  |
-| **MC/DC coverage**     | 100% (64/64 condition outcomes)                 |
-| **Line coverage**      | 100% (81/81)                                    |
-| **Function coverage**  | 100% (18/18)                                    |
+| **CI enforcement**     | Yes — exactly 2 named timeouts allowed          |
+| **MC/DC coverage**     | 100% (96/96 condition outcomes)                 |
+| **Line coverage**      | 100% (131/131)                                  |
+| **Function coverage**  | 100% (30/30)                                    |
 | **CI artifact**        | `wp-proof-checked` (full per-goal breakdown)    |
+
+### Function inventory
+
+The 30 functions split into two groups by verification approach:
+
+**Overflow-detecting arithmetic (18 functions):** `checked_add`,
+`checked_add_u8/u16/u32/u64`, `checked_sub`, `checked_sub_u8/u16/u32/u64`,
+`checked_mul`, `checked_mul_u8/u16/u32/u64`, `checked_add_isize`,
+`checked_sub_isize`, `checked_mul_isize`. These functions use compiler
+builtins (`__builtin_*_overflow`) on GCC/Clang with portable fallback
+paths for verification under `__FRAMAC__` (see VERIFY-001).
+
+**UB-detecting division and modulo (12 functions):** `checked_div`,
+`checked_div_u8/u16/u32/u64`, `checked_div_isize`, `checked_mod`,
+`checked_mod_u8/u16/u32/u64`, `checked_mod_isize`. These functions
+have no compiler builtin equivalent — `__builtin_div_overflow` does
+not exist. They are implemented directly in C under all build
+configurations and verified directly without the `__FRAMAC__`
+workaround. The verified code is the executed code.
 
 ### What is proved
 
@@ -46,6 +65,15 @@ Combined verification status across all annotated headers:
   consistent with the preconditions. Behaviors are marked `complete`
   and `disjoint`, ensuring the specification is exhaustive and
   non-overlapping.
+
+  For overflow-detecting functions, behaviors are
+  `no_overflow` / `overflow` (with an additional `zero` behavior on
+  multiplication for `a == 0 || b == 0`).
+
+  For division and modulo, behaviors are `ok` / `div_by_zero` for
+  unsigned variants, and `ok` / `div_by_zero` / `overflow` for the
+  signed isize variants (where `overflow` captures the
+  `ISIZE_MIN / -1` and `ISIZE_MIN % -1` UB cases).
 
 - **Absence of runtime errors** (`-wp-rte`): WP proves that no
   execution of any function can trigger:
@@ -60,14 +88,30 @@ Combined verification status across all annotated headers:
 
 ### Prover breakdown
 
-| Prover         | Goals discharged | Typical time      |
+| Category       | Goals discharged | Typical time      |
 |----------------|------------------|--------------------|
-| Qed (internal) | 1413             | 1ms–10ms          |
-| Alt-Ergo 2.6.3 | 76               | 16ms–47ms         |
-| CVC5 1.2.1     | 3                | 79ms–209ms        |
-| Z3 4.15.2      | 11               | 20ms–67ms         |
+| Terminating    | 30               | (structural)      |
+| Unreachable    | 30               | (structural)      |
+| Qed (internal) | 1587             | 1ms–10ms          |
+| Alt-Ergo 2.6.3 | 92               | 14ms–47ms         |
+| CVC5 1.2.1     | 3                | 79ms–268ms        |
+| Z3 4.15.2      | 11               | 18ms–72ms         |
 | Timeout        | 2                | >120s (see below) |
-| **Total**      | **1539 / 1541**  |                    |
+| **Total**      | **1753 / 1755**  |                    |
+
+`Terminating` and `Unreachable` are WP's structural categories for
+goals that are discharged without invoking an SMT solver — termination
+proofs and unreachable-by-construction proof obligations. They count
+toward the proved total alongside the prover-discharged goals.
+
+The division and modulo functions added 214 new proof obligations
+over the previous baseline (1541 → 1755). All 214 were discharged
+automatically — most by Qed (`+174`) plus contributions from Alt-Ergo
+and the structural categories. Z3 and CVC5 were not invoked on any
+new goal, confirming that the div/mod contracts require no nonlinear
+or modular reasoning. The two manually-discharged goals are unchanged
+from the previous baseline (both belong to the original add-overflow
+functions).
 
 ### Manually discharged goals
 
@@ -128,7 +172,7 @@ frama-c -wp -wp-rte \
   core/primitives/checked.h
 ```
 
-Expected output: `Proved goals: 1539 / 1541` with exactly 2 timeouts.
+Expected output: `Proved goals: 1753 / 1755` with exactly 2 timeouts.
 
 ---
 
@@ -482,9 +526,9 @@ different class of goal well:
   division-based overflow checks in `checked_mul_isize`) and on goals
   involving arrays and quantifiers.
 - **CVC5 1.2.1** — contributes additional proofs on goals where
-  Alt-Ergo and Z3 time out. Observed in CI #795: 3 goals on checked.h
-  and 3 goals on ptr.h discharged by CVC5 that neither Alt-Ergo nor
-  Z3 could close.
+  Alt-Ergo and Z3 time out. Observed contributions: 3 goals on
+  checked.h and 3 goals on ptr.h discharged by CVC5 that neither
+  Alt-Ergo nor Z3 could close.
 
 The practical consequence: **every remaining unproved goal (2 on
 checked.h, 15 on bits.h, 10 on ptr.h) is demonstrated triple-prover-
@@ -509,15 +553,15 @@ the complete installation and registration procedure.
 
 ### core/primitives/ (current)
 
-| Header       | Status          | Proved    | Notes                             |
-|--------------|-----------------|-----------|-----------------------------------|
-| checked.h    | ✅ Verified      | 1539/1541 | 2 manual discharges               |
-| bits.h       | ✅ Verified      | 746/761   | 15 documented timeouts            |
-| compare.h    | ✅ Fully verified| 208/208   | 100% automatic, 0 timeouts        |
-| ptr.h        | ✅ Verified      | 1729/1739 | 10 documented timeouts (VERIFY-006)|
-| types.h      | N/A             |           | Type definitions only             |
-| limits.h     | N/A             |           | Constant definitions only         |
-| contract.h   | ✅ Annotated     |           | Handler contract used by ptr.h    |
+| Header       | Status           | Proved    | Notes                              |
+|--------------|------------------|-----------|------------------------------------|
+| checked.h    | ✅ Verified       | 1753/1755 | 2 manual discharges                |
+| bits.h       | ✅ Verified       | 746/761   | 15 documented timeouts             |
+| compare.h    | ✅ Fully verified | 208/208   | 100% automatic, 0 timeouts         |
+| ptr.h        | ✅ Verified       | 1729/1739 | 10 documented timeouts (VERIFY-006)|
+| types.h      | N/A              |           | Type definitions only              |
+| limits.h     | N/A              |           | Constant definitions only          |
+| contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h     |
 
 ### core/ (next)
 
