@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-04-23                                                   |
+| **Date**           | 2026-04-27                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | debb202                                                      |
-| **CI run**         | Canon-C CI #795                                              |
+| **Commit**         | c3df659                                                      |
+| **CI run**         | Canon-C CI #804                                              |
 | **CI job**         | coverage                                                     |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -60,10 +60,10 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 96.1%      | 2123       | 2209       |
-| Functions  | 99.6%      | 499        | 501        |
-| Branches   | 84.3%      | 1365       | 1619       |
-| MC/DC      | 83.5%      | 1327       | 1590       |
+| Lines      | 95.7%      | 2159       | 2257       |
+| Functions  | 99.6%      | 511        | 513        |
+| Branches   | 84.6%      | 1398       | 1652       |
+| MC/DC      | 83.8%      | 1359       | 1622       |
 
 ### Methodology changes since baseline
 
@@ -87,23 +87,39 @@ Headers at 100% MC/DC:
 `time.h`, `map_impl.h`, `filter_impl.h`, `find_impl.h`, `reverse_impl.h`,
 `search_impl.h`, `any_all_impl.h`, `unique_impl.h`
 
+The `checked.h` 100% MC/DC result holds at the new 96/96 condition-outcome
+denominator (up from 64/64) following the addition of 12 division and
+modulo functions. Each new function adds exactly one zero-check branch
+plus, for the signed `_isize` variants, an additional `&&` short-circuit
+pair for the `ISIZE_MIN / -1` overflow guard. All new conditions are
+exercised by the dedicated `checked_div_*_op`, `checked_mod_*_op`,
+`checked_div_isize_mcdc`, and `checked_mod_isize_mcdc` test groups in
+`test/core/primitives/checked_test.c`.
+
 ## Formal verification status
 
-Per-header formal verification state as of CI #795 (see
-`docs/verification.md` for full per-header detail):
+Per-header formal verification state (see `docs/verification.md` for
+full per-header detail):
 
 | Header     | Functions | Proof obligations | Proved (auto) | Unproved | Deviation    |
 |------------|-----------|-------------------|---------------|----------|--------------|
-| checked.h  | 18        | 1541              | 1539 (99.87%) | 2        | VERIFY-002   |
+| checked.h  | 30        | 1755              | 1753 (99.89%) | 2        | VERIFY-002   |
 | bits.h     | 18        |  761              |  746 (98.03%) | 15       | VERIFY-003/4 |
 | compare.h  | 28        |  208              |  208 (100%)   | 0        | VERIFY-005   |
 | ptr.h      | 26        | 1739              | 1729 (99.43%) | 10       | VERIFY-006   |
-| **Total**  | **90**    | **4249**          | **4222 (99.36%)** | **27** |            |
+| **Total**  | **102**   | **4463**          | **4436 (99.40%)** | **27** |            |
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
 `-wp-timeout 120`). All 27 unproved goals are demonstrated
 triple-prover-resistant and carry written manual-proof arguments in
 `docs/deviations.md`.
+
+The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
+the division and modulo functions were added. All 214 new obligations
+were discharged automatically — most by Qed, with smaller contributions
+from Alt-Ergo and from WP's structural categories (Terminating /
+Unreachable). The two manually-discharged goals are unchanged from
+the previous baseline.
 
 ### History
 
@@ -116,5 +132,6 @@ triple-prover-resistant and carry written manual-proof arguments in
 | 2026-04-17 | 7efd1c7 | #752   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | bits.h ACSL contracts; WP 746/761; CANON_BITS_FORCE_FALLBACK added       |
 | 2026-04-18 | 2f33389 | #761   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | compare.h ACSL contracts; WP 208/208 (100%); Typed+Cast model            |
 | 2026-04-23 | debb202 | #795   | v1.3.0  | 96.1%  | 99.6%     | 84.3%    | 83.5%  | ptr.h ACSL contracts; WP 1729/1739; triple-prover with CVC5 1.2.1        |
+| 2026-04-27 | c3df659 | #804   | v1.3.0  | 95.7%  | 99.6%     | 84.6%    | 83.8%  | checked.h div/mod added (12 functions); WP 1753/1755; 100% MC/DC held    |
 
 ---
