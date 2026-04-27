@@ -13,26 +13,37 @@ ID, rationale, and mitigation strategy.
 | Field          | Value |
 |----------------|-------|
 | **ID**         | VERIFY-001 |
-| **Date**       | 2026-04-17 |
-| **Scope**      | checked.h, bits.h |
+| **Date**       | 2026-04-17 (revised on div/mod addition) |
+| **Scope**      | checked.h (add/sub/mul only), bits.h |
 | **Category**   | Formal verification scope |
 
-**Description**: When `__GNUC__` or `__clang__` is defined, checked.h
-uses `__builtin_*_overflow` intrinsics and bits.h uses
+**Description**: When `__GNUC__` or `__clang__` is defined, the
+overflow-detecting arithmetic functions in checked.h use
+`__builtin_*_overflow` intrinsics, and bits.h uses
 `__builtin_popcountll`, `__builtin_clzll`, `__builtin_ctzll`, and
 `__builtin_bswap*`. These paths are not verified by Frama-C WP because
 WP has no semantics for compiler builtins. The `__FRAMAC__` preprocessor
 guard forces the fallback path during verification.
 
-Note: compare.h and ptr.h have no compiler builtins — all code paths
+**Scope clarification (added when div/mod functions were introduced):**
+This deviation applies only to the addition, subtraction, and
+multiplication functions in checked.h. The division and modulo
+functions (`checked_div`, `checked_div_u8/u16/u32/u64`,
+`checked_div_isize`, `checked_mod`, `checked_mod_u8/u16/u32/u64`,
+`checked_mod_isize`) have no compiler builtin equivalent —
+`__builtin_div_overflow` does not exist in any compiler — and are
+implemented directly in C under all build configurations. The verified
+code is the executed code for these functions; no `__FRAMAC__` workaround
+is needed. Likewise, compare.h and ptr.h have no compiler builtins and
 are verified directly.
 
-**Rationale**: The builtin path is semantically equivalent to the
-fallback path — both implement the same mathematical operation. GCC and
-Clang's builtins are extensively tested by compiler test suites and
-used in millions of production codebases. The fallback path is the one
-that needs verification because it contains hand-written arithmetic
-that could have subtle bugs.
+**Rationale**: For functions where this deviation does apply, the
+builtin path is semantically equivalent to the fallback path — both
+implement the same mathematical operation. GCC and Clang's builtins
+are extensively tested by compiler test suites and used in millions
+of production codebases. The fallback path is the one that needs
+verification because it contains hand-written arithmetic that could
+have subtle bugs.
 
 **Mitigation**: The fallback path is fully verified by WP. The builtin
 path is tested by the same test suite (100% MC/DC on both checked.h
@@ -69,7 +80,10 @@ are discharged by a manual proof recorded in docs/verification.md.
 **Mitigation**: Manual proof by modular-arithmetic argument (see
 verification.md, "Manually discharged goals"). CI enforces that
 exactly these two goals time out and no others — any additional
-timeout is a regression.
+timeout is a regression. This invariant continues to hold after the
+addition of the division and modulo functions: the new functions
+introduced 214 proof obligations, all auto-discharged, with no new
+timeouts.
 
 ---
 
@@ -266,7 +280,11 @@ structurally unreachable branches.
 
 **Rationale**: The flags align the coverage measurement with the
 formal verification scope. WP proves the fallback path; coverage
-measures the fallback path.
+measures the fallback path. CANON_CHECKED_FORCE_FALLBACK has no effect
+on the new checked.h division and modulo functions because those
+functions have no builtin path to suppress — they are always-direct
+implementations. The flag remains active for the add/sub/mul
+functions where the builtin/fallback distinction still applies.
 
 **Mitigation**: The flags are documented in the CI YAML, in
 traceability.md, and here. The `contract_test` binary is excluded
