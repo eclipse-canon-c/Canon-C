@@ -14,7 +14,10 @@
  *   checked_add  / checked_add_u8  / checked_add_u16  / checked_add_u32  / checked_add_u64
  *   checked_sub  / checked_sub_u8  / checked_sub_u16  / checked_sub_u32  / checked_sub_u64
  *   checked_mul  / checked_mul_u8  / checked_mul_u16  / checked_mul_u32  / checked_mul_u64
+ *   checked_div  / checked_div_u8  / checked_div_u16  / checked_div_u32  / checked_div_u64
+ *   checked_mod  / checked_mod_u8  / checked_mod_u16  / checked_mod_u32  / checked_mod_u64
  *   checked_add_isize / checked_sub_isize / checked_mul_isize
+ *   checked_div_isize / checked_mod_isize
  *   checked_min  / checked_max     / checked_clamp
  *
  * MC/DC coverage note
@@ -24,6 +27,11 @@
  *   __builtin_*_overflow. The fallback branches in checked_mul_isize contain
  *   short-circuit conditions that need near-miss vs overflow pairs to reach
  *   full MC/DC — see checked_mul_isize_quadrants_op below.
+ *
+ *   Division and modulo have no compiler builtin equivalent, so their code
+ *   paths are the same in all builds — CANON_CHECKED_FORCE_FALLBACK has no
+ *   effect on them. The div/mod tests below exercise the full MC/DC pairs
+ *   (zero/non-zero denominator; for signed: ISIZE_MIN/-1 vs near-misses).
  *
  * Portability note
  * ───────────────────────────────────────────────────────────────────────────
@@ -381,12 +389,6 @@ TEST(checked_sub_isize_op) {
 
 /* =========================================================================
  * checked_sub_isize — MC/DC short-circuit coverage for fallback path
- *
- * The fallback in checked_sub_isize has two short-circuit conditions:
- *   if (b > 0 && a < (CANON_ISIZE_MIN + b)) return false;
- *   if (b < 0 && a > (CANON_ISIZE_MAX + b)) return false;
- *
- * Each needs near-miss vs overflow pairs to reach full MC/DC.
  * ====================================================================== */
 
 TEST(checked_sub_isize_mcdc) {
@@ -403,7 +405,6 @@ TEST(checked_sub_isize_mcdc) {
     /* b > 0 branch — both true (underflow by 1) */
     EXPECT(checked_sub_isize(CANON_ISIZE_MIN + 4, 5, &result) == false);
 
-    /* b < 0 branch — first condition false (b == 0, same call as above) */
     /* b < 0 branch — second condition false (exact fit, a == MAX + b) */
     EXPECT(checked_sub_isize(CANON_ISIZE_MAX - 5, -5, &result) == true &&
            result == CANON_ISIZE_MAX);
@@ -463,20 +464,6 @@ TEST(checked_mul_isize_op) {
 
 /* =========================================================================
  * checked_mul_isize — MC/DC four-quadrant coverage for fallback path
- *
- * The fallback in checked_mul_isize has four sign-quadrant checks:
- *   if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;  (+,+)
- *   if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;  (-,-)
- *   if (a > 0 && b < 0 && b < (CANON_ISIZE_MIN / a)) return false;  (+,-)
- *   if (a < 0 && b > 0 && a < (CANON_ISIZE_MIN / b)) return false;  (-,+)
- *
- * Each quadrant needs: first cond false, second cond false, third cond
- * false (just fits), and all three true (overflow by 1). The existing
- * tests cover (+,+) and (-,-) overflow via ISIZE_MAX*2 and ISIZE_MIN*MIN,
- * but (+,-) and (-,+) near-miss pairs are missing.
- *
- * Also verifies the "just fits" cases where division-based check exactly
- * allows the result — these are the boundary values for MC/DC.
  * ====================================================================== */
 
 TEST(checked_mul_isize_quadrants) {
@@ -521,17 +508,6 @@ TEST(checked_mul_isize_quadrants) {
 /* =========================================================================
  * checked_mul_isize — MC/DC gap closer for the (a == 1 && b == ISIZE_MIN)
  * special-case guard
- *
- * The fallback path in checked_mul_isize contains the line
- *     if (a == 1 && b == CANON_ISIZE_MIN) { ... return true; }
- * (and similarly for (a == -1 && b == ISIZE_MIN), handled elsewhere).
- *
- * The two branch outcomes we need, beyond what quadrants_op already covers:
- *   - a == 1, b != ISIZE_MIN  → first subcondition true, second false
- *   - a != 1, b == ISIZE_MIN  → first subcondition false (with b == ISIZE_MIN
- *                                 so the compound short-circuit is fully exercised)
- * Both are normal-path no-overflow multiplications, but they nail down the
- * MC/DC independence of each subcondition in the &&.
  * ====================================================================== */
 
 TEST(checked_mul_isize_one_min_guard) {
@@ -541,8 +517,7 @@ TEST(checked_mul_isize_one_min_guard) {
     EXPECT(checked_mul_isize(1, CANON_ISIZE_MIN, &result) == true &&
            result == CANON_ISIZE_MIN);
 
-    /* a == 1, b != ISIZE_MIN: first subcondition true, second false.
-     * Identity multiplication; b ranges over several values to be safe. */
+    /* a == 1, b != ISIZE_MIN: first subcondition true, second false. */
     EXPECT(checked_mul_isize(1, 0, &result)                == true && result == 0);
     EXPECT(checked_mul_isize(1, 1, &result)                == true && result == 1);
     EXPECT(checked_mul_isize(1, -1, &result)               == true && result == -1);
@@ -550,74 +525,404 @@ TEST(checked_mul_isize_one_min_guard) {
     EXPECT(checked_mul_isize(1, CANON_ISIZE_MIN + 1, &result) == true &&
            result == CANON_ISIZE_MIN + 1);
 
-    /* a != 1, b == ISIZE_MIN: first subcondition false with the same b.
-     * a == 0 is safe (zero short-circuit), a == -1 overflows (INT_MIN negation). */
+    /* a != 1, b == ISIZE_MIN: first subcondition false with the same b. */
     EXPECT(checked_mul_isize(0, CANON_ISIZE_MIN, &result)  == true && result == 0);
     EXPECT(checked_mul_isize(-1, CANON_ISIZE_MIN, &result) == false);
 }
 
 /* =========================================================================
  * checked_mul_u64 — MC/DC gap closer for the (a == 0 || b == 0) shortcut
- *
- * The fallback path in checked_mul_u64 has:
- *     if (a == 0 || b == 0) { *result = 0; return true; }
- * The existing checked_mul_mcdc test above exercises this for checked_mul
- * (usize), but checked_mul_u64 is a distinct function and needs its own
- * coverage of the same pattern. This test hits all four MC/DC pairs on
- * the || specifically for the u64 overload.
  * ====================================================================== */
 
 TEST(checked_mul_u64_mcdc) {
     u64 result = 0;
 
-    /* a == 0, b == 0: both true (pair: neither independently matters) */
     EXPECT(checked_mul_u64(0, 0, &result) == true && result == 0);
-
-    /* a == 0, b != 0: first true, second false — first subcondition
-     * independently decides the outcome */
     EXPECT(checked_mul_u64(0, 42, &result) == true && result == 0);
     EXPECT(checked_mul_u64(0, 0xFFFFFFFFFFFFFFFFULL, &result) == true && result == 0);
-
-    /* a != 0, b == 0: first false, second true — second subcondition
-     * independently decides the outcome */
     EXPECT(checked_mul_u64(42, 0, &result) == true && result == 0);
     EXPECT(checked_mul_u64(0xFFFFFFFFFFFFFFFFULL, 0, &result) == true && result == 0);
-
-    /* Both non-zero, no overflow: reaches division check, passes */
     EXPECT(checked_mul_u64(2, 3, &result) == true && result == 6);
-
-    /* Both non-zero, exact boundary */
     EXPECT(checked_mul_u64(0xFFFFFFFFFFFFFFFFULL / 2, 2, &result) == true);
-
-    /* Both non-zero, overflow */
     EXPECT(checked_mul_u64(0xFFFFFFFFFFFFFFFFULL / 2 + 1, 3, &result) == false);
 }
 
 /* =========================================================================
  * checked_mul (usize) — MC/DC short-circuit for fallback path
- *
- * The fallback has: if (a == 0 || b == 0) { *result = 0; return true; }
- * followed by the division-based overflow check. Need cases that
- * exercise each side of the || independently and the division check.
  * ====================================================================== */
 
 TEST(checked_mul_mcdc) {
     usize result = 0;
 
-    /* First operand zero — short-circuits out */
     EXPECT(checked_mul(0, 42, &result) == true && result == 0);
-
-    /* Second operand zero — first condition false, second true */
     EXPECT(checked_mul(42, 0, &result) == true && result == 0);
-
-    /* Both non-zero, no overflow — reaches division check, passes */
     EXPECT(checked_mul(2, 3, &result) == true && result == 6);
-
-    /* Both non-zero, exact boundary — MAX/2 * 2 == MAX-1 (even) or MAX (odd) */
     EXPECT(checked_mul(CANON_USIZE_MAX / 2, 2, &result) == true);
-
-    /* Both non-zero, one past boundary — overflow detected by division */
     EXPECT(checked_mul(CANON_USIZE_MAX / 2 + 1, 3, &result) == false);
+}
+
+/* =========================================================================
+ * checked_div (usize)
+ *
+ * Single failure mode: division by zero. Tests cover MC/DC pairs:
+ *   - b == 0 (failure) vs b != 0 (success)
+ *   - a == 0 with non-zero b (the "zero numerator, non-zero denominator"
+ *     path that's distinct from the zero-denominator short-circuit)
+ * ====================================================================== */
+
+TEST(checked_div_op) {
+    usize result = 0;
+
+    /* Normal cases */
+    EXPECT(checked_div(10, 2, &result) == true && result == 5);
+    EXPECT(checked_div(100, 10, &result) == true && result == 10);
+    EXPECT(checked_div(7, 3, &result) == true && result == 2);  /* truncation */
+    EXPECT(checked_div(0, 1, &result) == true && result == 0);
+    EXPECT(checked_div(0, CANON_USIZE_MAX, &result) == true && result == 0);
+
+    /* Boundary */
+    EXPECT(checked_div(CANON_USIZE_MAX, 1, &result) == true &&
+           result == CANON_USIZE_MAX);
+    EXPECT(checked_div(CANON_USIZE_MAX, CANON_USIZE_MAX, &result) == true &&
+           result == 1);
+    EXPECT(checked_div(1, CANON_USIZE_MAX, &result) == true && result == 0);
+
+    /* Division by zero */
+    EXPECT(checked_div(0, 0, &result) == false);
+    EXPECT(checked_div(1, 0, &result) == false);
+    EXPECT(checked_div(CANON_USIZE_MAX, 0, &result) == false);
+}
+
+TEST(checked_div_typed_op) {
+    u8  r8  = 0;
+    u16 r16 = 0;
+    u32 r32 = 0;
+    u64 r64 = 0;
+
+    /* u8 */
+    EXPECT(checked_div_u8(255, 5, &r8) == true && r8 == 51);
+    EXPECT(checked_div_u8(0, 1, &r8)   == true && r8 == 0);
+    EXPECT(checked_div_u8(0, 255, &r8) == true && r8 == 0);
+    EXPECT(checked_div_u8(0, 0, &r8)   == false);
+    EXPECT(checked_div_u8(255, 0, &r8) == false);
+
+    /* u16 */
+    EXPECT(checked_div_u16(65535, 256, &r16) == true && r16 == 255);
+    EXPECT(checked_div_u16(0, 1, &r16)       == true && r16 == 0);
+    EXPECT(checked_div_u16(0, 0, &r16)       == false);
+    EXPECT(checked_div_u16(1, 0, &r16)       == false);
+
+    /* u32 */
+    EXPECT(checked_div_u32(0xFFFFFFFFU, 2, &r32) == true && r32 == 0x7FFFFFFFU);
+    EXPECT(checked_div_u32(0, 1, &r32)            == true && r32 == 0);
+    EXPECT(checked_div_u32(0, 0, &r32)            == false);
+    EXPECT(checked_div_u32(0xFFFFFFFFU, 0, &r32)  == false);
+
+    /* u64 */
+    EXPECT(checked_div_u64(0xFFFFFFFFFFFFFFFFULL, 2, &r64) == true &&
+           r64 == 0x7FFFFFFFFFFFFFFFULL);
+    EXPECT(checked_div_u64(0, 1, &r64) == true && r64 == 0);
+    EXPECT(checked_div_u64(0, 0, &r64) == false);
+    EXPECT(checked_div_u64(1, 0, &r64) == false);
+}
+
+/* =========================================================================
+ * checked_mod (usize)
+ *
+ * Same failure mode as checked_div. Tests verify:
+ *   - C99 modulo semantics: a % b is in [0, b-1] for unsigned
+ *   - Zero-numerator success: 0 % b == 0
+ *   - The (a / b) * b + (a % b) == a identity for spot-checked values
+ * ====================================================================== */
+
+TEST(checked_mod_op) {
+    usize result = 0;
+
+    /* Normal cases */
+    EXPECT(checked_mod(10, 3, &result) == true && result == 1);
+    EXPECT(checked_mod(100, 10, &result) == true && result == 0);
+    EXPECT(checked_mod(7, 3, &result) == true && result == 1);
+    EXPECT(checked_mod(0, 1, &result) == true && result == 0);
+    EXPECT(checked_mod(0, CANON_USIZE_MAX, &result) == true && result == 0);
+
+    /* a < b: result == a */
+    EXPECT(checked_mod(3, 10, &result) == true && result == 3);
+    EXPECT(checked_mod(1, CANON_USIZE_MAX, &result) == true && result == 1);
+
+    /* a == b: result == 0 */
+    EXPECT(checked_mod(42, 42, &result) == true && result == 0);
+    EXPECT(checked_mod(CANON_USIZE_MAX, CANON_USIZE_MAX, &result) == true &&
+           result == 0);
+
+    /* Boundary: result is always strictly less than b */
+    EXPECT(checked_mod(CANON_USIZE_MAX, 2, &result) == true && result < 2);
+    EXPECT(checked_mod(CANON_USIZE_MAX, 256, &result) == true && result < 256);
+
+    /* Division by zero */
+    EXPECT(checked_mod(0, 0, &result) == false);
+    EXPECT(checked_mod(1, 0, &result) == false);
+    EXPECT(checked_mod(CANON_USIZE_MAX, 0, &result) == false);
+}
+
+TEST(checked_mod_typed_op) {
+    u8  r8  = 0;
+    u16 r16 = 0;
+    u32 r32 = 0;
+    u64 r64 = 0;
+
+    /* u8 */
+    EXPECT(checked_mod_u8(255, 7, &r8) == true && r8 == 3);   /* 255 = 36*7 + 3 */
+    EXPECT(checked_mod_u8(0, 1, &r8)   == true && r8 == 0);
+    EXPECT(checked_mod_u8(0, 0, &r8)   == false);
+    EXPECT(checked_mod_u8(255, 0, &r8) == false);
+
+    /* u16 */
+    EXPECT(checked_mod_u16(65535, 256, &r16) == true && r16 == 255);
+    EXPECT(checked_mod_u16(0, 1, &r16)       == true && r16 == 0);
+    EXPECT(checked_mod_u16(0, 0, &r16)       == false);
+    EXPECT(checked_mod_u16(1, 0, &r16)       == false);
+
+    /* u32 */
+    EXPECT(checked_mod_u32(0xFFFFFFFFU, 7, &r32) == true && r32 == 3);
+    EXPECT(checked_mod_u32(0, 1, &r32)            == true && r32 == 0);
+    EXPECT(checked_mod_u32(0, 0, &r32)            == false);
+    EXPECT(checked_mod_u32(0xFFFFFFFFU, 0, &r32)  == false);
+
+    /* u64 */
+    EXPECT(checked_mod_u64(0xFFFFFFFFFFFFFFFFULL, 7, &r64) == true && r64 == 1);
+    EXPECT(checked_mod_u64(0, 1, &r64) == true && r64 == 0);
+    EXPECT(checked_mod_u64(0, 0, &r64) == false);
+    EXPECT(checked_mod_u64(1, 0, &r64) == false);
+}
+
+/* =========================================================================
+ * checked_div_isize
+ *
+ * Two failure modes — both must be tested separately for MC/DC:
+ *   1. b == 0 (division by zero)
+ *   2. a == ISIZE_MIN && b == -1 (overflow, mathematical -ISIZE_MIN
+ *      is unrepresentable)
+ *
+ * MC/DC pairs for the && in the second guard:
+ *   - a == ISIZE_MIN, b == -1   → both true   (failure)
+ *   - a == ISIZE_MIN, b != -1   → first true, second false (success)
+ *   - a != ISIZE_MIN, b == -1   → first false, second true (success)
+ *   - a != ISIZE_MIN, b != -1   → both false  (success, unrelated path)
+ *
+ * Also tests C99 truncation-toward-zero semantics for negative operands
+ * (-7 / 2 == -3 in C99, not -4 as Euclidean modulo would give).
+ * ====================================================================== */
+
+TEST(checked_div_isize_op) {
+    isize result = 0;
+
+    /* Normal positive */
+    EXPECT(checked_div_isize(10, 2, &result) == true && result == 5);
+    EXPECT(checked_div_isize(7, 3, &result)  == true && result == 2);
+
+    /* Normal negative — C99 truncation toward zero */
+    EXPECT(checked_div_isize(-10, 2, &result)  == true && result == -5);
+    EXPECT(checked_div_isize(10, -2, &result)  == true && result == -5);
+    EXPECT(checked_div_isize(-10, -2, &result) == true && result == 5);
+    EXPECT(checked_div_isize(-7, 2, &result)   == true && result == -3);  /* not -4 */
+    EXPECT(checked_div_isize(7, -2, &result)   == true && result == -3);
+    EXPECT(checked_div_isize(-7, -2, &result)  == true && result == 3);
+
+    /* Zero numerator paths (non-zero denominator, positive AND negative) */
+    EXPECT(checked_div_isize(0, 1, &result)  == true && result == 0);
+    EXPECT(checked_div_isize(0, -1, &result) == true && result == 0);
+    EXPECT(checked_div_isize(0, CANON_ISIZE_MAX, &result) == true && result == 0);
+    EXPECT(checked_div_isize(0, CANON_ISIZE_MIN, &result) == true && result == 0);
+    EXPECT(checked_div_isize(0, 42, &result)  == true && result == 0);
+    EXPECT(checked_div_isize(0, -42, &result) == true && result == 0);
+
+    /* Identity */
+    EXPECT(checked_div_isize(42, 1, &result)   == true && result == 42);
+    EXPECT(checked_div_isize(-42, 1, &result)  == true && result == -42);
+    EXPECT(checked_div_isize(42, -1, &result)  == true && result == -42);
+    EXPECT(checked_div_isize(-42, -1, &result) == true && result == 42);
+
+    /* Boundary — ISIZE_MAX */
+    EXPECT(checked_div_isize(CANON_ISIZE_MAX, 1, &result) == true &&
+           result == CANON_ISIZE_MAX);
+    EXPECT(checked_div_isize(CANON_ISIZE_MAX, -1, &result) == true &&
+           result == -CANON_ISIZE_MAX);
+    EXPECT(checked_div_isize(CANON_ISIZE_MAX, CANON_ISIZE_MAX, &result) == true &&
+           result == 1);
+
+    /* Boundary — ISIZE_MIN with safe denominators */
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, 1, &result) == true &&
+           result == CANON_ISIZE_MIN);
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, 2, &result) == true);
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, CANON_ISIZE_MIN, &result) == true &&
+           result == 1);
+
+    /* Failure — division by zero (a varies) */
+    EXPECT(checked_div_isize(0, 0, &result)               == false);
+    EXPECT(checked_div_isize(1, 0, &result)               == false);
+    EXPECT(checked_div_isize(-1, 0, &result)              == false);
+    EXPECT(checked_div_isize(CANON_ISIZE_MAX, 0, &result) == false);
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, 0, &result) == false);
+
+    /* Failure — ISIZE_MIN / -1 overflow (the only signed-div overflow case) */
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, -1, &result) == false);
+}
+
+TEST(checked_div_isize_mcdc) {
+    isize result = 0;
+
+    /*
+     * MC/DC for the (a == CANON_ISIZE_MIN && b == -1) guard.
+     * Each subcondition must independently determine the outcome.
+     */
+
+    /* Both true → failure */
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, -1, &result) == false);
+
+    /* First true, second false → success (ISIZE_MIN as numerator, b != -1) */
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, 1, &result) == true &&
+           result == CANON_ISIZE_MIN);
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, 2, &result) == true);
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN, CANON_ISIZE_MAX, &result) == true);
+
+    /* First false, second true → success (b == -1, a != ISIZE_MIN) */
+    EXPECT(checked_div_isize(0, -1, &result)               == true && result == 0);
+    EXPECT(checked_div_isize(1, -1, &result)               == true && result == -1);
+    EXPECT(checked_div_isize(-1, -1, &result)              == true && result == 1);
+    EXPECT(checked_div_isize(CANON_ISIZE_MAX, -1, &result) == true &&
+           result == -CANON_ISIZE_MAX);
+    EXPECT(checked_div_isize(CANON_ISIZE_MIN + 1, -1, &result) == true);
+}
+
+/* =========================================================================
+ * checked_mod_isize
+ *
+ * Same two failure modes as checked_div_isize. Tests verify:
+ *   - C99 truncation-toward-zero semantics: -7 % 2 == -1 (not 1)
+ *   - The standard's identity (a/b)*b + (a%b) == a holds for representable
+ *     pairs (verified in cross-check test below)
+ *   - ISIZE_MIN % -1 fails even though some compilers return 0 — Canon-C
+ *     rejects on standard's terms, not de-facto behavior
+ *   - MC/DC pairs for the (a == ISIZE_MIN && b == -1) guard
+ * ====================================================================== */
+
+TEST(checked_mod_isize_op) {
+    isize result = 0;
+
+    /* Normal positive */
+    EXPECT(checked_mod_isize(10, 3, &result) == true && result == 1);
+    EXPECT(checked_mod_isize(7, 3, &result)  == true && result == 1);
+    EXPECT(checked_mod_isize(100, 10, &result) == true && result == 0);
+
+    /* C99 truncation toward zero — sign of result matches sign of dividend */
+    EXPECT(checked_mod_isize(-7, 2, &result)  == true && result == -1);  /* not 1 */
+    EXPECT(checked_mod_isize(7, -2, &result)  == true && result == 1);
+    EXPECT(checked_mod_isize(-7, -2, &result) == true && result == -1);
+    EXPECT(checked_mod_isize(-10, 3, &result) == true && result == -1);
+    EXPECT(checked_mod_isize(-1, 2, &result)  == true && result == -1);
+
+    /* Zero numerator paths (non-zero denominator, positive AND negative) */
+    EXPECT(checked_mod_isize(0, 1, &result)  == true && result == 0);
+    EXPECT(checked_mod_isize(0, -1, &result) == true && result == 0);
+    EXPECT(checked_mod_isize(0, CANON_ISIZE_MAX, &result) == true && result == 0);
+    EXPECT(checked_mod_isize(0, CANON_ISIZE_MIN, &result) == true && result == 0);
+    EXPECT(checked_mod_isize(0, 42, &result)  == true && result == 0);
+    EXPECT(checked_mod_isize(0, -42, &result) == true && result == 0);
+
+    /* a == b → 0 */
+    EXPECT(checked_mod_isize(42, 42, &result) == true && result == 0);
+    EXPECT(checked_mod_isize(-42, -42, &result) == true && result == 0);
+
+    /* Identity-by-divisor: a % 1 == 0, a % -1 == 0 */
+    EXPECT(checked_mod_isize(42, 1, &result)   == true && result == 0);
+    EXPECT(checked_mod_isize(-42, 1, &result)  == true && result == 0);
+    EXPECT(checked_mod_isize(42, -1, &result)  == true && result == 0);
+    EXPECT(checked_mod_isize(-42, -1, &result) == true && result == 0);
+
+    /* Boundary */
+    EXPECT(checked_mod_isize(CANON_ISIZE_MAX, 2, &result) == true);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, 2, &result) == true);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, 1, &result) == true && result == 0);
+
+    /* Failure — division by zero */
+    EXPECT(checked_mod_isize(0, 0, &result)               == false);
+    EXPECT(checked_mod_isize(1, 0, &result)               == false);
+    EXPECT(checked_mod_isize(-1, 0, &result)              == false);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MAX, 0, &result) == false);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, 0, &result) == false);
+
+    /* Failure — ISIZE_MIN % -1.
+     * Canon-C rejects this on standard's terms (the intermediate
+     * ISIZE_MIN / -1 is UB), even though the mathematical answer is 0
+     * and some compilers (notably MSVC) return 0 as a QoI choice. */
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, -1, &result) == false);
+}
+
+TEST(checked_mod_isize_mcdc) {
+    isize result = 0;
+
+    /* Both true → failure */
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, -1, &result) == false);
+
+    /* First true, second false → success (ISIZE_MIN, b != -1) */
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, 1, &result) == true && result == 0);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, 2, &result) == true);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN, CANON_ISIZE_MAX, &result) == true);
+
+    /* First false, second true → success (b == -1, a != ISIZE_MIN) */
+    EXPECT(checked_mod_isize(0, -1, &result)               == true && result == 0);
+    EXPECT(checked_mod_isize(1, -1, &result)               == true && result == 0);
+    EXPECT(checked_mod_isize(-1, -1, &result)              == true && result == 0);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MAX, -1, &result) == true && result == 0);
+    EXPECT(checked_mod_isize(CANON_ISIZE_MIN + 1, -1, &result) == true && result == 0);
+}
+
+/* =========================================================================
+ * Cross-check: C99 division-modulo identity (a/b)*b + (a%b) == a
+ *
+ * Verifies for representable inputs that the C99 §6.5.5¶6 guarantee
+ * holds. Skips inputs that would trigger overflow during the
+ * reconstruction multiplication or addition, since those would not be
+ * meaningful failures of the identity.
+ * ====================================================================== */
+
+TEST(div_mod_isize_identity) {
+    isize values[12];
+    int i, j;
+
+    values[0]  = 0;
+    values[1]  = 1;
+    values[2]  = -1;
+    values[3]  = 7;
+    values[4]  = -7;
+    values[5]  = 100;
+    values[6]  = -100;
+    values[7]  = CANON_ISIZE_MAX;
+    values[8]  = CANON_ISIZE_MIN;
+    values[9]  = CANON_ISIZE_MAX / 2;
+    values[10] = CANON_ISIZE_MIN / 2;
+    values[11] = 42;
+
+    for (i = 0; i < 12; i++) {
+        for (j = 0; j < 12; j++) {
+            isize a = values[i];
+            isize b = values[j];
+            isize q = 0, r = 0;
+
+            if (!checked_div_isize(a, b, &q)) continue;
+            if (!checked_mod_isize(a, b, &r)) continue;
+
+            /* Reconstruct a from q and r using checked ops to avoid
+             * triggering UB on adversarial values. Skip if any step
+             * would overflow — those inputs simply can't be checked
+             * by this identity. */
+            isize qb = 0, sum = 0;
+            if (!checked_mul_isize(q, b, &qb)) continue;
+            if (!checked_add_isize(qb, r, &sum)) continue;
+
+            EXPECT(sum == a);
+        }
+    }
 }
 
 /* =========================================================================
@@ -651,10 +956,10 @@ TEST(checked_max_op) {
 TEST(checked_clamp_op) {
     /* Normal clamping */
     EXPECT(checked_clamp(5, 0, 10)  == 5);
-    EXPECT(checked_clamp(0, 0, 10)  == 0);   /* at lo */
-    EXPECT(checked_clamp(10, 0, 10) == 10);  /* at hi */
-    EXPECT(checked_clamp(-1, 0, 10) == 0);   /* below lo */
-    EXPECT(checked_clamp(11, 0, 10) == 10);  /* above hi */
+    EXPECT(checked_clamp(0, 0, 10)  == 0);
+    EXPECT(checked_clamp(10, 0, 10) == 10);
+    EXPECT(checked_clamp(-1, 0, 10) == 0);
+    EXPECT(checked_clamp(11, 0, 10) == 10);
 
     /* Degenerate: lo == hi */
     EXPECT(checked_clamp(5, 7, 7) == 7);
@@ -766,30 +1071,69 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     /* mul by one preserves value */
     if (!checked_mul(ua, 1, &ur) || ur != ua) __builtin_trap();
 
+    /* Unsigned div/mod */
+    (void)checked_div(ua, ub, &ur);
+    (void)checked_mod(ua, ub, &ur);
+
+    /* Division by zero must fail */
+    if (checked_div(ua, 0, &ur)) __builtin_trap();
+    if (checked_mod(ua, 0, &ur)) __builtin_trap();
+
+    /* Division by one is identity; modulo by one is zero */
+    if (!checked_div(ua, 1, &ur) || ur != ua) __builtin_trap();
+    if (!checked_mod(ua, 1, &ur) || ur != 0)  __builtin_trap();
+
+    /* Unsigned div/mod identity: (a/b)*b + (a%b) == a, gated on success.
+     * The reconstruction uses checked_mul + checked_add and is skipped
+     * if either step would overflow — adversarial inputs can construct
+     * (a, b) pairs where the identity holds mathematically but the
+     * reconstruction overflows usize. */
+    {
+        usize q = 0, r = 0;
+        if (checked_div(ua, ub, &q) && checked_mod(ua, ub, &r)) {
+            usize qb = 0, sum = 0;
+            if (checked_mul(q, ub, &qb) && checked_add(qb, r, &sum)) {
+                if (sum != ua) __builtin_trap();
+            }
+        }
+    }
+
     /* Typed unsigned */
     {
         u8 a8 = (u8)ua, b8 = (u8)ub;
         (void)checked_add_u8(a8, b8, &r8);
         (void)checked_sub_u8(a8, b8, &r8);
         (void)checked_mul_u8(a8, b8, &r8);
+        (void)checked_div_u8(a8, b8, &r8);
+        (void)checked_mod_u8(a8, b8, &r8);
+        if (b8 == 0) {
+            if (checked_div_u8(a8, b8, &r8)) __builtin_trap();
+            if (checked_mod_u8(a8, b8, &r8)) __builtin_trap();
+        }
     }
     {
         u16 a16 = (u16)ua, b16 = (u16)ub;
         (void)checked_add_u16(a16, b16, &r16);
         (void)checked_sub_u16(a16, b16, &r16);
         (void)checked_mul_u16(a16, b16, &r16);
+        (void)checked_div_u16(a16, b16, &r16);
+        (void)checked_mod_u16(a16, b16, &r16);
     }
     {
         u32 a32 = (u32)ua, b32 = (u32)ub;
         (void)checked_add_u32(a32, b32, &r32);
         (void)checked_sub_u32(a32, b32, &r32);
         (void)checked_mul_u32(a32, b32, &r32);
+        (void)checked_div_u32(a32, b32, &r32);
+        (void)checked_mod_u32(a32, b32, &r32);
     }
     {
         u64 a64 = (u64)ua, b64 = (u64)ub;
         (void)checked_add_u64(a64, b64, &r64);
         (void)checked_sub_u64(a64, b64, &r64);
         (void)checked_mul_u64(a64, b64, &r64);
+        (void)checked_div_u64(a64, b64, &r64);
+        (void)checked_mod_u64(a64, b64, &r64);
     }
 
     /* Signed add then sub inverse */
@@ -806,6 +1150,34 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
     /* Signed mul: one preserves value */
     if (!checked_mul_isize(ia, 1, &ir) || ir != ia) __builtin_trap();
     if (!checked_mul_isize(1, ia, &ir) || ir != ia) __builtin_trap();
+
+    /* Signed div/mod */
+    (void)checked_div_isize(ia, ib, &ir);
+    (void)checked_mod_isize(ia, ib, &ir);
+
+    /* Division by zero must fail */
+    if (checked_div_isize(ia, 0, &ir)) __builtin_trap();
+    if (checked_mod_isize(ia, 0, &ir)) __builtin_trap();
+
+    /* ISIZE_MIN / -1 and ISIZE_MIN % -1 must fail */
+    if (checked_div_isize(CANON_ISIZE_MIN, -1, &ir)) __builtin_trap();
+    if (checked_mod_isize(CANON_ISIZE_MIN, -1, &ir)) __builtin_trap();
+
+    /* Signed div/mod identity: (a/b)*b + (a%b) == a.
+     * Use checked_mul_isize + checked_add_isize for the reconstruction
+     * so adversarial inputs can't trigger UB during the invariant
+     * check itself. Skip if either reconstruction step overflows —
+     * that's not a violation of the C99 identity, just an input
+     * pattern where the round-trip exceeds isize range. */
+    {
+        isize q = 0, r = 0;
+        if (checked_div_isize(ia, ib, &q) && checked_mod_isize(ia, ib, &r)) {
+            isize qb = 0, sum = 0;
+            if (checked_mul_isize(q, ib, &qb) && checked_add_isize(qb, r, &sum)) {
+                if (sum != ia) __builtin_trap();
+            }
+        }
+    }
 
     /* min/max/clamp sanity */
     {
@@ -839,6 +1211,11 @@ int main(void) {
     RUN(checked_mul_mcdc);
     RUN(checked_mul_u64_mcdc);
 
+    RUN(checked_div_op);
+    RUN(checked_div_typed_op);
+    RUN(checked_mod_op);
+    RUN(checked_mod_typed_op);
+
     RUN(checked_add_isize_op);
     RUN(checked_add_isize_mcdc);
     RUN(checked_sub_isize_op);
@@ -846,6 +1223,13 @@ int main(void) {
     RUN(checked_mul_isize_op);
     RUN(checked_mul_isize_quadrants);
     RUN(checked_mul_isize_one_min_guard);
+
+    RUN(checked_div_isize_op);
+    RUN(checked_div_isize_mcdc);
+    RUN(checked_mod_isize_op);
+    RUN(checked_mod_isize_mcdc);
+
+    RUN(div_mod_isize_identity);
 
     RUN(checked_min_op);
     RUN(checked_max_op);
