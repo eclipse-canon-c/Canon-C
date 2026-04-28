@@ -60,7 +60,7 @@
  *
  * @remark Internal — use str_trim_whitespace_inplace() at call sites.
  */
-static inline bool canon_split_is_ws_(char c) {
+static inline bool split_is_ws_(char c) {
     switch (c) {
         case ' ': case '\t': case '\n': case '\r':
         case '\f': case '\v':
@@ -238,7 +238,7 @@ static inline char* str_trim_whitespace_inplace(char* s) {
 
     /* Trim leading whitespace */
     start = s;
-    while (*start && canon_split_is_ws_(*start)) ++start;
+    while (*start && split_is_ws_(*start)) ++start;
 
     /* All whitespace → empty string */
     if (!*start) {
@@ -253,7 +253,7 @@ static inline char* str_trim_whitespace_inplace(char* s) {
 
     /* Trim trailing whitespace */
     end = s + str_len(s);
-    while (end > s && canon_split_is_ws_(*(end - 1))) --end;
+    while (end > s && split_is_ws_(*(end - 1))) --end;
     *end = '\0';
 
     return s;

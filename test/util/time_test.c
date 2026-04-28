@@ -9,7 +9,7 @@
  *   stopwatch_elapsed_us   — microsecond query, unit consistency
  *   stopwatch_elapsed_ms   — millisecond query, unit consistency
  *   stopwatch_elapsed_sec  — fractional seconds query, unit consistency
- *   canon_stopwatch_now_ns_ — monotonicity of underlying clock
+ *   stopwatch_now_ns_ — monotonicity of underlying clock
  *
  * Contract note
  * ───────────────────────────────────────────────────────────────────────────
@@ -203,9 +203,9 @@ TEST(now_ns_monotonic) {
     u64 prev, curr;
     int i;
 
-    prev = canon_stopwatch_now_ns_();
+    prev = stopwatch_now_ns_();
     for (i = 0; i < 100; i++) {
-        curr = canon_stopwatch_now_ns_();
+        curr = stopwatch_now_ns_();
         EXPECT(curr >= prev);
         prev = curr;
     }

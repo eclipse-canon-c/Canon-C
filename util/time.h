@@ -117,7 +117,7 @@ typedef struct {
  *
  * @remark Internal — use stopwatch_start() and stopwatch_elapsed_ns() instead.
  */
-static inline u64 canon_stopwatch_now_ns_(void) {
+static inline u64 stopwatch_now_ns_(void) {
 #ifdef _WIN32
     LARGE_INTEGER freq, counter;
     QueryPerformanceFrequency(&freq);
@@ -144,7 +144,7 @@ static inline u64 canon_stopwatch_now_ns_(void) {
  */
 static inline void stopwatch_start(borrowed(Stopwatch*) sw) {
     require_msg(sw != NULL, "stopwatch_start: sw is NULL");
-    sw->start = canon_stopwatch_now_ns_();
+    sw->start = stopwatch_now_ns_();
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ static inline void stopwatch_start(borrowed(Stopwatch*) sw) {
 static inline u64 stopwatch_elapsed_ns(borrowed(const Stopwatch*) sw) {
     require_msg(sw != NULL, "stopwatch_elapsed_ns: sw is NULL");
     if (sw->start == 0) return 0;
-    return canon_stopwatch_now_ns_() - sw->start;
+    return stopwatch_now_ns_() - sw->start;
 }
 
 /**

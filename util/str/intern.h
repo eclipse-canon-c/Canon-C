@@ -76,7 +76,7 @@ typedef struct {
  *
  * @remark Internal — do not call directly.
  */
-static inline u64 canon_intern_hash_(borrowed(const char*) s, usize len) {
+static inline u64 intern_hash_(borrowed(const char*) s, usize len) {
     u64 h = 14695981039346656037ULL;
     usize i;
     for (i = 0; i < len; i++) {
@@ -120,7 +120,7 @@ static inline str_view_t intern_string(
     if (!s) s = "";
 
     len    = str_len(s);
-    hash   = canon_intern_hash_(s, len);
+    hash   = intern_hash_(s, len);
     index  = (usize)(hash % pool->capacity);
     probes = 0;
 

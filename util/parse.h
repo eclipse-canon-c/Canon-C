@@ -156,7 +156,7 @@ CANON_RESULT(f64, Error)
  *
  * @remark Internal — use parse_skip_ws() at call sites.
  */
-static inline bool canon_parse_is_ws_(char c) {
+static inline bool parse_is_ws_(char c) {
     switch (c) {
         case ' ': case '\t': case '\n': case '\r':
         case '\f': case '\v':
@@ -181,7 +181,7 @@ static inline bool canon_parse_is_ws_(char c) {
  */
 static inline const char* parse_skip_ws(borrowed(const char*) s) {
     if (!s) return s;
-    while (*s && canon_parse_is_ws_(*s)) ++s;
+    while (*s && parse_is_ws_(*s)) ++s;
     return s;
 }
 
@@ -209,7 +209,7 @@ static inline result_i64_Error parse_i64(
 {
     require_msg(s != NULL, "parse_i64: input string is NULL");
 
-    if (!*s || canon_parse_is_ws_(*s)) {
+    if (!*s || parse_is_ws_(*s)) {
         if (endptr) *endptr = s;
         return result_i64_Error_err(ERR_PARSE_FAILED);
     }
@@ -251,7 +251,7 @@ static inline result_u64_Error parse_u64(
 {
     require_msg(s != NULL, "parse_u64: input string is NULL");
 
-    if (!*s || canon_parse_is_ws_(*s)) {
+    if (!*s || parse_is_ws_(*s)) {
         if (endptr) *endptr = s;
         return result_u64_Error_err(ERR_PARSE_FAILED);
     }
@@ -298,7 +298,7 @@ static inline result_f64_Error parse_f64(
 {
     require_msg(s != NULL, "parse_f64: input string is NULL");
 
-    if (!*s || canon_parse_is_ws_(*s)) {
+    if (!*s || parse_is_ws_(*s)) {
         if (endptr) *endptr = s;
         return result_f64_Error_err(ERR_PARSE_FAILED);
     }

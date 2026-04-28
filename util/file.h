@@ -80,12 +80,12 @@ CANON_RESULT(usize, Error)
  * @remark Internal — use file_read_all_arena() instead.
  * @remark Does NOT close f — caller is responsible for fclose.
  */
-static inline option_charp canon_file_read_stream_(
+static inline option_charp file_read_stream_(
     borrowed(FILE*)  f,
     borrowed(Arena*) arena)
 {
-    require_msg(f     != NULL, "canon_file_read_stream_: f is NULL");
-    require_msg(arena != NULL, "canon_file_read_stream_: arena is NULL");
+    require_msg(f     != NULL, "file_read_stream_: f is NULL");
+    require_msg(arena != NULL, "file_read_stream_: arena is NULL");
 
     usize available = arena_remaining(arena);
     if (available < 2) return option_charp_none();
@@ -169,7 +169,7 @@ static inline option_charp file_read_all_arena(
     }
 
     /* fseek failed — non-seekable stream, use streaming fallback */
-    result = canon_file_read_stream_(f, arena);
+    result = file_read_stream_(f, arena);
 
 done:
     fclose(f);
