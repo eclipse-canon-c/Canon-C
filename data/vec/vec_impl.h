@@ -932,9 +932,9 @@ linkage IterType fn(borrowed(VecType*) v) { \
  *
  * Typical usage:
  * ```c
- * canon_vec_int_iter it = canon_vec_int_iter_init(&v);
+ * vec_int_iter it = vec_int_iter_init(&v);
  * int val;
- * while (canon_vec_int_iter_next(&it, &val)) {
+ * while (vec_int_iter_next(&it, &val)) {
  *     // use val
  * }
  * ```

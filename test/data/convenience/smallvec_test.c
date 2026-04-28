@@ -57,15 +57,15 @@
 /* ── Type instantiations ─────────────────────────────────────────────────── */
 
 /* DEFINE_SMALLVEC unconditionally emits as_vec, which references
- * canon_vec_##type and canon_vec_##type##_init. DEFINE_VEC(linkage, type)
+ * vec_##type and vec_##type##_init. DEFINE_VEC(linkage, type)
  * would provide these but requires CANON_OPTION and CANON_RESULT first.
  * Instead, provide minimal shim typedefs — just the struct layout and the
  * init constructor that as_vec actually calls. The vec struct has exactly
- * three fields (data, len, cap) matching the standard canon_vec layout. */
+ * three fields (data, len, cap) matching the standard vec layout. */
 
-typedef struct { int*   data; usize len; usize cap; } canon_vec_int;
-static inline canon_vec_int canon_vec_int_init(int* d, usize n)
-    { canon_vec_int v; v.data = d; v.len = 0; v.cap = n; return v; }
+typedef struct { int*   data; usize len; usize cap; } vec_int;
+static inline vec_int vec_int_init(int* d, usize n)
+    { vec_int v; v.data = d; v.len = 0; v.cap = n; return v; }
 
 #ifdef __GNUC__
 #pragma GCC diagnostic push
@@ -81,9 +81,9 @@ DEFINE_SMALLVEC(int,   4)
 
 typedef struct { int x; int y; } Point;
 
-typedef struct { Point* data; usize len; usize cap; } canon_vec_Point;
-static inline canon_vec_Point canon_vec_Point_init(Point* d, usize n)
-    { canon_vec_Point v; v.data = d; v.len = 0; v.cap = n; return v; }
+typedef struct { Point* data; usize len; usize cap; } vec_Point;
+static inline vec_Point vec_Point_init(Point* d, usize n)
+    { vec_Point v; v.data = d; v.len = 0; v.cap = n; return v; }
 
 #ifdef __GNUC__
 #pragma GCC diagnostic push
@@ -486,7 +486,7 @@ static void test_as_vec(void)
     smallvec_int_push(&v, 20);
     smallvec_int_push(&v, 30);
 
-    canon_vec_int vv = smallvec_int_as_vec(&v);
+    vec_int vv = smallvec_int_as_vec(&v);
     /* Borrowed view — same data pointer, same capacity */
     EXPECT(vv.data == v.data);
     EXPECT(vv.cap  == v.cap);

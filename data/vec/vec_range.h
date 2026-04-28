@@ -51,18 +51,18 @@
  * DEFINE_VEC_RANGE(static inline, int)
  *
  * int buf[16];
- * canon_vec_int v = canon_vec_int_init(buf, 16);
+ * vec_int v = vec_int_init(buf, 16);
  *
  * range r = range_make(0, 10, 1);  // 0..9 ascending
- * result__Bool_Error res = canon_vec_int_extend_from_range(&v, r);
+ * result__Bool_Error res = vec_int_extend_from_range(&v, r);
  * // v now contains [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
  *
  * range desc = range_make(5, 0, -1);  // 5..1 descending
- * canon_vec_int_extend_from_range(&v, desc);
+ * vec_int_extend_from_range(&v, desc);
  * // appends [5, 4, 3, 2, 1]
  *
  * range stepped = range_make(0, 20, 3);  // stepped by 3
- * canon_vec_int_extend_from_range(&v, stepped);
+ * vec_int_extend_from_range(&v, stepped);
  * // appends [0, 3, 6, 9, 12, 15, 18]
  * ```
  *
@@ -129,11 +129,11 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
 /**
  * @brief Name of the extend_from_range function for a given element type
  *
- * Default: canon_vec_##type##_extend_from_range
+ * Default: vec_##type##_extend_from_range
  * Override before including this file if custom naming is needed.
  */
 #ifndef MANGLE_VEC_EXTEND_FROM_RANGE
-    #define MANGLE_VEC_EXTEND_FROM_RANGE(type) canon_vec_##type##_extend_from_range
+    #define MANGLE_VEC_EXTEND_FROM_RANGE(type) vec_##type##_extend_from_range
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -146,7 +146,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
  * Must be called AFTER DEFINE_VEC(linkage, type) for the same type.
  *
  * Generated function (using default mangle):
- * - canon_vec_##type##_extend_from_range(v, r) → result__Bool_Error
+ * - vec_##type##_extend_from_range(v, r) → result__Bool_Error
  *
  * @param linkage Function linkage (should match the DEFINE_VEC call)
  * @param type    Element type (must be castable from isize)
@@ -157,7 +157,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
  * DEFINE_VEC_RANGE(static inline, int)
  *
  * // Now available:
- * // result__Bool_Error canon_vec_int_extend_from_range(borrowed(canon_vec_int*) v, range r);
+ * // result__Bool_Error vec_int_extend_from_range(borrowed(vec_int*) v, range r);
  * ```
  *
  * @note Only makes semantic sense for numeric element types (int, float, i32, etc.)

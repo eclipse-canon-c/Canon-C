@@ -39,20 +39,20 @@
 /**
  * @brief Name of the deque type for a given element type
  *
- * Default: canon_deque_##type
- * Example: MANGLE_DEQUE_TYPE(int) → canon_deque_int
+ * Default: deque_##type
+ * Example: MANGLE_DEQUE_TYPE(int) → deque_int
  */
 #ifndef MANGLE_DEQUE_TYPE
-    #define MANGLE_DEQUE_TYPE(type)                 canon_deque_##type
+    #define MANGLE_DEQUE_TYPE(type)                 deque_##type
 #endif
 
 /**
  * @brief Struct tag for the deque type
  *
- * Default: canon_deque_##type##_s
+ * Default: deque_##type##_s
  */
 #ifndef MANGLE_DEQUE_STRUCT_TAG
-    #define MANGLE_DEQUE_STRUCT_TAG(type)           canon_deque_##type##_s
+    #define MANGLE_DEQUE_STRUCT_TAG(type)           deque_##type##_s
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -131,19 +131,19 @@
 /**
  * @brief Name of the init function (caller-owned buffer constructor)
  *
- * Default: canon_deque_##type##_init
+ * Default: deque_##type##_init
  */
 #ifndef MANGLE_DEQUE_INIT
-    #define MANGLE_DEQUE_INIT(type)                 canon_deque_##type##_init
+    #define MANGLE_DEQUE_INIT(type)                 deque_##type##_init
 #endif
 
 /**
  * @brief Name of the empty constructor (null/zero state)
  *
- * Default: canon_deque_##type##_empty
+ * Default: deque_##type##_empty
  */
 #ifndef MANGLE_DEQUE_EMPTY
-    #define MANGLE_DEQUE_EMPTY(type)                canon_deque_##type##_empty
+    #define MANGLE_DEQUE_EMPTY(type)                deque_##type##_empty
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -153,46 +153,46 @@
 /**
  * @brief Name of the length query function
  *
- * Default: canon_deque_##type##_len
+ * Default: deque_##type##_len
  */
 #ifndef MANGLE_DEQUE_LEN
-    #define MANGLE_DEQUE_LEN(type)                  canon_deque_##type##_len
+    #define MANGLE_DEQUE_LEN(type)                  deque_##type##_len
 #endif
 
 /**
  * @brief Name of the capacity query function
  *
- * Default: canon_deque_##type##_capacity
+ * Default: deque_##type##_capacity
  */
 #ifndef MANGLE_DEQUE_CAPACITY
-    #define MANGLE_DEQUE_CAPACITY(type)             canon_deque_##type##_capacity
+    #define MANGLE_DEQUE_CAPACITY(type)             deque_##type##_capacity
 #endif
 
 /**
  * @brief Name of the remaining-space query function
  *
- * Default: canon_deque_##type##_remaining
+ * Default: deque_##type##_remaining
  */
 #ifndef MANGLE_DEQUE_REMAINING
-    #define MANGLE_DEQUE_REMAINING(type)            canon_deque_##type##_remaining
+    #define MANGLE_DEQUE_REMAINING(type)            deque_##type##_remaining
 #endif
 
 /**
  * @brief Name of the is-empty predicate
  *
- * Default: canon_deque_##type##_is_empty
+ * Default: deque_##type##_is_empty
  */
 #ifndef MANGLE_DEQUE_IS_EMPTY
-    #define MANGLE_DEQUE_IS_EMPTY(type)             canon_deque_##type##_is_empty
+    #define MANGLE_DEQUE_IS_EMPTY(type)             deque_##type##_is_empty
 #endif
 
 /**
  * @brief Name of the is-full predicate
  *
- * Default: canon_deque_##type##_is_full
+ * Default: deque_##type##_is_full
  */
 #ifndef MANGLE_DEQUE_IS_FULL
-    #define MANGLE_DEQUE_IS_FULL(type)              canon_deque_##type##_is_full
+    #define MANGLE_DEQUE_IS_FULL(type)              deque_##type##_is_full
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -202,55 +202,55 @@
 /**
  * @brief Name of the Result-returning push-to-front function
  *
- * Default: canon_deque_##type##_push_front
+ * Default: deque_##type##_push_front
  */
 #ifndef MANGLE_DEQUE_PUSH_FRONT
-    #define MANGLE_DEQUE_PUSH_FRONT(type)           canon_deque_##type##_push_front
+    #define MANGLE_DEQUE_PUSH_FRONT(type)           deque_##type##_push_front
 #endif
 
 /**
  * @brief Name of the Result-returning push-to-back function
  *
- * Default: canon_deque_##type##_push_back
+ * Default: deque_##type##_push_back
  */
 #ifndef MANGLE_DEQUE_PUSH_BACK
-    #define MANGLE_DEQUE_PUSH_BACK(type)            canon_deque_##type##_push_back
+    #define MANGLE_DEQUE_PUSH_BACK(type)            deque_##type##_push_back
 #endif
 
 /**
  * @brief Name of the bool-returning push-to-front function (no Result overhead)
  *
- * Default: canon_deque_##type##_try_push_front
+ * Default: deque_##type##_try_push_front
  */
 #ifndef MANGLE_DEQUE_TRY_PUSH_FRONT
-    #define MANGLE_DEQUE_TRY_PUSH_FRONT(type)       canon_deque_##type##_try_push_front
+    #define MANGLE_DEQUE_TRY_PUSH_FRONT(type)       deque_##type##_try_push_front
 #endif
 
 /**
  * @brief Name of the bool-returning push-to-back function (no Result overhead)
  *
- * Default: canon_deque_##type##_try_push_back
+ * Default: deque_##type##_try_push_back
  */
 #ifndef MANGLE_DEQUE_TRY_PUSH_BACK
-    #define MANGLE_DEQUE_TRY_PUSH_BACK(type)        canon_deque_##type##_try_push_back
+    #define MANGLE_DEQUE_TRY_PUSH_BACK(type)        deque_##type##_try_push_back
 #endif
 
 /**
  * @brief Name of the unchecked push-to-front function (no bounds check, fast path)
  *
- * Default: canon_deque_##type##_push_front_unchecked
+ * Default: deque_##type##_push_front_unchecked
  */
 #ifndef MANGLE_DEQUE_PUSH_FRONT_UNCHECKED
-    #define MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type) canon_deque_##type##_push_front_unchecked
+    #define MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type) deque_##type##_push_front_unchecked
 #endif
 
 /**
  * @brief Name of the unchecked push-to-back function (no bounds check, fast path)
  *
- * Default: canon_deque_##type##_push_back_unchecked
+ * Default: deque_##type##_push_back_unchecked
  */
 #ifndef MANGLE_DEQUE_PUSH_BACK_UNCHECKED
-    #define MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)  canon_deque_##type##_push_back_unchecked
+    #define MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)  deque_##type##_push_back_unchecked
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -260,37 +260,37 @@
 /**
  * @brief Name of the pop-from-front function
  *
- * Default: canon_deque_##type##_pop_front
+ * Default: deque_##type##_pop_front
  */
 #ifndef MANGLE_DEQUE_POP_FRONT
-    #define MANGLE_DEQUE_POP_FRONT(type)            canon_deque_##type##_pop_front
+    #define MANGLE_DEQUE_POP_FRONT(type)            deque_##type##_pop_front
 #endif
 
 /**
  * @brief Name of the pop-from-back function
  *
- * Default: canon_deque_##type##_pop_back
+ * Default: deque_##type##_pop_back
  */
 #ifndef MANGLE_DEQUE_POP_BACK
-    #define MANGLE_DEQUE_POP_BACK(type)             canon_deque_##type##_pop_back
+    #define MANGLE_DEQUE_POP_BACK(type)             deque_##type##_pop_back
 #endif
 
 /**
  * @brief Name of the Option-returning pop-from-front function
  *
- * Default: canon_deque_##type##_pop_front_option
+ * Default: deque_##type##_pop_front_option
  */
 #ifndef MANGLE_DEQUE_POP_FRONT_OPTION
-    #define MANGLE_DEQUE_POP_FRONT_OPTION(type)     canon_deque_##type##_pop_front_option
+    #define MANGLE_DEQUE_POP_FRONT_OPTION(type)     deque_##type##_pop_front_option
 #endif
 
 /**
  * @brief Name of the Option-returning pop-from-back function
  *
- * Default: canon_deque_##type##_pop_back_option
+ * Default: deque_##type##_pop_back_option
  */
 #ifndef MANGLE_DEQUE_POP_BACK_OPTION
-    #define MANGLE_DEQUE_POP_BACK_OPTION(type)      canon_deque_##type##_pop_back_option
+    #define MANGLE_DEQUE_POP_BACK_OPTION(type)      deque_##type##_pop_back_option
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -300,37 +300,37 @@
 /**
  * @brief Name of the peek-at-front function (non-mutating)
  *
- * Default: canon_deque_##type##_peek_front
+ * Default: deque_##type##_peek_front
  */
 #ifndef MANGLE_DEQUE_PEEK_FRONT
-    #define MANGLE_DEQUE_PEEK_FRONT(type)           canon_deque_##type##_peek_front
+    #define MANGLE_DEQUE_PEEK_FRONT(type)           deque_##type##_peek_front
 #endif
 
 /**
  * @brief Name of the peek-at-back function (non-mutating)
  *
- * Default: canon_deque_##type##_peek_back
+ * Default: deque_##type##_peek_back
  */
 #ifndef MANGLE_DEQUE_PEEK_BACK
-    #define MANGLE_DEQUE_PEEK_BACK(type)            canon_deque_##type##_peek_back
+    #define MANGLE_DEQUE_PEEK_BACK(type)            deque_##type##_peek_back
 #endif
 
 /**
  * @brief Name of the Option-returning peek-at-front function
  *
- * Default: canon_deque_##type##_peek_front_option
+ * Default: deque_##type##_peek_front_option
  */
 #ifndef MANGLE_DEQUE_PEEK_FRONT_OPTION
-    #define MANGLE_DEQUE_PEEK_FRONT_OPTION(type)    canon_deque_##type##_peek_front_option
+    #define MANGLE_DEQUE_PEEK_FRONT_OPTION(type)    deque_##type##_peek_front_option
 #endif
 
 /**
  * @brief Name of the Option-returning peek-at-back function
  *
- * Default: canon_deque_##type##_peek_back_option
+ * Default: deque_##type##_peek_back_option
  */
 #ifndef MANGLE_DEQUE_PEEK_BACK_OPTION
-    #define MANGLE_DEQUE_PEEK_BACK_OPTION(type)     canon_deque_##type##_peek_back_option
+    #define MANGLE_DEQUE_PEEK_BACK_OPTION(type)     deque_##type##_peek_back_option
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -340,19 +340,19 @@
 /**
  * @brief Name of the clear function (reset size/head/tail to 0)
  *
- * Default: canon_deque_##type##_clear
+ * Default: deque_##type##_clear
  */
 #ifndef MANGLE_DEQUE_CLEAR
-    #define MANGLE_DEQUE_CLEAR(type)                canon_deque_##type##_clear
+    #define MANGLE_DEQUE_CLEAR(type)                deque_##type##_clear
 #endif
 
 /**
  * @brief Name of the swap function (O(1) exchange of two deques)
  *
- * Default: canon_deque_##type##_swap
+ * Default: deque_##type##_swap
  */
 #ifndef MANGLE_DEQUE_SWAP
-    #define MANGLE_DEQUE_SWAP(type)                 canon_deque_##type##_swap
+    #define MANGLE_DEQUE_SWAP(type)                 deque_##type##_swap
 #endif
 
 #endif /* CANON_DATA_DEQUE_MANGLE_H */

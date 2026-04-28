@@ -808,7 +808,7 @@ result_int_Error parse_and_validate(
     require_msg(arena  != NULL, "arena is NULL");
     require_msg(inputs != NULL, "inputs is NULL");
 
-    canon_vec_int vec;
+    vec_int vec;
     TRY(int, Error, collect(arena, inputs, count, &vec));
 
     /* ... */

@@ -521,13 +521,13 @@ static inline void smallvec_##type##_free(smallvec_##type* v) { \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
 /** \
- * @brief Returns a zero-copy borrowed canon_vec_##type view over the buffer \
+ * @brief Returns a zero-copy borrowed vec_##type view over the buffer \
  * \
  * Allows passing a smallvec's contents to any API that accepts a vec. \
  * The returned vec does NOT own the buffer — do not store or outlive v. \
  * \
  * @param v smallvec to borrow from \
- * @return canon_vec_##type backed by v->data with v->cap capacity \
+ * @return vec_##type backed by v->data with v->cap capacity \
  * \
  * @pre v != NULL — checked via require_msg() \
  * \

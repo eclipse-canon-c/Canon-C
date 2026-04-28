@@ -1,9 +1,9 @@
 /**
  * @file hashmap_range.h
- * @brief Optional extension: collect hashmap keys or values into a canon_vec
+ * @brief Optional extension: collect hashmap keys or values into a vec
  *
  * Provides helpers that drain a hashmap's contents into caller-owned
- * canon_vec instances, and a HASHMAP_FOR_EACH macro for ergonomic iteration.
+ * vec instances, and a HASHMAP_FOR_EACH macro for ergonomic iteration.
  * Useful when you need a snapshot of keys or values for sorting, indexed
  * access, or passing to algo/ functions.
  *
@@ -15,14 +15,14 @@
  * Requires data/vec/vec.h. The key and value vec types must be instantiated
  * with DEFINE_VEC before including this header:
  *
- *   DEFINE_VEC(static inline, u64)  →  canon_vec_u64
- *   DEFINE_VEC(static inline, int)  →  canon_vec_int
+ *   DEFINE_VEC(static inline, u64)  →  vec_u64
+ *   DEFINE_VEC(static inline, int)  →  vec_int
  *
  * Unlike hashmap_fmt.h, this extension does NOT require you to supply push
  * function names manually. They are derived directly from HASHMAP_KEY_TYPE
- * and HASHMAP_VAL_TYPE using the canon_vec naming convention:
+ * and HASHMAP_VAL_TYPE using the vec naming convention:
  *
- *   push fn = canon_vec_##HASHMAP_KEY_TYPE##_push
+ *   push fn = vec_##HASHMAP_KEY_TYPE##_push
  *
  * This works because DEFINE_VEC always generates functions with this exact
  * naming pattern. No HASHMAP_KEY_PUSH_FN or HASHMAP_VAL_PUSH_FN needed.
@@ -60,12 +60,12 @@
  *
  * // Collect all keys into a caller-owned vec
  * u64 key_buf[64];
- * canon_vec_u64 keys = canon_vec_u64_init(key_buf, 64);
+ * vec_u64 keys = vec_u64_init(key_buf, 64);
  * result__Bool_Error r = hashmap_collect_keys(&my_map, &keys);
  *
  * // Collect all values into a caller-owned vec
  * int val_buf[64];
- * canon_vec_int vals = canon_vec_int_init(val_buf, 64);
+ * vec_int vals = vec_int_init(val_buf, 64);
  * result__Bool_Error r2 = hashmap_collect_values(&my_map, &vals);
  *
  * // Ergonomic iteration macro (no vec needed)
@@ -102,31 +102,31 @@
 #endif
 
 /* ============================================================================
- * Internal: derive canon_vec push function names from key/value types
+ * Internal: derive vec push function names from key/value types
  * ========================================================================= */
 
-/** @brief Expands to the canon_vec type for a given element type */
-#define _HM_RANGE_VEC(type)  canon_vec_##type
+/** @brief Expands to the vec type for a given element type */
+#define _HM_RANGE_VEC(type)  vec_##type
 
-/** @brief Calls the canon_vec push function for a given element type */
+/** @brief Calls the vec push function for a given element type */
 #define _HM_RANGE_PUSH(type, vec_ptr, elem_ptr) \
-    canon_vec_##type##_push((vec_ptr), (elem_ptr))
+    vec_##type##_push((vec_ptr), (elem_ptr))
 
 /* ============================================================================
  * hashmap_collect_keys
  * ========================================================================= */
 
 /**
- * @brief Collects all keys from the hashmap into a caller-owned canon_vec
+ * @brief Collects all keys from the hashmap into a caller-owned vec
  *
  * Iterates all occupied slots and pushes each key into *out using
- * canon_vec_##HASHMAP_KEY_TYPE##_push(). The vec must have sufficient
+ * vec_##HASHMAP_KEY_TYPE##_push(). The vec must have sufficient
  * capacity — if it fills before all keys are pushed, returns
  * Err(ERR_CAPACITY_EXCEEDED). Keys are appended to whatever is already
  * in the vec; it is NOT cleared before insertion.
  *
  * @param map  Pointer to initialized hashmap (must not be NULL)
- * @param out  Caller-owned canon_vec for keys to append into (must not be NULL)
+ * @param out  Caller-owned vec for keys to append into (must not be NULL)
  * @return     result__Bool_Error — Ok(true) on success,
  *             Err(ERR_CAPACITY_EXCEEDED) if vec fills before all keys are pushed,
  *             Err(ERR_INVALID_ARG) if any pointer is NULL
@@ -162,15 +162,15 @@ static inline result__Bool_Error HASHMAP_FN(collect_keys)(
  * ========================================================================= */
 
 /**
- * @brief Collects all values from the hashmap into a caller-owned canon_vec
+ * @brief Collects all values from the hashmap into a caller-owned vec
  *
  * Iterates all occupied slots and appends each value into *out using
- * canon_vec_##HASHMAP_VAL_TYPE##_push(). Value ordering corresponds to
+ * vec_##HASHMAP_VAL_TYPE##_push(). Value ordering corresponds to
  * the order returned by iter_next (unspecified). The vec is NOT cleared
  * before insertion.
  *
  * @param map  Pointer to initialized hashmap (must not be NULL)
- * @param out  Caller-owned canon_vec for values to append into (must not be NULL)
+ * @param out  Caller-owned vec for values to append into (must not be NULL)
  * @return     result__Bool_Error — Ok(true) on success,
  *             Err(ERR_CAPACITY_EXCEEDED) if vec fills before all values are pushed,
  *             Err(ERR_INVALID_ARG) if any pointer is NULL

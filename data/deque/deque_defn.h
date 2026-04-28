@@ -31,9 +31,9 @@
  * DEFINE_DEQUE(static inline, int)
  *
  * int buf[64];
- * canon_deque_int d;
- * canon_deque_int_init(&d, buf, 64);
- * canon_deque_int_push_back(&d, 42);
+ * deque_int d;
+ * deque_int_init(&d, buf, 64);
+ * deque_int_push_back(&d, 42);
  * ```
  *
  * Separate compilation:
@@ -66,52 +66,52 @@
  * @brief Instantiates a complete typed deque for element type `type`
  *
  * Generated type (using default mangle):
- * - canon_deque_##type
+ * - deque_##type
  *
  * Generated functions (using default mangle):
  *
  * Constructor:
- * - canon_deque_##type##_init(d, buffer, capacity)   → void
- * - canon_deque_##type##_empty()                     → canon_deque_##type
+ * - deque_##type##_init(d, buffer, capacity)   → void
+ * - deque_##type##_empty()                     → deque_##type
  *
  * Queries:
- * - canon_deque_##type##_len(d)                      → usize
- * - canon_deque_##type##_capacity(d)                 → usize
- * - canon_deque_##type##_remaining(d)                → usize
- * - canon_deque_##type##_is_empty(d)                 → bool
- * - canon_deque_##type##_is_full(d)                  → bool
+ * - deque_##type##_len(d)                      → usize
+ * - deque_##type##_capacity(d)                 → usize
+ * - deque_##type##_remaining(d)                → usize
+ * - deque_##type##_is_empty(d)                 → bool
+ * - deque_##type##_is_full(d)                  → bool
  *
  * Push (Result variants — full diagnostics):
- * - canon_deque_##type##_push_front(d, item)         → result_bool_Error
- * - canon_deque_##type##_push_back(d, item)          → result_bool_Error
+ * - deque_##type##_push_front(d, item)         → result_bool_Error
+ * - deque_##type##_push_back(d, item)          → result_bool_Error
  *
  * Push (bool variants — no Result overhead):
- * - canon_deque_##type##_try_push_front(d, item)     → bool
- * - canon_deque_##type##_try_push_back(d, item)      → bool
+ * - deque_##type##_try_push_front(d, item)     → bool
+ * - deque_##type##_try_push_back(d, item)      → bool
  *
  * Push (unchecked variants — debug-only assertions):
- * - canon_deque_##type##_push_front_unchecked(d, item) → void
- * - canon_deque_##type##_push_back_unchecked(d, item)  → void
+ * - deque_##type##_push_front_unchecked(d, item) → void
+ * - deque_##type##_push_back_unchecked(d, item)  → void
  *
  * Pop (Result variants):
- * - canon_deque_##type##_pop_front(d, out)           → result_bool_Error
- * - canon_deque_##type##_pop_back(d, out)            → result_bool_Error
+ * - deque_##type##_pop_front(d, out)           → result_bool_Error
+ * - deque_##type##_pop_back(d, out)            → result_bool_Error
  *
  * Pop (Option variants):
- * - canon_deque_##type##_pop_front_option(d)         → option_##type
- * - canon_deque_##type##_pop_back_option(d)          → option_##type
+ * - deque_##type##_pop_front_option(d)         → option_##type
+ * - deque_##type##_pop_back_option(d)          → option_##type
  *
  * Peek (bool variants):
- * - canon_deque_##type##_peek_front(d, out)          → bool
- * - canon_deque_##type##_peek_back(d, out)           → bool
+ * - deque_##type##_peek_front(d, out)          → bool
+ * - deque_##type##_peek_back(d, out)           → bool
  *
  * Peek (Option variants):
- * - canon_deque_##type##_peek_front_option(d)        → option_##type
- * - canon_deque_##type##_peek_back_option(d)         → option_##type
+ * - deque_##type##_peek_front_option(d)        → option_##type
+ * - deque_##type##_peek_back_option(d)         → option_##type
  *
  * Misc:
- * - canon_deque_##type##_clear(d)                    → void
- * - canon_deque_##type##_swap(a, b)                  → void
+ * - deque_##type##_clear(d)                    → void
+ * - deque_##type##_swap(a, b)                  → void
  *
  * @param linkage C linkage specifier: `static inline`, `static`, or empty
  * @param type    Element type (must be a valid C identifier)

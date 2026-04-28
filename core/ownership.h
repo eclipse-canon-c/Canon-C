@@ -286,7 +286,7 @@ static inline bool borrowed_##type##_is_valid(const borrowed_##type* b) {       
    ══════════════════════════════════════════════════════════════════════════
 
    CALLER OWNS, FUNCTION BORROWS (most common read/write operations):
-     void vec_push(borrowed(canon_vec_int*) v, int item);
+     void vec_push(borrowed(vec_int*) v, int item);
 
    FUNCTION RETURNS OWNED (caller must free):
      owned(char*) str_duplicate(borrowed(const char*) src);

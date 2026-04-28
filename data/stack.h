@@ -9,7 +9,7 @@
 
 /**
  * @file stack.h
- * @brief Bounded LIFO stack — thin wrapper over canon_vec_##type
+ * @brief Bounded LIFO stack — thin wrapper over vec_##type
  *
  * Provides a clean, intention-revealing LIFO interface with fixed capacity.
  * All operations delegate directly to the underlying vec with zero overhead.
@@ -94,7 +94,7 @@
  * - len / capacity / remaining:      O(1)
  * - is_empty / is_full:              O(1)
  * - clear:                           O(1)
- * - struct size:                     same as canon_vec_##type (typedef alias)
+ * - struct size:                     same as vec_##type (typedef alias)
  * - element overhead:                0 bytes beyond sizeof(type) per element
  *
  * Quick start:
@@ -108,30 +108,30 @@
  *
  * // Stack-allocated buffer backing a LIFO stack
  * int buf[128];
- * canon_stack_int s;
- * canon_stack_int_init(&s, buf, 128);
+ * stack_int s;
+ * stack_int_init(&s, buf, 128);
  *
- * canon_stack_int_push(&s, 10);
- * canon_stack_int_push(&s, 20);
+ * stack_int_push(&s, 10);
+ * stack_int_push(&s, 20);
  *
  * int val;
- * canon_stack_int_pop(&s, &val);   // val = 20 (LIFO)
+ * stack_int_pop(&s, &val);   // val = 20 (LIFO)
  *
  * // Bool variant — no Result overhead
- * if (!canon_stack_int_try_push(&s, 42)) {
+ * if (!stack_int_try_push(&s, 42)) {
  *     // stack is full or NULL — handle gracefully
  * }
  *
  * // Unchecked variant — ISR hot path (caller guarantees not full)
- * if (!canon_stack_int_is_full(&s)) {
- *     canon_stack_int_push_unchecked(&s, frame);
+ * if (!stack_int_is_full(&s)) {
+ *     stack_int_push_unchecked(&s, frame);
  * }
  *
  * // Option variant — no out-param needed
- * option_int top = canon_stack_int_pop_option(&s);   // Some(10)
+ * option_int top = stack_int_pop_option(&s);   // Some(10)
  *
  * // Peek without popping
- * option_int peek = canon_stack_int_peek_option(&s);
+ * option_int peek = stack_int_peek_option(&s);
  * ```
  *
  * Separate compilation:
@@ -175,46 +175,46 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief Instantiates a typed LIFO stack as a thin wrapper over canon_vec_##type
+ * @brief Instantiates a typed LIFO stack as a thin wrapper over vec_##type
  *
  * Generated type (typedef alias, no new struct):
- * - canon_stack_##type  (alias for canon_vec_##type)
+ * - stack_##type  (alias for vec_##type)
  *
  * Generated functions:
  *
  * Constructor:
- * - canon_stack_##type##_init(s, buffer, capacity)  → void
+ * - stack_##type##_init(s, buffer, capacity)  → void
  *
  * Queries:
- * - canon_stack_##type##_len(s)                     → usize
- * - canon_stack_##type##_capacity(s)                → usize
- * - canon_stack_##type##_remaining(s)               → usize
- * - canon_stack_##type##_is_empty(s)                → bool
- * - canon_stack_##type##_is_full(s)                 → bool
+ * - stack_##type##_len(s)                     → usize
+ * - stack_##type##_capacity(s)                → usize
+ * - stack_##type##_remaining(s)               → usize
+ * - stack_##type##_is_empty(s)                → bool
+ * - stack_##type##_is_full(s)                 → bool
  *
  * Push (Result variant — full diagnostics):
- * - canon_stack_##type##_push(s, item)              → result__Bool_Error
+ * - stack_##type##_push(s, item)              → result__Bool_Error
  *
  * Push (bool variant — no Result overhead):
- * - canon_stack_##type##_try_push(s, item)          → bool
+ * - stack_##type##_try_push(s, item)          → bool
  *
  * Push (unchecked variant — debug-only assertions):
- * - canon_stack_##type##_push_unchecked(s, item)    → void
+ * - stack_##type##_push_unchecked(s, item)    → void
  *
  * Pop (Result variant):
- * - canon_stack_##type##_pop(s, out)                → result__Bool_Error
+ * - stack_##type##_pop(s, out)                → result__Bool_Error
  *
  * Pop (Option variant):
- * - canon_stack_##type##_pop_option(s)              → option_##type
+ * - stack_##type##_pop_option(s)              → option_##type
  *
  * Peek (bool + out-param variant):
- * - canon_stack_##type##_peek(s, out)               → bool
+ * - stack_##type##_peek(s, out)               → bool
  *
  * Peek (Option variant — preferred when caller has not checked is_empty):
- * - canon_stack_##type##_peek_option(s)             → option_##type
+ * - stack_##type##_peek_option(s)             → option_##type
  *
  * Misc:
- * - canon_stack_##type##_clear(s)                   → void
+ * - stack_##type##_clear(s)                   → void
  *
  * @param linkage C linkage specifier: `static inline`, `static`, or empty
  * @param type    Element type — DEFINE_VEC(linkage, type) must be called first
@@ -222,7 +222,7 @@
  * @pre CANON_OPTION(type) has already been called for the same type
  * @pre DEFINE_VEC(linkage, type) has already been called for the same type
  *
- * @note canon_stack_##type is a typedef alias for canon_vec_##type — all vec
+ * @note stack_##type is a typedef alias for vec_##type — all vec
  *       functions remain usable. DEFINE_STACK only adds LIFO-named wrappers
  *       for clarity.
  */
@@ -231,16 +231,16 @@
 /** \
  * @brief Fixed-capacity LIFO stack for type \
  * \
- * Typedef alias for canon_vec_##type. \
- * All canon_vec_##type functions are available; \
- * use canon_stack_##type functions for LIFO-specific clarity. \
+ * Typedef alias for vec_##type. \
+ * All vec_##type functions are available; \
+ * use stack_##type functions for LIFO-specific clarity. \
  */ \
-typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
+typedef MANGLE_VEC_TYPE(type) stack_##type; \
 \
 /** \
  * @brief Initializes the stack with a caller-owned buffer \
  * \
- * @param s        borrowed(canon_stack_##type*) — must not be NULL \
+ * @param s        borrowed(stack_##type*) — must not be NULL \
  * @param buffer   borrowed(type*) — must remain valid for stack lifetime \
  * @param capacity Maximum number of elements \
  * \
@@ -255,17 +255,17 @@ typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
  * - Time:  O(1) \
  * - Space: O(1) — wraps caller-provided buffer \
  */ \
-linkage void canon_stack_##type##_init( \
-    borrowed(canon_stack_##type*) s, borrowed(type*) buffer, usize capacity) \
+linkage void stack_##type##_init( \
+    borrowed(stack_##type*) s, borrowed(type*) buffer, usize capacity) \
 { \
-    require_msg(s != NULL, "canon_stack_" #type "_init: s cannot be NULL"); \
+    require_msg(s != NULL, "stack_" #type "_init: s cannot be NULL"); \
     *s = MANGLE_VEC_INIT(type)(buffer, capacity); \
 } \
 \
 /** \
  * @brief Pushes an item onto the top of the stack, returns Result \
  * \
- * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param s    borrowed(stack_##type*) — initialized stack instance \
  * @param item Value to push \
  * @return result__Bool_Error — Ok(true) on success \
  * \
@@ -276,8 +276,8 @@ linkage void canon_stack_##type##_init( \
  * - Time:  O(1) — no allocation \
  * - Space: O(1) \
  */ \
-linkage result__Bool_Error canon_stack_##type##_push( \
-    borrowed(canon_stack_##type*) s, type item) \
+linkage result__Bool_Error stack_##type##_push( \
+    borrowed(stack_##type*) s, type item) \
 { \
     return MANGLE_VEC_PUSH(type)(s, item); \
 } \
@@ -285,18 +285,18 @@ linkage result__Bool_Error canon_stack_##type##_push( \
 /** \
  * @brief Pushes an item onto the top of the stack, returns bool (no Result overhead) \
  * \
- * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param s    borrowed(stack_##type*) — initialized stack instance \
  * @param item Value to push \
  * @return true on success, false if s == NULL, s->items == NULL, or stack is full \
  * \
  * @remark O(1) time, O(1) space — no allocation, no Result construction \
  * @remark Preferred over push in hot paths where only pass/fail matters \
  * \
- * @sa canon_stack_##type##_push — Result variant with specific error codes \
- * @sa canon_stack_##type##_push_unchecked — unchecked variant for maximum throughput \
+ * @sa stack_##type##_push — Result variant with specific error codes \
+ * @sa stack_##type##_push_unchecked — unchecked variant for maximum throughput \
  */ \
-linkage bool canon_stack_##type##_try_push( \
-    borrowed(canon_stack_##type*) s, type item) \
+linkage bool stack_##type##_try_push( \
+    borrowed(stack_##type*) s, type item) \
 { \
     return MANGLE_VEC_TRY_PUSH(type)(s, item); \
 } \
@@ -304,7 +304,7 @@ linkage bool canon_stack_##type##_try_push( \
 /** \
  * @brief Pushes an item onto the top of the stack without any checking (fast path) \
  * \
- * @param s    borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param s    borrowed(stack_##type*) — initialized stack instance \
  * @param item Value to push \
  * \
  * @pre s != NULL \
@@ -317,11 +317,11 @@ linkage bool canon_stack_##type##_try_push( \
  * @remark O(1) time, O(1) space — zero overhead in release builds \
  * @remark Use in ISRs and tight loops where you have already checked is_full \
  * \
- * @sa canon_stack_##type##_push — Result variant with full diagnostics \
- * @sa canon_stack_##type##_try_push — bool variant with runtime checks \
+ * @sa stack_##type##_push — Result variant with full diagnostics \
+ * @sa stack_##type##_try_push — bool variant with runtime checks \
  */ \
-linkage void canon_stack_##type##_push_unchecked( \
-    borrowed(canon_stack_##type*) s, type item) \
+linkage void stack_##type##_push_unchecked( \
+    borrowed(stack_##type*) s, type item) \
 { \
     MANGLE_VEC_PUSH_UNCHECKED(type)(s, item); \
 } \
@@ -329,7 +329,7 @@ linkage void canon_stack_##type##_push_unchecked( \
 /** \
  * @brief Removes and returns the top item (LIFO order) \
  * \
- * @param s   borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param s   borrowed(stack_##type*) — initialized stack instance \
  * @param out borrowed(type*) — pointer to store the popped value \
  * @return result__Bool_Error — Ok(true) on success \
  * \
@@ -341,8 +341,8 @@ linkage void canon_stack_##type##_push_unchecked( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage result__Bool_Error canon_stack_##type##_pop( \
-    borrowed(canon_stack_##type*) s, borrowed(type*) out) \
+linkage result__Bool_Error stack_##type##_pop( \
+    borrowed(stack_##type*) s, borrowed(type*) out) \
 { \
     return MANGLE_VEC_POP(type)(s, out); \
 } \
@@ -350,15 +350,15 @@ linkage result__Bool_Error canon_stack_##type##_pop( \
 /** \
  * @brief Removes and returns the top item as Option<type> \
  * \
- * @param s borrowed(canon_stack_##type*) — initialized stack instance \
+ * @param s borrowed(stack_##type*) — initialized stack instance \
  * @return option_##type — Some(item) on success, None if empty or invalid \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage option_##type canon_stack_##type##_pop_option( \
-    borrowed(canon_stack_##type*) s) \
+linkage option_##type stack_##type##_pop_option( \
+    borrowed(stack_##type*) s) \
 { \
     return MANGLE_VEC_POP_OPTION(type)(s); \
 } \
@@ -369,7 +369,7 @@ linkage option_##type canon_stack_##type##_pop_option( \
  * Use peek_option() when the caller has not already confirmed the stack \
  * is non-empty. Use peek() as a fast path after an is_empty() check. \
  * \
- * @param s   borrowed(const canon_stack_##type*) — must not be NULL \
+ * @param s   borrowed(const stack_##type*) — must not be NULL \
  * @param out borrowed(type*) — must not be NULL \
  * @return true if a value was written to *out, false if stack is empty \
  * \
@@ -382,11 +382,11 @@ linkage option_##type canon_stack_##type##_pop_option( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage bool canon_stack_##type##_peek( \
-    borrowed(const canon_stack_##type*) s, borrowed(type*) out) \
+linkage bool stack_##type##_peek( \
+    borrowed(const stack_##type*) s, borrowed(type*) out) \
 { \
-    require_msg(s   != NULL, "canon_stack_" #type "_peek: s cannot be NULL"); \
-    require_msg(out != NULL, "canon_stack_" #type "_peek: out cannot be NULL"); \
+    require_msg(s   != NULL, "stack_" #type "_peek: s cannot be NULL"); \
+    require_msg(out != NULL, "stack_" #type "_peek: out cannot be NULL"); \
     if (MANGLE_VEC_IS_EMPTY(type)(s)) return false; \
     type* last = MANGLE_VEC_LAST(type)(s); \
     if (!last) return false; \
@@ -401,7 +401,7 @@ linkage bool canon_stack_##type##_peek( \
  * stack is non-empty. Returns None cleanly instead of requiring a \
  * prior is_empty() check. \
  * \
- * @param s borrowed(const canon_stack_##type*) — must not be NULL \
+ * @param s borrowed(const stack_##type*) — must not be NULL \
  * @return option_##type — Some(top) if non-empty, None if empty \
  * \
  * @pre s != NULL (programming error — triggers require_msg via peek) \
@@ -412,11 +412,11 @@ linkage bool canon_stack_##type##_peek( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage option_##type canon_stack_##type##_peek_option( \
-    borrowed(const canon_stack_##type*) s) \
+linkage option_##type stack_##type##_peek_option( \
+    borrowed(const stack_##type*) s) \
 { \
     type val = {0}; /* zero-init so val is never uninitialized on any path */ \
-    if (canon_stack_##type##_peek(s, &val)) \
+    if (stack_##type##_peek(s, &val)) \
         return option_##type##_some(val); \
     return option_##type##_none(); \
 } \
@@ -424,15 +424,15 @@ linkage option_##type canon_stack_##type##_peek_option( \
 /** \
  * @brief Returns the current number of elements \
  * \
- * @param s borrowed(const canon_stack_##type*) — NULL-safe, returns 0 if NULL \
+ * @param s borrowed(const stack_##type*) — NULL-safe, returns 0 if NULL \
  * @return usize \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage usize canon_stack_##type##_len( \
-    borrowed(const canon_stack_##type*) s) \
+linkage usize stack_##type##_len( \
+    borrowed(const stack_##type*) s) \
 { \
     return MANGLE_VEC_LEN(type)(s); \
 } \
@@ -440,15 +440,15 @@ linkage usize canon_stack_##type##_len( \
 /** \
  * @brief Returns the fixed maximum capacity \
  * \
- * @param s borrowed(const canon_stack_##type*) — NULL-safe, returns 0 if NULL \
+ * @param s borrowed(const stack_##type*) — NULL-safe, returns 0 if NULL \
  * @return usize \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage usize canon_stack_##type##_capacity( \
-    borrowed(const canon_stack_##type*) s) \
+linkage usize stack_##type##_capacity( \
+    borrowed(const stack_##type*) s) \
 { \
     return MANGLE_VEC_CAPACITY(type)(s); \
 } \
@@ -456,15 +456,15 @@ linkage usize canon_stack_##type##_capacity( \
 /** \
  * @brief Returns remaining free slots (capacity - len) \
  * \
- * @param s borrowed(const canon_stack_##type*) — NULL-safe, returns 0 if NULL \
+ * @param s borrowed(const stack_##type*) — NULL-safe, returns 0 if NULL \
  * @return usize \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage usize canon_stack_##type##_remaining( \
-    borrowed(const canon_stack_##type*) s) \
+linkage usize stack_##type##_remaining( \
+    borrowed(const stack_##type*) s) \
 { \
     return MANGLE_VEC_REMAINING(type)(s); \
 } \
@@ -472,15 +472,15 @@ linkage usize canon_stack_##type##_remaining( \
 /** \
  * @brief Returns true if the stack has no elements (len == 0) \
  * \
- * @param s borrowed(const canon_stack_##type*) — NULL-safe, returns true if NULL \
+ * @param s borrowed(const stack_##type*) — NULL-safe, returns true if NULL \
  * @return bool \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage bool canon_stack_##type##_is_empty( \
-    borrowed(const canon_stack_##type*) s) \
+linkage bool stack_##type##_is_empty( \
+    borrowed(const stack_##type*) s) \
 { \
     return MANGLE_VEC_IS_EMPTY(type)(s); \
 } \
@@ -488,15 +488,15 @@ linkage bool canon_stack_##type##_is_empty( \
 /** \
  * @brief Returns true if the stack is at capacity (len == capacity) \
  * \
- * @param s borrowed(const canon_stack_##type*) — NULL-safe, returns true if NULL \
+ * @param s borrowed(const stack_##type*) — NULL-safe, returns true if NULL \
  * @return bool \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage bool canon_stack_##type##_is_full( \
-    borrowed(const canon_stack_##type*) s) \
+linkage bool stack_##type##_is_full( \
+    borrowed(const stack_##type*) s) \
 { \
     return MANGLE_VEC_IS_FULL(type)(s); \
 } \
@@ -504,7 +504,7 @@ linkage bool canon_stack_##type##_is_full( \
 /** \
  * @brief Resets the stack to empty state (O(1), does not zero buffer) \
  * \
- * @param s borrowed(canon_stack_##type*) — NULL-safe \
+ * @param s borrowed(stack_##type*) — NULL-safe \
  * \
  * @post s->len == 0 \
  * @post Buffer contents are NOT zeroed — only logical state is reset \
@@ -514,7 +514,7 @@ linkage bool canon_stack_##type##_is_full( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
-linkage void canon_stack_##type##_clear(borrowed(canon_stack_##type*) s) { \
+linkage void stack_##type##_clear(borrowed(stack_##type*) s) { \
     MANGLE_VEC_CLEAR(type)(s); \
 }
 
@@ -539,21 +539,21 @@ linkage void canon_stack_##type##_clear(borrowed(canon_stack_##type*) s) { \
  */
 #define DECLARE_STACK(type) \
 \
-typedef MANGLE_VEC_TYPE(type) canon_stack_##type; \
+typedef MANGLE_VEC_TYPE(type) stack_##type; \
 \
-extern void                canon_stack_##type##_init(borrowed(canon_stack_##type*) s, borrowed(type*) buffer, usize capacity); \
-extern result__Bool_Error  canon_stack_##type##_push(borrowed(canon_stack_##type*) s, type item); \
-extern bool                canon_stack_##type##_try_push(borrowed(canon_stack_##type*) s, type item); \
-extern void                canon_stack_##type##_push_unchecked(borrowed(canon_stack_##type*) s, type item); \
-extern result__Bool_Error  canon_stack_##type##_pop(borrowed(canon_stack_##type*) s, borrowed(type*) out); \
-extern option_##type       canon_stack_##type##_pop_option(borrowed(canon_stack_##type*) s); \
-extern bool                canon_stack_##type##_peek(borrowed(const canon_stack_##type*) s, borrowed(type*) out); \
-extern option_##type       canon_stack_##type##_peek_option(borrowed(const canon_stack_##type*) s); \
-extern usize               canon_stack_##type##_len(borrowed(const canon_stack_##type*) s); \
-extern usize               canon_stack_##type##_capacity(borrowed(const canon_stack_##type*) s); \
-extern usize               canon_stack_##type##_remaining(borrowed(const canon_stack_##type*) s); \
-extern bool                canon_stack_##type##_is_empty(borrowed(const canon_stack_##type*) s); \
-extern bool                canon_stack_##type##_is_full(borrowed(const canon_stack_##type*) s); \
-extern void                canon_stack_##type##_clear(borrowed(canon_stack_##type*) s);
+extern void                stack_##type##_init(borrowed(stack_##type*) s, borrowed(type*) buffer, usize capacity); \
+extern result__Bool_Error  stack_##type##_push(borrowed(stack_##type*) s, type item); \
+extern bool                stack_##type##_try_push(borrowed(stack_##type*) s, type item); \
+extern void                stack_##type##_push_unchecked(borrowed(stack_##type*) s, type item); \
+extern result__Bool_Error  stack_##type##_pop(borrowed(stack_##type*) s, borrowed(type*) out); \
+extern option_##type       stack_##type##_pop_option(borrowed(stack_##type*) s); \
+extern bool                stack_##type##_peek(borrowed(const stack_##type*) s, borrowed(type*) out); \
+extern option_##type       stack_##type##_peek_option(borrowed(const stack_##type*) s); \
+extern usize               stack_##type##_len(borrowed(const stack_##type*) s); \
+extern usize               stack_##type##_capacity(borrowed(const stack_##type*) s); \
+extern usize               stack_##type##_remaining(borrowed(const stack_##type*) s); \
+extern bool                stack_##type##_is_empty(borrowed(const stack_##type*) s); \
+extern bool                stack_##type##_is_full(borrowed(const stack_##type*) s); \
+extern void                stack_##type##_clear(borrowed(stack_##type*) s);
 
 #endif /* CANON_DATA_STACK_H */

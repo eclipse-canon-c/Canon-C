@@ -3,17 +3,17 @@
  * @brief Tests for data/queue.h — bounded FIFO queue (deque wrapper)
  *
  * Covers:
- *   - canon_queue_int_init()              — valid initialization
- *   - canon_queue_int_enqueue()           — success, capacity exceeded,
+ *   - queue_int_init()              — valid initialization
+ *   - queue_int_enqueue()           — success, capacity exceeded,
  *                                           NULL args (ERR_INVALID_ARG)
- *   - canon_queue_int_try_enqueue()       — bool variant, success + full + NULL
- *   - canon_queue_int_enqueue_unchecked() — unchecked variant, success + wraparound
- *   - canon_queue_int_dequeue()           — FIFO order, empty queue
+ *   - queue_int_try_enqueue()       — bool variant, success + full + NULL
+ *   - queue_int_enqueue_unchecked() — unchecked variant, success + wraparound
+ *   - queue_int_dequeue()           — FIFO order, empty queue
  *                                           (ERR_INVALID_STATE), NULL args
- *   - canon_queue_int_dequeue_option()    — Some / None
- *   - canon_queue_int_peek()              — present / empty, non-destructive
- *   - canon_queue_int_peek_option()       — Some / None, non-destructive
- *   - canon_queue_int_clear()             — resets to empty, buffer reusable
+ *   - queue_int_dequeue_option()    — Some / None
+ *   - queue_int_peek()              — present / empty, non-destructive
+ *   - queue_int_peek_option()       — Some / None, non-destructive
+ *   - queue_int_clear()             — resets to empty, buffer reusable
  *   - Queries                             — len, capacity, remaining,
  *                                           is_empty, is_full
  *   - FIFO ordering stress                — 128-element wrap-around ring
@@ -82,14 +82,14 @@ static int g_failed = 0;
 static void test_init(void)
 {
     int buf[8];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 8);
+    queue_int q;
+    queue_int_init(&q, buf, 8);
 
-    EXPECT(canon_queue_int_len(&q)       == 0);
-    EXPECT(canon_queue_int_capacity(&q)  == 8);
-    EXPECT(canon_queue_int_remaining(&q) == 8);
-    EXPECT(canon_queue_int_is_empty(&q));
-    EXPECT(!canon_queue_int_is_full(&q));
+    EXPECT(queue_int_len(&q)       == 0);
+    EXPECT(queue_int_capacity(&q)  == 8);
+    EXPECT(queue_int_remaining(&q) == 8);
+    EXPECT(queue_int_is_empty(&q));
+    EXPECT(!queue_int_is_full(&q));
 }
 
 /* ── FIFO ordering ───────────────────────────────────────────────────────── */
@@ -97,23 +97,23 @@ static void test_init(void)
 static void test_fifo_ordering(void)
 {
     int buf[8];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 8);
+    queue_int q;
+    queue_int_init(&q, buf, 8);
 
     for (int i = 1; i <= 5; i++) {
-        result__Bool_Error r = canon_queue_int_enqueue(&q, i * 10);
+        result__Bool_Error r = queue_int_enqueue(&q, i * 10);
         EXPECT(result__Bool_Error_is_ok(r));
     }
-    EXPECT(canon_queue_int_len(&q) == 5);
+    EXPECT(queue_int_len(&q) == 5);
 
     /* dequeue must return values in enqueue order */
     for (int i = 1; i <= 5; i++) {
         int out = 0;
-        result__Bool_Error r = canon_queue_int_dequeue(&q, &out);
+        result__Bool_Error r = queue_int_dequeue(&q, &out);
         EXPECT(result__Bool_Error_is_ok(r));
         EXPECT(out == i * 10);
     }
-    EXPECT(canon_queue_int_is_empty(&q));
+    EXPECT(queue_int_is_empty(&q));
 }
 
 /* ── enqueue — capacity exceeded ─────────────────────────────────────────── */
@@ -121,26 +121,26 @@ static void test_fifo_ordering(void)
 static void test_enqueue_capacity_exceeded(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
-    canon_queue_int_enqueue(&q, 1);
-    canon_queue_int_enqueue(&q, 2);
-    canon_queue_int_enqueue(&q, 3);
-    canon_queue_int_enqueue(&q, 4);
-    EXPECT(canon_queue_int_is_full(&q));
+    queue_int_enqueue(&q, 1);
+    queue_int_enqueue(&q, 2);
+    queue_int_enqueue(&q, 3);
+    queue_int_enqueue(&q, 4);
+    EXPECT(queue_int_is_full(&q));
 
-    result__Bool_Error r = canon_queue_int_enqueue(&q, 5);
+    result__Bool_Error r = queue_int_enqueue(&q, 5);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
-    EXPECT(canon_queue_int_len(&q) == 4); /* unchanged */
+    EXPECT(queue_int_len(&q) == 4); /* unchanged */
 }
 
 /* ── enqueue — NULL args ─────────────────────────────────────────────────── */
 
 static void test_enqueue_null_args(void)
 {
-    result__Bool_Error r = canon_queue_int_enqueue(NULL, 42);
+    result__Bool_Error r = queue_int_enqueue(NULL, 42);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
@@ -150,38 +150,38 @@ static void test_enqueue_null_args(void)
 static void test_try_enqueue_success(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
-    EXPECT(canon_queue_int_try_enqueue(&q, 1));
-    EXPECT(canon_queue_int_try_enqueue(&q, 2));
-    EXPECT(canon_queue_int_try_enqueue(&q, 3));
+    EXPECT(queue_int_try_enqueue(&q, 1));
+    EXPECT(queue_int_try_enqueue(&q, 2));
+    EXPECT(queue_int_try_enqueue(&q, 3));
 
-    EXPECT(canon_queue_int_len(&q) == 3);
+    EXPECT(queue_int_len(&q) == 3);
 
     /* FIFO order preserved */
     int out = 0;
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 1);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 2);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 3);
+    queue_int_dequeue(&q, &out); EXPECT(out == 1);
+    queue_int_dequeue(&q, &out); EXPECT(out == 2);
+    queue_int_dequeue(&q, &out); EXPECT(out == 3);
 }
 
 static void test_try_enqueue_full_returns_false(void)
 {
     int buf[2];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 2);
+    queue_int q;
+    queue_int_init(&q, buf, 2);
 
-    EXPECT(canon_queue_int_try_enqueue(&q, 1));
-    EXPECT(canon_queue_int_try_enqueue(&q, 2));
-    EXPECT(!canon_queue_int_try_enqueue(&q, 3));
+    EXPECT(queue_int_try_enqueue(&q, 1));
+    EXPECT(queue_int_try_enqueue(&q, 2));
+    EXPECT(!queue_int_try_enqueue(&q, 3));
 
-    EXPECT(canon_queue_int_len(&q) == 2);
+    EXPECT(queue_int_len(&q) == 2);
 }
 
 static void test_try_enqueue_null_returns_false(void)
 {
-    EXPECT(!canon_queue_int_try_enqueue(NULL, 1));
+    EXPECT(!queue_int_try_enqueue(NULL, 1));
 }
 
 /* ── enqueue_unchecked ───────────────────────────────────────────────────── */
@@ -189,47 +189,47 @@ static void test_try_enqueue_null_returns_false(void)
 static void test_enqueue_unchecked_success(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
-    canon_queue_int_enqueue_unchecked(&q, 10);
-    canon_queue_int_enqueue_unchecked(&q, 20);
-    canon_queue_int_enqueue_unchecked(&q, 30);
+    queue_int_enqueue_unchecked(&q, 10);
+    queue_int_enqueue_unchecked(&q, 20);
+    queue_int_enqueue_unchecked(&q, 30);
 
-    EXPECT(canon_queue_int_len(&q) == 3);
+    EXPECT(queue_int_len(&q) == 3);
 
     /* FIFO order preserved */
     int out = 0;
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 10);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 20);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 30);
+    queue_int_dequeue(&q, &out); EXPECT(out == 10);
+    queue_int_dequeue(&q, &out); EXPECT(out == 20);
+    queue_int_dequeue(&q, &out); EXPECT(out == 30);
 }
 
 static void test_enqueue_unchecked_wraparound(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
     /* Fill and drain to move head/tail forward */
-    canon_queue_int_enqueue_unchecked(&q, 1);
-    canon_queue_int_enqueue_unchecked(&q, 2);
+    queue_int_enqueue_unchecked(&q, 1);
+    queue_int_enqueue_unchecked(&q, 2);
     int out = 0;
-    canon_queue_int_dequeue(&q, &out);
-    canon_queue_int_dequeue(&q, &out);
+    queue_int_dequeue(&q, &out);
+    queue_int_dequeue(&q, &out);
 
     /* Now enqueue_unchecked should wrap around correctly */
-    canon_queue_int_enqueue_unchecked(&q, 3);
-    canon_queue_int_enqueue_unchecked(&q, 4);
-    canon_queue_int_enqueue_unchecked(&q, 5);
-    canon_queue_int_enqueue_unchecked(&q, 6);
+    queue_int_enqueue_unchecked(&q, 3);
+    queue_int_enqueue_unchecked(&q, 4);
+    queue_int_enqueue_unchecked(&q, 5);
+    queue_int_enqueue_unchecked(&q, 6);
 
-    EXPECT(canon_queue_int_is_full(&q));
+    EXPECT(queue_int_is_full(&q));
 
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 3);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 4);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 5);
-    canon_queue_int_dequeue(&q, &out); EXPECT(out == 6);
+    queue_int_dequeue(&q, &out); EXPECT(out == 3);
+    queue_int_dequeue(&q, &out); EXPECT(out == 4);
+    queue_int_dequeue(&q, &out); EXPECT(out == 5);
+    queue_int_dequeue(&q, &out); EXPECT(out == 6);
 }
 
 /* ── dequeue — empty queue ───────────────────────────────────────────────── */
@@ -237,11 +237,11 @@ static void test_enqueue_unchecked_wraparound(void)
 static void test_dequeue_empty(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
     int out = 999;
-    result__Bool_Error r = canon_queue_int_dequeue(&q, &out);
+    result__Bool_Error r = queue_int_dequeue(&q, &out);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
     EXPECT(out == 999); /* out must not be written */
@@ -252,20 +252,20 @@ static void test_dequeue_empty(void)
 static void test_dequeue_null_args(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
     int out = 0;
 
     result__Bool_Error r;
 
     /* NULL queue */
-    r = canon_queue_int_dequeue(NULL, &out);
+    r = queue_int_dequeue(NULL, &out);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
     /* NULL out */
-    canon_queue_int_enqueue(&q, 42);
-    r = canon_queue_int_dequeue(&q, NULL);
+    queue_int_enqueue(&q, 42);
+    r = queue_int_dequeue(&q, NULL);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
@@ -275,24 +275,24 @@ static void test_dequeue_null_args(void)
 static void test_dequeue_option(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
-    canon_queue_int_enqueue(&q, 10);
-    canon_queue_int_enqueue(&q, 20);
+    queue_int_enqueue(&q, 10);
+    queue_int_enqueue(&q, 20);
 
     option_int o;
 
-    o = canon_queue_int_dequeue_option(&q);
+    o = queue_int_dequeue_option(&q);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 10);
 
-    o = canon_queue_int_dequeue_option(&q);
+    o = queue_int_dequeue_option(&q);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 20);
 
     /* None on empty */
-    o = canon_queue_int_dequeue_option(&q);
+    o = queue_int_dequeue_option(&q);
     EXPECT(option_int_is_none(o));
 }
 
@@ -301,26 +301,26 @@ static void test_dequeue_option(void)
 static void test_peek(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
     /* empty — peek returns false */
     int out = 999;
-    EXPECT(!canon_queue_int_peek(&q, &out));
+    EXPECT(!queue_int_peek(&q, &out));
     EXPECT(out == 999); /* not written */
 
-    canon_queue_int_enqueue(&q, 55);
-    canon_queue_int_enqueue(&q, 77);
+    queue_int_enqueue(&q, 55);
+    queue_int_enqueue(&q, 77);
 
     /* peek twice — same result, len unchanged */
-    EXPECT(canon_queue_int_peek(&q, &out));
+    EXPECT(queue_int_peek(&q, &out));
     EXPECT(out == 55);
-    EXPECT(canon_queue_int_len(&q) == 2);
+    EXPECT(queue_int_len(&q) == 2);
 
     out = 0;
-    EXPECT(canon_queue_int_peek(&q, &out));
+    EXPECT(queue_int_peek(&q, &out));
     EXPECT(out == 55);
-    EXPECT(canon_queue_int_len(&q) == 2);
+    EXPECT(queue_int_len(&q) == 2);
 }
 
 /* ── peek_option — Some / None ───────────────────────────────────────────── */
@@ -328,20 +328,20 @@ static void test_peek(void)
 static void test_peek_option(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
-    EXPECT(option_int_is_none(canon_queue_int_peek_option(&q)));
+    EXPECT(option_int_is_none(queue_int_peek_option(&q)));
 
-    canon_queue_int_enqueue(&q, 42);
+    queue_int_enqueue(&q, 42);
 
-    option_int o = canon_queue_int_peek_option(&q);
+    option_int o = queue_int_peek_option(&q);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 42);
-    EXPECT(canon_queue_int_len(&q) == 1); /* non-destructive */
+    EXPECT(queue_int_len(&q) == 1); /* non-destructive */
 
     /* peek again — still Some(42) */
-    o = canon_queue_int_peek_option(&q);
+    o = queue_int_peek_option(&q);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 42);
 }
@@ -351,24 +351,24 @@ static void test_peek_option(void)
 static void test_clear(void)
 {
     int buf[8];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 8);
+    queue_int q;
+    queue_int_init(&q, buf, 8);
 
-    canon_queue_int_enqueue(&q, 1);
-    canon_queue_int_enqueue(&q, 2);
-    canon_queue_int_enqueue(&q, 3);
-    EXPECT(canon_queue_int_len(&q) == 3);
+    queue_int_enqueue(&q, 1);
+    queue_int_enqueue(&q, 2);
+    queue_int_enqueue(&q, 3);
+    EXPECT(queue_int_len(&q) == 3);
 
-    canon_queue_int_clear(&q);
-    EXPECT(canon_queue_int_len(&q)       == 0);
-    EXPECT(canon_queue_int_capacity(&q)  == 8);
-    EXPECT(canon_queue_int_remaining(&q) == 8);
-    EXPECT(canon_queue_int_is_empty(&q));
+    queue_int_clear(&q);
+    EXPECT(queue_int_len(&q)       == 0);
+    EXPECT(queue_int_capacity(&q)  == 8);
+    EXPECT(queue_int_remaining(&q) == 8);
+    EXPECT(queue_int_is_empty(&q));
 
     /* Buffer reusable after clear */
-    result__Bool_Error r = canon_queue_int_enqueue(&q, 99);
+    result__Bool_Error r = queue_int_enqueue(&q, 99);
     EXPECT(result__Bool_Error_is_ok(r));
-    EXPECT(canon_queue_int_len(&q) == 1);
+    EXPECT(queue_int_len(&q) == 1);
 }
 
 /* ── queries ─────────────────────────────────────────────────────────────── */
@@ -376,28 +376,28 @@ static void test_clear(void)
 static void test_queries(void)
 {
     int buf[4];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 4);
+    queue_int q;
+    queue_int_init(&q, buf, 4);
 
-    EXPECT(canon_queue_int_len(&q)       == 0);
-    EXPECT(canon_queue_int_capacity(&q)  == 4);
-    EXPECT(canon_queue_int_remaining(&q) == 4);
-    EXPECT(canon_queue_int_is_empty(&q));
-    EXPECT(!canon_queue_int_is_full(&q));
+    EXPECT(queue_int_len(&q)       == 0);
+    EXPECT(queue_int_capacity(&q)  == 4);
+    EXPECT(queue_int_remaining(&q) == 4);
+    EXPECT(queue_int_is_empty(&q));
+    EXPECT(!queue_int_is_full(&q));
 
-    canon_queue_int_enqueue(&q, 10);
-    EXPECT(canon_queue_int_len(&q)       == 1);
-    EXPECT(canon_queue_int_remaining(&q) == 3);
-    EXPECT(!canon_queue_int_is_empty(&q));
-    EXPECT(!canon_queue_int_is_full(&q));
+    queue_int_enqueue(&q, 10);
+    EXPECT(queue_int_len(&q)       == 1);
+    EXPECT(queue_int_remaining(&q) == 3);
+    EXPECT(!queue_int_is_empty(&q));
+    EXPECT(!queue_int_is_full(&q));
 
-    canon_queue_int_enqueue(&q, 20);
-    canon_queue_int_enqueue(&q, 30);
-    canon_queue_int_enqueue(&q, 40);
-    EXPECT(canon_queue_int_len(&q)       == 4);
-    EXPECT(canon_queue_int_remaining(&q) == 0);
-    EXPECT(canon_queue_int_is_full(&q));
-    EXPECT(!canon_queue_int_is_empty(&q));
+    queue_int_enqueue(&q, 20);
+    queue_int_enqueue(&q, 30);
+    queue_int_enqueue(&q, 40);
+    EXPECT(queue_int_len(&q)       == 4);
+    EXPECT(queue_int_remaining(&q) == 0);
+    EXPECT(queue_int_is_full(&q));
+    EXPECT(!queue_int_is_empty(&q));
 }
 
 /* ── ring-buffer wrap-around stress ──────────────────────────────────────── */
@@ -405,23 +405,23 @@ static void test_queries(void)
 static void test_ring_wrap_around(void)
 {
     int buf[8];
-    canon_queue_int q;
-    canon_queue_int_init(&q, buf, 8);
+    queue_int q;
+    queue_int_init(&q, buf, 8);
 
     for (int round = 0; round < 16; round++) {
         for (int i = 0; i < 8; i++) {
-            result__Bool_Error r = canon_queue_int_enqueue(&q, round * 8 + i);
+            result__Bool_Error r = queue_int_enqueue(&q, round * 8 + i);
             EXPECT(result__Bool_Error_is_ok(r));
         }
-        EXPECT(canon_queue_int_is_full(&q));
+        EXPECT(queue_int_is_full(&q));
 
         for (int i = 0; i < 8; i++) {
             int out = 0;
-            result__Bool_Error r = canon_queue_int_dequeue(&q, &out);
+            result__Bool_Error r = queue_int_dequeue(&q, &out);
             EXPECT(result__Bool_Error_is_ok(r));
             EXPECT(out == round * 8 + i);
         }
-        EXPECT(canon_queue_int_is_empty(&q));
+        EXPECT(queue_int_is_empty(&q));
     }
 }
 
@@ -430,71 +430,71 @@ static void test_ring_wrap_around(void)
 static void test_struct_type(void)
 {
     Msg buf[4];
-    canon_queue_Msg q;
-    canon_queue_Msg_init(&q, buf, 4);
+    queue_Msg q;
+    queue_Msg_init(&q, buf, 4);
 
-    EXPECT(canon_queue_Msg_is_empty(&q));
-    EXPECT(canon_queue_Msg_len(&q)       == 0);
-    EXPECT(canon_queue_Msg_capacity(&q)  == 4);
-    EXPECT(canon_queue_Msg_remaining(&q) == 4);
-    EXPECT(!canon_queue_Msg_is_full(&q));
+    EXPECT(queue_Msg_is_empty(&q));
+    EXPECT(queue_Msg_len(&q)       == 0);
+    EXPECT(queue_Msg_capacity(&q)  == 4);
+    EXPECT(queue_Msg_remaining(&q) == 4);
+    EXPECT(!queue_Msg_is_full(&q));
 
     Msg m1 = {1, 10};
     Msg m2 = {2, 20};
     Msg m3 = {3, 30};
 
     result__Bool_Error r;
-    r = canon_queue_Msg_enqueue(&q, m1); EXPECT(result__Bool_Error_is_ok(r));
-    r = canon_queue_Msg_enqueue(&q, m2); EXPECT(result__Bool_Error_is_ok(r));
-    r = canon_queue_Msg_enqueue(&q, m3); EXPECT(result__Bool_Error_is_ok(r));
-    EXPECT(canon_queue_Msg_len(&q) == 3);
+    r = queue_Msg_enqueue(&q, m1); EXPECT(result__Bool_Error_is_ok(r));
+    r = queue_Msg_enqueue(&q, m2); EXPECT(result__Bool_Error_is_ok(r));
+    r = queue_Msg_enqueue(&q, m3); EXPECT(result__Bool_Error_is_ok(r));
+    EXPECT(queue_Msg_len(&q) == 3);
 
     /* try_enqueue on Msg */
-    EXPECT(canon_queue_Msg_try_enqueue(&q, (Msg){4, 40}));
-    EXPECT(canon_queue_Msg_is_full(&q));
-    EXPECT(!canon_queue_Msg_try_enqueue(&q, (Msg){5, 50}));
+    EXPECT(queue_Msg_try_enqueue(&q, (Msg){4, 40}));
+    EXPECT(queue_Msg_is_full(&q));
+    EXPECT(!queue_Msg_try_enqueue(&q, (Msg){5, 50}));
 
     /* Drain one and test enqueue_unchecked on Msg */
     Msg out_msg = {0, 0};
-    canon_queue_Msg_dequeue(&q, &out_msg);
-    canon_queue_Msg_enqueue_unchecked(&q, (Msg){5, 50});
+    queue_Msg_dequeue(&q, &out_msg);
+    queue_Msg_enqueue_unchecked(&q, (Msg){5, 50});
 
-    option_Msg peek = canon_queue_Msg_peek_option(&q);
+    option_Msg peek = queue_Msg_peek_option(&q);
     EXPECT(option_Msg_is_some(peek));
     EXPECT(option_Msg_unwrap(peek).id == 2);
-    EXPECT(canon_queue_Msg_len(&q) == 4);
+    EXPECT(queue_Msg_len(&q) == 4);
 
     /* peek — out-param variant */
     Msg top = {0, 0};
-    EXPECT(canon_queue_Msg_peek(&q, &top));
+    EXPECT(queue_Msg_peek(&q, &top));
     EXPECT(top.id == 2);
 
     /* FIFO dequeue via option */
     option_Msg o;
-    o = canon_queue_Msg_dequeue_option(&q);
+    o = queue_Msg_dequeue_option(&q);
     EXPECT(option_Msg_is_some(o));
     EXPECT(option_Msg_unwrap(o).id == 2);
 
     /* FIFO dequeue via out-param */
     out_msg = (Msg){0, 0};
-    r = canon_queue_Msg_dequeue(&q, &out_msg);
+    r = queue_Msg_dequeue(&q, &out_msg);
     EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out_msg.id == 3);
 
-    EXPECT(canon_queue_Msg_len(&q) == 2);
+    EXPECT(queue_Msg_len(&q) == 2);
 
     /* clear */
-    canon_queue_Msg_clear(&q);
-    EXPECT(canon_queue_Msg_is_empty(&q));
-    EXPECT(option_Msg_is_none(canon_queue_Msg_dequeue_option(&q)));
+    queue_Msg_clear(&q);
+    EXPECT(queue_Msg_is_empty(&q));
+    EXPECT(option_Msg_is_none(queue_Msg_dequeue_option(&q)));
 
     /* capacity exceeded */
-    canon_queue_Msg_enqueue(&q, m1);
-    canon_queue_Msg_enqueue(&q, m2);
-    canon_queue_Msg_enqueue(&q, m3);
-    canon_queue_Msg_enqueue(&q, (Msg){4, 40});
-    EXPECT(canon_queue_Msg_is_full(&q));
-    r = canon_queue_Msg_enqueue(&q, (Msg){5, 50});
+    queue_Msg_enqueue(&q, m1);
+    queue_Msg_enqueue(&q, m2);
+    queue_Msg_enqueue(&q, m3);
+    queue_Msg_enqueue(&q, (Msg){4, 40});
+    EXPECT(queue_Msg_is_full(&q));
+    r = queue_Msg_enqueue(&q, (Msg){5, 50});
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
 }
@@ -546,28 +546,28 @@ static void queue_suppress_unused(void)
     (void)option_Msg_eq;
 
     /* Deque functions exposed through the alias but not needed in tests */
-    (void)canon_deque_int_push_front;
-    (void)canon_deque_int_pop_back;
-    (void)canon_deque_int_pop_back_option;
-    (void)canon_deque_int_peek_back;
-    (void)canon_deque_int_peek_back_option;
-    (void)canon_deque_int_empty;
-    (void)canon_deque_int_swap;
-    (void)canon_deque_int_try_push_front;
-    (void)canon_deque_int_try_push_back;
-    (void)canon_deque_int_push_front_unchecked;
-    (void)canon_deque_int_push_back_unchecked;
-    (void)canon_deque_Msg_push_front;
-    (void)canon_deque_Msg_pop_back;
-    (void)canon_deque_Msg_pop_back_option;
-    (void)canon_deque_Msg_peek_back;
-    (void)canon_deque_Msg_peek_back_option;
-    (void)canon_deque_Msg_empty;
-    (void)canon_deque_Msg_swap;
-    (void)canon_deque_Msg_try_push_front;
-    (void)canon_deque_Msg_try_push_back;
-    (void)canon_deque_Msg_push_front_unchecked;
-    (void)canon_deque_Msg_push_back_unchecked;
+    (void)deque_int_push_front;
+    (void)deque_int_pop_back;
+    (void)deque_int_pop_back_option;
+    (void)deque_int_peek_back;
+    (void)deque_int_peek_back_option;
+    (void)deque_int_empty;
+    (void)deque_int_swap;
+    (void)deque_int_try_push_front;
+    (void)deque_int_try_push_back;
+    (void)deque_int_push_front_unchecked;
+    (void)deque_int_push_back_unchecked;
+    (void)deque_Msg_push_front;
+    (void)deque_Msg_pop_back;
+    (void)deque_Msg_pop_back_option;
+    (void)deque_Msg_peek_back;
+    (void)deque_Msg_peek_back_option;
+    (void)deque_Msg_empty;
+    (void)deque_Msg_swap;
+    (void)deque_Msg_try_push_front;
+    (void)deque_Msg_try_push_back;
+    (void)deque_Msg_push_front_unchecked;
+    (void)deque_Msg_push_back_unchecked;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -618,44 +618,44 @@ int main(void)
 static void queue_fuzz_suppress_unused(void)
 {
     /* Struct type not used in fuzz path */
-    (void)canon_queue_Msg_init;
-    (void)canon_queue_Msg_enqueue;
-    (void)canon_queue_Msg_try_enqueue;
-    (void)canon_queue_Msg_enqueue_unchecked;
-    (void)canon_queue_Msg_dequeue;
-    (void)canon_queue_Msg_dequeue_option;
-    (void)canon_queue_Msg_peek;
-    (void)canon_queue_Msg_peek_option;
-    (void)canon_queue_Msg_len;
-    (void)canon_queue_Msg_capacity;
-    (void)canon_queue_Msg_remaining;
-    (void)canon_queue_Msg_is_empty;
-    (void)canon_queue_Msg_is_full;
-    (void)canon_queue_Msg_clear;
+    (void)queue_Msg_init;
+    (void)queue_Msg_enqueue;
+    (void)queue_Msg_try_enqueue;
+    (void)queue_Msg_enqueue_unchecked;
+    (void)queue_Msg_dequeue;
+    (void)queue_Msg_dequeue_option;
+    (void)queue_Msg_peek;
+    (void)queue_Msg_peek_option;
+    (void)queue_Msg_len;
+    (void)queue_Msg_capacity;
+    (void)queue_Msg_remaining;
+    (void)queue_Msg_is_empty;
+    (void)queue_Msg_is_full;
+    (void)queue_Msg_clear;
 
     /* Deque functions not used in fuzz path */
-    (void)canon_deque_int_push_front;
-    (void)canon_deque_int_pop_back;
-    (void)canon_deque_int_pop_back_option;
-    (void)canon_deque_int_peek_back;
-    (void)canon_deque_int_peek_back_option;
-    (void)canon_deque_int_empty;
-    (void)canon_deque_int_swap;
-    (void)canon_deque_int_try_push_front;
-    (void)canon_deque_int_try_push_back;
-    (void)canon_deque_int_push_front_unchecked;
-    (void)canon_deque_int_push_back_unchecked;
-    (void)canon_deque_Msg_push_front;
-    (void)canon_deque_Msg_pop_back;
-    (void)canon_deque_Msg_pop_back_option;
-    (void)canon_deque_Msg_peek_back;
-    (void)canon_deque_Msg_peek_back_option;
-    (void)canon_deque_Msg_empty;
-    (void)canon_deque_Msg_swap;
-    (void)canon_deque_Msg_try_push_front;
-    (void)canon_deque_Msg_try_push_back;
-    (void)canon_deque_Msg_push_front_unchecked;
-    (void)canon_deque_Msg_push_back_unchecked;
+    (void)deque_int_push_front;
+    (void)deque_int_pop_back;
+    (void)deque_int_pop_back_option;
+    (void)deque_int_peek_back;
+    (void)deque_int_peek_back_option;
+    (void)deque_int_empty;
+    (void)deque_int_swap;
+    (void)deque_int_try_push_front;
+    (void)deque_int_try_push_back;
+    (void)deque_int_push_front_unchecked;
+    (void)deque_int_push_back_unchecked;
+    (void)deque_Msg_push_front;
+    (void)deque_Msg_pop_back;
+    (void)deque_Msg_pop_back_option;
+    (void)deque_Msg_peek_back;
+    (void)deque_Msg_peek_back_option;
+    (void)deque_Msg_empty;
+    (void)deque_Msg_swap;
+    (void)deque_Msg_try_push_front;
+    (void)deque_Msg_try_push_back;
+    (void)deque_Msg_push_front_unchecked;
+    (void)deque_Msg_push_back_unchecked;
 
     /* option_int combinators not used in fuzz path */
     (void)option_int_is_none;
@@ -706,10 +706,10 @@ static void queue_fuzz_suppress_unused(void)
     (void)result__Bool_Error_eq;
 
     /* int queue functions not used in fuzz path */
-    (void)canon_queue_int_capacity;
-    (void)canon_queue_int_remaining;
-    (void)canon_queue_int_is_full;
-    (void)canon_queue_int_peek;
+    (void)queue_int_capacity;
+    (void)queue_int_remaining;
+    (void)queue_int_is_full;
+    (void)queue_int_peek;
 }
 
 /*
@@ -745,14 +745,14 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     /* Max capacity 16 — size buffer for that */
     int buf[16];
-    canon_queue_int q;
+    queue_int q;
 
     (void)queue_fuzz_suppress_unused;
 
     if (size < 2) return 0;
 
     usize cap = cap_table[data[0] % 4u];
-    canon_queue_int_init(&q, buf, cap);
+    queue_int_init(&q, buf, cap);
 
     /*
      * Reference model — a parallel fixed-size circular queue.
@@ -766,14 +766,14 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     #define CHECK_INVARIANTS()                                              \
         do {                                                                \
             /* is_empty consistency */                                      \
-            if (canon_queue_int_is_empty(&q) != (canon_queue_int_len(&q) == 0)) \
+            if (queue_int_is_empty(&q) != (queue_int_len(&q) == 0)) \
                 __builtin_trap();                                           \
             /* len agrees with ref */                                       \
-            if (canon_queue_int_len(&q) != ref_len)                        \
+            if (queue_int_len(&q) != ref_len)                        \
                 __builtin_trap();                                           \
             /* peek matches front of ref */                                 \
             {                                                               \
-                option_int top__ = canon_queue_int_peek_option(&q);        \
+                option_int top__ = queue_int_peek_option(&q);        \
                 if (ref_len == 0) {                                         \
                     if (option_int_is_some(top__)) __builtin_trap();       \
                 } else {                                                    \
@@ -792,7 +792,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
         switch (op) {
 
             case 0: { /* enqueue */
-                result__Bool_Error r = canon_queue_int_enqueue(&q, val);
+                result__Bool_Error r = queue_int_enqueue(&q, val);
                 if (result__Bool_Error_is_ok(r)) {
                     if (ref_len >= cap) __builtin_trap();
                     ref[(ref_head + ref_len) % 16] = val;
@@ -803,7 +803,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
             case 1: { /* dequeue — out-param variant */
                 int out = -1;
-                result__Bool_Error r = canon_queue_int_dequeue(&q, &out);
+                result__Bool_Error r = queue_int_dequeue(&q, &out);
                 if (result__Bool_Error_is_ok(r)) {
                     if (ref_len == 0)                     __builtin_trap();
                     if (out != ref[ref_head % 16])        __builtin_trap();
@@ -816,7 +816,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
 
             case 2: { /* dequeue_option variant */
-                option_int o = canon_queue_int_dequeue_option(&q);
+                option_int o = queue_int_dequeue_option(&q);
                 if (option_int_is_some(o)) {
                     if (ref_len == 0)                           __builtin_trap();
                     if (option_int_unwrap(o) != ref[ref_head % 16])
@@ -830,9 +830,9 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
 
             case 3: { /* peek_option — non-destructive */
-                usize before = canon_queue_int_len(&q);
-                option_int o = canon_queue_int_peek_option(&q);
-                if (canon_queue_int_len(&q) != before)  __builtin_trap();
+                usize before = queue_int_len(&q);
+                option_int o = queue_int_peek_option(&q);
+                if (queue_int_len(&q) != before)  __builtin_trap();
                 if (ref_len == 0) {
                     if (option_int_is_some(o))           __builtin_trap();
                 } else {
@@ -844,15 +844,15 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
 
             case 4: { /* clear */
-                canon_queue_int_clear(&q);
+                queue_int_clear(&q);
                 ref_head = 0;
                 ref_len  = 0;
-                if (!canon_queue_int_is_empty(&q)) __builtin_trap();
+                if (!queue_int_is_empty(&q)) __builtin_trap();
                 break;
             }
 
             case 5: { /* try_enqueue */
-                bool ok = canon_queue_int_try_enqueue(&q, val);
+                bool ok = queue_int_try_enqueue(&q, val);
                 if (ok) {
                     if (ref_len >= cap) __builtin_trap();
                     ref[(ref_head + ref_len) % 16] = val;
@@ -862,8 +862,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
 
             case 6: { /* enqueue_unchecked — only if not full */
-                if (!canon_queue_int_is_full(&q)) {
-                    canon_queue_int_enqueue_unchecked(&q, val);
+                if (!queue_int_is_full(&q)) {
+                    queue_int_enqueue_unchecked(&q, val);
                     if (ref_len >= cap) __builtin_trap();
                     ref[(ref_head + ref_len) % 16] = val;
                     ref_len++;

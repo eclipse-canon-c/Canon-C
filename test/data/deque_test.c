@@ -82,39 +82,39 @@ static int g_failed = 0;
 static void test_init_sets_state(void)
 {
     int buf[8];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 8);
+    deque_int d;
+    deque_int_init(&d, buf, 8);
 
-    EXPECT(canon_deque_int_len(&d)       == 0);
-    EXPECT(canon_deque_int_capacity(&d)  == 8);
-    EXPECT(canon_deque_int_remaining(&d) == 8);
-    EXPECT(canon_deque_int_is_empty(&d));
-    EXPECT(!canon_deque_int_is_full(&d));
+    EXPECT(deque_int_len(&d)       == 0);
+    EXPECT(deque_int_capacity(&d)  == 8);
+    EXPECT(deque_int_remaining(&d) == 8);
+    EXPECT(deque_int_is_empty(&d));
+    EXPECT(!deque_int_is_full(&d));
 }
 
 /* ── Constructor: empty() ────────────────────────────────────────────────── */
 
 static void test_empty_is_null_state(void)
 {
-    canon_deque_int d = canon_deque_int_empty();
+    deque_int d = deque_int_empty();
 
     /* NULL-safe queries return safe defaults */
-    EXPECT(canon_deque_int_len(&d)       == 0);
-    EXPECT(canon_deque_int_capacity(&d)  == 0);
-    EXPECT(canon_deque_int_remaining(&d) == 0);
-    EXPECT(canon_deque_int_is_empty(&d));
-    EXPECT(canon_deque_int_is_full(&d));  /* NULL guard: is_full returns true on NULL */
+    EXPECT(deque_int_len(&d)       == 0);
+    EXPECT(deque_int_capacity(&d)  == 0);
+    EXPECT(deque_int_remaining(&d) == 0);
+    EXPECT(deque_int_is_empty(&d));
+    EXPECT(deque_int_is_full(&d));  /* NULL guard: is_full returns true on NULL */
 }
 
 /* ── NULL-safe queries ───────────────────────────────────────────────────── */
 
 static void test_queries_null_safe(void)
 {
-    EXPECT(canon_deque_int_len(NULL)       == 0);
-    EXPECT(canon_deque_int_capacity(NULL)  == 0);
-    EXPECT(canon_deque_int_remaining(NULL) == 0);
-    EXPECT(canon_deque_int_is_empty(NULL));
-    EXPECT(canon_deque_int_is_full(NULL));
+    EXPECT(deque_int_len(NULL)       == 0);
+    EXPECT(deque_int_capacity(NULL)  == 0);
+    EXPECT(deque_int_remaining(NULL) == 0);
+    EXPECT(deque_int_is_empty(NULL));
+    EXPECT(deque_int_is_full(NULL));
 }
 
 /* ── push_back + pop_front (FIFO order) ──────────────────────────────────── */
@@ -122,34 +122,34 @@ static void test_queries_null_safe(void)
 static void test_push_back_pop_front_fifo(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
     result__Bool_Error r;
 
-    r = canon_deque_int_push_back(&d, 1);
+    r = deque_int_push_back(&d, 1);
     EXPECT(result__Bool_Error_is_ok(r));
-    r = canon_deque_int_push_back(&d, 2);
+    r = deque_int_push_back(&d, 2);
     EXPECT(result__Bool_Error_is_ok(r));
-    r = canon_deque_int_push_back(&d, 3);
+    r = deque_int_push_back(&d, 3);
     EXPECT(result__Bool_Error_is_ok(r));
 
-    EXPECT(canon_deque_int_len(&d) == 3);
+    EXPECT(deque_int_len(&d) == 3);
 
     int out = 0;
-    r = canon_deque_int_pop_front(&d, &out);
+    r = deque_int_pop_front(&d, &out);
     EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out == 1);
 
-    r = canon_deque_int_pop_front(&d, &out);
+    r = deque_int_pop_front(&d, &out);
     EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out == 2);
 
-    r = canon_deque_int_pop_front(&d, &out);
+    r = deque_int_pop_front(&d, &out);
     EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(out == 3);
 
-    EXPECT(canon_deque_int_is_empty(&d));
+    EXPECT(deque_int_is_empty(&d));
 }
 
 /* ── push_front + pop_back (reverse FIFO order) ──────────────────────────── */
@@ -157,26 +157,26 @@ static void test_push_back_pop_front_fifo(void)
 static void test_push_front_pop_back(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_front(&d, 10);
-    canon_deque_int_push_front(&d, 20);
-    canon_deque_int_push_front(&d, 30);
+    deque_int_push_front(&d, 10);
+    deque_int_push_front(&d, 20);
+    deque_int_push_front(&d, 30);
 
     /* deque front-to-back: 30, 20, 10 */
 
     int out = 0;
-    canon_deque_int_pop_back(&d, &out);
+    deque_int_pop_back(&d, &out);
     EXPECT(out == 10);
 
-    canon_deque_int_pop_back(&d, &out);
+    deque_int_pop_back(&d, &out);
     EXPECT(out == 20);
 
-    canon_deque_int_pop_back(&d, &out);
+    deque_int_pop_back(&d, &out);
     EXPECT(out == 30);
 
-    EXPECT(canon_deque_int_is_empty(&d));
+    EXPECT(deque_int_is_empty(&d));
 }
 
 /* ── push_front + pop_front (LIFO / stack order) ─────────────────────────── */
@@ -184,21 +184,21 @@ static void test_push_front_pop_back(void)
 static void test_push_front_pop_front_lifo(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_front(&d, 1);
-    canon_deque_int_push_front(&d, 2);
-    canon_deque_int_push_front(&d, 3);
+    deque_int_push_front(&d, 1);
+    deque_int_push_front(&d, 2);
+    deque_int_push_front(&d, 3);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
     EXPECT(out == 3);
 
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
     EXPECT(out == 2);
 
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
     EXPECT(out == 1);
 }
 
@@ -207,32 +207,32 @@ static void test_push_front_pop_front_lifo(void)
 static void test_push_back_full_returns_err(void)
 {
     int buf[2];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 2);
+    deque_int d;
+    deque_int_init(&d, buf, 2);
 
-    canon_deque_int_push_back(&d, 1);
-    canon_deque_int_push_back(&d, 2);
+    deque_int_push_back(&d, 1);
+    deque_int_push_back(&d, 2);
 
-    EXPECT(canon_deque_int_is_full(&d));
+    EXPECT(deque_int_is_full(&d));
 
-    result__Bool_Error r = canon_deque_int_push_back(&d, 3);
+    result__Bool_Error r = deque_int_push_back(&d, 3);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
 
     /* deque is unchanged */
-    EXPECT(canon_deque_int_len(&d) == 2);
+    EXPECT(deque_int_len(&d) == 2);
 }
 
 static void test_push_front_full_returns_err(void)
 {
     int buf[2];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 2);
+    deque_int d;
+    deque_int_init(&d, buf, 2);
 
-    canon_deque_int_push_front(&d, 1);
-    canon_deque_int_push_front(&d, 2);
+    deque_int_push_front(&d, 1);
+    deque_int_push_front(&d, 2);
 
-    result__Bool_Error r = canon_deque_int_push_front(&d, 3);
+    result__Bool_Error r = deque_int_push_front(&d, 3);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_CAPACITY_EXCEEDED);
 }
@@ -242,66 +242,66 @@ static void test_push_front_full_returns_err(void)
 static void test_try_push_back_success(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    EXPECT(canon_deque_int_try_push_back(&d, 1));
-    EXPECT(canon_deque_int_try_push_back(&d, 2));
-    EXPECT(canon_deque_int_try_push_back(&d, 3));
+    EXPECT(deque_int_try_push_back(&d, 1));
+    EXPECT(deque_int_try_push_back(&d, 2));
+    EXPECT(deque_int_try_push_back(&d, 3));
 
-    EXPECT(canon_deque_int_len(&d) == 3);
+    EXPECT(deque_int_len(&d) == 3);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 1);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 2);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 3);
+    deque_int_pop_front(&d, &out); EXPECT(out == 1);
+    deque_int_pop_front(&d, &out); EXPECT(out == 2);
+    deque_int_pop_front(&d, &out); EXPECT(out == 3);
 }
 
 static void test_try_push_back_full_returns_false(void)
 {
     int buf[2];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 2);
+    deque_int d;
+    deque_int_init(&d, buf, 2);
 
-    EXPECT(canon_deque_int_try_push_back(&d, 1));
-    EXPECT(canon_deque_int_try_push_back(&d, 2));
-    EXPECT(!canon_deque_int_try_push_back(&d, 3));
+    EXPECT(deque_int_try_push_back(&d, 1));
+    EXPECT(deque_int_try_push_back(&d, 2));
+    EXPECT(!deque_int_try_push_back(&d, 3));
 
-    EXPECT(canon_deque_int_len(&d) == 2);
+    EXPECT(deque_int_len(&d) == 2);
 }
 
 static void test_try_push_front_success(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    EXPECT(canon_deque_int_try_push_front(&d, 10));
-    EXPECT(canon_deque_int_try_push_front(&d, 20));
+    EXPECT(deque_int_try_push_front(&d, 10));
+    EXPECT(deque_int_try_push_front(&d, 20));
 
     /* front-to-back: 20, 10 */
     int out = 0;
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 20);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 10);
+    deque_int_pop_front(&d, &out); EXPECT(out == 20);
+    deque_int_pop_front(&d, &out); EXPECT(out == 10);
 }
 
 static void test_try_push_front_full_returns_false(void)
 {
     int buf[2];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 2);
+    deque_int d;
+    deque_int_init(&d, buf, 2);
 
-    EXPECT(canon_deque_int_try_push_front(&d, 1));
-    EXPECT(canon_deque_int_try_push_front(&d, 2));
-    EXPECT(!canon_deque_int_try_push_front(&d, 3));
+    EXPECT(deque_int_try_push_front(&d, 1));
+    EXPECT(deque_int_try_push_front(&d, 2));
+    EXPECT(!deque_int_try_push_front(&d, 3));
 
-    EXPECT(canon_deque_int_len(&d) == 2);
+    EXPECT(deque_int_len(&d) == 2);
 }
 
 static void test_try_push_null_returns_false(void)
 {
-    EXPECT(!canon_deque_int_try_push_back(NULL, 1));
-    EXPECT(!canon_deque_int_try_push_front(NULL, 1));
+    EXPECT(!deque_int_try_push_back(NULL, 1));
+    EXPECT(!deque_int_try_push_front(NULL, 1));
 }
 
 /* ── push_back_unchecked / push_front_unchecked ──────────────────────────── */
@@ -309,65 +309,65 @@ static void test_try_push_null_returns_false(void)
 static void test_push_back_unchecked_success(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_back_unchecked(&d, 10);
-    canon_deque_int_push_back_unchecked(&d, 20);
-    canon_deque_int_push_back_unchecked(&d, 30);
+    deque_int_push_back_unchecked(&d, 10);
+    deque_int_push_back_unchecked(&d, 20);
+    deque_int_push_back_unchecked(&d, 30);
 
-    EXPECT(canon_deque_int_len(&d) == 3);
+    EXPECT(deque_int_len(&d) == 3);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 10);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 20);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 30);
+    deque_int_pop_front(&d, &out); EXPECT(out == 10);
+    deque_int_pop_front(&d, &out); EXPECT(out == 20);
+    deque_int_pop_front(&d, &out); EXPECT(out == 30);
 }
 
 static void test_push_front_unchecked_success(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_front_unchecked(&d, 10);
-    canon_deque_int_push_front_unchecked(&d, 20);
-    canon_deque_int_push_front_unchecked(&d, 30);
+    deque_int_push_front_unchecked(&d, 10);
+    deque_int_push_front_unchecked(&d, 20);
+    deque_int_push_front_unchecked(&d, 30);
 
     /* front-to-back: 30, 20, 10 */
-    EXPECT(canon_deque_int_len(&d) == 3);
+    EXPECT(deque_int_len(&d) == 3);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 30);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 20);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 10);
+    deque_int_pop_front(&d, &out); EXPECT(out == 30);
+    deque_int_pop_front(&d, &out); EXPECT(out == 20);
+    deque_int_pop_front(&d, &out); EXPECT(out == 10);
 }
 
 static void test_push_unchecked_wraparound(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
     /* Fill and drain to move head/tail forward */
-    canon_deque_int_push_back_unchecked(&d, 1);
-    canon_deque_int_push_back_unchecked(&d, 2);
+    deque_int_push_back_unchecked(&d, 1);
+    deque_int_push_back_unchecked(&d, 2);
     int out = 0;
-    canon_deque_int_pop_front(&d, &out);
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
 
     /* Now push_back_unchecked should wrap around correctly */
-    canon_deque_int_push_back_unchecked(&d, 3);
-    canon_deque_int_push_back_unchecked(&d, 4);
-    canon_deque_int_push_back_unchecked(&d, 5);
-    canon_deque_int_push_back_unchecked(&d, 6);
+    deque_int_push_back_unchecked(&d, 3);
+    deque_int_push_back_unchecked(&d, 4);
+    deque_int_push_back_unchecked(&d, 5);
+    deque_int_push_back_unchecked(&d, 6);
 
-    EXPECT(canon_deque_int_is_full(&d));
+    EXPECT(deque_int_is_full(&d));
 
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 3);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 4);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 5);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 6);
+    deque_int_pop_front(&d, &out); EXPECT(out == 3);
+    deque_int_pop_front(&d, &out); EXPECT(out == 4);
+    deque_int_pop_front(&d, &out); EXPECT(out == 5);
+    deque_int_pop_front(&d, &out); EXPECT(out == 6);
 }
 
 /* ── pop on empty ────────────────────────────────────────────────────────── */
@@ -375,11 +375,11 @@ static void test_push_unchecked_wraparound(void)
 static void test_pop_front_empty_returns_err(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
     int out = 0;
-    result__Bool_Error r = canon_deque_int_pop_front(&d, &out);
+    result__Bool_Error r = deque_int_pop_front(&d, &out);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
 }
@@ -387,11 +387,11 @@ static void test_pop_front_empty_returns_err(void)
 static void test_pop_back_empty_returns_err(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
     int out = 0;
-    result__Bool_Error r = canon_deque_int_pop_back(&d, &out);
+    result__Bool_Error r = deque_int_pop_back(&d, &out);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_STATE);
 }
@@ -402,11 +402,11 @@ static void test_push_null_deque_returns_err(void)
 {
     result__Bool_Error r;
 
-    r = canon_deque_int_push_back(NULL, 1);
+    r = deque_int_push_back(NULL, 1);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
-    r = canon_deque_int_push_front(NULL, 1);
+    r = deque_int_push_front(NULL, 1);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
@@ -416,11 +416,11 @@ static void test_pop_null_deque_returns_err(void)
     int out = 0;
     result__Bool_Error r;
 
-    r = canon_deque_int_pop_front(NULL, &out);
+    r = deque_int_pop_front(NULL, &out);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
-    r = canon_deque_int_pop_back(NULL, &out);
+    r = deque_int_pop_back(NULL, &out);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
@@ -428,17 +428,17 @@ static void test_pop_null_deque_returns_err(void)
 static void test_pop_null_out_returns_err(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
-    canon_deque_int_push_back(&d, 1);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 1);
 
     result__Bool_Error r;
 
-    r = canon_deque_int_pop_front(&d, NULL);
+    r = deque_int_pop_front(&d, NULL);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
-    r = canon_deque_int_pop_back(&d, NULL);
+    r = deque_int_pop_back(&d, NULL);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
@@ -448,19 +448,19 @@ static void test_pop_null_out_returns_err(void)
 static void test_peek_front_does_not_remove(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_back(&d, 10);
-    canon_deque_int_push_back(&d, 20);
+    deque_int_push_back(&d, 10);
+    deque_int_push_back(&d, 20);
 
     int out = 0;
-    bool ok = canon_deque_int_peek_front(&d, &out);
+    bool ok = deque_int_peek_front(&d, &out);
     EXPECT(ok);
     EXPECT(out == 10);
-    EXPECT(canon_deque_int_len(&d) == 2); /* unchanged */
+    EXPECT(deque_int_len(&d) == 2); /* unchanged */
 
-    ok = canon_deque_int_peek_front(&d, &out);
+    ok = deque_int_peek_front(&d, &out);
     EXPECT(ok);
     EXPECT(out == 10); /* same value again */
 }
@@ -468,27 +468,27 @@ static void test_peek_front_does_not_remove(void)
 static void test_peek_back_does_not_remove(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_back(&d, 10);
-    canon_deque_int_push_back(&d, 20);
+    deque_int_push_back(&d, 10);
+    deque_int_push_back(&d, 20);
 
     int out = 0;
-    bool ok = canon_deque_int_peek_back(&d, &out);
+    bool ok = deque_int_peek_back(&d, &out);
     EXPECT(ok);
     EXPECT(out == 20);
-    EXPECT(canon_deque_int_len(&d) == 2); /* unchanged */
+    EXPECT(deque_int_len(&d) == 2); /* unchanged */
 }
 
 static void test_peek_front_empty_returns_false(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
     int out = 99;
-    bool ok = canon_deque_int_peek_front(&d, &out);
+    bool ok = deque_int_peek_front(&d, &out);
     EXPECT(!ok);
     EXPECT(out == 99); /* unchanged */
 }
@@ -496,11 +496,11 @@ static void test_peek_front_empty_returns_false(void)
 static void test_peek_back_empty_returns_false(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
     int out = 99;
-    bool ok = canon_deque_int_peek_back(&d, &out);
+    bool ok = deque_int_peek_back(&d, &out);
     EXPECT(!ok);
     EXPECT(out == 99); /* unchanged */
 }
@@ -510,47 +510,47 @@ static void test_peek_back_empty_returns_false(void)
 static void test_pop_front_option_some(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
-    canon_deque_int_push_back(&d, 7);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 7);
 
-    option_int o = canon_deque_int_pop_front_option(&d);
+    option_int o = deque_int_pop_front_option(&d);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 7);
-    EXPECT(canon_deque_int_is_empty(&d));
+    EXPECT(deque_int_is_empty(&d));
 }
 
 static void test_pop_front_option_none_on_empty(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    option_int o = canon_deque_int_pop_front_option(&d);
+    option_int o = deque_int_pop_front_option(&d);
     EXPECT(option_int_is_none(o));
 }
 
 static void test_pop_back_option_some(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
-    canon_deque_int_push_back(&d, 1);
-    canon_deque_int_push_back(&d, 2);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 1);
+    deque_int_push_back(&d, 2);
 
-    option_int o = canon_deque_int_pop_back_option(&d);
+    option_int o = deque_int_pop_back_option(&d);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 2);
-    EXPECT(canon_deque_int_len(&d) == 1);
+    EXPECT(deque_int_len(&d) == 1);
 }
 
 static void test_pop_back_option_none_on_empty(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    option_int o = canon_deque_int_pop_back_option(&d);
+    option_int o = deque_int_pop_back_option(&d);
     EXPECT(option_int_is_none(o));
 }
 
@@ -559,47 +559,47 @@ static void test_pop_back_option_none_on_empty(void)
 static void test_peek_front_option_some(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
-    canon_deque_int_push_back(&d, 42);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 42);
 
-    option_int o = canon_deque_int_peek_front_option(&d);
+    option_int o = deque_int_peek_front_option(&d);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 42);
-    EXPECT(canon_deque_int_len(&d) == 1); /* unchanged */
+    EXPECT(deque_int_len(&d) == 1); /* unchanged */
 }
 
 static void test_peek_front_option_none_on_empty(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    option_int o = canon_deque_int_peek_front_option(&d);
+    option_int o = deque_int_peek_front_option(&d);
     EXPECT(option_int_is_none(o));
 }
 
 static void test_peek_back_option_some(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
-    canon_deque_int_push_back(&d, 1);
-    canon_deque_int_push_back(&d, 99);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 1);
+    deque_int_push_back(&d, 99);
 
-    option_int o = canon_deque_int_peek_back_option(&d);
+    option_int o = deque_int_peek_back_option(&d);
     EXPECT(option_int_is_some(o));
     EXPECT(option_int_unwrap(o) == 99);
-    EXPECT(canon_deque_int_len(&d) == 2); /* unchanged */
+    EXPECT(deque_int_len(&d) == 2); /* unchanged */
 }
 
 static void test_peek_back_option_none_on_empty(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    option_int o = canon_deque_int_peek_back_option(&d);
+    option_int o = deque_int_peek_back_option(&d);
     EXPECT(option_int_is_none(o));
 }
 
@@ -608,50 +608,50 @@ static void test_peek_back_option_none_on_empty(void)
 static void test_clear_resets_state(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_back(&d, 1);
-    canon_deque_int_push_back(&d, 2);
-    canon_deque_int_push_back(&d, 3);
+    deque_int_push_back(&d, 1);
+    deque_int_push_back(&d, 2);
+    deque_int_push_back(&d, 3);
 
-    canon_deque_int_clear(&d);
+    deque_int_clear(&d);
 
-    EXPECT(canon_deque_int_len(&d)       == 0);
-    EXPECT(canon_deque_int_capacity(&d)  == 4);
-    EXPECT(canon_deque_int_remaining(&d) == 4);
-    EXPECT(canon_deque_int_is_empty(&d));
-    EXPECT(!canon_deque_int_is_full(&d));
+    EXPECT(deque_int_len(&d)       == 0);
+    EXPECT(deque_int_capacity(&d)  == 4);
+    EXPECT(deque_int_remaining(&d) == 4);
+    EXPECT(deque_int_is_empty(&d));
+    EXPECT(!deque_int_is_full(&d));
 }
 
 static void test_clear_allows_reuse(void)
 {
     int buf[2];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 2);
+    deque_int d;
+    deque_int_init(&d, buf, 2);
 
-    canon_deque_int_push_back(&d, 10);
-    canon_deque_int_push_back(&d, 20);
-    canon_deque_int_clear(&d);
+    deque_int_push_back(&d, 10);
+    deque_int_push_back(&d, 20);
+    deque_int_clear(&d);
 
     /* After clear, deque is usable at full capacity again */
     result__Bool_Error r;
-    r = canon_deque_int_push_back(&d, 30);
+    r = deque_int_push_back(&d, 30);
     EXPECT(result__Bool_Error_is_ok(r));
-    r = canon_deque_int_push_back(&d, 40);
+    r = deque_int_push_back(&d, 40);
     EXPECT(result__Bool_Error_is_ok(r));
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
     EXPECT(out == 30);
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
     EXPECT(out == 40);
 }
 
 static void test_clear_null_safe(void)
 {
     /* Must not crash */
-    canon_deque_int_clear(NULL);
+    deque_int_clear(NULL);
 }
 
 /* ── swap() ──────────────────────────────────────────────────────────────── */
@@ -659,43 +659,43 @@ static void test_clear_null_safe(void)
 static void test_swap_exchanges_deques(void)
 {
     int bufA[4], bufB[4];
-    canon_deque_int a, b;
-    canon_deque_int_init(&a, bufA, 4);
-    canon_deque_int_init(&b, bufB, 4);
+    deque_int a, b;
+    deque_int_init(&a, bufA, 4);
+    deque_int_init(&b, bufB, 4);
 
-    canon_deque_int_push_back(&a, 1);
-    canon_deque_int_push_back(&a, 2);
+    deque_int_push_back(&a, 1);
+    deque_int_push_back(&a, 2);
 
-    canon_deque_int_push_back(&b, 9);
+    deque_int_push_back(&b, 9);
 
-    canon_deque_int_swap(&a, &b);
+    deque_int_swap(&a, &b);
 
-    EXPECT(canon_deque_int_len(&a) == 1);
-    EXPECT(canon_deque_int_len(&b) == 2);
+    EXPECT(deque_int_len(&a) == 1);
+    EXPECT(deque_int_len(&b) == 2);
 
     int out = 0;
-    canon_deque_int_pop_front(&a, &out);
+    deque_int_pop_front(&a, &out);
     EXPECT(out == 9);
 
-    canon_deque_int_pop_front(&b, &out);
+    deque_int_pop_front(&b, &out);
     EXPECT(out == 1);
-    canon_deque_int_pop_front(&b, &out);
+    deque_int_pop_front(&b, &out);
     EXPECT(out == 2);
 }
 
 static void test_swap_self(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
-    canon_deque_int_push_back(&d, 5);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 5);
 
-    canon_deque_int_swap(&d, &d);
+    deque_int_swap(&d, &d);
 
-    EXPECT(canon_deque_int_len(&d) == 1);
+    EXPECT(deque_int_len(&d) == 1);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out);
+    deque_int_pop_front(&d, &out);
     EXPECT(out == 5);
 }
 
@@ -704,57 +704,57 @@ static void test_swap_self(void)
 static void test_wraparound_push_back_pop_front(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_back(&d, 1);
-    canon_deque_int_push_back(&d, 2);
-    canon_deque_int_push_back(&d, 3);
-    canon_deque_int_push_back(&d, 4);
+    deque_int_push_back(&d, 1);
+    deque_int_push_back(&d, 2);
+    deque_int_push_back(&d, 3);
+    deque_int_push_back(&d, 4);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 1);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 2);
+    deque_int_pop_front(&d, &out); EXPECT(out == 1);
+    deque_int_pop_front(&d, &out); EXPECT(out == 2);
 
-    canon_deque_int_push_back(&d, 5);
-    canon_deque_int_push_back(&d, 6);
+    deque_int_push_back(&d, 5);
+    deque_int_push_back(&d, 6);
 
-    EXPECT(canon_deque_int_is_full(&d));
+    EXPECT(deque_int_is_full(&d));
 
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 3);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 4);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 5);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 6);
+    deque_int_pop_front(&d, &out); EXPECT(out == 3);
+    deque_int_pop_front(&d, &out); EXPECT(out == 4);
+    deque_int_pop_front(&d, &out); EXPECT(out == 5);
+    deque_int_pop_front(&d, &out); EXPECT(out == 6);
 
-    EXPECT(canon_deque_int_is_empty(&d));
+    EXPECT(deque_int_is_empty(&d));
 }
 
 static void test_wraparound_push_front_pop_back(void)
 {
     int buf[4];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 4);
+    deque_int d;
+    deque_int_init(&d, buf, 4);
 
-    canon_deque_int_push_front(&d, 4);
-    canon_deque_int_push_front(&d, 3);
-    canon_deque_int_push_front(&d, 2);
-    canon_deque_int_push_front(&d, 1);
+    deque_int_push_front(&d, 4);
+    deque_int_push_front(&d, 3);
+    deque_int_push_front(&d, 2);
+    deque_int_push_front(&d, 1);
 
     int out = 0;
-    canon_deque_int_pop_back(&d, &out); EXPECT(out == 4);
-    canon_deque_int_pop_back(&d, &out); EXPECT(out == 3);
+    deque_int_pop_back(&d, &out); EXPECT(out == 4);
+    deque_int_pop_back(&d, &out); EXPECT(out == 3);
 
-    canon_deque_int_push_front(&d, 0);
-    canon_deque_int_push_front(&d, -1);
+    deque_int_push_front(&d, 0);
+    deque_int_push_front(&d, -1);
 
-    EXPECT(canon_deque_int_is_full(&d));
+    EXPECT(deque_int_is_full(&d));
 
-    canon_deque_int_pop_back(&d, &out); EXPECT(out == 2);
-    canon_deque_int_pop_back(&d, &out); EXPECT(out == 1);
-    canon_deque_int_pop_back(&d, &out); EXPECT(out == 0);
-    canon_deque_int_pop_back(&d, &out); EXPECT(out == -1);
+    deque_int_pop_back(&d, &out); EXPECT(out == 2);
+    deque_int_pop_back(&d, &out); EXPECT(out == 1);
+    deque_int_pop_back(&d, &out); EXPECT(out == 0);
+    deque_int_pop_back(&d, &out); EXPECT(out == -1);
 
-    EXPECT(canon_deque_int_is_empty(&d));
+    EXPECT(deque_int_is_empty(&d));
 }
 
 /* ── Sliding window pattern ──────────────────────────────────────────────── */
@@ -762,26 +762,26 @@ static void test_wraparound_push_front_pop_back(void)
 static void test_sliding_window(void)
 {
     int buf[3];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 3);
+    deque_int d;
+    deque_int_init(&d, buf, 3);
 
     int stream[] = {10, 20, 30, 40, 50};
     int n = (int)(sizeof(stream) / sizeof(stream[0]));
 
     for (int i = 0; i < n; i++) {
-        if (canon_deque_int_is_full(&d)) {
+        if (deque_int_is_full(&d)) {
             int dropped = 0;
-            canon_deque_int_pop_front(&d, &dropped);
+            deque_int_pop_front(&d, &dropped);
         }
-        canon_deque_int_push_back(&d, stream[i]);
+        deque_int_push_back(&d, stream[i]);
     }
 
-    EXPECT(canon_deque_int_len(&d) == 3);
+    EXPECT(deque_int_len(&d) == 3);
 
     int out = 0;
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 30);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 40);
-    canon_deque_int_pop_front(&d, &out); EXPECT(out == 50);
+    deque_int_pop_front(&d, &out); EXPECT(out == 30);
+    deque_int_pop_front(&d, &out); EXPECT(out == 40);
+    deque_int_pop_front(&d, &out); EXPECT(out == 50);
 }
 
 /* ── len + remaining invariant ───────────────────────────────────────────── */
@@ -789,23 +789,23 @@ static void test_sliding_window(void)
 static void test_len_remaining_invariant(void)
 {
     int buf[5];
-    canon_deque_int d;
-    canon_deque_int_init(&d, buf, 5);
+    deque_int d;
+    deque_int_init(&d, buf, 5);
 
     for (int i = 0; i < 5; i++) {
-        EXPECT(canon_deque_int_len(&d) + canon_deque_int_remaining(&d)
-               == canon_deque_int_capacity(&d));
-        canon_deque_int_push_back(&d, i);
+        EXPECT(deque_int_len(&d) + deque_int_remaining(&d)
+               == deque_int_capacity(&d));
+        deque_int_push_back(&d, i);
     }
 
-    EXPECT(canon_deque_int_len(&d) + canon_deque_int_remaining(&d)
-           == canon_deque_int_capacity(&d));
+    EXPECT(deque_int_len(&d) + deque_int_remaining(&d)
+           == deque_int_capacity(&d));
 
     for (int i = 0; i < 5; i++) {
         int out = 0;
-        canon_deque_int_pop_front(&d, &out);
-        EXPECT(canon_deque_int_len(&d) + canon_deque_int_remaining(&d)
-               == canon_deque_int_capacity(&d));
+        deque_int_pop_front(&d, &out);
+        EXPECT(deque_int_len(&d) + deque_int_remaining(&d)
+               == deque_int_capacity(&d));
     }
 }
 
@@ -814,98 +814,98 @@ static void test_len_remaining_invariant(void)
 static void test_struct_all_functions(void)
 {
     Point buf[4];
-    canon_deque_Point d;
-    canon_deque_Point_init(&d, buf, 4);
+    deque_Point d;
+    deque_Point_init(&d, buf, 4);
 
     Point zero = {0, 0};
     Point a    = {1, 2};
     Point b    = {3, 4};
     Point c    = {5, 6};
 
-    canon_deque_Point empty_d = canon_deque_Point_empty();
-    EXPECT(canon_deque_Point_len(&empty_d)      == 0);
-    EXPECT(canon_deque_Point_capacity(&empty_d) == 0);
+    deque_Point empty_d = deque_Point_empty();
+    EXPECT(deque_Point_len(&empty_d)      == 0);
+    EXPECT(deque_Point_capacity(&empty_d) == 0);
 
-    canon_deque_Point_push_back(&d, b);
-    canon_deque_Point_push_front(&d, a);
-    canon_deque_Point_push_back(&d, c);
+    deque_Point_push_back(&d, b);
+    deque_Point_push_front(&d, a);
+    deque_Point_push_back(&d, c);
 
-    EXPECT(canon_deque_Point_len(&d)       == 3);
-    EXPECT(canon_deque_Point_remaining(&d) == 1);
-    EXPECT(!canon_deque_Point_is_empty(&d));
-    EXPECT(!canon_deque_Point_is_full(&d));
+    EXPECT(deque_Point_len(&d)       == 3);
+    EXPECT(deque_Point_remaining(&d) == 1);
+    EXPECT(!deque_Point_is_empty(&d));
+    EXPECT(!deque_Point_is_full(&d));
 
     /* try_push / push_unchecked on Point */
-    EXPECT(canon_deque_Point_try_push_back(&d, zero));
-    EXPECT(canon_deque_Point_is_full(&d));
-    EXPECT(!canon_deque_Point_try_push_front(&d, zero));
+    EXPECT(deque_Point_try_push_back(&d, zero));
+    EXPECT(deque_Point_is_full(&d));
+    EXPECT(!deque_Point_try_push_front(&d, zero));
 
     Point pout = zero;
-    canon_deque_Point_pop_back(&d, &pout); /* remove the zero we just pushed */
+    deque_Point_pop_back(&d, &pout); /* remove the zero we just pushed */
 
-    canon_deque_Point_push_back_unchecked(&d, zero);
-    canon_deque_Point_pop_back(&d, &pout); /* remove it again */
+    deque_Point_push_back_unchecked(&d, zero);
+    deque_Point_pop_back(&d, &pout); /* remove it again */
 
-    canon_deque_Point_push_front_unchecked(&d, zero);
-    canon_deque_Point_pop_front(&d, &pout); /* remove it */
+    deque_Point_push_front_unchecked(&d, zero);
+    deque_Point_pop_front(&d, &pout); /* remove it */
 
     /* peek_front / peek_back */
     Point peeked = zero;
-    EXPECT(canon_deque_Point_peek_front(&d, &peeked));
+    EXPECT(deque_Point_peek_front(&d, &peeked));
     EXPECT(point_eq(peeked, a));
 
     peeked = zero;
-    EXPECT(canon_deque_Point_peek_back(&d, &peeked));
+    EXPECT(deque_Point_peek_back(&d, &peeked));
     EXPECT(point_eq(peeked, c));
 
     /* peek options */
-    option_Point pfo = canon_deque_Point_peek_front_option(&d);
+    option_Point pfo = deque_Point_peek_front_option(&d);
     EXPECT(option_Point_is_some(pfo));
     EXPECT(point_eq(option_Point_unwrap(pfo), a));
 
-    option_Point pbo = canon_deque_Point_peek_back_option(&d);
+    option_Point pbo = deque_Point_peek_back_option(&d);
     EXPECT(option_Point_is_some(pbo));
     EXPECT(point_eq(option_Point_unwrap(pbo), c));
 
     /* pop_front / pop_back */
     Point out = zero;
-    canon_deque_Point_pop_front(&d, &out);
+    deque_Point_pop_front(&d, &out);
     EXPECT(point_eq(out, a));
 
-    canon_deque_Point_pop_back(&d, &out);
+    deque_Point_pop_back(&d, &out);
     EXPECT(point_eq(out, c));
 
     /* pop options */
-    option_Point pfo2 = canon_deque_Point_pop_front_option(&d);
+    option_Point pfo2 = deque_Point_pop_front_option(&d);
     EXPECT(option_Point_is_some(pfo2));
     EXPECT(point_eq(option_Point_unwrap(pfo2), b));
 
-    EXPECT(canon_deque_Point_is_empty(&d));
+    EXPECT(deque_Point_is_empty(&d));
 
-    option_Point none_opt = canon_deque_Point_pop_front_option(&d);
+    option_Point none_opt = deque_Point_pop_front_option(&d);
     EXPECT(option_Point_is_none(none_opt));
 
-    none_opt = canon_deque_Point_pop_back_option(&d);
+    none_opt = deque_Point_pop_back_option(&d);
     EXPECT(option_Point_is_none(none_opt));
 
     /* swap */
     Point buf2[4];
-    canon_deque_Point d2;
-    canon_deque_Point_init(&d2, buf2, 4);
-    canon_deque_Point_push_back(&d, a);
-    canon_deque_Point_push_back(&d2, b);
+    deque_Point d2;
+    deque_Point_init(&d2, buf2, 4);
+    deque_Point_push_back(&d, a);
+    deque_Point_push_back(&d2, b);
 
-    canon_deque_Point_swap(&d, &d2);
-    EXPECT(canon_deque_Point_len(&d) == 1);
+    deque_Point_swap(&d, &d2);
+    EXPECT(deque_Point_len(&d) == 1);
 
     out = zero;
-    canon_deque_Point_pop_front(&d, &out);
+    deque_Point_pop_front(&d, &out);
     EXPECT(point_eq(out, b));
 
     /* clear */
-    canon_deque_Point_push_back(&d2, a);
-    canon_deque_Point_clear(&d2);
-    EXPECT(canon_deque_Point_is_empty(&d2));
+    deque_Point_push_back(&d2, a);
+    deque_Point_clear(&d2);
+    EXPECT(deque_Point_is_empty(&d2));
 }
 
 /* ── Suppress unused option API functions ──────────────────────────────────── */
@@ -1045,9 +1045,9 @@ static void deque_fuzz_suppress_unused(void)
     (void)option_int_take;
     (void)option_int_eq;
 
-    (void)canon_deque_int_empty;
-    (void)canon_deque_int_capacity;
-    (void)canon_deque_int_swap;
+    (void)deque_int_empty;
+    (void)deque_int_capacity;
+    (void)deque_int_swap;
 
     (void)point_eq;
     (void)option_Point_some;
@@ -1066,29 +1066,29 @@ static void deque_fuzz_suppress_unused(void)
     (void)option_Point_replace;
     (void)option_Point_take;
     (void)option_Point_eq;
-    (void)canon_deque_Point_init;
-    (void)canon_deque_Point_empty;
-    (void)canon_deque_Point_len;
-    (void)canon_deque_Point_capacity;
-    (void)canon_deque_Point_remaining;
-    (void)canon_deque_Point_is_empty;
-    (void)canon_deque_Point_is_full;
-    (void)canon_deque_Point_push_back;
-    (void)canon_deque_Point_push_front;
-    (void)canon_deque_Point_try_push_back;
-    (void)canon_deque_Point_try_push_front;
-    (void)canon_deque_Point_push_back_unchecked;
-    (void)canon_deque_Point_push_front_unchecked;
-    (void)canon_deque_Point_pop_front;
-    (void)canon_deque_Point_pop_back;
-    (void)canon_deque_Point_pop_front_option;
-    (void)canon_deque_Point_pop_back_option;
-    (void)canon_deque_Point_peek_front;
-    (void)canon_deque_Point_peek_back;
-    (void)canon_deque_Point_peek_front_option;
-    (void)canon_deque_Point_peek_back_option;
-    (void)canon_deque_Point_clear;
-    (void)canon_deque_Point_swap;
+    (void)deque_Point_init;
+    (void)deque_Point_empty;
+    (void)deque_Point_len;
+    (void)deque_Point_capacity;
+    (void)deque_Point_remaining;
+    (void)deque_Point_is_empty;
+    (void)deque_Point_is_full;
+    (void)deque_Point_push_back;
+    (void)deque_Point_push_front;
+    (void)deque_Point_try_push_back;
+    (void)deque_Point_try_push_front;
+    (void)deque_Point_push_back_unchecked;
+    (void)deque_Point_push_front_unchecked;
+    (void)deque_Point_pop_front;
+    (void)deque_Point_pop_back;
+    (void)deque_Point_pop_front_option;
+    (void)deque_Point_pop_back_option;
+    (void)deque_Point_peek_front;
+    (void)deque_Point_peek_back;
+    (void)deque_Point_peek_front_option;
+    (void)deque_Point_peek_back_option;
+    (void)deque_Point_clear;
+    (void)deque_Point_swap;
 }
 
 /*
@@ -1118,14 +1118,14 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
 {
     static const usize cap_table[4] = {1, 2, 4, 8};
     int backing[8];
-    canon_deque_int d;
+    deque_int d;
 
     (void)deque_fuzz_suppress_unused;
 
     if (size < 2) return 0;
 
     usize cap = cap_table[data[0] % 4u];
-    canon_deque_int_init(&d, backing, cap);
+    deque_int_init(&d, backing, cap);
 
     int  ref[8];
     usize ref_head = 0;
@@ -1139,19 +1139,19 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
 
         #define CHECK_INVARIANTS()                                            \
             do {                                                              \
-                usize len = canon_deque_int_len(&d);                          \
-                usize rem = canon_deque_int_remaining(&d);                    \
+                usize len = deque_int_len(&d);                          \
+                usize rem = deque_int_remaining(&d);                    \
                 if (len + rem != cap)                   __builtin_trap();     \
-                if (canon_deque_int_is_empty(&d) != (len == 0))              \
+                if (deque_int_is_empty(&d) != (len == 0))              \
                                                         __builtin_trap();     \
-                if (canon_deque_int_is_full(&d)  != (len == cap))            \
+                if (deque_int_is_full(&d)  != (len == cap))            \
                                                         __builtin_trap();     \
             } while (0)
 
         switch (op) {
             case 0: { /* push_back */
-                usize before = canon_deque_int_len(&d);
-                result__Bool_Error r = canon_deque_int_push_back(&d, val);
+                usize before = deque_int_len(&d);
+                result__Bool_Error r = deque_int_push_back(&d, val);
                 if (before >= cap) {
                     if (result__Bool_Error_is_ok(r))     __builtin_trap();
                 } else {
@@ -1164,9 +1164,9 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 break;
             }
             case 1: { /* push_front */
-                result__Bool_Error r = canon_deque_int_push_front(&d, val);
+                result__Bool_Error r = deque_int_push_front(&d, val);
                 if (!result__Bool_Error_is_ok(r) &&
-                    canon_deque_int_len(&d) < cap)      __builtin_trap();
+                    deque_int_len(&d) < cap)      __builtin_trap();
                 ref_dirty = true;
                 ref_head  = 0;
                 ref_size  = 0;
@@ -1174,7 +1174,7 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
             }
             case 2: { /* pop_front */
                 int out = 0;
-                result__Bool_Error r = canon_deque_int_pop_front(&d, &out);
+                result__Bool_Error r = deque_int_pop_front(&d, &out);
                 if (result__Bool_Error_is_ok(r)) {
                     if (!ref_dirty && ref_size > 0) {
                         int expected = ref[ref_head % cap];
@@ -1187,7 +1187,7 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
             }
             case 3: { /* pop_back */
                 int out = 0;
-                canon_deque_int_pop_back(&d, &out);
+                deque_int_pop_back(&d, &out);
                 ref_dirty = true;
                 ref_head  = 0;
                 ref_size  = 0;
@@ -1195,25 +1195,25 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
             }
             case 4: { /* peek_front */
                 int out = 0;
-                bool ok = canon_deque_int_peek_front(&d, &out);
-                usize len = canon_deque_int_len(&d);
+                bool ok = deque_int_peek_front(&d, &out);
+                usize len = deque_int_len(&d);
                 if (ok  && len == 0)                    __builtin_trap();
                 if (!ok && len >  0)                    __builtin_trap();
-                if (canon_deque_int_len(&d) != len)     __builtin_trap();
+                if (deque_int_len(&d) != len)     __builtin_trap();
                 break;
             }
             case 5: { /* peek_back */
                 int out = 0;
-                bool ok = canon_deque_int_peek_back(&d, &out);
-                usize len = canon_deque_int_len(&d);
+                bool ok = deque_int_peek_back(&d, &out);
+                usize len = deque_int_len(&d);
                 if (ok  && len == 0)                    __builtin_trap();
                 if (!ok && len >  0)                    __builtin_trap();
-                if (canon_deque_int_len(&d) != len)     __builtin_trap();
+                if (deque_int_len(&d) != len)     __builtin_trap();
                 break;
             }
             case 6: { /* pop_front_option */
-                usize before = canon_deque_int_len(&d);
-                option_int o = canon_deque_int_pop_front_option(&d);
+                usize before = deque_int_len(&d);
+                option_int o = deque_int_pop_front_option(&d);
                 if (before == 0 && option_int_is_some(o)) __builtin_trap();
                 if (before >  0 && option_int_is_none(o)) __builtin_trap();
                 ref_dirty = true;
@@ -1222,8 +1222,8 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 break;
             }
             case 7: { /* pop_back_option */
-                usize before = canon_deque_int_len(&d);
-                option_int o = canon_deque_int_pop_back_option(&d);
+                usize before = deque_int_len(&d);
+                option_int o = deque_int_pop_back_option(&d);
                 if (before == 0 && option_int_is_some(o)) __builtin_trap();
                 if (before >  0 && option_int_is_none(o)) __builtin_trap();
                 ref_dirty = true;
@@ -1232,9 +1232,9 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 break;
             }
             case 8: { /* peek_front_option / peek_back_option */
-                usize before = canon_deque_int_len(&d);
-                option_int pf = canon_deque_int_peek_front_option(&d);
-                option_int pb = canon_deque_int_peek_back_option(&d);
+                usize before = deque_int_len(&d);
+                option_int pf = deque_int_peek_front_option(&d);
+                option_int pb = deque_int_peek_back_option(&d);
                 if (before == 0) {
                     if (option_int_is_some(pf))         __builtin_trap();
                     if (option_int_is_some(pb))         __builtin_trap();
@@ -1242,21 +1242,21 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                     if (option_int_is_none(pf))         __builtin_trap();
                     if (option_int_is_none(pb))         __builtin_trap();
                 }
-                if (canon_deque_int_len(&d) != before)  __builtin_trap();
+                if (deque_int_len(&d) != before)  __builtin_trap();
                 break;
             }
             case 9: { /* clear */
-                canon_deque_int_clear(&d);
-                if (!canon_deque_int_is_empty(&d))      __builtin_trap();
-                if (canon_deque_int_len(&d) != 0)       __builtin_trap();
+                deque_int_clear(&d);
+                if (!deque_int_is_empty(&d))      __builtin_trap();
+                if (deque_int_len(&d) != 0)       __builtin_trap();
                 ref_head  = 0;
                 ref_size  = 0;
                 ref_dirty = false;
                 break;
             }
             case 10: { /* try_push_back */
-                usize before = canon_deque_int_len(&d);
-                bool ok = canon_deque_int_try_push_back(&d, val);
+                usize before = deque_int_len(&d);
+                bool ok = deque_int_try_push_back(&d, val);
                 if (before >= cap) {
                     if (ok)                              __builtin_trap();
                 } else {
@@ -1269,19 +1269,19 @@ int LLVMFuzzerTestOneInput(const u8 *data, usize size)
                 break;
             }
             case 11: { /* try_push_front */
-                bool ok = canon_deque_int_try_push_front(&d, val);
-                if (!ok && canon_deque_int_len(&d) < cap) __builtin_trap();
+                bool ok = deque_int_try_push_front(&d, val);
+                if (!ok && deque_int_len(&d) < cap) __builtin_trap();
                 ref_dirty = true;
                 ref_head  = 0;
                 ref_size  = 0;
                 break;
             }
             case 12: { /* push_back_unchecked / push_front_unchecked */
-                if (!canon_deque_int_is_full(&d)) {
+                if (!deque_int_is_full(&d)) {
                     if (val & 1) {
-                        canon_deque_int_push_back_unchecked(&d, val);
+                        deque_int_push_back_unchecked(&d, val);
                     } else {
-                        canon_deque_int_push_front_unchecked(&d, val);
+                        deque_int_push_front_unchecked(&d, val);
                     }
                     ref_dirty = true;
                     ref_head  = 0;

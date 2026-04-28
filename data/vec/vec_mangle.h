@@ -48,59 +48,59 @@
 /**
  * @brief Name of the vector type for a given element type
  *
- * Default: canon_vec_##type
- * Example: MANGLE_VEC_TYPE(int) → canon_vec_int
+ * Default: vec_##type
+ * Example: MANGLE_VEC_TYPE(int) → vec_int
  */
 #ifndef MANGLE_VEC_TYPE
-    #define MANGLE_VEC_TYPE(type)               canon_vec_##type
+    #define MANGLE_VEC_TYPE(type)               vec_##type
 #endif
 
 /**
  * @brief Struct tag for the vector type (used in typedef struct TAG { } NAME)
  *
- * Default: canon_vec_##type##_s
- * Example: MANGLE_VEC_STRUCT_TAG(int) → canon_vec_int_s
+ * Default: vec_##type##_s
+ * Example: MANGLE_VEC_STRUCT_TAG(int) → vec_int_s
  */
 #ifndef MANGLE_VEC_STRUCT_TAG
-    #define MANGLE_VEC_STRUCT_TAG(type)         canon_vec_##type##_s
+    #define MANGLE_VEC_STRUCT_TAG(type)         vec_##type##_s
 #endif
 
 /**
  * @brief Name of the iterator type for a given element type
  *
- * Default: canon_vec_##type##_iter
- * Example: MANGLE_VEC_ITER_TYPE(int) → canon_vec_int_iter
+ * Default: vec_##type##_iter
+ * Example: MANGLE_VEC_ITER_TYPE(int) → vec_int_iter
  */
 #ifndef MANGLE_VEC_ITER_TYPE
-    #define MANGLE_VEC_ITER_TYPE(type)          canon_vec_##type##_iter
+    #define MANGLE_VEC_ITER_TYPE(type)          vec_##type##_iter
 #endif
 
 /**
  * @brief Struct tag for the iterator type
  *
- * Default: canon_vec_##type##_iter_s
+ * Default: vec_##type##_iter_s
  */
 #ifndef MANGLE_VEC_ITER_STRUCT_TAG
-    #define MANGLE_VEC_ITER_STRUCT_TAG(type)    canon_vec_##type##_iter_s
+    #define MANGLE_VEC_ITER_STRUCT_TAG(type)    vec_##type##_iter_s
 #endif
 
 /**
  * @brief Name of the slice type for a given element type
  *
- * Default: canon_vec_##type##_slice
- * Example: MANGLE_VEC_SLICE_TYPE(int) → canon_vec_int_slice
+ * Default: vec_##type##_slice
+ * Example: MANGLE_VEC_SLICE_TYPE(int) → vec_int_slice
  */
 #ifndef MANGLE_VEC_SLICE_TYPE
-    #define MANGLE_VEC_SLICE_TYPE(type)         canon_vec_##type##_slice
+    #define MANGLE_VEC_SLICE_TYPE(type)         vec_##type##_slice
 #endif
 
 /**
  * @brief Struct tag for the slice type
  *
- * Default: canon_vec_##type##_slice_s
+ * Default: vec_##type##_slice_s
  */
 #ifndef MANGLE_VEC_SLICE_STRUCT_TAG
-    #define MANGLE_VEC_SLICE_STRUCT_TAG(type)   canon_vec_##type##_slice_s
+    #define MANGLE_VEC_SLICE_STRUCT_TAG(type)   vec_##type##_slice_s
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -175,46 +175,46 @@
 /**
  * @brief Name of the init function (caller-owned buffer constructor)
  *
- * Default: canon_vec_##type##_init
+ * Default: vec_##type##_init
  */
 #ifndef MANGLE_VEC_INIT
-    #define MANGLE_VEC_INIT(type)               canon_vec_##type##_init
+    #define MANGLE_VEC_INIT(type)               vec_##type##_init
 #endif
 
 /**
  * @brief Name of the empty constructor (null/zero state)
  *
- * Default: canon_vec_##type##_empty
+ * Default: vec_##type##_empty
  */
 #ifndef MANGLE_VEC_EMPTY
-    #define MANGLE_VEC_EMPTY(type)              canon_vec_##type##_empty
+    #define MANGLE_VEC_EMPTY(type)              vec_##type##_empty
 #endif
 
 /**
  * @brief Name of the heap allocation constructor
  *
- * Default: canon_vec_##type##_alloc
+ * Default: vec_##type##_alloc
  */
 #ifndef MANGLE_VEC_ALLOC
-    #define MANGLE_VEC_ALLOC(type)              canon_vec_##type##_alloc
+    #define MANGLE_VEC_ALLOC(type)              vec_##type##_alloc
 #endif
 
 /**
  * @brief Name of the arena allocation constructor
  *
- * Default: canon_vec_##type##_arena_alloc
+ * Default: vec_##type##_arena_alloc
  */
 #ifndef MANGLE_VEC_ARENA_ALLOC
-    #define MANGLE_VEC_ARENA_ALLOC(type)        canon_vec_##type##_arena_alloc
+    #define MANGLE_VEC_ARENA_ALLOC(type)        vec_##type##_arena_alloc
 #endif
 
 /**
  * @brief Name of the heap free function
  *
- * Default: canon_vec_##type##_free
+ * Default: vec_##type##_free
  */
 #ifndef MANGLE_VEC_FREE
-    #define MANGLE_VEC_FREE(type)               canon_vec_##type##_free
+    #define MANGLE_VEC_FREE(type)               vec_##type##_free
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -224,46 +224,46 @@
 /**
  * @brief Name of the length query function
  *
- * Default: canon_vec_##type##_len
+ * Default: vec_##type##_len
  */
 #ifndef MANGLE_VEC_LEN
-    #define MANGLE_VEC_LEN(type)                canon_vec_##type##_len
+    #define MANGLE_VEC_LEN(type)                vec_##type##_len
 #endif
 
 /**
  * @brief Name of the capacity query function
  *
- * Default: canon_vec_##type##_capacity
+ * Default: vec_##type##_capacity
  */
 #ifndef MANGLE_VEC_CAPACITY
-    #define MANGLE_VEC_CAPACITY(type)           canon_vec_##type##_capacity
+    #define MANGLE_VEC_CAPACITY(type)           vec_##type##_capacity
 #endif
 
 /**
  * @brief Name of the remaining-space query function
  *
- * Default: canon_vec_##type##_remaining
+ * Default: vec_##type##_remaining
  */
 #ifndef MANGLE_VEC_REMAINING
-    #define MANGLE_VEC_REMAINING(type)          canon_vec_##type##_remaining
+    #define MANGLE_VEC_REMAINING(type)          vec_##type##_remaining
 #endif
 
 /**
  * @brief Name of the is-empty predicate
  *
- * Default: canon_vec_##type##_is_empty
+ * Default: vec_##type##_is_empty
  */
 #ifndef MANGLE_VEC_IS_EMPTY
-    #define MANGLE_VEC_IS_EMPTY(type)           canon_vec_##type##_is_empty
+    #define MANGLE_VEC_IS_EMPTY(type)           vec_##type##_is_empty
 #endif
 
 /**
  * @brief Name of the is-full predicate
  *
- * Default: canon_vec_##type##_is_full
+ * Default: vec_##type##_is_full
  */
 #ifndef MANGLE_VEC_IS_FULL
-    #define MANGLE_VEC_IS_FULL(type)            canon_vec_##type##_is_full
+    #define MANGLE_VEC_IS_FULL(type)            vec_##type##_is_full
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -273,73 +273,73 @@
 /**
  * @brief Name of the checked get function (returns bool + out param)
  *
- * Default: canon_vec_##type##_get
+ * Default: vec_##type##_get
  */
 #ifndef MANGLE_VEC_GET
-    #define MANGLE_VEC_GET(type)                canon_vec_##type##_get
+    #define MANGLE_VEC_GET(type)                vec_##type##_get
 #endif
 
 /**
  * @brief Name of the Option-returning get function
  *
- * Default: canon_vec_##type##_get_option
+ * Default: vec_##type##_get_option
  */
 #ifndef MANGLE_VEC_GET_OPTION
-    #define MANGLE_VEC_GET_OPTION(type)         canon_vec_##type##_get_option
+    #define MANGLE_VEC_GET_OPTION(type)         vec_##type##_get_option
 #endif
 
 /**
  * @brief Name of the unchecked get function (no bounds check, fast path)
  *
- * Default: canon_vec_##type##_get_unchecked
+ * Default: vec_##type##_get_unchecked
  */
 #ifndef MANGLE_VEC_GET_UNCHECKED
-    #define MANGLE_VEC_GET_UNCHECKED(type)      canon_vec_##type##_get_unchecked
+    #define MANGLE_VEC_GET_UNCHECKED(type)      vec_##type##_get_unchecked
 #endif
 
 /**
  * @brief Name of the pointer-to-element accessor (at)
  *
- * Default: canon_vec_##type##_at
+ * Default: vec_##type##_at
  */
 #ifndef MANGLE_VEC_AT
-    #define MANGLE_VEC_AT(type)                 canon_vec_##type##_at
+    #define MANGLE_VEC_AT(type)                 vec_##type##_at
 #endif
 
 /**
  * @brief Name of the checked set function
  *
- * Default: canon_vec_##type##_set
+ * Default: vec_##type##_set
  */
 #ifndef MANGLE_VEC_SET
-    #define MANGLE_VEC_SET(type)                canon_vec_##type##_set
+    #define MANGLE_VEC_SET(type)                vec_##type##_set
 #endif
 
 /**
  * @brief Name of the pointer-to-first-element function
  *
- * Default: canon_vec_##type##_first
+ * Default: vec_##type##_first
  */
 #ifndef MANGLE_VEC_FIRST
-    #define MANGLE_VEC_FIRST(type)              canon_vec_##type##_first
+    #define MANGLE_VEC_FIRST(type)              vec_##type##_first
 #endif
 
 /**
  * @brief Name of the pointer-to-last-element function
  *
- * Default: canon_vec_##type##_last
+ * Default: vec_##type##_last
  */
 #ifndef MANGLE_VEC_LAST
-    #define MANGLE_VEC_LAST(type)               canon_vec_##type##_last
+    #define MANGLE_VEC_LAST(type)               vec_##type##_last
 #endif
 
 /**
  * @brief Name of the raw buffer pointer function
  *
- * Default: canon_vec_##type##_data
+ * Default: vec_##type##_data
  */
 #ifndef MANGLE_VEC_DATA
-    #define MANGLE_VEC_DATA(type)               canon_vec_##type##_data
+    #define MANGLE_VEC_DATA(type)               vec_##type##_data
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -349,82 +349,82 @@
 /**
  * @brief Name of the Result-returning push function
  *
- * Default: canon_vec_##type##_push
+ * Default: vec_##type##_push
  */
 #ifndef MANGLE_VEC_PUSH
-    #define MANGLE_VEC_PUSH(type)               canon_vec_##type##_push
+    #define MANGLE_VEC_PUSH(type)               vec_##type##_push
 #endif
 
 /**
  * @brief Name of the bool-returning push function (no Result overhead)
  *
- * Default: canon_vec_##type##_try_push
+ * Default: vec_##type##_try_push
  */
 #ifndef MANGLE_VEC_TRY_PUSH
-    #define MANGLE_VEC_TRY_PUSH(type)           canon_vec_##type##_try_push
+    #define MANGLE_VEC_TRY_PUSH(type)           vec_##type##_try_push
 #endif
 
 /**
  * @brief Name of the unchecked push function (no bounds check, fast path)
  *
- * Default: canon_vec_##type##_push_unchecked
+ * Default: vec_##type##_push_unchecked
  */
 #ifndef MANGLE_VEC_PUSH_UNCHECKED
-    #define MANGLE_VEC_PUSH_UNCHECKED(type)     canon_vec_##type##_push_unchecked
+    #define MANGLE_VEC_PUSH_UNCHECKED(type)     vec_##type##_push_unchecked
 #endif
 
 /**
  * @brief Name of the Result-returning pop function
  *
- * Default: canon_vec_##type##_pop
+ * Default: vec_##type##_pop
  */
 #ifndef MANGLE_VEC_POP
-    #define MANGLE_VEC_POP(type)                canon_vec_##type##_pop
+    #define MANGLE_VEC_POP(type)                vec_##type##_pop
 #endif
 
 /**
  * @brief Name of the Option-returning pop function
  *
- * Default: canon_vec_##type##_pop_option
+ * Default: vec_##type##_pop_option
  */
 #ifndef MANGLE_VEC_POP_OPTION
-    #define MANGLE_VEC_POP_OPTION(type)         canon_vec_##type##_pop_option
+    #define MANGLE_VEC_POP_OPTION(type)         vec_##type##_pop_option
 #endif
 
 /**
  * @brief Name of the clear function (reset len to 0)
  *
- * Default: canon_vec_##type##_clear
+ * Default: vec_##type##_clear
  */
 #ifndef MANGLE_VEC_CLEAR
-    #define MANGLE_VEC_CLEAR(type)              canon_vec_##type##_clear
+    #define MANGLE_VEC_CLEAR(type)              vec_##type##_clear
 #endif
 
 /**
  * @brief Name of the Result-returning insert function
  *
- * Default: canon_vec_##type##_insert
+ * Default: vec_##type##_insert
  */
 #ifndef MANGLE_VEC_INSERT
-    #define MANGLE_VEC_INSERT(type)             canon_vec_##type##_insert
+    #define MANGLE_VEC_INSERT(type)             vec_##type##_insert
 #endif
 
 /**
  * @brief Name of the Result-returning remove function
  *
- * Default: canon_vec_##type##_remove
+ * Default: vec_##type##_remove
  */
 #ifndef MANGLE_VEC_REMOVE
-    #define MANGLE_VEC_REMOVE(type)             canon_vec_##type##_remove
+    #define MANGLE_VEC_REMOVE(type)             vec_##type##_remove
 #endif
 
 /**
  * @brief Name of the Option-returning remove function
  *
- * Default: canon_vec_##type##_remove_option
+ * Default: vec_##type##_remove_option
  */
 #ifndef MANGLE_VEC_REMOVE_OPTION
-    #define MANGLE_VEC_REMOVE_OPTION(type)      canon_vec_##type##_remove_option
+    #define MANGLE_VEC_REMOVE_OPTION(type)      vec_##type##_remove_option
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -434,37 +434,37 @@
 /**
  * @brief Name of the append-array bulk copy function
  *
- * Default: canon_vec_##type##_append_array
+ * Default: vec_##type##_append_array
  */
 #ifndef MANGLE_VEC_APPEND_ARRAY
-    #define MANGLE_VEC_APPEND_ARRAY(type)       canon_vec_##type##_append_array
+    #define MANGLE_VEC_APPEND_ARRAY(type)       vec_##type##_append_array
 #endif
 
 /**
  * @brief Name of the extend function (alias for append_array)
  *
- * Default: canon_vec_##type##_extend
+ * Default: vec_##type##_extend
  */
 #ifndef MANGLE_VEC_EXTEND
-    #define MANGLE_VEC_EXTEND(type)             canon_vec_##type##_extend
+    #define MANGLE_VEC_EXTEND(type)             vec_##type##_extend
 #endif
 
 /**
  * @brief Name of the fill function (repeat a value n times)
  *
- * Default: canon_vec_##type##_fill
+ * Default: vec_##type##_fill
  */
 #ifndef MANGLE_VEC_FILL
-    #define MANGLE_VEC_FILL(type)               canon_vec_##type##_fill
+    #define MANGLE_VEC_FILL(type)               vec_##type##_fill
 #endif
 
 /**
  * @brief Name of the swap function (O(1) swap of two vecs)
  *
- * Default: canon_vec_##type##_swap
+ * Default: vec_##type##_swap
  */
 #ifndef MANGLE_VEC_SWAP
-    #define MANGLE_VEC_SWAP(type)               canon_vec_##type##_swap
+    #define MANGLE_VEC_SWAP(type)               vec_##type##_swap
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -474,19 +474,19 @@
 /**
  * @brief Name of the iterator constructor
  *
- * Default: canon_vec_##type##_iter_init
+ * Default: vec_##type##_iter_init
  */
 #ifndef MANGLE_VEC_ITER_INIT
-    #define MANGLE_VEC_ITER_INIT(type)          canon_vec_##type##_iter_init
+    #define MANGLE_VEC_ITER_INIT(type)          vec_##type##_iter_init
 #endif
 
 /**
  * @brief Name of the iterator advance function
  *
- * Default: canon_vec_##type##_iter_next
+ * Default: vec_##type##_iter_next
  */
 #ifndef MANGLE_VEC_ITER_NEXT
-    #define MANGLE_VEC_ITER_NEXT(type)          canon_vec_##type##_iter_next
+    #define MANGLE_VEC_ITER_NEXT(type)          vec_##type##_iter_next
 #endif
 
 /* ════════════════════════════════════════════════════════════════
@@ -496,19 +496,19 @@
 /**
  * @brief Name of the slice constructor
  *
- * Default: canon_vec_##type##_slice_init
+ * Default: vec_##type##_slice_init
  */
 #ifndef MANGLE_VEC_SLICE_INIT
-    #define MANGLE_VEC_SLICE_INIT(type)         canon_vec_##type##_slice_init
+    #define MANGLE_VEC_SLICE_INIT(type)         vec_##type##_slice_init
 #endif
 
 /**
  * @brief Name of the slice element accessor
  *
- * Default: canon_vec_##type##_slice_get
+ * Default: vec_##type##_slice_get
  */
 #ifndef MANGLE_VEC_SLICE_GET
-    #define MANGLE_VEC_SLICE_GET(type)          canon_vec_##type##_slice_get
+    #define MANGLE_VEC_SLICE_GET(type)          vec_##type##_slice_get
 #endif
 
 #endif /* CANON_DATA_VEC_MANGLE_H */

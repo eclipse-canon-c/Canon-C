@@ -55,23 +55,23 @@
  * DEFINE_VEC_FMT(static inline, int)
  *
  * int buf[4];
- * canon_vec_int v = canon_vec_int_init(buf, 4);
+ * vec_int v = vec_int_init(buf, 4);
  * int src[4] = {1, 2, 3, 4};
- * canon_vec_int_append_array(&v, src, 4);
+ * vec_int_append_array(&v, src, 4);
  *
  * char out[256];
  * StringBuf sb;
  * stringbuf_init_buffer(&sb, out, sizeof(out));
  *
  * // Printf-style:
- * canon_vec_int_to_stringbuf(&v, &sb, "%d ");
+ * vec_int_to_stringbuf(&v, &sb, "%d ");
  * // sb now contains "1 2 3 4 "
  *
  * // Callback-style (for custom types or complex formatting):
  * void fmt_int(StringBuf* sb, int val) {
  *     stringbuf_printf(sb, "[%d]", val);
  * }
- * canon_vec_int_to_stringbuf_cb(&v, &sb, fmt_int);
+ * vec_int_to_stringbuf_cb(&v, &sb, fmt_int);
  * // sb now contains "[1][2][3][4]"
  * ```
  *
@@ -175,21 +175,21 @@ linkage void fn(                                                                
 /**
  * @brief Name of the printf-style format function
  *
- * Default: canon_vec_##type##_to_stringbuf
+ * Default: vec_##type##_to_stringbuf
  * Override before including this file if custom naming is needed.
  */
 #ifndef MANGLE_VEC_TO_STRINGBUF
-    #define MANGLE_VEC_TO_STRINGBUF(type)    canon_vec_##type##_to_stringbuf
+    #define MANGLE_VEC_TO_STRINGBUF(type)    vec_##type##_to_stringbuf
 #endif
 
 /**
  * @brief Name of the callback-style format function
  *
- * Default: canon_vec_##type##_to_stringbuf_cb
+ * Default: vec_##type##_to_stringbuf_cb
  * Override before including this file if custom naming is needed.
  */
 #ifndef MANGLE_VEC_TO_STRINGBUF_CB
-    #define MANGLE_VEC_TO_STRINGBUF_CB(type) canon_vec_##type##_to_stringbuf_cb
+    #define MANGLE_VEC_TO_STRINGBUF_CB(type) vec_##type##_to_stringbuf_cb
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -202,8 +202,8 @@ linkage void fn(                                                                
  * Must be called AFTER DEFINE_VEC(linkage, type) for the same type.
  *
  * Generated functions (using default mangle):
- * - canon_vec_##type##_to_stringbuf(v, sb, fmt)   → void
- * - canon_vec_##type##_to_stringbuf_cb(v, sb, cb) → void
+ * - vec_##type##_to_stringbuf(v, sb, fmt)   → void
+ * - vec_##type##_to_stringbuf_cb(v, sb, cb) → void
  *
  * @param linkage Function linkage (should match the DEFINE_VEC call)
  * @param type    Element type
@@ -214,10 +214,10 @@ linkage void fn(                                                                
  * DEFINE_VEC_FMT(static inline, int)
  *
  * // Now available:
- * // void canon_vec_int_to_stringbuf(borrowed(const canon_vec_int*) v,
+ * // void vec_int_to_stringbuf(borrowed(const vec_int*) v,
  * //                                 borrowed(StringBuf*) sb,
  * //                                 borrowed(const char*) fmt);
- * // void canon_vec_int_to_stringbuf_cb(borrowed(const canon_vec_int*) v,
+ * // void vec_int_to_stringbuf_cb(borrowed(const vec_int*) v,
  * //                                    borrowed(StringBuf*) sb,
  * //                                    void (*cb)(borrowed(StringBuf*), int));
  * ```

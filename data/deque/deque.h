@@ -9,7 +9,7 @@
  *
  * This is the primary user-facing header for the Canon-C deque module.
  * Including this file gives you the full header-only API using default
- * mangled names (canon_deque_##type).
+ * mangled names (deque_##type).
  *
  * Core ideas:
  * ────────────────────────────────────────────────────────────────────────────
@@ -87,38 +87,38 @@
  *
  * // Stack-backed deque
  * int buf[64];
- * canon_deque_int d;
- * canon_deque_int_init(&d, buf, 64);
+ * deque_int d;
+ * deque_int_init(&d, buf, 64);
  *
- * canon_deque_int_push_back(&d, 10);
- * canon_deque_int_push_front(&d, 5);
+ * deque_int_push_back(&d, 10);
+ * deque_int_push_front(&d, 5);
  * // d is now: [5, 10]
  *
  * int val;
- * canon_deque_int_pop_front(&d, &val);  // val = 5
- * canon_deque_int_pop_back(&d, &val);   // val = 10
+ * deque_int_pop_front(&d, &val);  // val = 5
+ * deque_int_pop_back(&d, &val);   // val = 10
  *
  * // Bool variant — no Result overhead
- * if (!canon_deque_int_try_push_back(&d, 42)) {
+ * if (!deque_int_try_push_back(&d, 42)) {
  *     // deque is full or NULL — handle gracefully
  * }
  *
  * // Unchecked variant — ISR hot path (caller guarantees not full)
- * if (!canon_deque_int_is_full(&d)) {
- *     canon_deque_int_push_back_unchecked(&d, sensor_reading);
+ * if (!deque_int_is_full(&d)) {
+ *     deque_int_push_back_unchecked(&d, sensor_reading);
  * }
  *
  * // Option variants — no out-param needed
- * option_int front = canon_deque_int_pop_front_option(&d);
- * option_int back  = canon_deque_int_peek_back_option(&d);
+ * option_int front = deque_int_pop_front_option(&d);
+ * option_int back  = deque_int_peek_back_option(&d);
  *
  * // Sliding window pattern
  * while (has_data()) {
- *     if (canon_deque_int_is_full(&d)) {
+ *     if (deque_int_is_full(&d)) {
  *         int old;
- *         canon_deque_int_pop_front(&d, &old);
+ *         deque_int_pop_front(&d, &old);
  *     }
- *     canon_deque_int_push_back(&d, next_value());
+ *     deque_int_push_back(&d, next_value());
  * }
  *
  * // Pointer types (typedef first)

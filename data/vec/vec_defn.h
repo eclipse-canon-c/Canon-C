@@ -33,8 +33,8 @@
  *
  * // Use immediately:
  * int buf[64];
- * canon_vec_int v = canon_vec_int_init(buf, 64);
- * canon_vec_int_push(&v, 42);
+ * vec_int v = vec_int_init(buf, 64);
+ * vec_int_push(&v, 42);
  * ```
  *
  * Separate compilation usage:
@@ -58,7 +58,7 @@
  * ```c
  * typedef void* voidptr;
  * DEFINE_VEC(static inline, voidptr)
- * // canon_vec_voidptr v = canon_vec_voidptr_init(buf, 64);
+ * // vec_voidptr v = vec_voidptr_init(buf, 64);
  * ```
  *
  * @sa vec_decl.h, vec_mangle.h, vec_impl.h, vec.h
@@ -72,60 +72,60 @@
  * @brief Instantiates a complete typed vector for element type `type`
  *
  * Generated types (using default mangle):
- * - canon_vec_##type
- * - canon_vec_##type##_iter
- * - canon_vec_##type##_slice
+ * - vec_##type
+ * - vec_##type##_iter
+ * - vec_##type##_slice
  *
  * Generated functions (using default mangle):
  *
  * Constructors:
- * - canon_vec_##type##_init(buffer, capacity)     → canon_vec_##type
- * - canon_vec_##type##_empty()                    → canon_vec_##type
- * - canon_vec_##type##_alloc(capacity)            → canon_vec_##type
- * - canon_vec_##type##_arena_alloc(arena, cap)    → canon_vec_##type
- * - canon_vec_##type##_free(v)                    → void
+ * - vec_##type##_init(buffer, capacity)     → vec_##type
+ * - vec_##type##_empty()                    → vec_##type
+ * - vec_##type##_alloc(capacity)            → vec_##type
+ * - vec_##type##_arena_alloc(arena, cap)    → vec_##type
+ * - vec_##type##_free(v)                    → void
  *
  * Queries:
- * - canon_vec_##type##_len(v)                     → usize
- * - canon_vec_##type##_capacity(v)                → usize
- * - canon_vec_##type##_remaining(v)               → usize
- * - canon_vec_##type##_is_empty(v)                → bool
- * - canon_vec_##type##_is_full(v)                 → bool
+ * - vec_##type##_len(v)                     → usize
+ * - vec_##type##_capacity(v)                → usize
+ * - vec_##type##_remaining(v)               → usize
+ * - vec_##type##_is_empty(v)                → bool
+ * - vec_##type##_is_full(v)                 → bool
  *
  * Element access:
- * - canon_vec_##type##_get(v, i, out)             → bool
- * - canon_vec_##type##_get_option(v, i)           → option_##type
- * - canon_vec_##type##_get_unchecked(v, i)        → type
- * - canon_vec_##type##_at(v, i)                   → type*
- * - canon_vec_##type##_set(v, i, val)             → bool
- * - canon_vec_##type##_first(v)                   → type*
- * - canon_vec_##type##_last(v)                    → type*
- * - canon_vec_##type##_data(v)                    → type*
+ * - vec_##type##_get(v, i, out)             → bool
+ * - vec_##type##_get_option(v, i)           → option_##type
+ * - vec_##type##_get_unchecked(v, i)        → type
+ * - vec_##type##_at(v, i)                   → type*
+ * - vec_##type##_set(v, i, val)             → bool
+ * - vec_##type##_first(v)                   → type*
+ * - vec_##type##_last(v)                    → type*
+ * - vec_##type##_data(v)                    → type*
  *
  * Modification:
- * - canon_vec_##type##_push(v, item)              → result_bool_Error
- * - canon_vec_##type##_try_push(v, item)          → bool
- * - canon_vec_##type##_push_unchecked(v, item)    → void
- * - canon_vec_##type##_pop(v, out)                → result_bool_Error
- * - canon_vec_##type##_pop_option(v)              → option_##type
- * - canon_vec_##type##_clear(v)                   → void
- * - canon_vec_##type##_insert(v, i, item)         → result_bool_Error
- * - canon_vec_##type##_remove(v, i, out)          → result_bool_Error
- * - canon_vec_##type##_remove_option(v, i)        → option_##type
+ * - vec_##type##_push(v, item)              → result_bool_Error
+ * - vec_##type##_try_push(v, item)          → bool
+ * - vec_##type##_push_unchecked(v, item)    → void
+ * - vec_##type##_pop(v, out)                → result_bool_Error
+ * - vec_##type##_pop_option(v)              → option_##type
+ * - vec_##type##_clear(v)                   → void
+ * - vec_##type##_insert(v, i, item)         → result_bool_Error
+ * - vec_##type##_remove(v, i, out)          → result_bool_Error
+ * - vec_##type##_remove_option(v, i)        → option_##type
  *
  * Bulk:
- * - canon_vec_##type##_append_array(v, src, n)    → result_bool_Error
- * - canon_vec_##type##_extend(v, src, n)          → result_bool_Error
- * - canon_vec_##type##_fill(v, val, n)            → void
- * - canon_vec_##type##_swap(a, b)                 → void
+ * - vec_##type##_append_array(v, src, n)    → result_bool_Error
+ * - vec_##type##_extend(v, src, n)          → result_bool_Error
+ * - vec_##type##_fill(v, val, n)            → void
+ * - vec_##type##_swap(a, b)                 → void
  *
  * Iterator:
- * - canon_vec_##type##_iter_init(v)               → canon_vec_##type##_iter
- * - canon_vec_##type##_iter_next(it, out)         → bool
+ * - vec_##type##_iter_init(v)               → vec_##type##_iter
+ * - vec_##type##_iter_next(it, out)         → bool
  *
  * Slice:
- * - canon_vec_##type##_slice_init(v, start, end)  → canon_vec_##type##_slice
- * - canon_vec_##type##_slice_get(s, i)            → type*
+ * - vec_##type##_slice_init(v, start, end)  → vec_##type##_slice
+ * - vec_##type##_slice_get(s, i)            → type*
  *
  * @param linkage C linkage specifier: `static inline`, `static`, or empty
  * @param type    Element type (must be a valid C identifier)
