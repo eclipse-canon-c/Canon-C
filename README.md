@@ -2,7 +2,7 @@
   <img src="logo-github.png" alt="Canon-C" width="600"/>
 </p>
 
-# Canon-C
+# Canon-C 
 
 
 <!-- Language -->
