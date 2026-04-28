@@ -115,28 +115,80 @@ programs to communicate intent clearly, consistently, and safely.
 
 Making intent explicit at call sites is the immediate benefit. The longer
 arc is that the same discipline that makes Canon-C readable also makes it
-verifiable.
+verifiable, and that the verification effort *composes* — proofs done
+once at the substrate are not re-done in every function that uses it.
 
 Most safety-critical C is verified, when it is verified at all, function
 by function. An engineer writes ACSL annotations, runs Frama-C,
-discharges proof obligations, and moves on. The work scales linearly with
-the codebase, which is why formal verification remains rare outside the
-deepest specialization tier of the embedded industry.
+discharges proof obligations, and moves on. The work scales linearly
+with the codebase, which is why formal verification remains rare outside
+the deepest specialization tier of the embedded industry.
 
 Canon-C is built around a specific architectural bet: that a small,
-formally verified primitive set can serve as the basis for compositional
-verification of the code that uses it. If the primitives a function uses
-are formally verified once, the verification burden on the calling code
-reduces from "prove this function correct against arbitrary C" to "prove
-this function correctly composes verified primitives to meet its
-specification." The low-level safety properties — bounds checking,
-overflow safety, pointer validity, error propagation correctness — travel
-with the primitives rather than being re-established in every function.
+formally verified primitive set provides a substrate against which the
+calling code's verification burden is meaningfully reduced. Concretely,
+when a function is written using verified primitives, three things
+happen to its proof obligations:
 
-This is not a claim that calling code becomes verified for free. Calling
-code still needs proofs of its own logic, preconditions, postconditions,
-and loop invariants. What the verified primitive set provides is a
-foundation that bounds the proof scope.
+1. **Runtime-safety obligations travel with the primitives.** Bounds
+   checking, overflow detection, null-pointer validity, division-by-zero,
+   and invalid-shift checks are discharged once at the substrate. Calling
+   code does not re-prove them — it proves it meets the substrate's
+   preconditions, which is a smaller and more local obligation.
+
+2. **Functional-correctness obligations are partially reduced.** The
+   primitive's postcondition becomes available to the caller as a
+   verified fact, so the caller's proofs about its own logic can chain
+   through the substrate rather than re-establishing low-level
+   properties from scratch.
+
+3. **A predictable, characterized residual remains.** Loop invariants,
+   frame conditions over caller-defined state, and functional
+   postconditions specific to the caller's logic still need proofs of
+   their own. So does a small, named class of obligations that inherits
+   WP integer-theory or memory-model limitations from the substrate
+   (modular arithmetic, bitwise reasoning, uintptr_t round-trips). These
+   replays appear at higher layers under different goal names but use
+   the same manual arguments as the substrate, so the proof effort
+   reuses across the codebase rather than being duplicated.
+
+This is not a claim that calling code becomes verified for free. The
+honest version of the bet is: verified primitives discharge the
+runtime-safety obligations of calling code, reduce the
+functional-correctness burden, and constrain the residual to a
+predictable, documented class of obligations whose manual arguments are
+written once and replayed under new goal names at each layer above.
+
+### Verification status
+
+The substrate is not hypothetical. Headers under `core/primitives/` are
+formally verified using Frama-C WP with ACSL contracts, and CI enforces
+the proof state on every push to master — any drift in the named
+residual goals fails the build.
+
+For current numbers, see:
+
+- **`docs/verification.md`** — per-header proof obligation counts,
+  prover breakdowns, manually discharged goals with their proof
+  arguments, and reproduction commands.
+- **`docs/deviations.md`** — every unproved goal documented by ID, with
+  category, rationale, and mitigation.
+- **`docs/traceability.md`** — coverage record (lines, branches, MC/DC),
+  per-header coverage results, and history of measurements.
+
+All currently unproved goals are demonstrated triple-prover-resistant
+under Alt-Ergo + Z3 + CVC5 with a 120-second timeout, and fall into a
+small number of named categories (modular arithmetic, bitwise complement
+in specs, SWAR patterns, uintptr_t round-trips, alignment formulas, the
+ACSL non-termination idiom for panic handlers) that are characteristic
+of WP's encoding rather than weaknesses in the code.
+
+The same code that WP proves is the code that runs in production. The
+CI build uses `-DCANON_CHECKED_FORCE_FALLBACK` and
+`-DCANON_BITS_FORCE_FALLBACK` to keep MC/DC coverage measurement aligned
+with the verified path, and fuzzed binaries exercise the same fallback
+paths under ASan + UBSan. Proof, coverage, and runtime instrumentation
+measure one code path under three different lenses.
 
 ### Translation table
 
@@ -164,8 +216,11 @@ functions:
 | Shared mutable state   | explicit parameters, regions, functional composition |
 
 When a function is written using only these replacements, its
-verification reduces to proving specification-conformance over a verified
-substrate.
+verification reduces to discharging its specification-specific
+obligations (loop invariants, caller-state frame conditions, functional
+postconditions) over a verified substrate, plus a bounded set of
+inherited residuals whose manual arguments are reused from the
+substrate's deviations record.
 
 ### Three usage patterns
 
@@ -175,6 +230,9 @@ Canon-C is designed to be useful across a range of adoption depths.
 end-to-end — typical for the deepest certification tiers (DO-178C Level A
 and B, ISO 26262 ASIL D, IEC 62304 Class C). These users adopt the strict
 discipline and benefit most from the compositional verification approach.
+The substrate's verified primitives, the deviations record, and the CI
+enforcement of named residuals are directly reusable as certification
+evidence.
 
 **Disciplined embedded development.** Code that uses Canon-C's
 conventions — `Result` for errors, ownership annotations, fixed-capacity
@@ -194,14 +252,29 @@ for code that needs it, not a requirement for using Canon-C.
 
 ### Open empirical question
 
-Whether Canon-C's primitive set is sufficient to express most
-safety-critical embedded code compositionally is an empirical question
-the project is positioned to investigate. The current working estimate
-is that 70-85% of typical safety-critical application-layer code can be
-expressed compositionally, with the remainder requiring imperative
-escape hatches (state machines with non-trivial transitions, hardware
-register manipulation, performance-critical inner loops). Refining this
-estimate against real industrial codebases is part of the project's
+Canon-C's working hypothesis is that most safety-critical embedded code
+above the substrate can be expressed compositionally — using only the
+primitives in the translation table — with a residual proof effort that
+scales sub-linearly in the codebase rather than linearly. Two things
+remain to be measured against real industrial codebases:
+
+1. **What fraction of typical safety-critical application-layer code is
+   expressible without imperative escape hatches?** The current working
+   estimate is 70-85%, with the remainder requiring escape hatches for
+   state machines with non-trivial transitions, hardware register
+   manipulation, and performance-critical inner loops. This estimate is
+   provisional.
+
+2. **How does the inherited residual scale across layers?** The
+   substrate's unproved goals re-emit at higher layers under different
+   goal names whenever calling code touches the same WP-resistant
+   patterns. Early evidence from ptr.h verifying against checked.h
+   (where some ptr.h residuals are direct replays of checked.h's
+   residuals — see `docs/deviations.md`, VERIFY-006 category 1)
+   suggests the inheritance is bounded and predictable, but the scaling
+   behavior over a full application codebase is not yet measured.
+
+Refining both estimates against real workloads is part of the project's
 roadmap.
 
 ---
