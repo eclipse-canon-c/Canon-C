@@ -75,23 +75,143 @@
 
 ## Motivation
 
-Over time, I found myself repeatedly re-implementing the same low-level patterns in C: arenas, error handling, vectors, parsing, file I/O, and more. Existing libraries either hide allocation, impose heavy frameworks, rely on implicit conventions, or lack consistency across modules. None matched my preference for explicit ownership, predictable allocation, header-only usage, and minimal hidden behavior.
+Over time, I found myself repeatedly re-implementing the same low-level
+patterns in C: arenas, error handling, vectors, parsing, file I/O, and
+more. Existing libraries either hide allocation, impose heavy frameworks,
+rely on implicit conventions, or lack consistency across modules. None
+matched my preference for explicit ownership, predictable allocation,
+header-only usage, and minimal hidden behavior.
 
-In practice, this meant rewriting the same infrastructure across projects and re-learning the same informal rules every time.
+In practice, this meant rewriting the same infrastructure across projects
+and re-learning the same informal rules every time.
 
-Canon-C is an attempt to unify these patterns into a small, disciplined, and composable semantic standard library for C, governed by strict design principles. The goal is **not to add new functionality**, but to make program intent visible directly in APIs, so that ownership, lifetime, failure, and data flow are immediately clear at call sites.
+Canon-C is an attempt to unify these patterns into a small, disciplined,
+and composable semantic standard library for C, governed by strict design
+principles. The goal is **not to add new functionality**, but to make
+program intent visible directly in APIs, so that ownership, lifetime,
+failure, and data flow are immediately clear at call sites.
 
-C is fast, portable, and predictable, but its native semantics are low-level and mechanical. Writing non-trivial programs in C requires memorizing conventions and boilerplate around memory management, ownership rules, error handling, and iteration. These details obscure intent and significantly increase cognitive load.
+C is fast, portable, and predictable, but its native semantics are
+low-level and mechanical. Writing non-trivial programs in C requires
+memorizing conventions and boilerplate around memory management,
+ownership rules, error handling, and iteration. These details obscure
+intent and significantly increase cognitive load.
 
-Modern languages embed these abstractions directly into the language. While powerful, this often hides behavior, increases semantic complexity, and reduces transparency. Canon-C takes a different approach: **C itself remains unchanged. Meaning is added explicitly through libraries, not syntax.**
+Modern languages embed these abstractions directly into the language.
+While powerful, this often hides behavior, increases semantic complexity,
+and reduces transparency. Canon-C takes a different approach: **C itself
+remains unchanged. Meaning is added explicitly through libraries, not
+syntax.**
 
-The result is a set of semantic building blocks that improve readability, preserve explicit control, maintain performance, and remain fully transparent.
+The result is a set of semantic building blocks that improve readability,
+preserve explicit control, maintain performance, and remain fully
+transparent.
 
-The long-term goal is for this taxonomy of C abstractions to become a **shared standard vocabulary** — a common foundation that allows C programs to communicate intent clearly, consistently, and safely.
+The long-term goal is for this taxonomy of C abstractions to become a
+**shared standard vocabulary** — a common foundation that allows C
+programs to communicate intent clearly, consistently, and safely.
 
-Canon-C is licensed under **MPL 2.0**.  ( See Licence-MIT related issues at Licence-MIT file )
+### From shared vocabulary to compositional verification
 
-> Using Canon-C headers unmodified in your project (commercial or non-commercial) does not trigger MPL requirements — only modifications to Canon-C files themselves do.
+Making intent explicit at call sites is the immediate benefit. The longer
+arc is that the same discipline that makes Canon-C readable also makes it
+verifiable.
+
+Most safety-critical C is verified, when it is verified at all, function
+by function. An engineer writes ACSL annotations, runs Frama-C,
+discharges proof obligations, and moves on. The work scales linearly with
+the codebase, which is why formal verification remains rare outside the
+deepest specialization tier of the embedded industry.
+
+Canon-C is built around a specific architectural bet: that a small,
+formally verified primitive set can serve as the basis for compositional
+verification of the code that uses it. If the primitives a function uses
+are formally verified once, the verification burden on the calling code
+reduces from "prove this function correct against arbitrary C" to "prove
+this function correctly composes verified primitives to meet its
+specification." The low-level safety properties — bounds checking,
+overflow safety, pointer validity, error propagation correctness — travel
+with the primitives rather than being re-established in every function.
+
+This is not a claim that calling code becomes verified for free. Calling
+code still needs proofs of its own logic, preconditions, postconditions,
+and loop invariants. What the verified primitive set provides is a
+foundation that bounds the proof scope.
+
+### Translation table
+
+Canon-C's primitive set covers the constructs that appear in most C
+functions:
+
+| Raw C construct        | Canon-C replacement                                  |
+| ---------------------- | ---------------------------------------------------- |
+| Arithmetic operations  | `checked.h`                                          |
+| Comparisons            | `compare.h`                                          |
+| Bit operations         | `bits.h`                                             |
+| Array indexing         | `slice_at` returning `Option`                        |
+| Pointer arithmetic     | `ptr.h`                                              |
+| Error propagation      | `Result` combinators (`TRY_UNWRAP`, `and_then`)      |
+| Optional values        | `Option` combinators (`unwrap_or`, `map`, `filter`)  |
+| Null checks            | `ptr_or`                                             |
+| Multi-way dispatch     | function pointer tables with `Option` lookup         |
+| Precondition guards    | `require_msg`                                        |
+| Counted loops          | `range` + `RANGE_FOR`                                |
+| Transform loops        | `algo_map`                                           |
+| Filter loops           | `algo_filter`                                        |
+| Reduce loops           | `algo_fold`                                          |
+| Search loops           | `algo_find`, `algo_search`, `algo_any_all`           |
+| Sort, unique, reverse  | corresponding algorithms                             |
+| Shared mutable state   | explicit parameters, regions, functional composition |
+
+When a function is written using only these replacements, its
+verification reduces to proving specification-conformance over a verified
+substrate.
+
+### Three usage patterns
+
+Canon-C is designed to be useful across a range of adoption depths.
+
+**Verification-grade composition.** Code that will be formally verified
+end-to-end — typical for the deepest certification tiers (DO-178C Level A
+and B, ISO 26262 ASIL D, IEC 62304 Class C). These users adopt the strict
+discipline and benefit most from the compositional verification approach.
+
+**Disciplined embedded development.** Code that uses Canon-C's
+conventions — `Result` for errors, ownership annotations, fixed-capacity
+collections, contract-checked preconditions — without committing to
+whole-program formal verification. Typical for ASIL B/C automotive,
+IEC 62304 Class B medical, and industrial control work. These users get
+runtime safety improvements and audit traceability without the full
+proof discharge cost.
+
+**Selective adoption.** Code that uses individual Canon-C modules for
+specific benefits — `checked.h` for overflow safety, `slice.h` for bounds
+checking, `arena.h` for predictable allocation — without adopting the
+full convention set.
+
+The same library serves all three. The strict discipline is an option
+for code that needs it, not a requirement for using Canon-C.
+
+### Open empirical question
+
+Whether Canon-C's primitive set is sufficient to express most
+safety-critical embedded code compositionally is an empirical question
+the project is positioned to investigate. The current working estimate
+is that 70-85% of typical safety-critical application-layer code can be
+expressed compositionally, with the remainder requiring imperative
+escape hatches (state machines with non-trivial transitions, hardware
+register manipulation, performance-critical inner loops). Refining this
+estimate against real industrial codebases is part of the project's
+roadmap.
+
+---
+
+Canon-C is licensed under **MPL 2.0**. (See Licence-MIT related issues
+at Licence-MIT file)
+
+> Using Canon-C headers unmodified in your project (commercial or
+> non-commercial) does not trigger MPL requirements — only modifications
+> to Canon-C files themselves do.
 
 ---
 
