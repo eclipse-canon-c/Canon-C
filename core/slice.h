@@ -541,6 +541,7 @@ static inline str_t str_from(const char* ptr, usize len) {
  */
 /*@
     assigns  \nothing;
+    ensures  str_invariant(\result);
     behavior null_input:
         assumes cstr == \null;
         ensures \result.ptr == \null;
@@ -550,7 +551,6 @@ static inline str_t str_from(const char* ptr, usize len) {
         ensures \result.ptr == cstr;
     complete behaviors;
     disjoint behaviors;
-    ensures str_invariant(\result);
  */
 static inline str_t str_from_cstr(const char* cstr) {
     if (!cstr) return (str_t){ .ptr = NULL, .len = 0 };
