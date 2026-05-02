@@ -118,8 +118,11 @@ static void test_bytes_at_oob(void)
     EXPECT(bytes_at(b, 99) == NULL);
 }
 
-static void test_bytes_at_null_ptr(void)
+static void test_bytes_at_empty_slice(void)
 {
+    /* bytes_empty() has ptr==NULL AND len==0 — both subconditions of
+     * the early return are simultaneously true. The non-NULL OOB case
+     * is independently exercised by test_bytes_at_oob above. */
     bytes_t b = bytes_empty();
     EXPECT(bytes_at(b, 0) == NULL);
 }
@@ -158,10 +161,29 @@ static void test_bytes_equal_same_pointer(void)
     EXPECT(bytes_equal(b, b));
 }
 
-static void test_bytes_equal_both_empty(void)
+static void test_bytes_equal_same_null_pointer(void)
 {
+    /* Both slices have ptr==NULL, so the a.ptr==b.ptr fast path fires
+     * before the length comparison ever runs. This test exercises the
+     * same-pointer branch with NULL specifically.
+     * For zero-length equality through distinct pointers, see
+     * test_bytes_equal_zero_len_distinct_ptrs below. */
     bytes_t a = bytes_empty();
     bytes_t b = bytes_empty();
+    EXPECT(bytes_equal(a, b));
+}
+
+static void test_bytes_equal_zero_len_distinct_ptrs(void)
+{
+    /* Two zero-length slices over different backing buffers.
+     * Same-pointer fast path does not fire (different ptrs).
+     * Length-mismatch path does not fire (both 0).
+     * Reaches memcmp with n==0, which is defined to return 0. */
+    u8      buf_a[1] = {0};
+    u8      buf_b[1] = {0};
+    bytes_t a        = bytes_from(buf_a, 0);
+    bytes_t b        = bytes_from(buf_b, 0);
+    EXPECT(a.ptr != b.ptr);   /* precondition of the test */
     EXPECT(bytes_equal(a, b));
 }
 
@@ -383,6 +405,15 @@ static void test_str_slice_basic(void)
     /* Guard ptr before dereferencing — clang-tidy NullDereference */
     EXPECT_NOT_NULL(r.ptr);
     EXPECT(r.ptr[0] == 'e');
+}
+
+static void test_str_slice_oob_start(void)
+{
+    /* Parity with test_bytes_slice_oob_start — exercises the
+     * `start >= s.len` early-return branch in str_slice. */
+    str_t s = str_from_cstr("hello");
+    str_t r = str_slice(s, 10, 20);
+    EXPECT(str_is_empty(r));
 }
 
 static void test_str_take(void)
@@ -633,12 +664,13 @@ int main(void)
     test_bytes_is_empty_false();
     test_bytes_at_valid();
     test_bytes_at_oob();
-    test_bytes_at_null_ptr();
+    test_bytes_at_empty_slice();
     test_bytes_equal_identical();
     test_bytes_equal_different();
     test_bytes_equal_different_lengths();
     test_bytes_equal_same_pointer();
-    test_bytes_equal_both_empty();
+    test_bytes_equal_same_null_pointer();
+    test_bytes_equal_zero_len_distinct_ptrs();
 
     /* bytes_t — slicing */
     test_bytes_slice_basic();
@@ -677,6 +709,7 @@ int main(void)
 
     /* str_t — slicing */
     test_str_slice_basic();
+    test_str_slice_oob_start();
     test_str_take();
     test_str_skip();
     test_str_as_bytes();
