@@ -1010,7 +1010,7 @@ jobs:
         # docs/deviations.md under VERIFY-007 with WP-warning evidence
         # and category analysis. They fall into three categories:
         #
-        #   1. memcmp call-site preconditions (18) — six per
+        #   1. memcmp call-site preconditions (20) — six per
         #      bytes_equal/str_equal, four per str_starts_with/
         #      str_ends_with. WP itself reports the limitation:
         #        "Allocation, initialization and danglingness not yet
@@ -1085,8 +1085,8 @@ jobs:
           # before WP ran (typically an ACSL parse error). The
           # unproved counters below would all read zero, falsely
           # passing the count check. Without this guard, a parse
-          # error becomes a silent pass — see CI #820 / #821 history
-          # for the bug this prevents.
+          # error becomes a silent pass — see CI #821 history for the
+          # bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
