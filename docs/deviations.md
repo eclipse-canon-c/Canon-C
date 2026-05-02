@@ -275,7 +275,7 @@ by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3
 Typed+Cast`. All 23 are triple-prover-resistant. The goals fall into
 three categories:
 
-1. **memcmp call-site preconditions** (18): Six per `bytes_equal`
+1. **memcmp call-site preconditions** (20): Six per `bytes_equal`
    and `str_equal`, four per `str_starts_with` and `str_ends_with`.
    Goal-name pattern: `typed_cast_<func>_call_memcmp_requires_<X>`
    where `<X>` ranges over `valid_s1`, `valid_s2`, `initialization_s1`,
