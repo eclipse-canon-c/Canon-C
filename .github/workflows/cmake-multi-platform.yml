@@ -1244,6 +1244,51 @@ jobs:
             done
           fi
 
+      - name: "Debug: per-line MC/DC detail for slice.h"
+        # Identifies which specific conditions in slice.h are uncovered.
+        # As of CI #804 slice.h was at 75.9% MC/DC; after the test-suite
+        # audit (rename + 12 reachable-via-API gap closures), the next
+        # measurement rose to 87.9% (51/58, 7 missed). This step exposes
+        # which 7 outcomes are actually missed so docs/deviations.md
+        # entry MCDC-002 can be written against ground truth — i.e.
+        # confirmed API-unreachable defensive branches — rather than
+        # the stricter MC/DC model the audit assumed.
+        #
+        # Once MCDC-002 is finalised and slice.h reaches its achievable
+        # ceiling (51/51 of public-API-reachable outcomes), this step
+        # should remain in place as a regression detector — the same
+        # role it serves for ptr.h.
+        run: |
+          cd build
+
+          SLICE_GCDA=$(find . -name "slice_test*.gcda" | head -1)
+
+          if [ -z "$SLICE_GCDA" ]; then
+            echo "ERROR: could not locate slice_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+
+          echo "Running gcov on: $SLICE_GCDA"
+          gcov-14 --conditions --all-blocks "$SLICE_GCDA" 2>&1 | \
+            grep -A 200 "slice.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for slice.h ==="
+          find . -name "slice.h.gcov" -exec echo "Found: {}" \;
+
+          SLICE_GCOV=$(find . -name "slice.h.gcov" | head -1)
+          if [ -n "$SLICE_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $SLICE_GCOV ==="
+            cat "$SLICE_GCOV"
+          else
+            echo "No slice.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*slice* 2>/dev/null || true
+            done
+          fi
+
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
