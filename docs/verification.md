@@ -11,7 +11,7 @@ Combined verification status across all annotated headers:
 | Metric               | Value                                            |
 |----------------------|---------------------------------------------------|
 | **Headers verified** | 5 (checked.h, bits.h, compare.h, ptr.h, slice.h) |
-| **Functions**        | 119 annotated and verified                       |
+| **Functions**        | 124 annotated and verified                       |
 | **Total obligations**| 4853                                              |
 | **Proved automatic** | 4803 (98.97%)                                     |
 | **Unproved**         | 50 (all documented, see per-header sections)      |
@@ -530,7 +530,7 @@ Expected output: `Proved goals: 1729 / 1739` with 10 timeouts.
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | (Canon-C CI #821)                               |
-| **Functions**          | 17 of 17 non-macro functions annotated          |
+| **Functions**          | 22 of 22 non-macro functions annotated          |
 | **Proof obligations**  | 367 / 390 discharged automatically (94.10%)     |
 | **Timeouts**           | 23 (all documented under VERIFY-007)            |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
@@ -544,14 +544,14 @@ Expected output: `Proved goals: 1729 / 1739` with 10 timeouts.
 
 slice.h provides four type families with different verification scope:
 
-**bytes_t (mutable byte view) — 8 functions, all annotated and proved:**
+**bytes_t (mutable byte view) — 9 functions, all annotated and proved:**
 `bytes_from`, `bytes_empty`, `bytes_as_const`, `bytes_is_empty`,
 `bytes_at`, `bytes_equal`, `bytes_slice`, `bytes_take`, `bytes_skip`.
 
 **cbytes_t (read-only byte view) — 2 constructors, annotated and proved:**
 `cbytes_from`, `cbytes_empty`.
 
-**str_t (read-only character view) — 9 functions, annotated and proved:**
+**str_t (read-only character view) — 11 functions, annotated and proved:**
 `str_from`, `str_from_cstr`, `str_empty`, `str_is_empty`, `str_equal`,
 `str_starts_with`, `str_ends_with`, `str_slice`, `str_take`, `str_skip`,
 `str_as_bytes`. (str_from_cstr and the four equality/match functions
@@ -581,12 +581,12 @@ target requires it.
   `bytes_slice`, `bytes_skip`, `str_slice`, `str_skip` as unreachable
   — the cross-stream closure of MCDC-002.
 
-- **Functional correctness for non-libc functions** (12 of 17): Full
+- **Functional correctness for non-libc functions** (17 of 22): Full
   behavioral specs with `complete` and `disjoint` behaviors on
   multi-case functions (`bytes_at`, `bytes_slice`, `bytes_skip`,
   `str_slice`, `str_skip`, `str_from_cstr`).
 
-- **Partial functional correctness for libc-bridging functions** (5 of 17):
+- **Partial functional correctness for libc-bridging functions** (5 of 22):
   `bytes_equal`, `str_equal`, `str_starts_with`, `str_ends_with`, and
   `str_from_cstr` carry range and structural specs but defer full
   functional semantics to testing — see "Timeout goals" below for the
@@ -618,10 +618,12 @@ target requires it.
 | Timeout        | 23               | >120s (see below) |
 | **Total**      | **367 / 390**    |                    |
 
-The 15 `Unreachable` goals include WP's discharge of the four
-MCDC-002 `!ptr` defensive branches as unreachable under the type
-invariant — the formal closure of the coverage gap that gcov cannot
-exercise through the public API.
+The 23 unproved goals belong to three documented categories (see
+VERIFY-007); WP's discharge of the four MCDC-002 `!ptr` defensive
+branches as unreachable is verified separately by the wrapper's
+`MCDC-002 functions with WP residuals: 0/4` diagnostic, which
+confirms none of `bytes_slice`, `bytes_skip`, `str_slice`, or
+`str_skip` appear in the unproved list.
 
 CVC5 1.2.1 is invoked as a tertiary prover but closes none of the 23
 unproved goals — they are demonstrated triple-prover-resistant.
@@ -631,7 +633,7 @@ unproved goals — they are demonstrated triple-prover-resistant.
 All 23 are documented as triple-prover-resistant. They fall into three
 categories:
 
-**memcmp call-site preconditions (18):** Six per `bytes_equal` and
+**memcmp call-site preconditions (20):** Six per `bytes_equal` and
 `str_equal`, four per `str_starts_with` and `str_ends_with`.
 Goal-name pattern:
 `typed_cast_<func>_call_memcmp_requires_<aspect>` where `<aspect>`
@@ -739,7 +741,7 @@ pointers, and the casts preserve the referenced byte range.
   the strlen logic function which is the same residual as timeout
   category 2.
 
-- All functions specify `assigns \nothing;` (17 of 17). The single
+- All functions specify `assigns \nothing;` (22 of 22). The single
   `wp:pedantic-assigns` warning on `bytes_at` is precision-refinement
   opportunity, not a soundness concern.
 
