@@ -53,8 +53,8 @@
  *
  * Macro-generated functions (DEFINE_SLICE(T) — slice_T_from, slice_T_at,
  * slice_T_first, etc.) are NOT WP-verified in this baseline. The C
- * preprocessor strips `/*@ ... *\/` comments inside #define bodies before
- * macro expansion, so ACSL annotations cannot be carried into the
+ * preprocessor strips ACSL annotation comments inside #define bodies
+ * before macro expansion, so contracts cannot be carried into the
  * generated code through the macro. The contract comments inside the
  * macro body are retained as human-readable documentation; they will
  * convert to real ACSL the day a separate slice_verify.h instantiates
