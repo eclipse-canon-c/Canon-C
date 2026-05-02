@@ -11,6 +11,13 @@
  *                      at, first, last, slice, take, skip,
  *                      as_bytes, as_cbytes
  *
+ * MC/DC discipline:
+ *   Tests that target a specific subcondition of a compound boolean
+ *   (`!ptr || cond`, `ptr && cond`, etc.) are named and commented to
+ *   make clear which branch they isolate. Branches reachable only
+ *   through direct struct construction that bypasses the constructor
+ *   contract are documented in MCDC-002 in docs/deviations.md.
+ *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random offsets and lengths into bytes_t / str_t / slice_i32
  *     operations. Verifies no crash and returned pointers stay within
@@ -175,9 +182,10 @@ static void test_bytes_equal_same_null_pointer(void)
 
 static void test_bytes_equal_zero_len_distinct_ptrs(void)
 {
-    /* Two zero-length slices over different backing buffers.
+    /* Two zero-length slices over different non-NULL backing buffers.
      * Same-pointer fast path does not fire (different ptrs).
      * Length-mismatch path does not fire (both 0).
+     * `!a.ptr || !b.ptr` is false (both non-NULL).
      * Reaches memcmp with n==0, which is defined to return 0. */
     u8      buf_a[1] = {0};
     u8      buf_b[1] = {0};
@@ -185,6 +193,23 @@ static void test_bytes_equal_zero_len_distinct_ptrs(void)
     bytes_t b        = bytes_from(buf_b, 0);
     EXPECT(a.ptr != b.ptr);   /* precondition of the test */
     EXPECT(bytes_equal(a, b));
+}
+
+static void test_bytes_equal_one_null_distinct_ptrs(void)
+{
+    /* Equal lengths (both 0), distinct ptrs (one NULL, one non-NULL).
+     * Same-pointer fast path does not fire (NULL != buf).
+     * Length check does not fire (both 0).
+     * `!a.ptr || !b.ptr` IS true (one side is NULL).
+     * This isolates branch C — the "len equal, one side NULL" defensive
+     * check that catches malformed slices distinct from bytes_empty().
+     * The branch is reachable because bytes_empty() and bytes_from(buf,0)
+     * are both valid API outputs with equal length and distinct ptr state. */
+    u8      buf[1] = {0};
+    bytes_t a      = bytes_empty();          /* {NULL, 0} */
+    bytes_t b      = bytes_from(buf, 0);     /* {buf,  0} */
+    EXPECT(!bytes_equal(a, b));
+    EXPECT(!bytes_equal(b, a));               /* commutative across the OR */
 }
 
 /* ── bytes_t — slicing ───────────────────────────────────────────────────── */
@@ -258,6 +283,16 @@ static void test_cbytes_from_basic(void)
     EXPECT(c.len == 4);
 }
 
+static void test_cbytes_from_null_zero_len(void)
+{
+    /* Branch parity with test_bytes_from_null_zero_len.
+     * Exercises the `ptr != NULL` false, `len == 0` true side of the
+     * cbytes_from contract. */
+    cbytes_t c = cbytes_from(NULL, 0);
+    EXPECT(c.ptr == NULL);
+    EXPECT(c.len == 0);
+}
+
 static void test_cbytes_empty(void)
 {
     cbytes_t c = cbytes_empty();
@@ -281,6 +316,15 @@ static void test_str_from_basic(void)
     str_t s = str_from("hello", 5);
     EXPECT(s.len == 5);
     EXPECT(s.ptr[0] == 'h');
+}
+
+static void test_str_from_null_zero_len(void)
+{
+    /* Branch parity with test_bytes_from_null_zero_len.
+     * Exercises `ptr != NULL` false, `len == 0` true side of str_from. */
+    str_t s = str_from(NULL, 0);
+    EXPECT(s.ptr == NULL);
+    EXPECT(s.len == 0);
 }
 
 static void test_str_from_cstr(void)
@@ -325,6 +369,17 @@ static void test_str_equal_identical(void)
     EXPECT(str_equal(a, b));
 }
 
+static void test_str_equal_same_pointer(void)
+{
+    /* Aliased ptr ensures a.ptr == b.ptr regardless of literal-dedup
+     * behavior. Isolates the same-pointer fast path with non-NULL ptr. */
+    static const char buf[] = "hello";
+    str_t a = str_from(buf, 5);
+    str_t b = str_from(buf, 5);
+    EXPECT(a.ptr == b.ptr);
+    EXPECT(str_equal(a, b));
+}
+
 static void test_str_equal_different(void)
 {
     str_t a = str_from_cstr("hello");
@@ -341,9 +396,24 @@ static void test_str_equal_different_lengths(void)
 
 static void test_str_equal_both_empty(void)
 {
+    /* Both NULL — same-pointer fast path. See bytes_equal_same_null_pointer
+     * for the corresponding bytes_t case. */
     str_t a = str_empty();
     str_t b = str_empty();
     EXPECT(str_equal(a, b));
+}
+
+static void test_str_equal_one_null(void)
+{
+    /* Equal lengths (0), one NULL ptr, one non-NULL ptr.
+     * Same-pointer fast path does not fire.
+     * `!a.ptr || !b.ptr` IS true.
+     * Branch C of str_equal — symmetric to bytes_equal_one_null. */
+    static const char buf[] = "x";
+    str_t a = str_empty();
+    str_t b = str_from(buf, 0);
+    EXPECT(!str_equal(a, b));
+    EXPECT(!str_equal(b, a));
 }
 
 static void test_str_starts_with_true(void)
@@ -362,8 +432,25 @@ static void test_str_starts_with_false(void)
 
 static void test_str_starts_with_empty_prefix(void)
 {
+    /* Empty via str_empty() — both !ptr and len==0 are true.
+     * For the len==0 branch isolated from !ptr (non-NULL prefix with
+     * zero len), see test_str_starts_with_zero_len_nonnull_prefix. */
     str_t s      = str_from_cstr("hello");
     str_t prefix = str_empty();
+    EXPECT(str_starts_with(s, prefix));
+}
+
+static void test_str_starts_with_zero_len_nonnull_prefix(void)
+{
+    /* Isolates `prefix.len == 0` true with `!prefix.ptr` false.
+     * Reached via str_from(buf, 0) where buf is a real address.
+     * Without this test the OR's right-hand side is never independently
+     * varied — both subconditions fire together when using str_empty(). */
+    static const char buf[] = "x";
+    str_t s      = str_from_cstr("hello");
+    str_t prefix = str_from(buf, 0);
+    EXPECT(prefix.ptr != NULL);
+    EXPECT(prefix.len == 0);
     EXPECT(str_starts_with(s, prefix));
 }
 
@@ -392,6 +479,18 @@ static void test_str_ends_with_empty_suffix(void)
 {
     str_t s      = str_from_cstr("hello");
     str_t suffix = str_empty();
+    EXPECT(str_ends_with(s, suffix));
+}
+
+static void test_str_ends_with_zero_len_nonnull_suffix(void)
+{
+    /* Symmetric to test_str_starts_with_zero_len_nonnull_prefix.
+     * Isolates `suffix.len == 0` true with `!suffix.ptr` false. */
+    static const char buf[] = "x";
+    str_t s      = str_from_cstr("hello");
+    str_t suffix = str_from(buf, 0);
+    EXPECT(suffix.ptr != NULL);
+    EXPECT(suffix.len == 0);
     EXPECT(str_ends_with(s, suffix));
 }
 
@@ -434,6 +533,16 @@ static void test_str_skip(void)
     EXPECT(r.ptr[0] == 'l');
 }
 
+static void test_str_skip_all(void)
+{
+    /* Parity with test_bytes_skip_all. Exercises `n >= s.len` true with
+     * non-NULL ptr — the right-hand subcondition of the OR isolated from
+     * the !s.ptr left-hand side. */
+    str_t s = str_from_cstr("hello");
+    str_t r = str_skip(s, 5);
+    EXPECT(str_is_empty(r));
+}
+
 static void test_str_as_bytes(void)
 {
     str_t    s = str_from_cstr("hi");
@@ -450,6 +559,14 @@ static void test_slice_i32_from(void)
     slice_i32 s      = slice_i32_from(arr, 4);
     EXPECT(s.ptr == arr);
     EXPECT(s.len == 4);
+}
+
+static void test_slice_i32_from_null_zero_len(void)
+{
+    /* Branch parity with bytes_from / str_from null-zero tests. */
+    slice_i32 s = slice_i32_from(NULL, 0);
+    EXPECT(s.ptr == NULL);
+    EXPECT(s.len == 0);
 }
 
 static void test_slice_i32_empty(void)
@@ -542,7 +659,21 @@ static void test_slice_i32_first(void)
 
 static void test_slice_i32_first_empty(void)
 {
+    /* slice_i32_empty() — both `s.ptr` false AND `s.len > 0` false. */
     slice_i32 s = slice_i32_empty();
+    EXPECT(slice_i32_first(s) == NULL);
+}
+
+static void test_slice_i32_first_zero_len_nonnull(void)
+{
+    /* Isolates the right-hand AND subcondition: `s.ptr` true, `s.len > 0`
+     * false. Reached by slice_i32_from(arr, 0) — non-NULL backing with
+     * zero length. Without this test the AND is only flipped when both
+     * sides flip together (via slice_i32_empty()). */
+    i32       arr[1] = {0};
+    slice_i32 s      = slice_i32_from(arr, 0);
+    EXPECT(s.ptr != NULL);
+    EXPECT(s.len == 0);
     EXPECT(slice_i32_first(s) == NULL);
 }
 
@@ -558,6 +689,14 @@ static void test_slice_i32_last(void)
 static void test_slice_i32_last_empty(void)
 {
     slice_i32 s = slice_i32_empty();
+    EXPECT(slice_i32_last(s) == NULL);
+}
+
+static void test_slice_i32_last_zero_len_nonnull(void)
+{
+    /* Symmetric to first_zero_len_nonnull. */
+    i32       arr[1] = {0};
+    slice_i32 s      = slice_i32_from(arr, 0);
     EXPECT(slice_i32_last(s) == NULL);
 }
 
@@ -639,6 +778,15 @@ static void test_slice_i32_as_bytes_empty(void)
     EXPECT(b.len == 0);
 }
 
+static void test_slice_i32_as_cbytes_empty(void)
+{
+    /* Parity with test_slice_i32_as_bytes_empty. */
+    slice_i32 s = slice_i32_empty();
+    cbytes_t  c = slice_i32_as_cbytes(s);
+    EXPECT(c.ptr == NULL);
+    EXPECT(c.len == 0);
+}
+
 static void test_slice_i32_write_through_at(void)
 {
     i32       arr[4] = {0,0,0,0};
@@ -671,6 +819,7 @@ int main(void)
     test_bytes_equal_same_pointer();
     test_bytes_equal_same_null_pointer();
     test_bytes_equal_zero_len_distinct_ptrs();
+    test_bytes_equal_one_null_distinct_ptrs();
 
     /* bytes_t — slicing */
     test_bytes_slice_basic();
@@ -683,11 +832,13 @@ int main(void)
 
     /* cbytes_t */
     test_cbytes_from_basic();
+    test_cbytes_from_null_zero_len();
     test_cbytes_empty();
     test_bytes_as_const();
 
     /* str_t — construction */
     test_str_from_basic();
+    test_str_from_null_zero_len();
     test_str_from_cstr();
     test_str_from_cstr_null();
     test_str_empty();
@@ -696,26 +847,32 @@ int main(void)
     test_str_is_empty_true();
     test_str_is_empty_false();
     test_str_equal_identical();
+    test_str_equal_same_pointer();
     test_str_equal_different();
     test_str_equal_different_lengths();
     test_str_equal_both_empty();
+    test_str_equal_one_null();
     test_str_starts_with_true();
     test_str_starts_with_false();
     test_str_starts_with_empty_prefix();
+    test_str_starts_with_zero_len_nonnull_prefix();
     test_str_starts_with_too_long();
     test_str_ends_with_true();
     test_str_ends_with_false();
     test_str_ends_with_empty_suffix();
+    test_str_ends_with_zero_len_nonnull_suffix();
 
     /* str_t — slicing */
     test_str_slice_basic();
     test_str_slice_oob_start();
     test_str_take();
     test_str_skip();
+    test_str_skip_all();
     test_str_as_bytes();
 
     /* DEFINE_SLICE(i32) */
     test_slice_i32_from();
+    test_slice_i32_from_null_zero_len();
     test_slice_i32_empty();
     test_slice_i32_len();
     test_slice_i32_is_empty_true();
@@ -728,8 +885,10 @@ int main(void)
     test_slice_i32_at_oob();
     test_slice_i32_first();
     test_slice_i32_first_empty();
+    test_slice_i32_first_zero_len_nonnull();
     test_slice_i32_last();
     test_slice_i32_last_empty();
+    test_slice_i32_last_zero_len_nonnull();
     test_slice_i32_slice_basic();
     test_slice_i32_slice_clamp();
     test_slice_i32_slice_empty_range();
@@ -739,6 +898,7 @@ int main(void)
     test_slice_i32_as_bytes();
     test_slice_i32_as_cbytes();
     test_slice_i32_as_bytes_empty();
+    test_slice_i32_as_cbytes_empty();
     test_slice_i32_write_through_at();
 
     if (g_failed == 0) {
