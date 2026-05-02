@@ -475,6 +475,16 @@ static void test_str_ends_with_false(void)
     EXPECT(!str_ends_with(s, suffix));
 }
 
+static void test_str_ends_with_too_long(void)
+{
+    /* Parity with test_str_starts_with_too_long. Exercises the
+     * `suffix.len > s.len` true branch of str_ends_with — confirmed
+     * uncovered in CI gcov output before this test was added. */
+    str_t s      = str_from_cstr("hi");
+    str_t suffix = str_from_cstr("hello");
+    EXPECT(!str_ends_with(s, suffix));
+}
+
 static void test_str_ends_with_empty_suffix(void)
 {
     str_t s      = str_from_cstr("hello");
@@ -512,6 +522,26 @@ static void test_str_slice_oob_start(void)
      * `start >= s.len` early-return branch in str_slice. */
     str_t s = str_from_cstr("hello");
     str_t r = str_slice(s, 10, 20);
+    EXPECT(str_is_empty(r));
+}
+
+static void test_str_slice_clamp_end(void)
+{
+    /* Parity with test_bytes_slice_clamp_end — exercises the
+     * `end > s.len` true branch (the end-clamp path) of str_slice.
+     * Confirmed uncovered in CI gcov output before this test was added. */
+    str_t s = str_from_cstr("hello");
+    str_t r = str_slice(s, 1, 100);
+    EXPECT(r.len == 4);
+}
+
+static void test_str_slice_empty_range(void)
+{
+    /* Parity with test_bytes_slice_empty_range — exercises the
+     * `start >= end` true branch of str_slice with start == end.
+     * Confirmed uncovered in CI gcov output before this test was added. */
+    str_t s = str_from_cstr("hello");
+    str_t r = str_slice(s, 2, 2);
     EXPECT(str_is_empty(r));
 }
 
@@ -859,12 +889,15 @@ int main(void)
     test_str_starts_with_too_long();
     test_str_ends_with_true();
     test_str_ends_with_false();
+    test_str_ends_with_too_long();
     test_str_ends_with_empty_suffix();
     test_str_ends_with_zero_len_nonnull_suffix();
 
     /* str_t — slicing */
     test_str_slice_basic();
     test_str_slice_oob_start();
+    test_str_slice_clamp_end();
+    test_str_slice_empty_range();
     test_str_take();
     test_str_skip();
     test_str_skip_all();
