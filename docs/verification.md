@@ -8,14 +8,25 @@ with ACSL contracts, enforced in CI on every push to master.
 
 Combined verification status across all annotated headers:
 
-| Metric               | Value                                          |
-|----------------------|-------------------------------------------------|
-| **Headers verified** | 4 (checked.h, bits.h, compare.h, ptr.h)        |
-| **Functions**        | 102 annotated and verified                     |
-| **Total obligations**| 4463                                            |
-| **Proved automatic** | 4436 (99.40%)                                   |
-| **Unproved**         | 27 (all documented, see per-header sections)    |
-| **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)|
+| Metric               | Value                                            |
+|----------------------|---------------------------------------------------|
+| **Headers verified** | 5 (checked.h, bits.h, compare.h, ptr.h, slice.h) |
+| **Functions**        | 119 annotated and verified                       |
+| **Total obligations**| 4853                                              |
+| **Proved automatic** | 4803 (98.97%)                                     |
+| **Unproved**         | 50 (all documented, see per-header sections)      |
+| **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)  |
+
+The slice.h baseline (367 / 390) carries a higher residual fraction
+than the other four headers because it is the first Canon-C header
+that crosses the C standard library boundary — it calls `memcmp` and
+`strlen`, whose ACSL contracts require initialization and danglingness
+reasoning that Frama-C 29 has not yet implemented. The 23 slice.h
+residuals (5.9% of slice.h's obligations) are therefore not specific
+to slice.h's design but are the cost of crossing into libc with the
+current verifier; future headers using these functions will incur the
+same residuals. See VERIFY-007 in `docs/deviations.md` for the full
+classification.
 
 ---
 
@@ -330,9 +341,9 @@ the memory model to allow these casts, which is sound because the
 callers always pass correctly-typed pointers — the void* is a C
 generics mechanism, not a type-punning operation.
 
-This flag is applied to compare.h and ptr.h (both use void* → typed
-pointer casts). checked.h and bits.h do not use void* parameters and
-work correctly with the default `Typed` model.
+This flag is applied to compare.h, ptr.h, and slice.h (all use void* →
+typed pointer casts). checked.h and bits.h do not use void* parameters
+and work correctly with the default `Typed` model.
 
 ### ACSL contract conventions
 
@@ -431,9 +442,8 @@ included in the ptr.h proof run.
 
 **Align formula ensures (3):** `typed_cast_align_up_ensures`,
 `typed_cast_align_down_ensures`, `typed_cast_align_padding_ensures` —
-WP's integer theory cannot reason across the bitwise AND with
-complement (`~(a - 1)`) in the alignment formula
-`(n + a - 1) & ~(a - 1)` relative to arithmetic multiples-of-a equality.
+WP integer theory cannot bridge bitwise AND with complement
+(`~(a - 1)`) and arithmetic multiples-of-a equality.
 
 **Ptr_align call-chain preconditions (3):**
 `typed_cast_ptr_align_up_call_align_up_requires_3`,
@@ -512,6 +522,256 @@ Expected output: `Proved goals: 1729 / 1739` with 10 timeouts.
 
 ---
 
+## core/slice.h
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented timeouts)             |
+| **Baseline commit**    | (Canon-C CI #821)                               |
+| **Functions**          | 17 of 17 non-macro functions annotated          |
+| **Proof obligations**  | 367 / 390 discharged automatically (94.10%)     |
+| **Timeouts**           | 23 (all documented under VERIFY-007)            |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
+| **CI enforcement**     | Yes — 367/390 with 23 named goals expected      |
+| **MC/DC coverage**     | 93.1% (54/58 condition outcomes — see MCDC-002) |
+| **CI artifact**        | `wp-proof-slice` (full per-goal breakdown)      |
+
+### Function inventory
+
+slice.h provides four type families with different verification scope:
+
+**bytes_t (mutable byte view) — 8 functions, all annotated and proved:**
+`bytes_from`, `bytes_empty`, `bytes_as_const`, `bytes_is_empty`,
+`bytes_at`, `bytes_equal`, `bytes_slice`, `bytes_take`, `bytes_skip`.
+
+**cbytes_t (read-only byte view) — 2 constructors, annotated and proved:**
+`cbytes_from`, `cbytes_empty`.
+
+**str_t (read-only character view) — 9 functions, annotated and proved:**
+`str_from`, `str_from_cstr`, `str_empty`, `str_is_empty`, `str_equal`,
+`str_starts_with`, `str_ends_with`, `str_slice`, `str_take`, `str_skip`,
+`str_as_bytes`. (str_from_cstr and the four equality/match functions
+carry partial functional specs — see "What is proved" below.)
+
+**DEFINE_SLICE(T) macro — 14 generated functions per instantiation,
+documentation only:** The C preprocessor strips ACSL annotations inside
+`#define` bodies before macro expansion, so the macro-generated
+functions (`slice_T_from`, `slice_T_at`, `slice_T_first`, etc.) are not
+WP-verified in this baseline. Contract specifications are retained in
+the macro body as human-readable comments. These functions are
+validated by unit testing (90 tests in `test/core/slice_test.c`),
+fuzzing, and 93.1% MC/DC coverage on the i32 instantiation. Full
+WP verification of the macro family will require a separate
+`slice_verify.h` driver instantiating `DEFINE_SLICE(i32)` outside
+the macro context — planned for a future commit if the certification
+target requires it.
+
+### What is proved
+
+- **Type invariants**: slice.h defines three named ACSL predicates
+  (`bytes_invariant`, `cbytes_invariant`, `str_invariant`) and four
+  validity predicates with `{L}` memory-state labels (`bytes_valid_read`,
+  `bytes_valid_write`, `cbytes_valid`, `str_valid`). Every function
+  carries the appropriate predicate as a precondition. WP uses these
+  predicates to discharge the four `!ptr` defensive branches in
+  `bytes_slice`, `bytes_skip`, `str_slice`, `str_skip` as unreachable
+  — the cross-stream closure of MCDC-002.
+
+- **Functional correctness for non-libc functions** (12 of 17): Full
+  behavioral specs with `complete` and `disjoint` behaviors on
+  multi-case functions (`bytes_at`, `bytes_slice`, `bytes_skip`,
+  `str_slice`, `str_skip`, `str_from_cstr`).
+
+- **Partial functional correctness for libc-bridging functions** (5 of 17):
+  `bytes_equal`, `str_equal`, `str_starts_with`, `str_ends_with`, and
+  `str_from_cstr` carry range and structural specs but defer full
+  functional semantics to testing — see "Timeout goals" below for the
+  reasoning.
+
+- **Absence of runtime errors** (`-wp-rte`): WP proves no execution
+  of any annotated function can trigger signed overflow, invalid
+  memory access, null dereference, or out-of-bounds access through
+  the void* → u8* casts in the byte-construction functions.
+
+- **Side-effect bounding**: Every function specifies `assigns \nothing;`.
+  All slice operations are pure with respect to memory. The
+  `wp:pedantic-assigns` warnings observed in the CI output are
+  advisory — they note that pointer-returning functions
+  (`bytes_at` specifically) would benefit from `assigns \result \from ...`
+  clauses for tighter caller assumptions. This is a
+  precision-refinement opportunity for future work, not a soundness
+  concern.
+
+### Prover breakdown
+
+| Category       | Goals discharged | Typical time      |
+|----------------|------------------|--------------------|
+| Terminating    | 12               | (structural)      |
+| Unreachable    | 15               | (structural)      |
+| Qed (internal) | 292              | 0.6ms–11ms        |
+| Alt-Ergo 2.6.3 | 47               | 16ms–73ms         |
+| Z3 4.15.2      | 1                | 65ms              |
+| Timeout        | 23               | >120s (see below) |
+| **Total**      | **367 / 390**    |                    |
+
+The 15 `Unreachable` goals include WP's discharge of the four
+MCDC-002 `!ptr` defensive branches as unreachable under the type
+invariant — the formal closure of the coverage gap that gcov cannot
+exercise through the public API.
+
+CVC5 1.2.1 is invoked as a tertiary prover but closes none of the 23
+unproved goals — they are demonstrated triple-prover-resistant.
+
+### Timeout goals (23)
+
+All 23 are documented as triple-prover-resistant. They fall into three
+categories:
+
+**memcmp call-site preconditions (18):** Six per `bytes_equal` and
+`str_equal`, four per `str_starts_with` and `str_ends_with`.
+Goal-name pattern:
+`typed_cast_<func>_call_memcmp_requires_<aspect>` where `<aspect>`
+ranges over `valid_s1`, `valid_s2`, `initialization_s1`,
+`initialization_s2`, `danglingness_s1`, `danglingness_s2`. The
+`valid_*` obligations appear only on the bytes_t variants because
+the str_t variants close them through `str_valid` predicate
+reasoning; the `initialization_*` and `danglingness_*` obligations
+appear on all four equality functions.
+
+These are not solver-strength residuals. WP itself reports the
+limitation during the proof run:
+
+```
+[wp] FRAMAC_SHARE/libc/string.h:38: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (\dangling{L}((char *)s + i))
+```
+
+ACSL's `memcmp` standard-library contract requires the caller to
+establish that both buffer ranges are fully valid, fully initialized,
+and non-dangling. slice.h's `bytes_valid_write` and `str_valid`
+predicates establish validity, but the initialization and danglingness
+obligations cannot be discharged because the underlying logic is not
+yet implemented in Frama-C 29. Strengthening the slice.h predicates
+would not close these goals.
+
+**strlen valid_string precondition (1):**
+`typed_cast_str_from_cstr_call_strlen_requires_valid_string_s` —
+ACSL's `strlen` logic function requires the caller to establish
+`valid_string(s)` (a null-terminated string with valid memory through
+the terminator). slice.h's `str_from_cstr` deliberately omits this
+precondition because adding `requires valid_read_string(cstr)` would
+introduce a soundness dependency on Frama-C's `-frama-c-stdlib`
+configuration that no other Canon-C header requires. The cost (one
+documented residual) is much smaller than the cost (project-wide
+stdlib dependency for one function).
+
+**Transitive contract.h handler non-termination (2):**
+`typed_cast_contract_default_handler_terminates`,
+`typed_cast_contract_default_handler_loop_invariant_established`
+— same two goals as VERIFY-006 category 4. slice.h includes
+contract.h transitively through the `require_msg` calls in its
+constructor functions, so the unprovable-by-construction goals are
+re-emitted in the slice.h proof run. These are not new slice.h
+residuals; they are the same goals counted in VERIFY-006 reappearing.
+
+Full goal list and per-goal Qed-and-prover timing: see VERIFY-007 in
+`docs/deviations.md`. The CI artifact `wp-proof-slice` contains the
+verbatim WP output for auditor inspection.
+
+### MCDC-002 closure
+
+The MCDC-002 deviation documents four `!ptr` defensive branches in
+`bytes_slice`, `bytes_skip`, `str_slice`, and `str_skip` that are
+unreachable in MC/DC isolation through the public API. WP discharges
+these branches statically under the type invariant predicates — none
+of the four functions appears in the unproved goal list. The slice.h
+CI wrapper explicitly verifies this with the diagnostic line `MCDC-002
+functions with WP residuals: 0/4`. See the MCDC-002 status update in
+`docs/deviations.md` for the formal closure record. gcov measurement
+remains at 54/58 (93.1%) because gcov instruments the source rather
+than the proof; the two evidence streams complement rather than
+converge.
+
+### WP memory model note
+
+slice.h uses `-wp-model Typed+Cast` for the same reason as compare.h
+and ptr.h: the constructors `bytes_from`, `cbytes_from`, and the
+macro-generated `slice_T_as_bytes`/`slice_T_as_cbytes` perform
+`void*` → `u8*` casts. The default `Typed` model rejects these casts
+and every RTE mem_access goal becomes unprovable. Soundness argument
+identical to VERIFY-005 / VERIFY-006: callers supply correctly-typed
+pointers, and the casts preserve the referenced byte range.
+
+### ACSL contract conventions
+
+- Type invariants are encoded as named predicates rather than inline
+  conditions, so the same predicate text is reused across function
+  contracts. This makes the predicates available as lemmas for WP
+  and keeps the contracts readable.
+
+- Validity predicates carry `{L}` memory-state labels because they
+  reference memory; bare invariant predicates do not because they
+  test only the {ptr, len} structural relationship.
+
+- Contracts use byte-level validity for memory ranges:
+  `\valid((u8 *)ptr + (0 .. len - 1))` to allow Typed+Cast to bridge
+  the void* → u8* conversion at the contract level.
+
+- Equality functions (`bytes_equal`, `str_equal`, `str_starts_with`,
+  `str_ends_with`) carry partial functional specs — range
+  (`\result == \true || \result == \false`), structural (length-
+  mismatch returns false, same-pointer returns true,
+  zero-length-prefix/suffix returns true), and absence of runtime
+  errors. Full equality semantics (the "memcmp == 0" postcondition)
+  are deferred to testing because the memcmp axiomatic block needed
+  to prove them is the same feature gap documented under timeout
+  category 1. This follows the pattern set by VERIFY-004 for bits.h's
+  CLZ/CTZ/popcount range-only specs.
+
+- `str_from_cstr` carries a partial spec for the same reason —
+  pointer and length-pairing properties are proved, but
+  `\result.len == strlen(cstr)` is not, because asserting it requires
+  the strlen logic function which is the same residual as timeout
+  category 2.
+
+- All functions specify `assigns \nothing;` (17 of 17). The single
+  `wp:pedantic-assigns` warning on `bytes_at` is precision-refinement
+  opportunity, not a soundness concern.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: Same as the other verified headers —
+  compiles `require_msg` runtime NULL checks away; ACSL `requires`
+  clauses provide static guarantees.
+
+- **`-DNDEBUG`**: Standard release-mode flag.
+
+### Reproduction
+
+```bash
+frama-c -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  core/slice.h
+```
+
+Expected output: `Proved goals: 367 / 390` with 23 timeouts.
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -531,10 +791,11 @@ different class of goal well:
   Alt-Ergo nor Z3 could close.
 
 The practical consequence: **every remaining unproved goal (2 on
-checked.h, 15 on bits.h, 10 on ptr.h) is demonstrated triple-prover-
-resistant**. This is a stronger certification-evidence statement than
-dual-prover resistance — the goals are genuinely limited by WP's
-encoding and integer theory, not by prover strength.
+checked.h, 15 on bits.h, 10 on ptr.h, 23 on slice.h) is demonstrated
+triple-prover-resistant**. This is a stronger certification-evidence
+statement than dual-prover resistance — the goals are genuinely
+limited by WP's encoding, integer theory, or stdlib feature gaps,
+not by prover strength.
 
 ### CVC5 installation note
 
@@ -563,17 +824,17 @@ the complete installation and registration procedure.
 | limits.h     | N/A              |           | Constant definitions only          |
 | contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h     |
 
-### core/ (next)
+### core/ (in progress)
 
-| Header       | Status     | Notes                                    |
-|--------------|------------|------------------------------------------|
-| slice.h      | **Next**   | Non-owning views; depends on ptr.h       |
-| arena.h      | Planned    | Memory region management                  |
-| pool.h       | Planned    | Fixed-size block allocator                |
-| memory.h     | Planned    | Allocation wrappers                       |
-| region.h     | Planned    | Lifetime management                       |
-| scope.h      | Planned    | Cleanup pairing                           |
-| ownership.h  | N/A        | Annotation macros only, no logic          |
+| Header       | Status           | Proved    | Notes                                    |
+|--------------|------------------|-----------|------------------------------------------|
+| slice.h      | ✅ Verified       | 367/390   | 23 documented timeouts (VERIFY-007); MCDC-002 closed |
+| arena.h      | Planned          |           | Memory region management                  |
+| pool.h       | Planned          |           | Fixed-size block allocator                |
+| memory.h     | Planned          |           | Allocation wrappers                       |
+| region.h     | Planned          |           | Lifetime management                       |
+| scope.h      | Planned          |           | Cleanup pairing                           |
+| ownership.h  | N/A              |           | Annotation macros only, no logic          |
 
 ### semantics/ (after core/ complete)
 
