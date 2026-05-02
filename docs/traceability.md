@@ -42,11 +42,11 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-04-27                                                   |
+| **Date**           | 2026-05-02                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | c3df659                                                      |
-| **CI run**         | Canon-C CI #804                                              |
-| **CI job**         | coverage                                                     |
+| **Commit**         | 1e0d0fe                                                      |
+| **CI run**         | Canon-C CI #821                                              |
+| **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
 | **Build type**     | Debug                                                        |
@@ -62,8 +62,8 @@
 |------------|------------|------------|------------|
 | Lines      | 95.7%      | 2159       | 2257       |
 | Functions  | 99.6%      | 511        | 513        |
-| Branches   | 84.6%      | 1398       | 1652       |
-| MC/DC      | 83.8%      | 1359       | 1622       |
+| Branches   | 85.2%      | 1407       | 1652       |
+| MC/DC      | 84.5%      | 1370       | 1622       |
 
 ### Methodology changes since baseline
 
@@ -96,23 +96,48 @@ exercised by the dedicated `checked_div_*_op`, `checked_mod_*_op`,
 `checked_div_isize_mcdc`, and `checked_mod_isize_mcdc` test groups in
 `test/core/primitives/checked_test.c`.
 
+Headers at their documented MC/DC ceiling (below 100% by design):
+
+- **slice.h: 93.1% (54/58)** — the achievable ceiling under the
+  public-API constraint documented in MCDC-002. The 4 remaining
+  outcomes are the `!ptr` left-side of `||` in `bytes_slice` (line
+  117), `bytes_skip` (line 130), `str_slice` (line 194), and
+  `str_skip` (line 207). All four are unreachable in MC/DC isolation
+  through the public API and are formally proved unreachable by
+  Frama-C WP under the `bytes_invariant` / `str_invariant` type
+  predicates (see VERIFY-007 and the MCDC-002 status update). The
+  gcov measurement remains 54/58 because gcov instruments the source
+  rather than the proof — the two evidence streams complement each
+  other rather than converge.
+
 ## Formal verification status
 
 Per-header formal verification state (see `docs/verification.md` for
 full per-header detail):
 
-| Header     | Functions | Proof obligations | Proved (auto) | Unproved | Deviation    |
-|------------|-----------|-------------------|---------------|----------|--------------|
-| checked.h  | 30        | 1755              | 1753 (99.89%) | 2        | VERIFY-002   |
-| bits.h     | 18        |  761              |  746 (98.03%) | 15       | VERIFY-003/4 |
-| compare.h  | 28        |  208              |  208 (100%)   | 0        | VERIFY-005   |
-| ptr.h      | 26        | 1739              | 1729 (99.43%) | 10       | VERIFY-006   |
-| **Total**  | **102**   | **4463**          | **4436 (99.40%)** | **27** |            |
+| Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
+|------------|-----------|-------------------|-------------------|----------|--------------|
+| checked.h  | 30        | 1755              | 1753 (99.89%)     | 2        | VERIFY-002   |
+| bits.h     | 18        |  761              |  746 (98.03%)     | 15       | VERIFY-003/4 |
+| compare.h  | 28        |  208              |  208 (100%)       | 0        | VERIFY-005   |
+| ptr.h      | 26        | 1739              | 1729 (99.43%)     | 10       | VERIFY-006   |
+| slice.h    | 22        |  390              |  367 (94.10%)     | 23       | VERIFY-007   |
+| **Total**  | **124**   | **4853**          | **4803 (98.97%)** | **50**   |              |
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). All 27 unproved goals are demonstrated
-triple-prover-resistant and carry written manual-proof arguments in
-`docs/deviations.md`.
+`-wp-timeout 120`). All 50 unproved goals are demonstrated
+triple-prover-resistant and carry written manual-proof arguments or
+documented WP feature-gap rationale in `docs/deviations.md`.
+
+The slice.h baseline (367 / 390) carries a higher residual fraction
+(5.9%) than the previously verified headers because slice.h is the
+first Canon-C header that crosses the C standard library boundary —
+its equality functions call `memcmp` and `str_from_cstr` calls
+`strlen`, both of which have ACSL contracts requiring initialization
+and danglingness reasoning that Frama-C 29 has not yet implemented
+(see VERIFY-007 for the full WP warning text). The 23 slice.h
+residuals are not specific to slice.h's design; future headers that
+use these libc functions will incur the same residual category.
 
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
@@ -120,6 +145,21 @@ were discharged automatically — most by Qed, with smaller contributions
 from Alt-Ergo and from WP's structural categories (Terminating /
 Unreachable). The two manually-discharged goals are unchanged from
 the previous baseline.
+
+### Cross-stream evidence: MCDC-002 closure
+
+slice.h's MC/DC ceiling at 93.1% (54/58) and slice.h's WP discharge
+of the four MCDC-002 functions form complementary certification
+evidence. gcov reports the four `!ptr` defensive branches as uncovered
+because no test reaches them through the public API. WP proves the
+same four branches are unreachable for any caller satisfying the
+type invariant. The gcov measurement is honest about test coverage;
+the WP discharge is honest about formal reachability. Together they
+satisfy DO-178C's intent for "deactivated code" or "defensive code
+unreachable in normal operation" without removing the defensive
+checks: the verification framework provides the unreachability
+evidence the testing framework cannot. See MCDC-002 in
+`docs/deviations.md` for the formal closure record.
 
 ### History
 
@@ -133,5 +173,6 @@ the previous baseline.
 | 2026-04-18 | 2f33389 | #761   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | compare.h ACSL contracts; WP 208/208 (100%); Typed+Cast model            |
 | 2026-04-23 | debb202 | #795   | v1.3.0  | 96.1%  | 99.6%     | 84.3%    | 83.5%  | ptr.h ACSL contracts; WP 1729/1739; triple-prover with CVC5 1.2.1        |
 | 2026-04-27 | c3df659 | #804   | v1.3.0  | 95.7%  | 99.6%     | 84.6%    | 83.8%  | checked.h div/mod added (12 functions); WP 1753/1755; 100% MC/DC held    |
+| 2026-05-02 | 1e0d0fe | #821   | v1.3.0  | 95.7%  | 99.6%     | 85.2%    | 84.5%  | slice.h: MC/DC 93.1% ceiling (MCDC-002), ACSL contracts, WP 367/390 (VERIFY-007), MCDC-002 WP-discharged |
 
 ---
