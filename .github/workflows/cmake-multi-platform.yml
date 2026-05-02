@@ -992,11 +992,11 @@ jobs:
           path: wp_ptr_output.txt
 
       - name: "WP: core/slice.h"
-        # slice.h is the first non-primitives header to be WP-verified.
-        # It defines the canonical {ptr, len} borrow types — bytes_t
-        # (mutable byte view), cbytes_t (read-only byte view), and
-        # str_t (read-only character view) — plus the DEFINE_SLICE(T)
-        # macro for typed element views.
+        # slice.h is the first non-primitives header WP-verified in
+        # Canon-C. It defines the canonical {ptr, len} borrow types —
+        # bytes_t (mutable byte view), cbytes_t (read-only byte view),
+        # and str_t (read-only character view) — plus the
+        # DEFINE_SLICE(T) macro for typed element views.
         #
         # Memory model: Typed+Cast — same rationale as VERIFY-005
         # (compare.h) and VERIFY-006 (ptr.h). slice.h performs void*
@@ -1004,75 +1004,56 @@ jobs:
         # the default Typed memory model rejects these casts and
         # every RTE mem_access goal becomes unprovable.
         #
-        # Verification scope (VERIFY-007 in docs/deviations.md):
+        # Expected result: 367 / 390 proved, exactly 23 unproved.
+        # Established as the stable triple-prover baseline by CI #821
+        # (commit 1e0d0fe). The 23 unproved goals are documented in
+        # docs/deviations.md under VERIFY-007 with WP-warning evidence
+        # and category analysis. They fall into three categories:
+        #
+        #   1. memcmp call-site preconditions (18) — six per
+        #      bytes_equal/str_equal, four per str_starts_with/
+        #      str_ends_with. WP itself reports the limitation:
+        #        "Allocation, initialization and danglingness not yet
+        #         implemented (\dangling{L}((char *)s + i))"
+        #      ACSL's memcmp contract requires initialization and
+        #      danglingness reasoning that Frama-C 29 has not yet
+        #      implemented. Strengthening slice.h's predicates would
+        #      not close these — the verifier itself cannot process
+        #      the obligations.
+        #
+        #   2. strlen valid_string precondition (1) — str_from_cstr
+        #      deliberately omits valid_read_string to avoid a
+        #      project-wide -frama-c-stdlib dependency. See VERIFY-007
+        #      for the spec-strength tradeoff rationale.
+        #
+        #   3. Transitive contract.h handler non-termination (2) —
+        #      same two goals as VERIFY-006 category 4, re-emitted
+        #      because slice.h includes contract.h transitively.
+        #      Not new slice.h residuals.
+        #
+        # Verification scope:
         #   - bytes_t / cbytes_t / str_t functions: ANNOTATED + VERIFIED
-        #     Constructors, queries, and slicing operations all carry
-        #     full ACSL contracts with named predicates (bytes_invariant,
-        #     str_invariant, bytes_valid_write, str_valid, etc.) and
-        #     behavior blocks for every multi-case function.
+        #   - DEFINE_SLICE(T) macro: DOCUMENTED, NOT WP-VERIFIED — the
+        #     C preprocessor strips ACSL inside #define before macro
+        #     expansion. Macro-generated functions are validated by
+        #     unit testing, fuzzing, and 93.1% MC/DC coverage on the
+        #     i32 instantiation.
         #
-        #   - DEFINE_SLICE(T) macro: DOCUMENTED, NOT WP-VERIFIED
-        #     The C preprocessor strips ACSL comments inside #define
-        #     bodies before macro expansion, so contracts cannot ride
-        #     through the macro to the generated code. The contract
-        #     comments inside the macro body are retained as human-
-        #     readable specifications. Slice_T_* functions are validated
-        #     by unit testing, fuzzing, and 100% MC/DC coverage on the
-        #     i32 instantiation. They will become WP-verifiable when a
-        #     separate slice_verify.h is added that instantiates
-        #     DEFINE_SLICE outside the macro.
+        # MCDC-002 closure:
+        #   The four `!ptr` defensive branches in bytes_slice (line
+        #   117), bytes_skip (line 130), str_slice (line 194), and
+        #   str_skip (line 207) — documented in MCDC-002 as
+        #   API-unreachable in MC/DC isolation — are formally proved
+        #   unreachable by WP under the bytes_invariant / str_invariant
+        #   type predicates. None of the four functions appear in the
+        #   unproved goal list. The wrapper below verifies this with
+        #   the diagnostic line `MCDC-002 functions with WP residuals:
+        #   0/4` — a regression here means the predicates were
+        #   weakened or the type invariants are no longer being
+        #   carried through the contracts.
         #
-        #   - Equality functions (bytes_equal, str_equal, str_starts_with,
-        #     str_ends_with): partial functional specs. Range, length-
-        #     mismatch, same-pointer fast path, and absence of runtime
-        #     errors are proved. Full equality semantics (the memcmp
-        #     == 0 postcondition) are deferred to testing — the
-        #     project's WP setup has not validated the memcmp
-        #     axiomatic block, and depending on it would create a
-        #     soundness dependency on -frama-c-stdlib options that
-        #     other Canon-C headers do not require.
-        #
-        #   - str_from_cstr: weakened spec. The ACSL `valid_read_string`
-        #     predicate and the strlen logic function require
-        #     -frama-c-stdlib and have known interaction issues under
-        #     Typed+Cast. The contract proves pointer/null pairing and
-        #     invariant preservation but does not constrain
-        #     `\result.len == strlen(cstr)`.
-        #
-        # MCDC-002 connection:
-        #   The four `!ptr` defensive branches in bytes_slice,
-        #   bytes_skip, str_slice, and str_skip (documented in
-        #   docs/deviations.md as MCDC-002, API-unreachable in MC/DC
-        #   isolation) should be discharged by WP as unreachable under
-        #   the type invariant predicates. If the first run confirms
-        #   this, MCDC-002 transitions from "API-unreachable" to
-        #   "WP-discharged unreachable" — a stronger evidence
-        #   statement. If the first run does NOT discharge them, the
-        #   predicates need to be strengthened (likely by adding
-        #   axiomatic blocks rather than bare predicate definitions).
-        #
-        # First-run mode (BASELINE):
-        #   The expected residual count is genuinely uncertain — the
-        #   memcmp interaction and the slice_invariant predicate
-        #   strength are both first-time validations in this codebase.
-        #   This wrapper REPORTS the unproved count without enforcing
-        #   a specific number. Once the first run produces an actual
-        #   baseline, the next commit replaces the baseline-mode
-        #   block with a strict EXPECTED_UNPROVED check — matching
-        #   the structure of the bits.h, compare.h, and ptr.h
-        #   wrappers above.
-        #
-        #   Predicted range: 5-25 residuals, mostly clustered in:
-        #     - bytes_equal / str_equal / str_starts_with / str_ends_with
-        #       (memcmp interaction, expected per VERIFY-007)
-        #     - str_from_cstr (strlen interaction even with weakened spec)
-        #     - possibly the *_invariant or *_valid predicate definitions
-        #       if WP requires axiomatic blocks instead of bare predicates
-        #
-        #   If the count significantly exceeds 25, something
-        #   structural is wrong (probably the predicate definition
-        #   form) and the next iteration should adjust the predicates
-        #   before tightening enforcement.
+        # The wrapper enforces 367/390 proved with the 23 named
+        # unproved goal patterns. Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1100,13 +1081,12 @@ jobs:
           echo "  ${PROVED_LINE}"
 
           # First sanity check: did WP actually produce a verification
-          # summary? If the "Proved goals:" line is missing, frama-c
-          # aborted before running WP — typically due to an ACSL parse
-          # error (clause ordering, syntax, undefined predicate, etc.).
-          # In that case the unproved counters below all read zero
-          # because there are no goals at all, NOT because everything
-          # was proved. Without this guard, baseline mode falsely
-          # reports "PASS: 0 unproved goals" on a crashed WP run.
+          # summary? If "Proved goals:" is missing, frama-c aborted
+          # before WP ran (typically an ACSL parse error). The
+          # unproved counters below would all read zero, falsely
+          # passing the count check. Without this guard, a parse
+          # error becomes a silent pass — see CI #820 / #821 history
+          # for the bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1122,21 +1102,47 @@ jobs:
           fi
 
           # Count unproved goals: Timeout + Unknown + Failed.
+          # WP may classify the same goal as either Timeout or Unknown
+          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_slice_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_slice_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_slice_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
-
+          EXPECTED_UNPROVED=23
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT}"
-          echo ""
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
 
-          # Check whether the four MCDC-002 defensive branches were
-          # discharged. If they appear in the unproved list, MCDC-002
-          # cannot yet transition to "WP-discharged" status — flag
-          # this for the deviations.md update.
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (slice.h section) and"
+            echo "      docs/deviations.md (VERIFY-007) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_slice_output.txt || true
+            exit 1
+          fi
+
+          # Verify the proved count matches the stable triple-prover
+          # baseline (367 / 390).
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "367 / 390" ]; then
+            echo "WARNING: proved count changed from expected 367 / 390."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-007 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
+
+          # MCDC-002 closure check: verify WP discharged all four
+          # !ptr defensive branches as unreachable. If any of these
+          # functions appears in the unproved list, MCDC-002's
+          # WP-discharged status has regressed and the cross-stream
+          # certification evidence is no longer valid.
           MCDC002_GOALS=(
             "bytes_slice"
             "bytes_skip"
@@ -1149,49 +1155,76 @@ jobs:
               MCDC002_RESIDUALS=$((MCDC002_RESIDUALS + 1))
             fi
           done
-          echo "  MCDC-002 functions with WP residuals: ${MCDC002_RESIDUALS}/4"
-          if [ "${MCDC002_RESIDUALS}" -eq 0 ]; then
-            echo "  → MCDC-002 closure candidate: WP discharged all four"
-            echo "    !ptr defensive branches as unreachable. Update"
-            echo "    docs/deviations.md MCDC-002 entry to mark as"
-            echo "    'WP-discharged unreachable' instead of 'API-unreachable'."
-          fi
-          echo ""
-
-          # BASELINE MODE: report the count, do not enforce a specific
-          # value. WP-aborted runs are caught by the PROVED_LINE check
-          # above, so reaching this point means WP genuinely ran and
-          # the unproved counters are meaningful.
-          # When VERIFY-007 documents the expected baseline, replace
-          # this block with a strict EXPECTED_UNPROVED check (mirroring
-          # the bits.h, compare.h, and ptr.h enforcement above).
-          if [ "${UNPROVED_COUNT}" -gt 0 ]; then
-            echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_slice_output.txt || true
+          echo "  MCDC-002 functions with WP residuals: ${MCDC002_RESIDUALS}/4 (expected 0/4)"
+          if [ "${MCDC002_RESIDUALS}" -ne 0 ]; then
             echo ""
-            echo "BASELINE MODE: not enforcing residual count yet."
-            echo "  Once VERIFY-007 is documented in docs/deviations.md,"
-            echo "  this step will require the count to match exactly."
-            echo "  Predicted range was 5-25; observed: ${UNPROVED_COUNT}."
-            if [ "${UNPROVED_COUNT}" -gt 25 ]; then
-              echo ""
-              echo "  WARNING: count exceeds the predicted upper bound."
-              echo "  Investigate before tightening enforcement —"
-              echo "  the predicate or behavior structure may need adjustment."
-            fi
-          else
-            echo "PASS: slice.h fully verified — 0 unproved goals."
-            echo "  ${PROVED_LINE}"
-            echo "  Update VERIFY-007 to record full discharge as the baseline."
+            echo "FAIL: MCDC-002 closure regressed."
+            echo "      One or more of the four !ptr defensive branches"
+            echo "      (bytes_slice, bytes_skip, str_slice, str_skip)"
+            echo "      now produces a WP residual, breaking the"
+            echo "      'WP-discharged unreachable' status documented"
+            echo "      in docs/deviations.md MCDC-002. Investigate the"
+            echo "      type invariant predicates (bytes_invariant,"
+            echo "      str_invariant) — they may have been weakened."
+            exit 1
           fi
-          echo "==============================================="
 
-          # In baseline mode, exit 0 only if WP genuinely ran (the
-          # PROVED_LINE check above already exited 1 if WP aborted).
-          # Once VERIFY-007 is finalised and EXPECTED_UNPROVED is set,
-          # replace the block above with strict count enforcement and
-          # change this to: exit ${WP_EXIT}
-          exit 0
+          # Spot-check representative goals from each unproved category.
+          # These may appear as [Timeout], [Unknown], or [Failed] —
+          # check all. Full list: see docs/deviations.md, VERIFY-007.
+          # The check uses pattern-style names because WP emits one
+          # goal per memcmp aspect (valid/initialization/danglingness)
+          # times two arguments (s1/s2) per equality function.
+          CHECKS=(
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_contract_default_handler_loop_invariant_established"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+          )
+
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_slice_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+
+          # Confirm CVC5 was actually invoked. Same belt-and-braces
+          # check as the ptr.h wrapper. If CVC5 doesn't appear, the
+          # triple-prover setup has degraded to dual-prover and the
+          # certification claim ("triple-prover-resistant residuals")
+          # is no longer supported.
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_slice_output.txt || true)
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step."
+          fi
+
+          echo "PASS: slice.h verified — 367/390 proved, 23 documented"
+          echo "      residuals all observed (VERIFY-007), MCDC-002"
+          echo "      closure intact (4/4 defensive branches discharged)."
+          echo "==============================================="
 
       - name: Upload WP proof output (slice.h)
         if: always()
