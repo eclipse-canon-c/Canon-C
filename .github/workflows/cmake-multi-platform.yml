@@ -1099,6 +1099,28 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_slice_output.txt || true)
           echo "  ${PROVED_LINE}"
 
+          # First sanity check: did WP actually produce a verification
+          # summary? If the "Proved goals:" line is missing, frama-c
+          # aborted before running WP — typically due to an ACSL parse
+          # error (clause ordering, syntax, undefined predicate, etc.).
+          # In that case the unproved counters below all read zero
+          # because there are no goals at all, NOT because everything
+          # was proved. Without this guard, baseline mode falsely
+          # reports "PASS: 0 unproved goals" on a crashed WP run.
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in slice.h. Check the WP"
+            echo "      output above for [kernel:annot-error] or"
+            echo "      [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_slice_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+
           # Count unproved goals: Timeout + Unknown + Failed.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_slice_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_slice_output.txt || true)
@@ -1136,7 +1158,10 @@ jobs:
           fi
           echo ""
 
-          # BASELINE MODE: report the count, do not enforce.
+          # BASELINE MODE: report the count, do not enforce a specific
+          # value. WP-aborted runs are caught by the PROVED_LINE check
+          # above, so reaching this point means WP genuinely ran and
+          # the unproved counters are meaningful.
           # When VERIFY-007 documents the expected baseline, replace
           # this block with a strict EXPECTED_UNPROVED check (mirroring
           # the bits.h, compare.h, and ptr.h enforcement above).
@@ -1156,12 +1181,16 @@ jobs:
             fi
           else
             echo "PASS: slice.h fully verified — 0 unproved goals."
+            echo "  ${PROVED_LINE}"
             echo "  Update VERIFY-007 to record full discharge as the baseline."
           fi
           echo "==============================================="
 
-          # Always exit 0 in baseline mode. Once enforcement is
-          # turned on, replace this with: exit ${WP_EXIT}
+          # In baseline mode, exit 0 only if WP genuinely ran (the
+          # PROVED_LINE check above already exited 1 if WP aborted).
+          # Once VERIFY-007 is finalised and EXPECTED_UNPROVED is set,
+          # replace the block above with strict count enforcement and
+          # change this to: exit ${WP_EXIT}
           exit 0
 
       - name: Upload WP proof output (slice.h)
