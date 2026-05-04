@@ -514,6 +514,31 @@ For what Canon-C intentionally omits, established C libraries exist:
   Windows without pulling in a larger framework.
 - `C11 <threads.h>` — if your compiler fully supports C11, the standard threading
   API is available directly with no library needed.
+- `liblfds` — portable lock-free data structures (queues, stacks, hash tables,
+  ring buffers, freelists) in C89 with no external dependencies. License is
+  effectively whatever you want — the author grants any popular license on
+  request and places the code in the public domain. Performs no allocations
+  of its own, works with stack/heap/shared memory/NUMA, compiles on bare and
+  freestanding C89 implementations including kernel mode. Used in production
+  by AT&T, Red Hat, and Xen. Philosophically the closest match to Canon-C
+  among lock-free libraries — header-only, no hidden allocation, no global
+  state. Use for SPSC/MPSC queues between pinned threads where mutex-based
+  synchronization adds unacceptable contention or jitter (real-time audio,
+  telemetry pipelines, game loops, packet processing).
+- `Concurrency Kit (ck)` — broader concurrency primitives including lock-free
+  data structures, RCU, and epoch-based memory reclamation. BSD-licensed,
+  used in production at companies running latency-sensitive infrastructure.
+  Heavier than liblfds but more complete. Use when you need RCU or
+  hazard-pointer semantics in addition to lock-free containers.
+
+**High-resolution timing**
+- Platform primitives are usually the right answer here — no library required.
+  Use `clock_gettime(CLOCK_MONOTONIC_RAW)` on Linux, `mach_absolute_time()`
+  on macOS, `QueryPerformanceCounter` on Windows, and `__rdtsc()` / `__rdtscp()`
+  for cycle-level timing on x86. Beware TSC invariance, frequency scaling,
+  CPU migration, and the cost of `rdtsc` itself. Useful for profiling,
+  benchmarking, game loops, animation timing, and any workload where event
+  timestamps drive correctness.
 
 **Serialization**
 - `cJSON` — ultralightweight JSON parser and emitter in ANSI C. Single file, MIT
@@ -539,6 +564,26 @@ For what Canon-C intentionally omits, established C libraries exist:
   floating-point unit required, no dependencies. Fully cross-platform. Use
   on embedded targets without an FPU where `<math.h>` operations are
   prohibitively slow or unavailable.
+- `libdecnumber` — IBM's reference implementation of IEEE 754-2008 decimal
+  floating-point. Used internally by GCC. Portable C, permissive license.
+  Use whenever exact decimal arithmetic matters — monetary values, billing,
+  metering, accounting, or any domain where binary floating-point rounding
+  errors are unacceptable.
+- `Intel Decimal Floating-Point Math Library` — Intel's BID (Binary Integer
+  Decimal) implementation. Faster than libdecnumber on x86, BSD-licensed.
+  Use as a drop-in performance upgrade when libdecnumber is the bottleneck
+  and the target is x86.
+- `GSL (GNU Scientific Library)` — comprehensive scientific computing
+  library: statistics, distributions, linear algebra, optimization, root
+  finding, Monte Carlo, ODE solvers. GPL-licensed (a real constraint for
+  proprietary codebases — verify license compatibility before adopting).
+  Use for statistical analysis, numerical methods, and quantitative work
+  where breadth of functions matters more than the last cycle of performance.
+- `Cephes` — public domain library of special mathematical functions
+  (gamma, error function, Bessel, elliptic integrals, statistical
+  distributions). The numerical foundation many other libraries derive
+  from. Use when GSL's license is a problem or when you need only special
+  functions without the full GSL footprint.
 
 **Hashing (non-cryptographic)**
 - `xxHash` — extremely fast general-purpose hash. Use for checksums, data
@@ -607,12 +652,13 @@ For what Canon-C intentionally omits, established C libraries exist:
 > the library:
 >
 > **Wrap cleanly** — monocypher, mpack, miniz, xxHash, SipHash, cglm,
-> libfixmath, CMSIS-DSP.
+> libfixmath, CMSIS-DSP, libdecnumber, Intel BID, Cephes, liblfds.
 > Flat API, no global state, buffer-based. Maps directly to Canon-C
 > conventions with a thin adapter.
 >
 > **Wrap partially** — SQLite, LMDB, cJSON, yyjson, libsodium,
-> TinyCThread, pthreads, C11 `<threads.h>`, raylib, nuklear, SDL2, zlog.
+> TinyCThread, pthreads, C11 `<threads.h>`, raylib, nuklear, SDL2, zlog,
+> GSL, Concurrency Kit.
 > Core operations wrap well into `Result<T, Error>` and `owned()`/`borrowed()`.
 > Callbacks, domain-specific error codes, global initialization, stateful
 > handle lifecycles, or thread entry points create contained mismatches
