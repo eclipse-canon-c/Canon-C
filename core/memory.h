@@ -8,6 +8,7 @@
 #include "core/primitives/types.h"      /* u8, usize, bool */
 #include "core/primitives/limits.h"     /* CANON_USIZE_MAX, CANON_DEFAULT_ALIGN */
 #include "core/primitives/contract.h"   /* require_msg, ensure_msg */
+#include "core/primitives/checked.h"    /* checked_mul */
 #include "core/primitives/ptr.h"        /* align_up, ptr_is_aligned, is_power_of_two */
 #include "core/slice.h"                 /* bytes_t, cbytes_t */
 
@@ -22,6 +23,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - NULL and zero-size safe on all operations (documented per function)
  * - Overflow-protected alignment calculations
+ * - Overflow-protected array allocation (via mem_alloc_array_checked)
  * - Preconditions enforced via require_msg (contract.h); no silent fallbacks
  * - No hidden allocations, no global state, no thread-local state
  * - Type-safe macros reduce sizeof boilerplate
@@ -37,12 +39,22 @@
  * Heap allocation:
  * ────────────────────────────────────────────────────────────────────────────
  * mem_alloc/mem_free are explicit named wrappers over malloc/free.
+ * mem_alloc_array_checked routes through checked_mul (from checked.h) to
+ * detect element_size * count overflow before calling mem_alloc — eliminating
+ * the silent wraparound hazard that would otherwise produce a heap-buffer
+ * overflow when the caller computes count*sizeof(T) with a hand-rolled
+ * multiplication. The mem_alloc_array(Type, count) macro is now a thin
+ * wrapper that supplies sizeof(Type) and the typed cast; its arithmetic
+ * happens inside the verified function.
+ *
  * Prefer arena_alloc() for temporary, scoped allocations.
  *
- * Relationship to ptr.h:
+ * Relationship to ptr.h and checked.h:
  * ────────────────────────────────────────────────────────────────────────────
  * ptr.h handles pointer arithmetic and alignment at the address level.
- * memory.h handles byte-region operations and delegates alignment math to ptr.h.
+ * checked.h provides overflow-detecting integer arithmetic.
+ * memory.h handles byte-region operations and delegates alignment math to
+ * ptr.h, overflow-checked multiplication to checked.h.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -52,9 +64,10 @@
  *
  * Thread-safety: all functions are fully thread-safe (no shared mutable state).
  *
- * @sa core/primitives/ptr.h  — pointer arithmetic and alignment
- * @sa core/slice.h           — bytes_t / cbytes_t
- * @sa core/arena.h           — preferred allocator for scoped memory
+ * @sa core/primitives/ptr.h     — pointer arithmetic and alignment
+ * @sa core/primitives/checked.h — overflow-detecting arithmetic
+ * @sa core/slice.h              — bytes_t / cbytes_t
+ * @sa core/arena.h              — preferred allocator for scoped memory
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -113,6 +126,53 @@ static inline void* mem_alloc(usize size) {
  */
 static inline void mem_free(void* ptr) {
     free(ptr);
+}
+
+/**
+ * @brief Allocates an array of count elements of element_size bytes each.
+ *
+ * Computes total size as element_size * count using checked multiplication
+ * (checked_mul from checked.h). Returns NULL if the multiplication
+ * overflows usize, if either argument is zero, or if the underlying
+ * allocation fails.
+ *
+ * Prefer the type-safe macro mem_alloc_array(Type, count) at call sites;
+ * this function is the verified primitive the macro routes through.
+ *
+ * NULL contract:
+ *   - element_size == 0 OR count == 0      → NULL (consistent with mem_alloc)
+ *   - element_size * count overflows usize → NULL (detected by checked_mul)
+ *   - malloc fails                         → NULL
+ *   - otherwise                            → pointer to a buffer of total bytes
+ *
+ * Caller must free with mem_free().
+ *
+ * Compositional verification: this function's correctness is a transitive
+ * consequence of checked_mul's verified overflow detection plus mem_alloc's
+ * allocation contract. The README's translation table maps "Arithmetic
+ * operations" to checked.h; this function applies that principle at the
+ * memory.h boundary so that callers and macro consumers inherit the
+ * substrate's overflow safety automatically.
+ *
+ * @param element_size Size of each element in bytes (0 → NULL)
+ * @param count        Number of elements (0 → NULL)
+ *
+ * @return Pointer to the allocated buffer, or NULL on overflow / allocation
+ *         failure / either argument zero.
+ *
+ * Example:
+ * ```c
+ * MyStruct* arr = mem_alloc_array_checked(sizeof(MyStruct), user_count);
+ * if (!arr) return ERROR_ALLOC;
+ * ```
+ *
+ * @sa mem_alloc(), mem_alloc_array (macro), checked_mul()
+ */
+static inline void* mem_alloc_array_checked(usize element_size, usize count) {
+    usize total;
+    if (element_size == 0 || count == 0) return NULL;
+    if (!checked_mul(element_size, count, &total)) return NULL;
+    return mem_alloc(total);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -467,14 +527,31 @@ static inline void mem_secure_zero_bytes(bytes_t b) {
 #define mem_alloc_type(Type)            ((Type*)mem_alloc(sizeof(Type)))
 
 /**
- * @brief Allocates an array of count objects of Type on the heap
+ * @brief Allocates an array of count objects of Type on the heap.
+ *
+ * Verified-safe: routes through mem_alloc_array_checked, which uses
+ * checked_mul to detect sizeof(Type) * count overflow before calling
+ * the underlying allocator. Returns NULL on overflow, on count == 0,
+ * or on allocation failure.
  *
  * Caller must free with mem_free().
- * Returns NULL on allocation failure or if count == 0.
  *
- * @warning Does not check for sizeof(Type) * count overflow.
- *          Caller is responsible for validating count before use.
+ * Verification scope: per the slice.h precedent (VERIFY-007 macros),
+ * this macro is documented but not directly WP-verified. Its body is
+ * Type-independent except for sizeof(Type), and its correctness is a
+ * transitive consequence of mem_alloc_array_checked's verified
+ * behavior plus C's sizeof semantics. Validated by testing on a
+ * representative type (i32) and through the overflow test cases
+ * in memory_test.c.
+ *
+ * Spec (transitively verified through mem_alloc_array_checked):
+ *   - sizeof(Type) > 0  (always true for valid types)
+ *   - count == 0                            → NULL
+ *   - sizeof(Type) * count overflows usize  → NULL
+ *   - malloc fails                          → NULL
+ *   - otherwise                             → typed pointer to sizeof(Type)*count bytes
  */
-#define mem_alloc_array(Type, count)    ((Type*)mem_alloc(sizeof(Type) * (count)))
+#define mem_alloc_array(Type, count) \
+    ((Type*)mem_alloc_array_checked(sizeof(Type), (count)))
 
 #endif /* CANON_CORE_MEMORY_H */
