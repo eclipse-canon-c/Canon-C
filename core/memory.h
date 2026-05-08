@@ -64,19 +64,27 @@
  *
  * Thread-safety: all functions are fully thread-safe (no shared mutable state).
  *
- * Verification scope (Round 1 — section 1):
+ * Verification scope (Round 2 — full surface):
  * ────────────────────────────────────────────────────────────────────────────
- * The following functions carry ACSL contracts and are WP-verified:
- *   - mem_regions_overlap
- *   - mem_alloc, mem_free
- *   - mem_alloc_array_checked
- *   - mem_align, mem_align_to
- *   - mem_is_aligned, mem_get_alignment, mem_is_power_of_two
+ * All 22 user-facing functions in memory.h carry ACSL contracts and are
+ * WP-verified, organized in three groups:
  *
- * The remaining functions (raw memory operations: copy/move/zero/set/secure_zero/
- * compare/equal/is_all/is_zero/swap/swap_buf, plus all bytes_t/cbytes_t
- * variants) carry no ACSL contracts in this round and are validated by unit
- * testing + MC/DC coverage only. Round 2+ will add their contracts.
+ *   Group 1 — alignment and allocation (round 1, 9 functions):
+ *     mem_regions_overlap, mem_alloc, mem_free, mem_alloc_array_checked,
+ *     mem_align, mem_align_to, mem_is_aligned, mem_get_alignment,
+ *     mem_is_power_of_two
+ *
+ *   Group 2 — raw memory operations (round 2, 11 functions):
+ *     mem_copy, mem_move, mem_zero, mem_secure_zero, mem_set,
+ *     mem_compare, mem_equal, mem_is_all, mem_is_zero, mem_swap, mem_swap_buf
+ *
+ *   Group 3 — bytes_t/cbytes_t variants (round 2, 7 functions):
+ *     mem_copy_bytes, mem_move_bytes, mem_zero_bytes, mem_set_bytes,
+ *     mem_equal_bytes, mem_is_zero_bytes, mem_secure_zero_bytes
+ *
+ * Residuals are documented in docs/deviations.md under VERIFY-008. The
+ * inherited residuals from checked.h, ptr.h, and slice.h propagate
+ * unchanged — composable verification's central claim.
  *
  * Macro instantiations (mem_alloc_array, mem_alloc_type, mem_zero_type, etc.)
  * are documented but not directly WP-verified — see VERIFY-007 (slice.h
@@ -438,7 +446,6 @@ static inline bool mem_is_power_of_two(usize n) {
 
 /* ════════════════════════════════════════════════════════════════════════════
    Safe memory operations — raw pointer variants
-   (Round 2+: ACSL contracts to be added)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -448,6 +455,24 @@ static inline bool mem_is_power_of_two(usize n) {
  *
  * @pre dest and src must not overlap — use mem_move() for overlapping regions
  */
+/*@
+  requires dest == \null || src == \null || size == 0 ||
+           mem_valid_write(dest, (integer)size);
+  requires dest == \null || src == \null || size == 0 ||
+           mem_valid_read((void *)src, (integer)size);
+
+  behavior null_or_zero:
+    assumes dest == \null || src == \null || size == 0;
+    assigns \nothing;
+
+  behavior copy:
+    assumes dest != \null && src != \null && size > 0;
+    assumes !regions_overlap((char *)dest, (char *)src, (integer)size);
+    assigns ((char *)dest)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_copy(void* restrict dest, const void* restrict src, usize size) {
     if (!dest || !src || size == 0) return;
     require_msg(!mem_regions_overlap(dest, src, size),
@@ -460,6 +485,23 @@ static inline void mem_copy(void* restrict dest, const void* restrict src, usize
  *
  * No-op if dest or src is NULL, or size == 0.
  */
+/*@
+  requires dest == \null || src == \null || size == 0 ||
+           mem_valid_write(dest, (integer)size);
+  requires dest == \null || src == \null || size == 0 ||
+           mem_valid_read((void *)src, (integer)size);
+
+  behavior null_or_zero:
+    assumes dest == \null || src == \null || size == 0;
+    assigns \nothing;
+
+  behavior move:
+    assumes dest != \null && src != \null && size > 0;
+    assigns ((char *)dest)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_move(void* dest, const void* src, usize size) {
     if (!dest || !src || size == 0) return;
     memmove(dest, src, size);
@@ -470,6 +512,21 @@ static inline void mem_move(void* dest, const void* src, usize size) {
  *
  * No-op if ptr is NULL or size == 0.
  */
+/*@
+  requires ptr == \null || size == 0 ||
+           mem_valid_write(ptr, (integer)size);
+
+  behavior null_or_zero:
+    assumes ptr == \null || size == 0;
+    assigns \nothing;
+
+  behavior zero:
+    assumes ptr != \null && size > 0;
+    assigns ((char *)ptr)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
     memset(ptr, 0, size);
@@ -483,6 +540,21 @@ static inline void mem_zero(void* ptr, usize size) {
  *
  * @note Use for clearing cryptographic keys, passwords, and sensitive buffers.
  */
+/*@
+  requires ptr == \null || size == 0 ||
+           mem_valid_write(ptr, (integer)size);
+
+  behavior null_or_zero:
+    assumes ptr == \null || size == 0;
+    assigns \nothing;
+
+  behavior secure_zero:
+    assumes ptr != \null && size > 0;
+    assigns ((char *)ptr)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_secure_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
 #if defined(__STDC_LIB_EXT1__) && __STDC_LIB_EXT1__ && !defined(__FRAMAC__)
@@ -490,6 +562,11 @@ static inline void mem_secure_zero(void* ptr, usize size) {
 #else
     volatile u8* p = (volatile u8*)ptr;
     usize i;
+    /*@
+      loop invariant 0 <= i <= size;
+      loop assigns i, p[0 .. size - 1];
+      loop variant size - i;
+    */
     for (i = 0; i < size; i++) p[i] = 0;
 #endif
 }
@@ -499,6 +576,21 @@ static inline void mem_secure_zero(void* ptr, usize size) {
  *
  * No-op if ptr is NULL or size == 0.
  */
+/*@
+  requires ptr == \null || size == 0 ||
+           mem_valid_write(ptr, (integer)size);
+
+  behavior null_or_zero:
+    assumes ptr == \null || size == 0;
+    assigns \nothing;
+
+  behavior set:
+    assumes ptr != \null && size > 0;
+    assigns ((char *)ptr)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_set(void* ptr, int value, usize size) {
     if (!ptr || size == 0) return;
     memset(ptr, value, size);
@@ -512,6 +604,34 @@ static inline void mem_set(void* ptr, int value, usize size) {
  *
  * @note Not constant-time. Do not use to compare cryptographic secrets.
  */
+/*@
+  requires a == \null || b == \null || size == 0 || a == b ||
+           (mem_valid_read((void *)a, (integer)size) &&
+            mem_valid_read((void *)b, (integer)size));
+  assigns  \nothing;
+
+  behavior both_null_or_equal:
+    assumes a == b;
+    ensures \result == 0;
+
+  behavior a_null:
+    assumes a != b && a == \null;
+    ensures \result == -1;
+
+  behavior b_null:
+    assumes a != b && a != \null && b == \null;
+    ensures \result == 1;
+
+  behavior zero_size:
+    assumes a != b && a != \null && b != \null && size == 0;
+    ensures \result == 0;
+
+  behavior memcmp:
+    assumes a != b && a != \null && b != \null && size > 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline int mem_compare(const void* a, const void* b, usize size) {
     if (a == b)    return 0;                    /* covers both-NULL and same-pointer */
     if (!a || !b)  return (!a) ? -1 : 1;        /* NULL sorts before non-NULL */
@@ -524,6 +644,30 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
  *
  * NULL contract: both NULL → true. One NULL → false. size == 0 → true.
  */
+/*@
+  requires a == \null || b == \null || size == 0 || a == b ||
+           (mem_valid_read((void *)a, (integer)size) &&
+            mem_valid_read((void *)b, (integer)size));
+  assigns  \nothing;
+
+  behavior both_null_or_equal:
+    assumes a == b;
+    ensures \result == \true;
+
+  behavior one_null:
+    assumes a != b && (a == \null || b == \null);
+    ensures \result == \false;
+
+  behavior zero_size:
+    assumes a != b && a != \null && b != \null && size == 0;
+    ensures \result == \true;
+
+  behavior compare:
+    assumes a != b && a != \null && b != \null && size > 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool mem_equal(const void* a, const void* b, usize size) {
     if (a == b)    return true;                 /* covers both-NULL and same-pointer */
     if (!a || !b)  return false;
@@ -536,6 +680,21 @@ static inline bool mem_equal(const void* a, const void* b, usize size) {
  *
  * NULL or size == 0 → false.
  */
+/*@
+  requires ptr == \null || size == 0 ||
+           mem_valid_read((void *)ptr, (integer)size);
+  assigns  \nothing;
+
+  behavior null_or_zero:
+    assumes ptr == \null || size == 0;
+    ensures \result == \false;
+
+  behavior scan:
+    assumes ptr != \null && size > 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool mem_is_all(const void* ptr, int value, usize size) {
     const u8* p;
     u8        v;
@@ -543,6 +702,12 @@ static inline bool mem_is_all(const void* ptr, int value, usize size) {
     if (!ptr || size == 0) return false;
     p = (const u8*)ptr;
     v = (u8)value;
+    /*@
+      loop invariant 0 <= i <= size;
+      loop invariant \forall integer k; 0 <= k < i ==> p[k] == v;
+      loop assigns i;
+      loop variant size - i;
+    */
     for (i = 0; i < size; i++) {
         if (p[i] != v) return false;
     }
@@ -554,6 +719,11 @@ static inline bool mem_is_all(const void* ptr, int value, usize size) {
  *
  * NULL or size == 0 → false.
  */
+/*@
+  requires ptr == \null || size == 0 ||
+           mem_valid_read((void *)ptr, (integer)size);
+  assigns  \nothing;
+*/
 static inline bool mem_is_zero(const void* ptr, usize size) {
     return mem_is_all(ptr, 0, size);
 }
@@ -567,6 +737,24 @@ static inline bool mem_is_zero(const void* ptr, usize size) {
  * @pre size <= CANON_MEM_SWAP_MAX
  * @pre a and b must not overlap
  */
+/*@
+  requires a == \null || b == \null || size == 0 ||
+           (size <= CANON_MEM_SWAP_MAX &&
+            mem_valid_write(a, (integer)size) &&
+            mem_valid_write(b, (integer)size));
+
+  behavior null_or_zero:
+    assumes a == \null || b == \null || size == 0;
+    assigns \nothing;
+
+  behavior swap:
+    assumes a != \null && b != \null && size > 0;
+    assumes !regions_overlap((char *)a, (char *)b, (integer)size);
+    assigns ((char *)a)[0 .. size - 1], ((char *)b)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_swap(void* a, void* b, usize size) {
     u8 tmp[CANON_MEM_SWAP_MAX];
     if (!a || !b || size == 0) return;
@@ -588,6 +776,30 @@ static inline void mem_swap(void* a, void* b, usize size) {
  * @pre scratch_len >= size
  * @pre a, b, and scratch must not overlap each other
  */
+/*@
+  requires a == \null || b == \null || scratch == \null || size == 0 ||
+           (scratch_len >= size &&
+            mem_valid_write(a, (integer)size) &&
+            mem_valid_write(b, (integer)size) &&
+            mem_valid_write(scratch, (integer)size));
+
+  behavior null_or_zero:
+    assumes a == \null || b == \null || scratch == \null || size == 0;
+    assigns \nothing;
+
+  behavior swap:
+    assumes a != \null && b != \null && scratch != \null && size > 0;
+    assumes scratch_len >= size;
+    assumes !regions_overlap((char *)a, (char *)b, (integer)size);
+    assumes !regions_overlap((char *)a, (char *)scratch, (integer)size);
+    assumes !regions_overlap((char *)b, (char *)scratch, (integer)size);
+    assigns ((char *)a)[0 .. size - 1],
+            ((char *)b)[0 .. size - 1],
+            ((char *)scratch)[0 .. size - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_swap_buf(void* a, void* b, usize size,
                                 void* scratch, usize scratch_len) {
     /* scratch_len is referenced only by require_msg below. Under
@@ -608,7 +820,6 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
 
 /* ════════════════════════════════════════════════════════════════════════════
    bytes_t / cbytes_t variants
-   (Round 2+: ACSL contracts to be added)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -617,6 +828,29 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
  * @pre dest.len >= src.len
  * @return Bytes copied, or 0 on failure
  */
+/*@
+  requires dest.ptr == \null || src.ptr == \null || src.len == 0 ||
+           dest.len < src.len ||
+           (mem_valid_write(dest.ptr, (integer)src.len) &&
+            mem_valid_read((void *)src.ptr, (integer)src.len));
+
+  behavior null_or_zero_or_too_small:
+    assumes dest.ptr == \null || src.ptr == \null || src.len == 0 ||
+            dest.len < src.len;
+    assigns \nothing;
+    ensures \result == 0;
+
+  behavior copy:
+    assumes dest.ptr != \null && src.ptr != \null && src.len > 0 &&
+            dest.len >= src.len;
+    assumes !regions_overlap((char *)dest.ptr, (char *)src.ptr,
+                             (integer)src.len);
+    assigns ((char *)dest.ptr)[0 .. src.len - 1];
+    ensures \result == src.len;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || src.len == 0) return 0;
     require_msg(dest.len >= src.len, "mem_copy_bytes: dest smaller than src");
@@ -633,6 +867,27 @@ static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
  * @pre dest.len >= src.len
  * @return Bytes moved, or 0 on failure
  */
+/*@
+  requires dest.ptr == \null || src.ptr == \null || src.len == 0 ||
+           dest.len < src.len ||
+           (mem_valid_write(dest.ptr, (integer)src.len) &&
+            mem_valid_read((void *)src.ptr, (integer)src.len));
+
+  behavior null_or_zero_or_too_small:
+    assumes dest.ptr == \null || src.ptr == \null || src.len == 0 ||
+            dest.len < src.len;
+    assigns \nothing;
+    ensures \result == 0;
+
+  behavior move:
+    assumes dest.ptr != \null && src.ptr != \null && src.len > 0 &&
+            dest.len >= src.len;
+    assigns ((char *)dest.ptr)[0 .. src.len - 1];
+    ensures \result == src.len;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || src.len == 0) return 0;
     require_msg(dest.len >= src.len, "mem_move_bytes: dest smaller than src");
@@ -644,6 +899,21 @@ static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
 /**
  * @brief Zero-fills an entire bytes_t region
  */
+/*@
+  requires b.ptr == \null || b.len == 0 ||
+           mem_valid_write(b.ptr, (integer)b.len);
+
+  behavior null_or_zero:
+    assumes b.ptr == \null || b.len == 0;
+    assigns \nothing;
+
+  behavior zero:
+    assumes b.ptr != \null && b.len > 0;
+    assigns ((char *)b.ptr)[0 .. b.len - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_zero_bytes(bytes_t b) {
     if (!b.ptr || b.len == 0) return;
     memset(b.ptr, 0, b.len);
@@ -652,6 +922,21 @@ static inline void mem_zero_bytes(bytes_t b) {
 /**
  * @brief Fills a bytes_t region with a repeated byte value
  */
+/*@
+  requires b.ptr == \null || b.len == 0 ||
+           mem_valid_write(b.ptr, (integer)b.len);
+
+  behavior null_or_zero:
+    assumes b.ptr == \null || b.len == 0;
+    assigns \nothing;
+
+  behavior set:
+    assumes b.ptr != \null && b.len > 0;
+    assigns ((char *)b.ptr)[0 .. b.len - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_set_bytes(bytes_t b, int value) {
     if (!b.ptr || b.len == 0) return;
     memset(b.ptr, value, b.len);
@@ -662,6 +947,38 @@ static inline void mem_set_bytes(bytes_t b, int value) {
  *
  * Different lengths → false. Both empty (len == 0, ptr may differ) → true.
  */
+/*@
+  requires a.ptr == \null || b.ptr == \null || a.len == 0 || b.len == 0 ||
+           a.ptr == b.ptr ||
+           (mem_valid_read((void *)a.ptr, (integer)a.len) &&
+            mem_valid_read((void *)b.ptr, (integer)b.len));
+  assigns  \nothing;
+
+  behavior different_lengths:
+    assumes a.len != b.len;
+    ensures \result == \false;
+
+  behavior same_pointer:
+    assumes a.len == b.len && a.ptr == b.ptr;
+    ensures \result == \true;
+
+  behavior one_null:
+    assumes a.len == b.len && a.ptr != b.ptr &&
+            (a.ptr == \null || b.ptr == \null);
+    ensures \result == \false;
+
+  behavior zero_len:
+    assumes a.len == b.len && a.ptr != b.ptr &&
+            a.ptr != \null && b.ptr != \null && a.len == 0;
+    ensures \result == \true;
+
+  behavior compare:
+    assumes a.len == b.len && a.ptr != b.ptr &&
+            a.ptr != \null && b.ptr != \null && a.len > 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool mem_equal_bytes(cbytes_t a, cbytes_t b) {
     if (a.len != b.len) return false;
     if (a.ptr == b.ptr) return true;            /* covers both-NULL with equal len */
@@ -675,6 +992,11 @@ static inline bool mem_equal_bytes(cbytes_t a, cbytes_t b) {
  *
  * NULL ptr or len == 0 → false.
  */
+/*@
+  requires b.ptr == \null || b.len == 0 ||
+           mem_valid_read((void *)b.ptr, (integer)b.len);
+  assigns  \nothing;
+*/
 static inline bool mem_is_zero_bytes(cbytes_t b) {
     return mem_is_all(b.ptr, 0, b.len);
 }
@@ -682,6 +1004,21 @@ static inline bool mem_is_zero_bytes(cbytes_t b) {
 /**
  * @brief Securely zero-fills a bytes_t region (prevents compiler elimination)
  */
+/*@
+  requires b.ptr == \null || b.len == 0 ||
+           mem_valid_write(b.ptr, (integer)b.len);
+
+  behavior null_or_zero:
+    assumes b.ptr == \null || b.len == 0;
+    assigns \nothing;
+
+  behavior secure_zero:
+    assumes b.ptr != \null && b.len > 0;
+    assigns ((char *)b.ptr)[0 .. b.len - 1];
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void mem_secure_zero_bytes(bytes_t b) {
     mem_secure_zero(b.ptr, b.len);
 }
