@@ -1685,6 +1685,70 @@ jobs:
             done
           fi
 
+      - name: "Debug: per-line MC/DC detail for memory.h"
+        # Identifies which specific conditions in memory.h are uncovered.
+        # As of CI #831, memory.h reached 88.3% MC/DC (113/128, 15 missed).
+        # The 15 remaining outcomes split into three rough categories
+        # (estimated, to be confirmed by reading this debug output and
+        # documented in deviations.md as a memory.h-specific MCDC entry):
+        #
+        #   1. MCDC-002-pattern (~6 conditions) — the bytes_t variants
+        #      mem_copy_bytes, mem_move_bytes, mem_zero_bytes, mem_set_bytes,
+        #      mem_equal_bytes, mem_secure_zero_bytes contain compound
+        #      `!b.ptr || b.len == 0` early returns. The {ptr, len}
+        #      structure plus cbytes_empty() = {NULL, 0} make some
+        #      subcondition combinations API-unreachable in MC/DC
+        #      isolation, analogous to slice.h's bytes_slice / str_slice
+        #      defensive branches.
+        #
+        #   2. require_msg panic paths (~4-6 conditions) — mem_align_to,
+        #      mem_is_aligned, mem_swap, mem_swap_buf use require_msg to
+        #      enforce preconditions. The failing branches collapse under
+        #      -DCANON_NO_REQUIRE (used by the coverage build), but their
+        #      structural positions still register as conditions in some
+        #      cases. Same pattern as the contract.h 0/2 entry that
+        #      appears in every test row.
+        #
+        #   3. Reachable gaps (~3-5 conditions) — mem_compare's `if (a == b)`
+        #      vs `if (!a || !b)` interaction, and mem_swap_buf's three
+        #      separate overlap require_msg calls, are likely the
+        #      reachable subset that more-careful test design could close.
+        #
+        # This step remains in place as a regression detector. If a new
+        # function is added without corresponding tests, or if any of the
+        # previously-closed reachable gaps regress, the output will show
+        # which conditions drop below the documented baseline.
+        run: |
+          cd build
+
+          MEMORY_GCDA=$(find . -name "memory_test*.gcda" | head -1)
+
+          if [ -z "$MEMORY_GCDA" ]; then
+            echo "ERROR: could not locate memory_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+
+          echo "Running gcov on: $MEMORY_GCDA"
+          gcov-14 --conditions --all-blocks "$MEMORY_GCDA" 2>&1 | \
+            grep -A 200 "memory.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for memory.h ==="
+          find . -name "memory.h.gcov" -exec echo "Found: {}" \;
+
+          MEMORY_GCOV=$(find . -name "memory.h.gcov" | head -1)
+          if [ -n "$MEMORY_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $MEMORY_GCOV ==="
+            cat "$MEMORY_GCOV"
+          else
+            echo "No memory.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*memory* 2>/dev/null || true
+            done
+          fi
+
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
