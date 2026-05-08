@@ -619,9 +619,7 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
  * @return Bytes copied, or 0 on failure
  */
 static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
-    if (!dest.ptr || !src.ptr || src.len == 0) return 0;
-    require_msg(dest.len >= src.len, "mem_copy_bytes: dest smaller than src");
-    if (dest.len < src.len) return 0;
+    if (!dest.ptr || !src.ptr || src.len == 0 || dest.len < src.len) return 0;
     require_msg(!mem_regions_overlap(dest.ptr, src.ptr, src.len),
                 "mem_copy_bytes: regions overlap — use mem_move_bytes");
     memcpy(dest.ptr, src.ptr, src.len);
@@ -635,9 +633,7 @@ static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
  * @return Bytes moved, or 0 on failure
  */
 static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
-    if (!dest.ptr || !src.ptr || src.len == 0) return 0;
-    require_msg(dest.len >= src.len, "mem_move_bytes: dest smaller than src");
-    if (dest.len < src.len) return 0;
+    if (!dest.ptr || !src.ptr || src.len == 0 || dest.len < src.len) return 0;
     memmove(dest.ptr, src.ptr, src.len);
     return src.len;
 }
