@@ -130,9 +130,17 @@
  * conservative value that satisfies SSE, double, and pointer alignment on
  * virtually all platforms. Override to 8 for memory-constrained 32-bit
  * embedded targets if needed.
+ *
+ * Frama-C handling: Frama-C reports __STDC_VERSION__ >= 201112L (C11) but
+ * does NOT support _Alignof. The !defined(__FRAMAC__) guard forces the
+ * C99 fallback ((usize)16) under Frama-C so WP can parse memory.h /
+ * arena.h / pool.h functions that capture this constant. The fallback
+ * value matches the pre-C11 behavior — it is sound, not approximate.
+ * Same __FRAMAC__ discipline as checked.h (CANON_CHECKED_FORCE_FALLBACK)
+ * and bits.h (CANON_BITS_FORCE_FALLBACK).
  */
 #ifndef CANON_DEFAULT_ALIGN
-#  if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#  if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__FRAMAC__)
 #    define CANON_DEFAULT_ALIGN ((usize)_Alignof(max_align_t))
 #  else
 #    define CANON_DEFAULT_ALIGN ((usize)16)
