@@ -64,11 +64,54 @@
  *
  * Thread-safety: all functions are fully thread-safe (no shared mutable state).
  *
+ * Verification scope (Round 1 — section 1):
+ * ────────────────────────────────────────────────────────────────────────────
+ * The following functions carry ACSL contracts and are WP-verified:
+ *   - mem_regions_overlap
+ *   - mem_alloc, mem_free
+ *   - mem_alloc_array_checked
+ *   - mem_align, mem_align_to
+ *   - mem_is_aligned, mem_get_alignment, mem_is_power_of_two
+ *
+ * The remaining functions (raw memory operations: copy/move/zero/set/secure_zero/
+ * compare/equal/is_all/is_zero/swap/swap_buf, plus all bytes_t/cbytes_t
+ * variants) carry no ACSL contracts in this round and are validated by unit
+ * testing + MC/DC coverage only. Round 2+ will add their contracts.
+ *
+ * Macro instantiations (mem_alloc_array, mem_alloc_type, mem_zero_type, etc.)
+ * are documented but not directly WP-verified — see VERIFY-007 (slice.h
+ * DEFINE_SLICE precedent) for the macro verification rationale.
+ *
  * @sa core/primitives/ptr.h     — pointer arithmetic and alignment
  * @sa core/primitives/checked.h — overflow-detecting arithmetic
  * @sa core/slice.h              — bytes_t / cbytes_t
  * @sa core/arena.h              — preferred allocator for scoped memory
  */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ACSL predicates (verification-only)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/*@
+  // Two byte-regions overlap iff each region's start lies within the
+  // other's range. Empty regions (size == 0) never overlap.
+  predicate regions_overlap{L}(char *a, char *b, integer size) =
+      size > 0 && a < b + size && b < a + size;
+
+  // Address-level alignment: ptr is aligned to a power-of-2 boundary
+  // iff its low (alignment - 1) bits are zero.
+  predicate is_aligned_addr(void *ptr, integer alignment) =
+      alignment > 0 && ((unsigned long)ptr & (unsigned long)(alignment - 1)) == 0;
+
+  // Bytes-region read validity: either size == 0 (no read needed) or
+  // every byte in [ptr, ptr + size) is readable.
+  predicate mem_valid_read{L}(void *ptr, integer size) =
+      size == 0 || \valid_read((char *)ptr + (0 .. size - 1));
+
+  // Bytes-region write validity: either size == 0 or every byte is writable.
+  predicate mem_valid_write{L}(void *ptr, integer size) =
+      size == 0 || \valid((char *)ptr + (0 .. size - 1));
+*/
 
 /* ════════════════════════════════════════════════════════════════════════════
    mem_swap stack-buffer limit
@@ -93,6 +136,29 @@
  * @brief Returns true if [a, a+size) and [b, b+size) overlap
  * @note  Used internally; exposed for testing via mem_regions_overlap.
  */
+/*@
+  requires \separated(a, b);
+  assigns  \nothing;
+
+  behavior null_a:
+    assumes a == \null;
+    ensures \result == \false;
+
+  behavior null_b:
+    assumes a != \null && b == \null;
+    ensures \result == \false;
+
+  behavior zero_size:
+    assumes a != \null && b != \null && size == 0;
+    ensures \result == \false;
+
+  behavior overlapping:
+    assumes a != \null && b != \null && size > 0;
+    ensures \result == regions_overlap((char *)a, (char *)b, (integer)size);
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool mem_regions_overlap(const void* a, const void* b, usize size) {
     if (!a || !b || size == 0) return false;
     const u8* pa = (const u8*)a;
@@ -112,6 +178,20 @@ static inline bool mem_regions_overlap(const void* a, const void* b, usize size)
  *
  * @param size Bytes to allocate (0 → NULL)
  */
+/*@
+  assigns \nothing;
+
+  behavior zero_size:
+    assumes size == 0;
+    ensures \result == \null;
+
+  behavior nonzero_size:
+    assumes size > 0;
+    ensures \result == \null || \fresh(\result, size);
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void* mem_alloc(usize size) {
     if (size == 0) return NULL;
     return malloc(size);
@@ -124,6 +204,11 @@ static inline void* mem_alloc(usize size) {
  *
  * @param ptr Pointer to free (NULL-safe)
  */
+/*@
+  requires ptr == \null || \freeable(ptr);
+  assigns  \nothing;
+  ensures  \true;
+*/
 static inline void mem_free(void* ptr) {
     free(ptr);
 }
@@ -168,6 +253,30 @@ static inline void mem_free(void* ptr) {
  *
  * @sa mem_alloc(), mem_alloc_array (macro), checked_mul()
  */
+/*@
+  assigns \nothing;
+
+  behavior zero_element_size:
+    assumes element_size == 0;
+    ensures \result == \null;
+
+  behavior zero_count:
+    assumes element_size > 0 && count == 0;
+    ensures \result == \null;
+
+  behavior overflow:
+    assumes element_size > 0 && count > 0 &&
+            element_size * count > CANON_USIZE_MAX;
+    ensures \result == \null;
+
+  behavior nonoverflow:
+    assumes element_size > 0 && count > 0 &&
+            element_size * count <= CANON_USIZE_MAX;
+    ensures \result == \null || \fresh(\result, element_size * count);
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void* mem_alloc_array_checked(usize element_size, usize count) {
     usize total;
     if (element_size == 0 || count == 0) return NULL;
@@ -185,6 +294,25 @@ static inline void* mem_alloc_array_checked(usize element_size, usize count) {
  * @param size Bytes to align (0 → 0)
  * @return Aligned size, or CANON_USIZE_MAX on overflow
  */
+/*@
+  assigns \nothing;
+
+  behavior zero:
+    assumes size == 0;
+    ensures \result == 0;
+
+  behavior overflow:
+    assumes size > 0 && size > CANON_USIZE_MAX - (CANON_DEFAULT_ALIGN - 1);
+    ensures \result == CANON_USIZE_MAX;
+
+  behavior normal:
+    assumes size > 0 && size <= CANON_USIZE_MAX - (CANON_DEFAULT_ALIGN - 1);
+    ensures \result >= size;
+    ensures \result % CANON_DEFAULT_ALIGN == 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize mem_align(usize size) {
     const usize natural = CANON_DEFAULT_ALIGN;
     if (size == 0) return 0;
@@ -201,6 +329,27 @@ static inline usize mem_align(usize size) {
  *
  * @pre alignment > 0 && is_power_of_two(alignment)
  */
+/*@
+  requires alignment > 0;
+  requires (alignment & (alignment - 1)) == 0;
+  assigns  \nothing;
+
+  behavior zero:
+    assumes size == 0;
+    ensures \result == 0;
+
+  behavior overflow:
+    assumes size > 0 && size > CANON_USIZE_MAX - (alignment - 1);
+    ensures \result == CANON_USIZE_MAX;
+
+  behavior normal:
+    assumes size > 0 && size <= CANON_USIZE_MAX - (alignment - 1);
+    ensures \result >= size;
+    ensures \result % alignment == 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize mem_align_to(usize size, usize alignment) {
     require_msg(alignment > 0,              "mem_align_to: alignment must be > 0");
     require_msg(is_power_of_two(alignment), "mem_align_to: alignment must be a power of 2");
@@ -217,6 +366,28 @@ static inline usize mem_align_to(usize size, usize alignment) {
  *
  * @pre alignment > 0 && is_power_of_two(alignment)
  */
+/*@
+  requires alignment > 0;
+  requires (alignment & (alignment - 1)) == 0;
+  assigns  \nothing;
+
+  behavior null:
+    assumes ptr == \null;
+    ensures \result == \false;
+
+  behavior nonnull_aligned:
+    assumes ptr != \null;
+    assumes is_aligned_addr((void *)ptr, (integer)alignment);
+    ensures \result == \true;
+
+  behavior nonnull_unaligned:
+    assumes ptr != \null;
+    assumes !is_aligned_addr((void *)ptr, (integer)alignment);
+    ensures \result == \false;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool mem_is_aligned(const void* ptr, usize alignment) {
     require_msg(alignment > 0,              "mem_is_aligned: alignment must be > 0");
     require_msg(is_power_of_two(alignment), "mem_is_aligned: alignment must be a power of 2");
@@ -232,6 +403,21 @@ static inline bool mem_is_aligned(const void* ptr, usize alignment) {
  * @param ptr Pointer to inspect (NULL → 0)
  * @return Power-of-2 alignment in bytes, or 0 if ptr is NULL
  */
+/*@
+  assigns \nothing;
+
+  behavior null:
+    assumes ptr == \null;
+    ensures \result == 0;
+
+  behavior nonnull:
+    assumes ptr != \null;
+    ensures \result >= 1;
+    ensures (\result & (\result - 1)) == 0;
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize mem_get_alignment(const void* ptr) {
     uintptr_t addr;
     if (!ptr) return 0;
@@ -243,12 +429,17 @@ static inline usize mem_get_alignment(const void* ptr) {
 /**
  * @brief Returns true if n is a non-zero power of two
  */
+/*@
+  assigns \nothing;
+  ensures \result == (n > 0 && (n & (n - 1)) == 0);
+*/
 static inline bool mem_is_power_of_two(usize n) {
     return is_power_of_two(n);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Safe memory operations — raw pointer variants
+   (Round 2+: ACSL contracts to be added)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -295,7 +486,7 @@ static inline void mem_zero(void* ptr, usize size) {
  */
 static inline void mem_secure_zero(void* ptr, usize size) {
     if (!ptr || size == 0) return;
-#if defined(__STDC_LIB_EXT1__) && __STDC_LIB_EXT1__
+#if defined(__STDC_LIB_EXT1__) && __STDC_LIB_EXT1__ && !defined(__FRAMAC__)
     memset_s(ptr, size, 0, size);
 #else
     volatile u8* p = (volatile u8*)ptr;
@@ -418,6 +609,7 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
 
 /* ════════════════════════════════════════════════════════════════════════════
    bytes_t / cbytes_t variants
+   (Round 2+: ACSL contracts to be added)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
