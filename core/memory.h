@@ -137,7 +137,6 @@
  * @note  Used internally; exposed for testing via mem_regions_overlap.
  */
 /*@
-  requires \separated(a, b);
   assigns  \nothing;
 
   behavior null_a:
