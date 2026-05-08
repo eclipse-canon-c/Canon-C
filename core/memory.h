@@ -153,7 +153,7 @@
 
   behavior overlapping:
     assumes a != \null && b != \null && size > 0;
-    ensures \result == regions_overlap((char *)a, (char *)b, (integer)size);
+    ensures \result <==> regions_overlap((char *)a, (char *)b, (integer)size);
 
   complete behaviors;
   disjoint behaviors;
