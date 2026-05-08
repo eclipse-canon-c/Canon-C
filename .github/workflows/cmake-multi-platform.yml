@@ -16,7 +16,9 @@ on:
 #   frama-c         — Linux only, formal verification (WP proofs + Eva)
 #                     Currently scoped to core/primitives/checked.h,
 #                     core/primitives/bits.h, core/primitives/compare.h,
-#                     core/primitives/ptr.h, and core/slice.h.
+#                     core/primitives/ptr.h, core/slice.h, and
+#                     core/memory.h (round 1, discovery mode — see
+#                     comment on the memory.h step below).
 #                     Additional headers will be added as they are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
@@ -352,8 +354,8 @@ jobs:
   # 5. Formal verification — Frama-C (Linux only)
   #
   #    Scope: core/primitives/checked.h, core/primitives/bits.h,
-  #    core/primitives/compare.h, core/primitives/ptr.h, and
-  #    core/slice.h.
+  #    core/primitives/compare.h, core/primitives/ptr.h,
+  #    core/slice.h, and core/memory.h (round 1).
   #
   #    checked.h is the first Canon-C header with full ACSL contracts
   #    (every unsigned function plus all three signed functions). bits.h
@@ -365,8 +367,11 @@ jobs:
   #    discipline. slice.h is the fifth and the first non-primitives
   #    header — it defines the canonical {ptr, len} borrow types
   #    (bytes_t, cbytes_t, str_t) plus the DEFINE_SLICE(T) macro for
-  #    typed element views. When the rest of core/ is annotated, add
-  #    them to the file list in the WP steps below.
+  #    typed element views. memory.h is the sixth — it adds a heap
+  #    allocation surface (mem_alloc / mem_free / mem_alloc_array_checked)
+  #    and alignment helpers. memory.h is currently scoped to round 1
+  #    (predicates plus the simplest 9 functions); the remaining 22
+  #    functions in memory.h will land in round 2+.
   #
   #    Installation: opam with aggressive caching + cvc5 from GitHub.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
@@ -398,10 +403,10 @@ jobs:
   #    and 3 goals on ptr.h). WP tries Alt-Ergo first, falls through
   #    to Z3, then to CVC5 — keeping the common case fast while giving
   #    hard goals three chances before timing out. Remaining unproved
-  #    goals (2 on checked.h, 15 on bits.h, 10 on ptr.h, TBD on
-  #    slice.h) are therefore demonstrated triple-prover-resistant,
-  #    which is a stronger certification evidence statement than
-  #    single- or dual-prover.
+  #    goals (2 on checked.h, 15 on bits.h, 10 on ptr.h, 23 on
+  #    slice.h, TBD on memory.h) are therefore demonstrated triple-
+  #    prover-resistant, which is a stronger certification evidence
+  #    statement than single- or dual-prover.
   #
   #    CVC5 auto-detection: why3 config detect does NOT auto-register
   #    cvc5 1.2.1 because why3 1.7.2's prover-detection regex expects
@@ -433,7 +438,11 @@ jobs:
   #    __FRAMAC__ transitively through contract.h for the same
   #    handler-discipline reason — its own require_msg calls collapse
   #    under -DCANON_NO_REQUIRE so the WP and coverage evidence
-  #    streams measure the same source.
+  #    streams measure the same source. memory.h follows the same
+  #    pattern: require_msg collapses under -DCANON_NO_REQUIRE for
+  #    both WP and coverage, and mem_secure_zero forces the volatile
+  #    write-loop fallback under __FRAMAC__ (memset_s is C11 Annex K
+  #    and rarely shipped on certification targets).
   #
   #    Certification evidence produced:
   #      - Absence of runtime errors (all standards)
@@ -1233,6 +1242,141 @@ jobs:
           name: wp-proof-slice
           path: wp_slice_output.txt
 
+      - name: "WP: core/memory.h (round 1 — discovery mode)"
+        # memory.h is the sixth Canon-C header brought into WP scope and
+        # the FIRST currently in DISCOVERY mode (no enforcement).
+        #
+        # Round 1 scope (predicates + 9 functions, see header docstring):
+        #   - mem_regions_overlap
+        #   - mem_alloc, mem_free
+        #   - mem_alloc_array_checked
+        #   - mem_align, mem_align_to
+        #   - mem_is_aligned, mem_get_alignment, mem_is_power_of_two
+        #
+        # The remaining 22 functions in memory.h (raw-pointer ops, bytes_t
+        # variants) are intentionally NOT annotated in round 1 — they
+        # land in round 2+. WP will see them but emit no contract goals
+        # for them, so they do not affect the residual count.
+        #
+        # Memory model: Typed+Cast — same rationale as VERIFY-005
+        # (compare.h), VERIFY-006 (ptr.h), and VERIFY-007 (slice.h).
+        # memory.h performs void* to char*/u8* casts in mem_alloc /
+        # mem_alloc_array_checked / mem_regions_overlap; the default
+        # Typed memory model rejects these casts.
+        #
+        # DISCOVERY mode rationale:
+        # ---------------------------------------------------------------
+        # The memory.h annotations were drafted from the slice.h, ptr.h,
+        # checked.h, and compare.h precedents but have NOT been validated
+        # against a real Frama-C run before this CI push. The expected
+        # residual count is unknown — it depends on:
+        #   - which align_up / is_power_of_two predicates inherit ptr.h
+        #     residuals vs discharge transitively
+        #   - whether the predicate `is_aligned_addr` reasoning closes
+        #     the alignment ensures clauses or produces new residuals
+        #   - how mem_alloc_array_checked composes with checked_mul's
+        #     contract (the first transitive dependency on a verified
+        #     primitive at this layer)
+        #   - whether the contract.h handler residuals are inherited
+        #     (almost certainly yes, ~2 goals like ptr.h / slice.h)
+        #
+        # This step runs WP, prints what it found, and exits 0 regardless
+        # of residual count. After observing the actual residual count
+        # and goal names, round 2 of memory.h tightens this step into
+        # full enforcement mode (matching the slice.h step's structure).
+        #
+        # The wp_memory_output.txt artifact is the empirical record we
+        # use to set the round-2 enforcement baseline. Always uploaded
+        # via `if: always()` so a failed step still produces the artifact.
+        # ---------------------------------------------------------------
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/memory.h 2>&1 | tee wp_memory_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (memory.h round 1) exit status: ${WP_EXIT}"
+          echo "  Mode: DISCOVERY (no enforcement)"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_memory_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          # Sanity check: did WP produce a summary at all?
+          # If not, frama-c aborted before WP ran (typically an ACSL
+          # syntax error). In discovery mode we still want the diagnostic
+          # output for the round-2 fix, so we report cleanly and exit 1
+          # only on this catastrophic case. Any other WP outcome (timeouts,
+          # unknowns, failed goals) is acceptable in discovery mode.
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "DISCOVERY-FAIL: WP did not produce a verification summary."
+            echo "                frama-c aborted before running WP, likely"
+            echo "                due to an ACSL syntax error in memory.h."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_memory_output.txt | head -20 || true
+            echo "==============================================="
+            exit 1
+          fi
+
+          # Report what we found. None of these checks fail the build —
+          # they're informational so we know what to enforce in round 2.
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_memory_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_memory_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_memory_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo ""
+          echo "  Discovery summary:"
+          echo "    Proved:   ${PROVED_COUNT}"
+          echo "    Timeouts: ${TIMEOUT_COUNT}"
+          echo "    Unknown:  ${UNKNOWN_COUNT}"
+          echo "    Failed:   ${FAILED_COUNT}"
+          echo "    Total unproved: ${UNPROVED_COUNT}"
+
+          if [ "${UNPROVED_COUNT}" -gt 0 ]; then
+            echo ""
+            echo "  Unproved goals observed (for round 2 categorization):"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_memory_output.txt || true
+          fi
+
+          # Confirm CVC5 was actually invoked.
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_memory_output.txt || true)
+          echo ""
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "  WARNING: CVC5 does not appear in WP output."
+            echo "           The triple-prover setup may have degraded."
+          fi
+
+          echo ""
+          echo "PASS (discovery): memory.h round 1 baseline captured."
+          echo "  Use the wp_memory_output.txt artifact + this log to draft"
+          echo "  the round-2 enforcement wrapper (mirror slice.h's pattern)."
+          echo "==============================================="
+
+      - name: Upload WP proof output (memory.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-memory
+          path: wp_memory_output.txt
+
       # -- Eva (Evolved Value Analysis) is intentionally NOT run on checked.h --
       # Eva requires an entry point function to start abstract interpretation
       # from. checked.h is a header full of static inline functions with no
@@ -1256,8 +1400,8 @@ jobs:
       #
       # Candidate order, easiest first (based on current MC/DC standing
       # and structural complexity):
+      #   - core/memory.h round 2 (extend round 1 to remaining 22 fns)
       #   - core/region.h         (95.5% MC/DC, small surface)
-      #   - core/memory.h         (83.6% MC/DC, mostly bounds checks)
       #   - core/arena.h          (73.2% MC/DC, allocation invariants)
       #   - core/pool.h           (73.5% MC/DC, similar to arena)
       #   - semantics/borrow.h    (87.5% MC/DC, lifetime tracking)
