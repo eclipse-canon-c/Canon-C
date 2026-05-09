@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-05-02                                                   |
+| **Date**           | 2026-05-09                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 1e0d0fe                                                      |
-| **CI run**         | Canon-C CI #821                                              |
+| **Commit**         | b3e668b                                                      |
+| **CI run**         | Canon-C CI #840 (coverage at 4baf5c6) / #841 (frama-c memory.h at b3e668b) |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -60,10 +60,22 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.7%      | 2159       | 2257       |
-| Functions  | 99.6%      | 511        | 513        |
-| Branches   | 85.2%      | 1407       | 1652       |
-| MC/DC      | 84.5%      | 1370       | 1622       |
+| Lines      | 95.7%      | 2163       | 2261       |
+| Functions  | 99.6%      | 512        | 514        |
+| Branches   | 85.5%      | 1418       | 1658       |
+| MC/DC      | 84.8%      | 1381       | 1628       |
+
+memory.h's MC/DC contribution rose from 82.0% (105/128) at the
+pre-Phase-1 baseline to 88.3% (113/128) at the Phase-1+ACSL baseline.
+The 8-outcome improvement comes from the `mem_alloc_array_checked`
+refactor — extracting the previously-inlined arithmetic into a
+verified primitive function exposes the overflow-detection branches
+(via `checked_mul`) directly to the test suite, where 3 dedicated
+overflow tests in `test_mem_alloc_array_*` exercise the
+fallback-and-error paths that were previously dead-coded inside the
+macro expansion. The 15 remaining missed outcomes are defensive
+`require_msg` checks under `-DCANON_NO_REQUIRE`, the same coverage
+methodology pattern documented in MCDC-001.
 
 ### Methodology changes since baseline
 
@@ -96,7 +108,8 @@ exercised by the dedicated `checked_div_*_op`, `checked_mod_*_op`,
 `checked_div_isize_mcdc`, and `checked_mod_isize_mcdc` test groups in
 `test/core/primitives/checked_test.c`.
 
-Headers at their documented MC/DC ceiling (below 100% by design):
+Headers at their documented MC/DC ceiling (below 100% by design or
+by methodology):
 
 - **slice.h: 93.1% (54/58)** — the achievable ceiling under the
   public-API constraint documented in MCDC-002. The 4 remaining
@@ -110,6 +123,18 @@ Headers at their documented MC/DC ceiling (below 100% by design):
   rather than the proof — the two evidence streams complement each
   other rather than converge.
 
+- **memory.h: 88.3% (113/128)** — the ceiling under the
+  `-DCANON_NO_REQUIRE` methodology documented in MCDC-001. The 15
+  missed outcomes are defensive `require_msg` checks at the entry of
+  alignment, allocation, and copy functions; ACSL `requires` clauses
+  provide the static guarantee these checks enforce at runtime, so
+  the coverage build removes them and the WP proof discharges the
+  same precondition obligations statically. memory.h does not add a
+  new MCDC-002-style deviation — its bytes_t/cbytes_t variants
+  inherit slice.h's `bytes_invariant`, so the analogous `!ptr`
+  branches are discharged by the inherited type invariant rather
+  than re-introducing public-API-unreachable code.
+
 ## Formal verification status
 
 Per-header formal verification state (see `docs/verification.md` for
@@ -120,24 +145,52 @@ full per-header detail):
 | checked.h  | 30        | 1755              | 1753 (99.89%)     | 2        | VERIFY-002   |
 | bits.h     | 18        |  761              |  746 (98.03%)     | 15       | VERIFY-003/4 |
 | compare.h  | 28        |  208              |  208 (100%)       | 0        | VERIFY-005   |
-| ptr.h      | 26        | 1739              | 1729 (99.43%)     | 10       | VERIFY-006   |
+| ptr.h      | 21        | 1739              | 1729 (99.43%)     | 10       | VERIFY-006   |
 | slice.h    | 22        |  390              |  367 (94.10%)     | 23       | VERIFY-007   |
-| **Total**  | **124**   | **4853**          | **4803 (98.97%)** | **50**   |              |
+| memory.h   | 27        | 2862              | 2805 (98.01%)     | 57       | VERIFY-008   |
+| **Total**  | **146**   | **7715**          | **7608 (98.61%)** | **107**  |              |
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). All 50 unproved goals are demonstrated
+`-wp-timeout 120`). All 107 unproved goals are demonstrated
 triple-prover-resistant and carry written manual-proof arguments or
 documented WP feature-gap rationale in `docs/deviations.md`.
 
+**Note on totals**: the 7715 figure is the row-sum of independent
+per-header WP runs, where each row reports each header's own
+obligations (substrate goals are counted under their owning header,
+not duplicated into downstream rows). The CI WP step for ptr.h
+actually reports 1943/1953 because it processes ptr.h's translation
+unit including checked.h, but those +214 obligations belong to
+checked.h's row, not ptr.h's. Similarly, memory.h's CI step processes
+memory.h with ptr.h, slice.h, checked.h, and contract.h all
+transitively included; the 2862 figure for memory.h reflects the
+full run, but is shown here as memory.h's row because memory.h is
+the verification target. 31 of memory.h's 57 unproved goals are
+re-emerged residuals already documented under VERIFY-002/006/007
+(see VERIFY-008).
+
 The slice.h baseline (367 / 390) carries a higher residual fraction
-(5.9%) than the previously verified headers because slice.h is the
-first Canon-C header that crosses the C standard library boundary —
-its equality functions call `memcmp` and `str_from_cstr` calls
-`strlen`, both of which have ACSL contracts requiring initialization
-and danglingness reasoning that Frama-C 29 has not yet implemented
-(see VERIFY-007 for the full WP warning text). The 23 slice.h
-residuals are not specific to slice.h's design; future headers that
-use these libc functions will incur the same residual category.
+(5.9%) than the previously verified primitives headers because slice.h
+is the first Canon-C header that crosses the C standard library
+boundary — its equality functions call `memcmp` and `str_from_cstr`
+calls `strlen`, both of which have ACSL contracts requiring
+initialization and danglingness reasoning that Frama-C 29 has not yet
+implemented (see VERIFY-007 for the full WP warning text). The 23
+slice.h residuals are not specific to slice.h's design; future headers
+that use these libc functions will incur the same residual category.
+
+The memory.h baseline (2805 / 2862) is the first Canon-C verification
+round where inherited residuals from substrate headers exceed
+memory.h-own residuals — 31 of 57 are byte-identical to goals already
+documented in VERIFY-002/006/007, re-emerging because memory.h
+includes those headers transitively. The 26 memory.h-own residuals
+fall into three categories that are each rooted in a Frama-C feature
+gap (\fresh/\freeable allocation reasoning, bitwise-alignment integer
+theory, memcmp call-site initialization/danglingness). All 26 are
+documented in VERIFY-008 with manual-proof arguments. The 31:26
+inherited:own ratio is the first quantitative data point for the
+composable-verification thesis: substrate residuals propagate without
+amplification across composition layers.
 
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
@@ -161,6 +214,14 @@ checks: the verification framework provides the unreachability
 evidence the testing framework cannot. See MCDC-002 in
 `docs/deviations.md` for the formal closure record.
 
+memory.h does not extend the MCDC-002 list because its bytes_t/cbytes_t
+variants inherit slice.h's `bytes_invariant` — the analogous `!ptr`
+defensive branches are discharged by the inherited invariant rather
+than introducing new public-API-unreachable code paths. Future
+headers that introduce their own public {ptr, len} types (arena.h,
+pool.h, stringbuf.h are candidates) will need their own per-header
+MCDC analyses; memory.h does not.
+
 ### History
 
 | Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | MC/DC  | Notes                                                                    |
@@ -172,7 +233,8 @@ evidence the testing framework cannot. See MCDC-002 in
 | 2026-04-17 | 7efd1c7 | #752   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | bits.h ACSL contracts; WP 746/761; CANON_BITS_FORCE_FALLBACK added       |
 | 2026-04-18 | 2f33389 | #761   | v1.3.0  | 95.6%  | 99.6%     | 84.2%    | 83.3%  | compare.h ACSL contracts; WP 208/208 (100%); Typed+Cast model            |
 | 2026-04-23 | debb202 | #795   | v1.3.0  | 96.1%  | 99.6%     | 84.3%    | 83.5%  | ptr.h ACSL contracts; WP 1729/1739; triple-prover with CVC5 1.2.1        |
-| 2026-04-27 | c3df659 | #804   | v1.3.0  | 95.7%  | 99.6%     | 84.6%    | 83.8%  | checked.h div/mod added (12 functions); WP 1753/1755; 100% MC/DC held    |
+| 2026-04-27 | c3df659 | #804   | v1.3.0  | 95.7%  | 99.6%     | 84.6%    | 83.8%  | checked.h div/mod added (12 functions); WP 1753/1755; 100% MC/DC held. ptr.h CI step now reports 1943/1953 (full-run figure including checked.h substrate); ptr.h's own baseline 1729/1739 unchanged. |
 | 2026-05-02 | 1e0d0fe | #821   | v1.3.0  | 95.7%  | 99.6%     | 85.2%    | 84.5%  | slice.h: MC/DC 93.1% ceiling (MCDC-002), ACSL contracts, WP 367/390 (VERIFY-007), MCDC-002 WP-discharged |
+| 2026-05-09 | b3e668b | #841   | v1.3.0  | 95.7%  | 99.6%     | 85.5%    | 84.8%  | memory.h: Phase 0 tests + Phase 1 refactor (mem_alloc_array_checked) at 4baf5c6 (CI #840), then ACSL contracts + WP enforcement YAML at b3e668b (CI #841); WP 2805/2862 (VERIFY-008); 88.3% MC/DC; 31 inherited + 26 own residuals. |
 
 ---
