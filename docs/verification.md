@@ -908,7 +908,7 @@ type (i32) plus the dedicated overflow-test cases in
   byte is writable). Every function carries the appropriate predicate
   as a precondition.
 
-- **Functional correctness with complete behavior splits** (16 of 22
+- **Functional correctness with complete behavior splits** (16 of 27
   functions): Full behavioral specs with `complete` and `disjoint`
   behaviors covering NULL handling, zero-size handling, and the
   primary functional case. Functions in Group 1 (`mem_regions_overlap`,
@@ -917,7 +917,7 @@ type (i32) plus the dedicated overflow-test cases in
   `mem_is_power_of_two`) and most of Group 2 carry these full specs.
 
 - **Functional correctness with partial behavior splits, same-pointer
-  fast paths** (3 of 22 functions): `mem_compare`, `mem_equal`, and
+  fast paths** (3 of 27 functions): `mem_compare`, `mem_equal`, and
   `mem_equal_bytes` add a `same_pointer` behavior covering both-NULL
   and same-non-NULL cases, plus separate behaviors for length
   mismatch, NULL handling, and the primary `memcmp` case. The `memcmp`
@@ -925,14 +925,14 @@ type (i32) plus the dedicated overflow-test cases in
   testing for the same reason as slice.h's `bytes_equal`/`str_equal`
   (see VERIFY-008 category 2c).
 
-- **Non-overlap preconditions** (3 of 22 functions): `mem_copy`,
+- **Non-overlap preconditions** (3 of 27 functions): `mem_copy`,
   `mem_copy_bytes`, `mem_swap`, and `mem_swap_buf` carry top-level
   `requires !regions_overlap(...)` clauses. (`mem_swap_buf` carries
   three pairwise non-overlap clauses for a/b, a/scratch, b/scratch.)
   These preconditions guarantee `memcpy` semantics; callers needing
   to copy overlapping regions must use `mem_move` instead.
 
-- **Loop invariants on byte-scanning functions** (2 of 22 functions):
+- **Loop invariants on byte-scanning functions** (2 of 27 functions):
   `mem_secure_zero` and `mem_is_all` carry ACSL `loop invariant`,
   `loop assigns`, and `loop variant` annotations on their byte-by-byte
   loops. WP discharges all loop-related goals automatically.
@@ -1131,7 +1131,7 @@ preserve the referenced byte range.
   `loop assigns i, p[0 .. size - 1]`, `loop variant size - i`. WP
   discharges all loop-related goals automatically.
 
-- All 22 functions specify `assigns` correctly: `\nothing` for
+- All 27 functions specify `assigns` correctly: `\nothing` for
   predicates and pure functions, the modified byte range for
   destructive operations.
 
