@@ -296,9 +296,16 @@ at Licence-MIT file)
 2. Are things in the right layers?
 3. What’s missing or wrong?
 
-**Note:**  
+## Authorship and tool use
 
-This project is an **architectural proposal and design foundation** built by a team. The taxonomy, dependency rules, and API designs are intentional and carefully considered. The implementations are *fully tested** and compiled end-to-end. AI assistance was used for scaffolding, but architecture and philosophy are entirely human-designed.
+Canon-C is a single-author project. AI assistance was used
+substantially throughout development — for boilerplate generation around
+the typed-instantiation macros and tests, for drafting documentation
+prose, and as a discussion partner during architectural and verification
+work. The architectural decisions, verification scope, deviation
+classifications, and design philosophy are mine. The implementations are
+tested end-to-end, the verification runs on real CI with real Frama-C
+and SMT provers, and the proofs are real.
 
 ---
 
