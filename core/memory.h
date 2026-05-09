@@ -460,6 +460,8 @@ static inline bool mem_is_power_of_two(usize n) {
            mem_valid_write(dest, (integer)size);
   requires dest == \null || src == \null || size == 0 ||
            mem_valid_read((void *)src, (integer)size);
+  requires dest == \null || src == \null || size == 0 ||
+           !regions_overlap((char *)dest, (char *)src, (integer)size);
 
   behavior null_or_zero:
     assumes dest == \null || src == \null || size == 0;
@@ -467,7 +469,6 @@ static inline bool mem_is_power_of_two(usize n) {
 
   behavior copy:
     assumes dest != \null && src != \null && size > 0;
-    assumes !regions_overlap((char *)dest, (char *)src, (integer)size);
     assigns ((char *)dest)[0 .. size - 1];
 
   complete behaviors;
@@ -742,6 +743,8 @@ static inline bool mem_is_zero(const void* ptr, usize size) {
            (size <= CANON_MEM_SWAP_MAX &&
             mem_valid_write(a, (integer)size) &&
             mem_valid_write(b, (integer)size));
+  requires a == \null || b == \null || size == 0 ||
+           !regions_overlap((char *)a, (char *)b, (integer)size);
 
   behavior null_or_zero:
     assumes a == \null || b == \null || size == 0;
@@ -749,7 +752,6 @@ static inline bool mem_is_zero(const void* ptr, usize size) {
 
   behavior swap:
     assumes a != \null && b != \null && size > 0;
-    assumes !regions_overlap((char *)a, (char *)b, (integer)size);
     assigns ((char *)a)[0 .. size - 1], ((char *)b)[0 .. size - 1];
 
   complete behaviors;
@@ -782,6 +784,12 @@ static inline void mem_swap(void* a, void* b, usize size) {
             mem_valid_write(a, (integer)size) &&
             mem_valid_write(b, (integer)size) &&
             mem_valid_write(scratch, (integer)size));
+  requires a == \null || b == \null || scratch == \null || size == 0 ||
+           !regions_overlap((char *)a, (char *)b, (integer)size);
+  requires a == \null || b == \null || scratch == \null || size == 0 ||
+           !regions_overlap((char *)a, (char *)scratch, (integer)size);
+  requires a == \null || b == \null || scratch == \null || size == 0 ||
+           !regions_overlap((char *)b, (char *)scratch, (integer)size);
 
   behavior null_or_zero:
     assumes a == \null || b == \null || scratch == \null || size == 0;
@@ -789,10 +797,6 @@ static inline void mem_swap(void* a, void* b, usize size) {
 
   behavior swap:
     assumes a != \null && b != \null && scratch != \null && size > 0;
-    assumes scratch_len >= size;
-    assumes !regions_overlap((char *)a, (char *)b, (integer)size);
-    assumes !regions_overlap((char *)a, (char *)scratch, (integer)size);
-    assumes !regions_overlap((char *)b, (char *)scratch, (integer)size);
     assigns ((char *)a)[0 .. size - 1],
             ((char *)b)[0 .. size - 1],
             ((char *)scratch)[0 .. size - 1];
@@ -833,6 +837,10 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
            dest.len < src.len ||
            (mem_valid_write(dest.ptr, (integer)src.len) &&
             mem_valid_read((void *)src.ptr, (integer)src.len));
+  requires dest.ptr == \null || src.ptr == \null || src.len == 0 ||
+           dest.len < src.len ||
+           !regions_overlap((char *)dest.ptr, (char *)src.ptr,
+                            (integer)src.len);
 
   behavior null_or_zero_or_too_small:
     assumes dest.ptr == \null || src.ptr == \null || src.len == 0 ||
@@ -843,8 +851,6 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
   behavior copy:
     assumes dest.ptr != \null && src.ptr != \null && src.len > 0 &&
             dest.len >= src.len;
-    assumes !regions_overlap((char *)dest.ptr, (char *)src.ptr,
-                             (integer)src.len);
     assigns ((char *)dest.ptr)[0 .. src.len - 1];
     ensures \result == src.len;
 
