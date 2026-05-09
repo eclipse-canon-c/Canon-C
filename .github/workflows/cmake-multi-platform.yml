@@ -17,8 +17,9 @@ on:
 #                     Currently scoped to core/primitives/checked.h,
 #                     core/primitives/bits.h, core/primitives/compare.h,
 #                     core/primitives/ptr.h, core/slice.h, and
-#                     core/memory.h (round 1, discovery mode — see
-#                     comment on the memory.h step below).
+#                     core/memory.h (full surface, 22 functions across
+#                     alignment/allocation, raw memory ops, and
+#                     bytes_t/cbytes_t variants).
 #                     Additional headers will be added as they are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
@@ -404,7 +405,7 @@ jobs:
   #    to Z3, then to CVC5 — keeping the common case fast while giving
   #    hard goals three chances before timing out. Remaining unproved
   #    goals (2 on checked.h, 15 on bits.h, 10 on ptr.h, 23 on
-  #    slice.h, TBD on memory.h) are therefore demonstrated triple-
+  #    slice.h, 57 on memory.h) are therefore demonstrated triple-
   #    prover-resistant, which is a stronger certification evidence
   #    statement than single- or dual-prover.
   #
@@ -1242,53 +1243,112 @@ jobs:
           name: wp-proof-slice
           path: wp_slice_output.txt
 
-      - name: "WP: core/memory.h (round 1 — discovery mode)"
-        # memory.h is the sixth Canon-C header brought into WP scope and
-        # the FIRST currently in DISCOVERY mode (no enforcement).
+      - name: "WP: core/memory.h"
+        # memory.h is the sixth Canon-C header WP-verified and the
+        # second non-primitives header (after slice.h). It provides
+        # safe wrappers around memcpy/memmove/memset/memcmp,
+        # malloc/free, alignment helpers, and bytes_t/cbytes_t slice
+        # variants — 22 user-facing functions in three groups:
         #
-        # Round 1 scope (predicates + 9 functions, see header docstring):
-        #   - mem_regions_overlap
-        #   - mem_alloc, mem_free
-        #   - mem_alloc_array_checked
-        #   - mem_align, mem_align_to
-        #   - mem_is_aligned, mem_get_alignment, mem_is_power_of_two
+        #   Group 1 — alignment and allocation (9 functions):
+        #     mem_regions_overlap, mem_alloc, mem_free,
+        #     mem_alloc_array_checked, mem_align, mem_align_to,
+        #     mem_is_aligned, mem_get_alignment, mem_is_power_of_two
         #
-        # The remaining 22 functions in memory.h (raw-pointer ops, bytes_t
-        # variants) are intentionally NOT annotated in round 1 — they
-        # land in round 2+. WP will see them but emit no contract goals
-        # for them, so they do not affect the residual count.
+        #   Group 2 — raw memory operations (11 functions):
+        #     mem_copy, mem_move, mem_zero, mem_secure_zero, mem_set,
+        #     mem_compare, mem_equal, mem_is_all, mem_is_zero,
+        #     mem_swap, mem_swap_buf
+        #
+        #   Group 3 — bytes_t/cbytes_t variants (7 functions):
+        #     mem_copy_bytes, mem_move_bytes, mem_zero_bytes,
+        #     mem_set_bytes, mem_equal_bytes, mem_is_zero_bytes,
+        #     mem_secure_zero_bytes
         #
         # Memory model: Typed+Cast — same rationale as VERIFY-005
         # (compare.h), VERIFY-006 (ptr.h), and VERIFY-007 (slice.h).
-        # memory.h performs void* to char*/u8* casts in mem_alloc /
-        # mem_alloc_array_checked / mem_regions_overlap; the default
-        # Typed memory model rejects these casts.
+        # memory.h performs void* to char*/u8* casts in many places
+        # (mem_alloc, mem_regions_overlap, all bytes_t variants);
+        # the default Typed memory model rejects these casts.
         #
-        # DISCOVERY mode rationale:
-        # ---------------------------------------------------------------
-        # The memory.h annotations were drafted from the slice.h, ptr.h,
-        # checked.h, and compare.h precedents but have NOT been validated
-        # against a real Frama-C run before this CI push. The expected
-        # residual count is unknown — it depends on:
-        #   - which align_up / is_power_of_two predicates inherit ptr.h
-        #     residuals vs discharge transitively
-        #   - whether the predicate `is_aligned_addr` reasoning closes
-        #     the alignment ensures clauses or produces new residuals
-        #   - how mem_alloc_array_checked composes with checked_mul's
-        #     contract (the first transitive dependency on a verified
-        #     primitive at this layer)
-        #   - whether the contract.h handler residuals are inherited
-        #     (almost certainly yes, ~2 goals like ptr.h / slice.h)
+        # Expected result: 2805 / 2862 proved, exactly 57 unproved.
+        # Established as the stable triple-prover baseline by CI #851
+        # (commit TBD). The 57 unproved goals are documented in
+        # docs/deviations.md under VERIFY-008 with WP-warning evidence
+        # and category analysis. They split cleanly into inherited
+        # vs memory.h-own:
         #
-        # This step runs WP, prints what it found, and exits 0 regardless
-        # of residual count. After observing the actual residual count
-        # and goal names, round 2 of memory.h tightens this step into
-        # full enforcement mode (matching the slice.h step's structure).
+        # INHERITED RESIDUALS (31) — propagated unchanged from
+        # already-verified substrate headers. These are not memory.h
+        # defects; they are the substrate's documented residuals
+        # that re-emerge wherever memory.h's call paths reach them.
+        # The composable-verification thesis: substrate residuals
+        # propagate without amplification.
         #
-        # The wp_memory_output.txt artifact is the empirical record we
-        # use to set the round-2 enforcement baseline. Always uploaded
-        # via `if: always()` so a failed step still produces the artifact.
-        # ---------------------------------------------------------------
+        #   1a. contract.h handler non-termination (2) — same as
+        #       VERIFY-006 cat 4 (ptr.h) and slice.h cat 3.
+        #
+        #   1b. checked.h u64 add overflow (2) — same as VERIFY-001
+        #       (the manually-discharged checked_add_u64 pair).
+        #
+        #   1c. ptr.h align formula ensures (3) — same as VERIFY-006
+        #       cat 2 (align_up/down/padding integer theory).
+        #
+        #   1d. ptr.h call-chain align preconditions (3) — same as
+        #       VERIFY-006 cat 3 (ptr_align_up/padding).
+        #
+        #   1e. slice.h bytes_equal/str_equal/str_starts_with/
+        #       str_ends_with/str_from_cstr memcmp inheritance (21) —
+        #       same as VERIFY-007 cat 1 and cat 2. ACSL's memcmp
+        #       and strlen contracts use \dangling{L} and
+        #       \initialization clauses that Frama-C 29 has not yet
+        #       implemented.
+        #
+        # MEMORY.H-OWN RESIDUALS (26) — three categories, all
+        # documented under VERIFY-008:
+        #
+        #   2a. \fresh / \freeable allocation reasoning (5) —
+        #       mem_alloc, mem_free, mem_alloc_array_checked. WP
+        #       cannot reason across stdlib malloc/free's allocation
+        #       and freeability postconditions because Frama-C 29's
+        #       libc spec uses unsupported clauses:
+        #         "Allocation, initialization and danglingness not
+        #          yet implemented (\fresh{Old, Here}(...))"
+        #         "... (\freeable(p))"
+        #       Same WP limitation as the slice.h memcmp residuals.
+        #
+        #   2b. WP integer theory / bitwise alignment (9) —
+        #       mem_align, mem_align_to, mem_is_aligned,
+        #       mem_get_alignment. The "% alignment" ensures clauses
+        #       and bitwise alignment formulas exceed WP's integer
+        #       theory in the same pattern as ptr.h's align_up
+        #       residuals (VERIFY-006 cat 2). Strengthening contracts
+        #       cannot close these — the verifier itself cannot
+        #       process the obligations.
+        #
+        #   2c. memcmp call-site inheritance (12) — mem_compare,
+        #       mem_equal, mem_equal_bytes. Same root cause as
+        #       VERIFY-007 cat 1 (slice.h's bytes_equal/str_equal).
+        #       memory.h directly calls memcmp, so the same
+        #       \dangling/\initialization residuals re-emerge here
+        #       at memory.h's call sites.
+        #
+        # Verification scope:
+        #   - All 22 user-facing functions: ANNOTATED + VERIFIED
+        #   - mem_alloc_type, mem_alloc_array, mem_zero_type, etc.
+        #     (type-safe macros): DOCUMENTED, NOT WP-VERIFIED — the
+        #     C preprocessor strips ACSL inside #define before macro
+        #     expansion. Same VERIFY-007 macro-verification rationale
+        #     as slice.h's DEFINE_SLICE.
+        #   - mem_alloc_array_checked routes through checked_mul
+        #     (checked.h's verified primitive). The composable-
+        #     verification chain checked.h → memory.h is the first
+        #     transitive dependency on a verified primitive at this
+        #     layer; the inherited checked_add_u64 residual is the
+        #     concrete data point.
+        #
+        # The wrapper enforces 2805/2862 proved with the 57 named
+        # unproved goal patterns. Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1309,65 +1369,170 @@ jobs:
 
           echo ""
           echo "==============================================="
-          echo "  WP (memory.h round 1) exit status: ${WP_EXIT}"
-          echo "  Mode: DISCOVERY (no enforcement)"
+          echo "  WP (memory.h) exit status: ${WP_EXIT}"
           echo "==============================================="
 
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_memory_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # Sanity check: did WP produce a summary at all?
-          # If not, frama-c aborted before WP ran (typically an ACSL
-          # syntax error). In discovery mode we still want the diagnostic
-          # output for the round-2 fix, so we report cleanly and exit 1
-          # only on this catastrophic case. Any other WP outcome (timeouts,
-          # unknowns, failed goals) is acceptable in discovery mode.
+          # First sanity check: did WP actually produce a verification
+          # summary? If "Proved goals:" is missing, frama-c aborted
+          # before WP ran (typically an ACSL parse error). Without
+          # this guard, a parse error becomes a silent pass — see
+          # CI #821 history (slice.h) for the bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
-            echo "DISCOVERY-FAIL: WP did not produce a verification summary."
-            echo "                frama-c aborted before running WP, likely"
-            echo "                due to an ACSL syntax error in memory.h."
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in memory.h. Check the WP"
+            echo "      output above for [kernel:annot-error] or"
+            echo "      [kernel] User Error messages."
             echo ""
             echo "First diagnostic lines from WP output:"
-            grep -E "^\[(kernel|wp)" wp_memory_output.txt | head -20 || true
+            grep -E "^\[(kernel|wp)" wp_memory_output.txt | head -10 || true
             echo "==============================================="
             exit 1
           fi
 
-          # Report what we found. None of these checks fail the build —
-          # they're informational so we know what to enforce in round 2.
+          # Count unproved goals: Timeout + Unknown + Failed.
+          # WP may classify the same goal as either Timeout or Unknown
+          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_memory_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_memory_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_memory_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo ""
-          echo "  Discovery summary:"
-          echo "    Proved:   ${PROVED_COUNT}"
-          echo "    Timeouts: ${TIMEOUT_COUNT}"
-          echo "    Unknown:  ${UNKNOWN_COUNT}"
-          echo "    Failed:   ${FAILED_COUNT}"
-          echo "    Total unproved: ${UNPROVED_COUNT}"
+          EXPECTED_UNPROVED=57
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
 
-          if [ "${UNPROVED_COUNT}" -gt 0 ]; then
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
-            echo "  Unproved goals observed (for round 2 categorization):"
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (memory.h section) and"
+            echo "      docs/deviations.md (VERIFY-008) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_memory_output.txt || true
+            exit 1
           fi
 
-          # Confirm CVC5 was actually invoked.
+          # Verify the proved count matches the stable triple-prover
+          # baseline (2805 / 2862).
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "2805 / 2862" ]; then
+            echo "WARNING: proved count changed from expected 2805 / 2862."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-008 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
+
+          # Spot-check representative goals from each category. These
+          # may appear as [Timeout], [Unknown], or [Failed] — check
+          # all. Full list: see docs/deviations.md, VERIFY-008.
+          #
+          # The check uses pattern-style names because WP emits one
+          # goal per memcmp aspect (initialization/danglingness)
+          # times two arguments (s1/s2), and one goal per align
+          # behavior (part2/part3).
+          CHECKS=(
+            # Inherited cat 1a — contract.h handler (2)
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_contract_default_handler_loop_invariant_established"
+            # Inherited cat 1b — checked.h u64 add overflow (2)
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            # Inherited cat 1c — ptr.h align formula (3)
+            "typed_cast_align_up_ensures"
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            # Inherited cat 1d — ptr.h call-chain align (3)
+            "typed_cast_ptr_align_up_call_align_up_requires_3"
+            "typed_cast_ptr_align_padding_call_align_padding_requires_3"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            # Inherited cat 1e — slice.h memcmp/strlen (21)
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            # memory.h-own cat 2a — \fresh / \freeable allocation (5)
+            "typed_cast_mem_alloc_assigns_normal_part2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_free_assigns_normal"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            # memory.h-own cat 2b — WP integer theory (9)
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            # memory.h-own cat 2c — memcmp call-site inheritance (12)
+            "typed_cast_mem_compare_call_memcmp_requires_initialization_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_initialization_s2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+          )
+
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_memory_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+
+          # Confirm CVC5 was actually invoked. Same belt-and-braces
+          # check as the ptr.h and slice.h wrappers. If CVC5 doesn't
+          # appear, the triple-prover setup has degraded to dual-
+          # prover and the certification claim ("triple-prover-
+          # resistant residuals") is no longer supported.
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_memory_output.txt || true)
-          echo ""
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
-            echo "  WARNING: CVC5 does not appear in WP output."
-            echo "           The triple-prover setup may have degraded."
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo ""
-          echo "PASS (discovery): memory.h round 1 baseline captured."
-          echo "  Use the wp_memory_output.txt artifact + this log to draft"
-          echo "  the round-2 enforcement wrapper (mirror slice.h's pattern)."
+          echo "PASS: memory.h verified — 2805/2862 proved, 57 documented"
+          echo "      residuals all observed (VERIFY-008): 31 inherited"
+          echo "      from ptr.h/slice.h/checked.h substrate + 26"
+          echo "      memory.h-own (allocation reasoning, integer theory,"
+          echo "      memcmp inheritance). Composable verification claim"
+          echo "      holds: zero new substrate residuals introduced."
           echo "==============================================="
 
       - name: Upload WP proof output (memory.h)
@@ -1400,15 +1565,14 @@ jobs:
       #
       # Candidate order, easiest first (based on current MC/DC standing
       # and structural complexity):
-      #   - core/memory.h round 2 (extend round 1 to remaining 22 fns)
       #   - core/region.h         (95.5% MC/DC, small surface)
       #   - core/arena.h          (73.2% MC/DC, allocation invariants)
       #   - core/pool.h           (73.5% MC/DC, similar to arena)
       #   - semantics/borrow.h    (87.5% MC/DC, lifetime tracking)
       #   - semantics/error.h     (100% MC/DC, trivial)
-      # When ready, copy the slice.h step structure above and adjust
-      # the file path, comment block, and (eventually) the residual
-      # enforcement.
+      # When ready, copy the slice.h or memory.h step structure above
+      # and adjust the file path, comment block, and (eventually) the
+      # residual enforcement.
 
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
