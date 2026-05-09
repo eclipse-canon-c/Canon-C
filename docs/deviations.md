@@ -192,10 +192,11 @@ library generic interface.
 
 **Mitigation**: compare.h achieves 208/208 proved goals (100%) with
 `Typed+Cast`. The flag is applied only to compare.h, ptr.h (see
-VERIFY-006), and slice.h (see VERIFY-007) — checked.h and bits.h use
-the default `Typed` model. The difference is documented in the CI YAML
-and in this deviations record. All 28 comparators have 100% MC/DC
-coverage (8/8 condition outcomes) and pass fuzzing.
+VERIFY-006), slice.h (see VERIFY-007), and memory.h (see VERIFY-008)
+— checked.h and bits.h use the default `Typed` model. The difference
+is documented in the CI YAML and in this deviations record. All 28
+comparators have 100% MC/DC coverage (8/8 condition outcomes) and
+pass fuzzing.
 
 ---
 
@@ -257,6 +258,20 @@ regression and fails the build. ptr.h achieves 100% MC/DC coverage
 functions with representative alignments (1, 2, 4, 8, 16, 4096) and
 boundary inputs. Contract handler behavior is tested by `contract_test`
 under `!NDEBUG`.
+
+**CI run note**: ptr.h's own baseline is 1729/1739 (10 residuals out
+of 1739 ptr.h-own obligations). The CI WP step reports 1943/1953
+because it runs Frama-C on ptr.h's translation unit, which includes
+checked.h via `#include`. The +214 difference is checked.h's 12
+division and modulo functions added at commit `c3df659` (CI #804,
+Apr 27 2026); those obligations belong to checked.h (counted in its
+own row) and are not ptr.h's. The CI wrapper enforces 1943/1953 as
+the full-run figure but the substantive ptr.h baseline is 1729/1739.
+The 10 named residuals are the same ptr.h goals before and after
+c3df659 — none of the 214 inherited obligations entered the unproved
+list. The CI wrapper emits a `WARNING: proved count changed from
+expected 1729 / 1739` when the rebaseline first appeared and PASSes
+because all 10 expected named ptr.h goals are still present.
 
 ---
 
@@ -371,6 +386,347 @@ run — none of the four functions appear in the unproved goal list,
 which means WP successfully proved the `!ptr` branch unreachable
 when the caller satisfies `bytes_invariant` / `str_invariant`. See
 the MCDC-002 status update below for the formal closure.
+
+---
+
+## VERIFY-008: WP Limitations on Allocation, Alignment, and libc Boundary (memory.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-008 |
+| **Date**       | 2026-05-09 |
+| **Baseline commit** | b3e668b (Canon-C CI #841) |
+| **Scope**      | memory.h — 57 goals across 7 categories (3 own + 4 inherited) |
+| **Category**   | Formal verification completeness |
+
+**Description**: 57 of 2862 proof obligations (2.0%) are not discharged
+by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3
+4.15.2 + CVC5 1.2.1) with a 120-second timeout and `-wp-model
+Typed+Cast`. All 57 are triple-prover-resistant. The goals split
+cleanly into two top-level groups: **31 inherited from already-verified
+substrate headers** (re-emerging because memory.h includes those
+headers transitively) and **26 memory.h-own** residuals in three
+categories.
+
+This is the first Canon-C verification round where inherited
+residuals exceed own residuals. The 31:26 ratio is a quantitative
+expression of the composable-verification thesis: substrate residuals
+propagate without amplification across composition layers, so a layer
+that builds on five already-verified headers inherits their residual
+fingerprints. memory.h does not introduce 31 new defects — it is the
+first place where every previously-documented residual category
+becomes simultaneously visible.
+
+### Inherited residuals (31)
+
+These goals are not memory.h defects. They re-emerge in the memory.h
+proof run because memory.h includes ptr.h, checked.h, contract.h, and
+slice.h transitively, and WP re-emits the relevant obligations at the
+new call sites. Each is documented under its originating deviation;
+the count column shows how many goals appear in the memory.h run.
+
+| # | Source           | Goals | Pattern (within memory.h's run)                                   |
+|---|------------------|-------|--------------------------------------------------------------------|
+| 1 | VERIFY-002       | 2     | `typed_cast_checked_add_overflow_ensures`,                         |
+|   |                  |       | `typed_cast_checked_add_u64_overflow_ensures`                      |
+| 2 | VERIFY-006 cat 2 | 3     | `typed_cast_align_up_ensures`, `align_down_ensures`,               |
+|   |                  |       | `align_padding_ensures`                                            |
+| 3 | VERIFY-006 cat 3 | 3     | `typed_cast_ptr_align_up_call_align_up_requires_3`,                |
+|   |                  |       | `ptr_align_padding_call_align_padding_requires_3`,                 |
+|   |                  |       | `ptr_align_padding_nonnull_ensures_part2`                          |
+| 4 | VERIFY-006 cat 4 | 2     | `typed_cast_contract_default_handler_terminates`,                  |
+|   |                  |       | `contract_default_handler_loop_invariant_established`              |
+| 5 | VERIFY-007 cat 1 | 20    | `typed_cast_bytes_equal_call_memcmp_requires_<aspect>` (6 goals),  |
+|   |                  |       | `str_equal_call_memcmp_requires_<aspect>` (6),                     |
+|   |                  |       | `str_starts_with_call_memcmp_requires_<aspect>` (4),               |
+|   |                  |       | `str_ends_with_call_memcmp_requires_<aspect>` (4)                  |
+| 6 | VERIFY-007 cat 2 | 1     | `typed_cast_str_from_cstr_call_strlen_requires_valid_string_s`     |
+
+**Inherited subtotal: 31 goals.** These are the same goals counted in
+the originating deviations; they are not new memory.h residuals. The
+composable-verification claim is the empirical observation that this
+count is byte-identical between memory.h round 2 (before
+contract-shape fixes) and memory.h round 3 (after fixes) — the round
+3 fix removed 10 contract-shape residuals and zero inherited ones,
+confirming that hoisting non-overlap preconditions does not perturb
+the substrate's residual surface.
+
+### memory.h-own residuals (26)
+
+Three categories, each rooted in a documented WP feature gap. None
+are fixable by strengthening memory.h's contracts — the verifier
+itself cannot process the obligations.
+
+#### Category 1: \fresh / \freeable allocation reasoning (5)
+
+| # | Goal                                                            |
+|---|------------------------------------------------------------------|
+| 1 | `typed_cast_mem_alloc_assigns_normal_part2`                      |
+| 2 | `typed_cast_mem_alloc_nonzero_size_ensures_part2`                |
+| 3 | `typed_cast_mem_free_assigns_normal`                             |
+| 4 | `typed_cast_mem_free_call_free_requires_freeable`                |
+| 5 | `typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3`   |
+
+**Functions affected**: `mem_alloc`, `mem_free`,
+`mem_alloc_array_checked`.
+
+**Root cause**: Frama-C 29's libc spec for `malloc` and `free` uses
+ACSL clauses that the verifier has not yet implemented. WP itself
+reports the limitation during the proof run:
+
+```
+[wp] FRAMAC_SHARE/libc/stdlib.h:427: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (allocation: \fresh{Old, Here}(\at(\result,wp:post),\at(size,wp:pre)))
+
+[wp] FRAMAC_SHARE/libc/stdlib.h:438: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (\freeable(p))
+
+[wp] FRAMAC_SHARE/libc/stdlib.h:444: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (freed: \allocable(\at(p,wp:pre)))
+
+[wp] core/memory.h:197: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (\fresh{Old, Here}(\at(\result,wp:post),\at(size,wp:pre)))
+
+[wp] core/memory.h:215: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (\freeable(ptr))
+```
+
+The `\fresh{L1, L2}(p, n)` and `\freeable(p)` predicates are part of
+ACSL's heap-state language. Frama-C 29 parses them but cannot
+discharge proof obligations involving them. This is the same root
+cause as VERIFY-007 category 1 (memcmp's `\dangling` and
+`\initialization`) — different ACSL primitives, same underlying
+limitation in Frama-C's allocation-and-danglingness theory.
+
+**Manual proof argument**: For `mem_alloc`'s `nonzero_size_ensures_part2`,
+the obligation reads "if `size > 0`, then `\result == \null` or
+`\fresh{Old, Here}(\result, size)`". The C source exactly matches:
+when `size > 0`, the function calls `malloc(size)` whose return value
+is either NULL (on failure) or a freshly-allocated pointer to `size`
+bytes. The match between code and contract is direct; only the
+verifier's ability to discharge the `\fresh` clause is missing.
+
+For `mem_free`'s `assigns_normal`, the obligation states the function
+modifies only the heap region governed by `\freeable(ptr)`. The C
+source calls `free(ptr)` directly, which has exactly that effect by
+the C standard.
+
+For `mem_alloc_array_checked`'s `nonoverflow_ensures_part3`, the
+obligation chains through `mem_alloc`'s contract: when
+`element_size * count` does not overflow, the function calls
+`mem_alloc(total)` whose `\fresh` postcondition is propagated. The
+chain is correct; the residual is the inherited `\fresh` limitation
+plus one composition step.
+
+**Verification**: 100% line coverage on all three functions. 113/128
+MC/DC condition outcomes (88.3% — the missed branches are the
+`require_msg` defensive checks in `mem_alloc_array_checked` that
+`-DCANON_NO_REQUIRE` removes from the coverage build). Allocation
+behavior tested by `test_mem_alloc_*`, `test_mem_free_*`, and
+`test_mem_alloc_array_*` in `test/core/memory_test.c` — overflow
+detection, NULL handling, zero-size handling, and round-trip
+allocation-and-free are all exercised. ASan and UBSan verify
+absence of leaks, double-free, and use-after-free.
+
+#### Category 2: WP integer theory / bitwise alignment (9)
+
+| # | Goal                                                          |
+|---|----------------------------------------------------------------|
+| 1 | `typed_cast_mem_align_normal_ensures_part3`                    |
+| 2 | `typed_cast_mem_align_normal_ensures_2_part3`                  |
+| 3 | `typed_cast_mem_align_to_normal_ensures_part3`                 |
+| 4 | `typed_cast_mem_align_to_normal_ensures_2_part3`               |
+| 5 | `typed_cast_mem_is_aligned_nonnull_aligned_ensures`            |
+| 6 | `typed_cast_mem_is_aligned_nonnull_unaligned_ensures`          |
+| 7 | `typed_cast_mem_get_alignment_assert_rte_signed_overflow`      |
+| 8 | `typed_cast_mem_get_alignment_nonnull_ensures_part2`           |
+| 9 | `typed_cast_mem_get_alignment_nonnull_ensures_2_part2`         |
+
+**Functions affected**: `mem_align`, `mem_align_to`, `mem_is_aligned`,
+`mem_get_alignment`.
+
+**Root cause**: WP's integer theory cannot bridge bitwise alignment
+formulas (e.g. `(addr & (alignment - 1)) == 0` for power-of-2
+alignment) with the modular-arithmetic formulation
+(`addr % alignment == 0`). This is the same limitation documented in
+VERIFY-006 category 2 (ptr.h's `align_up`, `align_down`,
+`align_padding`). memory.h's wrappers (`mem_align`, `mem_align_to`,
+`mem_is_aligned`, `mem_get_alignment`) re-emit the limitation at the
+memory.h call sites because they reformulate the alignment ensures
+clauses in terms of `% alignment` (the natural mathematical
+formulation in an `ensures` clause) while the implementations use
+bitwise operations (the natural C idiom).
+
+The `mem_get_alignment_assert_rte_signed_overflow` goal is a related
+RTE check on the `(uintptr_t)(-(intptr_t)addr)` expression that
+extracts the lowest set bit. WP cannot prove the negation does not
+overflow under the `Typed+Cast` model because the cast round-trip
+loses the integer-bound information.
+
+**Manual proof argument**: For `mem_align_normal_ensures_part3`, the
+obligation is "if `size > 0` and `size <= USIZE_MAX - (CANON_DEFAULT_ALIGN - 1)`,
+then `\result % CANON_DEFAULT_ALIGN == 0`". The implementation calls
+`align_up(size, CANON_DEFAULT_ALIGN)` whose definition is
+`(size + (a - 1)) & ~(a - 1)` for power-of-2 `a`. By the
+power-of-2 mask identity, the result is divisible by `a`. The
+implementation is correct; the proof obstacle is WP's inability to
+discharge the bitwise→modular bridge, which is exactly VERIFY-006's
+documented limitation for `align_up_ensures`.
+
+For `mem_is_aligned_nonnull_aligned_ensures`, the obligation is "if
+`ptr != \null` and `is_aligned_addr(ptr, alignment)`, then
+`\result == \true`". The implementation calls
+`ptr_is_aligned(ptr, alignment)` which checks
+`((uintptr_t)ptr & (alignment - 1)) == 0`. The predicate
+`is_aligned_addr` was defined in memory.h with this exact body, but
+WP's reasoning about pointer-to-integer round-trips under
+`Typed+Cast` cannot connect the predicate body to the runtime check.
+
+**Verification**: 88.3% MC/DC on the alignment functions (113/128
+across all of memory.h, with most of the alignment-function
+condition outcomes covered). Exhaustive alignment test vectors in
+`test/core/memory_test.c` cover all four functions with
+representative alignments (1, 2, 4, 8, 16, 64, 4096, CANON_DEFAULT_ALIGN)
+and boundary inputs (size = 0, size = 1, size near USIZE_MAX). The
+underlying primitives (`align_up`, `is_power_of_two`,
+`ptr_is_aligned`) are tested independently in
+`test/core/primitives/ptr_test.c`.
+
+#### Category 3: memcmp call-site inheritance (12)
+
+| #  | Goal                                                                       |
+|----|-----------------------------------------------------------------------------|
+| 1  | `typed_cast_mem_compare_call_memcmp_requires_initialization_s1`             |
+| 2  | `typed_cast_mem_compare_call_memcmp_requires_initialization_s2`             |
+| 3  | `typed_cast_mem_compare_call_memcmp_requires_danglingness_s1`               |
+| 4  | `typed_cast_mem_compare_call_memcmp_requires_danglingness_s2`               |
+| 5  | `typed_cast_mem_equal_call_memcmp_requires_initialization_s1`               |
+| 6  | `typed_cast_mem_equal_call_memcmp_requires_initialization_s2`               |
+| 7  | `typed_cast_mem_equal_call_memcmp_requires_danglingness_s1`                 |
+| 8  | `typed_cast_mem_equal_call_memcmp_requires_danglingness_s2`                 |
+| 9  | `typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s1`         |
+| 10 | `typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2`         |
+| 11 | `typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1`           |
+| 12 | `typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2`           |
+
+**Functions affected**: `mem_compare`, `mem_equal`, `mem_equal_bytes`.
+
+**Root cause**: Identical to VERIFY-007 category 1. ACSL's `memcmp`
+contract requires the caller to establish that both buffer ranges
+are fully valid, fully initialized, and non-dangling. memory.h's
+`mem_valid_read` predicate establishes validity, but the
+`initialization` and `danglingness` obligations cannot be discharged
+because the underlying logic — quoted from WP's own warning during
+the slice.h proof run — is "not yet implemented" in Frama-C 29:
+
+```
+[wp] FRAMAC_SHARE/libc/string.h:38: Warning:
+  Allocation, initialization and danglingness not yet implemented
+  (\dangling{L}((char *)s + i))
+```
+
+memory.h directly calls `memcmp` from `mem_compare`, `mem_equal`,
+and `mem_equal_bytes`, so the same residual class re-emerges at
+memory.h's call sites. Note the count: 4 residuals per function ×
+3 functions = 12. This is fewer per function than slice.h's 6
+(for `bytes_equal` and `str_equal`) because the `valid_*` aspect
+discharges through `mem_valid_read` even when the
+`initialization`/`danglingness` aspects do not — memory.h's
+predicate is shaped slightly differently than slice.h's,
+specifically tuned to the call-site requirements.
+
+**Manual proof argument**: For `mem_compare_call_memcmp_requires_initialization_s1`,
+the obligation is "before calling `memcmp(a, b, size)`, every byte
+in `[a, a + size)` is initialized". memory.h's contract requires
+`mem_valid_read((void *)a, (integer)size)` which establishes that
+the byte range is readable in the program memory state. C99's
+read-only semantics for `memcmp` accept arbitrary readable bytes —
+the function does not require the bytes to be initialized in any
+particular sense; uninitialized bytes are read as
+implementation-defined values that the function compares
+byte-by-byte. The ACSL contract is stricter than C99 requires; the
+unproved obligation reflects this strictness, not a real soundness
+gap.
+
+**Verification**: 88.3% MC/DC on memory.h overall, with all branches
+in `mem_compare`, `mem_equal`, and `mem_equal_bytes` covered. 90+
+unit tests in `test/core/memory_test.c` cover identical content,
+distinct content, length mismatch, NULL handling, zero-size handling,
+and same-pointer fast paths. Fuzzing exercises every public function
+through randomly constructed byte buffers. Valgrind verifies absence
+of uninitialized-byte reads in real execution.
+
+### Summary of memory.h-own residuals
+
+| Category | Goals | Functions affected | WP feature gap |
+|----------|-------|--------------------|--------------------------------|
+| 2a       | 5     | mem_alloc/free/array_checked | `\fresh`, `\freeable` |
+| 2b       | 9     | mem_align*, mem_is_aligned, mem_get_alignment | bitwise-alignment integer theory |
+| 2c       | 12    | mem_compare/equal/equal_bytes | `\dangling`, `\initialization` |
+| **Total**| **26**|                              |                                |
+
+All 26 residuals would be discharged by improvements to Frama-C's
+allocation-and-danglingness theory or its integer theory. None
+require contract changes from memory.h. Strengthening memory.h's
+predicates would produce no improvement; the verifier itself cannot
+process the obligations.
+
+### Mitigation
+
+CI enforces exactly 57 unproved goals with the named goal patterns
+covering all 31 inherited and all 26 memory.h-own residuals. Any
+additional unproved goal or missing expected goal is a regression
+and fails the build. The exact-count enforcement with named
+patterns means a renamed goal (silent regression: a contract was
+weakened in a way that produces a new residual under a different
+name) is as much a failure as a count change — the wrapper looks
+for each named pattern individually.
+
+memory.h achieves 88.3% MC/DC coverage (113/128 condition outcomes)
+— an increase from the 82.0% baseline before the Phase 1 refactor
+that routed `mem_alloc_array` through the new
+`mem_alloc_array_checked` function (2026-05-09 push). The 15
+remaining missed outcomes are defensive `require_msg` checks under
+`-DCANON_NO_REQUIRE`, the same pattern as in checked.h, ptr.h, and
+slice.h — they are the `require_msg` infrastructure that ACSL
+preconditions provide statically and which the coverage build
+removes. This is the same coverage methodology documented in
+MCDC-001.
+
+memory.h is the first Canon-C header to demonstrate the composable-
+verification thesis quantitatively. The 31 inherited residuals
+propagated unchanged from the substrate (ptr.h's 8, checked.h's 2,
+slice.h's 21 — all visible in memory.h's 2862-goal run). The 26
+memory.h-own residuals fall into three categories that are each
+rooted in a Frama-C feature gap, not in memory.h's design, and
+each category has a known-good mitigation strategy (allocation
+testing, alignment vectors, libc compatibility under valgrind).
+
+The composable-verification claim — that substrate residuals
+propagate without amplification — is now empirically supported
+by two data points: ptr.h → slice.h (where slice.h inherited
+ptr.h's 2 contract-handler residuals unchanged) and ptr.h/checked.h/
+slice.h → memory.h (where memory.h inherited 31 substrate residuals
+unchanged across two proof rounds). Future verification rounds
+(arena.h, pool.h, region.h) will provide additional data points for
+this claim.
+
+### Cross-references
+
+- Inherited residuals: VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
+  VERIFY-007 (slice.h).
+- Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
+- Composable verification thesis: see README, "Composable
+  verification" section.
+- Per-goal CI artifact: `wp-proof-memory` (full WP output, including
+  goal-by-goal classification and Qed-and-prover timing).
+- Wrapper enforcement: `.github/workflows/cmake-multi-platform.yml`,
+  step "WP: core/memory.h".
 
 ---
 
@@ -511,6 +867,17 @@ its own per-line audit (per the procedure validated here) before
 opening analogous deviations. Numbers will differ — slice.h's
 4-of-58 ratio (6.9% unreachable defensive) is not directly
 transferable.
+
+memory.h does NOT add to the MCDC-002 list. Its bytes_t/cbytes_t
+variants (`mem_copy_bytes`, `mem_move_bytes`, `mem_zero_bytes`,
+etc.) inherit slice.h's `bytes_t` invariant rather than introducing
+new public {ptr, len} types, so the same `!ptr` checks at memory.h's
+boundary are guarded by slice.h's already-discharged invariant. WP
+discharges the analogous defensive branches in memory.h's bytes_t
+variants under `bytes_invariant`, the same way slice.h's are
+discharged. memory.h's MC/DC ceiling (88.3%) reflects the
+`-DCANON_NO_REQUIRE` infrastructure missing — see VERIFY-008's
+Mitigation section — not API-unreachable defensive code.
 
 ### Status update — 2026-05-02: WP-discharged unreachable
 
