@@ -10,6 +10,10 @@
 #include "core/memory.h"              /* mem_zero, mem_secure_zero */
 #include "core/slice.h"               /* bytes_t, bytes_from, bytes_empty */
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/region.h"          /* lifetime_t, region_id_t */
+#endif
+
 /**
  * @file arena.h
  * @brief Linear bump allocator with explicit lifetime control
@@ -32,12 +36,29 @@
  *   - peak: high-watermark of bytes used since last reset
  *   Zero cost in release builds — struct layout is identical without the flag.
  *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ *   - Embeds a lifetime_t lt field (id + open) on the Arena.
+ *   - arena_init() opens a fresh lifetime; the ID is derived from &arena.
+ *   - arena_reset() and arena_reset_secure() RE-STAMP the lifetime ID,
+ *     invalidating every borrow that captured the previous ID. Borrow
+ *     reads stamped with the old ID will fire require_msg via
+ *     lifetime_assert_valid() in semantics/borrow.h.
+ *   - arena_reset_to(mark) does NOT touch the lifetime — borrows
+ *     allocated before the mark must remain valid through rollback,
+ *     by the rollback contract. This is intentional.
+ *   - There is no arena_destroy(); arenas are reset, not destroyed.
+ *     If you need destruction semantics for borrows, pair the arena
+ *     with a Region and rely on region_end() to invalidate borrows.
+ *   Zero cost in release builds — struct layout is identical without the flag.
+ *
  * Dependency rule:
  *   arena.h is core/. It depends only on primitives/, core/memory.h, and
- *   core/slice.h. No data/, semantics/, algo/, or util/ headers may be
- *   included here.
+ *   core/slice.h (plus core/region.h when CANON_LIFETIME_DEBUG is set).
+ *   No data/, semantics/, algo/, or util/ headers may be included here.
  *
  * @sa arena_alloc(), arena_alloc_aligned(), arena_mark(), arena_reset_to()
+ * @sa core/region.h    — lifetime_t, lifetime_assert_valid
+ * @sa semantics/borrow.h — borrow types that capture and validate IDs
  */
 
 /* ============================================================================
@@ -62,6 +83,9 @@ typedef struct Arena {
 #ifdef CANON_ARENA_DEBUG
     usize alloc_count;     /**< [debug] Successful alloc calls since reset  */
     usize peak;            /**< [debug] Max offset ever reached since reset  */
+#endif
+#ifdef CANON_LIFETIME_DEBUG
+    lifetime_t lt;         /**< [debug] Lifetime token: id + open           */
 #endif
 } Arena;
 
@@ -127,6 +151,55 @@ static inline ArenaStats arena_stats(const Arena* arena) {
 #endif
 
 /* ============================================================================
+   Internal: lifetime helpers (compiled away in release)
+   ============================================================================
+   When CANON_LIFETIME_DEBUG is enabled, an Arena exposes a lifetime_t
+   that borrows can capture and validate against. The helpers below
+   manage the (id, open) pair across the arena lifecycle:
+
+     _arena_lifetime_open(a)
+       Called by arena_init. Sets id to the arena's address-derived
+       value and marks the lifetime open.
+
+     _arena_lifetime_restamp(a)
+       Called by arena_reset and arena_reset_secure. XORs the id
+       with a 64-bit golden-ratio constant so the new id is
+       guaranteed to differ from the old, invalidating every
+       previously-captured borrow without needing a separate
+       generation counter. Open flag stays true; arenas are not
+       "closed" by reset — they are recycled.
+
+     _arena_lifetime_close(a)
+       Reserved for future Arena destruction semantics. Not called
+       by any current API. Marks the lifetime closed, which makes
+       any subsequent borrow read fire lifetime_assert_valid.
+
+   In release builds (CANON_LIFETIME_DEBUG undefined) all three
+   helpers are no-ops — the Arena struct does not have an lt field
+   and no code touches it.
+   ============================================================================ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define _arena_lifetime_open(a)                                       \
+        do {                                                              \
+            (a)->lt.id   = (region_id_t)(uintptr_t)(a);                  \
+            (a)->lt.open = true;                                          \
+        } while (0)
+    /* XOR with golden-ratio constant guarantees the new id differs from
+       the old one even when the arena address is reused. */
+    #define _arena_lifetime_restamp(a)                                    \
+        do {                                                              \
+            (a)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;             \
+        } while (0)
+    #define _arena_lifetime_close(a)                                      \
+        do { (a)->lt.open = false; } while (0)
+#else
+    #define _arena_lifetime_open(a)     ((void)0)
+    #define _arena_lifetime_restamp(a)  ((void)0)
+    #define _arena_lifetime_close(a)    ((void)0)
+#endif
+
+/* ============================================================================
    Initialization & reset
    ============================================================================ */
 
@@ -139,6 +212,9 @@ static inline ArenaStats arena_stats(const Arena* arena) {
  *
  * @pre arena != NULL && buffer != NULL && capacity > 0
  * @pre capacity <= CANON_ARENA_MAX_SIZE
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token derived
+ * from &arena. Borrows captured after this call carry this lifetime ID.
  *
  * Performance: O(1)
  */
@@ -154,6 +230,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
+    _arena_lifetime_open(arena);
 }
 
 /**
@@ -164,6 +241,10 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
  *
  * @param arena Arena to reset (NULL-safe)
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the lifetime ID,
+ * invalidating every borrow captured before this call. Subsequent
+ * reads of those borrows will fire require_msg.
+ *
  * Performance: O(1)
  */
 static inline void arena_reset(Arena* arena) {
@@ -171,6 +252,7 @@ static inline void arena_reset(Arena* arena) {
     arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
+    _arena_lifetime_restamp(arena);
 }
 
 /**
@@ -183,6 +265,9 @@ static inline void arena_reset(Arena* arena) {
  *
  * @param arena Arena to reset (NULL-safe)
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the lifetime ID, same as
+ * arena_reset(). Borrows captured before this call are invalidated.
+ *
  * Performance: O(offset)
  */
 static inline void arena_reset_secure(Arena* arena) {
@@ -191,6 +276,7 @@ static inline void arena_reset_secure(Arena* arena) {
     arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
+    _arena_lifetime_restamp(arena);
 }
 
 /* ============================================================================
@@ -367,6 +453,14 @@ static inline ArenaMark arena_mark(const Arena* arena) {
  * @note alloc_count and peak are NOT rolled back. They reflect cumulative
  * activity since the last full reset, not since the mark.
  *
+ * @note (CANON_LIFETIME_DEBUG) The lifetime ID is NOT touched by this
+ * function. Borrows allocated before the mark must remain valid through
+ * rollback by the rollback contract. Re-stamping the ID would break that
+ * contract. Borrows allocated between the mark and the reset point are
+ * caller-error if used after rollback — that case is covered by ASan,
+ * not by lifetime tracking. If you need scope-bounded invalidation,
+ * pair the arena with a Region.
+ *
  * @pre mark <= arena->offset
  *
  * @param arena Arena to roll back (NULL-safe)
@@ -379,6 +473,7 @@ static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
     arena->offset = mark;
     /* padding_accum is intentionally not rolled back — it is a cumulative
        diagnostic counter, not required for correctness of rollback. */
+    /* lifetime ID is intentionally not re-stamped — see function doc. */
 }
 
 /* ============================================================================
