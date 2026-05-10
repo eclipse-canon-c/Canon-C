@@ -22,6 +22,51 @@ option(ENABLE_SANITIZERS "Enable ASan + UBSan (GCC/Clang) or ASan (MSVC)" OFF)
 option(ENABLE_FUZZING    "Enable libFuzzer fuzz targets (Clang only)"       OFF)
 
 # ---------------------------------------------------------------------------
+# Lifetime tracking and ownership mode — Phase 1 substrate
+#
+# CANON_LIFETIME:
+#   off    — no runtime tracking; struct layouts byte-identical to default.
+#   debug  — defines CANON_LIFETIME_DEBUG. Owning modules embed a
+#            lifetime_t token; borrows capture and validate it on every
+#            _get, firing require_msg on use-after-reset.
+#
+# CANON_OWNERSHIP:
+#   off    — no effect.
+#   strict — defines CANON_OWNERSHIP_STRICT. Reserved for Phase 4. The
+#            flag is wired through but currently has no effect on any
+#            header. Enabling it today is harmless — it proves the
+#            build plumbing works without changing any behaviour.
+#
+# Both flags are independent. Default builds (off/off) are byte-identical
+# to v1.2.x — no struct layout changes, no codegen changes, no runtime
+# overhead. Each flag is project-wide and must be consistent across all
+# translation units that share Canon-C types — same constraint as NDEBUG.
+# Mixing debug and release Canon-C objects in one binary is undefined.
+# ---------------------------------------------------------------------------
+set(CANON_LIFETIME "off" CACHE STRING "Lifetime tracking: off, debug")
+set_property(CACHE CANON_LIFETIME PROPERTY STRINGS off debug)
+
+if(CANON_LIFETIME STREQUAL "debug")
+    add_compile_definitions(CANON_LIFETIME_DEBUG)
+elseif(NOT CANON_LIFETIME STREQUAL "off")
+    message(FATAL_ERROR
+        "CANON_LIFETIME must be 'off' or 'debug', got '${CANON_LIFETIME}'")
+endif()
+
+set(CANON_OWNERSHIP "off" CACHE STRING "Ownership mode: off, strict")
+set_property(CACHE CANON_OWNERSHIP PROPERTY STRINGS off strict)
+
+if(CANON_OWNERSHIP STREQUAL "strict")
+    add_compile_definitions(CANON_OWNERSHIP_STRICT)
+elseif(NOT CANON_OWNERSHIP STREQUAL "off")
+    message(FATAL_ERROR
+        "CANON_OWNERSHIP must be 'off' or 'strict', got '${CANON_OWNERSHIP}'")
+endif()
+
+message(STATUS "Canon-C: CANON_LIFETIME=${CANON_LIFETIME}")
+message(STATUS "Canon-C: CANON_OWNERSHIP=${CANON_OWNERSHIP}")
+
+# ---------------------------------------------------------------------------
 # Warning flags — per compiler
 # ---------------------------------------------------------------------------
 if(MSVC)
