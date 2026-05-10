@@ -16,6 +16,9 @@
  *   - borrowed_bytes_slice clamping and edge cases
  *   - borrowed_bytes_eq: content equality, length mismatch, empty regions,
  *     same-pointer short-circuit, partial overlap, source tag ignored
+ *   - CANON_LIFETIME_DEBUG: _from_lifetime captures source's lifetime token;
+ *     _get fires require_msg after arena_reset (id mismatch); untracked
+ *     borrows bypass the check; arena_reset_to preserves validity.
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random (start, end, len) triples into borrowed_bytes_slice and
@@ -25,6 +28,11 @@
 
 #define CANON_CONTRACT_IMPL
 #include "semantics/borrow.h"
+
+#ifdef CANON_LIFETIME_DEBUG
+#  include "core/arena.h"           /* Arena, arena_init, arena_reset, ... */
+#  include <setjmp.h>               /* setjmp/longjmp for FIRES/SILENT     */
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -666,6 +674,165 @@ static void test_source_tag_round_trip_all_types(void)
 }
 
 /* ============================================================================
+   CANON_LIFETIME_DEBUG — lifetime tracking end-to-end
+   ============================================================================
+ *
+ * These tests close the loop on the substrate: arena restamps its lifetime
+ * ID on reset → captured borrow's stored ID no longer matches the source's
+ * current ID → borrowed_*_get fires require_msg via lifetime_assert_valid.
+ *
+ * The trap mechanism mirrors test/core/primitives/contract_test.c: install
+ * a capture handler via contract_set_handler that longjmps back to the test
+ * site instead of calling abort. setjmp wraps each "should fire" call.
+ *
+ * Coverage:
+ *   1. _from_lifetime constructor captures source_lt and captured_id.
+ *   2. _get on a fresh, open borrow is silent (baseline).
+ *   3. _get after arena_reset fires require_msg (the headline guarantee).
+ *   4. Untracked borrows (built via _from, no lifetime arg) bypass the
+ *      check even after reset (opt-in design works as documented).
+ *   5. _get after arena_reset_to is silent (rollback contract preserved).
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+#define LT_CAP_BUF 256
+
+static jmp_buf _lt_cap_jmp;
+static int     _lt_cap_fired = 0;
+static char    _lt_cap_msg[LT_CAP_BUF];
+
+static void _lt_capture_handler(const char *file, int line, const char *func,
+                                const char *expr, const char *msg)
+{
+    (void)file; (void)line; (void)func; (void)expr;
+    _lt_cap_fired = 1;
+    strncpy(_lt_cap_msg, msg ? msg : "", LT_CAP_BUF - 1);
+    _lt_cap_msg[LT_CAP_BUF - 1] = '\0';
+    longjmp(_lt_cap_jmp, 1);
+}
+
+static void _lt_cap_reset(void)
+{
+    _lt_cap_fired = 0;
+    _lt_cap_msg[0] = '\0';
+}
+
+#define LT_FIRES(stmt)                  \
+    do {                                \
+        _lt_cap_reset();                \
+        if (setjmp(_lt_cap_jmp) == 0) { \
+            stmt;                       \
+        }                               \
+    } while (0)
+
+#define LT_SILENT(stmt)                 \
+    do {                                \
+        _lt_cap_reset();                \
+        if (setjmp(_lt_cap_jmp) == 0) { \
+            stmt;                       \
+        }                               \
+    } while (0)
+
+/* Shared backing buffer for arena-based borrow tests. */
+#define LT_BUF_SIZE ((usize)256)
+static u8    g_lt_buf[LT_BUF_SIZE];
+static Arena g_lt_arena;
+
+static void lt_setup(void)
+{
+    memset(g_lt_buf, 0, LT_BUF_SIZE);
+    arena_init(&g_lt_arena, g_lt_buf, LT_BUF_SIZE);
+    contract_set_handler(_lt_capture_handler);
+}
+
+static void test_lifetime_borrow_captures_id(void)
+{
+    lt_setup();
+    u8 *p = (u8 *)arena_alloc(&g_lt_arena, 32);
+    EXPECT_NOT_NULL(p);
+
+    borrowed_bytes b = borrowed_bytes_from_lifetime(
+        p, 32, &g_lt_arena.lt, &g_lt_arena);
+
+    EXPECT(b.source_lt   == &g_lt_arena.lt);
+    EXPECT(b.captured_id == g_lt_arena.lt.id);
+}
+
+static void test_lifetime_get_open_borrow_silent(void)
+{
+    lt_setup();
+    u8 *p = (u8 *)arena_alloc(&g_lt_arena, 32);
+    EXPECT_NOT_NULL(p);
+
+    borrowed_bytes b = borrowed_bytes_from_lifetime(
+        p, 32, &g_lt_arena.lt, &g_lt_arena);
+
+    /* Baseline: fresh borrow, arena untouched — _get must not fire. */
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+static void test_lifetime_get_after_reset_fires(void)
+{
+    lt_setup();
+    u8 *p = (u8 *)arena_alloc(&g_lt_arena, 32);
+    EXPECT_NOT_NULL(p);
+
+    borrowed_bytes b = borrowed_bytes_from_lifetime(
+        p, 32, &g_lt_arena.lt, &g_lt_arena);
+
+    /* Reset re-stamps lt.id — borrow's captured_id is now stale. */
+    arena_reset(&g_lt_arena);
+
+    LT_FIRES(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    /* The message comes from lifetime_assert_valid — verify a non-empty
+     * message was captured. We don't assert exact content to keep this
+     * decoupled from the wording of the assertion site. */
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+static void test_lifetime_untracked_borrow_bypasses_check(void)
+{
+    lt_setup();
+    u8 *p = (u8 *)arena_alloc(&g_lt_arena, 32);
+    EXPECT_NOT_NULL(p);
+
+    /* Built via the classic _from constructor — source_lt is NULL,
+     * so the borrow is untracked. _get must NOT fire even after reset. */
+    borrowed_bytes b = borrowed_bytes_from(p, 32, &g_lt_arena);
+    EXPECT(b.source_lt == NULL);
+
+    arena_reset(&g_lt_arena);
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+static void test_lifetime_get_after_reset_to_silent(void)
+{
+    lt_setup();
+    u8 *p = (u8 *)arena_alloc(&g_lt_arena, 32);
+    EXPECT_NOT_NULL(p);
+
+    borrowed_bytes b = borrowed_bytes_from_lifetime(
+        p, 32, &g_lt_arena.lt, &g_lt_arena);
+
+    /* Take a mark AFTER the borrow's allocation, then allocate more,
+     * then rollback to the mark. The borrow's underlying memory is
+     * preserved, the lifetime ID is preserved, _get must NOT fire. */
+    ArenaMark mark = arena_mark(&g_lt_arena);
+    (void)arena_alloc(&g_lt_arena, 64);
+    arena_reset_to(&g_lt_arena, mark);
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
+/* ============================================================================
    Unit test entry point
    ============================================================================ */
 
@@ -754,6 +921,14 @@ int main(void)
 
     /* Source tag round-trip */
     test_source_tag_round_trip_all_types();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_borrow_captures_id();
+    test_lifetime_get_open_borrow_silent();
+    test_lifetime_get_after_reset_fires();
+    test_lifetime_untracked_borrow_bypasses_check();
+    test_lifetime_get_after_reset_to_silent();
+#endif
 
     if (g_failed == 0) {
         printf("OK  borrow_test  (all assertions passed)\n");
