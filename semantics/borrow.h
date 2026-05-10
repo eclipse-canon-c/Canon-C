@@ -204,6 +204,11 @@
             (b).source_lt   = NULL;                  \
             (b).captured_id = REGION_ID_STATIC;      \
         } while (0)
+    #define _BORROW_LT_INHERIT(dst, src)            \
+        do {                                         \
+            (dst).source_lt   = (src).source_lt;     \
+            (dst).captured_id = (src).captured_id;   \
+        } while (0)
     #define _BORROW_LT_CHECK(b, site)               \
         do {                                         \
             if ((b)->source_lt != NULL) {            \
@@ -218,6 +223,7 @@
     #define _BORROW_LT_FIELDS                       /* no fields */
     #define _BORROW_LT_INIT(b, src_lt)        ((void)0)
     #define _BORROW_LT_INIT_NONE(b)           ((void)0)
+    #define _BORROW_LT_INHERIT(dst, src)      ((void)0)
     #define _BORROW_LT_CHECK(b, site)         ((void)0)
 #endif
 
@@ -541,10 +547,7 @@ static inline borrowed_str borrowed_str_slice(borrowed_str b,
     borrowed_str r;
     r.str    = str_slice(b.str, start, end);
     r.source = b.source;
-#ifdef CANON_LIFETIME_DEBUG
-    r.source_lt   = b.source_lt;
-    r.captured_id = b.captured_id;
-#endif
+    _BORROW_LT_INHERIT(r, b);
     return r;
 }
 
@@ -768,10 +771,7 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
     r.bytes.ptr = base + start;   /* arithmetic on u8 *, not void * */
     r.bytes.len = end - start;
     r.source    = b.source;
-#ifdef CANON_LIFETIME_DEBUG
-    r.source_lt   = b.source_lt;
-    r.captured_id = b.captured_id;
-#endif
+    _BORROW_LT_INHERIT(r, b);
     return r;
 }
 
@@ -891,11 +891,7 @@ borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
     borrowed_slice_##type r;                                                   \
     r.slice  = slice_##type##_slice(b.slice, start, end);                      \
     r.source = b.source;                                                       \
-    /* Inherit lifetime fields when CANON_LIFETIME_DEBUG is set. */            \
-    /* In default builds these macros are no-ops. */                           \
-    /* Done via member assignment rather than _BORROW_LT_INIT to               \
-       inherit the existing captured_id, not re-read source_lt->id. */         \
-    (void)0;                                                                   \
+    _BORROW_LT_INHERIT(r, b);                                                  \
     return r;                                                                  \
 }                                                                              \
                                                                                \
