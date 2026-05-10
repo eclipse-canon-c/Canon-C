@@ -253,7 +253,7 @@ typedef u64 region_id_t;
  * Modules that embed this:
  *   - core/arena.h         (under CANON_LIFETIME_DEBUG)
  *   - core/pool.h          (planned, Phase 3)
- *   - data/convenience/*   (planned, Phase 2)
+ *   - data/convenience     (planned, Phase 2)
  *   - data/vec, deque, hashmap, stringbuf, priority_queue (planned, Phase 3)
  *
  * Borrows that need to validate against a source store a `const lifetime_t*`
