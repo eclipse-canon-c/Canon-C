@@ -483,7 +483,10 @@ static void test_bytes_slice_start_beyond_len_returns_empty(void)
 
 static void test_bytes_slice_null_ptr_returns_empty(void)
 {
-    borrowed_bytes b;
+    /* {0} initializer covers all fields including the lifetime fields under
+     * CANON_LIFETIME_DEBUG. The subsequent assignments overwrite bytes and
+     * source; the lifetime fields stay at their safe untracked defaults. */
+    borrowed_bytes b = {0};
     b.bytes  = cbytes_empty();
     b.source = NULL;
     borrowed_bytes sub = borrowed_bytes_slice(b, 0, 1);
