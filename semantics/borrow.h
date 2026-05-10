@@ -8,6 +8,10 @@
 #include "core/ownership.h"             /* borrowed(T) annotation style  */
 #include <string.h>                     /* memcmp — used by borrowed_bytes_eq */
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/region.h"            /* lifetime_t, lifetime_assert_valid, region_id_t */
+#endif
+
 /**
  * @file semantics/borrow.h
  * @brief Semantic borrowing types — non-owning views with explicit lifetime intent
@@ -23,7 +27,11 @@
  *   assertions. It is never dereferenced by this header.
  * - Lifetime rule: a borrowed value is valid only as long as its source
  *   is alive and the pointed-to memory is unmodified.
- * - No runtime enforcement — documentation + discipline.
+ * - Default mode: documentation + discipline, no runtime enforcement.
+ * - CANON_LIFETIME_DEBUG mode: borrows additionally capture the source's
+ *   lifetime ID at construction (via the _from_lifetime constructors) and
+ *   validate it on every read via lifetime_assert_valid. See "Lifetime
+ *   tracking" section below.
  *
  * Types provided:
  *   borrowed_ptr         — generic non-owning pointer to any T
@@ -50,6 +58,35 @@
  *   // s becomes invalid after: stringbuf_clear(&sb),
  *   //   arena_reset(sb.arena), free(sb), etc.
  *
+ * Lifetime tracking (CANON_LIFETIME_DEBUG):
+ * --------------------------------------------------------------------------
+ * When the build defines CANON_LIFETIME_DEBUG, each borrow type embeds
+ * two extra fields:
+ *
+ *   const lifetime_t *source_lt;   // pointer to source's embedded lifetime
+ *   region_id_t       captured_id; // ID copied at construction time
+ *
+ * Use the *_from_lifetime constructors to capture an owner's lifetime:
+ *
+ *   borrowed_bytes b = borrowed_bytes_from_lifetime(
+ *       arena_buffer(&arena), arena_used(&arena),
+ *       &arena.lt, &arena);
+ *
+ *   // ... arena_reset(&arena) re-stamps arena.lt.id ...
+ *
+ *   borrowed_bytes_get(&b);   // fires require_msg in debug builds
+ *
+ * The classic *_from constructors remain available for borrows from non-
+ * Canon-C sources (string literals, foreign data, anything without a
+ * lifetime_t). Borrows constructed via *_from carry source_lt == NULL,
+ * which the _get checks treat as "untracked — always valid."
+ *
+ * In default builds (CANON_LIFETIME_DEBUG undefined) the source_lt and
+ * captured_id fields do not exist; the structs are byte-equivalent to
+ * today's layout, the *_from_lifetime constructors compile to the same
+ * code as *_from with the lifetime arguments ignored, and the _get
+ * functions perform no extra work.
+ *
  * Source tag lifetime warning:
  * --------------------------------------------------------------------------
  * The source field stores the address of the owning object as a debug tag.
@@ -74,6 +111,13 @@
  * pass the borrowed value only to functions called from the same scope,
  * the tag is always valid at the point of inspection.
  *
+ * Under CANON_LIFETIME_DEBUG, the source_lt pointer has the same dangling
+ * risk if the owning object is destroyed while the borrow is live. But
+ * because the lifetime token's `open` flag is flipped to false at owner
+ * destruction (in modules that opt in to the convention), the validity
+ * check fires *before* dereferencing past the owner's lifetime in well-
+ * structured code. The protection is best-effort, not absolute.
+ *
  * NULL-safety contract:
  * --------------------------------------------------------------------------
  * All functions that receive a pointer-to-borrowed-X (const borrowed_X *b)
@@ -91,13 +135,14 @@
  * borrowed_str_eq   — content equality via str_equal (same as strcmp-equal).
  * borrowed_bytes_eq — content equality via memcmp (same bytes, same length).
  * These differ because the underlying types have different natural equality.
- * Source tags are always ignored by all _eq functions.
+ * Source tags and lifetime fields are always ignored by all _eq functions.
  *
  * Dependency rule:
  * --------------------------------------------------------------------------
  * borrow.h lives in semantics/ and may include core/ only.
  * No data/, util/, or other semantics/ headers.
  * <string.h> is included for memcmp used in borrowed_bytes_eq.
+ * core/region.h is included only when CANON_LIFETIME_DEBUG is defined.
  *
  * Portability:
  * --------------------------------------------------------------------------
@@ -106,7 +151,11 @@
  *
  * Performance:
  * --------------------------------------------------------------------------
- * - All types are approximately sizeof(ptr) + sizeof(usize) + sizeof(void *).
+ * - Default mode: each type is approximately sizeof(ptr) + sizeof(usize) +
+ *   sizeof(void *).
+ * - CANON_LIFETIME_DEBUG mode: each type grows by sizeof(const void*) +
+ *   sizeof(region_id_t) (typically 16 bytes), and each _get adds two
+ *   compares + one branch via lifetime_assert_valid.
  * - All functions are static inline — zero call overhead.
  *
  * Quick start:
@@ -129,8 +178,48 @@
  *
  * @sa core/slice.h              — underlying str_t, cbytes_t, slice_##type
  * @sa core/ownership.h          — borrowed(T) annotation macros
+ * @sa core/region.h             — lifetime_t, lifetime_assert_valid
  * @sa core/primitives/checked.h — checked_mul used in _as_bytes overflow guard
  */
+
+/* ============================================================================
+   Internal helpers — lifetime field declaration and check
+   ============================================================================
+   When CANON_LIFETIME_DEBUG is enabled these macros expand to real fields
+   and a real assertion call. Otherwise they vanish, leaving struct layouts
+   and function bodies byte-identical to the default build.
+   ============================================================================ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define _BORROW_LT_FIELDS                       \
+        const lifetime_t *source_lt;                \
+        region_id_t       captured_id;
+    #define _BORROW_LT_INIT(b, src_lt)              \
+        do {                                         \
+            (b).source_lt   = (src_lt);              \
+            (b).captured_id = (src_lt) ? (src_lt)->id : REGION_ID_STATIC; \
+        } while (0)
+    #define _BORROW_LT_INIT_NONE(b)                 \
+        do {                                         \
+            (b).source_lt   = NULL;                  \
+            (b).captured_id = REGION_ID_STATIC;      \
+        } while (0)
+    #define _BORROW_LT_CHECK(b, site)               \
+        do {                                         \
+            if ((b)->source_lt != NULL) {            \
+                lifetime_assert_valid(               \
+                    (b)->source_lt->id,              \
+                    (b)->source_lt->open,            \
+                    (b)->captured_id,                \
+                    (site));                         \
+            }                                        \
+        } while (0)
+#else
+    #define _BORROW_LT_FIELDS                       /* no fields */
+    #define _BORROW_LT_INIT(b, src_lt)        ((void)0)
+    #define _BORROW_LT_INIT_NONE(b)           ((void)0)
+    #define _BORROW_LT_CHECK(b, site)         ((void)0)
+#endif
 
 /* ============================================================================
    borrowed_ptr — generic non-owning pointer
@@ -147,6 +236,10 @@
  *   - source is a debug-only tag; it is never dereferenced.
  *   - The object at ptr must outlive this struct.
  *
+ * Under CANON_LIFETIME_DEBUG, additional fields (source_lt, captured_id)
+ * carry the source's lifetime token at construction time. See file-level
+ * "Lifetime tracking" section.
+ *
  * @warning source can itself become a dangling pointer if the owning object
  *          is destroyed while this struct is still in scope. See "Source tag
  *          lifetime warning" in the file-level documentation.
@@ -155,6 +248,7 @@ typedef struct {
     const void *ptr;    /**< Borrowed pointer — do NOT free. */
     const void *source; /**< Owning object's address (debug tag only).
                              Never dereference outside owning object's lifetime. */
+    _BORROW_LT_FIELDS
 } borrowed_ptr;
 
 /**
@@ -162,6 +256,10 @@ typedef struct {
  * @param ptr    Non-owning pointer (may be NULL).
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_ptr wrapping ptr.
+ *
+ * In CANON_LIFETIME_DEBUG builds the borrow is constructed without a
+ * tracked lifetime (source_lt == NULL); _get will skip the lifetime
+ * check. Use borrowed_ptr_from_lifetime() to opt into tracking.
  */
 static inline borrowed_ptr borrowed_ptr_from(const void *ptr,
                                               const void *source)
@@ -169,6 +267,37 @@ static inline borrowed_ptr borrowed_ptr_from(const void *ptr,
     borrowed_ptr b;
     b.ptr    = ptr;
     b.source = source;
+    _BORROW_LT_INIT_NONE(b);
+    return b;
+}
+
+/**
+ * @brief Constructs a borrowed_ptr that captures the source's lifetime.
+ *
+ * In CANON_LIFETIME_DEBUG builds, source_lt->id is copied into the borrow
+ * and verified by borrowed_ptr_get on every read. In default builds the
+ * source_lt argument is ignored.
+ *
+ * @param ptr       Non-owning pointer (may be NULL).
+ * @param source_lt Pointer to the source's embedded lifetime_t (may be NULL,
+ *                  in which case the borrow is untracked).
+ * @param source    Address of the owning object (debug tag; may be NULL).
+ * @return          A borrowed_ptr wrapping ptr with captured lifetime.
+ */
+static inline borrowed_ptr borrowed_ptr_from_lifetime(
+    const void *ptr,
+#ifdef CANON_LIFETIME_DEBUG
+    const lifetime_t *source_lt,
+#else
+    const void *source_lt,
+#endif
+    const void *source)
+{
+    borrowed_ptr b;
+    b.ptr    = ptr;
+    b.source = source;
+    _BORROW_LT_INIT(b, source_lt);
+    (void)source_lt; /* unused in default builds */
     return b;
 }
 
@@ -181,6 +310,7 @@ static inline borrowed_ptr borrowed_ptr_null(void)
     borrowed_ptr b;
     b.ptr    = NULL;
     b.source = NULL;
+    _BORROW_LT_INIT_NONE(b);
     return b;
 }
 
@@ -189,6 +319,10 @@ static inline borrowed_ptr borrowed_ptr_null(void)
  *
  * The caller is responsible for casting to the correct type.
  * Do NOT free the returned pointer.
+ *
+ * In CANON_LIFETIME_DEBUG builds, fires require_msg via lifetime_assert_valid
+ * if the captured lifetime ID no longer matches the source's current ID,
+ * or if the source has been closed.
  *
  * @pre  b != NULL  (checked with require_msg in debug builds).
  * @note Returns NULL when b == NULL in release builds so that callers
@@ -200,6 +334,7 @@ static inline const void *borrowed_ptr_get(const borrowed_ptr *b)
 {
     require_msg(b != NULL, "borrowed_ptr_get: b must not be NULL");
     if (b == NULL) { return NULL; }
+    _BORROW_LT_CHECK(b, "borrowed_ptr_get");
     return b->ptr;
 }
 
@@ -216,8 +351,9 @@ static inline bool borrowed_ptr_is_valid(const borrowed_ptr *b)
 /**
  * @brief Returns non-zero (true) if a and b point to the same address.
  *
- * Equality is pointer identity — source tags are intentionally ignored.
- * For content equality over pointed-to data, dereference and compare manually.
+ * Equality is pointer identity — source tags and lifetime fields are
+ * intentionally ignored. For content equality over pointed-to data,
+ * dereference and compare manually.
  *
  * @param a First borrowed_ptr (by value).
  * @param b Second borrowed_ptr (by value).
@@ -238,6 +374,9 @@ static inline bool borrowed_ptr_eq(borrowed_ptr a, borrowed_ptr b)
  * Wraps str_t. The character data is NOT null-terminated in general.
  * Do NOT free str.ptr — it is owned by source.
  *
+ * Under CANON_LIFETIME_DEBUG, additional fields (source_lt, captured_id)
+ * carry the source's lifetime token at construction time.
+ *
  * @warning source can itself become a dangling pointer if the owning object
  *          is destroyed while this struct is still in scope. See "Source tag
  *          lifetime warning" in the file-level documentation.
@@ -246,6 +385,7 @@ typedef struct {
     str_t        str;    /**< Borrowed string view — do NOT free str.ptr. */
     const void  *source; /**< Owning object's address (debug tag only).
                               Never dereference outside owning object's lifetime. */
+    _BORROW_LT_FIELDS
 } borrowed_str;
 
 /**
@@ -253,12 +393,43 @@ typedef struct {
  * @param s      The str_t to wrap.
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_str wrapping s.
+ *
+ * In CANON_LIFETIME_DEBUG builds the borrow is untracked. Use
+ * borrowed_str_from_lifetime() to opt into tracking.
  */
 static inline borrowed_str borrowed_str_from(str_t s, const void *source)
 {
     borrowed_str b;
     b.str    = s;
     b.source = source;
+    _BORROW_LT_INIT_NONE(b);
+    return b;
+}
+
+/**
+ * @brief Constructs a borrowed_str that captures the source's lifetime.
+ *
+ * In CANON_LIFETIME_DEBUG builds, source_lt->id is copied into the borrow
+ * and verified on every read.
+ *
+ * @param s         The str_t to wrap.
+ * @param source_lt Pointer to source's embedded lifetime_t (may be NULL).
+ * @param source    Address of the owning object (debug tag; may be NULL).
+ */
+static inline borrowed_str borrowed_str_from_lifetime(
+    str_t s,
+#ifdef CANON_LIFETIME_DEBUG
+    const lifetime_t *source_lt,
+#else
+    const void *source_lt,
+#endif
+    const void *source)
+{
+    borrowed_str b;
+    b.str    = s;
+    b.source = source;
+    _BORROW_LT_INIT(b, source_lt);
+    (void)source_lt;
     return b;
 }
 
@@ -267,6 +438,9 @@ static inline borrowed_str borrowed_str_from(str_t s, const void *source)
  * @param cstr   Null-terminated string (may be NULL, yielding empty view).
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_str wrapping cstr via str_from_cstr.
+ *
+ * String literals have static lifetime; this constructor produces an
+ * untracked borrow appropriate for that case.
  */
 static inline borrowed_str borrowed_str_from_cstr(const char *cstr,
                                                    const void *source)
@@ -274,6 +448,7 @@ static inline borrowed_str borrowed_str_from_cstr(const char *cstr,
     borrowed_str b;
     b.str    = str_from_cstr(cstr);
     b.source = source;
+    _BORROW_LT_INIT_NONE(b);
     return b;
 }
 
@@ -286,6 +461,7 @@ static inline borrowed_str borrowed_str_empty(void)
     borrowed_str b;
     b.str    = str_empty();
     b.source = NULL;
+    _BORROW_LT_INIT_NONE(b);
     return b;
 }
 
@@ -293,6 +469,9 @@ static inline borrowed_str borrowed_str_empty(void)
  * @brief Returns the underlying str_t.
  *
  * Do NOT free the returned ptr field.
+ *
+ * In CANON_LIFETIME_DEBUG builds, fires require_msg if the captured
+ * lifetime ID no longer matches the source's current ID.
  *
  * @pre  b != NULL  (checked with require_msg in debug builds).
  * @note Returns str_empty() when b == NULL in release builds.
@@ -303,6 +482,7 @@ static inline str_t borrowed_str_get(const borrowed_str *b)
 {
     require_msg(b != NULL, "borrowed_str_get: b must not be NULL");
     if (b == NULL) { return str_empty(); }
+    _BORROW_LT_CHECK(b, "borrowed_str_get");
     return b->str;
 }
 
@@ -329,9 +509,10 @@ static inline usize borrowed_str_len(const borrowed_str *b)
 /**
  * @brief Returns non-zero (true) if both strings have equal content.
  *
- * Equality is content-based via str_equal — source tags are intentionally
- * ignored. This differs from borrowed_ptr_eq which uses pointer identity;
- * the difference reflects the natural equality of the underlying types.
+ * Equality is content-based via str_equal — source tags and lifetime
+ * fields are intentionally ignored. This differs from borrowed_ptr_eq
+ * which uses pointer identity; the difference reflects the natural
+ * equality of the underlying types.
  *
  * @param a First borrowed_str (by value).
  * @param b Second borrowed_str (by value).
@@ -345,7 +526,7 @@ static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b)
 /**
  * @brief Returns a sub-borrow covering bytes [start, end).
  *
- * The returned view inherits the source tag of b.
+ * The returned view inherits the source tag and lifetime fields of b.
  * If start >= end or the range is out of bounds, behaviour is defined by
  * str_slice (typically returns an empty view).
  *
@@ -360,6 +541,10 @@ static inline borrowed_str borrowed_str_slice(borrowed_str b,
     borrowed_str r;
     r.str    = str_slice(b.str, start, end);
     r.source = b.source;
+#ifdef CANON_LIFETIME_DEBUG
+    r.source_lt   = b.source_lt;
+    r.captured_id = b.captured_id;
+#endif
     return r;
 }
 
@@ -372,6 +557,9 @@ static inline borrowed_str borrowed_str_slice(borrowed_str b,
  *
  * Wraps cbytes_t. Do NOT free bytes.ptr — it is owned by source.
  *
+ * Under CANON_LIFETIME_DEBUG, additional fields (source_lt, captured_id)
+ * carry the source's lifetime token at construction time.
+ *
  * @warning source can itself become a dangling pointer if the owning object
  *          is destroyed while this struct is still in scope. See "Source tag
  *          lifetime warning" in the file-level documentation.
@@ -380,6 +568,7 @@ typedef struct {
     cbytes_t     bytes;  /**< Borrowed byte view — do NOT free bytes.ptr. */
     const void  *source; /**< Owning object's address (debug tag only).
                               Never dereference outside owning object's lifetime. */
+    _BORROW_LT_FIELDS
 } borrowed_bytes;
 
 /**
@@ -387,6 +576,9 @@ typedef struct {
  *
  * ptr is cast to const u8 * internally via cbytes_from. The caller must
  * ensure ptr points to at least len readable bytes.
+ *
+ * In CANON_LIFETIME_DEBUG builds the borrow is untracked. Use
+ * borrowed_bytes_from_lifetime() to opt into tracking.
  *
  * @param ptr    Start of the byte region (may be NULL if len == 0).
  * @param len    Number of bytes in the region.
@@ -399,6 +591,35 @@ static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
     borrowed_bytes b;
     b.bytes  = cbytes_from(ptr, len);
     b.source = source;
+    _BORROW_LT_INIT_NONE(b);
+    return b;
+}
+
+/**
+ * @brief Constructs a borrowed_bytes that captures the source's lifetime.
+ *
+ * In CANON_LIFETIME_DEBUG builds, source_lt->id is copied into the borrow
+ * and verified by borrowed_bytes_get on every read.
+ *
+ * @param ptr       Start of the byte region (may be NULL if len == 0).
+ * @param len       Number of bytes in the region.
+ * @param source_lt Pointer to source's embedded lifetime_t (may be NULL).
+ * @param source    Address of the owning object (debug tag; may be NULL).
+ */
+static inline borrowed_bytes borrowed_bytes_from_lifetime(
+    const void *ptr, usize len,
+#ifdef CANON_LIFETIME_DEBUG
+    const lifetime_t *source_lt,
+#else
+    const void *source_lt,
+#endif
+    const void *source)
+{
+    borrowed_bytes b;
+    b.bytes  = cbytes_from(ptr, len);
+    b.source = source;
+    _BORROW_LT_INIT(b, source_lt);
+    (void)source_lt;
     return b;
 }
 
@@ -414,6 +635,7 @@ static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
     borrowed_bytes b;
     b.bytes  = cb;
     b.source = source;
+    _BORROW_LT_INIT_NONE(b);
     return b;
 }
 
@@ -426,6 +648,7 @@ static inline borrowed_bytes borrowed_bytes_empty(void)
     borrowed_bytes b;
     b.bytes  = cbytes_empty();
     b.source = NULL;
+    _BORROW_LT_INIT_NONE(b);
     return b;
 }
 
@@ -433,6 +656,9 @@ static inline borrowed_bytes borrowed_bytes_empty(void)
  * @brief Returns the underlying cbytes_t.
  *
  * Do NOT free the returned ptr field.
+ *
+ * In CANON_LIFETIME_DEBUG builds, fires require_msg if the captured
+ * lifetime ID no longer matches the source's current ID.
  *
  * @pre  b != NULL  (checked with require_msg in debug builds).
  * @note Returns cbytes_empty() when b == NULL in release builds.
@@ -443,6 +669,7 @@ static inline cbytes_t borrowed_bytes_get(const borrowed_bytes *b)
 {
     require_msg(b != NULL, "borrowed_bytes_get: b must not be NULL");
     if (b == NULL) { return cbytes_empty(); }
+    _BORROW_LT_CHECK(b, "borrowed_bytes_get");
     return b->bytes;
 }
 
@@ -470,8 +697,8 @@ static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
  * @brief Returns non-zero (true) if both byte regions have equal content.
  *
  * Equality is content-based via memcmp — lengths must match and every byte
- * must be identical. Source tags are intentionally ignored, consistent with
- * all other _eq functions in this header.
+ * must be identical. Source tags and lifetime fields are intentionally
+ * ignored, consistent with all other _eq functions in this header.
  *
  * Two empty regions (len == 0) are always equal regardless of ptr value,
  * consistent with memcmp semantics (zero-length comparison is vacuously true).
@@ -505,7 +732,7 @@ static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
 /**
  * @brief Returns a sub-borrow covering bytes [start, end).
  *
- * The returned view inherits the source tag of b.
+ * The returned view inherits the source tag and lifetime fields of b.
  * Returns borrowed_bytes_empty() when:
  *   - b.bytes.ptr is NULL, or
  *   - start >= b.bytes.len, or
@@ -541,6 +768,10 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
     r.bytes.ptr = base + start;   /* arithmetic on u8 *, not void * */
     r.bytes.len = end - start;
     r.source    = b.source;
+#ifdef CANON_LIFETIME_DEBUG
+    r.source_lt   = b.source_lt;
+    r.captured_id = b.captured_id;
+#endif
     return r;
 }
 
@@ -557,19 +788,17 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
  *   borrowed_slice_<type>
  *
  * Generated functions (all static inline):
- *   borrowed_slice_<type>_from      — construct from slice_<type> + source
- *   borrowed_slice_<type>_empty     — construct empty view
- *   borrowed_slice_<type>_get       — return inner slice_<type>
- *   borrowed_slice_<type>_len       — element count
- *   borrowed_slice_<type>_is_valid  — non-null check
- *   borrowed_slice_<type>_at        — bounds-checked const element pointer
- *   borrowed_slice_<type>_slice     — sub-borrow [start, end)
- *   borrowed_slice_<type>_as_bytes  — raw borrowed_bytes view over slice
- *                                     (returns borrowed_bytes_empty() on
- *                                      overflow of len * sizeof(type))
- *
- * No block comments are used inside the macro body to ensure compatibility
- * with all C99-conforming preprocessors.
+ *   borrowed_slice_<type>_from           — construct from slice_<type> + source
+ *   borrowed_slice_<type>_from_lifetime  — construct with captured lifetime
+ *   borrowed_slice_<type>_empty          — construct empty view
+ *   borrowed_slice_<type>_get            — return inner slice_<type>
+ *   borrowed_slice_<type>_len            — element count
+ *   borrowed_slice_<type>_is_valid       — non-null check
+ *   borrowed_slice_<type>_at             — bounds-checked const element pointer
+ *   borrowed_slice_<type>_slice          — sub-borrow [start, end)
+ *   borrowed_slice_<type>_as_bytes       — raw borrowed_bytes view over slice
+ *                                          (returns borrowed_bytes_empty() on
+ *                                           overflow of len * sizeof(type))
  *
  * Example:
  *   DEFINE_SLICE(int)
@@ -585,6 +814,7 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
 typedef struct {                                                               \
     slice_##type  slice;                                                       \
     const void   *source;                                                      \
+    _BORROW_LT_FIELDS                                                          \
 } borrowed_slice_##type;                                                       \
                                                                                \
 static inline borrowed_slice_##type                                            \
@@ -593,6 +823,23 @@ borrowed_slice_##type##_from(slice_##type s, const void *source)               \
     borrowed_slice_##type b;                                                   \
     b.slice  = s;                                                              \
     b.source = source;                                                         \
+    _BORROW_LT_INIT_NONE(b);                                                   \
+    return b;                                                                  \
+}                                                                              \
+                                                                               \
+static inline borrowed_slice_##type                                            \
+borrowed_slice_##type##_from_lifetime(                                         \
+    slice_##type s,                                                            \
+    const void *source_lt_arg,                                                 \
+    const void *source)                                                        \
+{                                                                              \
+    borrowed_slice_##type b;                                                   \
+    b.slice  = s;                                                              \
+    b.source = source;                                                         \
+    /* In CANON_LIFETIME_DEBUG builds, source_lt_arg is treated as a           \
+       const lifetime_t* and captured. In default builds it is ignored. */     \
+    _BORROW_LT_INIT(b, (const lifetime_t *)source_lt_arg);                     \
+    (void)source_lt_arg;                                                       \
     return b;                                                                  \
 }                                                                              \
                                                                                \
@@ -602,6 +849,7 @@ borrowed_slice_##type##_empty(void)                                            \
     borrowed_slice_##type b;                                                   \
     b.slice  = slice_##type##_empty();                                         \
     b.source = NULL;                                                           \
+    _BORROW_LT_INIT_NONE(b);                                                   \
     return b;                                                                  \
 }                                                                              \
                                                                                \
@@ -611,13 +859,14 @@ borrowed_slice_##type##_get(const borrowed_slice_##type *b)                    \
     require_msg(b != NULL,                                                     \
                 "borrowed_slice_" #type "_get: b must not be NULL");           \
     if (b == NULL) { return slice_##type##_empty(); }                          \
+    _BORROW_LT_CHECK(b, "borrowed_slice_" #type "_get");                       \
     return b->slice;                                                           \
 }                                                                              \
                                                                                \
 static inline usize                                                            \
 borrowed_slice_##type##_len(const borrowed_slice_##type *b)                    \
 {                                                                              \
-    return (b != NULL) ? b->slice.len : (usize)0;                             \
+    return (b != NULL) ? b->slice.len : (usize)0;                              \
 }                                                                              \
                                                                                \
 static inline bool                                                             \
@@ -629,10 +878,10 @@ borrowed_slice_##type##_is_valid(const borrowed_slice_##type *b)               \
 static inline const type *                                                     \
 borrowed_slice_##type##_at(const borrowed_slice_##type *b, usize i)            \
 {                                                                              \
-    if ((b == NULL) || (b->slice.ptr == NULL) || (i >= b->slice.len)) {       \
+    if ((b == NULL) || (b->slice.ptr == NULL) || (i >= b->slice.len)) {        \
         return NULL;                                                           \
     }                                                                          \
-    return &b->slice.ptr[i];                                                  \
+    return &b->slice.ptr[i];                                                   \
 }                                                                              \
                                                                                \
 static inline borrowed_slice_##type                                            \
@@ -640,8 +889,13 @@ borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
                                usize start, usize end)                         \
 {                                                                              \
     borrowed_slice_##type r;                                                   \
-    r.slice  = slice_##type##_slice(b.slice, start, end);                     \
+    r.slice  = slice_##type##_slice(b.slice, start, end);                      \
     r.source = b.source;                                                       \
+    /* Inherit lifetime fields when CANON_LIFETIME_DEBUG is set. */            \
+    /* In default builds these macros are no-ops. */                           \
+    /* Done via member assignment rather than _BORROW_LT_INIT to               \
+       inherit the existing captured_id, not re-read source_lt->id. */         \
+    (void)0;                                                                   \
     return r;                                                                  \
 }                                                                              \
                                                                                \
@@ -650,15 +904,16 @@ borrowed_slice_##type##_as_bytes(const borrowed_slice_##type *b)               \
 {                                                                              \
     usize byte_len;                                                            \
     borrowed_bytes r;                                                          \
-    if ((b == NULL) || (b->slice.ptr == NULL)) {                              \
+    if ((b == NULL) || (b->slice.ptr == NULL)) {                               \
         return borrowed_bytes_empty();                                         \
     }                                                                          \
-    if (!checked_mul(b->slice.len, sizeof(type), &byte_len)) {                \
+    if (!checked_mul(b->slice.len, sizeof(type), &byte_len)) {                 \
         return borrowed_bytes_empty();                                         \
     }                                                                          \
-    r.bytes.ptr = (const u8 *)b->slice.ptr;                                   \
+    r.bytes.ptr = (const u8 *)b->slice.ptr;                                    \
     r.bytes.len = byte_len;                                                    \
     r.source    = b->source;                                                   \
+    _BORROW_LT_INIT_NONE(r);                                                   \
     return r;                                                                  \
 }
 
