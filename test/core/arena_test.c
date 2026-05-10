@@ -15,6 +15,8 @@
  *   - arena_capacity / arena_remaining / arena_used / arena_is_empty / arena_is_full
  *   - arena_as_bytes / arena_buffer_bytes / arena_free_bytes
  *   - CANON_ARENA_DEBUG stats (alloc_count, peak) when enabled
+ *   - CANON_LIFETIME_DEBUG: lifetime ID stamping, restamping on reset,
+ *     and rollback-preserves-id contract
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random (size, alignment) pairs into arena_alloc /
@@ -499,6 +501,72 @@ static void test_debug_stats_null_returns_zero(void)
     EXPECT(s.alloc_count == 0);
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * These tests exercise the (id, open) lifetime token embedded on the Arena
+ * when CANON_LIFETIME_DEBUG is defined. They verify state-level invariants
+ * directly on a.lt — they do NOT construct borrows or trigger
+ * lifetime_assert_valid. The borrow-side validation path (fires require_msg
+ * after reset) is covered in test/semantics/borrow_test.c, alongside the
+ * borrow construction logic and the contract-trap helpers it needs.
+ *
+ * The contract under test is:
+ *   - arena_init opens the lifetime: lt.open == true, lt.id is set.
+ *   - arena_reset re-stamps lt.id: new ID differs from old ID.
+ *   - arena_reset_secure also re-stamps lt.id.
+ *   - arena_reset_to does NOT touch lt.id — borrows allocated before the
+ *     mark must remain valid through rollback (rollback contract).
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    setup();
+    EXPECT(g_arena.lt.open == true);
+    /* ID is address-derived, so for a non-NULL arena it is non-zero on
+     * any reasonable platform. We don't assert the exact value — just
+     * that the token is in the "open" state with some ID assigned. */
+    EXPECT(g_arena.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_reset_restamps_id(void)
+{
+    setup();
+    region_id_t before = g_arena.lt.id;
+    arena_reset(&g_arena);
+    EXPECT(g_arena.lt.id != before);
+    EXPECT(g_arena.lt.open == true); /* reset recycles, does not close */
+}
+
+static void test_lifetime_reset_secure_restamps_id(void)
+{
+    setup();
+    /* Allocate something so reset_secure has bytes to wipe — exercises
+     * the same restamp path as the empty-arena case. */
+    arena_alloc(&g_arena, 32);
+    region_id_t before = g_arena.lt.id;
+    arena_reset_secure(&g_arena);
+    EXPECT(g_arena.lt.id != before);
+    EXPECT(g_arena.lt.open == true);
+}
+
+static void test_lifetime_reset_to_preserves_id(void)
+{
+    /* Rollback contract: borrows allocated before the mark must remain
+     * valid after arena_reset_to. The lifetime ID must NOT change. */
+    setup();
+    arena_alloc(&g_arena, 16);
+    ArenaMark   mark   = arena_mark(&g_arena);
+    region_id_t before = g_arena.lt.id;
+    arena_alloc(&g_arena, 64);
+    arena_reset_to(&g_arena, mark);
+    EXPECT(g_arena.lt.id == before);
+    EXPECT(g_arena.lt.open == true);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Unit test entry point ───────────────────────────────────────────────── */
 
 int main(void)
@@ -555,6 +623,13 @@ int main(void)
     test_debug_reset_clears_stats();
     test_debug_stats_function();
     test_debug_stats_null_returns_zero();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_reset_restamps_id();
+    test_lifetime_reset_secure_restamps_id();
+    test_lifetime_reset_to_preserves_id();
+#endif
 
     if (g_failed == 0) {
         printf("OK  arena_test  (all assertions passed)\n");
