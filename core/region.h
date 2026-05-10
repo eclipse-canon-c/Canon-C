@@ -7,7 +7,7 @@
 
 /**
  * @file core/region.h
- * @brief Explicit lifetime region tokens — named boundaries for borrow validity
+ * @brief Explicit lifetime region tokens — named boundaries for borrowed values
  *
  * A Region is a stack-allocated lifetime token. It answers:
  * "how long is this borrowed value valid?"
@@ -51,6 +51,20 @@
  *                   lifetime ID for borrow validation, fires unconditionally
  *                   on region_end() regardless of how the caller reached it.
  *
+ * Generalized lifetime mechanism — see lifetime_t below:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Region's (id, open) pair is the prototype for a wider lifetime-tracking
+ * mechanism used by other Canon-C modules (arena, pool, dynvec, hashmap,
+ * stringbuf) under CANON_LIFETIME_DEBUG. Those modules embed lifetime_t
+ * directly so that borrows can validate against any source via a single
+ * const lifetime_t* pointer.
+ *
+ * Region itself does NOT embed lifetime_t — its id/open/arena/cleanups
+ * fields are layout-frozen by the existing test suite and refactoring
+ * them would be churn for no gain. lifetime_assert_valid() takes (id,
+ * open) values directly, so Region's separate fields and other modules'
+ * embedded lifetime_t are interoperable at the assertion site.
+ *
  * What region is NOT:
  * ────────────────────────────────────────────────────────────────────────────
  * - Not an allocator (use core/arena.h)
@@ -88,8 +102,9 @@
  *   #define CANON_NO_REGION_PARENT  // before including this header
  *
  * CANON_STRICT (propagated from contract.h)
- *   Promotes ensure_msg() to always-on. region_assert_*() become
- *   always-active in certified builds without any changes here.
+ *   Promotes ensure_msg() to always-on. region_assert_*() and
+ *   lifetime_assert_valid() become always-active in certified builds
+ *   without any changes here.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
@@ -110,6 +125,7 @@
  * - region_register:     O(1)
  * - region_is_open:      O(1)
  * - region_assert_*:     O(1) — debug-only by default, always-on with CANON_STRICT
+ * - lifetime_assert_valid: O(1) — same gating as region_assert_*
  * - sizeof(Region):      fixed — no dynamic sizing
  *
  * Quick start:
@@ -213,6 +229,80 @@ typedef u64 region_id_t;
 
 /** Reserved ID — "no region" / static lifetime. Borrows with this ID never expire. */
 #define REGION_ID_STATIC ((region_id_t)0)
+
+/* ════════════════════════════════════════════════════════════════════════════
+   lifetime_t — generalized lifetime token for non-Region owners
+   ════════════════════════════════════════════════════════════════════════════
+   Region embeds id and open as separate fields directly. The lifetime_t
+   struct below is for OTHER ownership-bearing modules (arena, dynvec,
+   hashmap, stringbuf, etc.) that want to expose the same (id, open) pair
+   in a uniform way so that borrows can validate against any source via a
+   single const lifetime_t* pointer.
+
+   Region itself does NOT use lifetime_t — its existing fields work fine
+   and refactoring them would break the existing test suite for no gain.
+   New modules embedding lifetime_t and existing Region using separate
+   fields are interoperable: lifetime_assert_valid() takes the (id, open)
+   values directly and works for both layouts.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief The (id, open) pair embedded by ownership-bearing modules
+ *        other than Region.
+ *
+ * Modules that embed this:
+ *   - core/arena.h         (under CANON_LIFETIME_DEBUG)
+ *   - core/pool.h          (planned, Phase 3)
+ *   - data/convenience/*   (planned, Phase 2)
+ *   - data/vec, deque, hashmap, stringbuf, priority_queue (planned, Phase 3)
+ *
+ * Borrows that need to validate against a source store a `const lifetime_t*`
+ * pointing at the source's `lt` field plus a captured `id`, then call
+ * `lifetime_assert_valid()` on read.
+ *
+ * The struct is a layout convention, not a clever abstraction. It exists
+ * so borrows can hold a single pointer regardless of which owning struct
+ * they came from.
+ */
+typedef struct {
+    region_id_t id;
+    bool        open;
+} lifetime_t;
+
+/**
+ * @brief Asserts that a borrow stamped with borrow_id is still valid
+ *        against a (id, open) lifetime pair.
+ *
+ * Generic, type-agnostic version of region_assert_borrow_valid for
+ * modules that embed lifetime_t (or two equivalent fields) without
+ * embedding a full Region.
+ *
+ * Compiled away under NDEBUG unless CANON_STRICT is defined — same
+ * mechanism as region_assert_borrow_valid, propagated through ensure_msg.
+ *
+ * @param source_id   Lifetime ID currently held by the source
+ * @param source_open Whether the source is currently open
+ * @param borrow_id   ID stamped on the borrow at creation
+ * @param site        Diagnostic name for ensure_msg failure messages
+ *
+ * Complexity: O(1)
+ */
+static inline void lifetime_assert_valid(
+    region_id_t source_id,
+    bool        source_open,
+    region_id_t borrow_id,
+    const char* site)
+{
+    if (borrow_id == REGION_ID_STATIC) return;
+    ensure_msg(source_open, site);
+    ensure_msg(source_id == borrow_id, site);
+    /* Suppress unused-parameter warnings when ensure_msg compiles away
+     * (NDEBUG without CANON_STRICT). The parameters are genuinely used
+     * in debug builds. */
+    (void)source_id;
+    (void)source_open;
+    (void)site;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    RegionCleanup
