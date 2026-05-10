@@ -191,25 +191,25 @@
    ============================================================================ */
 
 #ifdef CANON_LIFETIME_DEBUG
-    #define _BORROW_LT_FIELDS                       \
+    #define BORROW_LT_FIELDS_                       \
         const lifetime_t *source_lt;                \
         region_id_t       captured_id;
-    #define _BORROW_LT_INIT(b, src_lt)              \
+    #define BORROW_LT_INIT_(b, src_lt)              \
         do {                                         \
             (b).source_lt   = (src_lt);              \
             (b).captured_id = (src_lt) ? (src_lt)->id : REGION_ID_STATIC; \
         } while (0)
-    #define _BORROW_LT_INIT_NONE(b)                 \
+    #define BORROW_LT_INIT_NONE_(b)                 \
         do {                                         \
             (b).source_lt   = NULL;                  \
             (b).captured_id = REGION_ID_STATIC;      \
         } while (0)
-    #define _BORROW_LT_INHERIT(dst, src)            \
+    #define BORROW_LT_INHERIT_(dst, src)            \
         do {                                         \
             (dst).source_lt   = (src).source_lt;     \
             (dst).captured_id = (src).captured_id;   \
         } while (0)
-    #define _BORROW_LT_CHECK(b, site)               \
+    #define BORROW_LT_CHECK_(b, site)               \
         do {                                         \
             if ((b)->source_lt != NULL) {            \
                 lifetime_assert_valid(               \
@@ -220,11 +220,11 @@
             }                                        \
         } while (0)
 #else
-    #define _BORROW_LT_FIELDS                       /* no fields */
-    #define _BORROW_LT_INIT(b, src_lt)        ((void)0)
-    #define _BORROW_LT_INIT_NONE(b)           ((void)0)
-    #define _BORROW_LT_INHERIT(dst, src)      ((void)0)
-    #define _BORROW_LT_CHECK(b, site)         ((void)0)
+    #define BORROW_LT_FIELDS_                       /* no fields */
+    #define BORROW_LT_INIT_(b, src_lt)        ((void)0)
+    #define BORROW_LT_INIT_NONE_(b)           ((void)0)
+    #define BORROW_LT_INHERIT_(dst, src)      ((void)0)
+    #define BORROW_LT_CHECK_(b, site)         ((void)0)
 #endif
 
 /* ============================================================================
@@ -254,7 +254,7 @@ typedef struct {
     const void *ptr;    /**< Borrowed pointer — do NOT free. */
     const void *source; /**< Owning object's address (debug tag only).
                              Never dereference outside owning object's lifetime. */
-    _BORROW_LT_FIELDS
+    BORROW_LT_FIELDS_
 } borrowed_ptr;
 
 /**
@@ -273,7 +273,7 @@ static inline borrowed_ptr borrowed_ptr_from(const void *ptr,
     borrowed_ptr b;
     b.ptr    = ptr;
     b.source = source;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -302,7 +302,7 @@ static inline borrowed_ptr borrowed_ptr_from_lifetime(
     borrowed_ptr b;
     b.ptr    = ptr;
     b.source = source;
-    _BORROW_LT_INIT(b, source_lt);
+    BORROW_LT_INIT_(b, source_lt);
     (void)source_lt; /* unused in default builds */
     return b;
 }
@@ -316,7 +316,7 @@ static inline borrowed_ptr borrowed_ptr_null(void)
     borrowed_ptr b;
     b.ptr    = NULL;
     b.source = NULL;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -340,7 +340,7 @@ static inline const void *borrowed_ptr_get(const borrowed_ptr *b)
 {
     require_msg(b != NULL, "borrowed_ptr_get: b must not be NULL");
     if (b == NULL) { return NULL; }
-    _BORROW_LT_CHECK(b, "borrowed_ptr_get");
+    BORROW_LT_CHECK_(b, "borrowed_ptr_get");
     return b->ptr;
 }
 
@@ -391,7 +391,7 @@ typedef struct {
     str_t        str;    /**< Borrowed string view — do NOT free str.ptr. */
     const void  *source; /**< Owning object's address (debug tag only).
                               Never dereference outside owning object's lifetime. */
-    _BORROW_LT_FIELDS
+    BORROW_LT_FIELDS_
 } borrowed_str;
 
 /**
@@ -408,7 +408,7 @@ static inline borrowed_str borrowed_str_from(str_t s, const void *source)
     borrowed_str b;
     b.str    = s;
     b.source = source;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -434,7 +434,7 @@ static inline borrowed_str borrowed_str_from_lifetime(
     borrowed_str b;
     b.str    = s;
     b.source = source;
-    _BORROW_LT_INIT(b, source_lt);
+    BORROW_LT_INIT_(b, source_lt);
     (void)source_lt;
     return b;
 }
@@ -454,7 +454,7 @@ static inline borrowed_str borrowed_str_from_cstr(const char *cstr,
     borrowed_str b;
     b.str    = str_from_cstr(cstr);
     b.source = source;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -467,7 +467,7 @@ static inline borrowed_str borrowed_str_empty(void)
     borrowed_str b;
     b.str    = str_empty();
     b.source = NULL;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -488,7 +488,7 @@ static inline str_t borrowed_str_get(const borrowed_str *b)
 {
     require_msg(b != NULL, "borrowed_str_get: b must not be NULL");
     if (b == NULL) { return str_empty(); }
-    _BORROW_LT_CHECK(b, "borrowed_str_get");
+    BORROW_LT_CHECK_(b, "borrowed_str_get");
     return b->str;
 }
 
@@ -547,7 +547,7 @@ static inline borrowed_str borrowed_str_slice(borrowed_str b,
     borrowed_str r;
     r.str    = str_slice(b.str, start, end);
     r.source = b.source;
-    _BORROW_LT_INHERIT(r, b);
+    BORROW_LT_INHERIT_(r, b);
     return r;
 }
 
@@ -571,7 +571,7 @@ typedef struct {
     cbytes_t     bytes;  /**< Borrowed byte view — do NOT free bytes.ptr. */
     const void  *source; /**< Owning object's address (debug tag only).
                               Never dereference outside owning object's lifetime. */
-    _BORROW_LT_FIELDS
+    BORROW_LT_FIELDS_
 } borrowed_bytes;
 
 /**
@@ -594,7 +594,7 @@ static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
     borrowed_bytes b;
     b.bytes  = cbytes_from(ptr, len);
     b.source = source;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -621,7 +621,7 @@ static inline borrowed_bytes borrowed_bytes_from_lifetime(
     borrowed_bytes b;
     b.bytes  = cbytes_from(ptr, len);
     b.source = source;
-    _BORROW_LT_INIT(b, source_lt);
+    BORROW_LT_INIT_(b, source_lt);
     (void)source_lt;
     return b;
 }
@@ -638,7 +638,7 @@ static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
     borrowed_bytes b;
     b.bytes  = cb;
     b.source = source;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -651,7 +651,7 @@ static inline borrowed_bytes borrowed_bytes_empty(void)
     borrowed_bytes b;
     b.bytes  = cbytes_empty();
     b.source = NULL;
-    _BORROW_LT_INIT_NONE(b);
+    BORROW_LT_INIT_NONE_(b);
     return b;
 }
 
@@ -672,7 +672,7 @@ static inline cbytes_t borrowed_bytes_get(const borrowed_bytes *b)
 {
     require_msg(b != NULL, "borrowed_bytes_get: b must not be NULL");
     if (b == NULL) { return cbytes_empty(); }
-    _BORROW_LT_CHECK(b, "borrowed_bytes_get");
+    BORROW_LT_CHECK_(b, "borrowed_bytes_get");
     return b->bytes;
 }
 
@@ -771,7 +771,7 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
     r.bytes.ptr = base + start;   /* arithmetic on u8 *, not void * */
     r.bytes.len = end - start;
     r.source    = b.source;
-    _BORROW_LT_INHERIT(r, b);
+    BORROW_LT_INHERIT_(r, b);
     return r;
 }
 
@@ -814,7 +814,7 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
 typedef struct {                                                               \
     slice_##type  slice;                                                       \
     const void   *source;                                                      \
-    _BORROW_LT_FIELDS                                                          \
+    BORROW_LT_FIELDS_                                                          \
 } borrowed_slice_##type;                                                       \
                                                                                \
 static inline borrowed_slice_##type                                            \
@@ -823,7 +823,7 @@ borrowed_slice_##type##_from(slice_##type s, const void *source)               \
     borrowed_slice_##type b;                                                   \
     b.slice  = s;                                                              \
     b.source = source;                                                         \
-    _BORROW_LT_INIT_NONE(b);                                                   \
+    BORROW_LT_INIT_NONE_(b);                                                   \
     return b;                                                                  \
 }                                                                              \
                                                                                \
@@ -838,7 +838,7 @@ borrowed_slice_##type##_from_lifetime(                                         \
     b.source = source;                                                         \
     /* In CANON_LIFETIME_DEBUG builds, source_lt_arg is treated as a           \
        const lifetime_t* and captured. In default builds it is ignored. */     \
-    _BORROW_LT_INIT(b, (const lifetime_t *)source_lt_arg);                     \
+    BORROW_LT_INIT_(b, (const lifetime_t *)source_lt_arg);                     \
     (void)source_lt_arg;                                                       \
     return b;                                                                  \
 }                                                                              \
@@ -849,7 +849,7 @@ borrowed_slice_##type##_empty(void)                                            \
     borrowed_slice_##type b;                                                   \
     b.slice  = slice_##type##_empty();                                         \
     b.source = NULL;                                                           \
-    _BORROW_LT_INIT_NONE(b);                                                   \
+    BORROW_LT_INIT_NONE_(b);                                                   \
     return b;                                                                  \
 }                                                                              \
                                                                                \
@@ -859,7 +859,7 @@ borrowed_slice_##type##_get(const borrowed_slice_##type *b)                    \
     require_msg(b != NULL,                                                     \
                 "borrowed_slice_" #type "_get: b must not be NULL");           \
     if (b == NULL) { return slice_##type##_empty(); }                          \
-    _BORROW_LT_CHECK(b, "borrowed_slice_" #type "_get");                       \
+    BORROW_LT_CHECK_(b, "borrowed_slice_" #type "_get");                       \
     return b->slice;                                                           \
 }                                                                              \
                                                                                \
@@ -891,7 +891,7 @@ borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
     borrowed_slice_##type r;                                                   \
     r.slice  = slice_##type##_slice(b.slice, start, end);                      \
     r.source = b.source;                                                       \
-    _BORROW_LT_INHERIT(r, b);                                                  \
+    BORROW_LT_INHERIT_(r, b);                                                  \
     return r;                                                                  \
 }                                                                              \
                                                                                \
@@ -909,7 +909,7 @@ borrowed_slice_##type##_as_bytes(const borrowed_slice_##type *b)               \
     r.bytes.ptr = (const u8 *)b->slice.ptr;                                    \
     r.bytes.len = byte_len;                                                    \
     r.source    = b->source;                                                   \
-    _BORROW_LT_INIT_NONE(r);                                                   \
+    BORROW_LT_INIT_NONE_(r);                                                   \
     return r;                                                                  \
 }
 
