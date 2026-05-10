@@ -157,11 +157,11 @@ static inline ArenaStats arena_stats(const Arena* arena) {
    that borrows can capture and validate against. The helpers below
    manage the (id, open) pair across the arena lifecycle:
 
-     _arena_lifetime_open(a)
+     arena_lifetime_open_(a)
        Called by arena_init. Sets id to the arena's address-derived
        value and marks the lifetime open.
 
-     _arena_lifetime_restamp(a)
+     arena_lifetime_restamp_(a)
        Called by arena_reset and arena_reset_secure. XORs the id
        with a 64-bit golden-ratio constant so the new id is
        guaranteed to differ from the old, invalidating every
@@ -169,7 +169,7 @@ static inline ArenaStats arena_stats(const Arena* arena) {
        generation counter. Open flag stays true; arenas are not
        "closed" by reset — they are recycled.
 
-     _arena_lifetime_close(a)
+     arena_lifetime_close_(a)
        Reserved for future Arena destruction semantics. Not called
        by any current API. Marks the lifetime closed, which makes
        any subsequent borrow read fire lifetime_assert_valid.
@@ -180,23 +180,23 @@ static inline ArenaStats arena_stats(const Arena* arena) {
    ============================================================================ */
 
 #ifdef CANON_LIFETIME_DEBUG
-    #define _arena_lifetime_open(a)                                       \
+    #define arena_lifetime_open_(a)                                       \
         do {                                                              \
             (a)->lt.id   = (region_id_t)(uintptr_t)(a);                  \
             (a)->lt.open = true;                                          \
         } while (0)
     /* XOR with golden-ratio constant guarantees the new id differs from
        the old one even when the arena address is reused. */
-    #define _arena_lifetime_restamp(a)                                    \
+    #define arena_lifetime_restamp_(a)                                    \
         do {                                                              \
             (a)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;             \
         } while (0)
-    #define _arena_lifetime_close(a)                                      \
+    #define arena_lifetime_close_(a)                                      \
         do { (a)->lt.open = false; } while (0)
 #else
-    #define _arena_lifetime_open(a)     ((void)0)
-    #define _arena_lifetime_restamp(a)  ((void)0)
-    #define _arena_lifetime_close(a)    ((void)0)
+    #define arena_lifetime_open_(a)     ((void)0)
+    #define arena_lifetime_restamp_(a)  ((void)0)
+    #define arena_lifetime_close_(a)    ((void)0)
 #endif
 
 /* ============================================================================
@@ -230,7 +230,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
-    _arena_lifetime_open(arena);
+    arena_lifetime_open_(arena);
 }
 
 /**
@@ -252,7 +252,7 @@ static inline void arena_reset(Arena* arena) {
     arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
-    _arena_lifetime_restamp(arena);
+    arena_lifetime_restamp_(arena);
 }
 
 /**
@@ -276,7 +276,7 @@ static inline void arena_reset_secure(Arena* arena) {
     arena->offset        = 0;
     arena->padding_accum = 0;
     _arena_debug_reset(arena);
-    _arena_lifetime_restamp(arena);
+    arena_lifetime_restamp_(arena);
 }
 
 /* ============================================================================
