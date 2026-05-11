@@ -406,6 +406,7 @@ This is the **bedrock of Canon-C**:
 - Compile-time numeric limits & alignment constants
 - Pointer arithmetic and alignment utilities
 - Overflow-checked arithmetic
+- Lifetime token types shared across owning modules
 - Min/max/clamp helpers
 - Explicit contracts and assertions (`require_msg`, `ensure_msg`)
 
