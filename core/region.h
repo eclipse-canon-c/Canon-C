@@ -111,6 +111,20 @@
  * region.h is in core/ and includes only core/primitives/ and core/arena.h.
  * No data/, semantics/, algo/, or util/ headers may be included here.
  *
+ * Header parsing order:
+ * ────────────────────────────────────────────────────────────────────────────
+ * region.h includes core/arena.h to reference Arena*. Under
+ * CANON_LIFETIME_DEBUG, arena.h would naively want to include region.h
+ * to get lifetime_t — but that forms a parse-time cycle (region.h
+ * starts parsing before arena.h finishes, leaving Arena undefined).
+ *
+ * The fix: arena.h inlines the three lifetime type definitions
+ * (region_id_t, REGION_ID_STATIC, lifetime_t) guarded by
+ * CANON_LIFETIME_TYPES_DEFINED. region.h uses the same guard around
+ * the same three definitions. Whichever header is parsed first defines
+ * them; the other skips its block. The lifetime_assert_valid helper
+ * lives only in region.h and is not duplicated.
+ *
  * Thread safety:
  * ────────────────────────────────────────────────────────────────────────────
  * Regions are stack-local. region_begin() touches no shared state.
@@ -211,8 +225,29 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Region ID
+   Region ID and lifetime_t — shared with core/arena.h under CANON_LIFETIME_DEBUG
+   ════════════════════════════════════════════════════════════════════════════
+   These three definitions (region_id_t, REGION_ID_STATIC, lifetime_t) are
+   the minimum that core/arena.h also needs in order to embed a lifetime
+   token on the Arena struct under CANON_LIFETIME_DEBUG.
+
+   arena.h inlines the same three definitions under the same guard so the
+   two headers can be parsed in either order without conflict. region.h
+   remains the canonical home — lifetime_assert_valid lives only here.
+
+   Region itself uses (id, open) as separate fields directly. The
+   lifetime_t struct exists for OTHER ownership-bearing modules (arena,
+   dynvec, hashmap, stringbuf, etc.) that want to expose the same
+   (id, open) pair in a uniform way so that borrows can validate against
+   any source via a single const lifetime_t* pointer.
+
+   lifetime_assert_valid() takes the (id, open) values directly, so
+   Region's separate fields and other modules' embedded lifetime_t are
+   interoperable at the assertion site.
    ════════════════════════════════════════════════════════════════════════════ */
+
+#ifndef CANON_LIFETIME_TYPES_DEFINED
+#define CANON_LIFETIME_TYPES_DEFINED
 
 /**
  * @brief Unique identifier for a Region lifetime
@@ -229,22 +264,6 @@ typedef u64 region_id_t;
 
 /** Reserved ID — "no region" / static lifetime. Borrows with this ID never expire. */
 #define REGION_ID_STATIC ((region_id_t)0)
-
-/* ════════════════════════════════════════════════════════════════════════════
-   lifetime_t — generalized lifetime token for non-Region owners
-   ════════════════════════════════════════════════════════════════════════════
-   Region embeds id and open as separate fields directly. The lifetime_t
-   struct below is for OTHER ownership-bearing modules (arena, dynvec,
-   hashmap, stringbuf, etc.) that want to expose the same (id, open) pair
-   in a uniform way so that borrows can validate against any source via a
-   single const lifetime_t* pointer.
-
-   Region itself does NOT use lifetime_t — its existing fields work fine
-   and refactoring them would break the existing test suite for no gain.
-   New modules embedding lifetime_t and existing Region using separate
-   fields are interoperable: lifetime_assert_valid() takes the (id, open)
-   values directly and works for both layouts.
-   ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * @brief The (id, open) pair embedded by ownership-bearing modules
@@ -268,6 +287,16 @@ typedef struct {
     region_id_t id;
     bool        open;
 } lifetime_t;
+
+#endif /* CANON_LIFETIME_TYPES_DEFINED */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   lifetime_assert_valid
+   ════════════════════════════════════════════════════════════════════════════
+   Lives only in region.h. arena.h does not need it (only borrow.h reads
+   borrows, and borrow.h includes region.h directly without forming a
+   cycle — borrow.h is not on region.h's include chain).
+   ════════════════════════════════════════════════════════════════════════════ */
 
 /**
  * @brief Asserts that a borrow stamped with borrow_id is still valid
