@@ -28,6 +28,15 @@ on:
 #                     expand to single instructions with no branches for
 #                     gcov to see).
 #   misra           — Linux only, MISRA C:2012 advisory analysis
+#   lifetime-debug  — Linux only, builds and tests the suite with
+#                     CANON_LIFETIME=debug to exercise the runtime
+#                     lifetime-tracking path (CANON_LIFETIME_DEBUG).
+#                     Uses sanitizers (ASan + UBSan) to catch any UB
+#                     the lifetime instrumentation might introduce.
+#                     Currently exercises the substrate tests
+#                     (arena_test, borrow_test) end-to-end and rebuilds
+#                     all other tests under the flag to verify no
+#                     accidental struct-layout breakage.
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
 #   Dr. Memory crashes internally on Windows Server 2022 (the current
@@ -2061,3 +2070,62 @@ jobs:
         with:
           name: misra-report
           path: misra_report.txt
+
+  # -------------------------------------------------------------------------
+  # 8. Lifetime-debug build — Linux only
+  #
+  #    Builds and runs the full test suite with CANON_LIFETIME=debug,
+  #    which defines CANON_LIFETIME_DEBUG project-wide. This activates:
+  #      - lifetime_t lt field on Arena (and future owning types in
+  #        Phases 2 and 3)
+  #      - source_lt + captured_id fields on every borrow struct
+  #      - _from_lifetime constructors capture the source's token
+  #      - BORROW_LT_CHECK_ fires require_msg on every _get if the
+  #        captured ID no longer matches the source's current ID
+  #
+  #    This job exercises the substrate end-to-end and protects against
+  #    silent regressions. The bulk of test coverage comes from
+  #    arena_test (4 lifetime tests verifying restamp on reset,
+  #    preservation on reset_to) and borrow_test (5 lifetime tests
+  #    using the contract-trap pattern from contract_test.c to verify
+  #    require_msg fires on use-after-reset). Other tests run unchanged
+  #    — most code paths don't touch lifetime tracking — but compiling
+  #    them under the flag rules out accidental struct-layout breakage
+  #    in modules that include arena.h or borrow.h transitively.
+  #
+  #    Sanitizers (ASan + UBSan) are enabled to catch any latent UB the
+  #    lifetime instrumentation might introduce — e.g. a forgotten
+  #    field initialiser leaving captured_id uninitialised, or pointer
+  #    arithmetic that the additional fields perturb. The job is Linux-
+  #    only because Linux-Clang has the best sanitizer coverage; the
+  #    cross-platform build job already proves the flag compiles on
+  #    every supported platform (it doesn't yet — see below).
+  #
+  #    Future work: when Phase 2 ships, the build matrix for this job
+  #    should expand to cover Windows and macOS as well, since dynvec /
+  #    dynstring / smallvec will embed lifetime_t and broaden the
+  #    surface significantly. For Phase 1 (arena + borrow only),
+  #    Linux-Clang is sufficient evidence.
+  # -------------------------------------------------------------------------
+  lifetime-debug:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure CMake (CANON_LIFETIME=debug, sanitizers on)
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCANON_LIFETIME=debug \
+            -DENABLE_SANITIZERS=ON \
+            -S "${{ github.workspace }}"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        working-directory: build
+        run: ctest --build-config Debug --output-on-failure
