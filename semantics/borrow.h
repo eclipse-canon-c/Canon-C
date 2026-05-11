@@ -9,7 +9,8 @@
 #include <string.h>                     /* memcmp — used by borrowed_bytes_eq */
 
 #ifdef CANON_LIFETIME_DEBUG
-    #include "core/region.h"            /* lifetime_t, lifetime_assert_valid, region_id_t */
+    #include "core/primitives/lifetime.h"  /* lifetime_t, region_id_t */
+    #include "core/region.h"               /* lifetime_assert_valid   */
 #endif
 
 /**
@@ -142,7 +143,11 @@
  * borrow.h lives in semantics/ and may include core/ only.
  * No data/, util/, or other semantics/ headers.
  * <string.h> is included for memcmp used in borrowed_bytes_eq.
- * core/region.h is included only when CANON_LIFETIME_DEBUG is defined.
+ * Under CANON_LIFETIME_DEBUG, borrow.h additionally includes
+ * core/primitives/lifetime.h (for the lifetime_t and region_id_t types)
+ * and core/region.h (for the lifetime_assert_valid runtime check, which
+ * lives in region.h because it depends on ensure_msg from contract.h).
+ * The two includes are explicit so a reader can see what comes from where.
  *
  * Portability:
  * --------------------------------------------------------------------------
@@ -176,10 +181,11 @@
  *   borrowed_slice_int view =
  *       borrowed_slice_int_from(slice_int_from(arr, 4u), arr);
  *
- * @sa core/slice.h              — underlying str_t, cbytes_t, slice_##type
- * @sa core/ownership.h          — borrowed(T) annotation macros
- * @sa core/region.h             — lifetime_t, lifetime_assert_valid
- * @sa core/primitives/checked.h — checked_mul used in _as_bytes overflow guard
+ * @sa core/slice.h               — underlying str_t, cbytes_t, slice_##type
+ * @sa core/ownership.h           — borrowed(T) annotation macros
+ * @sa core/primitives/lifetime.h — lifetime_t, region_id_t (canonical home)
+ * @sa core/region.h              — lifetime_assert_valid (runtime check)
+ * @sa core/primitives/checked.h  — checked_mul used in _as_bytes overflow guard
  */
 
 /* ============================================================================
