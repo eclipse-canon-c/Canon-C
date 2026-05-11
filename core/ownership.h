@@ -38,10 +38,10 @@
  * - Grep-able: find all owned(T*) parameters across the codebase instantly
  * - With CANON_LIFETIME_DEBUG: runtime detection of dangling borrows and
  *   use-after-reset at first misuse (see "build modes" section below)
- * - With CANON_OWNERSHIP_STRICT (reserved for Phase 4): compile-time
- *   prevention of mixing owned and borrowed types at call sites via
- *   redefinition of the owned/borrowed/moved/dropped annotations.
- *   The flag is currently a no-op — see "build modes" section below.
+ * - For compile-time prevention of mixing owned and borrowed types,
+ *   use DEFINE_OWNED(T) and DEFINE_BORROWED(T) below — they generate
+ *   distinct wrapper struct types that the compiler enforces at API
+ *   boundaries. Opt-in per type, no build flag required.
  *
  * What this does NOT give you:
  * ─────────────────────────────────────────────────────────────────────────
@@ -53,18 +53,15 @@
  *
  *   - Default build:          no compile-time prevention of mixing
  *                             owned() and borrowed() at call sites —
- *                             the annotation macros expand to T identically
+ *                             the annotation macros expand to T identically.
+ *                             Use DEFINE_OWNED / DEFINE_BORROWED below
+ *                             to opt into compile-time enforcement
+ *                             per type.
  *
  *   - With CANON_LIFETIME_DEBUG: borrows captured before a source reset
  *                                or destruction DO fire require_msg at
  *                                first read; this catches the dangling-
  *                                borrow class of bugs at runtime
- *
- *   - With CANON_OWNERSHIP_STRICT: currently a reserved flag with no
- *                                  effect. Phase 4 will redefine the
- *                                  lowercase annotations under this flag
- *                                  to produce real wrapper types; today
- *                                  it is documentation only.
  *
  * Naming convention for functions:
  * ─────────────────────────────────────────────────────────────────────────
@@ -139,36 +136,36 @@
       Mechanism source: core/region.h defines lifetime_t and
       lifetime_assert_valid; modules opting in embed lifetime_t directly.
 
-   3. STRICT TYPED WRAPPERS (CANON_OWNERSHIP_STRICT, reserved for Phase 4)
-      Currently a reserved flag with no effect. The CMake option
-      (CANON_OWNERSHIP=strict) is wired through and defines this flag,
-      but no header in the library uses it yet.
+   3. COMPILE-TIME ENFORCEMENT (DEFINE_OWNED / DEFINE_BORROWED, opt-in)
+      For compile-time prevention of owned-vs-borrowed type confusion
+      at API boundaries, use DEFINE_OWNED(T) and DEFINE_BORROWED(T)
+      below. These generate distinct wrapper struct types — owned_T
+      and borrowed_T — that the compiler refuses to mix.
 
-      The intent for Phase 4 is to redefine the lowercase annotations
-      (owned/borrowed/moved/dropped) under this flag to produce real
-      wrapper struct types instead of expanding to T. Mismatches
-      between owned and borrowed wrappers would then become compile
-      errors at API boundaries, and moved()/dropped() would mark
-      tokens as consumed so subsequent uses fail to compile.
+      Opt-in per type, no build flag required. The cost is one macro
+      invocation per type plus explicit wrap/unwrap/borrow at API
+      boundaries. The benefit is real compile-time enforcement that
+      catches type-level ownership confusion at the first use site.
 
-      Until Phase 4 lands, enabling the flag is harmless — it changes
-      no code path. The flag exists today to reserve the namespace
-      and prove the build plumbing.
+      For deeper static analysis (use-after-move, double-drop, lifetime
+      parameters across function calls) — properties C99's type system
+      cannot enforce directly — use Frama-C, Polyspace, or LDRA on the
+      source.
 
-      Cost when off (the default):
-        - Zero.
+      Cost when not used:
+        - Zero. The lowercase annotations remain documentation only.
 
-      Cost when on (today):
-        - Zero — the flag has no effect until Phase 4.
-
-      Enable via CMake:
-        cmake -DCANON_OWNERSHIP=strict -B build
+      Cost when used:
+        - One DEFINE_OWNED(T) per type (one-line declaration).
+        - One wrap/unwrap/borrow helper at each API boundary.
+        - The wrapper struct adds one pointer of indirection at runtime.
 
    Quick reference:
    ─────────────────────────────────────────────────────────────────────
      Default build              — annotations as documentation; zero cost
      CANON_LIFETIME_DEBUG       — adds runtime lifetime tracking
-     CANON_OWNERSHIP_STRICT     — reserved for Phase 4; currently no-op
+     DEFINE_OWNED(T) /
+       DEFINE_BORROWED(T)       — opt-in compile-time enforcement per type
      CANON_STRICT               — promotes ensure_msg() to always-on; works
                                   whether or not lifetime tracking is enabled
    ══════════════════════════════════════════════════════════════════════════ */
