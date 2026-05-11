@@ -250,6 +250,54 @@ full convention set.
 The same library serves all three. The strict discipline is an option
 for code that needs it, not a requirement for using Canon-C.
 
+### What about compile-time ownership enforcement?
+
+A reasonable question after reading the ownership annotations
+(`owned()`, `borrowed()`, `moved()`, `dropped()`) is whether Canon-C
+provides a build flag that promotes them from documentation to
+compiler-enforced types — something like `CANON_OWNERSHIP_STRICT`
+that would catch owned-vs-borrowed mismatches at compile time across
+the whole project.
+
+It does not, and it deliberately does not. C99 lacks the language
+machinery needed to make this work cleanly at the annotation level:
+no move semantics to mark a variable invalid after `consume(x)`, no
+way to forbid copies of an "owned" struct, no flow-sensitive type
+checking. Any project-wide build flag attempting full enforcement
+would either break the visible `Type*` notation, force every
+declaration into a wrapper-and-unwrap dance, or silently allow the
+exact mistakes it claims to prevent. None of those outcomes survive
+Canon-C's design philosophy ("if behavior cannot be understood by
+reading the header, it does not belong").
+
+What Canon-C provides instead:
+
+1. **`DEFINE_OWNED(T)` and `DEFINE_BORROWED(T)`** in `core/ownership.h`
+   generate distinct wrapper struct types per type, opt-in. The
+   compiler refuses to pass `owned_Arena` where `borrowed_Arena` is
+   expected — real compile-time enforcement at API boundaries, with
+   no build flag required. Use this for the types where the cost of
+   the wrap/unwrap ceremony is worth catching mismatches at compile
+   time.
+
+2. **External static analyzers** for everything the C type system
+   cannot express: use-after-move, double-drop, lifetime parameters
+   across function calls, ownership flow through pointer aliases.
+   Tools like Frama-C, Polyspace, and LDRA do dataflow analysis on
+   the same source code Canon-C ships, reading the lowercase
+   annotations (`owned()`, `borrowed()`, etc.) as ACSL contracts or
+   tool-specific markers. This is the route certification users
+   already take for the substrate verification described above; the
+   same toolchain extends naturally to ownership flow analysis at the
+   application layer.
+
+The full rationale — the C99 limits, the design paths considered, why
+each one breaks something — will be recorded in a forthcoming
+`docs/design-decisions.md` entry. The short version is that
+`DEFINE_OWNED` covers the type-distinction case the C99 type system
+can enforce, and static analyzers cover everything beyond it. The two
+together are the answer.
+
 ### Open empirical question
 
 Canon-C's working hypothesis is that most safety-critical embedded code
