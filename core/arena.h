@@ -11,36 +11,7 @@
 #include "core/slice.h"               /* bytes_t, bytes_from, bytes_empty */
 
 #ifdef CANON_LIFETIME_DEBUG
-    /* Inline the minimal lifetime types arena.h needs, rather than
-     * including core/region.h.
-     *
-     * Why: core/region.h itself includes core/arena.h. If arena.h
-     * pulls in region.h here under CANON_LIFETIME_DEBUG, region.h
-     * starts parsing while arena.h is mid-parse — and region.h
-     * references `Arena*` in its Region struct and arena_reset()
-     * call, but Arena is not yet defined. The result is a hard
-     * "unknown type name 'Arena'" error.
-     *
-     * The types below are the same definitions used by region.h
-     * (region_id_t, REGION_ID_STATIC, lifetime_t). They are guarded
-     * by CANON_LIFETIME_TYPES_DEFINED so the two headers can be
-     * included in any order without conflict — whichever is parsed
-     * first defines the types; the other skips its block.
-     *
-     * region.h remains the canonical home for these types and for
-     * lifetime_assert_valid. Modules that need the assertion (like
-     * semantics/borrow.h) include region.h directly, which is safe
-     * because borrow.h does not appear in region.h's include chain.
-     */
-    #ifndef CANON_LIFETIME_TYPES_DEFINED
-    #define CANON_LIFETIME_TYPES_DEFINED
-    typedef u64 region_id_t;
-    #define REGION_ID_STATIC ((region_id_t)0)
-    typedef struct {
-        region_id_t id;
-        bool        open;
-    } lifetime_t;
-    #endif
+    #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
 /**
@@ -82,16 +53,17 @@
  *
  * Dependency rule:
  *   arena.h is core/. It depends only on primitives/, core/memory.h, and
- *   core/slice.h. Under CANON_LIFETIME_DEBUG, it inlines the minimal
- *   lifetime types (guarded by CANON_LIFETIME_TYPES_DEFINED) rather than
- *   including core/region.h, because region.h includes arena.h and would
- *   form a parse-time cycle. core/region.h remains the canonical home of
- *   the lifetime types and the lifetime_assert_valid helper.
+ *   core/slice.h. Under CANON_LIFETIME_DEBUG, it additionally includes
+ *   core/primitives/lifetime.h for the shared region_id_t / lifetime_t
+ *   types. core/region.h provides lifetime_assert_valid (the runtime
+ *   check), which arena.h does not call directly — only the borrow types
+ *   in semantics/borrow.h call it.
  *   No data/, semantics/, algo/, or util/ headers may be included here.
  *
  * @sa arena_alloc(), arena_alloc_aligned(), arena_mark(), arena_reset_to()
- * @sa core/region.h    — lifetime_t, lifetime_assert_valid (canonical home)
- * @sa semantics/borrow.h — borrow types that capture and validate IDs
+ * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
+ * @sa core/region.h              — Region type and lifetime_assert_valid()
+ * @sa semantics/borrow.h         — borrow types that capture and validate IDs
  */
 
 /* ============================================================================
