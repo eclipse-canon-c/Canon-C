@@ -3,6 +3,7 @@
 
 #include "core/primitives/types.h"
 #include "core/primitives/contract.h"
+#include "core/primitives/lifetime.h"  /* region_id_t, REGION_ID_STATIC, lifetime_t */
 #include "core/arena.h"
 
 /**
@@ -51,7 +52,7 @@
  *                   lifetime ID for borrow validation, fires unconditionally
  *                   on region_end() regardless of how the caller reached it.
  *
- * Generalized lifetime mechanism — see lifetime_t below:
+ * Generalized lifetime mechanism — see lifetime_t in core/primitives/lifetime.h:
  * ────────────────────────────────────────────────────────────────────────────
  * Region's (id, open) pair is the prototype for a wider lifetime-tracking
  * mechanism used by other Canon-C modules (arena, pool, dynvec, hashmap,
@@ -109,21 +110,11 @@
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * region.h is in core/ and includes only core/primitives/ and core/arena.h.
+ * The shared lifetime types (region_id_t, REGION_ID_STATIC, lifetime_t)
+ * come from core/primitives/lifetime.h, which is also included by
+ * core/arena.h under CANON_LIFETIME_DEBUG. lifetime_assert_valid lives
+ * here in region.h because it depends on ensure_msg from contract.h.
  * No data/, semantics/, algo/, or util/ headers may be included here.
- *
- * Header parsing order:
- * ────────────────────────────────────────────────────────────────────────────
- * region.h includes core/arena.h to reference Arena*. Under
- * CANON_LIFETIME_DEBUG, arena.h would naively want to include region.h
- * to get lifetime_t — but that forms a parse-time cycle (region.h
- * starts parsing before arena.h finishes, leaving Arena undefined).
- *
- * The fix: arena.h inlines the three lifetime type definitions
- * (region_id_t, REGION_ID_STATIC, lifetime_t) guarded by
- * CANON_LIFETIME_TYPES_DEFINED. region.h uses the same guard around
- * the same three definitions. Whichever header is parsed first defines
- * them; the other skips its block. The lifetime_assert_valid helper
- * lives only in region.h and is not duplicated.
  *
  * Thread safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -203,10 +194,11 @@
  *   return rc;
  * @endcode
  *
- * @sa core/arena.h   — bump allocator; attach to a region for scoped allocation
- * @sa core/slice.h   — bytes_t / str_t used with region lifetimes
- * @sa core/scope.h   — DEFER(expr) { body } for inline run-to-completion
- *                     cleanup; complementary to region, not a replacement
+ * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
+ * @sa core/arena.h               — bump allocator; attach to a region for scoped allocation
+ * @sa core/slice.h               — bytes_t / str_t used with region lifetimes
+ * @sa core/scope.h               — DEFER(expr) { body } for inline run-to-completion
+ *                                  cleanup; complementary to region, not a replacement
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -225,77 +217,14 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Region ID and lifetime_t — shared with core/arena.h under CANON_LIFETIME_DEBUG
-   ════════════════════════════════════════════════════════════════════════════
-   These three definitions (region_id_t, REGION_ID_STATIC, lifetime_t) are
-   the minimum that core/arena.h also needs in order to embed a lifetime
-   token on the Arena struct under CANON_LIFETIME_DEBUG.
-
-   arena.h inlines the same three definitions under the same guard so the
-   two headers can be parsed in either order without conflict. region.h
-   remains the canonical home — lifetime_assert_valid lives only here.
-
-   Region itself uses (id, open) as separate fields directly. The
-   lifetime_t struct exists for OTHER ownership-bearing modules (arena,
-   dynvec, hashmap, stringbuf, etc.) that want to expose the same
-   (id, open) pair in a uniform way so that borrows can validate against
-   any source via a single const lifetime_t* pointer.
-
-   lifetime_assert_valid() takes the (id, open) values directly, so
-   Region's separate fields and other modules' embedded lifetime_t are
-   interoperable at the assertion site.
-   ════════════════════════════════════════════════════════════════════════════ */
-
-#ifndef CANON_LIFETIME_TYPES_DEFINED
-#define CANON_LIFETIME_TYPES_DEFINED
-
-/**
- * @brief Unique identifier for a Region lifetime
- *
- * Derived from the Region's stack address in region_begin().
- * Unique across all simultaneously live regions.
- * Not monotonic — addresses, not sequence numbers.
- *
- * 0 is reserved as REGION_ID_STATIC ("no region" / static lifetime).
- * A valid Region will never have ID 0: no stack object has address 0
- * on any conforming C99 implementation.
- */
-typedef u64 region_id_t;
-
-/** Reserved ID — "no region" / static lifetime. Borrows with this ID never expire. */
-#define REGION_ID_STATIC ((region_id_t)0)
-
-/**
- * @brief The (id, open) pair embedded by ownership-bearing modules
- *        other than Region.
- *
- * Modules that embed this:
- *   - core/arena.h         (under CANON_LIFETIME_DEBUG)
- *   - core/pool.h          (planned, Phase 3)
- *   - data/convenience     (planned, Phase 2)
- *   - data/vec, deque, hashmap, stringbuf, priority_queue (planned, Phase 3)
- *
- * Borrows that need to validate against a source store a `const lifetime_t*`
- * pointing at the source's `lt` field plus a captured `id`, then call
- * `lifetime_assert_valid()` on read.
- *
- * The struct is a layout convention, not a clever abstraction. It exists
- * so borrows can hold a single pointer regardless of which owning struct
- * they came from.
- */
-typedef struct {
-    region_id_t id;
-    bool        open;
-} lifetime_t;
-
-#endif /* CANON_LIFETIME_TYPES_DEFINED */
-
-/* ════════════════════════════════════════════════════════════════════════════
    lifetime_assert_valid
    ════════════════════════════════════════════════════════════════════════════
-   Lives only in region.h. arena.h does not need it (only borrow.h reads
-   borrows, and borrow.h includes region.h directly without forming a
-   cycle — borrow.h is not on region.h's include chain).
+   The three lifetime types (region_id_t, REGION_ID_STATIC, lifetime_t)
+   come from core/primitives/lifetime.h, included at the top of this file.
+   lifetime_assert_valid lives here in region.h because it depends on
+   ensure_msg from contract.h — keeping it in primitives/ would force
+   primitives/lifetime.h to include contract.h, which is heavier than
+   the rest of the header warrants.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
