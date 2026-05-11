@@ -93,9 +93,9 @@
  * generated owned_T / borrowed_T types have explicit wrap/unwrap/borrow/get
  * helpers that the compiler enforces at call sites.
  *
- * @sa semantics/borrow.h — borrowed_slice, borrowed_str built on top of this
- * @sa core/region.h      — lifetime_t and lifetime_assert_valid drive
- *                          CANON_LIFETIME_DEBUG runtime checks
+ * @sa semantics/borrow.h         — borrowed_slice, borrowed_str built on top of this
+ * @sa core/primitives/lifetime.h — canonical home of lifetime_t and region_id_t
+ * @sa core/region.h              — lifetime_assert_valid runtime check
  */
 
 /* ══════════════════════════════════════════════════════════════════════════
