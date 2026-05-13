@@ -1,21 +1,3 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2026 Fikret Güney Ersezer
-//
-// This file is licensed under MIT (not the project-default MPL-2.0).
-//
-// Reason: checked.h implements overflow-safe arithmetic using compiler
-// builtins (__builtin_add_overflow, __builtin_mul_overflow, etc.) with
-// portable fallbacks for compilers that lack them. Embedded toolchains,
-// safety-certified compilers (Green Hills, IAR, Keil, TI CGT), and formal
-// verification environments frequently require these implementations to be
-// replaced or annotated in ways specific to the toolchain or certification
-// target. The signed overflow fallbacks in particular (checked_add_isize,
-// checked_mul_isize, checked_div_isize, checked_mod_isize) may need
-// adaptation for platforms with non-standard integer representations or
-// verification tool requirements. MIT allows those changes to remain
-// proprietary, which is essential in certified and commercial embedded
-// contexts.
-
 /**
  * @file checked.h
  * @brief UB-safe arithmetic operations for Canon-C
