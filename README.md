@@ -17,8 +17,8 @@
 
 <!-- License -->
 ### License
-![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-yellow?logo=mozilla&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue)
+![License: CC0-1.0](https://img.shields.io/badge/License-CC0--1.0-lightgrey)
 
 <!-- Development / Testing -->
 ### Development & Testing
@@ -327,12 +327,15 @@ roadmap.
 
 ---
 
-Canon-C is licensed under **MPL 2.0**. (See Licence-MIT related issues
-at Licence-MIT file)
+Canon-C is licensed under **MIT** for human-authored content, with
+substantially AI-generated portions additionally dedicated to the public
+domain under **CC0-1.0**. See `LICENSE` for the full text of both
+licenses, `AI-USAGE.md` for details on AI tool usage, and individual
+file headers for per-file licensing.
 
-> Using Canon-C headers unmodified in your project (commercial or
-> non-commercial) does not trigger MPL requirements — only modifications
-> to Canon-C files themselves do.
+> Canon-C is header-only and permissively licensed. There is no copyleft
+> obligation when using Canon-C in your project — commercial or
+> non-commercial, modified or unmodified.
 
 ---
 
@@ -354,6 +357,13 @@ work. The architectural decisions, verification scope, deviation
 classifications, and design philosophy are mine. The implementations are
 tested end-to-end, the verification runs on real CI with real Frama-C
 and SMT provers, and the proofs are real.
+
+For detailed disclosure of AI tool usage, including which files
+contain substantially AI-generated content and how those files are
+licensed, see `AI-USAGE.md`. Files containing substantially
+AI-generated content carry a per-file header marking them as dual-
+licensed under MIT AND CC0-1.0 in accordance with Eclipse Foundation
+generative AI guidelines.
 
 ---
 
