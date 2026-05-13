@@ -17,6 +17,7 @@
  *   - Type-safe macros: pool_init_type, pool_alloc_type,
  *     pool_alloc_type_zero, pool_get_type, pool_get_type_const
  *   - Multiple pools from the same arena
+ *   - CANON_LIFETIME_DEBUG: lifetime ID stamping and restamping on reset
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random allocation counts and object sizes into the pool,
@@ -473,6 +474,64 @@ static void test_type_macro_round_trip(void)
     EXPECT(got->x == 42 && got->y == 99);
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * These tests exercise the (id, open) lifetime token embedded on the Pool
+ * when CANON_LIFETIME_DEBUG is defined. They verify state-level invariants
+ * directly on g_pool.lt — they do NOT construct borrows or trigger
+ * lifetime_assert_valid. The borrow-side validation path (fires require_msg
+ * after reset) is covered in test/semantics/borrow_test.c, alongside the
+ * borrow construction logic and the contract-trap helpers it needs.
+ *
+ * The contract under test is:
+ *   - pool_init opens the lifetime: lt.open == true, lt.id is set.
+ *   - pool_reset re-stamps lt.id: new ID differs from old ID.
+ *   - pool_reset_secure also re-stamps lt.id.
+ *
+ * There is no pool_reset_to equivalent (pool has no rollback API), so no
+ * preserve-on-rollback test is needed — unlike arena.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    EXPECT(g_pool.lt.open == true);
+    /* ID is address-derived, so for a non-NULL pool it is non-zero on
+     * any reasonable platform. We don't assert the exact value — just
+     * that the token is in the "open" state with some ID assigned. */
+    EXPECT(g_pool.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_reset_restamps_id(void)
+{
+    region_id_t before;
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    before = g_pool.lt.id;
+    pool_reset(&g_pool);
+    EXPECT(g_pool.lt.id != before);
+    EXPECT(g_pool.lt.open == true); /* reset recycles, does not close */
+}
+
+static void test_lifetime_reset_secure_restamps_id(void)
+{
+    region_id_t before;
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    /* Allocate something so reset_secure has bytes to wipe — exercises
+     * the same restamp path as the empty-pool case. */
+    pool_alloc(&g_pool);
+    before = g_pool.lt.id;
+    pool_reset_secure(&g_pool);
+    EXPECT(g_pool.lt.id != before);
+    EXPECT(g_pool.lt.open == true);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Entry point ─────────────────────────────────────────────────────────── */
 
 int main(void)
@@ -529,6 +588,12 @@ int main(void)
 
     /* type-safe macros */
     test_type_macro_round_trip();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_reset_restamps_id();
+    test_lifetime_reset_secure_restamps_id();
+#endif
 
     if (g_failed == 0) {
         printf("OK  pool_test  (all assertions passed)\n");
