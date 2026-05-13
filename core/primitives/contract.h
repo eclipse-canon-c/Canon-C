@@ -1,20 +1,3 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2026 Fikret Güney Ersezer
-//
-// This file is licensed under MIT (not the project-default MPL-2.0).
-//
-// Reason: contract.h provides the panic handler infrastructure used by
-// every Canon-C assertion (require, ensure, unreachable, panic). The
-// default handler writes to stderr and calls abort() — both unavailable
-// on bare-metal targets. Although contract_set_handler() allows runtime
-// replacement without modifying this file, safety-critical and embedded
-// projects frequently need to modify the file itself: to remove stdio
-// dependencies at the preprocessor level, to replace abort() with a
-// hardware fault handler, to add MISRA-compliant annotations, or to
-// integrate with a DO-178C / ISO 26262 certified runtime. These are
-// exactly the contexts where copyleft disclosure obligations are most
-// burdensome. MIT removes that burden entirely.
-
 /**
  * @file contract.h
  * @brief Explicit contracts, invariants, and assertions for Canon-C
