@@ -9,6 +9,10 @@
 #include "core/memory.h"
 #include "core/slice.h"
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
+#endif
+
 /**
  * @file pool.h
  * @brief Fixed-size object pool allocator backed by an Arena
@@ -49,6 +53,28 @@
  *
  * Unsafe patterns:
  * ✗ Calling pool_reset() when you need post-init arena allocations to survive
+ * ✗ Calling arena_reset() / arena_reset_secure() on the pool's backing arena
+ *   while the pool is still live — see "Lifetime tracking" below.
+ *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field (id + open) on the Pool.
+ *   - pool_init() opens a fresh lifetime; the ID is derived from &pool.
+ *   - pool_reset() and pool_reset_secure() RE-STAMP the pool's lifetime ID,
+ *     invalidating every borrow that captured the previous ID. Borrow
+ *     reads stamped with the old ID will fire require_msg via
+ *     lifetime_assert_valid() in semantics/borrow.h.
+ *   - Pool's lifetime is independent of the arena's. The pool's field
+ *     catches pool_reset-class bugs (using a pool pointer after the
+ *     pool was reset). It does NOT catch arena_reset-class bugs:
+ *     if the caller resets the backing arena directly while the pool
+ *     is still live, the pool's reserved region is gone but the pool's
+ *     lt.id is unchanged. This is caller error and out of scope for
+ *     pool's lifetime tracking — same way it would be caller error to
+ *     free the arena's backing buffer while the pool is live. Use a
+ *     dedicated arena for the pool if this matters.
+ *   - There is no pool_destroy(); pools are reset, not destroyed.
+ *   Zero cost in release builds — struct layout is identical without the flag.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -60,8 +86,10 @@
  * - All queries         O(1)
  *
  * @sa pool_init(), pool_alloc(), pool_get(), pool_reset()
- * @sa core/primitives/ptr.h — ptr_offset, ptr_elem for index/offset calculation
- * @sa core/slice.h          — bytes_t / bytes_from for contiguous object views
+ * @sa core/primitives/ptr.h      — ptr_offset, ptr_elem for index/offset calculation
+ * @sa core/slice.h               — bytes_t / bytes_from for contiguous object views
+ * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
+ * @sa core/region.h              — lifetime_assert_valid runtime check
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -75,7 +103,59 @@ typedef struct {
     usize     used;         /**< Number of allocated objects                        */
     ArenaMark base_mark;    /**< Arena offset at pool_init() — start of reserved region */
     ArenaMark end_mark;     /**< Arena offset after reservation — base_mark + capacity * object_size */
+#ifdef CANON_LIFETIME_DEBUG
+    lifetime_t lt;          /**< [debug] Lifetime token: id + open                  */
+#endif
 } Pool;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime helpers (compiled away in release)
+   ════════════════════════════════════════════════════════════════════════════
+   When CANON_LIFETIME_DEBUG is enabled, a Pool exposes a lifetime_t
+   that borrows can capture and validate against. The helpers below
+   manage the (id, open) pair across the pool lifecycle:
+
+     pool_lifetime_open_(p)
+       Called by pool_init. Sets id to the pool's address-derived
+       value and marks the lifetime open.
+
+     pool_lifetime_restamp_(p)
+       Called by pool_reset and pool_reset_secure. XORs the id
+       with a 64-bit golden-ratio constant so the new id is
+       guaranteed to differ from the old, invalidating every
+       previously-captured borrow without needing a separate
+       generation counter. Open flag stays true; pools are not
+       "closed" by reset — they are recycled.
+
+     pool_lifetime_close_(p)
+       Reserved for future Pool destruction semantics. Not called
+       by any current API. Marks the lifetime closed, which makes
+       any subsequent borrow read fire lifetime_assert_valid.
+
+   In release builds (CANON_LIFETIME_DEBUG undefined) all three
+   helpers are no-ops — the Pool struct does not have an lt field
+   and no code touches it.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define pool_lifetime_open_(p)                                        \
+        do {                                                              \
+            (p)->lt.id   = (region_id_t)(uintptr_t)(p);                  \
+            (p)->lt.open = true;                                          \
+        } while (0)
+    /* XOR with golden-ratio constant guarantees the new id differs from
+       the old one even when the pool address is reused. */
+    #define pool_lifetime_restamp_(p)                                     \
+        do {                                                              \
+            (p)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;             \
+        } while (0)
+    #define pool_lifetime_close_(p)                                       \
+        do { (p)->lt.open = false; } while (0)
+#else
+    #define pool_lifetime_open_(p)     ((void)0)
+    #define pool_lifetime_restamp_(p)  ((void)0)
+    #define pool_lifetime_close_(p)    ((void)0)
+#endif
 
 /* ════════════════════════════════════════════════════════════════════════════
    Initialization
@@ -99,6 +179,10 @@ typedef struct {
  * @pre  object_size > 0 && max_objects > 0
  * @post On success: pool is ready; arena offset advanced by capacity * object_size
  * @post On failure: pool and arena are unchanged
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token derived
+ * from &pool. Borrows captured after this call carry this lifetime ID.
+ * Lifetime is only opened on successful init.
  */
 static inline bool pool_init(
     Pool* pool, Arena* arena, usize object_size, usize max_objects)
@@ -134,6 +218,7 @@ static inline bool pool_init(
     if (!region) return false;
 
     pool->end_mark = arena_mark(arena);
+    pool_lifetime_open_(pool);
     return true;
 }
 
@@ -296,6 +381,10 @@ static inline bytes_t pool_reserved_bytes(const Pool* pool) {
  *
  * @post pool->used == 0
  * @post All pointers returned by pool_alloc() / pool_get() are invalid
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the pool's lifetime ID,
+ * invalidating every borrow captured before this call. Subsequent
+ * reads of those borrows will fire require_msg.
  */
 static inline void pool_reset(Pool* pool) {
     void* region;
@@ -314,6 +403,8 @@ static inline void pool_reset(Pool* pool) {
     ensure_msg(region != NULL,
                "pool_reset: failed to re-reserve pool region after rollback");
     (void)region;
+
+    pool_lifetime_restamp_(pool);
 }
 
 /**
@@ -321,6 +412,9 @@ static inline void pool_reset(Pool* pool) {
  *
  * @post pool->used == 0
  * @post All previously allocated object memory is zeroed
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the pool's lifetime ID, same
+ * as pool_reset(). Borrows captured before this call are invalidated.
  */
 static inline void pool_reset_secure(Pool* pool) {
     void* base;
