@@ -280,35 +280,32 @@ static void test_data_first_last(void)
     DUMP_STATE("after push(1)", v);
 
     /* Manually expand dynvec_int_push(&v, 2) to find the crashing instruction.
-     * If any of steps A–G crash, we know exactly which operation MSVC
-     * mishandles. If all succeed, the bug is specific to the inlined form
-     * of push() under MSVC Release optimization. */
+     * The null_check step from push() is skipped — &v is a stack local and
+     * the compiler (correctly) treats &v != NULL as a tautology under
+     * -Wtautological-pointer-compare/-Waddress. The inlined push body still
+     * does the check; we just don't replicate it here. */
     fprintf(stderr, "    push(2) step A: v=%p\n", (void*)&v);
     fflush(stderr);
 
-    bool null_check = (&v != NULL);
-    fprintf(stderr, "    push(2) step B: null_check=%d\n", (int)null_check);
-    fflush(stderr);
-
     bool need_grow = (v.len >= v.cap);
-    fprintf(stderr, "    push(2) step C: need_grow=%d (len=%zu cap=%zu)\n",
+    fprintf(stderr, "    push(2) step B: need_grow=%d (len=%zu cap=%zu)\n",
             (int)need_grow, v.len, v.cap);
     fflush(stderr);
 
-    fprintf(stderr, "    push(2) step D: v.data=%p v.len=%zu\n",
+    fprintf(stderr, "    push(2) step C: v.data=%p v.len=%zu\n",
             (void*)v.data, v.len);
     fflush(stderr);
 
     int* target = &v.data[v.len];
-    fprintf(stderr, "    push(2) step E: target=%p\n", (void*)target);
+    fprintf(stderr, "    push(2) step D: target=%p\n", (void*)target);
     fflush(stderr);
 
     *target = 2;
-    fprintf(stderr, "    push(2) step F: store complete\n");
+    fprintf(stderr, "    push(2) step E: store complete\n");
     fflush(stderr);
 
     v.len++;
-    fprintf(stderr, "    push(2) step G: len=%zu\n", v.len);
+    fprintf(stderr, "    push(2) step F: len=%zu\n", v.len);
     fflush(stderr);
 
     CP(7);
