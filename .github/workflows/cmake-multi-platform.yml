@@ -28,15 +28,21 @@ on:
 #                     expand to single instructions with no branches for
 #                     gcov to see).
 #   misra           — Linux only, MISRA C:2012 advisory analysis
-#   lifetime-debug  — Linux only, builds and tests the suite with
-#                     CANON_LIFETIME=debug to exercise the runtime
-#                     lifetime-tracking path (CANON_LIFETIME_DEBUG).
-#                     Uses sanitizers (ASan + UBSan) to catch any UB
+#   lifetime-debug  — All platforms, Release + Debug, compatible compilers.
+#                     Builds and tests the suite with CANON_LIFETIME=debug
+#                     to exercise the runtime lifetime-tracking path
+#                     (CANON_LIFETIME_DEBUG). Sanitizers (ASan + UBSan)
+#                     enabled in Debug on Linux + macOS to catch any UB
 #                     the lifetime instrumentation might introduce.
-#                     Currently exercises the substrate tests
-#                     (arena_test, borrow_test) end-to-end and rebuilds
-#                     all other tests under the flag to verify no
-#                     accidental struct-layout breakage.
+#                     The matrix mirrors the default `build` job so the
+#                     substrate is exercised under the same platform and
+#                     compiler combinations: GCC + Clang on Linux, MSVC
+#                     on Windows, Clang on macOS. Previously Linux-Clang
+#                     only — expanded after Phase 2 (dynvec, dynstring,
+#                     smallvec) embedded lifetime_t in five owning types
+#                     plus all macro-generated dynvec instantiations,
+#                     broadening the surface enough that single-platform
+#                     evidence was no longer sufficient.
 #
 # NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
 #   Dr. Memory crashes internally on Windows Server 2022 (the current
@@ -2072,60 +2078,110 @@ jobs:
           path: misra_report.txt
 
   # -------------------------------------------------------------------------
-  # 8. Lifetime-debug build — Linux only
+  # 8. Lifetime-debug build — all platforms, Release + Debug
   #
   #    Builds and runs the full test suite with CANON_LIFETIME=debug,
   #    which defines CANON_LIFETIME_DEBUG project-wide. This activates:
-  #      - lifetime_t lt field on Arena (and future owning types in
-  #        Phases 2 and 3)
+  #      - lifetime_t lt field on Arena, Pool, DynString, every
+  #        dynvec_T instantiation, and (Phase 3) smallvec instantiations
   #      - source_lt + captured_id fields on every borrow struct
   #      - _from_lifetime constructors capture the source's token
   #      - BORROW_LT_CHECK_ fires require_msg on every _get if the
   #        captured ID no longer matches the source's current ID
   #
-  #    This job exercises the substrate end-to-end and protects against
-  #    silent regressions. The bulk of test coverage comes from
-  #    arena_test (4 lifetime tests verifying restamp on reset,
-  #    preservation on reset_to) and borrow_test (5 lifetime tests
-  #    using the contract-trap pattern from contract_test.c to verify
-  #    require_msg fires on use-after-reset). Other tests run unchanged
-  #    — most code paths don't touch lifetime tracking — but compiling
-  #    them under the flag rules out accidental struct-layout breakage
-  #    in modules that include arena.h or borrow.h transitively.
+  #    Matrix mirrors the default `build` job — same OS/compiler/
+  #    build-type coverage. This catches:
+  #      - MSVC vs GCC/Clang struct-padding differences for the
+  #        embedded lifetime_t field
+  #      - macOS Clang vs Linux Clang alignment behavior of uint64_t
+  #        inside struct
+  #      - Platform-specific pointer-size assumptions in the
+  #        (region_id_t)(uintptr_t)&v ID derivation
+  #      - Release-mode codegen differences when LIKELY/UNLIKELY hints
+  #        interact with the additional fields
   #
-  #    Sanitizers (ASan + UBSan) are enabled to catch any latent UB the
-  #    lifetime instrumentation might introduce — e.g. a forgotten
-  #    field initialiser leaving captured_id uninitialised, or pointer
-  #    arithmetic that the additional fields perturb. The job is Linux-
-  #    only because Linux-Clang has the best sanitizer coverage; the
-  #    cross-platform build job already proves the flag compiles on
-  #    every supported platform (it doesn't yet — see below).
+  #    Sanitizers (ASan + UBSan) are enabled in Debug on Linux + macOS
+  #    to catch any latent UB the lifetime instrumentation might
+  #    introduce — e.g. a forgotten field initialiser leaving
+  #    captured_id uninitialised, or pointer arithmetic that the
+  #    additional fields perturb. MSVC builds skip ASan (DLL
+  #    deployment limitation; see ENABLE_SANITIZERS in CMakeLists.txt).
   #
-  #    Future work: when Phase 2 ships, the build matrix for this job
-  #    should expand to cover Windows and macOS as well, since dynvec /
-  #    dynstring / smallvec will embed lifetime_t and broaden the
-  #    surface significantly. For Phase 1 (arena + borrow only),
-  #    Linux-Clang is sufficient evidence.
+  #    Previously this job was Linux-Clang only — sufficient evidence
+  #    when only arena and borrow embedded lifetime_t (Phase 1). After
+  #    Phase 2 broadened the surface to five owning types plus all
+  #    macro-generated dynvec instantiations, single-platform coverage
+  #    was no longer adequate. The matrix expanded after Phase 2
+  #    landed.
   # -------------------------------------------------------------------------
   lifetime-debug:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Release, Debug]
+        c_compiler: [gcc, clang, cl]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+          - os: ubuntu-latest
+            c_compiler: gcc
+          - os: ubuntu-latest
+            c_compiler: clang
+          - os: macos-latest
+            c_compiler: clang
+        exclude:
+          - os: windows-latest
+            c_compiler: gcc
+          - os: ubuntu-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure CMake (CANON_LIFETIME=debug, sanitizers on)
+      - name: Set reusable strings
+        id: strings
+        shell: bash
         run: |
-          cmake -B build \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_BUILD_TYPE=Debug \
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+      - name: Configure CMake (Linux / macOS, CANON_LIFETIME=debug)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          SANITIZERS=OFF
+          if [[ "${{ matrix.build_type }}" == "Debug" ]]; then
+            SANITIZERS=ON
+          fi
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DCANON_LIFETIME=debug \
-            -DENABLE_SANITIZERS=ON \
+            -DENABLE_SANITIZERS=${SANITIZERS} \
+            -S "${{ github.workspace }}"
+
+      - name: Configure CMake (Windows, CANON_LIFETIME=debug)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sanitizers = if ("${{ matrix.build_type }}" -eq "Debug") { "ON" } else { "OFF" }
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DCANON_LIFETIME=debug `
+            -DENABLE_SANITIZERS="$sanitizers" `
             -S "${{ github.workspace }}"
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
 
       - name: Test
-        working-directory: build
-        run: ctest --build-config Debug --output-on-failure
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
