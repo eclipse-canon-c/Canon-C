@@ -6,6 +6,10 @@
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
 #include "core/memory.h"                 /* mem_copy, mem_move */
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
+#endif
+
 /**
  * @file convenience/dynvec.h
  * @brief Auto-growing typed vector with hidden heap allocation
@@ -40,6 +44,27 @@
  * - Initial capacity: DYNVEC_INITIAL_CAPACITY (default 8 elements)
  * - Growth factor: DYNVEC_GROWTH_FACTOR (default 2×)
  * - No automatic shrinking — call dynvec_##type##_shrink_to_fit() explicitly
+ *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field (id + open) on each dynvec_##type instance.
+ *   - dynvec_##type##_init() and dynvec_##type##_with_capacity() open a fresh
+ *     lifetime; the ID is derived from &v.
+ *   - dynvec_##type##_grow() and dynvec_##type##_shrink_to_fit() RESTAMP the
+ *     lifetime ID conditionally — only when realloc actually moves the
+ *     buffer. Operations that don't trigger reallocation (push when cap is
+ *     sufficient, pop, clear, get, set, remove) do NOT restamp because the
+ *     buffer address is unchanged and existing borrows remain valid.
+ *   - dynvec_##type##_free() CLOSES the lifetime (lt.open = false). Any
+ *     borrow that captured this dynvec's ID will fire require_msg via
+ *     lifetime_assert_valid() on the next read.
+ *   - dynvec_##type##_clear() does NOT restamp. Clear only sets len = 0;
+ *     the buffer is unchanged. Lifetime tracking catches use-after-relocation
+ *     and use-after-free; it does NOT catch use-of-removed-element, because
+ *     the memory addresses of removed elements are still valid bytes in the
+ *     same buffer owned by the same dynvec. That bug class is out of scope
+ *     for the substrate.
+ *   Zero cost in release builds — struct layout is identical without the flag.
  *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
@@ -81,7 +106,9 @@
  * dynvec_int_free(&v); // REQUIRED — always call this
  * ```
  *
- * @sa data/vec/vec.h — fixed-capacity, explicit-allocation alternative
+ * @sa data/vec/vec.h               — fixed-capacity, explicit-allocation alternative
+ * @sa core/primitives/lifetime.h   — canonical home of region_id_t and lifetime_t
+ * @sa core/region.h                — lifetime_assert_valid runtime check
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -120,6 +147,42 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime macros for the field and the helper bodies
+   ════════════════════════════════════════════════════════════════════════════
+   These are defined ONCE here (outside DEFINE_DYNVEC) so the same field
+   declaration and helper body expand identically into every instantiation.
+
+   In release builds (CANON_LIFETIME_DEBUG undefined):
+     - DYNVEC_LIFETIME_FIELD_ expands to nothing — no lt field on the struct
+     - The three _BODY_ macros expand to nothing — helpers become no-ops
+       (the trailing `(void)v;` in each helper absorbs the unused-parameter
+       warning)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define DYNVEC_LIFETIME_FIELD_                                      \
+        lifetime_t lt; /**< [debug] Lifetime token: id + open */
+    #define DYNVEC_LIFETIME_OPEN_BODY_(vp)                              \
+        do {                                                            \
+            (vp)->lt.id   = (region_id_t)(uintptr_t)(vp);              \
+            (vp)->lt.open = true;                                       \
+        } while (0);
+    /* XOR with golden-ratio constant guarantees the new id differs from
+       the old one even when the dynvec address is reused. */
+    #define DYNVEC_LIFETIME_RESTAMP_BODY_(vp)                           \
+        do {                                                            \
+            (vp)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;          \
+        } while (0);
+    #define DYNVEC_LIFETIME_CLOSE_BODY_(vp)                             \
+        do { (vp)->lt.open = false; } while (0);
+#else
+    #define DYNVEC_LIFETIME_FIELD_           /* empty */
+    #define DYNVEC_LIFETIME_OPEN_BODY_(vp)   /* empty */
+    #define DYNVEC_LIFETIME_RESTAMP_BODY_(vp) /* empty */
+    #define DYNVEC_LIFETIME_CLOSE_BODY_(vp)  /* empty */
+#endif
+
+/* ════════════════════════════════════════════════════════════════════════════
    DEFINE_DYNVEC — instantiate a typed auto-growing vector
    ════════════════════════════════════════════════════════════════════════════ */
 
@@ -146,14 +209,40 @@
  * Do not access fields directly — use the provided functions. \
  * \
  * Memory layout: \
- * - sizeof(dynvec_##type) = sizeof(type*) + 2*sizeof(usize) \
+ * - sizeof(dynvec_##type) = sizeof(type*) + 2*sizeof(usize) [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG] \
  * - Backing buffer: cap * sizeof(type) bytes on the heap \
  */ \
 typedef struct { \
     type* data;     /**< Heap-owned element buffer (NULL until first push) */ \
     usize len;      /**< Current element count */ \
     usize cap;      /**< Allocated buffer capacity in elements */ \
+    DYNVEC_LIFETIME_FIELD_ \
 } dynvec_##type; \
+\
+/* ════════════════════════════════════════════════════════════════════════════ \
+   Internal: lifetime helpers (per-instantiation, compiled away in release) \
+   ════════════════════════════════════════════════════════════════════════════ \
+   See file docblock for the full contract. Summary: \
+     - _open_:    sets id (from &v) and marks open. Used by constructors. \
+     - _restamp_: XORs id with the golden-ratio constant. Used by grow / \
+                  shrink when realloc moves the buffer. \
+     - _close_:   marks closed. Used by free. \
+   ════════════════════════════════════════════════════════════════════════════ */ \
+\
+static inline void dynvec_##type##_lifetime_open_(dynvec_##type* v) { \
+    DYNVEC_LIFETIME_OPEN_BODY_(v) \
+    (void)v; \
+} \
+\
+static inline void dynvec_##type##_lifetime_restamp_(dynvec_##type* v) { \
+    DYNVEC_LIFETIME_RESTAMP_BODY_(v) \
+    (void)v; \
+} \
+\
+static inline void dynvec_##type##_lifetime_close_(dynvec_##type* v) { \
+    DYNVEC_LIFETIME_CLOSE_BODY_(v) \
+    (void)v; \
+} \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
    Internal helper — capacity growth \
@@ -166,6 +255,11 @@ typedef struct { \
  * \
  * @note Internal use only. \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): restamps lt.id ONLY if realloc moved the \
+ * buffer. If the buffer was reallocated in place (new_data == old_data) or \
+ * if cap was already sufficient, lt.id is preserved and existing borrows \
+ * remain valid. \
+ * \
  * Performance: \
  * - Time: O(n) — realloc copies existing elements \
  * - Space: Allocates up to 2× current cap * sizeof(type) \
@@ -177,10 +271,14 @@ static inline bool dynvec_##type##_grow(dynvec_##type* v, usize min_cap) { \
         ? DYNVEC_INITIAL_CAPACITY \
         : v->cap * DYNVEC_GROWTH_FACTOR; \
     if (new_cap < min_cap) new_cap = min_cap; \
+    type* old_data = v->data; \
     type* new_data = (type*)realloc(v->data, new_cap * sizeof(type)); \
     if (!new_data) return false; \
     v->data = new_data; \
     v->cap = new_cap; \
+    if (new_data != old_data) { \
+        dynvec_##type##_lifetime_restamp_(v); \
+    } \
     return true; \
 } \
 \
@@ -197,12 +295,21 @@ static inline bool dynvec_##type##_grow(dynvec_##type* v, usize min_cap) { \
  * \
  * @post result.data == NULL, result.len == 0, result.cap == 0 \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID is \
+ * derived from the returned struct's address — borrows constructed against \
+ * this dynvec carry this ID. \
+ * \
  * Performance: \
  * - Time: O(1) \
  * - Space: sizeof(dynvec_##type) — no heap allocation \
  */ \
 static inline dynvec_##type dynvec_##type##_init(void) { \
-    return (dynvec_##type){ .data = NULL, .len = 0, .cap = 0 }; \
+    dynvec_##type v; \
+    v.data = NULL; \
+    v.len  = 0; \
+    v.cap  = 0; \
+    dynvec_##type##_lifetime_open_(&v); \
+    return v; \
 } \
 \
 /** \
@@ -218,6 +325,8 @@ static inline dynvec_##type dynvec_##type##_init(void) { \
  * @post On failure (OOM or capacity == 0): returns dynvec_##type##_init() \
  * \
  * @note Call dynvec_##type##_free() when done. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token, same as init. \
  * \
  * Performance: \
  * - Time: O(1) \
@@ -399,6 +508,10 @@ static inline type* dynvec_##type##_last(const dynvec_##type* v) { \
  * \
  * @note May allocate heap memory. \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): if growth was triggered AND the buffer \
+ * was relocated, the lifetime ID is restamped. If no growth was needed, \
+ * the lifetime ID is preserved. \
+ * \
  * Performance: \
  * - Time: Amortized O(1), worst-case O(n) on realloc \
  * - Space: May allocate up to 2× current cap * sizeof(type) \
@@ -440,6 +553,9 @@ static inline bool dynvec_##type##_pop( \
  * @return true on success, false on v == NULL, i > v->len, or allocation failure \
  * \
  * @note May allocate heap memory. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): same as push — restamps only if realloc \
+ * moves the buffer. \
  * \
  * Performance: \
  * - Time: O(n) — shifts elements, may realloc \
@@ -493,6 +609,11 @@ static inline bool dynvec_##type##_remove( \
  * @note Buffer contents are not zeroed — only logical state is reset. \
  * Use dynvec_##type##_shrink_to_fit() to also release excess memory. \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. The buffer is unchanged \
+ * and existing borrows to addresses in [0, old_len) still point at valid \
+ * memory. The substrate does not catch use-of-removed-element — see the \
+ * file docblock. \
+ * \
  * Performance: \
  * - Time: O(1) \
  * - Space: O(1) \
@@ -514,6 +635,9 @@ static inline void dynvec_##type##_clear(dynvec_##type* v) { \
  * @return true on success, false on v == NULL, src == NULL, or allocation failure \
  * \
  * @note May allocate heap memory. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): same as push — restamps only if realloc \
+ * moves the buffer. \
  * \
  * Performance: \
  * - Time: O(count), plus possible O(n) realloc \
@@ -546,6 +670,10 @@ static inline bool dynvec_##type##_extend( \
  * \
  * @note May allocate heap memory. \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): if reserve triggers a grow that relocates \
+ * the buffer, the lifetime ID is restamped (via grow). If cap is already \
+ * sufficient, the lifetime ID is preserved. \
+ * \
  * Performance: \
  * - Time: O(1) if cap >= min_cap, else O(n) on realloc \
  * - Space: May allocate \
@@ -565,6 +693,14 @@ static inline bool dynvec_##type##_reserve( \
  * @param v dynvec to shrink (NULL-safe) \
  * @return true on success, false on realloc failure (v is unchanged on failure) \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): \
+ *   - If len == 0: frees the buffer and RESTAMPS the lifetime ID. The \
+ *     container is recycled to an empty state — subsequent operations \
+ *     work normally (push will grow from zero). lt.open stays true. \
+ *   - If len > 0 and realloc moves the buffer: RESTAMPS. \
+ *   - If len > 0 and realloc returns the same address (or cap was already \
+ *     equal to len): lifetime ID is preserved. \
+ * \
  * Performance: \
  * - Time: O(n) — realloc \
  * - Space: Frees (cap - len) * sizeof(type) bytes \
@@ -575,12 +711,17 @@ static inline bool dynvec_##type##_shrink_to_fit(dynvec_##type* v) { \
         free(v->data); \
         v->data = NULL; \
         v->cap = 0; \
+        dynvec_##type##_lifetime_restamp_(v); \
         return true; \
     } \
+    type* old_data = v->data; \
     type* new_data = (type*)realloc(v->data, v->len * sizeof(type)); \
     if (!new_data) return false; \
     v->data = new_data; \
     v->cap = v->len; \
+    if (new_data != old_data) { \
+        dynvec_##type##_lifetime_restamp_(v); \
+    } \
     return true; \
 } \
 \
@@ -598,6 +739,11 @@ static inline bool dynvec_##type##_shrink_to_fit(dynvec_##type* v) { \
  * ⚠️ MUST be called to avoid memory leaks. \
  * Subsequent use requires reinitializing via dynvec_##type##_init(). \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): CLOSES the lifetime (lt.open = false). \
+ * Any borrow that captured this dynvec's ID will fire require_msg on the \
+ * next read. The lifetime is reopened only by a fresh init / with_capacity \
+ * call. \
+ * \
  * Performance: \
  * - Time: O(1) \
  * - Space: Frees cap * sizeof(type) bytes \
@@ -608,6 +754,7 @@ static inline void dynvec_##type##_free(dynvec_##type* v) { \
     v->data = NULL; \
     v->len = 0; \
     v->cap = 0; \
+    dynvec_##type##_lifetime_close_(v); \
 }
 
 #endif /* CANON_DATA_CONVENIENCE_DYNVEC_H */
