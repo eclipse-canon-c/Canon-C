@@ -103,9 +103,8 @@
  *   #define CANON_NO_REGION_PARENT  // before including this header
  *
  * CANON_STRICT (propagated from contract.h)
- *   Promotes ensure_msg() to always-on. region_assert_*() and
- *   lifetime_assert_valid() become always-active in certified builds
- *   without any changes here.
+ *   Promotes ensure_msg() to always-on. region_assert_*() become
+ *   always-active in certified builds without any changes here.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
@@ -113,7 +112,7 @@
  * The shared lifetime types (region_id_t, REGION_ID_STATIC, lifetime_t)
  * come from core/primitives/lifetime.h, which is also included by
  * core/arena.h under CANON_LIFETIME_DEBUG. lifetime_assert_valid lives
- * here in region.h because it depends on ensure_msg from contract.h.
+ * here in region.h because it depends on require_msg from contract.h.
  * No data/, semantics/, algo/, or util/ headers may be included here.
  *
  * Thread safety:
@@ -130,7 +129,7 @@
  * - region_register:     O(1)
  * - region_is_open:      O(1)
  * - region_assert_*:     O(1) — debug-only by default, always-on with CANON_STRICT
- * - lifetime_assert_valid: O(1) — same gating as region_assert_*
+ * - lifetime_assert_valid: O(1) — always-on; disabled only by CANON_NO_REQUIRE
  * - sizeof(Region):      fixed — no dynamic sizing
  *
  * Quick start:
@@ -222,9 +221,41 @@
    The three lifetime types (region_id_t, REGION_ID_STATIC, lifetime_t)
    come from core/primitives/lifetime.h, included at the top of this file.
    lifetime_assert_valid lives here in region.h because it depends on
-   ensure_msg from contract.h — keeping it in primitives/ would force
+   require_msg from contract.h — keeping it in primitives/ would force
    primitives/lifetime.h to include contract.h, which is heavier than
    the rest of the header warrants.
+
+   Gating discipline — IMPORTANT:
+   ──────────────────────────────────────────────────────────────────────────
+   lifetime_assert_valid uses require_msg (always-on), NOT ensure_msg
+   (NDEBUG-gated). The two assertion macros in region.h are deliberately
+   gated differently:
+
+     region_assert_open, region_assert_borrow_valid — ensure_msg
+       These existed before CANON_LIFETIME_DEBUG and have always been
+       NDEBUG-gated like assert(). Preserving that gating is the right
+       call for the Region API contract from before lifetime tracking.
+
+     lifetime_assert_valid                          — require_msg
+       This is new infrastructure built specifically for the
+       CANON_LIFETIME_DEBUG opt-in path. The user has already paid the
+       cost of opting in (struct layout changes, additional code paths,
+       extra fields on every borrow). Compiling out the actual check in
+       Release would defeat the entire point of the flag — you would
+       pay the cost of tracking and get none of the safety. The flag's
+       contract is "if you set CANON_LIFETIME=debug, the checks fire,"
+       period. require_msg honors that contract in Release as well as
+       Debug. The escape hatch for formally-verified builds (Frama-C,
+       SPARK) is CANON_NO_REQUIRE, which compiles out require_msg
+       library-wide; that is the right place to disable this check
+       since it disables all the other call-site preconditions too.
+
+   See the CI history that led to this design choice: when
+   lifetime_assert_valid was originally written with ensure_msg, the
+   CANON_LIFETIME=debug + Release configuration silently no-op'd the
+   check on every platform, making borrow_test's
+   test_lifetime_get_after_reset_fires fail to fire across the entire
+   lifetime-debug matrix expansion.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
@@ -235,13 +266,14 @@
  * modules that embed lifetime_t (or two equivalent fields) without
  * embedding a full Region.
  *
- * Compiled away under NDEBUG unless CANON_STRICT is defined — same
- * mechanism as region_assert_borrow_valid, propagated through ensure_msg.
+ * Always-on regardless of NDEBUG. Disabled only by CANON_NO_REQUIRE,
+ * which is intended for builds where formal verification has proved
+ * all call sites safe and the runtime check is no longer needed.
  *
  * @param source_id   Lifetime ID currently held by the source
  * @param source_open Whether the source is currently open
  * @param borrow_id   ID stamped on the borrow at creation
- * @param site        Diagnostic name for ensure_msg failure messages
+ * @param site        Diagnostic name for require_msg failure messages
  *
  * Complexity: O(1)
  */
@@ -252,11 +284,11 @@ static inline void lifetime_assert_valid(
     const char* site)
 {
     if (borrow_id == REGION_ID_STATIC) return;
-    ensure_msg(source_open, site);
-    ensure_msg(source_id == borrow_id, site);
-    /* Suppress unused-parameter warnings when ensure_msg compiles away
-     * (NDEBUG without CANON_STRICT). The parameters are genuinely used
-     * in debug builds. */
+    require_msg(source_open, site);
+    require_msg(source_id == borrow_id, site);
+    /* Suppress unused-parameter warnings when require_msg compiles away
+     * (CANON_NO_REQUIRE defined). The parameters are genuinely used in
+     * default builds. */
     (void)source_id;
     (void)source_open;
     (void)site;
