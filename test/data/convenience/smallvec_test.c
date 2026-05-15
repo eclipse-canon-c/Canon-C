@@ -544,8 +544,9 @@ static void test_point(void)
  *   - clear does NOT touch lt — buffer is unchanged, borrows are still
  *     valid addresses (substrate does not catch use-of-removed-element).
  *   - free closes lt, then re-opens it via the embedded init() call. The
- *     final state is lt.open == true with a freshly-stamped id — any
- *     borrow that captured the pre-free id fails the lifetime check.
+ *     final state is lt.open == true with a freshly-stamped id that
+ *     differs from the pre-free id — any borrow that captured the
+ *     pre-free id fails the lifetime check.
  */
 
 #ifdef CANON_LIFETIME_DEBUG
@@ -619,9 +620,9 @@ static void test_lifetime_clear_preserves_id(void)
 static void test_lifetime_free_closes_then_reopens(void)
 {
     /* free closes the lifetime and then re-opens it via the embedded
-     * init() call. After free, lt.open == true and lt.id is freshly
-     * stamped — a borrow that captured the pre-free id sees a different
-     * id on the next read. */
+     * init() call. After free, lt.open == true and lt.id has changed
+     * relative to the pre-free value — a borrow that captured the
+     * pre-free id sees a different id on the next read. */
     smallvec_int v = smallvec_int_init();
     v.data = v.inline_buf; /* ASan fixup */
 
@@ -638,14 +639,14 @@ static void test_lifetime_free_closes_then_reopens(void)
 
     /* free → close → re-init → open: lt.open ends up true. */
     EXPECT(v.lt.open == true);
-    /* lt.id is the freshly stamped post-init id; it equals
-     * (region_id_t)(uintptr_t)&v. */
-    EXPECT(v.lt.id == (region_id_t)(uintptr_t)&v);
-    /* The id changed only if the close-then-reopen produced a different
-     * id than what was held pre-free. The pre-free id had been restamped
-     * once (by spill), so it was (orig_address_id XOR golden_ratio). The
-     * post-free id is back to orig_address_id, which differs from the
-     * XOR'd value as long as the constant is nonzero. */
+
+    /* Pre-free id was (orig_address_id XOR golden_ratio) after spill's
+     * restamp. Post-free id was stamped inside init()'s local frame and
+     * then copied into v by struct-assignment, so its exact numeric value
+     * isn't a stable part of the contract — what matters is that it
+     * differs from the pre-free id. This is the property a borrow's
+     * lifetime check depends on: stale captured IDs no longer match after
+     * free. */
     EXPECT(v.lt.id != before_free);
 }
 
