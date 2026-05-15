@@ -33,6 +33,9 @@
  *   - Post-spill capacity fixed    — subsequent push into full buffer returns false
  *   - Arena-backed spill           — no free needed; data points to arena memory
  *   - Point struct                 — push/pop/get/set with struct elements
+ *   - CANON_LIFETIME_DEBUG         — open on init/init_arena, unconditional
+ *                                     restamp on spill, preserve on no-spill ops
+ *                                     and on clear, close+reopen on free
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Single smallvec_int with INLINE_CAP=4; reference model tracks expected contents
@@ -217,7 +220,7 @@ static void test_spill_heap(void)
     EXPECT(v.len == 8); /* unchanged */
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     EXPECT(v.using_inline == true); /* free reinitializes inline */
     EXPECT(v.data == v.inline_buf);
     EXPECT(v.len  == 0);
@@ -251,7 +254,7 @@ static void test_spill_arena(void)
 
     /* free() with arena does NOT call free() — no-op for spill memory */
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     EXPECT(v.using_inline == true); /* reinitializes inline */
 }
 
@@ -341,7 +344,7 @@ static void test_insert(void)
     EXPECT(!smallvec_int_insert(NULL, 0, 0));
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 }
 
 /* ── remove ──────────────────────────────────────────────────────────────── */
@@ -403,7 +406,7 @@ static void test_extend(void)
     EXPECT(v.len == 5);
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 }
 
 /* ── clear ───────────────────────────────────────────────────────────────── */
@@ -438,7 +441,7 @@ static void test_free(void)
     EXPECT(v.using_inline == false);
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     EXPECT(v.using_inline == true);
     EXPECT(v.data == v.inline_buf);
     EXPECT(v.len  == 0);
@@ -474,7 +477,7 @@ static void test_inline_invariant(void)
     EXPECT(v.data != v.inline_buf && v.using_inline == false);
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 }
 
 /* ── as_vec interop ──────────────────────────────────────────────────────── */
@@ -524,6 +527,130 @@ static void test_point(void)
     EXPECT(v.using_inline == true);
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * These tests exercise the (id, open) lifetime token embedded on each
+ * smallvec_int instance when CANON_LIFETIME_DEBUG is defined. They verify
+ * state-level invariants directly on v.lt — they do NOT construct borrows
+ * or trigger lifetime_assert_valid. The borrow-side validation path
+ * (fires require_msg) is covered in test/semantics/borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - init / init_arena open the lifetime: lt.open == true, lt.id set
+ *     to v's address.
+ *   - spill restamps lt.id UNCONDITIONALLY — the buffer always moves at
+ *     spill time, so no old/new pointer check is needed. spill happens
+ *     at most once per smallvec.
+ *   - clear does NOT touch lt — buffer is unchanged, borrows are still
+ *     valid addresses (substrate does not catch use-of-removed-element).
+ *   - free closes lt, then re-opens it via the embedded init() call. The
+ *     final state is lt.open == true with a freshly-stamped id — any
+ *     borrow that captured the pre-free id fails the lifetime check.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    smallvec_int v = smallvec_int_init();
+    v.data = v.inline_buf; /* ASan fixup */
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+    /* No free needed — still inline. */
+}
+
+static void test_lifetime_init_arena_opens_token(void)
+{
+    u8    abuf[256];
+    Arena arena;
+    arena_init(&arena, abuf, sizeof(abuf));
+
+    smallvec_int v = smallvec_int_init_arena(&arena);
+    v.data = v.inline_buf; /* ASan fixup */
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+    EXPECT(v.arena == &arena);
+    /* No free needed — still inline; arena reset is caller's job. */
+}
+
+static void test_lifetime_spill_restamps_id(void)
+{
+    /* Fill inline buffer, then force spill on the 5th push. spill is the
+     * one and only restamp event in smallvec's lifecycle. */
+    smallvec_int v = smallvec_int_init();
+    v.data = v.inline_buf; /* ASan fixup */
+    region_id_t before = v.lt.id;
+
+    for (int i = 0; i < 4; i++) {
+        EXPECT(smallvec_int_push(&v, i));
+    }
+    /* Pre-spill: still using inline buffer, id unchanged. */
+    EXPECT(v.using_inline == true);
+    EXPECT(v.lt.id == before);
+    EXPECT(v.lt.open == true);
+
+    /* 5th push triggers spill. spill is unconditional — the buffer
+     * always moves (inline_buf address ≠ heap address). Restamp fires. */
+    EXPECT(smallvec_int_push(&v, 4));
+    EXPECT(v.using_inline == false);
+    EXPECT(v.lt.id != before);
+    EXPECT(v.lt.open == true);    /* spill recycles, does not close */
+
+    smallvec_int_free(&v);
+    v.data = v.inline_buf; /* ASan fixup */
+}
+
+static void test_lifetime_clear_preserves_id(void)
+{
+    /* Clear must not touch lt.id. The substrate is honest that it does
+     * not catch use-of-removed-element. This test documents that contract
+     * — if a future refactor accidentally restamps on clear, this fires. */
+    smallvec_int v = smallvec_int_init();
+    v.data = v.inline_buf; /* ASan fixup */
+    smallvec_int_push(&v, 1);
+    smallvec_int_push(&v, 2);
+    region_id_t before = v.lt.id;
+    smallvec_int_clear(&v);
+    EXPECT(v.lt.id == before);
+    EXPECT(v.lt.open == true);
+    /* No free needed — still inline. */
+}
+
+static void test_lifetime_free_closes_then_reopens(void)
+{
+    /* free closes the lifetime and then re-opens it via the embedded
+     * init() call. After free, lt.open == true and lt.id is freshly
+     * stamped — a borrow that captured the pre-free id sees a different
+     * id on the next read. */
+    smallvec_int v = smallvec_int_init();
+    v.data = v.inline_buf; /* ASan fixup */
+
+    /* Force spill so the heap-free path is exercised. */
+    for (int i = 0; i < 5; i++) {
+        EXPECT(smallvec_int_push(&v, i));
+    }
+    EXPECT(v.using_inline == false);
+
+    region_id_t before_free = v.lt.id;
+
+    smallvec_int_free(&v);
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
+
+    /* free → close → re-init → open: lt.open ends up true. */
+    EXPECT(v.lt.open == true);
+    /* lt.id is the freshly stamped post-init id; it equals
+     * (region_id_t)(uintptr_t)&v. */
+    EXPECT(v.lt.id == (region_id_t)(uintptr_t)&v);
+    /* The id changed only if the close-then-reopen produced a different
+     * id than what was held pre-free. The pre-free id had been restamped
+     * once (by spill), so it was (orig_address_id XOR golden_ratio). The
+     * post-free id is back to orig_address_id, which differs from the
+     * XOR'd value as long as the constant is nonzero. */
+    EXPECT(v.lt.id != before_free);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused ─────────────────────────────────────────────────────── */
 static void smallvec_suppress_unused(void)
 {
@@ -545,6 +672,16 @@ static void smallvec_suppress_unused(void)
     (void)smallvec_Point_extend;
     (void)smallvec_Point_clear;
     (void)smallvec_Point_init_arena;
+
+    /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
+     * Reference them unconditionally so release builds don't warn
+     * about unused inlines either. */
+    (void)smallvec_int_lifetime_open_;
+    (void)smallvec_int_lifetime_restamp_;
+    (void)smallvec_int_lifetime_close_;
+    (void)smallvec_Point_lifetime_open_;
+    (void)smallvec_Point_lifetime_restamp_;
+    (void)smallvec_Point_lifetime_close_;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -568,6 +705,14 @@ int main(void)
     test_as_vec();
     test_inline_invariant();
     test_point();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_init_arena_opens_token();
+    test_lifetime_spill_restamps_id();
+    test_lifetime_clear_preserves_id();
+    test_lifetime_free_closes_then_reopens();
+#endif
 
     if (g_failed == 0) {
         printf("OK  smallvec_test  (all assertions passed)\n");
@@ -605,6 +750,9 @@ static void smallvec_fuzz_suppress_unused(void)
     (void)smallvec_int_remove;
     (void)smallvec_int_extend;
     (void)smallvec_int_as_vec;
+    (void)smallvec_int_lifetime_open_;
+    (void)smallvec_int_lifetime_restamp_;
+    (void)smallvec_int_lifetime_close_;
 
     (void)smallvec_Point_init;
     (void)smallvec_Point_init_arena;
@@ -626,6 +774,9 @@ static void smallvec_fuzz_suppress_unused(void)
     (void)smallvec_Point_clear;
     (void)smallvec_Point_free;
     (void)smallvec_Point_as_vec;
+    (void)smallvec_Point_lifetime_open_;
+    (void)smallvec_Point_lifetime_restamp_;
+    (void)smallvec_Point_lifetime_close_;
 }
 
 /*
@@ -720,7 +871,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
             case 4: { /* free + reinit */
                 smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+                v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
                 v = smallvec_int_init();
                 v.data = v.inline_buf;
                 ref_count = 0;
@@ -738,7 +889,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     #undef FUZZ_INLINE_CAP
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free\'s internal re-init */
+    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     return 0;
 }
 
