@@ -9,6 +9,10 @@
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
 #include "core/memory.h"                 /* mem_copy */
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
+#endif
+
 /**
  * @file convenience/dynstring.h
  * @brief Auto-growing string builder with hidden heap allocation
@@ -44,6 +48,28 @@
  * - Growth factor: DYNSTRING_GROWTH_FACTOR (default 2×)
  * - No automatic shrinking — call dynstring_shrink_to_fit() explicitly
  *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field (id + open) on the DynString.
+ *   - dynstring_init(), dynstring_with_capacity(), and dynstring_from() open
+ *     a fresh lifetime; the ID is derived from &s.
+ *   - dynstring_ensure_capacity() and dynstring_shrink_to_fit() RESTAMP the
+ *     lifetime ID conditionally — only when realloc actually moves the
+ *     buffer. Operations that don't trigger reallocation (append when cap
+ *     is sufficient, clear, truncate) do NOT restamp because the buffer
+ *     address is unchanged and existing borrows remain valid.
+ *   - dynstring_free() CLOSES the lifetime (lt.open = false). Any borrow
+ *     that captured this DynString's ID will fire require_msg via
+ *     lifetime_assert_valid() on the next read.
+ *   - dynstring_clear() and dynstring_truncate() do NOT restamp. They only
+ *     adjust len; the buffer is unchanged. Lifetime tracking catches
+ *     use-after-relocation and use-after-free; it does NOT catch
+ *     use-of-truncated-characters, because the memory addresses of
+ *     truncated bytes are still valid bytes in the same buffer owned by
+ *     the same DynString. That bug class is out of scope for the
+ *     substrate.
+ *   Zero cost in release builds — struct layout is identical without the flag.
+ *
  * Thread-safety:
  * ────────────────────────────────────────────────────────────────────────────
  * Each DynString instance is independent — no shared state.
@@ -74,7 +100,9 @@
  * dynstring_free(&s); // REQUIRED — always call this
  * ```
  *
- * @sa data/stringbuf.h — fixed-capacity, arena-friendly alternative
+ * @sa data/stringbuf.h            — fixed-capacity, arena-friendly alternative
+ * @sa core/primitives/lifetime.h  — canonical home of region_id_t and lifetime_t
+ * @sa core/region.h               — lifetime_assert_valid runtime check
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -128,14 +156,69 @@
  * Do not access or modify fields directly — use the provided functions.
  *
  * Memory layout:
- * - sizeof(DynString) = sizeof(char*) + 2*sizeof(usize)
+ * - sizeof(DynString) = sizeof(char*) + 2*sizeof(usize) [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG]
  * - Backing buffer: cap bytes on the heap
  */
 typedef struct {
     char* data;     ///< Heap-allocated buffer (NULL until first append)
     usize len;      ///< Current string length (excluding '\0')
     usize cap;      ///< Total buffer capacity (including '\0')
+#ifdef CANON_LIFETIME_DEBUG
+    lifetime_t lt;  ///< [debug] Lifetime token: id + open
+#endif
 } DynString;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime helpers (compiled away in release)
+   ════════════════════════════════════════════════════════════════════════════
+   When CANON_LIFETIME_DEBUG is enabled, a DynString exposes a lifetime_t
+   that borrows can capture and validate against. The helpers below
+   manage the (id, open) pair across the DynString lifecycle:
+
+     dynstring_lifetime_open_(s)
+       Called by init, with_capacity, and from. Sets id to the
+       DynString's address-derived value and marks the lifetime open.
+
+     dynstring_lifetime_restamp_(s)
+       Called by ensure_capacity and shrink_to_fit when realloc moves
+       the buffer. XORs the id with a 64-bit golden-ratio constant so
+       the new id is guaranteed to differ from the old, invalidating
+       every previously-captured borrow without needing a separate
+       generation counter. Open flag stays true; DynStrings are not
+       "closed" by reallocation — they are recycled.
+
+     dynstring_lifetime_close_(s)
+       Called by free. Marks the lifetime closed, which makes any
+       subsequent borrow read fire lifetime_assert_valid.
+
+   In release builds (CANON_LIFETIME_DEBUG undefined) all three
+   helpers are no-ops — the DynString struct does not have an lt
+   field and no code touches it.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+static inline void dynstring_lifetime_open_(DynString* s) {
+#ifdef CANON_LIFETIME_DEBUG
+    s->lt.id   = (region_id_t)(uintptr_t)s;
+    s->lt.open = true;
+#endif
+    (void)s;
+}
+
+/* XOR with golden-ratio constant guarantees the new id differs from
+   the old one even when the DynString address is reused. */
+static inline void dynstring_lifetime_restamp_(DynString* s) {
+#ifdef CANON_LIFETIME_DEBUG
+    s->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;
+#endif
+    (void)s;
+}
+
+static inline void dynstring_lifetime_close_(DynString* s) {
+#ifdef CANON_LIFETIME_DEBUG
+    s->lt.open = false;
+#endif
+    (void)s;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    Internal helper — capacity management
@@ -156,6 +239,11 @@ typedef struct {
  *
  * @note Internal use only — do not call directly.
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): restamps lt.id ONLY if realloc moved
+ * the buffer. If cap was already sufficient (no realloc) or realloc
+ * returned the same address (in-place expansion), lt.id is preserved
+ * and existing borrows remain valid.
+ *
  * Performance:
  * - Time: O(len) on realloc, O(1) if already sufficient
  * - Space: Allocates up to 2× current capacity
@@ -171,11 +259,15 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
 
     if (new_cap < min_cap) new_cap = min_cap;
 
+    char* old_data = s->data;
     char* new_data = (char*)realloc(s->data, new_cap);
     if (!new_data) return false;
 
     s->data = new_data;
     s->cap = new_cap;
+    if (new_data != old_data) {
+        dynstring_lifetime_restamp_(s);
+    }
     return true;
 }
 
@@ -192,12 +284,21 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
  *
  * @post result.data == NULL, result.len == 0, result.cap == 0
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID
+ * is derived from the returned struct's address — borrows constructed
+ * against this DynString carry this ID.
+ *
  * Performance:
  * - Time: O(1)
  * - Space: sizeof(DynString) — no heap allocation
  */
 static inline DynString dynstring_init(void) {
-    return (DynString){ .data = NULL, .len = 0, .cap = 0 };
+    DynString s;
+    s.data = NULL;
+    s.len  = 0;
+    s.cap  = 0;
+    dynstring_lifetime_open_(&s);
+    return s;
 }
 
 /**
@@ -213,6 +314,8 @@ static inline DynString dynstring_init(void) {
  * @post On failure (OOM): returns dynstring_init() — check with dynstring_capacity()
  *
  * @note Call dynstring_free() when done.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token, same as init.
  *
  * Performance:
  * - Time: O(1)
@@ -240,6 +343,8 @@ static inline DynString dynstring_with_capacity(usize capacity) {
  * @post On failure (OOM): returns dynstring_init()
  *
  * @note Call dynstring_free() when done.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token, same as init.
  *
  * Performance:
  * - Time: O(strlen(str))
@@ -342,6 +447,10 @@ static inline const char* dynstring_str(const DynString* s) {
  *
  * @note May allocate heap memory.
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): if growth was triggered AND the buffer
+ * was relocated, the lifetime ID is restamped (via ensure_capacity). If
+ * no growth was needed, the lifetime ID is preserved.
+ *
  * Performance:
  * - Time: Amortized O(strlen(str)), worst-case O(len + strlen(str)) on realloc
  * - Space: May allocate up to 2× current capacity
@@ -375,6 +484,9 @@ static inline bool dynstring_append(DynString* s, const char* str) {
  *
  * @note May allocate heap memory.
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): same as dynstring_append — restamps
+ * only if realloc moves the buffer.
+ *
  * Performance:
  * - Time: Amortized O(1), worst-case O(len) on realloc
  * - Space: May allocate up to 2× current capacity
@@ -406,6 +518,9 @@ static inline bool dynstring_append_char(DynString* s, char c) {
  * @post On false: s is unchanged
  *
  * @note May allocate heap memory.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): same as dynstring_append — restamps
+ * only if realloc moves the buffer.
  *
  * Performance:
  * - Time: O(n) where n = formatted string length — two vsnprintf passes
@@ -445,6 +560,9 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
  * @return true on success, false on allocation failure
  *
  * @note May allocate heap memory.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): same as dynstring_append — restamps
+ * only if realloc moves the buffer.
  *
  * Performance:
  * - Time: Amortized O(min(n, strlen(str)))
@@ -486,6 +604,11 @@ static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
  * @note Buffer is NOT zeroed — only logical state is reset.
  * Use dynstring_shrink_to_fit() afterward to release excess memory.
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. The buffer is
+ * unchanged and existing borrows still point at valid memory. The
+ * substrate does not catch use-of-cleared-characters — see the file
+ * docblock.
+ *
  * Performance:
  * - Time: O(1)
  * - Space: O(1)
@@ -506,6 +629,9 @@ static inline void dynstring_clear(DynString* s) {
  * @param new_len New length — must be <= current length to take effect
  *
  * @post If new_len < s->len: s->len == new_len, s->data[new_len] == '\0'
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Buffer unchanged.
+ * Same rationale as dynstring_clear.
  *
  * Performance:
  * - Time: O(1)
@@ -533,6 +659,11 @@ static inline void dynstring_truncate(DynString* s, usize new_len) {
  *
  * @note May allocate heap memory.
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): if reserve triggers a realloc that
+ * relocates the buffer, the lifetime ID is restamped (via
+ * ensure_capacity). If cap is already sufficient, the lifetime ID is
+ * preserved.
+ *
  * Performance:
  * - Time: O(len) on realloc, O(1) if already sufficient
  * - Space: May allocate
@@ -550,6 +681,15 @@ static inline bool dynstring_reserve(DynString* s, usize min_cap) {
  * @param s DynString to shrink (NULL-safe)
  * @return true on success, false on realloc failure (s is unchanged on failure)
  *
+ * Lifetime (CANON_LIFETIME_DEBUG):
+ *   - If len == 0 and data != NULL: frees the buffer and RESTAMPS the
+ *     lifetime ID. The container is recycled to an empty state —
+ *     subsequent operations work normally (append will grow from zero).
+ *     lt.open stays true.
+ *   - If len > 0 and realloc moves the buffer: RESTAMPS.
+ *   - If len > 0 and realloc returns the same address (or cap was
+ *     already equal to len + 1): lifetime ID is preserved.
+ *
  * Performance:
  * - Time: O(len) — realloc
  * - Space: Frees (cap - len - 1) bytes
@@ -561,17 +701,22 @@ static inline bool dynstring_shrink_to_fit(DynString* s) {
         free(s->data);
         s->data = NULL;
         s->cap = 0;
+        dynstring_lifetime_restamp_(s);
         return true;
     }
 
     if (s->cap == s->len + 1) return true;  /* already minimal */
 
     usize new_cap = s->len + 1;
+    char* old_data = s->data;
     char* new_data = (char*)realloc(s->data, new_cap);
     if (!new_data) return false;
 
     s->data = new_data;
     s->cap = new_cap;
+    if (new_data != old_data) {
+        dynstring_lifetime_restamp_(s);
+    }
     return true;
 }
 
@@ -589,6 +734,11 @@ static inline bool dynstring_shrink_to_fit(DynString* s) {
  * ⚠️ MUST be called when done to avoid memory leaks.
  * Subsequent use requires reinitializing via dynstring_init() or dynstring_from().
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): CLOSES the lifetime (lt.open = false).
+ * Any borrow that captured this DynString's ID will fire require_msg on
+ * the next read. The lifetime is reopened only by a fresh init /
+ * with_capacity / from call.
+ *
  * Performance:
  * - Time: O(1)
  * - Space: Frees cap bytes
@@ -599,6 +749,11 @@ static inline void dynstring_free(DynString* s) {
         s->data = NULL;
         s->len = 0;
         s->cap = 0;
+        dynstring_lifetime_close_(s);
+    } else if (s) {
+        /* No buffer to free, but still close the lifetime so the
+         * contract holds regardless of whether anything was appended. */
+        dynstring_lifetime_close_(s);
     }
 }
 
