@@ -75,46 +75,6 @@ static int g_failed = 0;
         }                                                             \
     } while (0)
 
-/* Diagnostic: print test name before/after each call. Used to identify
- * which test crashes when the test binary segfaults without producing
- * an EXPECT failure message. fflush forces the output to disk even if
- * the test SEGFAULTs immediately after RUN prints — without fflush,
- * buffered stderr can be lost on abnormal termination on some platforms
- * (notably Windows MSVC). The wrapper is cheap enough that we leave it
- * on permanently; it adds two fprintf calls per test, which is noise
- * next to the actual test work and immediately useful the next time a
- * platform-specific crash appears. */
-#define RUN(test_fn)                                          \
-    do {                                                      \
-        fprintf(stderr, "RUN %s\n", #test_fn);               \
-        fflush(stderr);                                       \
-        test_fn();                                            \
-        fprintf(stderr, "OK  %s\n", #test_fn);               \
-        fflush(stderr);                                       \
-    } while (0)
-
-/* Intra-test checkpoint diagnostic — used in test_data_first_last
- * specifically to narrow down a Windows MSVC Release SEGFAULT to a
- * specific line. The last CP number printed before the crash identifies
- * the offending statement. Remove after the bug is fixed. */
-#define CP(n)                                                 \
-    do {                                                      \
-        fprintf(stderr, "  CP%d\n", (n));                    \
-        fflush(stderr);                                       \
-    } while (0)
-
-/* State dump for diagnosing the SEGFAULT in test_data_first_last on
- * Windows MSVC Release. Prints the three observable fields of a dynvec_int
- * at well-defined points so we can see when (or if) state corrupts.
- * Remove after the bug is fixed. */
-#define DUMP_STATE(label, v)                                              \
-    do {                                                                  \
-        fprintf(stderr,                                                   \
-                "    %s: data=%p len=%zu cap=%zu\n",                     \
-                (label), (void*)(v).data, (v).len, (v).cap);             \
-        fflush(stderr);                                                   \
-    } while (0)
-
 /* ── dynvec_int_init ─────────────────────────────────────────────────────── */
 static void test_init(void)
 {
@@ -251,84 +211,28 @@ static void test_get_set(void)
     dynvec_int_free(&v);
 }
 
-/* ── data / first / last ─────────────────────────────────────────────────── *
- * Instrumented with CP(n), DUMP_STATE(), and a manual step-by-step expansion
- * of the second dynvec_int_push() call to narrow down a Windows MSVC Release
- * SEGFAULT. Previous diagnostic passes confirmed:
- *   - State is valid right before the second push (data is a valid heap ptr,
- *     len=1, cap=8)
- *   - The crash is inside the second dynvec_int_push(&v, 2)
- * This pass manually expands the inline body of push() to find the exact
- * crashing instruction. To be removed once the underlying bug is fixed. */
+/* ── data / first / last ─────────────────────────────────────────────────── */
 static void test_data_first_last(void)
 {
-    CP(1);
     dynvec_int v = dynvec_int_init();
-    CP(2);
-    DUMP_STATE("after init", v);
 
     EXPECT(dynvec_int_data(&v)  == NULL);
-    CP(3);
     EXPECT(dynvec_int_first(&v) == NULL);
-    CP(4);
     EXPECT(dynvec_int_last(&v)  == NULL);
-    CP(5);
-    DUMP_STATE("after empty queries", v);
 
     dynvec_int_push(&v, 1);
-    CP(6);
-    DUMP_STATE("after push(1)", v);
-
-    /* Manually expand dynvec_int_push(&v, 2) to find the crashing instruction.
-     * The null_check step from push() is skipped — &v is a stack local and
-     * the compiler (correctly) treats &v != NULL as a tautology under
-     * -Wtautological-pointer-compare/-Waddress. The inlined push body still
-     * does the check; we just don't replicate it here. */
-    fprintf(stderr, "    push(2) step A: v=%p\n", (void*)&v);
-    fflush(stderr);
-
-    bool need_grow = (v.len >= v.cap);
-    fprintf(stderr, "    push(2) step B: need_grow=%d (len=%zu cap=%zu)\n",
-            (int)need_grow, v.len, v.cap);
-    fflush(stderr);
-
-    fprintf(stderr, "    push(2) step C: v.data=%p v.len=%zu\n",
-            (void*)v.data, v.len);
-    fflush(stderr);
-
-    int* target = &v.data[v.len];
-    fprintf(stderr, "    push(2) step D: target=%p\n", (void*)target);
-    fflush(stderr);
-
-    *target = 2;
-    fprintf(stderr, "    push(2) step E: store complete\n");
-    fflush(stderr);
-
-    v.len++;
-    fprintf(stderr, "    push(2) step F: len=%zu\n", v.len);
-    fflush(stderr);
-
-    CP(7);
-    DUMP_STATE("after manual push(2)", v);
-
+    dynvec_int_push(&v, 2);
     dynvec_int_push(&v, 3);
-    CP(8);
 
     EXPECT(dynvec_int_data(&v)  == v.data);
-    CP(9);
     EXPECT(*dynvec_int_first(&v) == 1);
-    CP(10);
     EXPECT(*dynvec_int_last(&v)  == 3);
-    CP(11);
 
     /* Mutate via pointer */
     *dynvec_int_first(&v) = 100;
-    CP(12);
     EXPECT(v.data[0] == 100);
-    CP(13);
 
     dynvec_int_free(&v);
-    CP(14);
 }
 
 /* ── insert ──────────────────────────────────────────────────────────────── */
@@ -649,27 +553,27 @@ int main(void)
 {
     (void)dynvec_suppress_unused;
 
-    RUN(test_init);
-    RUN(test_with_capacity);
-    RUN(test_push_basic);
-    RUN(test_growth);
-    RUN(test_pop);
-    RUN(test_get_set);
-    RUN(test_data_first_last);
-    RUN(test_insert);
-    RUN(test_remove);
-    RUN(test_clear);
-    RUN(test_extend);
-    RUN(test_reserve);
-    RUN(test_shrink_to_fit);
-    RUN(test_point);
+    test_init();
+    test_with_capacity();
+    test_push_basic();
+    test_growth();
+    test_pop();
+    test_get_set();
+    test_data_first_last();
+    test_insert();
+    test_remove();
+    test_clear();
+    test_extend();
+    test_reserve();
+    test_shrink_to_fit();
+    test_point();
 
 #ifdef CANON_LIFETIME_DEBUG
-    RUN(test_lifetime_init_opens_token);
-    RUN(test_lifetime_grow_restamps_id_when_relocated);
-    RUN(test_lifetime_clear_preserves_id);
-    RUN(test_lifetime_shrink_to_fit_empty_restamps);
-    RUN(test_lifetime_free_closes_token);
+    test_lifetime_init_opens_token();
+    test_lifetime_grow_restamps_id_when_relocated();
+    test_lifetime_clear_preserves_id();
+    test_lifetime_shrink_to_fit_empty_restamps();
+    test_lifetime_free_closes_token();
 #endif
 
     if (g_failed == 0) {
