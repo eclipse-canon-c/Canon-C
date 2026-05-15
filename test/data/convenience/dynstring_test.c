@@ -22,6 +22,10 @@
  *   - dynstring_to_cstr()        — independent heap copy; caller must free
  *   - Always-null-terminated     — data[len] == '\0' after every mutation
  *   - Growth semantics           — capacity at least doubles on each realloc
+ *   - CANON_LIFETIME_DEBUG       — open on init/with_capacity/from, restamp on
+ *                                   append-with-relocation, preserve on
+ *                                   clear/truncate, restamp on shrink-to-zero
+ *                                   (recycle), close on free
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Single DynString; no arena dependency
@@ -413,11 +417,126 @@ static void test_always_null_terminated(void)
     dynstring_free(&s);
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * These tests exercise the (id, open) lifetime token embedded on each
+ * DynString instance when CANON_LIFETIME_DEBUG is defined. They verify
+ * state-level invariants directly on s.lt — they do NOT construct borrows
+ * or trigger lifetime_assert_valid. The borrow-side validation path
+ * (fires require_msg) is covered in test/semantics/borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - init / with_capacity / from open the lifetime: lt.open == true,
+ *     lt.id set.
+ *   - ensure_capacity restamps lt.id ONLY when realloc moves the buffer.
+ *   - clear and truncate do NOT touch lt — buffer is unchanged, borrows
+ *     are still valid addresses (substrate does not catch
+ *     use-of-cleared-characters).
+ *   - shrink_to_fit(empty) restamps and stays open — recycle semantics.
+ *   - free closes lt: lt.open == false.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    DynString s = dynstring_init();
+    EXPECT(s.lt.open == true);
+    EXPECT(s.lt.id != REGION_ID_STATIC);
+    dynstring_free(&s);
+}
+
+static void test_lifetime_with_capacity_opens_token(void)
+{
+    DynString s = dynstring_with_capacity(64);
+    EXPECT(s.lt.open == true);
+    EXPECT(s.lt.id != REGION_ID_STATIC);
+    dynstring_free(&s);
+}
+
+static void test_lifetime_from_opens_token(void)
+{
+    DynString s = dynstring_from("hello");
+    EXPECT(s.lt.open == true);
+    EXPECT(s.lt.id != REGION_ID_STATIC);
+    dynstring_free(&s);
+}
+
+static void test_lifetime_append_restamps_id_when_relocated(void)
+{
+    /* First append from empty triggers ensure_capacity from cap=0,
+     * which allocates a new buffer. old_data was NULL → relocation. */
+    DynString s = dynstring_init();
+    region_id_t before = s.lt.id;
+    EXPECT(dynstring_append(&s, "hello"));
+    EXPECT(s.lt.id != before);
+    EXPECT(s.lt.open == true);  /* ensure_capacity recycles, does not close */
+    dynstring_free(&s);
+}
+
+static void test_lifetime_clear_preserves_id(void)
+{
+    /* Clear sets len = 0 and writes '\0' at index 0. Buffer address
+     * unchanged. Substrate must not restamp.
+     * This test documents the substrate's contract — if a future
+     * refactor accidentally restamps on clear, this fires. */
+    DynString s = dynstring_from("hello");
+    region_id_t before = s.lt.id;
+    dynstring_clear(&s);
+    EXPECT(s.lt.id == before);
+    EXPECT(s.lt.open == true);
+    dynstring_free(&s);
+}
+
+static void test_lifetime_truncate_preserves_id(void)
+{
+    /* Truncate is a stronger form of clear — same buffer-stable semantics. */
+    DynString s = dynstring_from("hello world");
+    region_id_t before = s.lt.id;
+    dynstring_truncate(&s, 5);
+    EXPECT(s.lt.id == before);
+    EXPECT(s.lt.open == true);
+    dynstring_free(&s);
+}
+
+static void test_lifetime_shrink_to_fit_empty_restamps(void)
+{
+    /* shrink_to_fit when len == 0 frees the buffer and restamps —
+     * the container is recycled to empty state, not destroyed.
+     * lt.open stays true; subsequent append will grow from zero. */
+    DynString s = dynstring_with_capacity(128);
+    region_id_t before = s.lt.id;
+    EXPECT(dynstring_shrink_to_fit(&s));
+    EXPECT(s.lt.id != before);
+    EXPECT(s.lt.open == true);   /* recycle, not close */
+    EXPECT(s.data == NULL);      /* buffer freed */
+    dynstring_free(&s);
+}
+
+static void test_lifetime_free_closes_token(void)
+{
+    DynString s = dynstring_from("hello");
+    dynstring_free(&s);
+    EXPECT(s.lt.open == false);
+    /* lt.id is preserved for post-mortem inspection but the lifetime
+     * is closed. lifetime_assert_valid against the captured id would
+     * fail the open check. */
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused ─────────────────────────────────────────────────────── */
 static void dynstring_suppress_unused(void)
 {
     (void)dynstring_ensure_capacity;
     (void)fmt_helper; /* used in test_append_fmt indirectly */
+
+    /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
+     * Reference them unconditionally so release builds don't warn
+     * about unused inlines either. */
+    (void)dynstring_lifetime_open_;
+    (void)dynstring_lifetime_restamp_;
+    (void)dynstring_lifetime_close_;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -440,6 +559,17 @@ int main(void)
     test_shrink_to_fit();
     test_to_cstr();
     test_always_null_terminated();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_with_capacity_opens_token();
+    test_lifetime_from_opens_token();
+    test_lifetime_append_restamps_id_when_relocated();
+    test_lifetime_clear_preserves_id();
+    test_lifetime_truncate_preserves_id();
+    test_lifetime_shrink_to_fit_empty_restamps();
+    test_lifetime_free_closes_token();
+#endif
 
     if (g_failed == 0) {
         printf("OK  dynstring_test  (all assertions passed)\n");
@@ -466,6 +596,9 @@ static void dynstring_fuzz_suppress_unused(void)
     (void)dynstring_reserve;
     (void)dynstring_shrink_to_fit;
     (void)dynstring_to_cstr;
+    (void)dynstring_lifetime_open_;
+    (void)dynstring_lifetime_restamp_;
+    (void)dynstring_lifetime_close_;
 }
 
 /*
