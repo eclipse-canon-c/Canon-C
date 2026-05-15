@@ -88,6 +88,15 @@
  * code as *_from with the lifetime arguments ignored, and the _get
  * functions perform no extra work.
  *
+ * Lifetime propagation through derived views:
+ * --------------------------------------------------------------------------
+ * Operations that produce a sub-borrow over the same underlying memory
+ * (borrowed_str_slice, borrowed_bytes_slice, borrowed_slice_<T>_slice,
+ * borrowed_slice_<T>_as_bytes) inherit the source's lifetime tracking via
+ * BORROW_LT_INHERIT_. The substrate contract is "lifetime stays attached
+ * to the underlying memory" — type erasure (e.g. slice_<T> → bytes) must
+ * not silently strip the safety check.
+ *
  * Source tag lifetime warning:
  * --------------------------------------------------------------------------
  * The source field stores the address of the owning object as a debug tag.
@@ -803,8 +812,10 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
  *   borrowed_slice_<type>_at             — bounds-checked const element pointer
  *   borrowed_slice_<type>_slice          — sub-borrow [start, end)
  *   borrowed_slice_<type>_as_bytes       — raw borrowed_bytes view over slice
- *                                          (returns borrowed_bytes_empty() on
- *                                           overflow of len * sizeof(type))
+ *                                          (inherits lifetime tracking from
+ *                                           the source slice; returns
+ *                                           borrowed_bytes_empty() on overflow
+ *                                           of len * sizeof(type))
  *
  * Example:
  *   DEFINE_SLICE(int)
@@ -915,7 +926,10 @@ borrowed_slice_##type##_as_bytes(const borrowed_slice_##type *b)               \
     r.bytes.ptr = (const u8 *)b->slice.ptr;                                    \
     r.bytes.len = byte_len;                                                    \
     r.source    = b->source;                                                   \
-    BORROW_LT_INIT_NONE_(r);                                                   \
+    /* Lifetime stays with the underlying memory across type erasure —         \
+       a byte view derived from a tracked slice must remain tracked,           \
+       otherwise the substrate's safety check is silently stripped. */         \
+    BORROW_LT_INHERIT_(r, *b);                                                 \
     return r;                                                                  \
 }
 
