@@ -8,6 +8,10 @@
 #include "core/arena.h"                  /* Arena*, arena_alloc_array */
 #include "data/vec/vec.h"                /* MANGLE_VEC_TYPE, MANGLE_VEC_INIT */
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
+#endif
+
 /**
  * @file convenience/smallvec.h
  * @brief Inline-first vector with at-most-one spill to heap or arena
@@ -48,6 +52,34 @@
  * - Uses Canon-C core modules only
  * - No platform-specific code
  *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field (id + open) on each smallvec_##type
+ *     instance.
+ *   - smallvec_##type##_init() and smallvec_##type##_init_arena() open a
+ *     fresh lifetime; the ID is derived from &v.
+ *   - smallvec_##type##_spill() RESTAMPS the lifetime ID unconditionally —
+ *     the buffer always moves at spill time (inline_buf address ≠ heap or
+ *     arena address), so the old/new pointer comparison that dynvec and
+ *     dynstring perform inside grow() is unnecessary here. spill happens
+ *     at most once per smallvec, so this is the only restamp event.
+ *   - Operations that don't trigger spill (push when len < cap, pop,
+ *     clear, get, set, remove) do NOT restamp because the buffer address
+ *     is unchanged and existing borrows remain valid.
+ *   - smallvec_##type##_free() CLOSES the lifetime (lt.open = false) and
+ *     then re-opens it via the embedded init() call, so a freed-and-reused
+ *     smallvec gets a fresh ID — any borrow that captured the pre-free
+ *     ID will fire require_msg via lifetime_assert_valid() on the next
+ *     read.
+ *   - smallvec_##type##_clear() does NOT restamp. Clear only sets len = 0;
+ *     the buffer is unchanged. Lifetime tracking catches use-after-spill
+ *     and use-after-free; it does NOT catch use-of-removed-element,
+ *     because the memory addresses of removed elements are still valid
+ *     bytes in the same buffer. Same substrate honesty as dynvec and
+ *     dynstring.
+ *   Zero cost in release builds — struct layout is identical without the
+ *   flag.
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - push (inline): O(1) — no allocation
@@ -61,6 +93,7 @@
  * - free: O(1)
  * - struct size: sizeof(type*) + 2*sizeof(usize) + sizeof(Arena*) +
  *   sizeof(bool) + INLINE_CAP*sizeof(type)
+ *   [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG]
  *
  * Quick start:
  * ```c
@@ -95,8 +128,10 @@
  * - You need full caller control over the backing buffer
  * - You need multi-stage growth or reuse across arena resets
  *
- * @sa data/vec/vec.h — fixed-capacity, explicit-allocation alternative
- * @sa data/convenience/dynvec.h — unlimited growth, always heap
+ * @sa data/vec/vec.h                  — fixed-capacity, explicit-allocation alternative
+ * @sa data/convenience/dynvec.h       — unlimited growth, always heap
+ * @sa core/primitives/lifetime.h      — canonical home of region_id_t and lifetime_t
+ * @sa core/region.h                   — lifetime_assert_valid runtime check
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -109,6 +144,49 @@
 #else
     #define SMALLVEC_LIKELY(x) (x)
     #define SMALLVEC_UNLIKELY(x) (x)
+#endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime macros for the field and the helper bodies
+   ════════════════════════════════════════════════════════════════════════════
+   Same pattern as dynvec: defined ONCE here (outside DEFINE_SMALLVEC) so
+   the field declaration and helper bodies expand identically into every
+   instantiation.
+
+   In release builds (CANON_LIFETIME_DEBUG undefined):
+     - SMALLVEC_LIFETIME_FIELD_ expands to nothing — no lt field on the struct
+     - The three _BODY_ macros expand to nothing — helpers become no-ops
+       (the trailing `(void)v;` in each helper absorbs the unused-parameter
+       warning)
+
+   smallvec's restamp body is unconditional — the buffer always moves at
+   spill time, so the conditional new_data != old_data check used by
+   dynvec and dynstring is unnecessary here. The restamp is invoked exactly
+   once per smallvec lifecycle (inside spill), reflecting smallvec's
+   "at most one growth event" contract.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define SMALLVEC_LIFETIME_FIELD_                                    \
+        lifetime_t lt; /**< [debug] Lifetime token: id + open */
+    #define SMALLVEC_LIFETIME_OPEN_BODY_(vp)                            \
+        do {                                                            \
+            (vp)->lt.id   = (region_id_t)(uintptr_t)(vp);              \
+            (vp)->lt.open = true;                                       \
+        } while (0);
+    /* XOR with golden-ratio constant guarantees the new id differs from
+       the old one even when the smallvec address is reused. */
+    #define SMALLVEC_LIFETIME_RESTAMP_BODY_(vp)                         \
+        do {                                                            \
+            (vp)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;          \
+        } while (0);
+    #define SMALLVEC_LIFETIME_CLOSE_BODY_(vp)                           \
+        do { (vp)->lt.open = false; } while (0);
+#else
+    #define SMALLVEC_LIFETIME_FIELD_           /* empty */
+    #define SMALLVEC_LIFETIME_OPEN_BODY_(vp)   /* empty */
+    #define SMALLVEC_LIFETIME_RESTAMP_BODY_(vp) /* empty */
+    #define SMALLVEC_LIFETIME_CLOSE_BODY_(vp)  /* empty */
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -142,6 +220,7 @@
  * \
  * Memory layout: \
  * - sizeof(smallvec_##type) includes INLINE_CAP inline element slots \
+ *   [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG] \
  * - No heap allocation unless/until a spill occurs \
  */ \
 typedef struct { \
@@ -150,8 +229,34 @@ typedef struct { \
     usize cap;              /**< Capacity of active buffer in elements */ \
     Arena* arena;           /**< Spill destination (NULL = malloc) */ \
     bool using_inline;      /**< true if data == inline_buf */ \
+    SMALLVEC_LIFETIME_FIELD_ \
     type inline_buf[INLINE_CAP]; /**< Inline storage — lives in the struct */ \
 } smallvec_##type; \
+\
+/* ════════════════════════════════════════════════════════════════════════════ \
+   Internal: lifetime helpers (per-instantiation, compiled away in release) \
+   ════════════════════════════════════════════════════════════════════════════ \
+   See file docblock for the full contract. Summary: \
+     - _open_:    sets id (from &v) and marks open. Used by both constructors. \
+     - _restamp_: XORs id with the golden-ratio constant. Used by spill. \
+                  Unconditional — the buffer always moves at spill time. \
+     - _close_:   marks closed. Used by free (immediately before re-init). \
+   ════════════════════════════════════════════════════════════════════════════ */ \
+\
+static inline void smallvec_##type##_lifetime_open_(smallvec_##type* v) { \
+    SMALLVEC_LIFETIME_OPEN_BODY_(v) \
+    (void)v; \
+} \
+\
+static inline void smallvec_##type##_lifetime_restamp_(smallvec_##type* v) { \
+    SMALLVEC_LIFETIME_RESTAMP_BODY_(v) \
+    (void)v; \
+} \
+\
+static inline void smallvec_##type##_lifetime_close_(smallvec_##type* v) { \
+    SMALLVEC_LIFETIME_CLOSE_BODY_(v) \
+    (void)v; \
+} \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
    Constructors \
@@ -165,6 +270,10 @@ typedef struct { \
  * @post v.data == v.inline_buf, v.len == 0, v.cap == INLINE_CAP \
  * @post v.using_inline == true, v.arena == NULL \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID \
+ * is derived from the returned struct's address — borrows constructed \
+ * against this smallvec carry this ID. \
+ * \
  * Performance: O(1), no heap allocation \
  */ \
 static inline smallvec_##type smallvec_##type##_init(void) { \
@@ -174,6 +283,7 @@ static inline smallvec_##type smallvec_##type##_init(void) { \
     v.arena = NULL; \
     v.using_inline = true; \
     v.data = v.inline_buf; \
+    smallvec_##type##_lifetime_open_(&v); \
     return v; \
 } \
 \
@@ -188,6 +298,9 @@ static inline smallvec_##type smallvec_##type##_init(void) { \
  * @return Initialized smallvec_##type with inline storage \
  * \
  * @pre arena != NULL — checked via require_msg() \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token, same as \
+ * init. \
  * \
  * Performance: O(1), no heap allocation \
  */ \
@@ -214,6 +327,13 @@ static inline smallvec_##type smallvec_##type##_init_arena(Arena* arena) { \
  * \
  * @note Internal use only — do not call directly. \
  * \
+ * Lifetime (CANON_LIFETIME_DEBUG): RESTAMPS lt.id unconditionally on \
+ * success. The buffer always moves at spill time (inline_buf address ≠ \
+ * heap or arena address), so no old/new pointer comparison is needed — \
+ * unlike dynvec's grow() which uses realloc and may keep the same address. \
+ * Restamp is the only one this smallvec will ever do; spill happens at \
+ * most once per instance. \
+ * \
  * Performance: O(len) — single allocation + mem_copy \
  */ \
 static inline bool smallvec_##type##_spill( \
@@ -235,6 +355,7 @@ static inline bool smallvec_##type##_spill( \
     v->data = new_buf; \
     v->cap = new_cap; \
     v->using_inline = false; \
+    smallvec_##type##_lifetime_restamp_(v); \
     return true; \
 } \
 \
@@ -365,6 +486,10 @@ static inline type* smallvec_##type##_last(const smallvec_##type* v) { \
  * \
  * @post On true: element appended, v->len incremented by 1 \
  * @post On false: v is unchanged \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): if push triggers spill, the spill helper \
+ * restamps lt.id. If push fits in the existing buffer (whether inline or \
+ * post-spill), lt.id is preserved. \
  */ \
 static inline bool smallvec_##type##_push( \
     smallvec_##type* v, type value) { \
@@ -411,6 +536,9 @@ static inline bool smallvec_##type##_pop( \
  * @return true on success, false on v == NULL, i > v->len, or spill failure \
  * \
  * @note Returns false if already spilled and full — no second growth. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): same as push — restamps if spill is \
+ * triggered. \
  */ \
 static inline bool smallvec_##type##_insert( \
     smallvec_##type* v, usize i, type value) { \
@@ -464,6 +592,9 @@ static inline bool smallvec_##type##_remove( \
  * @return true on success, false on v == NULL, src == NULL, or spill failure \
  * \
  * @note Returns false if already spilled and insufficient remaining capacity. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): same as push — restamps if spill is \
+ * triggered. \
  */ \
 static inline bool smallvec_##type##_extend( \
     smallvec_##type* v, const type* src, usize count) { \
@@ -492,6 +623,11 @@ static inline bool smallvec_##type##_extend( \
  * \
  * @post v->len == 0 \
  * @note Buffer is not zeroed. Post-spill heap buffer is not freed. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. The buffer is \
+ * unchanged and existing borrows to addresses in [0, old_len) still \
+ * point at valid memory. The substrate does not catch use-of-removed- \
+ * element — same honesty as dynvec/dynstring. \
  */ \
 static inline void smallvec_##type##_clear(smallvec_##type* v) { \
     if (v) v->len = 0; \
@@ -507,12 +643,19 @@ static inline void smallvec_##type##_clear(smallvec_##type* v) { \
  * @note If the spill was into an arena, nothing is freed — arena_reset() \
  * handles cleanup. free() is called only if using_inline == false \
  * AND arena == NULL. \
+ * \
+ * Lifetime (CANON_LIFETIME_DEBUG): CLOSES the lifetime, then re-opens it \
+ * via the embedded init() call. The result is that lt.open is true and \
+ * lt.id is freshly stamped at v's address — a freed-and-reused smallvec \
+ * carries a different ID than it did before free, so any borrow that \
+ * captured the pre-free ID fails the lifetime check on the next read. \
  */ \
 static inline void smallvec_##type##_free(smallvec_##type* v) { \
     if (!v) return; \
     if (!v->using_inline && !v->arena) { \
         free(v->data); \
     } \
+    smallvec_##type##_lifetime_close_(v); \
     *v = smallvec_##type##_init(); \
 } \
 \
