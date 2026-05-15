@@ -103,6 +103,18 @@ static int g_failed = 0;
         fflush(stderr);                                       \
     } while (0)
 
+/* State dump for diagnosing the SEGFAULT in test_data_first_last on
+ * Windows MSVC Release. Prints the three observable fields of a dynvec_int
+ * at well-defined points so we can see when (or if) state corrupts.
+ * Remove after the bug is fixed. */
+#define DUMP_STATE(label, v)                                              \
+    do {                                                                  \
+        fprintf(stderr,                                                   \
+                "    %s: data=%p len=%zu cap=%zu\n",                     \
+                (label), (void*)(v).data, (v).len, (v).cap);             \
+        fflush(stderr);                                                   \
+    } while (0)
+
 /* ── dynvec_int_init ─────────────────────────────────────────────────────── */
 static void test_init(void)
 {
@@ -240,15 +252,18 @@ static void test_get_set(void)
 }
 
 /* ── data / first / last ─────────────────────────────────────────────────── *
- * Instrumented with CP(n) checkpoints to narrow down a Windows MSVC Release
- * SEGFAULT. Each CP(n) call prints "  CPn\n" to stderr with fflush, so the
- * last CP number observed in CI output identifies the line preceding the
- * crash. To be removed once the underlying bug is fixed. */
+ * Instrumented with CP(n) checkpoints and DUMP_STATE() between operations
+ * to narrow down a Windows MSVC Release SEGFAULT. The previous diagnostic
+ * pass showed crash between CP6 (after push(1)) and CP7 (after push(2)).
+ * This pass dumps v's three observable fields at three checkpoints so we
+ * can see whether state corrupts during the empty queries or between the
+ * pushes. To be removed once the underlying bug is fixed. */
 static void test_data_first_last(void)
 {
     CP(1);
     dynvec_int v = dynvec_int_init();
     CP(2);
+    DUMP_STATE("after init", v);
 
     EXPECT(dynvec_int_data(&v)  == NULL);
     CP(3);
@@ -256,11 +271,18 @@ static void test_data_first_last(void)
     CP(4);
     EXPECT(dynvec_int_last(&v)  == NULL);
     CP(5);
+    DUMP_STATE("after empty queries", v);
 
     dynvec_int_push(&v, 1);
     CP(6);
+    DUMP_STATE("after push(1)", v);
+
+    /* The crash is somewhere in this push. The DUMP_STATE above gives
+     * us the exact state right before. */
     dynvec_int_push(&v, 2);
     CP(7);
+    DUMP_STATE("after push(2)", v);
+
     dynvec_int_push(&v, 3);
     CP(8);
 
