@@ -19,6 +19,9 @@
  *   - CANON_LIFETIME_DEBUG: _from_lifetime captures source's lifetime token;
  *     _get fires require_msg after arena_reset (id mismatch); untracked
  *     borrows bypass the check; arena_reset_to preserves validity.
+ *     Lifetime check is exercised on all four borrow types (ptr, str,
+ *     bytes, slice_int), plus the type-erasure path through as_bytes
+ *     (which must inherit lifetime tracking from the source slice).
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random (start, end, len) triples into borrowed_bytes_slice and
@@ -688,10 +691,13 @@ static void test_source_tag_round_trip_all_types(void)
  * Coverage:
  *   1. _from_lifetime constructor captures source_lt and captured_id.
  *   2. _get on a fresh, open borrow is silent (baseline).
- *   3. _get after arena_reset fires require_msg (the headline guarantee).
+ *   3. _get after arena_reset fires require_msg (the headline guarantee),
+ *      exercised on all four borrow types: bytes, str, ptr, slice_int.
  *   4. Untracked borrows (built via _from, no lifetime arg) bypass the
  *      check even after reset (opt-in design works as documented).
  *   5. _get after arena_reset_to is silent (rollback contract preserved).
+ *   6. _as_bytes inherits lifetime from the source slice — type erasure
+ *      must not silently strip the substrate's safety check.
  */
 
 #ifdef CANON_LIFETIME_DEBUG
@@ -830,6 +836,135 @@ static void test_lifetime_get_after_reset_to_silent(void)
     EXPECT(_lt_cap_fired == 0);
 }
 
+/* ── borrowed_str_get: fires after reset ──────────────────────────────────── *
+ *
+ * Allocates scratch space in the arena and points a str_t at it, so the
+ * str's underlying storage is owned by g_lt_arena and its lifetime is
+ * g_lt_arena.lt. arena_reset restamps lt.id; the captured_id in the
+ * borrow becomes stale; borrowed_str_get must fire require_msg.
+ */
+static void test_lifetime_str_get_after_reset_fires(void)
+{
+    lt_setup();
+    char *p = (char *)arena_alloc(&g_lt_arena, 6);
+    EXPECT_NOT_NULL(p);
+    memcpy(p, "hello", 6);
+
+    str_t s;
+    s.ptr = p;
+    s.len = 5;
+
+    borrowed_str b = borrowed_str_from_lifetime(s, &g_lt_arena.lt, &g_lt_arena);
+    EXPECT(b.source_lt   == &g_lt_arena.lt);
+    EXPECT(b.captured_id == g_lt_arena.lt.id);
+
+    /* Baseline: open arena — silent. */
+    LT_SILENT(borrowed_str_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    /* Reset restamps lt.id — captured_id is now stale. */
+    arena_reset(&g_lt_arena);
+
+    LT_FIRES(borrowed_str_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+/* ── borrowed_ptr_get: fires after reset ──────────────────────────────────── *
+ *
+ * The generic borrow type uses the same BORROW_LT_CHECK_ macro as the
+ * specialised types, but exercising it independently ensures any future
+ * divergence (e.g. a typed _get omitting the check) is caught.
+ */
+static void test_lifetime_ptr_get_after_reset_fires(void)
+{
+    lt_setup();
+    void *p = arena_alloc(&g_lt_arena, 16);
+    EXPECT_NOT_NULL(p);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(p, &g_lt_arena.lt, &g_lt_arena);
+    EXPECT(b.source_lt   == &g_lt_arena.lt);
+    EXPECT(b.captured_id == g_lt_arena.lt.id);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    arena_reset(&g_lt_arena);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+/* ── borrowed_slice_int_get: fires after reset ────────────────────────────── *
+ *
+ * DEFINE_BORROWED_SLICE emits its own copy of BORROW_LT_CHECK_ via macro
+ * expansion, and the _from_lifetime helper takes a const void * (not a
+ * const lifetime_t *) and casts internally. This test exercises that
+ * macro-internal cast path — without it the macro's lifetime tracking
+ * would be untested.
+ */
+static void test_lifetime_slice_int_get_after_reset_fires(void)
+{
+    lt_setup();
+    int *p = (int *)arena_alloc(&g_lt_arena, 4 * sizeof(int));
+    EXPECT_NOT_NULL(p);
+    p[0] = 1; p[1] = 2; p[2] = 3; p[3] = 4;
+
+    slice_int s = slice_int_from(p, 4);
+    borrowed_slice_int b = borrowed_slice_int_from_lifetime(
+        s, &g_lt_arena.lt, &g_lt_arena);
+
+    EXPECT(b.source_lt   == &g_lt_arena.lt);
+    EXPECT(b.captured_id == g_lt_arena.lt.id);
+
+    LT_SILENT(borrowed_slice_int_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    arena_reset(&g_lt_arena);
+
+    LT_FIRES(borrowed_slice_int_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+/* ── borrowed_slice_int_as_bytes inherits lifetime ────────────────────────── *
+ *
+ * Substrate contract: lifetime stays attached to the underlying memory
+ * across type erasure. The byte view derived from a tracked slice must
+ * also be tracked — otherwise as_bytes silently strips the safety check
+ * at the moment a caller does the most type-erasing operation. This
+ * test pins that behaviour: derived byte view inherits source_lt and
+ * captured_id, and fires after arena_reset just like the source slice.
+ */
+static void test_lifetime_slice_int_as_bytes_inherits_and_fires(void)
+{
+    lt_setup();
+    int *p = (int *)arena_alloc(&g_lt_arena, 4 * sizeof(int));
+    EXPECT_NOT_NULL(p);
+    p[0] = 10; p[1] = 20; p[2] = 30; p[3] = 40;
+
+    slice_int s = slice_int_from(p, 4);
+    borrowed_slice_int v = borrowed_slice_int_from_lifetime(
+        s, &g_lt_arena.lt, &g_lt_arena);
+
+    /* The derived byte view must inherit the source's lifetime token. */
+    borrowed_bytes bb = borrowed_slice_int_as_bytes(&v);
+    EXPECT(bb.source_lt   == &g_lt_arena.lt);
+    EXPECT(bb.captured_id == g_lt_arena.lt.id);
+
+    /* Baseline: open arena — silent. */
+    LT_SILENT(borrowed_bytes_get(&bb));
+    EXPECT(_lt_cap_fired == 0);
+
+    /* Reset restamps lt.id — captured_id on the derived view is now stale. */
+    arena_reset(&g_lt_arena);
+
+    LT_FIRES(borrowed_bytes_get(&bb));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
 #endif /* CANON_LIFETIME_DEBUG */
 
 /* ============================================================================
@@ -928,6 +1063,10 @@ int main(void)
     test_lifetime_get_after_reset_fires();
     test_lifetime_untracked_borrow_bypasses_check();
     test_lifetime_get_after_reset_to_silent();
+    test_lifetime_str_get_after_reset_fires();
+    test_lifetime_ptr_get_after_reset_fires();
+    test_lifetime_slice_int_get_after_reset_fires();
+    test_lifetime_slice_int_as_bytes_inherits_and_fires();
 #endif
 
     if (g_failed == 0) {
