@@ -28,6 +28,10 @@
  *   - dynvec_T_free()            — releases heap; resets fields
  *   - Growth semantics           — cap at least doubles on each realloc
  *   - Point struct               — get/set/push/pop with struct elements
+ *   - CANON_LIFETIME_DEBUG       — open on init, restamp on grow-with-
+ *                                   relocation, preserve on no-realloc
+ *                                   operations and on clear, restamp on
+ *                                   shrink-to-zero (recycle), close on free
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Single dynvec_int; reference model tracks expected contents
@@ -425,6 +429,92 @@ static void test_point(void)
     EXPECT(v.data == NULL);
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * These tests exercise the (id, open) lifetime token embedded on each
+ * dynvec_int instance when CANON_LIFETIME_DEBUG is defined. They verify
+ * state-level invariants directly on v.lt — they do NOT construct borrows
+ * or trigger lifetime_assert_valid. The borrow-side validation path
+ * (fires require_msg) is covered in test/semantics/borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - init / with_capacity open the lifetime: lt.open == true, lt.id set.
+ *   - grow restamps lt.id ONLY when realloc moves the buffer.
+ *   - clear does NOT touch lt — buffer is unchanged, borrows are still
+ *     valid addresses (substrate does not catch use-of-removed-element).
+ *   - shrink_to_fit(empty) restamps and stays open — recycle semantics.
+ *   - free closes lt: lt.open == false.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    dynvec_int v = dynvec_int_init();
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+    dynvec_int_free(&v);
+}
+
+static void test_lifetime_grow_restamps_id_when_relocated(void)
+{
+    /* Force at least one grow. realloc from a fresh (NULL, 0) state always
+     * allocates a new buffer — the old pointer was NULL, so new_data
+     * cannot equal old_data. This is the canonical relocation case. */
+    dynvec_int v = dynvec_int_init();
+    region_id_t before = v.lt.id;
+
+    /* First push triggers grow from cap=0 to DYNVEC_INITIAL_CAPACITY.
+     * old_data was NULL, new_data is non-NULL → relocation, restamp. */
+    dynvec_int_push(&v, 1);
+
+    EXPECT(v.lt.id != before);
+    EXPECT(v.lt.open == true);   /* grow recycles, does not close */
+    dynvec_int_free(&v);
+}
+
+static void test_lifetime_clear_preserves_id(void)
+{
+    /* Clear must not touch lt.id. The substrate is honest that it does
+     * not catch use-of-removed-element. This test documents that contract
+     * — if a future refactor accidentally restamps on clear, this fires. */
+    dynvec_int v = dynvec_int_init();
+    dynvec_int_push(&v, 1);
+    dynvec_int_push(&v, 2);
+    region_id_t before = v.lt.id;
+    dynvec_int_clear(&v);
+    EXPECT(v.lt.id == before);
+    EXPECT(v.lt.open == true);
+    dynvec_int_free(&v);
+}
+
+static void test_lifetime_shrink_to_fit_empty_restamps(void)
+{
+    /* shrink_to_fit when len == 0 frees the buffer and restamps —
+     * the container is recycled to empty state, not destroyed.
+     * lt.open stays true; subsequent push will grow from zero. */
+    dynvec_int v = dynvec_int_with_capacity(32);
+    region_id_t before = v.lt.id;
+    EXPECT(dynvec_int_shrink_to_fit(&v));
+    EXPECT(v.lt.id != before);
+    EXPECT(v.lt.open == true);  /* recycle, not close */
+    EXPECT(v.data == NULL);     /* buffer freed */
+    dynvec_int_free(&v);
+}
+
+static void test_lifetime_free_closes_token(void)
+{
+    dynvec_int v = dynvec_int_init();
+    dynvec_int_push(&v, 1);
+    dynvec_int_free(&v);
+    EXPECT(v.lt.open == false);
+    /* lt.id is preserved for post-mortem inspection but the lifetime
+     * is closed. lifetime_assert_valid against the captured id would
+     * fail the open check. */
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused ─────────────────────────────────────────────────────── */
 static void dynvec_suppress_unused(void)
 {
@@ -446,6 +536,16 @@ static void dynvec_suppress_unused(void)
     (void)dynvec_Point_reserve;
     (void)dynvec_Point_shrink_to_fit;
     (void)dynvec_Point_with_capacity;
+
+    /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
+     * Reference them unconditionally so release builds don't warn
+     * about unused inlines either. */
+    (void)dynvec_int_lifetime_open_;
+    (void)dynvec_int_lifetime_restamp_;
+    (void)dynvec_int_lifetime_close_;
+    (void)dynvec_Point_lifetime_open_;
+    (void)dynvec_Point_lifetime_restamp_;
+    (void)dynvec_Point_lifetime_close_;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -467,6 +567,14 @@ int main(void)
     test_reserve();
     test_shrink_to_fit();
     test_point();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_grow_restamps_id_when_relocated();
+    test_lifetime_clear_preserves_id();
+    test_lifetime_shrink_to_fit_empty_restamps();
+    test_lifetime_free_closes_token();
+#endif
 
     if (g_failed == 0) {
         printf("OK  dynvec_test  (all assertions passed)\n");
@@ -499,6 +607,9 @@ static void dynvec_fuzz_suppress_unused(void)
     (void)dynvec_int_extend;
     (void)dynvec_int_reserve;
     (void)dynvec_int_shrink_to_fit;
+    (void)dynvec_int_lifetime_open_;
+    (void)dynvec_int_lifetime_restamp_;
+    (void)dynvec_int_lifetime_close_;
 
     /* Point — entirely unused in fuzz path */
     (void)dynvec_Point_init;
@@ -522,6 +633,9 @@ static void dynvec_fuzz_suppress_unused(void)
     (void)dynvec_Point_shrink_to_fit;
     (void)dynvec_Point_free;
     (void)dynvec_Point_grow;
+    (void)dynvec_Point_lifetime_open_;
+    (void)dynvec_Point_lifetime_restamp_;
+    (void)dynvec_Point_lifetime_close_;
 }
 
 /*
