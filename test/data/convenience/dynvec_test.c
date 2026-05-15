@@ -93,6 +93,16 @@ static int g_failed = 0;
         fflush(stderr);                                       \
     } while (0)
 
+/* Intra-test checkpoint diagnostic — used in test_data_first_last
+ * specifically to narrow down a Windows MSVC Release SEGFAULT to a
+ * specific line. The last CP number printed before the crash identifies
+ * the offending statement. Remove after the bug is fixed. */
+#define CP(n)                                                 \
+    do {                                                      \
+        fprintf(stderr, "  CP%d\n", (n));                    \
+        fflush(stderr);                                       \
+    } while (0)
+
 /* ── dynvec_int_init ─────────────────────────────────────────────────────── */
 static void test_init(void)
 {
@@ -229,28 +239,46 @@ static void test_get_set(void)
     dynvec_int_free(&v);
 }
 
-/* ── data / first / last ─────────────────────────────────────────────────── */
+/* ── data / first / last ─────────────────────────────────────────────────── *
+ * Instrumented with CP(n) checkpoints to narrow down a Windows MSVC Release
+ * SEGFAULT. Each CP(n) call prints "  CPn\n" to stderr with fflush, so the
+ * last CP number observed in CI output identifies the line preceding the
+ * crash. To be removed once the underlying bug is fixed. */
 static void test_data_first_last(void)
 {
+    CP(1);
     dynvec_int v = dynvec_int_init();
+    CP(2);
 
     EXPECT(dynvec_int_data(&v)  == NULL);
+    CP(3);
     EXPECT(dynvec_int_first(&v) == NULL);
+    CP(4);
     EXPECT(dynvec_int_last(&v)  == NULL);
+    CP(5);
 
     dynvec_int_push(&v, 1);
+    CP(6);
     dynvec_int_push(&v, 2);
+    CP(7);
     dynvec_int_push(&v, 3);
+    CP(8);
 
     EXPECT(dynvec_int_data(&v)  == v.data);
+    CP(9);
     EXPECT(*dynvec_int_first(&v) == 1);
+    CP(10);
     EXPECT(*dynvec_int_last(&v)  == 3);
+    CP(11);
 
     /* Mutate via pointer */
     *dynvec_int_first(&v) = 100;
+    CP(12);
     EXPECT(v.data[0] == 100);
+    CP(13);
 
     dynvec_int_free(&v);
+    CP(14);
 }
 
 /* ── insert ──────────────────────────────────────────────────────────────── */
