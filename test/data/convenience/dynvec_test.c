@@ -252,12 +252,14 @@ static void test_get_set(void)
 }
 
 /* ── data / first / last ─────────────────────────────────────────────────── *
- * Instrumented with CP(n) checkpoints and DUMP_STATE() between operations
- * to narrow down a Windows MSVC Release SEGFAULT. The previous diagnostic
- * pass showed crash between CP6 (after push(1)) and CP7 (after push(2)).
- * This pass dumps v's three observable fields at three checkpoints so we
- * can see whether state corrupts during the empty queries or between the
- * pushes. To be removed once the underlying bug is fixed. */
+ * Instrumented with CP(n), DUMP_STATE(), and a manual step-by-step expansion
+ * of the second dynvec_int_push() call to narrow down a Windows MSVC Release
+ * SEGFAULT. Previous diagnostic passes confirmed:
+ *   - State is valid right before the second push (data is a valid heap ptr,
+ *     len=1, cap=8)
+ *   - The crash is inside the second dynvec_int_push(&v, 2)
+ * This pass manually expands the inline body of push() to find the exact
+ * crashing instruction. To be removed once the underlying bug is fixed. */
 static void test_data_first_last(void)
 {
     CP(1);
@@ -277,11 +279,40 @@ static void test_data_first_last(void)
     CP(6);
     DUMP_STATE("after push(1)", v);
 
-    /* The crash is somewhere in this push. The DUMP_STATE above gives
-     * us the exact state right before. */
-    dynvec_int_push(&v, 2);
+    /* Manually expand dynvec_int_push(&v, 2) to find the crashing instruction.
+     * If any of steps A–G crash, we know exactly which operation MSVC
+     * mishandles. If all succeed, the bug is specific to the inlined form
+     * of push() under MSVC Release optimization. */
+    fprintf(stderr, "    push(2) step A: v=%p\n", (void*)&v);
+    fflush(stderr);
+
+    bool null_check = (&v != NULL);
+    fprintf(stderr, "    push(2) step B: null_check=%d\n", (int)null_check);
+    fflush(stderr);
+
+    bool need_grow = (v.len >= v.cap);
+    fprintf(stderr, "    push(2) step C: need_grow=%d (len=%zu cap=%zu)\n",
+            (int)need_grow, v.len, v.cap);
+    fflush(stderr);
+
+    fprintf(stderr, "    push(2) step D: v.data=%p v.len=%zu\n",
+            (void*)v.data, v.len);
+    fflush(stderr);
+
+    int* target = &v.data[v.len];
+    fprintf(stderr, "    push(2) step E: target=%p\n", (void*)target);
+    fflush(stderr);
+
+    *target = 2;
+    fprintf(stderr, "    push(2) step F: store complete\n");
+    fflush(stderr);
+
+    v.len++;
+    fprintf(stderr, "    push(2) step G: len=%zu\n", v.len);
+    fflush(stderr);
+
     CP(7);
-    DUMP_STATE("after push(2)", v);
+    DUMP_STATE("after manual push(2)", v);
 
     dynvec_int_push(&v, 3);
     CP(8);
