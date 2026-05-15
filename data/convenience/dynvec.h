@@ -75,7 +75,8 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
  * - Uses Canon-C core modules only
- * - No platform-specific code
+ * - No platform-specific code in the API surface; one MSVC-specific
+ *   inlining workaround documented below (see DYNVEC_NOINLINE).
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -144,6 +145,45 @@
 #else
     #define DYNVEC_LIKELY(x) (x)
     #define DYNVEC_UNLIKELY(x) (x)
+#endif
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DYNVEC_NOINLINE — MSVC inliner workaround
+
+   MSVC's Release optimizer (verified on cl.exe with /O2) miscompiles the
+   inlined pattern of two consecutive dynvec_##type##_push() calls on the
+   same dynvec when the calling function previously took the address of
+   the dynvec via dynvec_##type##_first() / _last() in an empty-state
+   query. The miscompilation produces a SEGFAULT on the second push,
+   despite v->data being a valid heap pointer and v->len < v->cap.
+
+   The bug:
+     - Reproduces deterministically on Windows MSVC Release
+     - Does NOT reproduce on Linux gcc/clang or macOS clang
+     - Does NOT reproduce on MSVC Debug
+     - Does NOT reproduce on MSVC Release Clang (different inliner)
+     - Disappears immediately when any side-effecting call (fprintf,
+       fflush, or even a memory barrier) is inserted between the pushes
+     - Disappears when push/insert/extend are not inlined
+
+   The workaround:
+     - Marking push, insert, and extend with __declspec(noinline) on
+       MSVC defeats the bad inlining pattern. The functions remain
+       static, but MSVC will not inline them across call sites.
+     - On GCC/Clang, the macro expands to nothing — those compilers
+       continue to inline push when they consider it profitable.
+     - Zero cost on platforms unaffected by the bug.
+
+   The three affected functions (push, insert, extend) are the ones
+   that take the dynvec by mutable pointer and can trigger growth.
+   The other API functions are simple readers or single-effect mutators
+   that don't exhibit the pattern; they remain pure static inline.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#if defined(_MSC_VER)
+    #define DYNVEC_NOINLINE __declspec(noinline)
+#else
+    #define DYNVEC_NOINLINE
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -507,6 +547,8 @@ static inline type* dynvec_##type##_last(const dynvec_##type* v) { \
  * @post On false: v is unchanged \
  * \
  * @note May allocate heap memory. \
+ * @note Marked DYNVEC_NOINLINE — MSVC Release miscompiles consecutive \
+ * inlined push() calls (see DYNVEC_NOINLINE docblock above). \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): if growth was triggered AND the buffer \
  * was relocated, the lifetime ID is restamped. If no growth was needed, \
@@ -516,7 +558,7 @@ static inline type* dynvec_##type##_last(const dynvec_##type* v) { \
  * - Time: Amortized O(1), worst-case O(n) on realloc \
  * - Space: May allocate up to 2× current cap * sizeof(type) \
  */ \
-static inline bool dynvec_##type##_push( \
+static DYNVEC_NOINLINE bool dynvec_##type##_push( \
     dynvec_##type* v, type value) { \
     if (!v) return false; \
     if (DYNVEC_UNLIKELY(v->len >= v->cap)) { \
@@ -553,6 +595,8 @@ static inline bool dynvec_##type##_pop( \
  * @return true on success, false on v == NULL, i > v->len, or allocation failure \
  * \
  * @note May allocate heap memory. \
+ * @note Marked DYNVEC_NOINLINE for the same reason as push (see DYNVEC_NOINLINE \
+ * docblock above). \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): same as push — restamps only if realloc \
  * moves the buffer. \
@@ -561,7 +605,7 @@ static inline bool dynvec_##type##_pop( \
  * - Time: O(n) — shifts elements, may realloc \
  * - Space: May allocate up to 2× current cap * sizeof(type) \
  */ \
-static inline bool dynvec_##type##_insert( \
+static DYNVEC_NOINLINE bool dynvec_##type##_insert( \
     dynvec_##type* v, usize i, type value) { \
     if (!v || i > v->len) return false; \
     if (DYNVEC_UNLIKELY(v->len >= v->cap)) { \
@@ -635,6 +679,8 @@ static inline void dynvec_##type##_clear(dynvec_##type* v) { \
  * @return true on success, false on v == NULL, src == NULL, or allocation failure \
  * \
  * @note May allocate heap memory. \
+ * @note Marked DYNVEC_NOINLINE for the same reason as push (see DYNVEC_NOINLINE \
+ * docblock above). \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): same as push — restamps only if realloc \
  * moves the buffer. \
@@ -643,7 +689,7 @@ static inline void dynvec_##type##_clear(dynvec_##type* v) { \
  * - Time: O(count), plus possible O(n) realloc \
  * - Space: May allocate up to 2× current cap * sizeof(type) \
  */ \
-static inline bool dynvec_##type##_extend( \
+static DYNVEC_NOINLINE bool dynvec_##type##_extend( \
     dynvec_##type* v, const type* src, usize count) { \
     if (!v || !src) return false; \
     if (count == 0) return true; \
