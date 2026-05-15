@@ -75,6 +75,24 @@ static int g_failed = 0;
         }                                                             \
     } while (0)
 
+/* Diagnostic: print test name before/after each call. Used to identify
+ * which test crashes when the test binary segfaults without producing
+ * an EXPECT failure message. fflush forces the output to disk even if
+ * the test SEGFAULTs immediately after RUN prints — without fflush,
+ * buffered stderr can be lost on abnormal termination on some platforms
+ * (notably Windows MSVC). The wrapper is cheap enough that we leave it
+ * on permanently; it adds two fprintf calls per test, which is noise
+ * next to the actual test work and immediately useful the next time a
+ * platform-specific crash appears. */
+#define RUN(test_fn)                                          \
+    do {                                                      \
+        fprintf(stderr, "RUN %s\n", #test_fn);               \
+        fflush(stderr);                                       \
+        test_fn();                                            \
+        fprintf(stderr, "OK  %s\n", #test_fn);               \
+        fflush(stderr);                                       \
+    } while (0)
+
 /* ── dynvec_int_init ─────────────────────────────────────────────────────── */
 static void test_init(void)
 {
@@ -553,27 +571,27 @@ int main(void)
 {
     (void)dynvec_suppress_unused;
 
-    test_init();
-    test_with_capacity();
-    test_push_basic();
-    test_growth();
-    test_pop();
-    test_get_set();
-    test_data_first_last();
-    test_insert();
-    test_remove();
-    test_clear();
-    test_extend();
-    test_reserve();
-    test_shrink_to_fit();
-    test_point();
+    RUN(test_init);
+    RUN(test_with_capacity);
+    RUN(test_push_basic);
+    RUN(test_growth);
+    RUN(test_pop);
+    RUN(test_get_set);
+    RUN(test_data_first_last);
+    RUN(test_insert);
+    RUN(test_remove);
+    RUN(test_clear);
+    RUN(test_extend);
+    RUN(test_reserve);
+    RUN(test_shrink_to_fit);
+    RUN(test_point);
 
 #ifdef CANON_LIFETIME_DEBUG
-    test_lifetime_init_opens_token();
-    test_lifetime_grow_restamps_id_when_relocated();
-    test_lifetime_clear_preserves_id();
-    test_lifetime_shrink_to_fit_empty_restamps();
-    test_lifetime_free_closes_token();
+    RUN(test_lifetime_init_opens_token);
+    RUN(test_lifetime_grow_restamps_id_when_relocated);
+    RUN(test_lifetime_clear_preserves_id);
+    RUN(test_lifetime_shrink_to_fit_empty_restamps);
+    RUN(test_lifetime_free_closes_token);
 #endif
 
     if (g_failed == 0) {
