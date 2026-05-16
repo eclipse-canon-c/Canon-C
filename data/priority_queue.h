@@ -23,8 +23,15 @@
  * NOTE: CANON_RESULT(bool, Error) token-pastes to result__Bool_Error
  * (not result_bool_Error) because bool expands to _Bool before ## in C99.
  * All function signatures and call sites use result__Bool_Error accordingly.
+ *
+ * Guarded against multi-TU collision when vec/deque/priority_queue/hashmap
+ * are all included in the same translation unit (see test/semantics/borrow_test.c).
+ * Matches the pattern already used in vec_impl.h and deque_impl.h.
  */
-CANON_RESULT(bool, Error)
+#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
+    #define CANON_RESULT_BOOL_ERROR_DEFINED
+    CANON_RESULT(bool, Error)
+#endif
 
 /**
  * @file data/priority_queue.h
