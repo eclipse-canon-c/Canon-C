@@ -15,6 +15,9 @@
  *   - Max-heap ordering       — descending comparator, pop returns maximum
  *   - DEFINE_PRIORITY_QUEUE(int)   — typed wrapper (pq_int), full API coverage
  *   - DEFINE_PRIORITY_QUEUE(Score) — struct type for generated-code coverage
+ *   - CANON_LIFETIME_DEBUG: init opens, mutating ops restamp, queries
+ *     preserve the id. No close test — PQ has no destructor (caller owns
+ *     buffer and struct).
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Values drawn from low nibble (0–15); all pushes use that value
@@ -484,6 +487,165 @@ static void test_struct_type(void)
     EXPECT(b.len == 2 * sizeof(Score));
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * State-level assertions on h._pq.lt. Borrow-side end-to-end validation
+ * (firing require_msg via lifetime_assert_valid) is covered in Phase 4
+ * tests in borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - pq_init opens the lifetime: lt.open == true, lt.id derived from
+ *     a per-TU counter XOR'd with pq's address.
+ *   - PQ has NO destructor — no close test. Lifetime stays open for the
+ *     life of the struct.
+ *   - RESTAMP on every mutating operation: push, pop, remove_at, heapify.
+ *     The id changes; lt.open stays true.
+ *   - Peek and queries do NOT restamp.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    int buf[8];
+    pq_int h;
+    pq_int_init(&h, buf, 8, cmp_int_asc, NULL);
+    EXPECT(h._pq.lt.open == true);
+    EXPECT(h._pq.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_push_restamps(void)
+{
+    int buf[8];
+    pq_int h;
+    pq_int_init(&h, buf, 8, cmp_int_asc, NULL);
+    region_id_t id_before = h._pq.lt.id;
+
+    pq_int_push_result(&h, 42);
+    EXPECT(h._pq.lt.id != id_before);
+    EXPECT(h._pq.lt.open == true);
+
+    /* successive pushes each produce a fresh id */
+    region_id_t id_after_first = h._pq.lt.id;
+    pq_int_push_result(&h, 7);
+    EXPECT(h._pq.lt.id != id_after_first);
+
+    /* error path (capacity exceeded) does NOT restamp */
+    int small_buf[2];
+    pq_int small;
+    pq_int_init(&small, small_buf, 2, cmp_int_asc, NULL);
+    pq_int_push_result(&small, 1);
+    pq_int_push_result(&small, 2);
+    region_id_t id_before_overflow = small._pq.lt.id;
+    result__Bool_Error r = pq_int_push_result(&small, 3);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(small._pq.lt.id == id_before_overflow); /* error path preserves id */
+}
+
+static void test_lifetime_pop_restamps(void)
+{
+    int buf[8];
+    pq_int h;
+    pq_int_init(&h, buf, 8, cmp_int_asc, NULL);
+    pq_int_push_result(&h, 10);
+    pq_int_push_result(&h, 20);
+    pq_int_push_result(&h, 5);
+
+    region_id_t id_before = h._pq.lt.id;
+    option_int popped = pq_int_pop_option(&h);
+    EXPECT(option_int_is_some(popped));
+    EXPECT(h._pq.lt.id != id_before);
+    EXPECT(h._pq.lt.open == true);
+
+    /* pop on empty does NOT restamp — nothing changed */
+    int empty_buf[4];
+    pq_int empty_h;
+    pq_int_init(&empty_h, empty_buf, 4, cmp_int_asc, NULL);
+    region_id_t empty_id = empty_h._pq.lt.id;
+    option_int none = pq_int_pop_option(&empty_h);
+    EXPECT(option_int_is_none(none));
+    EXPECT(empty_h._pq.lt.id == empty_id); /* preserved on no-op */
+}
+
+static void test_lifetime_remove_at_restamps(void)
+{
+    int buf[8];
+    pq_int h;
+    pq_int_init(&h, buf, 8, cmp_int_asc, NULL);
+    pq_int_push_result(&h, 30);
+    pq_int_push_result(&h, 10);
+    pq_int_push_result(&h, 50);
+    pq_int_push_result(&h, 20);
+
+    region_id_t id_before = h._pq.lt.id;
+    result__Bool_Error r = pq_int_remove_at_result(&h, 1);
+    EXPECT(result__Bool_Error_is_ok(r));
+    EXPECT(h._pq.lt.id != id_before);
+    EXPECT(h._pq.lt.open == true);
+
+    /* removing the last element still restamps (composition changed) */
+    region_id_t id_mid = h._pq.lt.id;
+    r = pq_int_remove_at_result(&h, pq_int_len(&h) - 1);
+    EXPECT(result__Bool_Error_is_ok(r));
+    EXPECT(h._pq.lt.id != id_mid);
+
+    /* out-of-range does NOT restamp */
+    region_id_t id_stable = h._pq.lt.id;
+    r = pq_int_remove_at_result(&h, 999);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(h._pq.lt.id == id_stable);
+}
+
+static void test_lifetime_heapify_restamps(void)
+{
+    int buf[8];
+    pq_int h;
+    pq_int_init(&h, buf, 8, cmp_int_asc, NULL);
+
+    int values[5] = {50, 30, 40, 10, 20};
+    memcpy(buf, values, 5 * sizeof(int));
+
+    region_id_t id_before = h._pq.lt.id;
+    pq_int_heapify(&h, 5);
+    EXPECT(h._pq.lt.id != id_before);
+    EXPECT(h._pq.lt.open == true);
+
+    /* heapify(0) — empties the heap; still restamps (state changed) */
+    region_id_t id_mid = h._pq.lt.id;
+    pq_int_heapify(&h, 0);
+    EXPECT(h._pq.lt.id != id_mid);
+}
+
+static void test_lifetime_queries_preserve_id(void)
+{
+    /* Non-mutating operations must not touch lt. This documents the
+     * contract — if peek or any query accidentally restamps, this fires. */
+    int buf[8];
+    pq_int h;
+    pq_int_init(&h, buf, 8, cmp_int_asc, NULL);
+    pq_int_push_result(&h, 10);
+    pq_int_push_result(&h, 20);
+
+    region_id_t id_before = h._pq.lt.id;
+
+    /* peek variants */
+    (void)pq_int_peek_option(&h);
+    EXPECT(h._pq.lt.id == id_before);
+    (void)pq_peek_raw(&h._pq);
+    EXPECT(h._pq.lt.id == id_before);
+
+    /* queries */
+    (void)pq_int_len(&h);
+    (void)pq_int_capacity(&h);
+    (void)pq_int_remaining(&h);
+    (void)pq_int_is_empty(&h);
+    (void)pq_int_is_full(&h);
+    (void)pq_int_as_bytes(&h);
+    EXPECT(h._pq.lt.id == id_before);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused generated functions ────────────────────────────────── */
 
 static void pq_suppress_unused(void)
@@ -586,6 +748,15 @@ int main(void)
 
     /* struct type */
     test_struct_type();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_push_restamps();
+    test_lifetime_pop_restamps();
+    test_lifetime_remove_at_restamps();
+    test_lifetime_heapify_restamps();
+    test_lifetime_queries_preserve_id();
+#endif
 
     if (g_failed == 0) {
         printf("OK  priority_queue_test  (all assertions passed)\n");
