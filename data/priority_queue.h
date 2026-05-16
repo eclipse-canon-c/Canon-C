@@ -12,6 +12,11 @@
 #include "semantics/option/option.h"
 #include "semantics/result/result.h"
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                       /* uintptr_t */
+    #include "core/primitives/lifetime.h"     /* region_id_t, lifetime_t */
+#endif
+
 /*
  * Instantiate the Result type used by fallible operations.
  *
@@ -57,6 +62,39 @@ CANON_RESULT(bool, Error)
  * returns option_T from pop/peek instead of raw void* out-params.
  * Requires CANON_OPTION(T) to be instantiated first.
  *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field on the PriorityQueue struct. The field
+ *     is inherited transparently by every DEFINE_PRIORITY_QUEUE(T) typed
+ *     wrapper — typed wrappers just contain `PriorityQueue _pq` and read
+ *     `h->_pq.lt` exactly like any other field.
+ *   - pq_init opens a fresh lifetime. The ID is derived from a per-TU
+ *     monotonic counter XOR'd with the constructor's address (same pattern
+ *     as vec/deque — defensive against any future shift to a value-return
+ *     constructor shape).
+ *   - PriorityQueue has NO destructor. The buffer is caller-owned and the
+ *     struct is caller-allocated; there is no hook on which to call close.
+ *     The lifetime stays open for the life of the struct. Use-of-PQ-
+ *     after-the-struct-goes-out-of-scope is the caller's responsibility,
+ *     not the substrate's. (Same contract as deque.)
+ *   - Restamp-on-mutation: every operation that can change the element
+ *     at index 0 — push_result, pop_raw, remove_at_result, heapify — re-
+ *     derives lt.id at the end of the operation (on the success path).
+ *     A borrow that captured the previous id (e.g. against the address
+ *     returned by pq_peek_raw before the mutation) reads the new id at
+ *     the same &pq->lt address and mismatches — invalidation by id-bump,
+ *     analogous to vec's swap-via-struct-copy semantics.
+ *   - Operations that do NOT restamp: peek_raw/peek, queries (len,
+ *     capacity, remaining, is_empty, is_full, as_bytes). The bool legacy
+ *     wrappers (pq_push, pq_pop, pq_peek, pq_remove_at) inherit the
+ *     restamp transitively through the result variants they delegate to.
+ *   - Internal helpers (pq_swap, pq_sift_up, pq_sift_down) deliberately
+ *     do NOT restamp. The restamp belongs at the public-operation
+ *     boundary so a single push (which may call sift_up many times)
+ *     produces exactly one id bump, not one per internal swap.
+ *   Zero cost in release builds — struct layout is identical without
+ *   the flag.
+ *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
  * data/priority_queue.h is in data/ — depends on core/ and semantics/.
@@ -89,6 +127,7 @@ CANON_RESULT(bool, Error)
  * ```
  *
  * @sa core/primitives/compare.h — algo_cmp_fn and built-in comparators
+ * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
  * @sa semantics/option/option.h — option_T for typed peek/pop
  * @sa semantics/result/result.h — result__Bool_Error for fallible operations
  * @sa semantics/error.h         — Error enum (ERR_INVALID_ARG, etc.)
@@ -96,6 +135,53 @@ CANON_RESULT(bool, Error)
  * @sa core/slice.h              — bytes_t view of heap contents
  * @sa core/memory.h             — mem_copy, mem_swap, CANON_MEM_SWAP_MAX
  */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime field and helpers
+   ════════════════════════════════════════════════════════════════════════════
+   Field is conditionally injected via PQ_LIFETIME_FIELD_. Helpers are
+   conditionally defined; in release builds they are empty no-ops (and the
+   field doesn't exist on the struct).
+
+   PriorityQueue is a single base struct shared across all typed wrappers —
+   so a single pair of file-scoped helpers (open + restamp) suffices for
+   every DEFINE_PRIORITY_QUEUE(T) instantiation. Unlike vec/deque, no
+   per-instantiation helper is needed because nothing in this module
+   token-pastes against the lifetime helper name.
+
+   Restamp uses the same counter-mixed derivation as open. The result is
+   a fresh id distinct from the previous one (the counter monotonically
+   increments) — borrows that captured the old id now mismatch.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define PQ_LIFETIME_FIELD_ \
+        lifetime_t lt; /**< [debug] Lifetime token: id + open */
+
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * The counter ensures successive id derivations within a TU produce
+     * distinct values. The XOR with the struct address adds cross-TU
+     * diversity. Used by both open (on pq_init) and restamp (on every
+     * mutating operation).
+     *
+     * No thread-safety guarantee — concurrent construction or concurrent
+     * mutation requires external synchronization, the same constraint
+     * that applies to every Canon-C container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+     * derivation is defensively guarded against producing 0.
+     */
+    static inline region_id_t pq_lifetime_next_id_(void* pqp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(pqp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+#else
+    #define PQ_LIFETIME_FIELD_  /* empty */
+#endif
 
 /* ════════════════════════════════════════════════════════════════════════════
    PriorityQueue struct
@@ -106,6 +192,10 @@ CANON_RESULT(bool, Error)
  *
  * Do not access fields directly — use the provided functions.
  * Always initialize with pq_init() before use.
+ *
+ * Under CANON_LIFETIME_DEBUG, an additional lifetime_t lt field is appended
+ * for borrow-invalidation tracking. Typed wrappers (DEFINE_PRIORITY_QUEUE)
+ * read this field transparently as `h->_pq.lt`.
  */
 typedef struct {
     void*       data;      ///< Caller-owned element buffer
@@ -114,7 +204,28 @@ typedef struct {
     usize       elem_size; ///< Size of each element in bytes
     algo_cmp_fn cmp;       ///< Three-way comparator (< 0 means parent first)
     void*       ctx;       ///< Optional context passed to cmp (may be NULL)
+    PQ_LIFETIME_FIELD_
 } PriorityQueue;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime open/restamp helpers (file-scoped, after struct defn)
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    /** @brief Opens a fresh lifetime token on the queue (called by pq_init). */
+    static inline void pq_lifetime_open_(PriorityQueue* pq) {
+        pq->lt.id   = pq_lifetime_next_id_(pq);
+        pq->lt.open = true;
+    }
+    /** @brief Derives a new id, invalidating any prior borrows. */
+    static inline void pq_lifetime_restamp_(PriorityQueue* pq) {
+        pq->lt.id = pq_lifetime_next_id_(pq);
+        /* lt.open stays true — restamp is not destruction */
+    }
+#else
+    static inline void pq_lifetime_open_(PriorityQueue* pq)    { (void)pq; }
+    static inline void pq_lifetime_restamp_(PriorityQueue* pq) { (void)pq; }
+#endif
 
 /* ════════════════════════════════════════════════════════════════════════════
    Internal helpers
@@ -135,6 +246,10 @@ static inline usize pq_right_child(usize i) { return 2 * i + 2; }
  *
  * @pre pq != NULL
  * @pre a < pq->len && b < pq->len
+ *
+ * Lifetime: does NOT restamp. The restamp belongs at the public-operation
+ * boundary so a single push/pop produces exactly one id bump, not one per
+ * internal swap.
  */
 static inline void pq_swap(borrowed(PriorityQueue*) pq, usize a, usize b) {
     require_msg(pq != NULL, "pq_swap: pq cannot be NULL");
@@ -158,6 +273,8 @@ static inline void pq_swap(borrowed(PriorityQueue*) pq, usize a, usize b) {
  * @brief Restores heap invariant upward from index i
  *
  * @pre pq != NULL
+ *
+ * Lifetime: does NOT restamp (internal helper).
  */
 static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
     require_msg(pq != NULL, "pq_sift_up: pq cannot be NULL");
@@ -175,6 +292,8 @@ static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
  * @brief Restores heap invariant downward from index i
  *
  * @pre pq != NULL
+ *
+ * Lifetime: does NOT restamp (internal helper).
  */
 static inline void pq_sift_down(borrowed(PriorityQueue*) pq, usize i) {
     require_msg(pq != NULL, "pq_sift_down: pq cannot be NULL");
@@ -223,6 +342,10 @@ static inline void pq_sift_down(borrowed(PriorityQueue*) pq, usize i) {
  * @post pq->len == 0
  * @post pq->capacity == capacity
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID is
+ * derived from a per-TU counter XOR'd with pq's address — borrows constructed
+ * against this queue carry this ID.
+ *
  * Performance: O(1)
  */
 static inline void pq_init(
@@ -245,6 +368,7 @@ static inline void pq_init(
     pq->elem_size = elem_size;
     pq->cmp       = cmp;
     pq->ctx       = ctx;
+    pq_lifetime_open_(pq);
 }
 
 /**
@@ -263,6 +387,9 @@ static inline void pq_init(
  * @post pq->len == min(len, pq->capacity)
  * @post Heap invariant holds for all nodes
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): RESTAMPS. Floyd's algorithm reshuffles
+ * the whole heap; any borrow against a prior element position is invalid.
+ *
  * Performance: O(n) — Floyd's algorithm
  */
 static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
@@ -270,14 +397,16 @@ static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
     require_msg(pq->data    != NULL, "pq_heapify: pq not initialized (data is NULL)");
     require_msg(pq->cmp     != NULL, "pq_heapify: pq not initialized (cmp is NULL)");
     require_msg(pq->capacity > 0,    "pq_heapify: pq not initialized (capacity is 0)");
-    if (len == 0) { pq->len = 0; return; }
+    if (len == 0) { pq->len = 0; pq_lifetime_restamp_(pq); return; }
     if (len > pq->capacity) len = pq->capacity;
     pq->len = len;
-    if (len < 2) return;
-    usize i = pq_parent(len - 1) + 1;
-    while (i-- > 0) {
-        pq_sift_down(pq, i);
+    if (len >= 2) {
+        usize i = pq_parent(len - 1) + 1;
+        while (i-- > 0) {
+            pq_sift_down(pq, i);
+        }
     }
+    pq_lifetime_restamp_(pq);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -292,6 +421,12 @@ static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
  *
  * @return result__Bool_Error — Ok(true) on success, Err on failure
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): RESTAMPS on the success path. Sift-up
+ * may move the new element up to position 0, displacing whatever was there.
+ * A borrow against the previous index-0 element is invalid after push.
+ * The error paths (NULL args, capacity exceeded) do NOT restamp — nothing
+ * changed.
+ *
  * Performance: O(log n)
  */
 static inline result__Bool_Error pq_push_result(
@@ -303,6 +438,7 @@ static inline result__Bool_Error pq_push_result(
     mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
     pq_sift_up(pq, pq->len - 1);
+    pq_lifetime_restamp_(pq);
     return result__Bool_Error_ok(true);
 }
 
@@ -317,6 +453,11 @@ static inline result__Bool_Error pq_push_result(
  *
  * @return true if an element was removed, false if empty or pq is NULL
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): RESTAMPS on the success path. The
+ * element at index 0 is removed; the last element is moved to position 0
+ * and sift-down rearranges. A borrow against the previous index-0 is
+ * invalid after pop.
+ *
  * Performance: O(log n)
  */
 static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
@@ -329,6 +470,7 @@ static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
                  pq->elem_size);
         pq_sift_down(pq, 0);
     }
+    pq_lifetime_restamp_(pq);
     return true;
 }
 
@@ -342,6 +484,8 @@ static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
  * from DEFINE_PRIORITY_QUEUE(T).
  *
  * @return Pointer to the top element, or NULL if empty or pq is NULL
+ *
+ * Lifetime: does NOT restamp. Peek is non-mutating.
  *
  * Performance: O(1)
  */
@@ -361,6 +505,10 @@ static inline const void* pq_peek_raw(borrowed(const PriorityQueue*) pq) {
  *
  * @return result__Bool_Error — Ok(true) on success, Err on failure
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): RESTAMPS on the success path. The
+ * removed slot is filled with the last element and reorganized — any
+ * borrow against a prior position is invalid.
+ *
  * Performance: O(log n)
  */
 static inline result__Bool_Error pq_remove_at_result(
@@ -370,17 +518,26 @@ static inline result__Bool_Error pq_remove_at_result(
     if (!pq)          return result__Bool_Error_err(ERR_INVALID_ARG);
     if (i >= pq->len) return result__Bool_Error_err(ERR_OUT_OF_RANGE);
     pq->len--;
-    if (i == pq->len) return result__Bool_Error_ok(true); /* removed last element */
+    if (i == pq->len) {
+        /* removed last element — no rearrangement, but the heap composition
+         * changed (one element gone), so prior borrows are still invalidated */
+        pq_lifetime_restamp_(pq);
+        return result__Bool_Error_ok(true);
+    }
     mem_copy(ptr_elem(pq->data, i,       pq->elem_size),
              ptr_elem(pq->data, pq->len, pq->elem_size),
              pq->elem_size);
     pq_sift_up(pq, i);
     pq_sift_down(pq, i);
+    pq_lifetime_restamp_(pq);
     return result__Bool_Error_ok(true);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Legacy bool wrappers — kept for compatibility, result variants preferred
+   ════════════════════════════════════════════════════════════════════════════
+   These delegate to the result/raw variants above. Restamp happens
+   transitively through the inner call — no additional bookkeeping here.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /** @brief Inserts elem — returns true on success. Prefer pq_push_result(). */
@@ -455,6 +612,10 @@ static inline bytes_t pq_as_bytes(borrowed(const PriorityQueue*) pq) {
    Pop and peek return option_T instead of raw void* out-params.
 
    Requires CANON_OPTION(type) to be instantiated before expanding this macro.
+
+   The typed wrapper just contains a PriorityQueue _pq member — the lt
+   field (and all lifetime bookkeeping) is inherited transparently from
+   the base struct. No per-type lifetime helpers needed.
 
    Usage:
    ```c
