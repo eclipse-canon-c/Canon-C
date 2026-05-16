@@ -47,6 +47,15 @@
  * declarations for hashmap_init and hashmap_insert use result__Bool_Error to
  * match the definitions emitted by hashmap_impl.h exactly.
  *
+ * Lifetime field (CANON_LIFETIME_DEBUG):
+ * ────────────────────────────────────────────────────────────────────────────
+ * When CANON_LIFETIME_DEBUG is set, the struct layout here includes an extra
+ * lifetime_t lt field appended after ctx — matching the definition emitted
+ * by hashmap_impl.h. The flag MUST be set consistently across all translation
+ * units that share a hashmap type, otherwise the struct sizes will disagree
+ * and break separate compilation. Build with CANON_LIFETIME_DEBUG for the
+ * whole project or none of it — never mixed.
+ *
  * @sa hashmap.h       — header-only entry point (includes everything)
  * @sa hashmap_defn.h  — generates definitions (include in exactly one .c)
  * @sa hashmap_impl.h  — pure logic (included by defn)
@@ -66,6 +75,10 @@
 #include "semantics/result/result.h"
 #include "semantics/error.h"
 
+#ifdef CANON_LIFETIME_DEBUG
+    #include "core/primitives/lifetime.h"  /* lifetime_t */
+#endif
+
 /* ============================================================================
  * Required user definitions must be set before including this file
  * ========================================================================= */
@@ -84,6 +97,17 @@ CANON_RESULT(bool, Error)
 CANON_RESULT(hm_decl_val_t, Error)
 
 /* ============================================================================
+ * Lifetime field macro — must match hashmap_impl.h exactly
+ * ========================================================================= */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define HM_DECL_LIFETIME_FIELD_ \
+        lifetime_t lt; /**< [debug] Lifetime token: id + open */
+#else
+    #define HM_DECL_LIFETIME_FIELD_  /* empty */
+#endif
+
+/* ============================================================================
  * Slot forward declaration
  * ========================================================================= */
 
@@ -97,6 +121,9 @@ typedef struct {
 
 /* ============================================================================
  * Hashmap struct forward declaration
+ *
+ * Layout MUST match hashmap_impl.h exactly under the same flag settings,
+ * otherwise sizeof and field offsets diverge between translation units.
  * ========================================================================= */
 
 typedef struct {
@@ -104,6 +131,7 @@ typedef struct {
     usize              capacity;
     usize              len;
     void*              ctx;
+    HM_DECL_LIFETIME_FIELD_
 } HASHMAP_TYPE_NAME;
 
 /* ============================================================================
@@ -163,5 +191,13 @@ extern bool _HM_ITER_NEXT(
     const hm_decl_val_t**    val_out
 );
 
+/* Lifetime helpers — extern declarations so other TUs can see them.
+ * Their bodies are empty no-ops without CANON_LIFETIME_DEBUG, but the
+ * names always exist (callers in hashmap_impl.h invoke them
+ * unconditionally; consistent linkage across TUs is required). */
+extern void _HM_LIFETIME_OPEN(HASHMAP_TYPE_NAME* map);
+extern void _HM_LIFETIME_RESTAMP(HASHMAP_TYPE_NAME* map);
+
 #undef hm_decl_key_t
 #undef hm_decl_val_t
+#undef HM_DECL_LIFETIME_FIELD_
