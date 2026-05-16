@@ -931,7 +931,7 @@ static void test_lifetime_swap_exchanges_tokens(void)
 
     region_id_t a_id_before = a.lt.id;
     region_id_t b_id_before = b.lt.id;
-    EXPECT(a_id_before != b_id_before); /* derived from different addresses */
+    EXPECT(a_id_before != b_id_before); /* per-TU counter guarantees uniqueness */
 
     vec_int_swap(&a, &b);
 
