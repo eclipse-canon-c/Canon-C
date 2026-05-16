@@ -80,6 +80,14 @@ static bool _bt_eq_u64(const u64* a, const u64* b, void* ctx)
 DEFINE_SLICE(int)
 DEFINE_BORROWED_SLICE(int)
 
+/* option_int is required by:
+ *   - DEFINE_VEC (vec_int_get_option, vec_int_pop_option, vec_int_remove_option)
+ *   - DEFINE_DEQUE (deque_int_pop_*_option, deque_int_peek_*_option)
+ *   - DEFINE_PRIORITY_QUEUE (pq_int_pop_option, pq_int_peek_option)
+ * Must be instantiated before any of those. */
+#include "semantics/option/option.h"
+CANON_OPTION(int)
+
 #include "data/vec/vec.h"
 DEFINE_VEC(static inline, int)
 
