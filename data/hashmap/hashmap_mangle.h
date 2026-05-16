@@ -102,4 +102,21 @@
 /* Utilities */
 #define _HM_BUFFER_SIZE  HASHMAP_FN(buffer_size)
 
+/* ============================================================================
+ * Lifetime helper names (internal — used only when CANON_LIFETIME_DEBUG is set)
+ * ============================================================================
+ * Mangled via HASHMAP_FN so each hashmap instantiation gets its own type-
+ * specific open/restamp helper. Without mangling, a translation unit that
+ * instantiated two hashmap types (e.g. map_u64_int and map_str_u32 in the
+ * same .c file) would redefine the helper with a different struct parameter
+ * type on the second include — a compile error.
+ *
+ * The names always exist (the macros are unconditional). The function
+ * BODIES are no-ops without CANON_LIFETIME_DEBUG, but the names remain
+ * referenceable. Callers in hashmap_impl.h invoke them unconditionally.
+ * ========================================================================= */
+
+#define _HM_LIFETIME_OPEN    HASHMAP_FN(lifetime_open_)
+#define _HM_LIFETIME_RESTAMP HASHMAP_FN(lifetime_restamp_)
+
 #endif /* CANON_DATA_HASHMAP_MANGLE_H */
