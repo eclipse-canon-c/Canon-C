@@ -349,22 +349,31 @@ file headers for per-file licensing.
 
 ## Authorship and tool use
 
-Canon-C is a single-author project. AI assistance was used
-substantially throughout development — for boilerplate generation around
-the typed-instantiation macros and tests, for drafting documentation
-prose, and as a discussion partner during architectural and verification
-work. The architectural decisions, verification scope, deviation
-classifications, and design philosophy are mine. The implementations are
-tested end-to-end, the verification runs on real CI with real Frama-C
-and SMT provers, and the proofs are real.
+Canon-C is a single-author project developed as a human-directed
+collaboration with AI coding assistants. AI assistance is extensive
+across the codebase — it was used to produce text for the C
+implementation, the ACSL annotations, the test code, deviation
+arguments, and documentation.
 
-For detailed disclosure of AI tool usage, including which files
-contain substantially AI-generated content and how those files are
-licensed, see `AI-USAGE.md`. Files containing substantially
-AI-generated content carry a per-file header marking them as dual-
-licensed under MIT AND CC0-1.0 in accordance with Eclipse Foundation
-generative AI guidelines.
+What is human-authored is the judgment exercised throughout: the
+architectural design and layering, the scope of the library, the
+API surface and its contracts, the verification approach, the
+deviation classifications, and decisions about which AI-produced
+output is kept, modified, or rejected. AI-produced text is in the
+repository only because I reviewed it, judged it correct, and chose
+to include it. I am accountable for every line in the codebase
+regardless of how it was first produced.
 
+The implementations are tested end-to-end, the verification runs
+on real CI with real Frama-C and SMT provers, and the proofs are
+real.
+
+For detailed disclosure, including the tools used and the licensing
+model, see `AI-USAGE.md`. The codebase is licensed under MIT for
+human-authored content (including the engineering and editorial
+judgment expressed throughout) with AI-generated portions
+additionally dedicated to the public domain under CC0-1.0, in
+accordance with the Eclipse Foundation's generative AI guidelines.
 ---
 
 ## Dependency Rule (Strict)
