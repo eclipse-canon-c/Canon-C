@@ -17,6 +17,8 @@
  *   - Slice: slice_init(), slice_get()
  *   - NULL-guard paths: ERR_INVALID_ARG on NULL vec or NULL out-param
  *   - Error codes: ERR_CAPACITY_EXCEEDED, ERR_INVALID_STATE, ERR_OUT_OF_RANGE
+ *   - CANON_LIFETIME_DEBUG: open on init/empty/alloc/arena_alloc, close on
+ *     free, swap exchanges tokens, in-place mutations preserve id
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Exercises push, pop, insert, remove, clear under arbitrary inputs
@@ -28,6 +30,10 @@
 #define CANON_CONTRACT_IMPL
 #include "semantics/option/option.h"
 #include "data/vec/vec.h"
+
+#ifdef CANON_LIFETIME_DEBUG
+#  include "core/arena.h"  /* needed for arena_alloc lifetime test */
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -848,6 +854,143 @@ static void test_struct_all_functions(void)
     EXPECT(heap_v.items == NULL);
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * State-level assertions on v.lt. Borrow-side validation (firing
+ * require_msg via lifetime_assert_valid) is covered in borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - init / empty / alloc / arena_alloc open the lifetime: lt.open == true,
+ *     lt.id derived from &v.
+ *   - free closes lt: lt.open == false.
+ *   - swap exchanges the entire struct including lt — a's new id matches
+ *     b's old id (and vice versa).
+ *   - Vec has fixed capacity — no relocation, no restamp. push, pop,
+ *     insert, remove, clear, set, fill, append_array, extend all preserve
+ *     lt.id and lt.open.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    int buf[8];
+    vec_int v = vec_int_init(buf, 8);
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_empty_opens_token(void)
+{
+    vec_int v = vec_int_empty();
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_alloc_opens_token(void)
+{
+    vec_int v = vec_int_alloc(4);
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+    vec_int_free(&v);
+}
+
+static void test_lifetime_arena_alloc_opens_token(void)
+{
+    u8 backing[256];
+    Arena arena;
+    arena_init(&arena, backing, sizeof(backing));
+
+    vec_int v = vec_int_arena_alloc(&arena, 4);
+    EXPECT(v.lt.open == true);
+    EXPECT(v.lt.id != REGION_ID_STATIC);
+    /* No free needed — arena owns the buffer */
+}
+
+static void test_lifetime_free_closes_token(void)
+{
+    vec_int v = vec_int_alloc(4);
+    vec_int_push(&v, 1);
+    vec_int_free(&v);
+    EXPECT(v.lt.open == false);
+    /* lt.id is preserved for post-mortem inspection but the lifetime
+     * is closed. lifetime_assert_valid against the captured id would
+     * fail the open check. */
+}
+
+static void test_lifetime_swap_exchanges_tokens(void)
+{
+    /* The substrate contract: swap exchanges the entire VecType struct,
+     * including the embedded lt field. After swap, &a->lt still points
+     * at a's struct but contains b's former lifetime token. A borrow
+     * that captured a's old id reads the new id at the same address
+     * and mismatches — invalidation by struct-copy, no restamp needed. */
+    int bufA[4], bufB[4];
+    vec_int a = vec_int_init(bufA, 4);
+    vec_int b = vec_int_init(bufB, 4);
+
+    region_id_t a_id_before = a.lt.id;
+    region_id_t b_id_before = b.lt.id;
+    EXPECT(a_id_before != b_id_before); /* derived from different addresses */
+
+    vec_int_swap(&a, &b);
+
+    EXPECT(a.lt.id == b_id_before);
+    EXPECT(b.lt.id == a_id_before);
+    EXPECT(a.lt.open == true);  /* both still open — neither was freed */
+    EXPECT(b.lt.open == true);
+}
+
+static void test_lifetime_in_place_mutations_preserve_id(void)
+{
+    /* Fixed-capacity vec never relocates. Every in-place mutation must
+     * preserve lt.id. This test documents that contract — if a future
+     * refactor accidentally restamps on any of these ops, this fires. */
+    int buf[8];
+    vec_int v = vec_int_init(buf, 8);
+    region_id_t id_before = v.lt.id;
+
+    /* push — appends, no relocation */
+    vec_int_push(&v, 1);
+    EXPECT(v.lt.id == id_before);
+
+    vec_int_push(&v, 2);
+    vec_int_push(&v, 3);
+    EXPECT(v.lt.id == id_before);
+
+    /* pop — shrinks, no relocation */
+    int out = 0;
+    vec_int_pop(&v, &out);
+    EXPECT(v.lt.id == id_before);
+
+    /* insert — shifts in place */
+    vec_int_insert(&v, 0, 99);
+    EXPECT(v.lt.id == id_before);
+
+    /* remove — shifts in place */
+    vec_int_remove(&v, 0, &out);
+    EXPECT(v.lt.id == id_before);
+
+    /* set — writes one slot */
+    vec_int_set(&v, 0, 42);
+    EXPECT(v.lt.id == id_before);
+
+    /* append_array — bulk copy into existing buffer */
+    int src[] = {10, 20};
+    vec_int_append_array(&v, src, 2);
+    EXPECT(v.lt.id == id_before);
+
+    /* fill — writes multiple slots */
+    vec_int_clear(&v);
+    EXPECT(v.lt.id == id_before);  /* clear preserves id */
+    vec_int_fill(&v, 7, 3);
+    EXPECT(v.lt.id == id_before);
+
+    EXPECT(v.lt.open == true);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused option API functions ────────────────────────────────── */
 
 static void vec_suppress_unused_option_fns(void)
@@ -884,6 +1027,14 @@ static void vec_suppress_unused_option_fns(void)
     (void)option_Point_replace;
     (void)option_Point_take;
     (void)option_Point_eq;
+
+    /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
+     * Reference them unconditionally so release builds don't warn
+     * about unused inlines either. */
+    (void)vec_int_lifetime_open_;
+    (void)vec_int_lifetime_close_;
+    (void)vec_Point_lifetime_open_;
+    (void)vec_Point_lifetime_close_;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -977,6 +1128,16 @@ int main(void)
     /* struct type — covers all generated Point functions */
     test_struct_all_functions();
 
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_empty_opens_token();
+    test_lifetime_alloc_opens_token();
+    test_lifetime_arena_alloc_opens_token();
+    test_lifetime_free_closes_token();
+    test_lifetime_swap_exchanges_tokens();
+    test_lifetime_in_place_mutations_preserve_id();
+#endif
+
     if (g_failed == 0) {
         printf("OK  vec_test  (all assertions passed)\n");
         return 0;
@@ -1036,6 +1197,8 @@ static void vec_fuzz_suppress_unused(void)
     (void)vec_int_iter_next;
     (void)vec_int_slice_init;
     (void)vec_int_slice_get;
+    (void)vec_int_lifetime_open_;
+    (void)vec_int_lifetime_close_;
 
     /* Point type — not fuzzed at all */
     (void)point_eq;
@@ -1090,6 +1253,8 @@ static void vec_fuzz_suppress_unused(void)
     (void)vec_Point_iter_next;
     (void)vec_Point_slice_init;
     (void)vec_Point_slice_get;
+    (void)vec_Point_lifetime_open_;
+    (void)vec_Point_lifetime_close_;
 }
 
 /*
