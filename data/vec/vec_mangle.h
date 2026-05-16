@@ -218,6 +218,38 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════
+   Lifetime helper names (internal — used by lifetime tracking)
+   ════════════════════════════════════════════════════════════════
+   These names are passed to IMPL_VEC_STRUCTS, IMPL_VEC_INIT,
+   IMPL_VEC_EMPTY, and IMPL_VEC_FREE so that token-pasting happens
+   here (where the argument is a bare identifier `type`) rather than
+   inside the IMPL_* macros (where the equivalent token sequence would
+   be MANGLE_VEC_TYPE(type) — a parenthesized form that cannot be
+   re-pasted in C99 because macro arguments are not rescanned before
+   participating in ##).
+
+   The helpers are emitted unconditionally (so the names always exist),
+   but their bodies are empty without CANON_LIFETIME_DEBUG. */
+
+/**
+ * @brief Name of the per-instantiation lifetime-open helper
+ *
+ * Default: vec_##type##_lifetime_open_  (trailing underscore — internal)
+ */
+#ifndef MANGLE_VEC_LIFETIME_OPEN
+    #define MANGLE_VEC_LIFETIME_OPEN(type)      vec_##type##_lifetime_open_
+#endif
+
+/**
+ * @brief Name of the per-instantiation lifetime-close helper
+ *
+ * Default: vec_##type##_lifetime_close_ (trailing underscore — internal)
+ */
+#ifndef MANGLE_VEC_LIFETIME_CLOSE
+    #define MANGLE_VEC_LIFETIME_CLOSE(type)     vec_##type##_lifetime_close_
+#endif
+
+/* ════════════════════════════════════════════════════════════════
    Query names
    ════════════════════════════════════════════════════════════════ */
 
