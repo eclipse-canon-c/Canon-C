@@ -138,18 +138,27 @@
  * - SliceType — zero-copy view struct (items pointer + len)
  *
  * Also generates per-instantiation static inline lifetime helpers
- * (vec_##type##_lifetime_open_, vec_##type##_lifetime_close_) that
+ * (named via fn_lt_open and fn_lt_close, by default
+ * vec_##type##_lifetime_open_ and vec_##type##_lifetime_close_) that
  * wrap the module-level VEC_LIFETIME_*_BODY_ macros. The helpers absorb
  * the `(void)v;` unused-parameter warning suppression so that release
  * builds (where the bodies are empty) compile cleanly.
  *
- * @param VecType   Mangled vector type name
- * @param VecTag    Mangled vector struct tag
- * @param IterType  Mangled iterator type name
- * @param IterTag   Mangled iterator struct tag
- * @param SliceType Mangled slice type name
- * @param SliceTag  Mangled slice struct tag
- * @param type      Element type
+ * The lifetime helper names are passed in as parameters rather than
+ * formed via token-pasting inside the macro, because VecType is itself
+ * the expansion of MANGLE_VEC_TYPE(type) — and C99 does not re-scan
+ * macro arguments before they participate in ##. Threading the names
+ * through is the same pattern every other IMPL_VEC_* macro uses.
+ *
+ * @param VecType    Mangled vector type name
+ * @param VecTag     Mangled vector struct tag
+ * @param IterType   Mangled iterator type name
+ * @param IterTag    Mangled iterator struct tag
+ * @param SliceType  Mangled slice type name
+ * @param SliceTag   Mangled slice struct tag
+ * @param fn_lt_open  Mangled name of the lifetime-open helper
+ * @param fn_lt_close Mangled name of the lifetime-close helper
+ * @param type       Element type
  *
  * Performance:
  * - Time:  O(1) — compile-time only
@@ -158,7 +167,7 @@
  *          sizeof(IterType) = sizeof(VecType*) + sizeof(usize)
  *          sizeof(SliceType) = sizeof(type*) + sizeof(usize)
  */
-#define IMPL_VEC_STRUCTS(VecType, VecTag, IterType, IterTag, SliceType, SliceTag, type) \
+#define IMPL_VEC_STRUCTS(VecType, VecTag, IterType, IterTag, SliceType, SliceTag, fn_lt_open, fn_lt_close, type) \
 \
 typedef struct VecTag { \
     type* items;    /**< Caller-owned element buffer (NULL iff capacity == 0) */ \
@@ -180,16 +189,16 @@ typedef struct SliceTag { \
 /* ════════════════════════════════════════════════════════════════════════════ \
    Internal: lifetime helpers (per-instantiation, compiled away in release) \
    ════════════════════════════════════════════════════════════════════════════ \
-   - _open_:  sets id (from &v) and marks open. Used by init / empty. \
-   - _close_: marks closed. Used by free. \
+   - fn_lt_open:  sets id (from &v) and marks open. Used by init / empty. \
+   - fn_lt_close: marks closed. Used by free. \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
-static inline void VecType##_lifetime_open_(VecType* v) { \
+static inline void fn_lt_open(VecType* v) { \
     VEC_LIFETIME_OPEN_BODY_(v) \
     (void)v; \
 } \
 \
-static inline void VecType##_lifetime_close_(VecType* v) { \
+static inline void fn_lt_close(VecType* v) { \
     VEC_LIFETIME_CLOSE_BODY_(v) \
     (void)v; \
 }
@@ -222,7 +231,7 @@ static inline void VecType##_lifetime_close_(VecType* v) { \
  * - Time:  O(1)
  * - Space: O(1) — no allocation, wraps caller-provided buffer
  */
-#define IMPL_VEC_INIT(linkage, VecType, fn, type) \
+#define IMPL_VEC_INIT(linkage, VecType, fn, fn_lt_open, type) \
 linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
     require_msg(buffer != NULL || capacity == 0, \
         #fn ": buffer cannot be NULL when capacity > 0"); \
@@ -233,7 +242,7 @@ linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
     v.items    = buffer; \
     v.len      = 0; \
     v.capacity = capacity; \
-    VecType##_lifetime_open_(&v); \
+    fn_lt_open(&v); \
     return v; \
 }
 
@@ -262,13 +271,13 @@ linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
-#define IMPL_VEC_EMPTY(linkage, VecType, fn) \
+#define IMPL_VEC_EMPTY(linkage, VecType, fn, fn_lt_open) \
 linkage VecType fn(void) { \
     VecType v; \
     v.items    = NULL; \
     v.len      = 0; \
     v.capacity = 0; \
-    VecType##_lifetime_open_(&v); \
+    fn_lt_open(&v); \
     return v; \
 }
 
@@ -347,14 +356,14 @@ linkage VecType fn_alloc(usize capacity) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
-#define IMPL_VEC_FREE(linkage, VecType, fn) \
+#define IMPL_VEC_FREE(linkage, VecType, fn, fn_lt_close) \
 linkage void fn(dropped(VecType*) v) { \
     if (!v) return; \
     if (v->items) mem_free(v->items); \
     v->items    = NULL; \
     v->len      = 0; \
     v->capacity = 0; \
-    VecType##_lifetime_close_(v); \
+    fn_lt_close(v); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
