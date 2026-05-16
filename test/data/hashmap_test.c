@@ -16,6 +16,8 @@
  *   - hashmap_clear() — len resets, buffer reusable
  *   - hashmap_iter_next() — visits every occupied slot exactly once
  *   - Robin Hood stress: 75%-load insert + remove + verify survivors
+ *   - CANON_LIFETIME_DEBUG: init opens, every mutating op restamps,
+ *     read-only ops preserve id. No close test — hashmap has no destructor.
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Keys drawn from nibble (0–15), values are key*10
@@ -584,6 +586,165 @@ static void test_robin_hood_stress(void)
     }
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * State-level assertions on m.lt. Borrow-side end-to-end validation
+ * (firing require_msg via lifetime_assert_valid) is covered in Phase 4
+ * tests in borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - hashmap_init opens the lifetime.
+ *   - Hashmap has NO destructor — no close test.
+ *   - Every successful mutating op restamps: insert (new key, update,
+ *     and Robin Hood paths all restamp uniformly), remove, clear.
+ *   - Error paths do not restamp.
+ *   - Read-only ops (get, get_or_null, contains_key, iter_next, queries)
+ *     preserve the id.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    u8 buf[HM_BUF(8)];
+    hashmap m;
+    init_map(&m, buf, sizeof(buf), 8);
+    EXPECT(m.lt.open == true);
+    EXPECT(m.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_insert_restamps(void)
+{
+    u8 buf[HM_BUF(8)];
+    hashmap m;
+    init_map(&m, buf, sizeof(buf), 8);
+    region_id_t id_before = m.lt.id;
+
+    /* new key inserted — restamps */
+    u64 k = 42; int v = 100;
+    hashmap_insert(&m, &k, &v);
+    EXPECT(m.lt.id != id_before);
+    EXPECT(m.lt.open == true);
+
+    /* update existing key — also restamps (slot value mutated) */
+    region_id_t id_after_first = m.lt.id;
+    v = 200;
+    hashmap_insert(&m, &k, &v);
+    EXPECT(m.lt.id != id_after_first);
+
+    /* second new key — restamps again */
+    region_id_t id_after_update = m.lt.id;
+    u64 k2 = 43; int v2 = 7;
+    hashmap_insert(&m, &k2, &v2);
+    EXPECT(m.lt.id != id_after_update);
+}
+
+static void test_lifetime_insert_error_paths_preserve_id(void)
+{
+    /* Capacity exceeded does NOT restamp — nothing changed. */
+    u8 buf[HM_BUF(4)];
+    hashmap m;
+    init_map(&m, buf, sizeof(buf), 4);
+
+    u64 k; int v = 0;
+    k = 1; hashmap_insert(&m, &k, &v);
+    k = 2; hashmap_insert(&m, &k, &v);
+    k = 3; hashmap_insert(&m, &k, &v);
+
+    region_id_t id_full = m.lt.id;
+    k = 4;
+    result__Bool_Error r = hashmap_insert(&m, &k, &v);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(m.lt.id == id_full); /* error path preserves id */
+
+    /* NULL-arg error paths also preserve id */
+    region_id_t id_before_null = m.lt.id;
+    r = hashmap_insert(&m, NULL, &v);
+    EXPECT(!result__Bool_Error_is_ok(r));
+    EXPECT(m.lt.id == id_before_null);
+}
+
+static void test_lifetime_remove_restamps(void)
+{
+    u8 buf[HM_BUF(8)];
+    hashmap m;
+    init_map(&m, buf, sizeof(buf), 8);
+
+    u64 k = 1; int v = 10;
+    hashmap_insert(&m, &k, &v);
+
+    region_id_t id_before = m.lt.id;
+    result_hm_val_t_Error r = hashmap_remove(&m, &k);
+    EXPECT(result_hm_val_t_Error_is_ok(r));
+    EXPECT(m.lt.id != id_before);
+    EXPECT(m.lt.open == true);
+
+    /* remove of non-existent key does NOT restamp */
+    region_id_t id_stable = m.lt.id;
+    u64 absent = 999;
+    r = hashmap_remove(&m, &absent);
+    EXPECT(!result_hm_val_t_Error_is_ok(r));
+    EXPECT(m.lt.id == id_stable);
+}
+
+static void test_lifetime_clear_restamps(void)
+{
+    u8 buf[HM_BUF(8)];
+    hashmap m;
+    init_map(&m, buf, sizeof(buf), 8);
+
+    u64 k = 1; int v = 10;
+    hashmap_insert(&m, &k, &v);
+
+    region_id_t id_before = m.lt.id;
+    hashmap_clear(&m);
+    EXPECT(m.lt.id != id_before);
+    EXPECT(m.lt.open == true);
+}
+
+static void test_lifetime_read_only_ops_preserve_id(void)
+{
+    /* get, get_or_null, contains_key, iter_next, and all queries
+     * must NOT touch lt. This documents the contract — if any read-only
+     * op accidentally restamps, this fires. */
+    u8 buf[HM_BUF(8)];
+    hashmap m;
+    init_map(&m, buf, sizeof(buf), 8);
+
+    u64 k = 1; int v = 10;
+    hashmap_insert(&m, &k, &v);
+
+    region_id_t id_before = m.lt.id;
+
+    /* get */
+    (void)hashmap_get(&m, &k);
+    EXPECT(m.lt.id == id_before);
+
+    /* get_or_null */
+    (void)hashmap_get_or_null(&m, &k);
+    EXPECT(m.lt.id == id_before);
+
+    /* contains_key */
+    (void)hashmap_contains_key(&m, &k);
+    EXPECT(m.lt.id == id_before);
+
+    /* iter_next */
+    usize iter = 0;
+    const u64* ik;
+    const int* iv;
+    while (hashmap_iter_next(&m, &iter, &ik, &iv)) { /* iterate */ }
+    EXPECT(m.lt.id == id_before);
+
+    /* queries */
+    (void)hashmap_len(&m);
+    (void)hashmap_capacity(&m);
+    (void)hashmap_is_empty(&m);
+    (void)hashmap_load_factor(&m);
+    EXPECT(m.lt.id == id_before);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused generated functions ────────────────────────────────── */
 
 static void hashmap_suppress_unused(void)
@@ -628,6 +789,12 @@ static void hashmap_suppress_unused(void)
     (void)result_hm_val_t_Error_and;
     (void)result_hm_val_t_Error_or;
     (void)result_hm_val_t_Error_eq;
+
+    /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
+     * Reference unconditionally so release builds don't warn about
+     * unused inlines either. */
+    (void)hashmap_lifetime_open_;
+    (void)hashmap_lifetime_restamp_;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -687,6 +854,15 @@ int main(void)
 
     /* stress */
     test_robin_hood_stress();
+
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_insert_restamps();
+    test_lifetime_insert_error_paths_preserve_id();
+    test_lifetime_remove_restamps();
+    test_lifetime_clear_restamps();
+    test_lifetime_read_only_ops_preserve_id();
+#endif
 
     if (g_failed == 0) {
         printf("OK  hashmap_test  (all assertions passed)\n");
@@ -755,6 +931,10 @@ static void hashmap_fuzz_suppress_unused(void)
     (void)hashmap_capacity;
     (void)hashmap_load_factor;
     (void)hashmap_buffer_size;
+
+    /* Lifetime helpers — always emitted, never called in fuzz path */
+    (void)hashmap_lifetime_open_;
+    (void)hashmap_lifetime_restamp_;
 }
 
 /*
