@@ -28,10 +28,56 @@
  * because bool expands to _Bool before ## token-pasting in C99. All function
  * signatures and call sites use the correct generated name result__Bool_Error.
  *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field on the hashmap struct.
+ *   - hashmap_init opens a fresh lifetime. The ID is derived from a per-TU
+ *     counter XOR'd with the struct's address (same pattern as vec/deque/PQ).
+ *   - Hashmap has NO destructor. The buffer is caller-owned and the struct
+ *     is caller-allocated; there is no hook on which to call close. The
+ *     lifetime stays open for the life of the struct — use-after-out-of-
+ *     scope is caller's responsibility, not the substrate's.
+ *   - Restamp on EVERY successful mutating operation:
+ *       * hashmap_clear  — all entries gone, prior borrows invalid
+ *       * hashmap_insert — Robin Hood may shift adjacent slots even on
+ *                          "new key into empty slot", and value updates
+ *                          mutate slot contents in place. We restamp on
+ *                          every success path conservatively rather than
+ *                          try to distinguish "shift happened" from "shift
+ *                          did not happen" — the latter requires reasoning
+ *                          about the entire probe chain, brittle to express
+ *                          and harder to verify. False positives (firing
+ *                          when not strictly necessary) are a usability
+ *                          cost; false negatives are a correctness bug.
+ *       * hashmap_remove — backward shift deletion moves entries downstream;
+ *                          prior pointers into the affected region are invalid.
+ *     Error paths (NULL args, capacity exceeded, key not found) do NOT
+ *     restamp — nothing changed.
+ *   - Operations that do NOT restamp: hashmap_get, hashmap_get_or_null,
+ *     hashmap_contains_key, hashmap_iter_next, and all queries (len,
+ *     capacity, is_empty, load_factor). All read-only.
+ *   - Iteration contract: hashmap_iter_next does not restamp, but the
+ *     caller must not mutate the map during iteration (same caller-
+ *     discipline rule the function already documents). The substrate
+ *     does not catch mutation-during-iteration; HASHMAP_FOR_EACH users
+ *     must observe the same contract.
+ *   Zero cost in release builds — struct layout is identical without
+ *   the flag.
+ *
+ * Multi-instantiation note (CANON_LIFETIME_DEBUG):
+ * ────────────────────────────────────────────────────────────────────────────
+ * When a single translation unit instantiates multiple hashmap types (via
+ * repeated #include with different HASHMAP_TYPE_NAME), each instantiation
+ * gets its own type-specific open/restamp helpers via HASHMAP_FN-mangled
+ * names. They all share a single TU-wide counter helper, _hm_lifetime_next_id_,
+ * which is guarded against duplicate definition. Two hashmap types in the
+ * same TU therefore produce distinct ids relative to each other — desirable.
+ *
  * @sa hashmap.h         — user-facing entry point (include this)
  * @sa hashmap_mangle.h  — name customization
  * @sa hashmap_decl.h    — forward declarations for separate compilation
  * @sa hashmap_defn.h    — definitions for separate compilation
+ * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
  */
 
 /* ============================================================================
@@ -52,6 +98,11 @@
 #include "semantics/option/option.h"
 #include "semantics/result/result.h"
 #include "semantics/error.h"
+
+#ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                       /* uintptr_t */
+    #include "core/primitives/lifetime.h"     /* region_id_t, lifetime_t */
+#endif
 
 #include <string.h>  /* memset */
 
@@ -89,6 +140,17 @@ CANON_RESULT(bool, Error)
 CANON_RESULT(hm_val_t, Error)
 
 /* ============================================================================
+ * Internal: lifetime field macro
+ * ========================================================================= */
+
+#ifdef CANON_LIFETIME_DEBUG
+    #define HM_LIFETIME_FIELD_ \
+        lifetime_t lt; /**< [debug] Lifetime token: id + open */
+#else
+    #define HM_LIFETIME_FIELD_  /* empty */
+#endif
+
+/* ============================================================================
  * Slot struct
  * ========================================================================= */
 
@@ -109,7 +171,61 @@ typedef struct {
     usize              capacity; /**< Total slot count (power of 2) */
     usize              len;      /**< Number of occupied slots */
     void*              ctx;      /**< Optional caller context forwarded to hash/eq fns */
+    HM_LIFETIME_FIELD_
 } HASHMAP_TYPE_NAME;
+
+/* ============================================================================
+ * Internal: TU-wide lifetime counter helper
+ * ============================================================================
+ * Shared across all hashmap instantiations in the translation unit. Two
+ * hashmap types in the same TU draw from the same counter, producing
+ * distinct ids relative to each other.
+ *
+ * Guarded against duplicate definition because hashmap_impl.h may be
+ * included multiple times per TU (once per instantiation). Same pattern
+ * as CANON_RESULT_BOOL_ERROR_DEFINED in deque_impl.h.
+ *
+ * No thread-safety guarantee on concurrent construction or mutation —
+ * the same constraint that applies to every other Canon-C container.
+ *
+ * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+ * derivation is defensively guarded against producing 0.
+ * ========================================================================= */
+
+#ifdef CANON_LIFETIME_DEBUG
+#ifndef CANON_HM_LIFETIME_NEXT_ID_DEFINED
+#define CANON_HM_LIFETIME_NEXT_ID_DEFINED
+    static inline region_id_t _hm_lifetime_next_id_(void* mp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(mp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+#endif
+#endif
+
+/* ============================================================================
+ * Internal: per-instantiation lifetime open/restamp helpers
+ * ============================================================================
+ * Mangled via HASHMAP_FN so each hashmap type gets its own helpers (the
+ * function parameter type differs per instantiation). The helpers are
+ * always emitted; in release builds they are empty no-ops.
+ * ========================================================================= */
+
+#ifdef CANON_LIFETIME_DEBUG
+    HASHMAP_LINKAGE void _HM_LIFETIME_OPEN(HASHMAP_TYPE_NAME* map) {
+        map->lt.id   = _hm_lifetime_next_id_(map);
+        map->lt.open = true;
+    }
+    HASHMAP_LINKAGE void _HM_LIFETIME_RESTAMP(HASHMAP_TYPE_NAME* map) {
+        map->lt.id = _hm_lifetime_next_id_(map);
+        /* lt.open stays true — restamp is not destruction */
+    }
+#else
+    HASHMAP_LINKAGE void _HM_LIFETIME_OPEN(HASHMAP_TYPE_NAME* map)    { (void)map; }
+    HASHMAP_LINKAGE void _HM_LIFETIME_RESTAMP(HASHMAP_TYPE_NAME* map) { (void)map; }
+#endif
 
 /* ============================================================================
  * Internal helpers (not part of public API)
@@ -165,6 +281,8 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INIT(
 
     memset(map->slots, 0, required);
 
+    _HM_LIFETIME_OPEN(map);
+
     return result__Bool_Error_ok(true);
 }
 
@@ -177,6 +295,7 @@ HASHMAP_LINKAGE void _HM_CLEAR(borrowed(HASHMAP_TYPE_NAME*) map) {
     require_msg(map->slots != NULL, "hashmap_clear: map is uninitialized");
     memset(map->slots, 0, map->capacity * sizeof(HASHMAP_SLOT_NAME));
     map->len = 0;
+    _HM_LIFETIME_RESTAMP(map);
 }
 
 /* ============================================================================
@@ -243,6 +362,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
             /* Empty slot — place incoming here */
             *slot = incoming;
             if (is_new_key) map->len++;
+            _HM_LIFETIME_RESTAMP(map);
             return result__Bool_Error_ok(is_new_key);
         }
 
@@ -251,6 +371,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
             HASHMAP_EQ_FN(&slot->key, &incoming.key, map->ctx))
         {
             slot->value = incoming.value;
+            _HM_LIFETIME_RESTAMP(map);
             return result__Bool_Error_ok(false);
         }
 
@@ -419,6 +540,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error _HM_REMOVE(
     }
 
     map->len--;
+    _HM_LIFETIME_RESTAMP(map);
     return result_hm_val_t_Error_ok(old_value);
 }
 
@@ -455,3 +577,4 @@ HASHMAP_LINKAGE bool _HM_ITER_NEXT(
  * ========================================================================= */
 #undef hm_key_t
 #undef hm_val_t
+#undef HM_LIFETIME_FIELD_
