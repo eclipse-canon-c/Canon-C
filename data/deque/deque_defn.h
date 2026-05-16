@@ -113,6 +113,9 @@
  * - deque_##type##_clear(d)                    → void
  * - deque_##type##_swap(a, b)                  → void
  *
+ * Internal (always emitted; body empty without CANON_LIFETIME_DEBUG):
+ * - deque_##type##_lifetime_open_(d)           → void
+ *
  * @param linkage C linkage specifier: `static inline`, `static`, or empty
  * @param type    Element type (must be a valid C identifier)
  *
@@ -128,11 +131,12 @@
 IMPL_DEQUE_STRUCT( \
     MANGLE_DEQUE_TYPE(type), \
     MANGLE_DEQUE_STRUCT_TAG(type), \
+    MANGLE_DEQUE_LIFETIME_OPEN(type), \
     type \
 ) \
 \
-IMPL_DEQUE_INIT(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_INIT(type),  type) \
-IMPL_DEQUE_EMPTY(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_EMPTY(type)) \
+IMPL_DEQUE_INIT(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_INIT(type),  MANGLE_DEQUE_LIFETIME_OPEN(type), type) \
+IMPL_DEQUE_EMPTY(linkage, MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_EMPTY(type), MANGLE_DEQUE_LIFETIME_OPEN(type)) \
 \
 IMPL_DEQUE_LEN(linkage,       MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_LEN(type)) \
 IMPL_DEQUE_CAPACITY(linkage,  MANGLE_DEQUE_TYPE(type), MANGLE_DEQUE_CAPACITY(type)) \
