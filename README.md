@@ -374,6 +374,7 @@ human-authored content (including the engineering and editorial
 judgment expressed throughout) with AI-generated portions
 additionally dedicated to the public domain under CC0-1.0, in
 accordance with the Eclipse Foundation's generative AI guidelines.
+
 ---
 
 ## Dependency Rule (Strict)
