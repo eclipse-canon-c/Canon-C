@@ -17,6 +17,8 @@
  *   - Ring buffer wrap-around correctness (head/tail modulo arithmetic)
  *   - NULL-guard paths: ERR_INVALID_ARG on NULL deque or NULL out-param
  *   - Sliding window pattern
+ *   - CANON_LIFETIME_DEBUG: open on init/empty, swap exchanges tokens,
+ *     in-place mutations preserve id. No close test — deque has no destructor.
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random bytes interpreted as a sequence of push/pop/peek operations
@@ -908,6 +910,115 @@ static void test_struct_all_functions(void)
     EXPECT(deque_Point_is_empty(&d2));
 }
 
+/* ── CANON_LIFETIME_DEBUG: lifetime token semantics ──────────────────────── *
+ *
+ * State-level assertions on d.lt. Borrow-side validation (firing
+ * require_msg via lifetime_assert_valid) is covered in borrow_test.c.
+ *
+ * Contract per the file docblock:
+ *   - init and empty open the lifetime: lt.open == true, lt.id derived
+ *     from a per-TU counter so successive constructor calls produce
+ *     distinct ids even though empty() returns by value.
+ *   - Deque has NO destructor — no close test. Lifetime stays open for
+ *     the life of the struct. Callers must ensure all borrows die before
+ *     the deque does.
+ *   - swap exchanges the entire struct including lt — a's new id matches
+ *     b's old id (and vice versa).
+ *   - Deque has fixed capacity — no relocation, no restamp. All in-place
+ *     mutations (push/pop/clear/peek) preserve lt.id and lt.open.
+ */
+
+#ifdef CANON_LIFETIME_DEBUG
+
+static void test_lifetime_init_opens_token(void)
+{
+    int buf[8];
+    deque_int d;
+    deque_int_init(&d, buf, 8);
+    EXPECT(d.lt.open == true);
+    EXPECT(d.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_empty_opens_token(void)
+{
+    deque_int d = deque_int_empty();
+    EXPECT(d.lt.open == true);
+    EXPECT(d.lt.id != REGION_ID_STATIC);
+}
+
+static void test_lifetime_swap_exchanges_tokens(void)
+{
+    /* The substrate contract: swap exchanges the entire DequeType struct,
+     * including the embedded lt field. After swap, &a->lt still points
+     * at a's struct but contains b's former lifetime token. A borrow
+     * that captured a's old id reads the new id at the same address
+     * and mismatches — invalidation by struct-copy, no restamp needed. */
+    int bufA[4], bufB[4];
+    deque_int a, b;
+    deque_int_init(&a, bufA, 4);
+    deque_int_init(&b, bufB, 4);
+
+    region_id_t a_id_before = a.lt.id;
+    region_id_t b_id_before = b.lt.id;
+    EXPECT(a_id_before != b_id_before); /* per-TU counter guarantees uniqueness */
+
+    deque_int_swap(&a, &b);
+
+    EXPECT(a.lt.id == b_id_before);
+    EXPECT(b.lt.id == a_id_before);
+    EXPECT(a.lt.open == true);  /* both still open — deque has no destructor */
+    EXPECT(b.lt.open == true);
+}
+
+static void test_lifetime_in_place_mutations_preserve_id(void)
+{
+    /* Fixed-capacity deque never relocates. Every in-place mutation must
+     * preserve lt.id. This test documents that contract — if a future
+     * refactor accidentally restamps on any of these ops, this fires. */
+    int buf[8];
+    deque_int d;
+    deque_int_init(&d, buf, 8);
+    region_id_t id_before = d.lt.id;
+
+    /* push_back / push_front — no relocation */
+    deque_int_push_back(&d, 1);
+    EXPECT(d.lt.id == id_before);
+    deque_int_push_front(&d, 2);
+    EXPECT(d.lt.id == id_before);
+
+    /* try_push variants — same semantics */
+    deque_int_try_push_back(&d, 3);
+    EXPECT(d.lt.id == id_before);
+    deque_int_try_push_front(&d, 4);
+    EXPECT(d.lt.id == id_before);
+
+    /* unchecked variants — same semantics */
+    deque_int_push_back_unchecked(&d, 5);
+    EXPECT(d.lt.id == id_before);
+    deque_int_push_front_unchecked(&d, 6);
+    EXPECT(d.lt.id == id_before);
+
+    /* pop — shrinks, no relocation */
+    int out = 0;
+    deque_int_pop_front(&d, &out);
+    EXPECT(d.lt.id == id_before);
+    deque_int_pop_back(&d, &out);
+    EXPECT(d.lt.id == id_before);
+
+    /* peek — non-mutating */
+    deque_int_peek_front(&d, &out);
+    EXPECT(d.lt.id == id_before);
+    deque_int_peek_back(&d, &out);
+    EXPECT(d.lt.id == id_before);
+
+    /* clear — resets indices but buffer is unchanged */
+    deque_int_clear(&d);
+    EXPECT(d.lt.id == id_before);
+    EXPECT(d.lt.open == true);
+}
+
+#endif /* CANON_LIFETIME_DEBUG */
+
 /* ── Suppress unused option API functions ──────────────────────────────────── */
 
 static void deque_suppress_unused_option_fns(void)
@@ -934,6 +1045,12 @@ static void deque_suppress_unused_option_fns(void)
     (void)option_Point_replace;
     (void)option_Point_take;
     (void)option_Point_eq;
+
+    /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
+     * Reference them unconditionally so release builds don't warn
+     * about unused inlines either. */
+    (void)deque_int_lifetime_open_;
+    (void)deque_Point_lifetime_open_;
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
@@ -1018,6 +1135,13 @@ int main(void)
     /* struct type — covers all generated Point functions */
     test_struct_all_functions();
 
+#ifdef CANON_LIFETIME_DEBUG
+    test_lifetime_init_opens_token();
+    test_lifetime_empty_opens_token();
+    test_lifetime_swap_exchanges_tokens();
+    test_lifetime_in_place_mutations_preserve_id();
+#endif
+
     if (g_failed == 0) {
         printf("OK  deque_test  (all assertions passed)\n");
         return 0;
@@ -1048,6 +1172,7 @@ static void deque_fuzz_suppress_unused(void)
     (void)deque_int_empty;
     (void)deque_int_capacity;
     (void)deque_int_swap;
+    (void)deque_int_lifetime_open_;
 
     (void)point_eq;
     (void)option_Point_some;
@@ -1089,6 +1214,7 @@ static void deque_fuzz_suppress_unused(void)
     (void)deque_Point_peek_back_option;
     (void)deque_Point_clear;
     (void)deque_Point_swap;
+    (void)deque_Point_lifetime_open_;
 }
 
 /*
