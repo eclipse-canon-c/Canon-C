@@ -127,6 +127,10 @@
  * - vec_##type##_slice_init(v, start, end)  → vec_##type##_slice
  * - vec_##type##_slice_get(s, i)            → type*
  *
+ * Internal (always emitted; bodies empty without CANON_LIFETIME_DEBUG):
+ * - vec_##type##_lifetime_open_(v)          → void
+ * - vec_##type##_lifetime_close_(v)         → void
+ *
  * @param linkage C linkage specifier: `static inline`, `static`, or empty
  * @param type    Element type (must be a valid C identifier)
  *
@@ -147,14 +151,16 @@ IMPL_VEC_STRUCTS( \
     MANGLE_VEC_ITER_STRUCT_TAG(type), \
     MANGLE_VEC_SLICE_TYPE(type), \
     MANGLE_VEC_SLICE_STRUCT_TAG(type), \
+    MANGLE_VEC_LIFETIME_OPEN(type), \
+    MANGLE_VEC_LIFETIME_CLOSE(type), \
     type \
 ) \
 \
-IMPL_VEC_INIT(linkage,        MANGLE_VEC_TYPE(type), MANGLE_VEC_INIT(type),  type) \
-IMPL_VEC_EMPTY(linkage,       MANGLE_VEC_TYPE(type), MANGLE_VEC_EMPTY(type)) \
+IMPL_VEC_INIT(linkage,        MANGLE_VEC_TYPE(type), MANGLE_VEC_INIT(type),  MANGLE_VEC_LIFETIME_OPEN(type), type) \
+IMPL_VEC_EMPTY(linkage,       MANGLE_VEC_TYPE(type), MANGLE_VEC_EMPTY(type), MANGLE_VEC_LIFETIME_OPEN(type)) \
 IMPL_VEC_ALLOC(linkage,       MANGLE_VEC_TYPE(type), MANGLE_VEC_ALLOC(type), MANGLE_VEC_EMPTY(type), MANGLE_VEC_INIT(type), type) \
 IMPL_VEC_ARENA_ALLOC(linkage, MANGLE_VEC_TYPE(type), MANGLE_VEC_ARENA_ALLOC(type), MANGLE_VEC_EMPTY(type), MANGLE_VEC_INIT(type), type) \
-IMPL_VEC_FREE(linkage,        MANGLE_VEC_TYPE(type), MANGLE_VEC_FREE(type)) \
+IMPL_VEC_FREE(linkage,        MANGLE_VEC_TYPE(type), MANGLE_VEC_FREE(type), MANGLE_VEC_LIFETIME_CLOSE(type)) \
 \
 IMPL_VEC_LEN(linkage,       MANGLE_VEC_TYPE(type), MANGLE_VEC_LEN(type)) \
 IMPL_VEC_CAPACITY(linkage,  MANGLE_VEC_TYPE(type), MANGLE_VEC_CAPACITY(type)) \
