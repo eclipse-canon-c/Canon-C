@@ -22,6 +22,11 @@
  *     Lifetime check is exercised on all four borrow types (ptr, str,
  *     bytes, slice_int), plus the type-erasure path through as_bytes
  *     (which must inherit lifetime tracking from the source slice).
+ *   - Phase 4 — end-to-end container lifetime tests:
+ *     vec, deque, priority_queue, hashmap. Validate that the full chain
+ *     (container mutation → lt restamp/close → borrow captured_id stale →
+ *     borrowed_*_get fires require_msg) composes correctly for every
+ *     Phase 3 container.
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random (start, end, len) triples into borrowed_bytes_slice and
@@ -40,10 +45,32 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ── Slice instantiation needed by borrowed slice tests ───────────────────── *
- * DEFINE_SLICE stamps out more functions than this test file uses directly.
- * The unused-function warning is suppressed here — the same approach used
- * elsewhere in the Canon-C test suite for macro-generated instantiations.
+/* ── Hash and equality for hashmap instantiation ─────────────────────────── *
+ *
+ * Must be declared BEFORE hashmap.h is included so the generated static
+ * inline functions can reference them.
+ */
+static u64 _bt_hash_u64(const u64* k, void* ctx)
+{
+    (void)ctx;
+    u64 h = *k * 11400714819323198485ULL;
+    return h == 0 ? 1 : h;
+}
+
+static bool _bt_eq_u64(const u64* a, const u64* b, void* ctx)
+{
+    (void)ctx;
+    return *a == *b;
+}
+
+/* ── Slice + container instantiations needed by tests ────────────────────── *
+ *
+ * DEFINE_SLICE / DEFINE_VEC / DEFINE_DEQUE / DEFINE_PRIORITY_QUEUE all stamp
+ * out more functions than this test file uses directly. The unused-function
+ * warning is suppressed here; the same approach used elsewhere in the
+ * Canon-C test suite for macro-generated instantiations. A
+ * borrow_test_suppress_unused() function below references the leftovers
+ * with (void) to keep cppcheck and stricter linters quiet too.
  */
 #if defined(__GNUC__) || defined(__clang__)
 #  pragma GCC diagnostic push
@@ -52,6 +79,21 @@
 
 DEFINE_SLICE(int)
 DEFINE_BORROWED_SLICE(int)
+
+#include "data/vec/vec.h"
+DEFINE_VEC(static inline, int)
+
+#include "data/deque/deque.h"
+DEFINE_DEQUE(static inline, int)
+
+#include "data/priority_queue.h"
+DEFINE_PRIORITY_QUEUE(int)
+
+#define HASHMAP_KEY_TYPE u64
+#define HASHMAP_VAL_TYPE int
+#define HASHMAP_HASH_FN  _bt_hash_u64
+#define HASHMAP_EQ_FN    _bt_eq_u64
+#include "data/hashmap/hashmap.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 #  pragma GCC diagnostic pop
@@ -680,24 +722,17 @@ static void test_source_tag_round_trip_all_types(void)
    CANON_LIFETIME_DEBUG — lifetime tracking end-to-end
    ============================================================================
  *
- * These tests close the loop on the substrate: arena restamps its lifetime
- * ID on reset → captured borrow's stored ID no longer matches the source's
- * current ID → borrowed_*_get fires require_msg via lifetime_assert_valid.
+ * Sections in order:
+ *   - Trap infrastructure (handler, jmp_buf, LT_FIRES/LT_SILENT macros)
+ *   - Arena lifetime tests (the original Phase 1 coverage)
+ *   - Phase 4: vec lifetime tests
+ *   - Phase 4: deque lifetime tests
+ *   - Phase 4: priority_queue lifetime tests
+ *   - Phase 4: hashmap lifetime tests
  *
  * The trap mechanism mirrors test/core/primitives/contract_test.c: install
  * a capture handler via contract_set_handler that longjmps back to the test
  * site instead of calling abort. setjmp wraps each "should fire" call.
- *
- * Coverage:
- *   1. _from_lifetime constructor captures source_lt and captured_id.
- *   2. _get on a fresh, open borrow is silent (baseline).
- *   3. _get after arena_reset fires require_msg (the headline guarantee),
- *      exercised on all four borrow types: bytes, str, ptr, slice_int.
- *   4. Untracked borrows (built via _from, no lifetime arg) bypass the
- *      check even after reset (opt-in design works as documented).
- *   5. _get after arena_reset_to is silent (rollback contract preserved).
- *   6. _as_bytes inherits lifetime from the source slice — type erasure
- *      must not silently strip the substrate's safety check.
  */
 
 #ifdef CANON_LIFETIME_DEBUG
@@ -749,6 +784,14 @@ static void lt_setup(void)
 {
     memset(g_lt_buf, 0, LT_BUF_SIZE);
     arena_init(&g_lt_arena, g_lt_buf, LT_BUF_SIZE);
+    contract_set_handler(_lt_capture_handler);
+}
+
+/* Lighter setup for tests that don't need an arena — just installs the
+ * contract handler so LT_FIRES/LT_SILENT work. Each Phase 4 test creates
+ * its own container on the stack. */
+static void lt_setup_handler_only(void)
+{
     contract_set_handler(_lt_capture_handler);
 }
 
@@ -965,7 +1008,406 @@ static void test_lifetime_slice_int_as_bytes_inherits_and_fires(void)
     EXPECT(_lt_cap_msg[0] != '\0');
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Phase 4 — End-to-end container lifetime tests
+   ════════════════════════════════════════════════════════════════════════════
+ *
+ * Each section validates that the full owner→borrow→check chain composes
+ * correctly when the owner is a Phase 3 container (rather than an arena).
+ *
+ * Pattern:
+ *   1. Construct container on stack
+ *   2. Optionally push some content
+ *   3. Build a tracked borrow via borrowed_*_from_lifetime(payload, &c.lt, &c)
+ *   4. LT_SILENT baseline _get (proves the borrow is fresh)
+ *   5. Trigger a state change on the container (free / swap / push / etc.)
+ *   6. LT_FIRES or LT_SILENT on the next _get, depending on whether the
+ *      operation was meant to invalidate the borrow
+ *
+ * Borrow construction uses borrowed_ptr_from_lifetime throughout — it's
+ * the lowest-common-denominator that exercises BORROW_LT_CHECK_ for every
+ * Phase 3 container type. For vec the natural borrow target is
+ * vec_int_first(&v) — a real element pointer. For deque and pq there is
+ * no pointer-returning accessor (peek_front and peek_raw return via
+ * out-param or option), so the borrow target is the struct itself (&d,
+ * &pq); the substrate only inspects (source_lt, captured_id), so the
+ * payload pointer is incidental.
+ */
+
+/* ── vec — Phase 4 ───────────────────────────────────────────────────────── */
+
+static void test_lifetime_vec_borrow_open_is_silent(void)
+{
+    lt_setup_handler_only();
+
+    int buf[4];
+    vec_int v = vec_int_init(buf, 4);
+    vec_int_push(&v, 42);
+
+    /* Borrow against an element pointer in the vec. */
+    int *first = vec_int_first(&v);
+    EXPECT_NOT_NULL(first);
+    borrowed_ptr b = borrowed_ptr_from_lifetime(first, &v.lt, &v);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+    /* No vec_int_free — buf is stack-allocated.
+     * vec_int_free is for heap-backed vecs only (calls mem_free). */
+}
+
+static void test_lifetime_vec_free_closes_fires(void)
+{
+    /* Use vec_int_alloc so vec_int_free is legal — vec_int_free
+     * calls mem_free on v->items, which is undefined for stack buffers. */
+    lt_setup_handler_only();
+
+    vec_int v = vec_int_alloc(4);
+    vec_int_push(&v, 42);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(
+        vec_int_first(&v), &v.lt, &v);
+
+    /* free closes the lifetime — open flag flipped to false. */
+    vec_int_free(&v);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+static void test_lifetime_vec_swap_invalidates_a_fires(void)
+{
+    /* Two vecs, borrow against a, swap. After swap, &a.lt holds what was
+     * b's lt (different id), so the captured id is stale and _get fires.
+     * This is the most rigorous test of the substrate: it proves that
+     * vec_swap exchanges the lt field along with everything else. */
+    lt_setup_handler_only();
+
+    int buf_a[4];
+    int buf_b[4];
+    vec_int a = vec_int_init(buf_a, 4);
+    vec_int b = vec_int_init(buf_b, 4);
+    vec_int_push(&a, 1);
+    vec_int_push(&b, 2);
+
+    borrowed_ptr ba = borrowed_ptr_from_lifetime(
+        vec_int_first(&a), &a.lt, &a);
+
+    /* Baseline silent before swap. */
+    LT_SILENT(borrowed_ptr_get(&ba));
+    EXPECT(_lt_cap_fired == 0);
+
+    vec_int_swap(&a, &b);
+
+    LT_FIRES(borrowed_ptr_get(&ba));
+    EXPECT(_lt_cap_fired == 1);
+    /* No free — stack-backed. */
+}
+
+static void test_lifetime_vec_in_place_push_silent(void)
+{
+    /* Push into a vec with spare capacity does NOT relocate or restamp
+     * (vec has fixed capacity, no growth). Borrow against first element
+     * must still be valid. */
+    lt_setup_handler_only();
+
+    int buf[4];
+    vec_int v = vec_int_init(buf, 4);
+    vec_int_push(&v, 1);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(
+        vec_int_first(&v), &v.lt, &v);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    /* In-place push — no relocation possible (fixed buf). */
+    vec_int_push(&v, 2);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+    /* No free — stack-backed. */
+}
+
+/* ── deque — Phase 4 ─────────────────────────────────────────────────────── *
+ *
+ * deque_int_init is void (takes the deque by pointer); the deque exposes
+ * peek_front as a bool-returning out-param, not a pointer accessor. So
+ * for Phase 4 we borrow against the deque struct itself with
+ * borrowed_ptr_from_lifetime(&d, &d.lt, &d). The borrow target's address
+ * is incidental — BORROW_LT_CHECK_ only inspects (source_lt, captured_id),
+ * which is what we want to test. */
+
+static void test_lifetime_deque_borrow_open_is_silent(void)
+{
+    lt_setup_handler_only();
+
+    int buf[4];
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 7);
+
+    /* Borrow against the deque struct itself. */
+    borrowed_ptr b = borrowed_ptr_from_lifetime(&d, &d.lt, &d);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+static void test_lifetime_deque_swap_invalidates_fires(void)
+{
+    lt_setup_handler_only();
+
+    int buf_a[4];
+    int buf_b[4];
+    deque_int a;
+    deque_int b;
+    deque_int_init(&a, buf_a, 4);
+    deque_int_init(&b, buf_b, 4);
+    deque_int_push_back(&a, 1);
+    deque_int_push_back(&b, 2);
+
+    borrowed_ptr ba = borrowed_ptr_from_lifetime(&a, &a.lt, &a);
+
+    LT_SILENT(borrowed_ptr_get(&ba));
+    EXPECT(_lt_cap_fired == 0);
+
+    deque_int_swap(&a, &b);
+
+    LT_FIRES(borrowed_ptr_get(&ba));
+    EXPECT(_lt_cap_fired == 1);
+}
+
+static void test_lifetime_deque_in_place_push_silent(void)
+{
+    lt_setup_handler_only();
+
+    int buf[4];
+    deque_int d;
+    deque_int_init(&d, buf, 4);
+    deque_int_push_back(&d, 1);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(&d, &d.lt, &d);
+
+    /* push_back into spare capacity — does NOT restamp (deque has no
+     * restamp on mutation; lt only changes on swap or via struct-copy). */
+    deque_int_push_back(&d, 2);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+/* ── priority_queue — Phase 4 ────────────────────────────────────────────── *
+ *
+ * Typed PQ generated by DEFINE_PRIORITY_QUEUE(int) is named `pq_int`,
+ * not `PriorityQueue_int`. pq_int_init takes (h, buf, cap, cmp, ctx) by
+ * pointer and returns void. pq_int_peek_raw does NOT exist as a typed
+ * wrapper — the typed wrappers expose pq_int_peek_option and pq_int_peek
+ * (out-param). The base pq_peek_raw lives on the inner PriorityQueue.
+ *
+ * As with deque, Phase 4 tests borrow against the typed struct itself
+ * (&pq) and capture the lifetime via &pq._pq.lt. What we test is the
+ * substrate's invalidation logic, not the borrow payload.
+ *
+ * Comparator: algo_cmp_i32 (signed 32-bit ascending) — from
+ * core/primitives/compare.h, pulled in transitively via priority_queue.h.
+ */
+
+static void test_lifetime_pq_peek_raw_silent(void)
+{
+    lt_setup_handler_only();
+
+    int buf[8];
+    pq_int pq;
+    pq_int_init(&pq, buf, 8, algo_cmp_i32, NULL);
+    pq_int_push(&pq, 5);
+    pq_int_push(&pq, 1);
+    pq_int_push(&pq, 9);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(&pq, &pq._pq.lt, &pq);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+static void test_lifetime_pq_push_restamps_fires(void)
+{
+    lt_setup_handler_only();
+
+    int buf[8];
+    pq_int pq;
+    pq_int_init(&pq, buf, 8, algo_cmp_i32, NULL);
+    pq_int_push(&pq, 5);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(&pq, &pq._pq.lt, &pq);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    /* Push restamps — heap may have reordered. */
+    pq_int_push(&pq, 1);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+}
+
+static void test_lifetime_pq_pop_restamps_fires(void)
+{
+    lt_setup_handler_only();
+
+    int buf[8];
+    pq_int pq;
+    pq_int_init(&pq, buf, 8, algo_cmp_i32, NULL);
+    pq_int_push(&pq, 5);
+    pq_int_push(&pq, 3);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(&pq, &pq._pq.lt, &pq);
+
+    /* Pop restamps — heap reorganized. */
+    int out;
+    pq_int_pop(&pq, &out);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+}
+
+static void test_lifetime_pq_query_silent(void)
+{
+    /* Queries (len, peek_option) do NOT restamp. Borrow stays valid. */
+    lt_setup_handler_only();
+
+    int buf[8];
+    pq_int pq;
+    pq_int_init(&pq, buf, 8, algo_cmp_i32, NULL);
+    pq_int_push(&pq, 5);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(&pq, &pq._pq.lt, &pq);
+
+    (void)pq_int_len(&pq);
+    (void)pq_int_peek_option(&pq);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+/* ── hashmap — Phase 4 ───────────────────────────────────────────────────── */
+
+static void test_lifetime_hashmap_borrow_open_is_silent(void)
+{
+    lt_setup_handler_only();
+
+    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap m;
+    hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
+
+    u64 k = 42; int v = 100;
+    hashmap_insert(&m, &k, &v);
+
+    int *vp = hashmap_get_or_null(&m, &k);
+    EXPECT_NOT_NULL(vp);
+    borrowed_ptr b = borrowed_ptr_from_lifetime(vp, &m.lt, &m);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+}
+
+static void test_lifetime_hashmap_insert_restamps_fires(void)
+{
+    lt_setup_handler_only();
+
+    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap m;
+    hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
+
+    u64 k1 = 1; int v1 = 10;
+    hashmap_insert(&m, &k1, &v1);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(
+        hashmap_get_or_null(&m, &k1), &m.lt, &m);
+
+    LT_SILENT(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    /* Insert another key — Robin Hood may have shifted, so the substrate
+     * conservatively restamps on every successful insert. */
+    u64 k2 = 2; int v2 = 20;
+    hashmap_insert(&m, &k2, &v2);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+}
+
+static void test_lifetime_hashmap_remove_restamps_fires(void)
+{
+    /* Remove of a different key may backward-shift entries — invalidates
+     * prior pointers. Substrate restamps on every successful remove. */
+    lt_setup_handler_only();
+
+    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap m;
+    hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
+
+    u64 k1 = 1; int v1 = 10;
+    u64 k2 = 2; int v2 = 20;
+    hashmap_insert(&m, &k1, &v1);
+    hashmap_insert(&m, &k2, &v2);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(
+        hashmap_get_or_null(&m, &k1), &m.lt, &m);
+
+    /* Remove a different key — may shift adjacent slots. */
+    (void)hashmap_remove(&m, &k2);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+}
+
+static void test_lifetime_hashmap_clear_fires(void)
+{
+    lt_setup_handler_only();
+
+    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap m;
+    hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
+
+    u64 k = 42; int v = 100;
+    hashmap_insert(&m, &k, &v);
+
+    borrowed_ptr b = borrowed_ptr_from_lifetime(
+        hashmap_get_or_null(&m, &k), &m.lt, &m);
+
+    hashmap_clear(&m);
+
+    LT_FIRES(borrowed_ptr_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+}
+
 #endif /* CANON_LIFETIME_DEBUG */
+
+/* ── Suppress unused generated functions ─────────────────────────────────── *
+ *
+ * The DEFINE_VEC / DEFINE_DEQUE / DEFINE_PRIORITY_QUEUE / hashmap.h
+ * instantiations stamp out many functions not directly called in this test
+ * file. Reference them with (void) so cppcheck and stricter linters
+ * don't complain. Matches the convention used in the other test files. */
+
+static void borrow_test_suppress_unused(void)
+{
+    /* hashmap — all symbol names confirmed by reading hashmap.h directly.
+     * Reference the ones we know exist and aren't called above. The other
+     * container instantiations (vec, deque, pq) emit many generated names
+     * whose exact spellings would require introspecting each header; those
+     * are covered by the GCC diagnostic-ignored block at the top of the
+     * file rather than enumerated here. */
+    (void)hashmap_get;
+    (void)hashmap_contains_key;
+    (void)hashmap_len;
+    (void)hashmap_capacity;
+    (void)hashmap_is_empty;
+    (void)hashmap_load_factor;
+    (void)hashmap_iter_next;
+    (void)hashmap_buffer_size;
+}
 
 /* ============================================================================
    Unit test entry point
@@ -973,6 +1415,8 @@ static void test_lifetime_slice_int_as_bytes_inherits_and_fires(void)
 
 int main(void)
 {
+    (void)borrow_test_suppress_unused;
+
     /* borrowed_ptr */
     test_ptr_from_stores_ptr_and_source();
     test_ptr_from_null_ptr();
@@ -1058,6 +1502,7 @@ int main(void)
     test_source_tag_round_trip_all_types();
 
 #ifdef CANON_LIFETIME_DEBUG
+    /* Arena lifetime tests — Phase 1 coverage */
     test_lifetime_borrow_captures_id();
     test_lifetime_get_open_borrow_silent();
     test_lifetime_get_after_reset_fires();
@@ -1067,6 +1512,29 @@ int main(void)
     test_lifetime_ptr_get_after_reset_fires();
     test_lifetime_slice_int_get_after_reset_fires();
     test_lifetime_slice_int_as_bytes_inherits_and_fires();
+
+    /* Phase 4 — vec end-to-end */
+    test_lifetime_vec_borrow_open_is_silent();
+    test_lifetime_vec_free_closes_fires();
+    test_lifetime_vec_swap_invalidates_a_fires();
+    test_lifetime_vec_in_place_push_silent();
+
+    /* Phase 4 — deque end-to-end */
+    test_lifetime_deque_borrow_open_is_silent();
+    test_lifetime_deque_swap_invalidates_fires();
+    test_lifetime_deque_in_place_push_silent();
+
+    /* Phase 4 — priority_queue end-to-end */
+    test_lifetime_pq_peek_raw_silent();
+    test_lifetime_pq_push_restamps_fires();
+    test_lifetime_pq_pop_restamps_fires();
+    test_lifetime_pq_query_silent();
+
+    /* Phase 4 — hashmap end-to-end */
+    test_lifetime_hashmap_borrow_open_is_silent();
+    test_lifetime_hashmap_insert_restamps_fires();
+    test_lifetime_hashmap_remove_restamps_fires();
+    test_lifetime_hashmap_clear_fires();
 #endif
 
     if (g_failed == 0) {
