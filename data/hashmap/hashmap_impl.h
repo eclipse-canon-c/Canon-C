@@ -136,7 +136,10 @@ typedef HASHMAP_VAL_TYPE hm_val_t;
  * ========================================================================= */
 
 CANON_OPTION(hm_val_t)
-CANON_RESULT(bool, Error)
+#ifndef CANON_RESULT_BOOL_ERROR_DEFINED
+    #define CANON_RESULT_BOOL_ERROR_DEFINED
+    CANON_RESULT(bool, Error)
+#endif
 CANON_RESULT(hm_val_t, Error)
 
 /* ============================================================================
