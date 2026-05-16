@@ -147,6 +147,33 @@
 #endif
 
 /* ════════════════════════════════════════════════════════════════
+   Lifetime helper name (internal — used by lifetime tracking)
+   ════════════════════════════════════════════════════════════════
+   This name is passed to IMPL_DEQUE_STRUCT, IMPL_DEQUE_INIT, and
+   IMPL_DEQUE_EMPTY so that token-pasting happens here (where the
+   argument is a bare identifier `type`) rather than inside the
+   IMPL_* macros (where the equivalent token sequence would be
+   MANGLE_DEQUE_TYPE(type) — a parenthesized form that cannot be
+   re-pasted in C99 because macro arguments are not rescanned before
+   participating in ##).
+
+   The helper is emitted unconditionally (so the name always exists),
+   but its body is empty without CANON_LIFETIME_DEBUG.
+
+   Deque has only an open helper — no close. The deque module has no
+   destructor (the buffer is caller-owned, the struct is caller-allocated),
+   so there is no hook on which to call close. */
+
+/**
+ * @brief Name of the per-instantiation lifetime-open helper
+ *
+ * Default: deque_##type##_lifetime_open_ (trailing underscore — internal)
+ */
+#ifndef MANGLE_DEQUE_LIFETIME_OPEN
+    #define MANGLE_DEQUE_LIFETIME_OPEN(type)        deque_##type##_lifetime_open_
+#endif
+
+/* ════════════════════════════════════════════════════════════════
    Query names
    ════════════════════════════════════════════════════════════════ */
 
