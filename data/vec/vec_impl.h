@@ -39,7 +39,12 @@
  * ────────────────────────────────────────────────────────────────────────────
  *   - Embeds a lifetime_t lt field (id + open) on each generated vec type.
  *   - init / empty / alloc / arena_alloc open a fresh lifetime; the ID is
- *     derived from &v.
+ *     derived from a per-TU monotonic counter XOR'd with the constructor's
+ *     local-variable address. The counter ensures successive constructor
+ *     calls produce distinct IDs even though the compiler reuses the same
+ *     stack slot for the local variable — vec is returned by value and the
+ *     bare local-address derivation would collide across consecutive calls,
+ *     breaking the substrate's invalidation check on swap.
  *   - free CLOSES the lifetime (lt.open = false). Any borrow that captured
  *     this vec's ID will fire require_msg via lifetime_assert_valid() on
  *     the next read.
@@ -110,11 +115,49 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 #ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                       /* uintptr_t */
+
     #define VEC_LIFETIME_FIELD_                                         \
         lifetime_t lt; /**< [debug] Lifetime token: id + open */
+
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * Why not just use (uintptr_t)&v?
+     *   Vec is a value type — init/empty/alloc/arena_alloc all stamp the
+     *   lifetime against the constructor's local variable, then return by
+     *   value. The compiler reuses the same stack slot for consecutive
+     *   constructor calls, so &v collides across calls. After the struct
+     *   copy out of the constructor, the caller's vecs end up with identical
+     *   ids — defeating the substrate's invalidation check on swap.
+     *
+     * The counter is a `static` inside a `static inline` function, so each
+     * translation unit has its own copy and increments are TU-local. Two
+     * vecs constructed in the same TU get different ids; vecs constructed
+     * in different TUs get ids from independent counters but mixed with
+     * the local-variable address, making cross-TU collisions vanishingly
+     * unlikely.
+     *
+     * No thread-safety guarantee: if a single TU's vec constructors are
+     * called concurrently from multiple threads, the counter may race and
+     * collide. Callers needing concurrent construction must externally
+     * synchronize — the same constraint applies to every Canon-C container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+     * id derivation never produces 0 (the address term is always non-zero
+     * for any valid stack/heap object, but we ensure the result is non-zero
+     * defensively).
+     */
+    static inline region_id_t vec_lifetime_next_id_(void* vp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(vp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+
     #define VEC_LIFETIME_OPEN_BODY_(vp)                                 \
         do {                                                            \
-            (vp)->lt.id   = (region_id_t)(uintptr_t)(vp);              \
+            (vp)->lt.id   = vec_lifetime_next_id_((vp));                \
             (vp)->lt.open = true;                                       \
         } while (0);
     #define VEC_LIFETIME_CLOSE_BODY_(vp)                                \
