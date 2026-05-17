@@ -7,6 +7,7 @@
 #include "core/memory.h"                 /* mem_copy, mem_move */
 
 #ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                    /* uintptr_t */
     #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
@@ -49,12 +50,20 @@
  * ────────────────────────────────────────────────────────────────────────────
  *   - Embeds a lifetime_t lt field (id + open) on each dynvec_##type instance.
  *   - dynvec_##type##_init() and dynvec_##type##_with_capacity() open a fresh
- *     lifetime; the ID is derived from &v.
+ *     lifetime; the ID is derived from a per-TU monotonic counter XOR'd with
+ *     &v. The counter is necessary because dynvec constructors return by
+ *     value — the compiler reuses the same stack slot for consecutive
+ *     constructor calls, and the bare &v derivation would collide across
+ *     calls, breaking invalidation on subsequent struct copies or swaps.
  *   - dynvec_##type##_grow() and dynvec_##type##_shrink_to_fit() RESTAMP the
  *     lifetime ID conditionally — only when realloc actually moves the
  *     buffer. Operations that don't trigger reallocation (push when cap is
  *     sufficient, pop, clear, get, set, remove) do NOT restamp because the
  *     buffer address is unchanged and existing borrows remain valid.
+ *   - Restamp draws a fresh id from the per-TU counter — guaranteed
+ *     distinct from any prior id within the TU. Previously the restamp
+ *     XOR'd a constant into the id, which could cycle (x ^ K ^ K == x)
+ *     across grow-then-shrink and spuriously re-validate a stale borrow.
  *   - dynvec_##type##_free() CLOSES the lifetime (lt.open = false). Any
  *     borrow that captured this dynvec's ID will fire require_msg via
  *     lifetime_assert_valid() on the next read.
@@ -192,6 +201,10 @@
    These are defined ONCE here (outside DEFINE_DYNVEC) so the same field
    declaration and helper body expand identically into every instantiation.
 
+   The per-TU counter helper dynvec_lifetime_next_id_ is also file-scoped
+   (not per-instantiation) — every DEFINE_DYNVEC type in a TU draws from
+   the same counter, producing distinct ids relative to each other.
+
    In release builds (CANON_LIFETIME_DEBUG undefined):
      - DYNVEC_LIFETIME_FIELD_ expands to nothing — no lt field on the struct
      - The three _BODY_ macros expand to nothing — helpers become no-ops
@@ -200,18 +213,64 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 #ifdef CANON_LIFETIME_DEBUG
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * Why not just use (uintptr_t)vp?
+     *   dynvec_##type##_init() and with_capacity() return by value — the
+     *   compiler reuses the same stack slot for consecutive constructor
+     *   calls, so &v collides across calls. After the struct copy out,
+     *   two dynvecs declared back-to-back end up with identical ids —
+     *   defeating invalidation on subsequent struct copies or swaps.
+     *
+     * The counter is a `static` inside a `static inline` function, so
+     * each translation unit has its own copy and increments are TU-local.
+     * Two dynvecs constructed in the same TU get different ids; dynvecs
+     * constructed in different TUs get ids from independent counters but
+     * mixed with the local-variable address, making cross-TU collisions
+     * vanishingly unlikely. Same pattern as vec / deque / pq / hashmap /
+     * smallvec / dynstring.
+     *
+     * This helper is shared across every DEFINE_DYNVEC instantiation in
+     * a TU. Two dynvec types in the same TU draw from the same counter,
+     * producing distinct ids relative to each other.
+     *
+     * The counter also makes restamp collision-proof: previously the
+     * restamp XOR'd a constant into the id, which could cycle
+     * (x ^ K ^ K == x) across grow-then-shrink — spuriously re-validating
+     * a borrow captured before the first restamp. Drawing a fresh value
+     * from the counter eliminates that issue.
+     *
+     * No thread-safety guarantee: if a single TU's constructors or
+     * restamps are invoked concurrently, the counter may race and
+     * collide. Callers needing concurrent construction must externally
+     * synchronize — the same constraint applies to every Canon-C
+     * container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+     * id derivation never produces 0 defensively.
+     */
+    static inline region_id_t dynvec_lifetime_next_id_(void* vp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(vp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+
     #define DYNVEC_LIFETIME_FIELD_                                      \
         lifetime_t lt; /**< [debug] Lifetime token: id + open */
     #define DYNVEC_LIFETIME_OPEN_BODY_(vp)                              \
         do {                                                            \
-            (vp)->lt.id   = (region_id_t)(uintptr_t)(vp);              \
+            (vp)->lt.id   = dynvec_lifetime_next_id_((vp));            \
             (vp)->lt.open = true;                                       \
         } while (0);
-    /* XOR with golden-ratio constant guarantees the new id differs from
-       the old one even when the dynvec address is reused. */
+    /* Restamp draws a fresh id from the per-TU counter — guaranteed
+     * distinct from any prior id within the TU, unlike the previous
+     * XOR-with-constant approach which could cycle (x ^ K ^ K == x)
+     * across grow-then-shrink. */
     #define DYNVEC_LIFETIME_RESTAMP_BODY_(vp)                           \
         do {                                                            \
-            (vp)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;          \
+            (vp)->lt.id = dynvec_lifetime_next_id_((vp));              \
         } while (0);
     #define DYNVEC_LIFETIME_CLOSE_BODY_(vp)                             \
         do { (vp)->lt.open = false; } while (0);
@@ -263,9 +322,11 @@ typedef struct { \
    Internal: lifetime helpers (per-instantiation, compiled away in release) \
    ════════════════════════════════════════════════════════════════════════════ \
    See file docblock for the full contract. Summary: \
-     - _open_:    sets id (from &v) and marks open. Used by constructors. \
-     - _restamp_: XORs id with the golden-ratio constant. Used by grow / \
-                  shrink when realloc moves the buffer. \
+     - _open_:    draws fresh id from the per-TU counter (XOR'd with &v). \
+                  Used by constructors. \
+     - _restamp_: draws another fresh id from the same counter. Used by \
+                  grow / shrink when realloc moves the buffer. Guaranteed \
+                  distinct from any prior id within the TU. \
      - _close_:   marks closed. Used by free. \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
@@ -336,8 +397,8 @@ static inline bool dynvec_##type##_grow(dynvec_##type* v, usize min_cap) { \
  * @post result.data == NULL, result.len == 0, result.cap == 0 \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID is \
- * derived from the returned struct's address — borrows constructed against \
- * this dynvec carry this ID. \
+ * derived from a per-TU counter XOR'd with the returned struct's address — \
+ * borrows constructed against this dynvec carry this ID. \
  * \
  * Performance: \
  * - Time: O(1) \
