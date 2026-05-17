@@ -9,6 +9,12 @@
 #include "core/slice.h"
 #include "core/ownership.h"
 #include "semantics/option/option.h"
+#include "semantics/borrow.h"
+
+#ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                    /* uintptr_t */
+    #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
+#endif
 
 /**
  * @file data/bitset.h
@@ -25,6 +31,8 @@
  * - Backed by u64 words — 64 bits per word, cache-friendly
  * - Bits beyond capacity are always kept zero (padding invariant)
  * - bytes_t view available via bitset_as_bytes() for I/O and serialization
+ * - Tracked borrowed_bytes view available via bitset_as_borrowed_bytes()
+ *   when borrows need to participate in the lifetime substrate
  *
  * NULL contract (uniform across all functions):
  * ────────────────────────────────────────────────────────────────────────────
@@ -45,6 +53,26 @@
  * The raw sentinel-returning variants (bitset_find_first, bitset_find_next,
  * bitset_find_last) are kept for BITSET_FOR_EACH and performance-critical
  * tight loops where the option wrapper overhead is undesirable.
+ *
+ * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
+ * ────────────────────────────────────────────────────────────────────────────
+ *   - Embeds a lifetime_t lt field (id + open) on the Bitset.
+ *   - bitset_init() opens a fresh lifetime; the ID is derived from a per-TU
+ *     monotonic counter XOR'd with &bs. Borrows constructed via
+ *     bitset_as_borrowed_bytes() capture this ID.
+ *   - bitset_close() CLOSES the lifetime (lt.open = false). Any
+ *     borrowed_bytes captured prior to close fires require_msg via
+ *     lifetime_assert_valid() on the next read.
+ *   - Mutating operations (set / clear / toggle / assign / set_all /
+ *     clear_all / not / and / or / xor) do NOT restamp. Bitset has fixed
+ *     capacity, never reallocates, and the backing word array's address
+ *     is stable for the Bitset's whole lifetime. A borrowed_bytes view
+ *     captured against the words still points at valid memory after any
+ *     mutation; it just reads the new bit values. This matches the
+ *     substrate's documented honesty boundary used by vec, deque, and
+ *     the convenience containers: lifetime tracking catches
+ *     use-after-relocation and use-after-close, not use-of-mutated-value.
+ *   Zero cost in release builds — struct layout is identical without the flag.
  *
  * Dependency rule:
  * ────────────────────────────────────────────────────────────────────────────
@@ -100,12 +128,18 @@
  * u64* buf = arena_alloc(&arena, BITSET_WORD_COUNT(1024) * sizeof(u64));
  * Bitset bs2;
  * bitset_init(&bs2, buf, 1024);
+ *
+ * // Tracked borrow (CANON_LIFETIME_DEBUG)
+ * borrowed_bytes view = bitset_as_borrowed_bytes(&bs);
+ * // ... use borrowed_bytes_get(&view) ...
+ * bitset_close(&bs);   // invalidates view
  * ```
  *
  * @sa core/primitives/bits.h    — bits_popcount, bits_ctz, bits_clz used internally
  * @sa core/slice.h              — bytes_t used by bitset_as_bytes()
  * @sa core/ownership.h          — borrowed() annotation
  * @sa semantics/option/option.h — option_usize for typed find results
+ * @sa semantics/borrow.h        — borrowed_bytes used by bitset_as_borrowed_bytes()
  */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -136,12 +170,97 @@
  * Do not access fields directly — use the provided functions.
  *
  * Invariant: bits at indices [capacity, word_count*64) are always zero.
+ *
+ * Memory layout:
+ * - sizeof(Bitset) = sizeof(u64*) + 2*sizeof(usize)
+ *   [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG]
  */
 typedef struct {
     u64*  words;      ///< Backing word array (caller-owned)
     usize capacity;   ///< Number of usable bits
     usize word_count; ///< Number of u64 words in backing array
+#ifdef CANON_LIFETIME_DEBUG
+    lifetime_t lt;    ///< [debug] Lifetime token: id + open
+#endif
 } Bitset;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Internal: lifetime helpers (compiled away in release)
+   ════════════════════════════════════════════════════════════════════════════
+   When CANON_LIFETIME_DEBUG is enabled, a Bitset exposes a lifetime_t
+   that borrows constructed via bitset_as_borrowed_bytes() can capture and
+   validate against. The helpers below manage the (id, open) pair across
+   the Bitset lifecycle:
+
+     bitset_lifetime_open_(bs)
+       Called by bitset_init. Draws a fresh id from the per-TU monotonic
+       counter (XOR'd with &bs for cross-TU diversity) and marks the
+       lifetime open.
+
+     bitset_lifetime_close_(bs)
+       Called by bitset_close. Marks the lifetime closed, which makes any
+       subsequent borrow read fire lifetime_assert_valid.
+
+   There is intentionally no restamp helper — Bitset has fixed capacity
+   and never relocates its backing buffer. Mutating operations on bits
+   do not invalidate borrows on the words array. See file docblock for
+   the substrate's honesty boundary.
+
+   In release builds (CANON_LIFETIME_DEBUG undefined) both helpers are
+   no-ops — the Bitset struct does not have an lt field and no code
+   touches it.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+#ifdef CANON_LIFETIME_DEBUG
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * The counter is a `static` inside a `static inline` function, so
+     * each translation unit has its own copy and increments are TU-local.
+     * Two Bitsets initialized in the same TU get different ids; Bitsets
+     * initialized in different TUs get ids from independent counters but
+     * mixed with the struct address, making cross-TU collisions
+     * vanishingly unlikely. Same pattern as vec / deque / pq / hashmap /
+     * dynvec / smallvec / dynstring.
+     *
+     * Unlike the convenience containers that return by value (and where
+     * the compiler may reuse stack slots across constructor calls), the
+     * Bitset constructor takes the struct by pointer — so the caller's
+     * Bitset has a stable address that the counter mixes with cleanly.
+     * The counter still adds essential diversity: it guarantees that
+     * sequential init / close / init cycles on the same Bitset slot
+     * produce different ids, so borrows captured before close cannot
+     * silently re-validate against the post-init Bitset.
+     *
+     * No thread-safety guarantee: if a single TU's bitset_init or
+     * bitset_close are invoked concurrently, the counter may race and
+     * collide. Same constraint as every other Canon-C container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+     * id derivation never produces 0 defensively.
+     */
+    static inline region_id_t bitset_lifetime_next_id_(void* bsp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(bsp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+#endif
+
+static inline void bitset_lifetime_open_(Bitset* bs) {
+#ifdef CANON_LIFETIME_DEBUG
+    bs->lt.id   = bitset_lifetime_next_id_(bs);
+    bs->lt.open = true;
+#endif
+    (void)bs;
+}
+
+static inline void bitset_lifetime_close_(Bitset* bs) {
+#ifdef CANON_LIFETIME_DEBUG
+    bs->lt.open = false;
+#endif
+    (void)bs;
+}
 
 /* ════════════════════════════════════════════════════════════════════════════
    Internal helpers
@@ -184,6 +303,10 @@ static inline void bitset_clear_padding(borrowed(Bitset*) bs) {
  * @pre capacity > 0
  * @post All bits cleared, bs ready to use
  *
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID
+ * is derived from a per-TU counter XOR'd with &bs. Borrows constructed
+ * via bitset_as_borrowed_bytes carry this ID.
+ *
  * Performance: O(n/64) — clears backing words
  */
 static inline void bitset_init(borrowed(Bitset*) bs, borrowed(u64*) words, usize capacity) {
@@ -195,6 +318,35 @@ static inline void bitset_init(borrowed(Bitset*) bs, borrowed(u64*) words, usize
     bs->capacity   = capacity;
     bs->word_count = BITSET_WORD_COUNT(capacity);
     mem_zero(words, bs->word_count * sizeof(u64));
+    bitset_lifetime_open_(bs);
+}
+
+/**
+ * @brief Closes the Bitset's lifetime — invalidates outstanding borrowed views
+ *
+ * The Bitset's storage (the caller-provided word array) is NOT freed —
+ * Bitset never owned it. This function exists purely to signal "I'm done
+ * with this Bitset; any borrowed views captured against it should now
+ * fail." It is the symmetric counterpart of bitset_init.
+ *
+ * NULL-safe: bitset_close(NULL) is a no-op.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): CLOSES the lifetime (lt.open = false).
+ * Any borrowed_bytes that captured this Bitset's ID will fire require_msg
+ * on the next read. The lifetime is reopened only by a fresh bitset_init.
+ *
+ * In release builds (CANON_LIFETIME_DEBUG undefined): this function
+ * compiles to nothing — it is purely a substrate hook. Callers that do
+ * not opt into lifetime tracking may still call it freely; it costs
+ * nothing.
+ *
+ * @param bs Bitset to close (NULL-safe)
+ *
+ * Performance: O(1)
+ */
+static inline void bitset_close(borrowed(Bitset*) bs) {
+    if (!bs) return;
+    bitset_lifetime_close_(bs);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -207,6 +359,10 @@ static inline void bitset_init(borrowed(Bitset*) bs, borrowed(u64*) words, usize
  * NULL bs is a no-op. Out-of-bounds i on a valid bs is a contract violation.
  *
  * @pre i < bs->capacity (when bs != NULL)
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Backing words array
+ * is unchanged in extent and address; existing borrows remain valid.
+ *
  * Performance: O(1)
  */
 static inline void bitset_set(borrowed(Bitset*) bs, usize i) {
@@ -221,6 +377,9 @@ static inline void bitset_set(borrowed(Bitset*) bs, usize i) {
  * NULL bs is a no-op. Out-of-bounds i on a valid bs is a contract violation.
  *
  * @pre i < bs->capacity (when bs != NULL)
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(1)
  */
 static inline void bitset_clear(borrowed(Bitset*) bs, usize i) {
@@ -235,6 +394,9 @@ static inline void bitset_clear(borrowed(Bitset*) bs, usize i) {
  * NULL bs is a no-op. Out-of-bounds i on a valid bs is a contract violation.
  *
  * @pre i < bs->capacity (when bs != NULL)
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(1)
  */
 static inline void bitset_toggle(borrowed(Bitset*) bs, usize i) {
@@ -264,6 +426,9 @@ static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
  * NULL bs is a no-op. Out-of-bounds i on a valid bs is a contract violation.
  *
  * @pre i < bs->capacity (when bs != NULL)
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(1)
  */
 static inline void bitset_assign(borrowed(Bitset*) bs, usize i, bool value) {
@@ -279,6 +444,9 @@ static inline void bitset_assign(borrowed(Bitset*) bs, usize i, bool value) {
  * @brief Clears all bits
  *
  * NULL bs is a no-op.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(n/64)
  */
 static inline void bitset_clear_all(borrowed(Bitset*) bs) {
@@ -290,6 +458,9 @@ static inline void bitset_clear_all(borrowed(Bitset*) bs) {
  * @brief Sets all bits within capacity
  *
  * NULL bs is a no-op.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(n/64)
  */
 static inline void bitset_set_all(borrowed(Bitset*) bs) {
@@ -302,6 +473,9 @@ static inline void bitset_set_all(borrowed(Bitset*) bs) {
  * @brief Inverts all bits within capacity
  *
  * NULL bs is a no-op.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(n/64)
  */
 static inline void bitset_not(borrowed(Bitset*) bs) {
@@ -317,6 +491,9 @@ static inline void bitset_not(borrowed(Bitset*) bs) {
  *
  * NULL bs or other is a no-op.
  * Operates on min(bs->word_count, other->word_count) words.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(n/64)
  */
 static inline void bitset_and(borrowed(Bitset*) bs, borrowed(const Bitset*) other) {
@@ -336,6 +513,9 @@ static inline void bitset_and(borrowed(Bitset*) bs, borrowed(const Bitset*) othe
  *
  * NULL bs or other is a no-op.
  * Operates on min(bs->word_count, other->word_count) words.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(n/64)
  */
 static inline void bitset_or(borrowed(Bitset*) bs, borrowed(const Bitset*) other) {
@@ -351,6 +531,9 @@ static inline void bitset_or(borrowed(Bitset*) bs, borrowed(const Bitset*) other
  *
  * NULL bs or other is a no-op.
  * Operates on min(bs->word_count, other->word_count) words.
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as set.
+ *
  * Performance: O(n/64)
  */
 static inline void bitset_xor(borrowed(Bitset*) bs, borrowed(const Bitset*) other) {
@@ -596,11 +779,46 @@ static inline option_usize bitset_find_last_option(borrowed(const Bitset*) bs) {
  * Useful for serialization, hashing, or passing to byte-level APIs.
  * Non-owning — do not free the returned bytes_t.ptr.
  *
+ * This is the untracked view. For substrate-aware views that participate
+ * in lifetime checking, use bitset_as_borrowed_bytes() instead.
+ *
  * Performance: O(1)
  */
 static inline bytes_t bitset_as_bytes(borrowed(const Bitset*) bs) {
     if (!bs || !bs->words) return bytes_empty();
     return bytes_from(bs->words, bs->word_count * sizeof(u64));
+}
+
+/**
+ * @brief Returns a tracked borrowed_bytes view over the raw backing words
+ *
+ * Like bitset_as_bytes(), but the returned view captures the Bitset's
+ * lifetime token (under CANON_LIFETIME_DEBUG). After bitset_close(), any
+ * borrowed_bytes_get() on the returned view fires require_msg.
+ *
+ * NULL bs returns borrowed_bytes_empty().
+ *
+ * In release builds (CANON_LIFETIME_DEBUG undefined), the returned
+ * borrowed_bytes carries source_lt == NULL — the check is a no-op and
+ * the view behaves exactly like wrapping bitset_as_bytes() in
+ * borrowed_bytes_from(bytes.ptr, bytes.len, bs).
+ *
+ * @param bs Bitset to view (NULL-safe)
+ * @return borrowed_bytes covering the entire word array
+ *
+ * Performance: O(1)
+ */
+static inline borrowed_bytes bitset_as_borrowed_bytes(borrowed(const Bitset*) bs) {
+    if (!bs || !bs->words) return borrowed_bytes_empty();
+    return borrowed_bytes_from_lifetime(
+        bs->words,
+        bs->word_count * sizeof(u64),
+#ifdef CANON_LIFETIME_DEBUG
+        &bs->lt,
+#else
+        NULL,
+#endif
+        bs);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
