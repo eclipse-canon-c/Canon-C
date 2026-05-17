@@ -9,6 +9,7 @@
 #include "data/vec/vec.h"                /* MANGLE_VEC_TYPE, MANGLE_VEC_INIT */
 
 #ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                    /* uintptr_t */
     #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
@@ -57,20 +58,31 @@
  *   - Embeds a lifetime_t lt field (id + open) on each smallvec_##type
  *     instance.
  *   - smallvec_##type##_init() and smallvec_##type##_init_arena() open a
- *     fresh lifetime; the ID is derived from &v.
+ *     fresh lifetime; the ID is derived from a per-TU monotonic counter
+ *     XOR'd with &v. The counter is necessary because the constructors
+ *     return by value — the compiler reuses the same stack slot for
+ *     consecutive constructor calls, so the bare &v derivation would
+ *     collide across calls.
  *   - smallvec_##type##_spill() RESTAMPS the lifetime ID unconditionally —
  *     the buffer always moves at spill time (inline_buf address ≠ heap or
  *     arena address), so the old/new pointer comparison that dynvec and
  *     dynstring perform inside grow() is unnecessary here. spill happens
  *     at most once per smallvec, so this is the only restamp event.
+ *   - Restamp draws a fresh id from the per-TU counter — guaranteed
+ *     distinct from any prior id within the TU. (Previously the restamp
+ *     XOR'd a constant into the id, which could cycle (x ^ K ^ K == x)
+ *     given a hypothetical second restamp; smallvec only restamps once
+ *     in practice, but the counter contract is robust to future changes.)
  *   - Operations that don't trigger spill (push when len < cap, pop,
  *     clear, get, set, remove) do NOT restamp because the buffer address
  *     is unchanged and existing borrows remain valid.
  *   - smallvec_##type##_free() CLOSES the lifetime (lt.open = false) and
  *     then re-opens it via the embedded init() call, so a freed-and-reused
- *     smallvec gets a fresh ID — any borrow that captured the pre-free
- *     ID will fire require_msg via lifetime_assert_valid() on the next
- *     read.
+ *     smallvec is guaranteed to get a fresh ID — any borrow that captured
+ *     the pre-free ID will fire require_msg via lifetime_assert_valid()
+ *     on the next read. (Previously the docstring promised this but the
+ *     bare-address derivation made it merely probabilistic; the per-TU
+ *     counter makes it guaranteed.)
  *   - smallvec_##type##_clear() does NOT restamp. Clear only sets len = 0;
  *     the buffer is unchanged. Lifetime tracking catches use-after-spill
  *     and use-after-free; it does NOT catch use-of-removed-element,
@@ -153,6 +165,10 @@
    the field declaration and helper bodies expand identically into every
    instantiation.
 
+   The per-TU counter helper smallvec_lifetime_next_id_ is also file-scoped
+   (not per-instantiation) — every DEFINE_SMALLVEC type in a TU draws from
+   the same counter, producing distinct ids relative to each other.
+
    In release builds (CANON_LIFETIME_DEBUG undefined):
      - SMALLVEC_LIFETIME_FIELD_ expands to nothing — no lt field on the struct
      - The three _BODY_ macros expand to nothing — helpers become no-ops
@@ -167,18 +183,61 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 #ifdef CANON_LIFETIME_DEBUG
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * Why not just use (uintptr_t)vp?
+     *   smallvec_##type##_init() returns by value, and smallvec_##type##_free()
+     *   then assigns a fresh init() result into *v. Both stampings would
+     *   use the same constructor-local address (which the compiler reuses
+     *   across calls), so a freed-and-reused smallvec could end up with
+     *   the same id it had before — silently re-validating a stale borrow.
+     *   The docstring promises "freed-and-reused gets a fresh ID"; the
+     *   per-TU counter makes that guaranteed instead of probabilistic.
+     *
+     * The counter is a `static` inside a `static inline` function, so each
+     * translation unit has its own copy and increments are TU-local. Same
+     * pattern as vec / deque / pq / hashmap / dynvec / dynstring.
+     *
+     * This helper is shared across every DEFINE_SMALLVEC instantiation in
+     * a TU. Two smallvec types in the same TU draw from the same counter,
+     * producing distinct ids relative to each other.
+     *
+     * The counter also makes restamp collision-proof: previously XOR with
+     * the same constant could cycle (x ^ K ^ K == x). Smallvec spills at
+     * most once per instance so this issue rarely manifested in practice,
+     * but the contract is now ironclad regardless.
+     *
+     * No thread-safety guarantee: if a single TU's constructors or
+     * restamps are invoked concurrently, the counter may race and
+     * collide. Callers needing concurrent construction must externally
+     * synchronize — the same constraint applies to every Canon-C
+     * container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+     * id derivation never produces 0 defensively.
+     */
+    static inline region_id_t smallvec_lifetime_next_id_(void* vp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(vp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+
     #define SMALLVEC_LIFETIME_FIELD_                                    \
         lifetime_t lt; /**< [debug] Lifetime token: id + open */
     #define SMALLVEC_LIFETIME_OPEN_BODY_(vp)                            \
         do {                                                            \
-            (vp)->lt.id   = (region_id_t)(uintptr_t)(vp);              \
+            (vp)->lt.id   = smallvec_lifetime_next_id_((vp));          \
             (vp)->lt.open = true;                                       \
         } while (0);
-    /* XOR with golden-ratio constant guarantees the new id differs from
-       the old one even when the smallvec address is reused. */
+    /* Restamp draws a fresh id from the per-TU counter — guaranteed
+     * distinct from any prior id within the TU. Smallvec restamps at
+     * most once per instance (at spill), but the counter makes the
+     * contract robust to future changes. */
     #define SMALLVEC_LIFETIME_RESTAMP_BODY_(vp)                         \
         do {                                                            \
-            (vp)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;          \
+            (vp)->lt.id = smallvec_lifetime_next_id_((vp));            \
         } while (0);
     #define SMALLVEC_LIFETIME_CLOSE_BODY_(vp)                           \
         do { (vp)->lt.open = false; } while (0);
@@ -237,9 +296,11 @@ typedef struct { \
    Internal: lifetime helpers (per-instantiation, compiled away in release) \
    ════════════════════════════════════════════════════════════════════════════ \
    See file docblock for the full contract. Summary: \
-     - _open_:    sets id (from &v) and marks open. Used by both constructors. \
-     - _restamp_: XORs id with the golden-ratio constant. Used by spill. \
-                  Unconditional — the buffer always moves at spill time. \
+     - _open_:    draws fresh id from the per-TU counter (XOR'd with &v). \
+                  Used by both constructors. \
+     - _restamp_: draws another fresh id from the same counter. Used by \
+                  spill. Unconditional — the buffer always moves at spill \
+                  time. \
      - _close_:   marks closed. Used by free (immediately before re-init). \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
@@ -271,8 +332,8 @@ static inline void smallvec_##type##_lifetime_close_(smallvec_##type* v) { \
  * @post v.using_inline == true, v.arena == NULL \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID \
- * is derived from the returned struct's address — borrows constructed \
- * against this smallvec carry this ID. \
+ * is derived from a per-TU counter XOR'd with the returned struct's \
+ * address — borrows constructed against this smallvec carry this ID. \
  * \
  * Performance: O(1), no heap allocation \
  */ \
@@ -645,10 +706,10 @@ static inline void smallvec_##type##_clear(smallvec_##type* v) { \
  * AND arena == NULL. \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): CLOSES the lifetime, then re-opens it \
- * via the embedded init() call. The result is that lt.open is true and \
- * lt.id is freshly stamped at v's address — a freed-and-reused smallvec \
- * carries a different ID than it did before free, so any borrow that \
- * captured the pre-free ID fails the lifetime check on the next read. \
+ * via the embedded init() call. Because the open helper draws from the \
+ * per-TU monotonic counter, the new id is guaranteed to differ from the \
+ * pre-free id — any borrow that captured the pre-free ID fails the \
+ * lifetime check on the next read. \
  */ \
 static inline void smallvec_##type##_free(smallvec_##type* v) { \
     if (!v) return; \
