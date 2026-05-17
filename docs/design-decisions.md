@@ -11,8 +11,15 @@
       — verified present; covers DEFINE_OWNED / DEFINE_BORROWED.
     - README anchor "Lifetime token types shared across owning modules"
       — verified present in the core/primitives/ getting-started section.
+    - README anchor "From shared vocabulary to compositional verification"
+      — verified present; positions the substrate as the runtime layer of
+      the same compositional bet (§1, §7).
     - CMakeLists.txt comment block on CANON_LIFETIME (off/debug)
       — verified present; documents the ABI guarantee.
+    - docs/verification.md, docs/deviations.md, docs/traceability.md
+      — referenced as the canonical homes for VERIFY-NNN / MCDC-NNN entries.
+      Substrate header entries land there as the non-macro substrate gets
+      annotated; OWN-001 will gain ID-specific cross-references at that point.
     - CHANGELOG entry for v1.3.0 — TODO: confirm anchor when CHANGELOG is
       updated for the release. Inline as {TODO: CHANGELOG v1.3.0 anchor}.
     - OWN-002 — placeholder forward-reference; will exist if and when the
@@ -22,14 +29,23 @@
 
 ## OWN-001 — Runtime lifetime substrate for owning containers
 
-| Field        | Value                                                             |
-| ------------ | ----------------------------------------------------------------- |
-| Status       | Shipped in v1.3.0                                                 |
-| Merged at    | `da6ed2e` (CI #938)                                               |
-| Last green   | CI #935 baseline; CI #938 confirms Phase 5 merge across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug) |
-| Scope        | All owning container types in `core/` and `data/`                 |
-| Build knob   | `CANON_LIFETIME=off` (default) or `CANON_LIFETIME=debug` — see `CMakeLists.txt` |
-| Cross-refs   | README sections *"Borrow lifetime — know when a borrowed value is still valid"*, *"What about compile-time ownership enforcement?"*; `CMakeLists.txt` `CANON_LIFETIME` block; {TODO: CHANGELOG v1.3.0 anchor}; OWN-002 (forward, conditional). |
+This entry records the runtime lifetime substrate shipped in v1.3.0:
+opt-in runtime tracking of borrow validity across container reset,
+realloc, swap, and teardown, enabled by `CANON_LIFETIME=debug` and
+byte-identical to v1.2.x in default builds. The substrate covers every
+owning container type in `core/` and `data/` and composes with the
+formally-verified primitive layer described in the README's
+*"From shared vocabulary to compositional verification"* section.
+
+| Field          | Value                                                             |
+| -------------- | ----------------------------------------------------------------- |
+| Status         | Shipped in v1.3.0                                                 |
+| Merged at      | Phase 5 sequence: CI #936 (`55b6aaf`, bitset substrate), CI #937 (`302cf0f`, stringbuf substrate), CI #938 (`da6ed2e`, Phase 5 tests). v1.3.0 = state of master at `da6ed2e`. |
+| Last green     | CI #938 across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug) |
+| Scope          | All owning container types in `core/` and `data/`                 |
+| Build knob     | `CANON_LIFETIME=off` (default) or `CANON_LIFETIME=debug` — see `CMakeLists.txt` |
+| Verification   | Runtime-validated via `test/semantics/borrow_test.c` across all 16 configs. WP coverage of the non-macro substrate headers (`lifetime.h`, `region.h`, `arena.h`, `pool.h`, and the non-macro surface of `borrow.h`) is on the verification roadmap per `docs/verification.md` — they sit in the queue alongside the headers walking up from `core/primitives/`. Macro-templated bodies remain runtime-only by construction (see §7). |
+| Cross-refs     | README sections *"Borrow lifetime — know when a borrowed value is still valid"*, *"What about compile-time ownership enforcement?"*, *"From shared vocabulary to compositional verification"*; `CMakeLists.txt` `CANON_LIFETIME` block; `docs/verification.md`, `docs/deviations.md`, `docs/traceability.md` (substrate VERIFY-NNN entries land here as headers get annotated); {TODO: CHANGELOG v1.3.0 anchor}; OWN-002 (forward, conditional). |
 
 ### Phase chronology
 
@@ -40,7 +56,7 @@
 | 3a    | May 15–16, 2026 | `vec` and `deque` instrumented. **Value-return ID collision discovered.** Per-TU counter pattern introduced.         | CI #905 → CI #919; key fix at CI #913 (`51f941b`)             |
 | 3b    | May 16, 2026    | `priority_queue` and `hashmap` instrumented. Restamp-on-every-mutation contract for reordering containers.           | CI #923 → CI #929                                             |
 | 4     | May 15–16, 2026 | End-to-end borrow tests in `test/semantics/borrow_test.c`. Interleaved with Phase 3 — tests landed per container.    | CI #919, #924, #928                                           |
-| 5     | May 17, 2026    | `bitset` and `stringbuf` view-tracking. Phase 2 retrofit (XOR-constant → per-TU counter) landed as prep.             | Retrofit at CI #933–#935 (`ab59935`, `7393eb9`, `f5a6dfa`); Phase 5 merge at CI #938 (`da6ed2e`) |
+| 5     | May 17, 2026    | `bitset` and `stringbuf` view-tracking. Phase 2 retrofit (XOR-constant → per-TU counter) landed as prep.             | Retrofit at CI #933–#935 (`ab59935`, `7393eb9`, `f5a6dfa`); Phase 5 substrate at CI #936 (`55b6aaf`, bitset) and CI #937 (`302cf0f`, stringbuf); Phase 5 tests at CI #938 (`da6ed2e`) |
 
 ### 1. Context
 
@@ -79,6 +95,17 @@ fires `require_msg` at the use site if the captured lifetime has been
 invalidated. It is opt-in, runs under `CANON_LIFETIME_DEBUG`, and is
 byte-identical to v1.2.x when the flag is off — the same ABI guarantee
 the `CMakeLists.txt` `CANON_LIFETIME` block documents.
+
+The substrate is the runtime layer of the same compositional bet the
+README's *"From shared vocabulary to compositional verification"*
+section describes. Where formal verification currently reaches — the
+primitives in `core/primitives/`, the borrow types in `core/slice.h`,
+and the memory primitives in `core/memory.h` — calling code inherits
+proved runtime-safety obligations. The runtime substrate documented
+here is the companion piece for the layer above: owning containers
+whose macro-templated bodies sit outside WP's reach (§7), validated
+at runtime instead while WP coverage walks up the dependency tree
+toward them.
 
 ### 2. Decision
 
@@ -314,35 +341,53 @@ second is outside the scope of v1.3.0's runtime-checked substrate. If
 formal temporal verification of the substrate becomes a priority in a
 later release, it will get its own entry.
 
-### 7. Macro-verification note
+### 7. Verification posture: macro-templated vs non-macro substrate
 
-Several substrate surfaces are macro-templated: `BORROW_LT_FIELDS_`,
-`BORROW_LT_INHERIT_`, `BORROW_LT_CHECK_`, and `DEFINE_BORROWED_SLICE` in
-`semantics/borrow.h`; `DEFINE_DYNVEC`, `DEFINE_SMALLVEC`, and the
-per-instantiation helper bodies in the convenience containers. The C
-preprocessor strips ACSL annotations inside `#define` before expansion,
-so macro-generated function bodies cannot be WP-verified directly —
-they exist only after preprocessing, and only at the instantiation
-sites.
+The substrate splits cleanly into two surfaces with different
+verification stories. OWN-001 records both so the boundary is not
+later mistaken for an omission.
 
-The substrate is therefore runtime-validated, not formally proved. The
-evidence stream is `test/semantics/borrow_test.c`, which covers every
-phase of the substrate end-to-end across all four borrow types
-(`borrowed_ptr`, `borrowed_str`, `borrowed_bytes`,
-`borrowed_slice_int`), every Phase 3 container (vec, deque, pq,
-hashmap), every Phase 5 view container (bitset, stringbuf), the
-type-erasure path (`as_bytes` inheritance), and the opt-out path
-(untracked `_from` constructors). The test runs in all 16 CI configs
-under both the standard build and `CANON_LIFETIME=debug`, with ASan +
-UBSan enabled on Linux and macOS debug builds.
+**Macro-templated bodies — runtime-only by construction.** Several
+substrate surfaces are macro-templated: `BORROW_LT_FIELDS_`,
+`BORROW_LT_INHERIT_`, `BORROW_LT_CHECK_`, and `DEFINE_BORROWED_SLICE`
+in `semantics/borrow.h`; `DEFINE_DYNVEC`, `DEFINE_SMALLVEC`, and the
+per-instantiation helper bodies in the convenience containers. The
+C99 preprocessor strips ACSL annotations inside `#define` before
+expansion, so macro-generated function bodies cannot be WP-verified
+directly — they exist only after preprocessing, and only at the
+instantiation sites. Extending WP coverage to these would require
+generating per-instantiation ACSL specs at template expansion time,
+which is outside the C99 preprocessor's reach and would need either a
+code generator or a switch to a different annotation toolchain.
+Neither is in scope for v1.3.0; if it ever becomes a priority, it
+will get its own entry.
 
-This boundary — formal proof for `core/primitives/` and `core/slice.h`,
-runtime test evidence for macro-templated substrate — is recorded here
-so it is not later mistaken for an omission. Extending WP coverage to
-the macro-generated functions would require generating per-instantiation
-ACSL specs at template expansion time, which is outside the C99
-preprocessor's reach and would need either a code generator or a switch
-to a different annotation toolchain.
+**Non-macro substrate — on the verification roadmap.**
+`core/primitives/lifetime.h`, `core/region.h`'s `lifetime_assert_valid`,
+the lifecycle functions in `core/arena.h` and `core/pool.h`, and the
+non-macro surface of `semantics/borrow.h` are all conventional C99
+inline functions amenable to WP. Per the CI file's candidate list,
+they sit in the verification queue alongside the rest of the headers
+walking up from `core/primitives/`. When they land — under
+`VERIFY-NNN` entries in `docs/verification.md` and `docs/deviations.md`
+— OWN-001 will gain cross-references to those entries, but the
+substrate's behavioral contracts documented above will not change.
+The contract table in §3 is the spec; the verification entries will
+add formal evidence that the implementation meets it.
+
+**Current evidence stream.** While the WP work walks up to the
+substrate headers, the substrate is validated at runtime via
+`test/semantics/borrow_test.c`. The test covers every phase of the
+substrate end-to-end across all four borrow types (`borrowed_ptr`,
+`borrowed_str`, `borrowed_bytes`, `borrowed_slice_int`), every Phase 3
+container (vec, deque, pq, hashmap), every Phase 5 view container
+(bitset, stringbuf), the type-erasure path (`as_bytes` inheritance),
+and the opt-out path (untracked `_from` constructors). It runs in all
+16 CI configs under both the standard build and
+`CANON_LIFETIME=debug`, with ASan + UBSan enabled on Linux and macOS
+debug builds. This is the substrate's current verification evidence;
+it remains the evidence for macro-templated bodies indefinitely, and
+sits alongside formal proof for the non-macro headers once they land.
 
 ### 8. Cross-references
 
@@ -364,6 +409,17 @@ to a different annotation toolchain.
   `borrowed_bytes`; `BORROW_LT_*` macros; `_from_lifetime` constructors
   and the inheriting `_slice` / `_as_bytes` accessors.
 - **`test/semantics/borrow_test.c`** — substrate evidence stream.
+- **`docs/verification.md`** — canonical home for `VERIFY-NNN` entries.
+  Substrate header entries land here as the non-macro substrate
+  surface gets WP-annotated; OWN-001 will cross-reference those by ID
+  when they exist.
+- **`docs/deviations.md`** — canonical home for documented unproved
+  goals with their manual proof arguments. Substrate residuals (if
+  any) will land here once the non-macro substrate headers are
+  WP-annotated.
+- **`docs/traceability.md`** — MC/DC coverage record. Substrate
+  headers join the per-header coverage table as they get instrumented
+  and annotated.
 - **CHANGELOG**, v1.3.0 — `{TODO: CHANGELOG v1.3.0 anchor}`.
 - **OWN-002** — forward, conditional. Would migrate `Arena` and `Pool`
   from XOR-with-constant restamp to the per-TU counter pattern used by
