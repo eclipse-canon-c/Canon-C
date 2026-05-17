@@ -27,6 +27,12 @@
  *     (container mutation → lt restamp/close → borrow captured_id stale →
  *     borrowed_*_get fires require_msg) composes correctly for every
  *     Phase 3 container.
+ *   - Phase 5 — bitset and stringbuf view tracking:
+ *     bitset_as_borrowed_bytes, stringbuf_as_borrowed_str,
+ *     stringbuf_as_borrowed_bytes, stringbuf_buffer_as_borrowed_bytes.
+ *     Validate that close fires while mutation (set / clear / append /
+ *     truncate) stays silent — the substrate's documented honesty
+ *     boundary for fixed-capacity never-relocating containers.
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random (start, end, len) triples into borrowed_bytes_slice and
@@ -84,9 +90,15 @@ DEFINE_BORROWED_SLICE(int)
  *   - DEFINE_VEC (vec_int_get_option, vec_int_pop_option, vec_int_remove_option)
  *   - DEFINE_DEQUE (deque_int_pop_*_option, deque_int_peek_*_option)
  *   - DEFINE_PRIORITY_QUEUE (pq_int_pop_option, pq_int_peek_option)
- * Must be instantiated before any of those. */
+ *
+ * option_usize is required by:
+ *   - data/bitset.h (bitset_find_first_option / _next_option / _last_option
+ *     return option_usize and reference it in their bodies)
+ *
+ * Both must be instantiated before any of those headers expand. */
 #include "semantics/option/option.h"
 CANON_OPTION(int)
+CANON_OPTION(usize)
 
 #include "data/vec/vec.h"
 DEFINE_VEC(static inline, int)
@@ -102,6 +114,12 @@ DEFINE_PRIORITY_QUEUE(int)
 #define HASHMAP_HASH_FN  _bt_hash_u64
 #define HASHMAP_EQ_FN    _bt_eq_u64
 #include "data/hashmap/hashmap.h"
+
+/* Phase 5: bitset and stringbuf. These have no DEFINE_X macro — they're
+ * concrete types, included directly. bitset.h depends on CANON_OPTION(usize)
+ * which is instantiated above. */
+#include "data/bitset.h"
+#include "data/stringbuf.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 #  pragma GCC diagnostic pop
@@ -737,6 +755,8 @@ static void test_source_tag_round_trip_all_types(void)
  *   - Phase 4: deque lifetime tests
  *   - Phase 4: priority_queue lifetime tests
  *   - Phase 4: hashmap lifetime tests
+ *   - Phase 5: bitset lifetime tests
+ *   - Phase 5: stringbuf lifetime tests
  *
  * The trap mechanism mirrors test/core/primitives/contract_test.c: install
  * a capture handler via contract_set_handler that longjmps back to the test
@@ -796,7 +816,7 @@ static void lt_setup(void)
 }
 
 /* Lighter setup for tests that don't need an arena — just installs the
- * contract handler so LT_FIRES/LT_SILENT work. Each Phase 4 test creates
+ * contract handler so LT_FIRES/LT_SILENT work. Each Phase 4/5 test creates
  * its own container on the stack. */
 static void lt_setup_handler_only(void)
 {
@@ -1390,6 +1410,265 @@ static void test_lifetime_hashmap_clear_fires(void)
     EXPECT(_lt_cap_fired == 1);
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Phase 5 — Bitset and StringBuf view tracking
+   ════════════════════════════════════════════════════════════════════════════
+ *
+ * Both containers are fixed-capacity, never-relocating. Their substrate
+ * surface is:
+ *
+ *   - bitset_as_borrowed_bytes / stringbuf_as_borrowed_str /
+ *     stringbuf_as_borrowed_bytes / stringbuf_buffer_as_borrowed_bytes
+ *     capture the source's lifetime at construction.
+ *
+ *   - bitset_close / stringbuf_close flip lt.open to false. Borrows
+ *     captured before close fire require_msg on the next read.
+ *
+ *   - Mutating operations (bitset_set, bitset_clear, bitset_clear_all,
+ *     bitset_set_all, stringbuf_append, stringbuf_clear, stringbuf_truncate)
+ *     do NOT restamp and do NOT close. The backing buffer's address is
+ *     stable across mutations, so existing borrows remain valid. This
+ *     matches the substrate's documented honesty boundary used by vec
+ *     and the convenience containers: lifetime tracking catches
+ *     use-after-close, not use-of-mutated-value.
+ */
+
+/* ── bitset — Phase 5 ────────────────────────────────────────────────────── */
+
+static void test_lifetime_bitset_borrow_open_is_silent(void)
+{
+    lt_setup_handler_only();
+
+    u64 words[BITSET_WORD_COUNT(128)];
+    Bitset bs;
+    bitset_init(&bs, words, 128);
+    bitset_set(&bs, 5);
+
+    borrowed_bytes b = bitset_as_borrowed_bytes(&bs);
+    EXPECT(b.source_lt   == &bs.lt);
+    EXPECT(b.captured_id == bs.lt.id);
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    bitset_close(&bs);
+}
+
+static void test_lifetime_bitset_close_fires(void)
+{
+    lt_setup_handler_only();
+
+    u64 words[BITSET_WORD_COUNT(64)];
+    Bitset bs;
+    bitset_init(&bs, words, 64);
+    bitset_set(&bs, 0);
+
+    borrowed_bytes b = bitset_as_borrowed_bytes(&bs);
+
+    /* Baseline silent before close. */
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    /* close flips lt.open = false. */
+    bitset_close(&bs);
+
+    LT_FIRES(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+static void test_lifetime_bitset_mutation_silent(void)
+{
+    /* Mutating bits does NOT invalidate the borrow — the backing words
+     * array's address is unchanged. Substrate catches use-after-close,
+     * not use-of-mutated-value. Matches vec / deque honesty boundary. */
+    lt_setup_handler_only();
+
+    u64 words[BITSET_WORD_COUNT(128)];
+    Bitset bs;
+    bitset_init(&bs, words, 128);
+
+    borrowed_bytes b = bitset_as_borrowed_bytes(&bs);
+
+    /* Capture id BEFORE any mutations — must persist through them all. */
+    region_id_t initial_id = bs.lt.id;
+
+    bitset_set(&bs, 7);
+    bitset_set(&bs, 42);
+    bitset_clear(&bs, 7);
+    bitset_toggle(&bs, 100);
+    bitset_clear_all(&bs);
+    bitset_set_all(&bs);
+    bitset_not(&bs);
+
+    EXPECT(bs.lt.id == initial_id);   /* id never restamped */
+    EXPECT(bs.lt.open == true);       /* still open */
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    bitset_close(&bs);
+}
+
+static void test_lifetime_bitset_view_points_at_words(void)
+{
+    /* Sanity: the borrowed_bytes view actually covers the backing
+     * words array with the correct length. */
+    lt_setup_handler_only();
+
+    u64 words[BITSET_WORD_COUNT(128)]; /* 2 u64 words for 128 bits */
+    Bitset bs;
+    bitset_init(&bs, words, 128);
+
+    borrowed_bytes b = bitset_as_borrowed_bytes(&bs);
+    cbytes_t       cb;
+    LT_SILENT(cb = borrowed_bytes_get(&b));
+
+    EXPECT(cb.ptr == (const u8 *)words);
+    EXPECT(cb.len == BITSET_WORD_COUNT(128) * sizeof(u64));
+    EXPECT(_lt_cap_fired == 0);
+
+    bitset_close(&bs);
+}
+
+/* ── stringbuf — Phase 5 ─────────────────────────────────────────────────── */
+
+static void test_lifetime_stringbuf_borrow_str_open_is_silent(void)
+{
+    lt_setup_handler_only();
+
+    char buf[64];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+    stringbuf_append(&sb, "hello");
+
+    borrowed_str b = stringbuf_as_borrowed_str(&sb);
+    EXPECT(b.source_lt   == &sb.lt);
+    EXPECT(b.captured_id == sb.lt.id);
+
+    LT_SILENT(borrowed_str_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    stringbuf_close(&sb);
+}
+
+static void test_lifetime_stringbuf_borrow_bytes_open_is_silent(void)
+{
+    lt_setup_handler_only();
+
+    char buf[64];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+    stringbuf_append(&sb, "world");
+
+    borrowed_bytes b = stringbuf_as_borrowed_bytes(&sb);
+    EXPECT(b.source_lt   == &sb.lt);
+    EXPECT(b.captured_id == sb.lt.id);
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    stringbuf_close(&sb);
+}
+
+static void test_lifetime_stringbuf_close_fires_str(void)
+{
+    lt_setup_handler_only();
+
+    char buf[64];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+    stringbuf_append(&sb, "hello");
+
+    borrowed_str b = stringbuf_as_borrowed_str(&sb);
+
+    /* Baseline silent before close. */
+    LT_SILENT(borrowed_str_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    stringbuf_close(&sb);
+
+    LT_FIRES(borrowed_str_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+static void test_lifetime_stringbuf_close_fires_bytes(void)
+{
+    lt_setup_handler_only();
+
+    char buf[64];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+    stringbuf_append(&sb, "hello");
+
+    borrowed_bytes b = stringbuf_as_borrowed_bytes(&sb);
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    stringbuf_close(&sb);
+
+    LT_FIRES(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+static void test_lifetime_stringbuf_close_fires_buffer_bytes(void)
+{
+    /* The buffer_as_borrowed_bytes view covers the entire backing buffer
+     * (used + null + free), not just [data, data+len). It must still be
+     * invalidated by close — same lt, same captured_id. */
+    lt_setup_handler_only();
+
+    char buf[64];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+
+    borrowed_bytes b = stringbuf_buffer_as_borrowed_bytes(&sb);
+    EXPECT(b.source_lt   == &sb.lt);
+    EXPECT(b.captured_id == sb.lt.id);
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    stringbuf_close(&sb);
+
+    LT_FIRES(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+}
+
+static void test_lifetime_stringbuf_mutation_silent(void)
+{
+    /* Append / clear / truncate do NOT invalidate the borrow — the
+     * backing buffer's address is unchanged. Substrate catches
+     * use-after-close, not use-of-cleared-characters or stale-len.
+     * Matches the dynstring honesty boundary. */
+    lt_setup_handler_only();
+
+    char buf[64];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof(buf));
+    stringbuf_append(&sb, "hello");
+
+    borrowed_bytes b = stringbuf_as_borrowed_bytes(&sb);
+    region_id_t initial_id = sb.lt.id;
+
+    stringbuf_append(&sb, " world");
+    stringbuf_append_char(&sb, '!');
+    stringbuf_clear(&sb);
+    stringbuf_append(&sb, "again");
+    stringbuf_truncate(&sb, 2);
+
+    EXPECT(sb.lt.id == initial_id);   /* id never restamped */
+    EXPECT(sb.lt.open == true);       /* still open */
+
+    LT_SILENT(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 0);
+
+    stringbuf_close(&sb);
+}
+
 #endif /* CANON_LIFETIME_DEBUG */
 
 /* ── Suppress unused generated functions ─────────────────────────────────── *
@@ -1543,6 +1822,20 @@ int main(void)
     test_lifetime_hashmap_insert_restamps_fires();
     test_lifetime_hashmap_remove_restamps_fires();
     test_lifetime_hashmap_clear_fires();
+
+    /* Phase 5 — bitset view tracking */
+    test_lifetime_bitset_borrow_open_is_silent();
+    test_lifetime_bitset_close_fires();
+    test_lifetime_bitset_mutation_silent();
+    test_lifetime_bitset_view_points_at_words();
+
+    /* Phase 5 — stringbuf view tracking */
+    test_lifetime_stringbuf_borrow_str_open_is_silent();
+    test_lifetime_stringbuf_borrow_bytes_open_is_silent();
+    test_lifetime_stringbuf_close_fires_str();
+    test_lifetime_stringbuf_close_fires_bytes();
+    test_lifetime_stringbuf_close_fires_buffer_bytes();
+    test_lifetime_stringbuf_mutation_silent();
 #endif
 
     if (g_failed == 0) {
