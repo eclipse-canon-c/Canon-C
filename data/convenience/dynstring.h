@@ -10,6 +10,7 @@
 #include "core/memory.h"                 /* mem_copy */
 
 #ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                    /* uintptr_t */
     #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
@@ -52,12 +53,21 @@
  * ────────────────────────────────────────────────────────────────────────────
  *   - Embeds a lifetime_t lt field (id + open) on the DynString.
  *   - dynstring_init(), dynstring_with_capacity(), and dynstring_from() open
- *     a fresh lifetime; the ID is derived from &s.
+ *     a fresh lifetime; the ID is derived from a per-TU monotonic counter
+ *     XOR'd with &s. The counter is necessary because DynString constructors
+ *     return by value — the compiler reuses the same stack slot for
+ *     consecutive constructor calls, and the bare &s derivation would
+ *     collide across calls, breaking invalidation on subsequent struct
+ *     copies or swaps.
  *   - dynstring_ensure_capacity() and dynstring_shrink_to_fit() RESTAMP the
  *     lifetime ID conditionally — only when realloc actually moves the
  *     buffer. Operations that don't trigger reallocation (append when cap
  *     is sufficient, clear, truncate) do NOT restamp because the buffer
  *     address is unchanged and existing borrows remain valid.
+ *   - Restamp draws a fresh id from the per-TU counter — guaranteed
+ *     distinct from any prior id within the TU. Previously the restamp
+ *     XOR'd a constant into the id, which could cycle (x ^ K ^ K == x)
+ *     across grow-then-shrink and spuriously re-validate a stale borrow.
  *   - dynstring_free() CLOSES the lifetime (lt.open = false). Any borrow
  *     that captured this DynString's ID will fire require_msg via
  *     lifetime_assert_valid() on the next read.
@@ -176,16 +186,15 @@ typedef struct {
    manage the (id, open) pair across the DynString lifecycle:
 
      dynstring_lifetime_open_(s)
-       Called by init, with_capacity, and from. Sets id to the
-       DynString's address-derived value and marks the lifetime open.
+       Called by init, with_capacity, and from. Draws a fresh id from
+       the per-TU monotonic counter (XOR'd with &s for cross-TU
+       diversity) and marks the lifetime open.
 
      dynstring_lifetime_restamp_(s)
        Called by ensure_capacity and shrink_to_fit when realloc moves
-       the buffer. XORs the id with a 64-bit golden-ratio constant so
-       the new id is guaranteed to differ from the old, invalidating
-       every previously-captured borrow without needing a separate
-       generation counter. Open flag stays true; DynStrings are not
-       "closed" by reallocation — they are recycled.
+       the buffer. Draws a fresh id from the per-TU counter, guaranteed
+       distinct from any prior id within the TU. Open flag stays true;
+       DynStrings are not "closed" by reallocation — they are recycled.
 
      dynstring_lifetime_close_(s)
        Called by free. Marks the lifetime closed, which makes any
@@ -196,19 +205,62 @@ typedef struct {
    field and no code touches it.
    ════════════════════════════════════════════════════════════════════════════ */
 
+#ifdef CANON_LIFETIME_DEBUG
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * Why not just use (uintptr_t)s?
+     *   dynstring_init() / with_capacity() / from() return by value — the
+     *   compiler reuses the same stack slot for consecutive constructor
+     *   calls, so &s collides across calls. After the struct copy out,
+     *   two DynStrings declared back-to-back end up with identical ids —
+     *   defeating invalidation on subsequent struct copies or swaps.
+     *
+     * The counter is a `static` inside a `static inline` function, so
+     * each translation unit has its own copy and increments are TU-local.
+     * Two DynStrings constructed in the same TU get different ids;
+     * DynStrings constructed in different TUs get ids from independent
+     * counters but mixed with the local-variable address, making
+     * cross-TU collisions vanishingly unlikely. Same pattern as vec /
+     * deque / pq / hashmap / dynvec / smallvec.
+     *
+     * The counter also makes restamp collision-proof: previously the
+     * restamp XOR'd a constant into the id, which could cycle
+     * (x ^ K ^ K == x) across grow-then-shrink — spuriously re-validating
+     * a borrow captured before the first restamp. Drawing a fresh value
+     * from the counter eliminates that issue.
+     *
+     * No thread-safety guarantee: if a single TU's constructors or
+     * restamps are invoked concurrently, the counter may race and
+     * collide. Callers needing concurrent construction must externally
+     * synchronize — the same constraint applies to every Canon-C
+     * container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and the
+     * id derivation never produces 0 defensively.
+     */
+    static inline region_id_t dynstring_lifetime_next_id_(void* sp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(sp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+#endif
+
 static inline void dynstring_lifetime_open_(DynString* s) {
 #ifdef CANON_LIFETIME_DEBUG
-    s->lt.id   = (region_id_t)(uintptr_t)s;
+    s->lt.id   = dynstring_lifetime_next_id_(s);
     s->lt.open = true;
 #endif
     (void)s;
 }
 
-/* XOR with golden-ratio constant guarantees the new id differs from
-   the old one even when the DynString address is reused. */
+/* Restamp draws a fresh id from the per-TU counter — guaranteed distinct
+ * from any prior id within the TU, unlike the previous XOR-with-constant
+ * approach which could cycle (x ^ K ^ K == x) across grow-then-shrink. */
 static inline void dynstring_lifetime_restamp_(DynString* s) {
 #ifdef CANON_LIFETIME_DEBUG
-    s->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;
+    s->lt.id = dynstring_lifetime_next_id_(s);
 #endif
     (void)s;
 }
@@ -285,8 +337,8 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
  * @post result.data == NULL, result.len == 0, result.cap == 0
  *
  * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID
- * is derived from the returned struct's address — borrows constructed
- * against this DynString carry this ID.
+ * is derived from a per-TU counter XOR'd with the returned struct's
+ * address — borrows constructed against this DynString carry this ID.
  *
  * Performance:
  * - Time: O(1)
