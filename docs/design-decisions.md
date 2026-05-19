@@ -2,7 +2,6 @@
   ============================================================================
   OWN-001 — Runtime lifetime substrate for owning containers
   ----------------------------------------------------------------------------
-  Paste this entry into docs/design-decisions.md under the OWN- section.
 
   Cross-references to confirm before pushing:
     - README anchor "Borrow lifetime — know when a borrowed value is still
@@ -22,8 +21,8 @@
       annotated; OWN-001 will gain ID-specific cross-references at that point.
     - CHANGELOG entry for v1.3.0 — TODO: confirm anchor when CHANGELOG is
       updated for the release. Inline as {TODO: CHANGELOG v1.3.0 anchor}.
-    - OWN-002 — placeholder forward-reference; will exist if and when the
-      Arena/Pool restamp migration is taken up.
+    - OWN-002 — Arena/Pool restamp migration; shipped post-v1.3.0 at
+      CI #944. See OWN-002 entry below.
   ============================================================================
 -->
 
@@ -41,11 +40,11 @@ formally-verified primitive layer described in the README's
 | -------------- | ----------------------------------------------------------------- |
 | Status         | Shipped in v1.3.0                                                 |
 | Merged at      | Phase 5 sequence: CI #936 (`55b6aaf`, bitset substrate), CI #937 (`302cf0f`, stringbuf substrate), CI #938 (`da6ed2e`, Phase 5 tests). v1.3.0 = state of master at `da6ed2e`. |
-| Last green     | CI #938 across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug) |
+| Last green     | CI #938 across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug) at v1.3.0 ship. Subsequent extensions tracked under their own entries (see OWN-002 for the post-v1.3.0 Arena/Pool migration). |
 | Scope          | All owning container types in `core/` and `data/`                 |
 | Build knob     | `CANON_LIFETIME=off` (default) or `CANON_LIFETIME=debug` — see `CMakeLists.txt` |
 | Verification   | Runtime-validated via `test/semantics/borrow_test.c` across all 16 configs. WP coverage of the non-macro substrate headers (`lifetime.h`, `region.h`, `arena.h`, `pool.h`, and the non-macro surface of `borrow.h`) is on the verification roadmap per `docs/verification.md` — they sit in the queue alongside the headers walking up from `core/primitives/`. Macro-templated bodies remain runtime-only by construction (see §7). |
-| Cross-refs     | README sections *"Borrow lifetime — know when a borrowed value is still valid"*, *"What about compile-time ownership enforcement?"*, *"From shared vocabulary to compositional verification"*; `CMakeLists.txt` `CANON_LIFETIME` block; `docs/verification.md`, `docs/deviations.md`, `docs/traceability.md` (substrate VERIFY-NNN entries land here as headers get annotated); {TODO: CHANGELOG v1.3.0 anchor}; OWN-002 (forward, conditional). |
+| Cross-refs     | README sections *"Borrow lifetime — know when a borrowed value is still valid"*, *"What about compile-time ownership enforcement?"*, *"From shared vocabulary to compositional verification"*; `CMakeLists.txt` `CANON_LIFETIME` block; `docs/verification.md`, `docs/deviations.md`, `docs/traceability.md` (substrate VERIFY-NNN entries land here as headers get annotated); {TODO: CHANGELOG v1.3.0 anchor}; OWN-002 (Arena/Pool restamp migration, shipped post-v1.3.0). |
 
 ### Phase chronology
 
@@ -57,6 +56,11 @@ formally-verified primitive layer described in the README's
 | 3b    | May 16, 2026    | `priority_queue` and `hashmap` instrumented. Restamp-on-every-mutation contract for reordering containers.           | CI #923 → CI #929                                             |
 | 4     | May 15–16, 2026 | End-to-end borrow tests in `test/semantics/borrow_test.c`. Interleaved with Phase 3 — tests landed per container.    | CI #919, #924, #928                                           |
 | 5     | May 17, 2026    | `bitset` and `stringbuf` view-tracking. Phase 2 retrofit (XOR-constant → per-TU counter) landed as prep.             | Retrofit at CI #933–#935 (`ab59935`, `7393eb9`, `f5a6dfa`); Phase 5 substrate at CI #936 (`55b6aaf`, bitset) and CI #937 (`302cf0f`, stringbuf); Phase 5 tests at CI #938 (`da6ed2e`) |
+
+Note: The Phase chronology covers Phases 1–5 of the v1.3.0 substrate
+shipment. Post-v1.3.0 extensions are recorded under their own OWN-NNN
+entries — the Arena/Pool restamp migration at CI #944 lives in OWN-002,
+not in this table.
 
 ### 1. Context
 
@@ -164,10 +168,18 @@ shipped in v1.3.0. The table is descriptive: it reports what each type
 does, not whether the behavior is desirable. Evaluative content lives
 in §4.
 
+The Arena and Pool rows below reflect the post-OWN-002 state. The
+shipped v1.3.0 mechanism for both was XOR-with-constant restamp; the
+per-TU counter migration is recorded in OWN-002 and the rows are
+updated here so the contract table remains the authoritative
+description of the current substrate. The historical XOR-with-constant
+mechanism and the cycle issue that motivated the migration are
+preserved in §4 and §5.
+
 | Type             | Phase | Field embedded?          | Open on                                       | Restamp on                                                                                                       | Close on                              | ID derivation                                                                                              |
 | ---------------- | ----- | ------------------------ | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `Arena`          | 1     | Yes                      | `arena_init`                                  | `arena_reset`, `arena_reset_secure` — XOR with `0x9E3779B97F4A7C15ULL`                                           | —                                     | `(region_id_t)(uintptr_t)&arena`                                                                           |
-| `Pool`           | 1     | Yes                      | `pool_init` (on success only)                 | `pool_reset`, `pool_reset_secure` — XOR with `0x9E3779B97F4A7C15ULL`                                             | —                                     | `(region_id_t)(uintptr_t)&pool`                                                                            |
+| `Arena`          | 1     | Yes                      | `arena_init`                                  | `arena_reset`, `arena_reset_secure` — per-TU counter (see OWN-002)                                               | —                                     | Per-TU counter XOR'd with local address (migrated at CI #944; see OWN-002)                                 |
+| `Pool`           | 1     | Yes                      | `pool_init` (on success only)                 | `pool_reset`, `pool_reset_secure` — per-TU counter (see OWN-002)                                                 | —                                     | Per-TU counter XOR'd with local address (migrated at CI #944; see OWN-002)                                 |
 | `Region`         | 1     | No — separate `id`, `open` fields | `region_begin`                                | —                                                                                                                | `region_end`                          | Internal; layout-frozen by `region.h` regression tests                                                     |
 | `vec_T`          | 3a    | Yes                      | `vec_T_init`, `vec_T_alloc`                   | Struct copy / `vec_T_swap` (swap exchanges the `lt` field along with everything else)                            | `vec_T_free` (heap-backed only)       | Per-TU counter XOR'd with local address                                                                    |
 | `deque_T`        | 3a    | Yes                      | `deque_T_init`                                | Struct copy / `deque_T_swap`                                                                                     | —                                     | Per-TU counter XOR'd with local address                                                                    |
@@ -264,18 +276,21 @@ Each is documented in the relevant header docblock.
 - **Arena reset under a `stringbuf_init_arena`-backed StringBuf.** Same
   pattern: the StringBuf's `lt` is independent of the Arena's `lt`.
   Capture both if needed.
-- **Two-reset cycles on `Arena` and `Pool`.** The Phase 1 restamp is
-  XOR with the constant `0x9E3779B97F4A7C15ULL`. Two consecutive
-  resets cycle the ID back to its original value: `A → A ^ K → A`. A
-  borrow captured at the original ID will silently re-validate after
-  the second reset. The Phase 3a discovery (see §5) introduced the
-  per-TU counter that avoids this; Arena and Pool were not retroactively
-  migrated when the convenience containers were. The practical impact
-  is bounded — three or more resets cycle further around the ring, and
-  `arena_reset_to(mark)` does not restamp at all — but the asymmetry is
-  real and is recorded here so it is not silently inherited by future
-  work. A future entry (OWN-002, conditional) would migrate Arena and
-  Pool to the per-TU counter for consistency.
+- **Two-reset cycles on `Arena` and `Pool`.** *Historical, closed by
+  OWN-002.* The original Phase 1 restamp was XOR with the constant
+  `0x9E3779B97F4A7C15ULL`. Two consecutive resets cycled the ID back
+  to its original value: `A → A ^ K → A`. A borrow captured at the
+  original ID would silently re-validate after the second reset. The
+  Phase 3a discovery (see §5) introduced the per-TU counter that
+  avoids this; Arena and Pool were not retroactively migrated when
+  the convenience containers were. The asymmetry was documented here
+  as a known limitation and forward-referenced for closure. OWN-002
+  (shipped at CI #944, commits 2a7c0ba / a7c0413 / 83fa70b) migrated
+  Arena and Pool to the per-TU counter pattern, closing this cycle.
+  See OWN-002 for the migration details and regression tests; this
+  bullet is preserved for chronological continuity and so future
+  readers tracing the substrate's evolution see how the limitation
+  was discovered, documented, and resolved.
 
 ### 5. Phase 2 retrofit chronology
 
@@ -310,12 +325,16 @@ The same narration appears verbatim in `dynvec.h` and is reflected in
 `smallvec.h`'s comments. The header text is the canonical version of
 the story; anything else is reinterpretation.
 
-Arena and Pool predate Phase 2 and were not part of the retrofit.
-`arena.h`'s restamp comment records the original intent of the XOR
-constant: *"XOR with golden-ratio constant guarantees the new id
-differs from the old one even when the arena address is reused."*
-That guarantee holds for a single reset; the cycle issue noted in §4
-is the cost of stopping there.
+Arena and Pool predate Phase 2 and were not part of the Phase 5 prep
+retrofit. `arena.h`'s original restamp comment recorded the intent of
+the XOR constant: *"XOR with golden-ratio constant guarantees the new
+id differs from the old one even when the arena address is reused."*
+That guarantee held for a single reset; the cycle issue noted in §4
+was the cost of stopping there. Arena and Pool were subsequently
+migrated to the per-TU counter pattern at CI #944 — see OWN-002 for
+the migration details. The XOR-with-constant restamp comments in
+`arena.h` and `pool.h` were updated at the same time to reflect the
+new mechanism.
 
 ### 6. Alternatives considered
 
@@ -421,7 +440,202 @@ sits alongside formal proof for the non-macro headers once they land.
   headers join the per-header coverage table as they get instrumented
   and annotated.
 - **CHANGELOG**, v1.3.0 — `{TODO: CHANGELOG v1.3.0 anchor}`.
-- **OWN-002** — forward, conditional. Would migrate `Arena` and `Pool`
-  from XOR-with-constant restamp to the per-TU counter pattern used by
-  every Phase 3+ container, closing the two-reset cycle noted in §4.
-  Not scoped for v1.3.0.
+- **OWN-002** — Arena/Pool restamp migration. Shipped at CI #944
+  (commits 2a7c0ba / a7c0413 / 83fa70b). Closes the two-reset cycle
+  documented in §4 by migrating Arena and Pool from XOR-with-constant
+  restamp to the per-TU counter pattern used by every Phase 3+
+  container.
+
+<!--
+  ============================================================================
+  OWN-002 — Arena and Pool restamp migration to per-TU counter
+  ----------------------------------------------------------------------------
+  Paste this entry into docs/design-decisions.md under the OWN- section,
+  immediately after OWN-001.
+
+  Cross-references to confirm before pushing:
+    - OWN-001 §3 (contract table) — Arena and Pool rows reflect the
+      post-migration state; the historical XOR-with-constant mechanism
+      is preserved in §4 and §5.
+    - OWN-001 §4 (Honesty Boundary) — the "Two-reset cycles" bullet
+      forward-references OWN-002 as the closure.
+    - OWN-001 §5 (Phase 2 retrofit chronology) — the closing paragraph
+      references OWN-002 as the Arena/Pool migration follow-up.
+    - docs/decision-families.md — Category A description names OWN-002
+      as the canonical example.
+    - core/arena.h, core/pool.h — restamp helper comments updated to
+      describe the per-TU counter mechanism rather than the original
+      XOR-with-constant rationale.
+    - test/core/arena_test.c, test/core/pool_test.c — regression tests
+      pin the no-cycle property for Arena and Pool respectively.
+  ============================================================================
+-->
+
+## OWN-002 — Arena and Pool restamp migration to per-TU counter
+
+This entry records the post-v1.3.0 migration of `Arena` and `Pool` from
+XOR-with-constant restamp to the per-TU counter pattern used by every
+Phase 3+ container. The migration closes the two-reset cycle documented
+in OWN-001 §4 and is the first Category A entry per the Decision
+Families guide — closing a known limitation from an earlier OWN-NNN
+entry's Honesty Boundary.
+
+| Field          | Value                                                             |
+| -------------- | ----------------------------------------------------------------- |
+| Status         | Shipped post-v1.3.0                                               |
+| Merged at      | CI #944 sequence: CI #942 (`2a7c0ba`, *"Refactor lifetime ID generation in arena.h"*), CI #943 (`a7c0413`, *"Refactor lifetime ID generation in pool functions"*), CI #944 (`83fa70b`, *"Implement OWN-002 regression tests for Arena and Pool"*). |
+| Last green     | CI #944 across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug). All six Frama-C WP wrappers (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h) passed with their exact expected proved/unproved counts and named residuals — the migration did not perturb the verified substrate. |
+| Scope          | `core/arena.h`, `core/pool.h` — restamp helpers and ID derivation |
+| Build knob     | Inherits `CANON_LIFETIME=off/debug` from OWN-001; no new knob added |
+| Category       | A — Closing a known limitation from an earlier OWN-NNN entry. See `docs/decision-families.md`, "Category A — Closing known limitations from earlier entries." |
+| Cross-refs     | OWN-001 §3 (contract table, post-migration state), §4 (Honesty Boundary, closed bullet), §5 (Phase 2 retrofit chronology, closing paragraph); `docs/decision-families.md` Category A; `core/arena.h` and `core/pool.h` restamp helper comments; `test/core/arena_test.c` and `test/core/pool_test.c` regression tests. |
+
+### 1. Context
+
+OWN-001 §4 documented a deliberate limitation in the v1.3.0 substrate:
+the Phase 1 restamp mechanism for `Arena` and `Pool` was XOR with the
+constant `0x9E3779B97F4A7C15ULL`. Two consecutive resets cycled the ID
+back to its original value (`A → A ^ K → A`), so a borrow captured at
+the original ID would silently re-validate after the second reset. The
+practical impact was bounded — three or more resets cycle further
+around the ring, and `arena_reset_to(mark)` does not restamp at all —
+but the asymmetry with the per-TU counter pattern used by every
+Phase 3+ container was real and acknowledged.
+
+The Phase 3a discovery (OWN-001 §5) introduced the per-TU counter
+pattern in response to the value-return ID collision in `vec_int_init`.
+The Phase 2 convenience containers were retroactively migrated at
+CI #933–#935. Arena and Pool predated Phase 2 and were not part of the
+Phase 5 prep retrofit; OWN-001 §4 forward-referenced the migration as
+OWN-002, conditional on whether the consistency benefit justified the
+churn.
+
+This entry records the decision to ship the migration and the evidence
+that it landed cleanly. The trigger was simply that the cycle was the
+most legitimate "but what about—" question anyone reviewing the
+substrate could raise. Closing it removes the asymmetry and means every
+restamping container in Canon-C uses the same ID-generation pattern.
+
+### 2. Decision
+
+Both `arena.h` and `pool.h` migrated their restamp helpers from
+XOR-with-constant to the same per-TU monotonic counter pattern that
+every Phase 3+ container uses. The pattern is a `static region_id_t`
+counter inside a `static inline` helper function, drawn fresh on every
+restamp and XOR'd with the local address of the container being
+restamped. The counter gives uniqueness across consecutive restamps of
+the same container (no cycle); the XOR with the local address
+preserves cross-container diversity within a translation unit and
+cross-TU diversity overall.
+
+The migration touched:
+
+- `core/arena.h` — `arena_reset` and `arena_reset_secure` restamp
+  helpers, and the `arena_init` ID derivation.
+- `core/pool.h` — `pool_reset` and `pool_reset_secure` restamp
+  helpers, and the `pool_init` ID derivation.
+- `test/core/arena_test.c` — regression tests pinning the no-cycle
+  property: two consecutive `arena_reset` calls produce three distinct
+  IDs, and a borrow captured at the original ID fires on the first
+  reset rather than re-validating on the second.
+- `test/core/pool_test.c` — symmetric regression tests for `Pool`.
+
+The shipped v1.3.0 ABI is unchanged. The `lifetime_t` field layout in
+`Arena` and `Pool` is the same; only the function bodies that draw and
+update `lt.id` changed. Default builds (`CANON_LIFETIME=off`) remain
+byte-identical to v1.2.x by the same ABI guarantee documented in
+OWN-001 §2 — the helper functions compile to nothing under the
+default flag.
+
+### 3. Honesty boundary
+
+The migration does not introduce new not-caught cases. The other items
+in OWN-001 §4's "Not caught — by design" list (use-of-mutated-value,
+arena-reset of a Pool's backing arena, arena-reset under an
+arena-backed StringBuf) are unchanged and remain deliberate boundaries
+of what the runtime substrate is *for*, not limitations to be closed.
+
+What the migration changes about the Honesty Boundary is bounded and
+explicit: the "Two-reset cycles on Arena and Pool" bullet is now a
+historical record of a closed limitation rather than an open one. The
+bullet is preserved in OWN-001 §4 so future readers tracing the
+substrate's evolution see how the limitation was discovered,
+documented, and resolved.
+
+The regression tests added in CI #944 are the trust-by-mechanism layer
+for the closure. If anyone reverts the change or accidentally
+reintroduces the XOR-with-constant pattern, the regression tests fail
+the build. This is the same pattern used for the verified substrate
+(named unproved-goal lists in the WP wrappers) and the runtime
+substrate generally (the lifetime-debug job's ASan + UBSan coverage on
+all 16 configs).
+
+### 4. Alternatives considered
+
+There was effectively one alternative considered and one path taken.
+
+**Leave the asymmetry in place.** The cycle issue was bounded in
+practice — three or more resets cycle further around the ring, and
+`arena_reset_to(mark)` does not restamp at all — so the cost of
+shipping the asymmetry was small. The cost of *not* closing it was
+that the substrate had a documented limitation with a known fix, and
+every reviewer reading OWN-001 §4 would reasonably ask why the fix
+wasn't applied. The migration is small (two restamp helpers and two
+test files), and the consistency benefit across the substrate
+outweighs the churn cost. Closing the cycle was the path taken.
+
+**Other ID derivations** (hash-of-counter, monotonic clock,
+per-process counter) were not seriously considered. The per-TU
+monotonic counter pattern is already proved out across every Phase 3+
+container — it has the right properties (uniqueness across
+consecutive restamps, cross-TU diversity via address XOR, no
+synchronization required, no observable performance cost) and shipping
+a different pattern for Arena and Pool would introduce a second
+implementation to maintain.
+
+### 5. Verification posture
+
+OWN-002 is a runtime-substrate change, validated by the same evidence
+stream as OWN-001: `test/semantics/borrow_test.c` plus the new
+regression tests in `test/core/arena_test.c` and
+`test/core/pool_test.c`, running across all 16 CI configs under both
+the standard build and `CANON_LIFETIME=debug`, with ASan + UBSan
+enabled on Linux and macOS debug builds.
+
+The migration is mechanical (the per-TU counter helper is already
+proved out by every Phase 3+ container) and the change surface is
+small (four restamp helper bodies plus two test files). The CI #944
+green-across-16-configs result is the verification evidence for the
+shipped behavior.
+
+The non-macro surface of `arena.h` and `pool.h` remains on the
+WP-verification roadmap, as recorded in OWN-001 §7 and in the CI
+file's candidate list. The migration does not change what will need
+to be proved when WP coverage reaches these headers; the helper
+function bodies are amenable to the same ACSL annotation approach as
+the rest of the substrate. When those VERIFY-NNN entries land, this
+entry will gain cross-references to them.
+
+### 6. Cross-references
+
+- **OWN-001 §3** — contract table rows for Arena and Pool, updated
+  post-migration. The historical XOR-with-constant mechanism is
+  preserved in §4 and §5.
+- **OWN-001 §4** — "Two-reset cycles on Arena and Pool" bullet,
+  preserved as a historical record of a closed limitation.
+- **OWN-001 §5** — Phase 2 retrofit chronology, closing paragraph
+  references OWN-002 as the Arena/Pool migration follow-up.
+- **`docs/decision-families.md`** — Category A description ("Closing
+  known limitations from earlier entries"). OWN-002 is the canonical
+  Category A example.
+- **`core/arena.h`** — restamp helper comments updated to describe the
+  per-TU counter mechanism. The original XOR-with-constant rationale
+  comment was replaced at CI #942.
+- **`core/pool.h`** — symmetric update at CI #943.
+- **`test/core/arena_test.c`** — regression tests for the no-cycle
+  property on Arena.
+- **`test/core/pool_test.c`** — regression tests for the no-cycle
+  property on Pool.
+- **`test/semantics/borrow_test.c`** — substrate evidence stream that
+  continues to validate end-to-end borrow behavior across Arena and
+  Pool resets under the new restamp mechanism.
