@@ -11,6 +11,7 @@
 #include "core/slice.h"               /* bytes_t, bytes_from, bytes_empty */
 
 #ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                    /* uintptr_t */
     #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
@@ -38,7 +39,9 @@
  *
  * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
  *   - Embeds a lifetime_t lt field (id + open) on the Arena.
- *   - arena_init() opens a fresh lifetime; the ID is derived from &arena.
+ *   - arena_init() opens a fresh lifetime; the ID is derived from a
+ *     per-TU counter XOR'd with &arena. See "Internal: lifetime
+ *     helpers" below.
  *   - arena_reset() and arena_reset_secure() RE-STAMP the lifetime ID,
  *     invalidating every borrow that captured the previous ID. Borrow
  *     reads stamped with the old ID will fire require_msg via
@@ -163,38 +166,79 @@ static inline ArenaStats arena_stats(const Arena* arena) {
    manage the (id, open) pair across the arena lifecycle:
 
      arena_lifetime_open_(a)
-       Called by arena_init. Sets id to the arena's address-derived
-       value and marks the lifetime open.
+       Called by arena_init. Draws a fresh id from the per-TU monotonic
+       counter (XOR'd with &arena for cross-TU diversity) and marks the
+       lifetime open.
 
      arena_lifetime_restamp_(a)
-       Called by arena_reset and arena_reset_secure. XORs the id
-       with a 64-bit golden-ratio constant so the new id is
-       guaranteed to differ from the old, invalidating every
-       previously-captured borrow without needing a separate
-       generation counter. Open flag stays true; arenas are not
-       "closed" by reset — they are recycled.
+       Called by arena_reset and arena_reset_secure. Draws another fresh
+       id from the same counter, guaranteed distinct from any prior id
+       within the TU. Open flag stays true; arenas are not "closed" by
+       reset — they are recycled.
 
      arena_lifetime_close_(a)
-       Reserved for future Arena destruction semantics. Not called
-       by any current API. Marks the lifetime closed, which makes
-       any subsequent borrow read fire lifetime_assert_valid.
+       Reserved for future Arena destruction semantics. Not called by
+       any current API. Marks the lifetime closed, which makes any
+       subsequent borrow read fire lifetime_assert_valid.
 
    In release builds (CANON_LIFETIME_DEBUG undefined) all three
    helpers are no-ops — the Arena struct does not have an lt field
    and no code touches it.
+
+   History: Phase 1 (CI #865 onward) shipped with bare-address
+   derivation for _open_ and XOR-with-`0x9E3779B97F4A7C15ULL` for
+   _restamp_. The XOR-with-constant approach cycled after two resets
+   (A -> A^K -> A), silently re-validating a borrow captured at the
+   original id. OWN-002 migrated both _open_ and _restamp_ to the
+   per-TU counter pattern used by every Phase 3+ container,
+   consistent with bitset / stringbuf / dynvec / dynstring / smallvec.
+   See docs/design-decisions.md OWN-001 §4 (the documented
+   limitation) and OWN-002 (the migration).
    ============================================================================ */
 
 #ifdef CANON_LIFETIME_DEBUG
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * The counter is a `static` inside a `static inline` function, so
+     * each translation unit has its own copy and increments are
+     * TU-local. Two Arenas initialized in the same TU get different
+     * ids; Arenas initialized in different TUs get ids from
+     * independent counters but mixed with the struct address, making
+     * cross-TU collisions vanishingly unlikely. Same pattern as
+     * bitset / stringbuf / vec / deque / pq / hashmap / dynvec /
+     * smallvec / dynstring.
+     *
+     * Why a counter rather than the previous XOR-with-constant:
+     *   arena_reset / arena_reset_secure are called repeatedly on the
+     *   same Arena across its lifetime. XOR with a fixed constant K
+     *   cycles: A -> A^K -> A. A borrow captured at id A re-validates
+     *   silently after two resets. Drawing a fresh id from the
+     *   counter eliminates that cycle.
+     *
+     * No thread-safety guarantee: if a single TU's arena_init /
+     * arena_reset / arena_reset_secure are invoked concurrently, the
+     * counter may race and collide. Same constraint as every other
+     * Canon-C container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and
+     * the id derivation never produces 0 defensively.
+     */
+    static inline region_id_t arena_lifetime_next_id_(void* ap) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(ap);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+
     #define arena_lifetime_open_(a)                                       \
         do {                                                              \
-            (a)->lt.id   = (region_id_t)(uintptr_t)(a);                  \
+            (a)->lt.id   = arena_lifetime_next_id_((a));                  \
             (a)->lt.open = true;                                          \
         } while (0)
-    /* XOR with golden-ratio constant guarantees the new id differs from
-       the old one even when the arena address is reused. */
     #define arena_lifetime_restamp_(a)                                    \
         do {                                                              \
-            (a)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;             \
+            (a)->lt.id = arena_lifetime_next_id_((a));                    \
         } while (0)
     #define arena_lifetime_close_(a)                                      \
         do { (a)->lt.open = false; } while (0)
@@ -218,8 +262,9 @@ static inline ArenaStats arena_stats(const Arena* arena) {
  * @pre arena != NULL && buffer != NULL && capacity > 0
  * @pre capacity <= CANON_ARENA_MAX_SIZE
  *
- * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token derived
- * from &arena. Borrows captured after this call carry this lifetime ID.
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID
+ * is drawn from a per-TU counter XOR'd with &arena. Borrows captured
+ * after this call carry this lifetime ID.
  *
  * Performance: O(1)
  */
@@ -246,9 +291,11 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
  *
  * @param arena Arena to reset (NULL-safe)
  *
- * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the lifetime ID,
- * invalidating every borrow captured before this call. Subsequent
- * reads of those borrows will fire require_msg.
+ * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the lifetime ID with a
+ * fresh draw from the per-TU counter, invalidating every borrow
+ * captured before this call. Subsequent reads of those borrows will
+ * fire require_msg. Multiple resets in sequence produce distinct ids
+ * each time — no cycling.
  *
  * Performance: O(1)
  */
