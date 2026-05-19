@@ -22,6 +22,11 @@
  *     Lifetime check is exercised on all four borrow types (ptr, str,
  *     bytes, slice_int), plus the type-erasure path through as_bytes
  *     (which must inherit lifetime tracking from the source slice).
+ *   - OWN-002 regression: double-reset on Arena and Pool produces a
+ *     fresh id each time and does NOT cycle. A borrow captured before
+ *     the first reset fires on every _get after, no matter how many
+ *     resets have happened. Pre-OWN-002 XOR-with-constant restamp
+ *     would have silently re-validated after two resets.
  *   - Phase 4 — end-to-end container lifetime tests:
  *     vec, deque, priority_queue, hashmap. Validate that the full chain
  *     (container mutation → lt restamp/close → borrow captured_id stale →
@@ -45,6 +50,7 @@
 
 #ifdef CANON_LIFETIME_DEBUG
 #  include "core/arena.h"           /* Arena, arena_init, arena_reset, ... */
+#  include "core/pool.h"            /* Pool, pool_init, pool_reset, ...    */
 #  include <setjmp.h>               /* setjmp/longjmp for FIRES/SILENT     */
 #endif
 
@@ -751,6 +757,7 @@ static void test_source_tag_round_trip_all_types(void)
  * Sections in order:
  *   - Trap infrastructure (handler, jmp_buf, LT_FIRES/LT_SILENT macros)
  *   - Arena lifetime tests (the original Phase 1 coverage)
+ *   - OWN-002 regression: Arena and Pool double-reset
  *   - Phase 4: vec lifetime tests
  *   - Phase 4: deque lifetime tests
  *   - Phase 4: priority_queue lifetime tests
@@ -905,6 +912,86 @@ static void test_lifetime_get_after_reset_to_silent(void)
 
     LT_SILENT(borrowed_bytes_get(&b));
     EXPECT(_lt_cap_fired == 0);
+}
+
+/* ── OWN-002 regression: Arena double-reset ────────────────────────────────
+ *
+ * Pre-OWN-002 (XOR-with-`0x9E3779B97F4A7C15ULL` restamp): two resets
+ * cycled the id back to its original value (A -> A^K -> A), silently
+ * re-validating a borrow captured at the original id. Post-OWN-002
+ * (per-TU counter restamp): every reset draws a fresh id, so two
+ * resets produce two new ids both distinct from the original. A
+ * borrow captured before the first reset must continue to fire on
+ * every _get after, no matter how many resets have happened.
+ *
+ * This test is the regression guard for OWN-002. See OWN-001 §4
+ * (the documented limitation) and OWN-002 (the migration).
+ */
+static void test_lifetime_arena_double_reset_invalidates(void)
+{
+    lt_setup();
+    u8 *p = (u8 *)arena_alloc(&g_lt_arena, 32);
+    EXPECT_NOT_NULL(p);
+
+    borrowed_bytes b = borrowed_bytes_from_lifetime(
+        p, 32, &g_lt_arena.lt, &g_lt_arena);
+    region_id_t captured = b.captured_id;
+
+    /* First reset — id changes. */
+    arena_reset(&g_lt_arena);
+    EXPECT(g_lt_arena.lt.id != captured);
+
+    /* Second reset — id changes again, must NOT equal the captured
+     * pre-reset id (which is what the XOR-with-constant approach
+     * would have produced via A -> A^K -> A cycling). */
+    arena_reset(&g_lt_arena);
+    EXPECT(g_lt_arena.lt.id != captured);
+
+    /* The borrow must still fire after any number of resets. */
+    LT_FIRES(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
+}
+
+/* ── OWN-002 regression: Pool double-reset ─────────────────────────────────
+ *
+ * Pool used the identical XOR-with-constant pattern as Arena pre-OWN-002
+ * and was migrated at the same time. This test mirrors the arena
+ * double-reset test, using a Pool drawn from g_lt_arena.
+ *
+ * The Pool requires its own arena allocation, so this test re-initializes
+ * g_lt_arena via lt_setup before constructing the pool.
+ */
+static void test_lifetime_pool_double_reset_invalidates(void)
+{
+    lt_setup();
+
+    Pool pl;
+    /* 4 objects of 16 bytes = 64 bytes reserved from the arena. */
+    bool init_ok = pool_init(&pl, &g_lt_arena, 16, 4);
+    EXPECT(init_ok);
+    if (!init_ok) return;
+
+    void *slot = pool_alloc(&pl);
+    EXPECT_NOT_NULL(slot);
+
+    borrowed_bytes b = borrowed_bytes_from_lifetime(
+        (u8 *)slot, 16, &pl.lt, &pl);
+    region_id_t captured = b.captured_id;
+
+    /* First reset — id changes. */
+    pool_reset(&pl);
+    EXPECT(pl.lt.id != captured);
+
+    /* Second reset — id changes again, must NOT equal the captured
+     * pre-reset id. */
+    pool_reset(&pl);
+    EXPECT(pl.lt.id != captured);
+
+    /* The borrow must still fire after any number of resets. */
+    LT_FIRES(borrowed_bytes_get(&b));
+    EXPECT(_lt_cap_fired == 1);
+    EXPECT(_lt_cap_msg[0] != '\0');
 }
 
 /* ── borrowed_str_get: fires after reset ──────────────────────────────────── *
@@ -1795,6 +1882,8 @@ int main(void)
     test_lifetime_get_after_reset_fires();
     test_lifetime_untracked_borrow_bypasses_check();
     test_lifetime_get_after_reset_to_silent();
+    test_lifetime_arena_double_reset_invalidates();   /* OWN-002 regression guard */
+    test_lifetime_pool_double_reset_invalidates();    /* OWN-002 regression guard */
     test_lifetime_str_get_after_reset_fires();
     test_lifetime_ptr_get_after_reset_fires();
     test_lifetime_slice_int_get_after_reset_fires();
