@@ -10,6 +10,7 @@
 #include "core/slice.h"
 
 #ifdef CANON_LIFETIME_DEBUG
+    #include <stdint.h>                    /* uintptr_t */
     #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
@@ -59,7 +60,9 @@
  * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
  * ────────────────────────────────────────────────────────────────────────────
  *   - Embeds a lifetime_t lt field (id + open) on the Pool.
- *   - pool_init() opens a fresh lifetime; the ID is derived from &pool.
+ *   - pool_init() opens a fresh lifetime; the ID is derived from a
+ *     per-TU counter XOR'd with &pool. See "Internal: lifetime
+ *     helpers" below.
  *   - pool_reset() and pool_reset_secure() RE-STAMP the pool's lifetime ID,
  *     invalidating every borrow that captured the previous ID. Borrow
  *     reads stamped with the old ID will fire require_msg via
@@ -116,38 +119,77 @@ typedef struct {
    manage the (id, open) pair across the pool lifecycle:
 
      pool_lifetime_open_(p)
-       Called by pool_init. Sets id to the pool's address-derived
-       value and marks the lifetime open.
+       Called by pool_init. Draws a fresh id from the per-TU monotonic
+       counter (XOR'd with &pool for cross-TU diversity) and marks the
+       lifetime open.
 
      pool_lifetime_restamp_(p)
-       Called by pool_reset and pool_reset_secure. XORs the id
-       with a 64-bit golden-ratio constant so the new id is
-       guaranteed to differ from the old, invalidating every
-       previously-captured borrow without needing a separate
-       generation counter. Open flag stays true; pools are not
-       "closed" by reset — they are recycled.
+       Called by pool_reset and pool_reset_secure. Draws another fresh
+       id from the same counter, guaranteed distinct from any prior id
+       within the TU. Open flag stays true; pools are not "closed" by
+       reset — they are recycled.
 
      pool_lifetime_close_(p)
-       Reserved for future Pool destruction semantics. Not called
-       by any current API. Marks the lifetime closed, which makes
-       any subsequent borrow read fire lifetime_assert_valid.
+       Reserved for future Pool destruction semantics. Not called by
+       any current API. Marks the lifetime closed, which makes any
+       subsequent borrow read fire lifetime_assert_valid.
 
    In release builds (CANON_LIFETIME_DEBUG undefined) all three
    helpers are no-ops — the Pool struct does not have an lt field
    and no code touches it.
+
+   History: Phase 1 shipped with bare-address derivation for _open_
+   and XOR-with-`0x9E3779B97F4A7C15ULL` for _restamp_. The
+   XOR-with-constant approach cycled after two resets
+   (A -> A^K -> A), silently re-validating a borrow captured at the
+   original id. OWN-002 migrated both _open_ and _restamp_ to the
+   per-TU counter pattern used by every Phase 3+ container. See
+   arena.h's matching helper for the migration rationale; pool uses
+   the same pattern. See docs/design-decisions.md OWN-001 §4 (the
+   documented limitation) and OWN-002 (the migration).
    ════════════════════════════════════════════════════════════════════════════ */
 
 #ifdef CANON_LIFETIME_DEBUG
+    /* Per-TU counter used to derive unique lifetime ids.
+     *
+     * See arena.h's arena_lifetime_next_id_ for the full rationale —
+     * pool follows the same pattern. The counter is a `static` inside
+     * a `static inline` function, so each translation unit has its
+     * own copy and increments are TU-local. Same pattern as bitset /
+     * stringbuf / vec / deque / pq / hashmap / dynvec / smallvec /
+     * dynstring.
+     *
+     * Why a counter rather than the previous XOR-with-constant:
+     *   pool_reset / pool_reset_secure are called repeatedly on the
+     *   same Pool across its lifetime. XOR with a fixed constant K
+     *   cycles: A -> A^K -> A. A borrow captured at id A re-validates
+     *   silently after two resets. Drawing a fresh id from the
+     *   counter eliminates that cycle.
+     *
+     * No thread-safety guarantee: if a single TU's pool_init /
+     * pool_reset / pool_reset_secure are invoked concurrently, the
+     * counter may race and collide. Same constraint as every other
+     * Canon-C container.
+     *
+     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and
+     * the id derivation never produces 0 defensively.
+     */
+    static inline region_id_t pool_lifetime_next_id_(void* pp) {
+        static region_id_t counter_ = 1;
+        region_id_t id = (region_id_t)(counter_++)
+                       ^ (region_id_t)(uintptr_t)(pp);
+        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        return id;
+    }
+
     #define pool_lifetime_open_(p)                                        \
         do {                                                              \
-            (p)->lt.id   = (region_id_t)(uintptr_t)(p);                  \
+            (p)->lt.id   = pool_lifetime_next_id_((p));                   \
             (p)->lt.open = true;                                          \
         } while (0)
-    /* XOR with golden-ratio constant guarantees the new id differs from
-       the old one even when the pool address is reused. */
     #define pool_lifetime_restamp_(p)                                     \
         do {                                                              \
-            (p)->lt.id ^= (region_id_t)0x9E3779B97F4A7C15ULL;             \
+            (p)->lt.id = pool_lifetime_next_id_((p));                     \
         } while (0)
     #define pool_lifetime_close_(p)                                       \
         do { (p)->lt.open = false; } while (0)
@@ -180,9 +222,10 @@ typedef struct {
  * @post On success: pool is ready; arena offset advanced by capacity * object_size
  * @post On failure: pool and arena are unchanged
  *
- * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token derived
- * from &pool. Borrows captured after this call carry this lifetime ID.
- * Lifetime is only opened on successful init.
+ * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID
+ * is drawn from a per-TU counter XOR'd with &pool. Borrows captured
+ * after this call carry this lifetime ID. Lifetime is only opened on
+ * successful init.
  */
 static inline bool pool_init(
     Pool* pool, Arena* arena, usize object_size, usize max_objects)
@@ -382,9 +425,11 @@ static inline bytes_t pool_reserved_bytes(const Pool* pool) {
  * @post pool->used == 0
  * @post All pointers returned by pool_alloc() / pool_get() are invalid
  *
- * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the pool's lifetime ID,
- * invalidating every borrow captured before this call. Subsequent
- * reads of those borrows will fire require_msg.
+ * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the pool's lifetime ID
+ * with a fresh draw from the per-TU counter, invalidating every borrow
+ * captured before this call. Subsequent reads of those borrows will
+ * fire require_msg. Multiple resets in sequence produce distinct ids
+ * each time — no cycling.
  */
 static inline void pool_reset(Pool* pool) {
     void* region;
