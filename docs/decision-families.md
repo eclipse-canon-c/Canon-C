@@ -98,10 +98,14 @@ documented not-caught case is a potential follow-up entry: a future
 OWN-NNN that closes the gap by extending the substrate, with the
 earlier entry's Honesty Boundary serving as its motivation.
 
-The canonical Category A example is OWN-002 (forward-referenced in
-OWN-001 §8): migrating `Arena` and `Pool` from XOR-with-constant
-restamp to the per-TU counter pattern used by every Phase 3+
-container, closing the two-reset cycle.
+The canonical Category A example is OWN-002 (shipped at CI #944):
+migrating `Arena` and `Pool` from XOR-with-constant restamp to the
+per-TU counter pattern used by every Phase 3+ container, closing the
+two-reset cycle. See `docs/design-decisions.md` for the entry. OWN-002
+is also the worked example for what a Category A entry looks like in
+practice — short, mechanical, grounded in the originating entry's
+Honesty Boundary and pinned by regression tests that fail the build
+if the closure is reverted.
 
 Category A entries are bounded: the substrate has a finite number of
 seams, and each seam closes at most once. The pattern propagates
@@ -213,8 +217,13 @@ should aim for:
 Future OWN- entries don't need to be as long as OWN-001 (which
 covers a five-phase substrate across twelve container types). Most
 will be shorter, covering one decision with one Honesty Boundary
-case. But the shape — sourced status, explicit cross-references,
-honest about what isn't covered — is the template.
+case. OWN-002 demonstrates the shorter shape: a single closure of a
+single bullet from OWN-001 §4, mechanical migration, regression
+tests pinning the no-cycle property, three commits across one CI
+run. But the shape — sourced status, explicit cross-references,
+honest about what isn't covered — is the template that scales from
+OWN-001's substrate-wide scope down to OWN-002's two-header
+migration.
 
 ---
 
@@ -317,10 +326,12 @@ visible in the codebase.
 - **Entry counts or schedules.** How many OWN- or VERIFY- entries
   will exist at v2.0.0 is unknown; estimating it adds a forecast
   genre that decays. The stable content is the shape, not the count.
-- **Specific future entries.** OWN-002 is forward-referenced in
-  OWN-001 because that specific migration is implied by OWN-001's
-  Honesty Boundary; it earns the reference. Speculation about
-  OWN-003 or VERIFY-009 does not belong here.
+- **Specific future entries.** OWN-002 was forward-referenced in
+  OWN-001 because that specific migration was implied by OWN-001's
+  Honesty Boundary; it earned the reference and has since shipped.
+  Speculation about OWN-003 or VERIFY-009 does not belong here —
+  forward references earn their place only when the originating
+  entry's Honesty Boundary or equivalent directly implies them.
 - **Project roadmap.** Roadmap belongs in CHANGELOG (for shipped
   releases) and in issue tracker / project board (for in-flight
   work). This file documents the decision-record system, not the
