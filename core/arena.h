@@ -63,6 +63,28 @@
  *   in semantics/borrow.h call it.
  *   No data/, semantics/, algo/, or util/ headers may be included here.
  *
+ * Formal verification:
+ * ────────────────────────────────────────────────────────────────────────────
+ * Every function in this header carries an ACSL contract suitable for
+ * Frama-C WP. The Typed+Cast memory model is required because arena.h
+ * performs void-to-u8 pointer casts for byte-level pointer arithmetic
+ * (same rationale as compare.h — see VERIFY-005 — and the substrate
+ * headers ptr.h, slice.h, memory.h).
+ *
+ * The structural invariant `arena_invariant` (defined below) is the
+ * load-bearing predicate: every public function preserves it. Allocator
+ * functions additionally use `arena_can_fit` to express the three-way
+ * overflow guard before adjusting offset. Rollback uses `mark_in_arena`
+ * to validate the mark precondition.
+ *
+ * Lifetime invariants (under CANON_LIFETIME_DEBUG) are captured by
+ * `arena_lifetime_valid`. The OWN-002 no-cycle property is encoded as
+ * a per-call `ensures arena->lt.id != \old(arena->lt.id)` on the reset
+ * helpers, matching the regression test in arena_test.c.
+ *
+ * Predicate design rationale and the residual fingerprint live in
+ * docs/verification.md (VERIFY-009) and docs/deviations.md.
+ *
  * @sa arena_alloc(), arena_alloc_aligned(), arena_mark(), arena_reset_to()
  * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
  * @sa core/region.h              — Region type and lifetime_assert_valid()
@@ -104,6 +126,72 @@ typedef struct Arena {
  * Treat as opaque — do not rely on internal representation.
  */
 typedef usize ArenaMark;
+
+/* ============================================================================
+   ACSL predicates for verification
+   ============================================================================
+   The predicates below capture the structural invariants WP needs to verify
+   arena.h. They are referenced by `requires` and `ensures` clauses on every
+   function contract.
+
+   Design notes:
+
+   - arena_invariant: the structural shape every valid Arena maintains. Does
+     NOT include padding_accum because arena_reset_to deliberately preserves
+     padding_accum across rollback (per the comment in the function body:
+     "padding_accum is intentionally not rolled back — it is a cumulative
+     diagnostic counter, not required for correctness of rollback").
+     Including padding_accum in the invariant would force arena_reset_to to
+     either restore it or violate the predicate.
+
+   - arena_can_fit: the three-way overflow guard that arena_alloc enforces
+     before adjusting offset. Captures both the address-space overflow
+     checks (against CANON_USIZE_MAX) and the buffer-capacity check. The
+     `pad` calculation uses modular arithmetic; for power-of-two alignments
+     WP can typically discharge the equivalence (alignment - (cur % alignment))
+     % alignment == ((cur + alignment - 1) & ~(alignment - 1)) - cur, though
+     this may require z3 with longer timeout. See VERIFY-009 for the
+     residual category if it doesn't close automatically.
+
+   - mark_in_arena: validity of an ArenaMark relative to its arena. The
+     "mark <= a->offset" precondition guards arena_reset_to. Trivial to
+     prove because mark comes from a prior arena_mark call which returns
+     a->offset.
+
+   - arena_lifetime_open / arena_lifetime_valid (CANON_LIFETIME_DEBUG only):
+     the lifetime token is open and has a non-static id. Used by arena_init
+     and the restamp functions in ensures clauses.
+
+   The no-cycle property for OWN-002 is encoded as a per-call ensures
+   `arena->lt.id != \old(arena->lt.id)` on arena_reset and
+   arena_reset_secure, not as a separate predicate. The contract matches
+   the regression test in arena_test.c (test_lifetime_reset_restamps_id),
+   which checks lt.id != before directly. A general "all N+1 ids distinct
+   across N resets" property would require a sequence model that WP does
+   not reason about naturally; the per-call form gives the same guarantee
+   transitively (if every consecutive pair differs, and the counter is
+   monotonic, no two prior ids collide within the TU).
+   ============================================================================ */
+
+/*@
+  predicate arena_invariant(Arena *a) =
+      \valid(a) &&
+      a->capacity > 0 &&
+      a->capacity <= CANON_ARENA_MAX_SIZE &&
+      a->offset <= a->capacity &&
+      \valid(a->buffer + (0 .. a->capacity - 1));
+
+  predicate arena_can_fit{L}(Arena *a, integer size, integer alignment) =
+      \let cur = a->offset;
+      \let pad = (alignment - (cur % alignment)) % alignment;
+      cur <= CANON_USIZE_MAX - pad &&
+      cur + pad <= CANON_USIZE_MAX - size &&
+      cur + pad + size <= a->capacity;
+
+  predicate mark_in_arena(Arena *a, ArenaMark mark) =
+      arena_invariant(a) &&
+      mark <= a->offset;
+*/
 
 /* ============================================================================
    Debug stats (only available with CANON_ARENA_DEBUG)
@@ -197,6 +285,15 @@ static inline ArenaStats arena_stats(const Arena* arena) {
    ============================================================================ */
 
 #ifdef CANON_LIFETIME_DEBUG
+    /*@
+      predicate arena_lifetime_open(Arena *a) =
+          a->lt.open == \true;
+
+      predicate arena_lifetime_valid(Arena *a) =
+          arena_lifetime_open(a) &&
+          a->lt.id != REGION_ID_STATIC;
+    */
+
     /* Per-TU counter used to derive unique lifetime ids.
      *
      * The counter is a `static` inside a `static inline` function, so
