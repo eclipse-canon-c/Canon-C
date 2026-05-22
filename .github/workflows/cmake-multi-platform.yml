@@ -1589,6 +1589,95 @@ jobs:
       # and adjust the file path, comment block, and (eventually) the
       # residual enforcement.
 
+      - name: "WP: core/arena.h (exploratory — no enforcement yet)"
+        # Exploratory step for VERIFY-009 (arena.h verification round).
+        # No residual enforcement: this step is permissive while we
+        # calibrate the actual proved/unproved counts.
+        #
+        # Once the contracts settle and the residual fingerprint is
+        # stable, this wrapper will be rewritten to match the slice.h /
+        # memory.h pattern — named goal patterns, strict count check,
+        # CVC5 presence check. Until then, this step records the raw
+        # output and uploads it for analysis.
+        #
+        # Expected outcome on each run during development:
+        #   - Annotations parse cleanly (no [kernel:annot-error]).
+        #   - WP runs to completion (produces "Proved goals:" summary).
+        #   - Some unproved goals will exist — that is the point of
+        #     this step. The strict wrapper comes later.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/arena.h 2>&1 | tee wp_arena_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (arena.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_arena_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          # Sanity check: did WP produce a verification summary?
+          # If "Proved goals:" is missing, frama-c aborted before WP
+          # ran (typically an ACSL parse error in the predicates or
+          # contracts). Surface this loudly.
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "NOTE: WP did not produce a verification summary."
+            echo "      Likely cause: ACSL parse error in arena.h annotations."
+            echo "      First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_arena_output.txt | head -20 || true
+            echo ""
+            echo "(Step is permissive — not failing the job. Fix the"
+            echo " parse error and push again.)"
+            echo "==============================================="
+            exit 0
+          fi
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_arena_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_arena_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_arena_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (no expected count yet)"
+
+          if [ "${UNPROVED_COUNT}" -gt 0 ]; then
+            echo ""
+            echo "  --- Unproved goals (for VERIFY-009 calibration) ---"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_arena_output.txt || true
+          fi
+
+          echo ""
+          echo "STATUS: exploratory — not enforcing residual counts."
+          echo "        See wp_arena_output.txt artifact for full details."
+          echo "==============================================="
+
+          # Force success — this step is observational only.
+          exit 0
+
+      - name: Upload WP proof output (arena.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-arena
+          path: wp_arena_output.txt
+
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
