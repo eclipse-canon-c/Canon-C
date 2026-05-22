@@ -248,7 +248,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
   assigns arena == \null ? \nothing : *arena;
   behavior null_arena:
     assumes arena == \null;
-    ensures \nothing;
+    assigns \nothing;
   behavior non_null:
     assumes \valid(arena);
     ensures arena->offset == 0;
@@ -273,7 +273,7 @@ static inline void arena_reset(Arena* arena) {
   assigns arena == \null ? \nothing : arena->buffer[0 .. arena->offset - 1];
   behavior null_or_empty:
     assumes arena == \null || arena->offset == 0;
-    ensures \nothing;
+    assigns \nothing;
   behavior non_empty:
     assumes \valid(arena) && arena->offset > 0;
     ensures arena->offset == 0;
@@ -448,8 +448,7 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
   assigns out == \null ? \nothing : *out;
   ensures arena_invariant(arena);
   ensures out != \null ==> (*out == \null || \valid((u8*)*out + (0 .. size - 1)));
-  ensures \result == (out != \null && *out != \null) ||
-          (\result == \false && (out == \null || *out == \null));
+  ensures \result <==> (out != \null && *out != \null);
 */
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
@@ -465,6 +464,7 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
   assigns out == \null ? \nothing : *out;
   ensures arena_invariant(arena);
   ensures out != \null ==> (*out == \null || \valid((u8*)*out + (0 .. size - 1)));
+  ensures \result <==> (out != \null && *out != \null);
 */
 static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
@@ -583,7 +583,7 @@ static inline ArenaMark arena_mark(const Arena* arena) {
   assigns arena == \null ? \nothing : arena->offset;
   behavior null_arena:
     assumes arena == \null;
-    ensures \nothing;
+    assigns \nothing;
   behavior non_null:
     assumes \valid(arena);
     ensures arena->offset == mark;
