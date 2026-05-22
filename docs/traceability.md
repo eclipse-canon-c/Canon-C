@@ -91,6 +91,38 @@ and bswap instead of compiler builtins.
 has already proved unreachable under Frama-C. contract_test is excluded
 from the coverage build for the same reason.
 
+### Notes on per-test column attribution
+
+Headers in this table report MC/DC measured at their own source-line
+attribution after gcov merges across translation units. When a header
+is included transitively — `checked.h` reaches every test that
+includes `ptr.h`, `memory.h`, or `slice.h` — gcov also attributes
+inlined-expanded conditions to each call site in the including TU.
+This produces a "50% of N" pattern visible in many per-test columns
+of the raw gcov output: at each inlined call site, the success
+branch is reachable from typical test inputs but the
+overflow/underflow branches require pathological inputs (arrays of
+2^62 elements, capacity calculations near `USIZE_MAX`) that unit
+tests don't construct.
+
+A notable instance: `priority_queue_test` reports 33.93% of 56 for
+`core/primitives/checked.h`. The number reflects the inlined
+`ptr_elem` and `mem_copy` call sites across the priority queue's
+operations, each contributing condition outcomes from
+`checked_add`/`checked_mul`, of which only the success branch is
+reachable through realistic test inputs. The aggregate measurement
+at the top of the table correctly merges across TUs (checked.h
+itself is at 100% via `checked_test`); per-call-site uncovered
+branches at transitive call sites are call-site-unreachable
+defensive code, analogous to MCDC-002's disposition for slice.h's
+`!ptr` branches at the per-function level.
+
+The aggregate MC/DC figures in the "Results" table reflect the
+post-merge coverage and are the authoritative numbers. Per-test
+column figures in the raw gcov output reflect what each test
+reaches in isolation, including transitive inlined-expanded
+conditions, and should not be read as per-header coverage gaps.
+
 ### Notable per-header results
 
 Headers at 100% MC/DC:
@@ -134,6 +166,42 @@ by methodology):
   inherit slice.h's `bytes_invariant`, so the analogous `!ptr`
   branches are discharged by the inherited type invariant rather
   than re-introducing public-API-unreachable code.
+
+Headers absent from the MC/DC table:
+
+`core/primitives/types.h`, `core/primitives/limits.h`,
+`core/primitives/lifetime.h`, `core/scope.h`, and `core/ownership.h`
+do not appear in the per-header MC/DC table because they have no
+measurable condition outcomes under the coverage build. Their content
+is exclusively typedefs, constants, and macros that expand at call
+sites — no `static inline` functions with their own branches for gcov
+to attribute. Runtime evidence comes from `types_test.c`,
+`limits_test.c`, `scope_test.c`, and `ownership_test.c` respectively,
+which lock the headers' documented behavior to regression tests. The
+condition outcomes measured by those tests are attributed to the
+calling TU's expansion sites, not to the headers themselves.
+
+`lifetime.h` has no dedicated test file by the same logic — its
+content (three typedefs and one constant) makes no claim that could
+fail on any conforming C99 target beyond what `types_test.c` already
+covers. Lifetime substrate behavior is exercised through
+`borrow_test.c` and the per-container tests across all 16 CI configs
+under both `CANON_LIFETIME` modes. See verification.md's roadmap
+table for the matching N/A disposition.
+
+`core/primitives/contract.h` reports 0.0% MC/DC (0/2 condition
+outcomes) consistently across every test column in the per-TU gcov
+output. This is the `-DCANON_NO_REQUIRE` flag's intended effect: the
+coverage build compiles `require_msg` calls out to `((void)0)`, but
+the contract handler's installation-dispatch branch remains in the
+preprocessed source because the handler-installation API is separate
+from the assertion macro. The two condition outcomes are reachable
+only when an alternate handler has been registered via the
+contract handler API, which `contract_test.c` exercises — but
+`contract_test` is excluded from the coverage build (its assertions
+would all fail under `-DCANON_NO_REQUIRE` by design; see MCDC-001
+for the methodology). The 0/2 is structurally unreachable under the
+coverage build's flag set, not a coverage gap.
 
 ## Formal verification status
 
