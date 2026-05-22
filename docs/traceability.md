@@ -96,7 +96,7 @@ from the coverage build for the same reason.
 Headers in this table report MC/DC measured at their own source-line
 attribution after gcov merges across translation units. When a header
 is included transitively — `checked.h` reaches every test that
-includes `ptr.h`, `memory.h`, or `slice.h` — gcov also attributes
+includes `ptr.h`, `memory.h`, or `slice.h` — gcov attributes
 inlined-expanded conditions to each call site in the including TU.
 This produces a "50% of N" pattern visible in many per-test columns
 of the raw gcov output: at each inlined call site, the success
@@ -106,16 +106,19 @@ overflow/underflow branches require pathological inputs (arrays of
 tests don't construct.
 
 A notable instance: `priority_queue_test` reports 33.93% of 56 for
-`core/primitives/checked.h`. The number reflects the inlined
-`ptr_elem` and `mem_copy` call sites across the priority queue's
-operations, each contributing condition outcomes from
-`checked_add`/`checked_mul`, of which only the success branch is
-reachable through realistic test inputs. The aggregate measurement
-at the top of the table correctly merges across TUs (checked.h
-itself is at 100% via `checked_test`); per-call-site uncovered
-branches at transitive call sites are call-site-unreachable
-defensive code, analogous to MCDC-002's disposition for slice.h's
-`!ptr` branches at the per-function level.
+`core/primitives/checked.h`. checked.h itself has 96 condition
+outcomes total (visible in `checked_test`'s column as 100% of 96).
+priority_queue.h's transitive include graph pulls in a subset of
+checked.h's functions, contributing 56 of those condition outcomes
+to pq_test's TU; pq_test inputs reach 19 of them (the success
+branches at the inlined call sites), leaving 37 uncovered (the
+overflow/underflow/zero-input branches that require pathological
+inputs unit tests don't construct). The aggregate measurement at
+the top of the table correctly merges across TUs (checked.h itself
+is at 100% via `checked_test`); per-call-site uncovered branches at
+transitive call sites are call-site-unreachable defensive code,
+analogous to MCDC-002's disposition for slice.h's `!ptr` branches
+at the per-function level.
 
 The aggregate MC/DC figures in the "Results" table reflect the
 post-merge coverage and are the authoritative numbers. Per-test
@@ -182,7 +185,7 @@ condition outcomes measured by those tests are attributed to the
 calling TU's expansion sites, not to the headers themselves.
 
 `lifetime.h` has no dedicated test file by the same logic — its
-content (three typedefs and one constant) makes no claim that could
+content (two typedefs and one constant) makes no claim that could
 fail on any conforming C99 target beyond what `types_test.c` already
 covers. Lifetime substrate behavior is exercised through
 `borrow_test.c` and the per-container tests across all 16 CI configs
@@ -191,17 +194,16 @@ table for the matching N/A disposition.
 
 `core/primitives/contract.h` reports 0.0% MC/DC (0/2 condition
 outcomes) consistently across every test column in the per-TU gcov
-output. This is the `-DCANON_NO_REQUIRE` flag's intended effect: the
-coverage build compiles `require_msg` calls out to `((void)0)`, but
-the contract handler's installation-dispatch branch remains in the
-preprocessed source because the handler-installation API is separate
-from the assertion macro. The two condition outcomes are reachable
-only when an alternate handler has been registered via the
-contract handler API, which `contract_test.c` exercises — but
-`contract_test` is excluded from the coverage build (its assertions
-would all fail under `-DCANON_NO_REQUIRE` by design; see MCDC-001
-for the methodology). The 0/2 is structurally unreachable under the
-coverage build's flag set, not a coverage gap.
+output. The two condition outcomes are the
+`handler ? handler : contract_default_handler` ternary inside
+`contract_set_handler`, which selects between a caller-supplied
+handler and the default. `contract_set_handler` is exercised only by
+`contract_test.c`, which is excluded from the coverage build because
+its assertions deliberately violate contracts to test the handler —
+and under the coverage build's project-wide `-DCANON_NO_REQUIRE`,
+those assertions compile to `((void)0)` and the test cannot fire
+(see MCDC-001 for the methodology). The 0/2 is therefore unreachable
+under the coverage build's flag set, not a coverage gap.
 
 ## Formal verification status
 
