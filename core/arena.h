@@ -245,7 +245,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
 
 /*@
   requires arena == \null || arena_invariant(arena);
-  assigns arena == \null ? \nothing : *arena;
+  assigns *arena;
   behavior null_arena:
     assumes arena == \null;
     assigns \nothing;
@@ -269,8 +269,8 @@ static inline void arena_reset(Arena* arena) {
 
 /*@
   requires arena == \null || arena_invariant(arena);
-  assigns arena == \null ? \nothing : *arena;
-  assigns arena == \null ? \nothing : arena->buffer[0 .. arena->offset - 1];
+  assigns *arena;
+  assigns arena->buffer[0 .. arena->offset - 1];
   behavior null_or_empty:
     assumes arena == \null || arena->offset == 0;
     assigns \nothing;
@@ -445,10 +445,19 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
   requires arena_invariant(arena);
   requires out == \null || \valid(out);
   assigns *arena;
-  assigns out == \null ? \nothing : *out;
-  ensures arena_invariant(arena);
-  ensures out != \null ==> (*out == \null || \valid((u8*)*out + (0 .. size - 1)));
-  ensures \result <==> (out != \null && *out != \null);
+  behavior null_out:
+    assumes out == \null;
+    assigns *arena;
+    ensures arena_invariant(arena);
+    ensures \result == \false;
+  behavior non_null_out:
+    assumes \valid(out);
+    assigns *arena, *out;
+    ensures arena_invariant(arena);
+    ensures *out == \null || \valid((u8*)*out + (0 .. size - 1));
+    ensures \result <==> (*out != \null);
+  complete behaviors;
+  disjoint behaviors;
 */
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
@@ -461,10 +470,19 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
   requires is_power_of_two(alignment);
   requires out == \null || \valid(out);
   assigns *arena;
-  assigns out == \null ? \nothing : *out;
-  ensures arena_invariant(arena);
-  ensures out != \null ==> (*out == \null || \valid((u8*)*out + (0 .. size - 1)));
-  ensures \result <==> (out != \null && *out != \null);
+  behavior null_out:
+    assumes out == \null;
+    assigns *arena;
+    ensures arena_invariant(arena);
+    ensures \result == \false;
+  behavior non_null_out:
+    assumes \valid(out);
+    assigns *arena, *out;
+    ensures arena_invariant(arena);
+    ensures *out == \null || \valid((u8*)*out + (0 .. size - 1));
+    ensures \result <==> (*out != \null);
+  complete behaviors;
+  disjoint behaviors;
 */
 static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
@@ -580,7 +598,7 @@ static inline ArenaMark arena_mark(const Arena* arena) {
 /*@
   requires arena == \null || arena_invariant(arena);
   requires arena != \null ==> mark <= arena->offset;
-  assigns arena == \null ? \nothing : arena->offset;
+  assigns arena->offset;
   behavior null_arena:
     assumes arena == \null;
     assigns \nothing;
