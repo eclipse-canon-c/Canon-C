@@ -40,50 +40,19 @@
  * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
  *   - Embeds a lifetime_t lt field (id + open) on the Arena.
  *   - arena_init() opens a fresh lifetime; the ID is derived from a
- *     per-TU counter XOR'd with &arena. See "Internal: lifetime
- *     helpers" below.
+ *     per-TU counter XOR'd with &arena.
  *   - arena_reset() and arena_reset_secure() RE-STAMP the lifetime ID,
- *     invalidating every borrow that captured the previous ID. Borrow
- *     reads stamped with the old ID will fire require_msg via
- *     lifetime_assert_valid() in semantics/borrow.h.
+ *     invalidating every borrow that captured the previous ID.
  *   - arena_reset_to(mark) does NOT touch the lifetime — borrows
- *     allocated before the mark must remain valid through rollback,
- *     by the rollback contract. This is intentional.
- *   - There is no arena_destroy(); arenas are reset, not destroyed.
- *     If you need destruction semantics for borrows, pair the arena
- *     with a Region and rely on region_end() to invalidate borrows.
- *   Zero cost in release builds — struct layout is identical without the flag.
+ *     allocated before the mark must remain valid through rollback.
+ *   Zero cost in release builds.
  *
- * Dependency rule:
- *   arena.h is core/. It depends only on primitives/, core/memory.h, and
- *   core/slice.h. Under CANON_LIFETIME_DEBUG, it additionally includes
- *   core/primitives/lifetime.h for the shared region_id_t / lifetime_t
- *   types. core/region.h provides lifetime_assert_valid (the runtime
- *   check), which arena.h does not call directly — only the borrow types
- *   in semantics/borrow.h call it.
- *   No data/, semantics/, algo/, or util/ headers may be included here.
- *
- * Formal verification:
- * ────────────────────────────────────────────────────────────────────────────
- * Every function in this header carries an ACSL contract suitable for
- * Frama-C WP. The Typed+Cast memory model is required because arena.h
- * performs void-to-u8 pointer casts for byte-level pointer arithmetic
- * (same rationale as compare.h — see VERIFY-005 — and the substrate
- * headers ptr.h, slice.h, memory.h).
- *
- * The structural invariant `arena_invariant` (defined below) is the
- * load-bearing predicate: every public function preserves it. Allocator
- * functions additionally use `arena_can_fit` to express the three-way
- * overflow guard before adjusting offset. Rollback uses `mark_in_arena`
- * to validate the mark precondition.
- *
- * Lifetime invariants (under CANON_LIFETIME_DEBUG) are captured by
- * `arena_lifetime_valid`. The OWN-002 no-cycle property is encoded as
- * a per-call `ensures arena->lt.id != \old(arena->lt.id)` on the reset
- * helpers, matching the regression test in arena_test.c.
- *
- * Predicate design rationale and the residual fingerprint live in
- * docs/verification.md (VERIFY-009) and docs/deviations.md.
+ * Formal verification: every public function carries an ACSL contract
+ * suitable for Frama-C WP under the Typed+Cast memory model. See
+ * docs/verification.md (VERIFY-009) for the residual category analysis
+ * and docs/deviations.md for the manually-discharged goals (including
+ * the OWN-002 no-cycle property, which is runtime-validated rather than
+ * formally proved — see test/core/arena_test.c).
  *
  * @sa arena_alloc(), arena_alloc_aligned(), arena_mark(), arena_reset_to()
  * @sa core/primitives/lifetime.h — canonical home of region_id_t and lifetime_t
@@ -95,16 +64,6 @@
    Arena struct and mark type
    ============================================================================ */
 
-/**
- * @brief Arena instance.
- *
- * Fields are public for inspection but must not be modified directly.
- * Use the API functions below to manage state.
- *
- * padding_accum tracks cumulative alignment padding bytes consumed since
- * the last full reset. This is needed so arena_reset_secure() can wipe
- * the entire used+padding region, not just allocated bytes.
- */
 typedef struct Arena {
     u8*   buffer;          /**< Start of caller-owned memory block          */
     usize capacity;        /**< Total usable bytes in buffer                */
@@ -119,58 +78,10 @@ typedef struct Arena {
 #endif
 } Arena;
 
-/**
- * @brief Opaque checkpoint for partial rollback.
- *
- * Returned by arena_mark(), consumed by arena_reset_to().
- * Treat as opaque — do not rely on internal representation.
- */
 typedef usize ArenaMark;
 
 /* ============================================================================
    ACSL predicates for verification
-   ============================================================================
-   The predicates below capture the structural invariants WP needs to verify
-   arena.h. They are referenced by `requires` and `ensures` clauses on every
-   function contract.
-
-   Design notes:
-
-   - arena_invariant: the structural shape every valid Arena maintains. Does
-     NOT include padding_accum because arena_reset_to deliberately preserves
-     padding_accum across rollback (per the comment in the function body:
-     "padding_accum is intentionally not rolled back — it is a cumulative
-     diagnostic counter, not required for correctness of rollback").
-     Including padding_accum in the invariant would force arena_reset_to to
-     either restore it or violate the predicate.
-
-   - arena_can_fit: the three-way overflow guard that arena_alloc enforces
-     before adjusting offset. Captures both the address-space overflow
-     checks (against CANON_USIZE_MAX) and the buffer-capacity check. The
-     `pad` calculation uses modular arithmetic; for power-of-two alignments
-     WP can typically discharge the equivalence (alignment - (cur % alignment))
-     % alignment == ((cur + alignment - 1) & ~(alignment - 1)) - cur, though
-     this may require z3 with longer timeout. See VERIFY-009 for the
-     residual category if it doesn't close automatically.
-
-   - mark_in_arena: validity of an ArenaMark relative to its arena. The
-     "mark <= a->offset" precondition guards arena_reset_to. Trivial to
-     prove because mark comes from a prior arena_mark call which returns
-     a->offset.
-
-   - arena_lifetime_open / arena_lifetime_valid (CANON_LIFETIME_DEBUG only):
-     the lifetime token is open and has a non-static id. Used by arena_init
-     and the restamp functions in ensures clauses.
-
-   The no-cycle property for OWN-002 is encoded as a per-call ensures
-   `arena->lt.id != \old(arena->lt.id)` on arena_reset and
-   arena_reset_secure, not as a separate predicate. The contract matches
-   the regression test in arena_test.c (test_lifetime_reset_restamps_id),
-   which checks lt.id != before directly. A general "all N+1 ids distinct
-   across N resets" property would require a sequence model that WP does
-   not reason about naturally; the per-call form gives the same guarantee
-   transitively (if every consecutive pair differs, and the counter is
-   monotonic, no two prior ids collide within the TU).
    ============================================================================ */
 
 /*@
@@ -198,22 +109,34 @@ typedef usize ArenaMark;
    ============================================================================ */
 
 #ifdef CANON_ARENA_DEBUG
-/**
- * @brief Snapshot of arena debug state.
- * All values reflect state since last full reset.
- */
 typedef struct {
-    usize used;        /**< Bytes currently consumed (allocations + padding) */
-    usize remaining;   /**< Bytes still available                            */
-    usize capacity;    /**< Total arena capacity                             */
-    usize peak;        /**< Maximum bytes ever consumed (high watermark)     */
-    usize alloc_count; /**< Total successful allocations                     */
+    usize used;
+    usize remaining;
+    usize capacity;
+    usize peak;
+    usize alloc_count;
 } ArenaStats;
 
-/**
- * @brief Returns a snapshot of current arena debug state.
- * NULL-safe — returns zeroed stats for NULL arena.
- */
+/*@
+  requires arena == \null || \valid(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result.used == 0;
+    ensures \result.remaining == 0;
+    ensures \result.capacity == 0;
+    ensures \result.peak == 0;
+    ensures \result.alloc_count == 0;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures \result.used == arena->offset;
+    ensures \result.remaining == arena->capacity - arena->offset;
+    ensures \result.capacity == arena->capacity;
+    ensures \result.peak == arena->peak;
+    ensures \result.alloc_count == arena->alloc_count;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline ArenaStats arena_stats(const Arena* arena) {
     if (!arena) {
         ArenaStats s = {0};
@@ -248,40 +171,6 @@ static inline ArenaStats arena_stats(const Arena* arena) {
 
 /* ============================================================================
    Internal: lifetime helpers (compiled away in release)
-   ============================================================================
-   When CANON_LIFETIME_DEBUG is enabled, an Arena exposes a lifetime_t
-   that borrows can capture and validate against. The helpers below
-   manage the (id, open) pair across the arena lifecycle:
-
-     arena_lifetime_open_(a)
-       Called by arena_init. Draws a fresh id from the per-TU monotonic
-       counter (XOR'd with &arena for cross-TU diversity) and marks the
-       lifetime open.
-
-     arena_lifetime_restamp_(a)
-       Called by arena_reset and arena_reset_secure. Draws another fresh
-       id from the same counter, guaranteed distinct from any prior id
-       within the TU. Open flag stays true; arenas are not "closed" by
-       reset — they are recycled.
-
-     arena_lifetime_close_(a)
-       Reserved for future Arena destruction semantics. Not called by
-       any current API. Marks the lifetime closed, which makes any
-       subsequent borrow read fire lifetime_assert_valid.
-
-   In release builds (CANON_LIFETIME_DEBUG undefined) all three
-   helpers are no-ops — the Arena struct does not have an lt field
-   and no code touches it.
-
-   History: Phase 1 (CI #865 onward) shipped with bare-address
-   derivation for _open_ and XOR-with-`0x9E3779B97F4A7C15ULL` for
-   _restamp_. The XOR-with-constant approach cycled after two resets
-   (A -> A^K -> A), silently re-validating a borrow captured at the
-   original id. OWN-002 migrated both _open_ and _restamp_ to the
-   per-TU counter pattern used by every Phase 3+ container,
-   consistent with bitset / stringbuf / dynvec / dynstring / smallvec.
-   See docs/design-decisions.md OWN-001 §4 (the documented
-   limitation) and OWN-002 (the migration).
    ============================================================================ */
 
 #ifdef CANON_LIFETIME_DEBUG
@@ -294,32 +183,10 @@ static inline ArenaStats arena_stats(const Arena* arena) {
           a->lt.id != REGION_ID_STATIC;
     */
 
-    /* Per-TU counter used to derive unique lifetime ids.
-     *
-     * The counter is a `static` inside a `static inline` function, so
-     * each translation unit has its own copy and increments are
-     * TU-local. Two Arenas initialized in the same TU get different
-     * ids; Arenas initialized in different TUs get ids from
-     * independent counters but mixed with the struct address, making
-     * cross-TU collisions vanishingly unlikely. Same pattern as
-     * bitset / stringbuf / vec / deque / pq / hashmap / dynvec /
-     * smallvec / dynstring.
-     *
-     * Why a counter rather than the previous XOR-with-constant:
-     *   arena_reset / arena_reset_secure are called repeatedly on the
-     *   same Arena across its lifetime. XOR with a fixed constant K
-     *   cycles: A -> A^K -> A. A borrow captured at id A re-validates
-     *   silently after two resets. Drawing a fresh id from the
-     *   counter eliminates that cycle.
-     *
-     * No thread-safety guarantee: if a single TU's arena_init /
-     * arena_reset / arena_reset_secure are invoked concurrently, the
-     * counter may race and collide. Same constraint as every other
-     * Canon-C container.
-     *
-     * REGION_ID_STATIC (0) is reserved; the counter starts at 1 and
-     * the id derivation never produces 0 defensively.
-     */
+    /*@
+      assigns \nothing;
+      ensures \result != REGION_ID_STATIC;
+    */
     static inline region_id_t arena_lifetime_next_id_(void* ap) {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
@@ -349,22 +216,18 @@ static inline ArenaStats arena_stats(const Arena* arena) {
    Initialization & reset
    ============================================================================ */
 
-/**
- * @brief Initializes an arena from a caller-provided buffer.
- *
- * @param arena    Valid pointer to uninitialized Arena struct
- * @param buffer   Pointer to memory block (must remain valid for arena lifetime)
- * @param capacity Size of buffer in bytes (> 0, <= CANON_ARENA_MAX_SIZE)
- *
- * @pre arena != NULL && buffer != NULL && capacity > 0
- * @pre capacity <= CANON_ARENA_MAX_SIZE
- *
- * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID
- * is drawn from a per-TU counter XOR'd with &arena. Borrows captured
- * after this call carry this lifetime ID.
- *
- * Performance: O(1)
- */
+/*@
+  requires \valid(arena);
+  requires \valid((u8*)buffer + (0 .. capacity - 1));
+  requires capacity > 0;
+  requires capacity <= CANON_ARENA_MAX_SIZE;
+  assigns *arena;
+  ensures arena_invariant(arena);
+  ensures arena->buffer == (u8*)buffer;
+  ensures arena->capacity == capacity;
+  ensures arena->offset == 0;
+  ensures arena->padding_accum == 0;
+*/
 static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     require_msg(arena    != NULL, "arena_init: arena cannot be NULL");
     require_msg(buffer   != NULL, "arena_init: buffer cannot be NULL");
@@ -380,22 +243,22 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     arena_lifetime_open_(arena);
 }
 
-/**
- * @brief Resets arena to empty state (fast path).
- *
- * Moves offset back to 0. Memory content is NOT cleared.
- * Use arena_reset_secure() for sensitive data.
- *
- * @param arena Arena to reset (NULL-safe)
- *
- * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the lifetime ID with a
- * fresh draw from the per-TU counter, invalidating every borrow
- * captured before this call. Subsequent reads of those borrows will
- * fire require_msg. Multiple resets in sequence produce distinct ids
- * each time — no cycling.
- *
- * Performance: O(1)
- */
+/*@
+  requires arena == \null || arena_invariant(arena);
+  assigns arena == \null ? \nothing : *arena;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \nothing;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures arena->offset == 0;
+    ensures arena->padding_accum == 0;
+    ensures arena->buffer == \old(arena->buffer);
+    ensures arena->capacity == \old(arena->capacity);
+    ensures arena_invariant(arena);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void arena_reset(Arena* arena) {
     if (!arena) return;
     arena->offset        = 0;
@@ -404,21 +267,23 @@ static inline void arena_reset(Arena* arena) {
     arena_lifetime_restamp_(arena);
 }
 
-/**
- * @brief Resets arena and securely wipes all consumed memory.
- *
- * Zeros the full consumed region: allocations AND alignment padding bytes,
- * so no residual data remains anywhere in the used range.
- *
- * Slower than arena_reset() — O(offset).
- *
- * @param arena Arena to reset (NULL-safe)
- *
- * Lifetime (CANON_LIFETIME_DEBUG): re-stamps the lifetime ID, same as
- * arena_reset(). Borrows captured before this call are invalidated.
- *
- * Performance: O(offset)
- */
+/*@
+  requires arena == \null || arena_invariant(arena);
+  assigns arena == \null ? \nothing : *arena;
+  assigns arena == \null ? \nothing : arena->buffer[0 .. arena->offset - 1];
+  behavior null_or_empty:
+    assumes arena == \null || arena->offset == 0;
+    ensures \nothing;
+  behavior non_empty:
+    assumes \valid(arena) && arena->offset > 0;
+    ensures arena->offset == 0;
+    ensures arena->padding_accum == 0;
+    ensures arena->buffer == \old(arena->buffer);
+    ensures arena->capacity == \old(arena->capacity);
+    ensures arena_invariant(arena);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void arena_reset_secure(Arena* arena) {
     if (!arena || arena->offset == 0) return;
     mem_secure_zero(arena->buffer, arena->offset);
@@ -432,16 +297,31 @@ static inline void arena_reset_secure(Arena* arena) {
    Allocation
    ============================================================================ */
 
-/**
- * @brief Allocates size bytes with natural alignment (CANON_DEFAULT_ALIGN).
- *
- * @param arena Valid initialized arena
- * @param size  Bytes to allocate (> 0; returns NULL for size == 0)
- *
- * @return Aligned pointer, or NULL if arena is full or size == 0.
- *
- * Performance: O(1)
- */
+/*@
+  requires arena_invariant(arena);
+  assigns *arena;
+  behavior size_zero:
+    assumes size == 0;
+    ensures \result == \null;
+    ensures arena->offset == \old(arena->offset);
+    ensures arena_invariant(arena);
+  behavior fits:
+    assumes size > 0;
+    assumes arena_can_fit(arena, size, CANON_DEFAULT_ALIGN);
+    ensures \result != \null;
+    ensures \valid((u8*)\result + (0 .. size - 1));
+    ensures arena->offset >= \old(arena->offset) + size;
+    ensures arena->offset <= arena->capacity;
+    ensures arena_invariant(arena);
+  behavior does_not_fit:
+    assumes size > 0;
+    assumes !arena_can_fit(arena, size, CANON_DEFAULT_ALIGN);
+    ensures \result == \null;
+    ensures arena->offset == \old(arena->offset);
+    ensures arena_invariant(arena);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void* arena_alloc(Arena* arena, usize size) {
     void* current;
     void* aligned_ptr;
@@ -469,19 +349,32 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     return result;
 }
 
-/**
- * @brief Allocates size bytes with a specific power-of-2 alignment.
- *
- * @param arena     Valid initialized arena
- * @param size      Bytes to allocate (> 0; returns NULL for size == 0)
- * @param alignment Power-of-2 alignment (1, 2, 4, 8, 16, ...)
- *
- * @pre is_power_of_two(alignment)
- *
- * @return Aligned pointer, or NULL if arena is full or size == 0.
- *
- * Performance: O(1)
- */
+/*@
+  requires arena_invariant(arena);
+  requires is_power_of_two(alignment);
+  assigns *arena;
+  behavior size_zero:
+    assumes size == 0;
+    ensures \result == \null;
+    ensures arena->offset == \old(arena->offset);
+    ensures arena_invariant(arena);
+  behavior fits:
+    assumes size > 0;
+    assumes arena_can_fit(arena, size, alignment);
+    ensures \result != \null;
+    ensures \valid((u8*)\result + (0 .. size - 1));
+    ensures arena->offset >= \old(arena->offset) + size;
+    ensures arena->offset <= arena->capacity;
+    ensures arena_invariant(arena);
+  behavior does_not_fit:
+    assumes size > 0;
+    assumes !arena_can_fit(arena, size, alignment);
+    ensures \result == \null;
+    ensures arena->offset == \old(arena->offset);
+    ensures arena_invariant(arena);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignment) {
     void* current;
     void* aligned_ptr;
@@ -515,14 +408,29 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
    Zero-initializing variants
    ============================================================================ */
 
-/** @brief Allocates size bytes and zero-initializes them. O(size) */
+/*@
+  requires arena_invariant(arena);
+  assigns *arena;
+  ensures arena_invariant(arena);
+  ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
+  ensures \result != \null ==>
+      \forall integer i; 0 <= i < size ==> ((u8*)\result)[i] == 0;
+*/
 static inline void* arena_alloc_zero(Arena* arena, usize size) {
     void* p = arena_alloc(arena, size);
     if (p) mem_zero(p, size);
     return p;
 }
 
-/** @brief Allocates aligned size bytes and zero-initializes them. O(size) */
+/*@
+  requires arena_invariant(arena);
+  requires is_power_of_two(alignment);
+  assigns *arena;
+  ensures arena_invariant(arena);
+  ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
+  ensures \result != \null ==>
+      \forall integer i; 0 <= i < size ==> ((u8*)\result)[i] == 0;
+*/
 static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize alignment) {
     void* p = arena_alloc_aligned(arena, size, alignment);
     if (p) mem_zero(p, size);
@@ -533,12 +441,31 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
    Try-alloc variants (bool return, output via pointer)
    ============================================================================ */
 
+/*@
+  requires arena_invariant(arena);
+  requires out == \null || \valid(out);
+  assigns *arena;
+  assigns out == \null ? \nothing : *out;
+  ensures arena_invariant(arena);
+  ensures out != \null ==> (*out == \null || \valid((u8*)*out + (0 .. size - 1)));
+  ensures \result == (out != \null && *out != \null) ||
+          (\result == \false && (out == \null || *out == \null));
+*/
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
     if (out) *out = p;
     return p != NULL;
 }
 
+/*@
+  requires arena_invariant(arena);
+  requires is_power_of_two(alignment);
+  requires out == \null || \valid(out);
+  assigns *arena;
+  assigns out == \null ? \nothing : *out;
+  ensures arena_invariant(arena);
+  ensures out != \null ==> (*out == \null || \valid((u8*)*out + (0 .. size - 1)));
+*/
 static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
     if (out) *out = p;
@@ -549,27 +476,83 @@ static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize align
    Query
    ============================================================================ */
 
-/** @brief Total capacity of the arena in bytes. NULL-safe. */
+/*@
+  requires arena == \null || \valid(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result == 0;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures \result == arena->capacity;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize arena_capacity(const Arena* arena) {
     return arena ? arena->capacity : 0;
 }
 
-/** @brief Bytes still available for allocation. NULL-safe. */
+/*@
+  requires arena == \null || arena_invariant(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result == 0;
+  behavior non_null:
+    assumes \valid(arena);
+    assumes arena->offset <= arena->capacity;
+    ensures \result == arena->capacity - arena->offset;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize arena_remaining(const Arena* arena) {
     return arena ? (arena->capacity - arena->offset) : 0;
 }
 
-/** @brief Bytes currently consumed (allocations + alignment padding). NULL-safe. */
+/*@
+  requires arena == \null || \valid(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result == 0;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures \result == arena->offset;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize arena_used(const Arena* arena) {
     return arena ? arena->offset : 0;
 }
 
-/** @brief True if the arena has no active allocations. NULL-safe. */
+/*@
+  requires arena == \null || \valid(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result == \true;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures \result == (arena->offset == 0);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool arena_is_empty(const Arena* arena) {
     return !arena || arena->offset == 0;
 }
 
-/** @brief True if the arena has no remaining space. NULL-safe. */
+/*@
+  requires arena == \null || \valid(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result == \true;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures \result == (arena->offset >= arena->capacity);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool arena_is_full(const Arena* arena) {
     return !arena || arena->offset >= arena->capacity;
 }
@@ -578,79 +561,79 @@ static inline bool arena_is_full(const Arena* arena) {
    Checkpoint / rollback
    ============================================================================ */
 
-/**
- * @brief Saves the current allocation position as a rollback point.
- *
- * Pair with arena_reset_to() for scoped temporary allocations:
- *
- *   ArenaMark m = arena_mark(&arena);
- *   // ... temporary work ...
- *   arena_reset_to(&arena, m);
- *
- * @param arena Arena to checkpoint (NULL-safe — returns 0)
- */
+/*@
+  requires arena == \null || \valid(arena);
+  assigns \nothing;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \result == 0;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures \result == arena->offset;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline ArenaMark arena_mark(const Arena* arena) {
     return arena ? arena->offset : 0;
 }
 
-/**
- * @brief Rolls back arena state to a previously saved mark.
- *
- * Invalidates all allocations made after the mark was taken.
- * Memory content is NOT cleared — use arena_reset_secure() for that.
- *
- * @note alloc_count and peak are NOT rolled back. They reflect cumulative
- * activity since the last full reset, not since the mark.
- *
- * @note (CANON_LIFETIME_DEBUG) The lifetime ID is NOT touched by this
- * function. Borrows allocated before the mark must remain valid through
- * rollback by the rollback contract. Re-stamping the ID would break that
- * contract. Borrows allocated between the mark and the reset point are
- * caller-error if used after rollback — that case is covered by ASan,
- * not by lifetime tracking. If you need scope-bounded invalidation,
- * pair the arena with a Region.
- *
- * @pre mark <= arena->offset
- *
- * @param arena Arena to roll back (NULL-safe)
- * @param mark  Value returned by a prior arena_mark() on this arena
- */
+/*@
+  requires arena == \null || arena_invariant(arena);
+  requires arena != \null ==> mark <= arena->offset;
+  assigns arena == \null ? \nothing : arena->offset;
+  behavior null_arena:
+    assumes arena == \null;
+    ensures \nothing;
+  behavior non_null:
+    assumes \valid(arena);
+    ensures arena->offset == mark;
+    ensures arena->buffer == \old(arena->buffer);
+    ensures arena->capacity == \old(arena->capacity);
+    ensures arena_invariant(arena);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
     if (!arena) return;
     require_msg(mark <= arena->offset,
                 "arena_reset_to: mark is ahead of current offset");
     arena->offset = mark;
-    /* padding_accum is intentionally not rolled back — it is a cumulative
-       diagnostic counter, not required for correctness of rollback. */
-    /* lifetime ID is intentionally not re-stamped — see function doc. */
 }
 
 /* ============================================================================
    Byte views — slice.h integration
    ============================================================================ */
 
-/**
- * @brief View over the currently consumed region [buffer, buffer+offset).
- * Non-owning — becomes invalid after any reset.
- */
+/*@
+  requires arena_invariant(arena);
+  assigns \nothing;
+  ensures \result.len == arena->offset;
+  ensures \result.len == 0 || \result.ptr == arena->buffer;
+*/
 static inline bytes_t arena_as_bytes(const Arena* arena) {
     require_msg(arena != NULL, "arena_as_bytes: arena cannot be NULL");
     return bytes_from(arena->buffer, arena->offset);
 }
 
-/**
- * @brief View over the entire buffer [buffer, buffer+capacity).
- * Use arena_as_bytes() for the used portion only.
- */
+/*@
+  requires arena_invariant(arena);
+  assigns \nothing;
+  ensures \result.ptr == arena->buffer;
+  ensures \result.len == arena->capacity;
+*/
 static inline bytes_t arena_buffer_bytes(const Arena* arena) {
     require_msg(arena != NULL, "arena_buffer_bytes: arena cannot be NULL");
     return bytes_from(arena->buffer, arena->capacity);
 }
 
-/**
- * @brief View over the remaining (unallocated) region [buffer+offset, buffer+capacity).
- * Useful for passing free space to I/O operations.
- */
+/*@
+  requires arena_invariant(arena);
+  assigns \nothing;
+  ensures arena->offset >= arena->capacity ==>
+      (\result.ptr == \null && \result.len == 0);
+  ensures arena->offset < arena->capacity ==>
+      \result.len == arena->capacity - arena->offset;
+*/
 static inline bytes_t arena_free_bytes(const Arena* arena) {
     require_msg(arena != NULL, "arena_free_bytes: arena cannot be NULL");
     if (arena->offset >= arena->capacity) return bytes_empty();
@@ -662,28 +645,15 @@ static inline bytes_t arena_free_bytes(const Arena* arena) {
    Typed allocation macros
    ============================================================================ */
 
-/** @brief Allocates one object of Type from arena. */
 #define arena_alloc_type(arena, Type) \
     ((Type*)arena_alloc((arena), sizeof(Type)))
 
-/**
- * @brief Allocates an array of count objects of Type from arena.
- *
- * sizeof(Type) * count is NOT overflow-checked in this macro.
- * For untrusted count values, compute the size separately with a
- * checked multiplication before calling arena_alloc() directly.
- */
 #define arena_alloc_array(arena, Type, count) \
     ((Type*)arena_alloc((arena), sizeof(Type) * (count)))
 
-/** @brief Allocates and zero-initializes one object of Type. */
 #define arena_alloc_type_zero(arena, Type) \
     ((Type*)arena_alloc_zero((arena), sizeof(Type)))
 
-/**
- * @brief Allocates and zero-initializes an array of count objects of Type.
- * Same overflow caveat as arena_alloc_array.
- */
 #define arena_alloc_array_zero(arena, Type, count) \
     ((Type*)arena_alloc_zero((arena), sizeof(Type) * (count)))
 
