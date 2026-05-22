@@ -1215,6 +1215,7 @@ the complete installation and registration procedure.
 | ptr.h        | ✅ Verified       | 1729/1739 | 10 documented timeouts (VERIFY-006); CI run reports 1943/1953 due to checked.h #include |
 | types.h      | N/A              |           | Type definitions only              |
 | limits.h     | N/A              |           | Constant definitions only          |
+| lifetime.h   | N/A              |           | Layout convention only — three typedefs and one constant; no functions to verify. Exercised through borrow_test.c and per-container tests. |
 | contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h     |
 
 ### core/ (in progress)
@@ -1226,8 +1227,8 @@ the complete installation and registration procedure.
 | arena.h      | Planned          |           | Memory region management                  |
 | pool.h       | Planned          |           | Fixed-size block allocator                |
 | region.h     | Planned          |           | Lifetime management                       |
-| scope.h      | Planned          |           | Cleanup pairing                           |
-| ownership.h  | N/A              |           | Annotation macros only, no logic          |
+| scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
+| ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
 ### semantics/ (after core/ complete)
 
