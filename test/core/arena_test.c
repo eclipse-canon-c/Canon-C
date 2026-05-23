@@ -6,14 +6,17 @@
  *   - arena_init: basic setup, NULL/zero-capacity contracts
  *   - arena_alloc: normal allocation, alignment, exhaustion, zero-size
  *   - arena_alloc_aligned: custom power-of-2 alignments
- *   - arena_alloc_zero / arena_alloc_aligned_zero: memory is zeroed
- *   - arena_try_alloc / arena_try_alloc_aligned: bool return variants
+ *   - arena_alloc_zero / arena_alloc_aligned_zero: memory is zeroed,
+ *     exhaustion returns NULL (closes `if (p)` FALSE branch)
+ *   - arena_try_alloc / arena_try_alloc_aligned: bool return variants,
+ *     NULL out parameter handling (closes `if (out)` FALSE branch)
  *   - arena_alloc_type / arena_alloc_array macros
  *   - arena_reset: fast reset, reuse after reset
- *   - arena_reset_secure: wipes consumed memory
+ *   - arena_reset_secure: wipes consumed memory, empty-arena early return
  *   - arena_mark / arena_reset_to: checkpoint / rollback
  *   - arena_capacity / arena_remaining / arena_used / arena_is_empty / arena_is_full
  *   - arena_as_bytes / arena_buffer_bytes / arena_free_bytes
+ *     (including exhausted-arena case)
  *   - CANON_ARENA_DEBUG stats (alloc_count, peak) when enabled
  *   - CANON_LIFETIME_DEBUG: lifetime ID stamping, restamping on reset,
  *     and rollback-preserves-id contract
@@ -218,6 +221,23 @@ static void test_alloc_aligned_zero_is_zeroed(void)
     for (i = 0; i < 16; i++) EXPECT(p[i] == 0);
 }
 
+/* MC/DC: closes the `if (p)` FALSE branch in arena_alloc_zero — when
+ * the underlying alloc returns NULL, mem_zero must not be called. */
+static void test_alloc_zero_exhaustion_returns_null(void)
+{
+    setup();
+    void* p = arena_alloc_zero(&g_arena, BUF_SIZE * 2);
+    EXPECT(p == NULL);
+}
+
+/* MC/DC: closes the `if (p)` FALSE branch in arena_alloc_aligned_zero. */
+static void test_alloc_aligned_zero_exhaustion_returns_null(void)
+{
+    setup();
+    void* p = arena_alloc_aligned_zero(&g_arena, BUF_SIZE * 2, 16);
+    EXPECT(p == NULL);
+}
+
 /* ── arena_try_alloc ─────────────────────────────────────────────────────── */
 
 static void test_try_alloc_success(void)
@@ -246,6 +266,36 @@ static void test_try_alloc_aligned_success(void)
     EXPECT(ok);
     EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, 16));
+}
+
+/* MC/DC: closes the `if (out)` FALSE branch in arena_try_alloc.
+ *
+ * The ACSL contract is:
+ *     ensures \result <==> (out != \null && *out != \null);
+ *
+ * So when out == NULL, \result must be false regardless of whether
+ * allocation succeeded internally. This test depends on the C code
+ * matching the contract — the implementation must be:
+ *     return out != NULL && p != NULL;
+ * NOT:
+ *     return p != NULL;
+ *
+ * Without the contract-conforming implementation, this test fails on
+ * the path where out == NULL but allocation succeeds (returns true,
+ * contract says false). */
+static void test_try_alloc_null_out(void)
+{
+    setup();
+    bool ok = arena_try_alloc(&g_arena, 16, NULL);
+    EXPECT(ok == false);
+}
+
+/* MC/DC: same `if (out)` FALSE branch closure for arena_try_alloc_aligned. */
+static void test_try_alloc_aligned_null_out(void)
+{
+    setup();
+    bool ok = arena_try_alloc_aligned(&g_arena, 16, 16, NULL);
+    EXPECT(ok == false);
 }
 
 /* ── arena_reset ─────────────────────────────────────────────────────────── */
@@ -296,6 +346,19 @@ static void test_reset_secure_null_safe(void)
 {
     arena_reset_secure(NULL);
     EXPECT(1);
+}
+
+/* MC/DC: closes the offset==0 TRUE side of (!arena || offset==0).
+ * test_reset_secure_wipes_memory hits both subconditions FALSE;
+ * test_reset_secure_null_safe hits the left-TRUE; this hits
+ * left-FALSE && right-TRUE (initialized but empty arena). */
+static void test_reset_secure_empty_arena(void)
+{
+    setup();
+    /* Don't allocate — offset is 0 */
+    arena_reset_secure(&g_arena);
+    EXPECT(arena_used(&g_arena) == 0);
+    EXPECT(arena_is_empty(&g_arena));
 }
 
 /* ── arena_mark / arena_reset_to ─────────────────────────────────────────── */
@@ -365,6 +428,31 @@ static void test_remaining_decreases_on_alloc(void)
     EXPECT(arena_used(&g_arena) + arena_remaining(&g_arena) == BUF_SIZE);
 }
 
+/* MC/DC: closes the offset==0 FALSE outcome on a non-null arena.
+ * test_init_state covers TRUE; test_query_null_safe covers !arena TRUE.
+ * This is the missing combination: arena non-null AND offset > 0. */
+static void test_is_empty_after_alloc(void)
+{
+    setup();
+    EXPECT(arena_is_empty(&g_arena));      /* before alloc */
+    arena_alloc(&g_arena, 16);
+    EXPECT(!arena_is_empty(&g_arena));     /* after alloc — closes the gap */
+}
+
+/* MC/DC: closes the offset >= capacity TRUE outcome on a non-null arena.
+ * test_init_state covers FALSE; this covers TRUE by exhausting the arena. */
+static void test_is_full_when_exhausted(void)
+{
+    u8    small[64];
+    Arena a;
+    arena_init(&a, small, sizeof(small));
+
+    /* Fill completely — keep allocating 1-byte chunks until exhausted */
+    while (arena_alloc(&a, 1) != NULL) { /* fill */ }
+    EXPECT(arena_is_full(&a));
+    EXPECT(arena_remaining(&a) == 0);
+}
+
 /* ── bytes views ─────────────────────────────────────────────────────────── */
 
 static void test_arena_as_bytes(void)
@@ -404,6 +492,26 @@ static void test_arena_free_bytes_when_full(void)
         EXPECT(f.len == 0);
     }
     EXPECT(1);
+}
+
+/* MC/DC: closes the offset >= capacity TRUE branch in arena_free_bytes
+ * unconditionally. The existing test_arena_free_bytes_when_full has a
+ * defensive `if (remaining == 0)` guard that may not trigger if
+ * alignment padding leaves the arena not-quite-full. This version
+ * forces full exhaustion and asserts unconditionally. */
+static void test_free_bytes_when_exhausted(void)
+{
+    u8    small[64];
+    Arena a;
+    arena_init(&a, small, sizeof(small));
+
+    /* Fill completely (same pattern as test_is_full_when_exhausted) */
+    while (arena_alloc(&a, 1) != NULL) { /* fill */ }
+    EXPECT(arena_remaining(&a) == 0);
+
+    bytes_t f = arena_free_bytes(&a);
+    EXPECT(f.ptr == NULL);
+    EXPECT(f.len == 0);
 }
 
 /* ── typed macros ────────────────────────────────────────────────────────── */
@@ -588,10 +696,14 @@ int main(void)
 
     test_alloc_zero_is_zeroed();
     test_alloc_aligned_zero_is_zeroed();
+    test_alloc_zero_exhaustion_returns_null();
+    test_alloc_aligned_zero_exhaustion_returns_null();
 
     test_try_alloc_success();
     test_try_alloc_failure();
     test_try_alloc_aligned_success();
+    test_try_alloc_null_out();
+    test_try_alloc_aligned_null_out();
 
     test_reset_clears_offset();
     test_reset_allows_reuse();
@@ -599,6 +711,7 @@ int main(void)
 
     test_reset_secure_wipes_memory();
     test_reset_secure_null_safe();
+    test_reset_secure_empty_arena();
 
     test_mark_and_rollback();
     test_mark_at_zero();
@@ -607,11 +720,14 @@ int main(void)
 
     test_query_null_safe();
     test_remaining_decreases_on_alloc();
+    test_is_empty_after_alloc();
+    test_is_full_when_exhausted();
 
     test_arena_as_bytes();
     test_arena_buffer_bytes();
     test_arena_free_bytes();
     test_arena_free_bytes_when_full();
+    test_free_bytes_when_exhausted();
 
     test_alloc_type_macro();
     test_alloc_array_macro();
