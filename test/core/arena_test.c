@@ -76,6 +76,28 @@ static void setup(void)
     arena_init(&g_arena, g_buf, BUF_SIZE);
 }
 
+/* Drain an arena to exactly remaining == 0.
+ *
+ * The naive loop `while (arena_alloc(&a, 1)) {}` does NOT reach
+ * remaining == 0 because each 1-byte alloc consumes CANON_DEFAULT_ALIGN
+ * bytes of offset (alignment padding). Once offset gets within
+ * CANON_DEFAULT_ALIGN - 1 of capacity, the next 1-byte alloc fails the
+ * capacity check and the loop terminates with non-zero remaining.
+ *
+ * The pattern used by test_alloc_exact_fit is reliable: allocate a
+ * full CANON_DEFAULT_ALIGN chunk to force the offset onto a clean
+ * boundary, then allocate the entire remaining capacity in one call.
+ * After that, remaining == 0 deterministically. */
+static void drain_arena_to_zero(Arena* a)
+{
+    /* Force offset onto an aligned boundary */
+    (void)arena_alloc(a, CANON_DEFAULT_ALIGN);
+    usize rem = arena_remaining(a);
+    if (rem > 0) {
+        (void)arena_alloc(a, rem);
+    }
+}
+
 /* ── arena_init ──────────────────────────────────────────────────────────── */
 
 static void test_init_state(void)
@@ -270,19 +292,15 @@ static void test_try_alloc_aligned_success(void)
 
 /* MC/DC: closes the `if (out)` FALSE branch in arena_try_alloc.
  *
- * The ACSL contract is:
+ * REQUIRES the arena.h fix: the C code must match its ACSL contract
  *     ensures \result <==> (out != \null && *out != \null);
- *
- * So when out == NULL, \result must be false regardless of whether
- * allocation succeeded internally. This test depends on the C code
- * matching the contract — the implementation must be:
+ * which means the return must be:
  *     return out != NULL && p != NULL;
- * NOT:
+ * not:
  *     return p != NULL;
  *
- * Without the contract-conforming implementation, this test fails on
- * the path where out == NULL but allocation succeeds (returns true,
- * contract says false). */
+ * Without the fix, this test fails on the path where out == NULL but
+ * the internal allocation succeeds. */
 static void test_try_alloc_null_out(void)
 {
     setup();
@@ -440,17 +458,16 @@ static void test_is_empty_after_alloc(void)
 }
 
 /* MC/DC: closes the offset >= capacity TRUE outcome on a non-null arena.
- * test_init_state covers FALSE; this covers TRUE by exhausting the arena. */
+ * Uses drain_arena_to_zero() to reach exact exhaustion deterministically. */
 static void test_is_full_when_exhausted(void)
 {
-    u8    small[64];
+    u8    small[128];
     Arena a;
     arena_init(&a, small, sizeof(small));
 
-    /* Fill completely — keep allocating 1-byte chunks until exhausted */
-    while (arena_alloc(&a, 1) != NULL) { /* fill */ }
-    EXPECT(arena_is_full(&a));
+    drain_arena_to_zero(&a);
     EXPECT(arena_remaining(&a) == 0);
+    EXPECT(arena_is_full(&a));
 }
 
 /* ── bytes views ─────────────────────────────────────────────────────────── */
@@ -495,18 +512,14 @@ static void test_arena_free_bytes_when_full(void)
 }
 
 /* MC/DC: closes the offset >= capacity TRUE branch in arena_free_bytes
- * unconditionally. The existing test_arena_free_bytes_when_full has a
- * defensive `if (remaining == 0)` guard that may not trigger if
- * alignment padding leaves the arena not-quite-full. This version
- * forces full exhaustion and asserts unconditionally. */
+ * unconditionally. Uses drain_arena_to_zero() for deterministic exhaustion. */
 static void test_free_bytes_when_exhausted(void)
 {
-    u8    small[64];
+    u8    small[128];
     Arena a;
     arena_init(&a, small, sizeof(small));
 
-    /* Fill completely (same pattern as test_is_full_when_exhausted) */
-    while (arena_alloc(&a, 1) != NULL) { /* fill */ }
+    drain_arena_to_zero(&a);
     EXPECT(arena_remaining(&a) == 0);
 
     bytes_t f = arena_free_bytes(&a);
