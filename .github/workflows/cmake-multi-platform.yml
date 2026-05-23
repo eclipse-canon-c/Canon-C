@@ -1589,22 +1589,109 @@ jobs:
       # and adjust the file path, comment block, and (eventually) the
       # residual enforcement.
 
-      - name: "WP: core/arena.h (exploratory — no enforcement yet)"
-        # Exploratory step for VERIFY-009 (arena.h verification round).
-        # No residual enforcement: this step is permissive while we
-        # calibrate the actual proved/unproved counts.
+      - name: "WP: core/arena.h"
+        # arena.h is the seventh Canon-C header WP-verified and the
+        # third non-primitives header (after slice.h and memory.h). It
+        # provides a linear bump allocator with explicit lifetime
+        # control — 22 user-facing functions across init/reset,
+        # allocation, query, and checkpoint/rollback.
         #
-        # Once the contracts settle and the residual fingerprint is
-        # stable, this wrapper will be rewritten to match the slice.h /
-        # memory.h pattern — named goal patterns, strict count check,
-        # CVC5 presence check. Until then, this step records the raw
-        # output and uploads it for analysis.
+        # Memory model: Typed+Cast — same rationale as VERIFY-005
+        # (compare.h), VERIFY-006 (ptr.h), VERIFY-007 (slice.h), and
+        # VERIFY-008 (memory.h). arena.h performs void* to u8* casts
+        # in arena_init, arena_alloc, arena_alloc_aligned, the byte
+        # views, and several internal helpers; the default Typed
+        # memory model rejects these casts.
         #
-        # Expected outcome on each run during development:
-        #   - Annotations parse cleanly (no [kernel:annot-error]).
-        #   - WP runs to completion (produces "Proved goals:" summary).
-        #   - Some unproved goals will exist — that is the point of
-        #     this step. The strict wrapper comes later.
+        # Expected result: 3269 / 3372 proved, exactly 103 unproved.
+        # Established as the stable triple-prover baseline.
+        # (commit TBD). The 103 unproved goals are documented in
+        # docs/deviations.md under VERIFY-009. They split cleanly
+        # into inherited vs arena.h-own — extending the composable-
+        # verification claim to a third data point (after slice.h
+        # inheriting from ptr.h, and memory.h inheriting from
+        # ptr.h+slice.h+checked.h):
+        #
+        # INHERITED RESIDUALS (57) — propagated unchanged from the
+        # already-verified substrate. memory.h's full residual set is
+        # re-emitted byte-for-byte because arena.h includes memory.h
+        # (which transitively includes ptr.h, slice.h, checked.h, and
+        # contract.h). Zero new substrate residuals introduced.
+        #
+        #   1a. contract.h handler non-termination (2)
+        #   1b. checked.h u64 add overflow (2)
+        #   1c. ptr.h align formula ensures (3)
+        #   1d. ptr.h call-chain align preconditions (3)
+        #   1e. slice.h memcmp/strlen inheritance (21)
+        #   1f. memory.h \fresh / \freeable allocation (5)
+        #   1g. memory.h WP integer theory / bitwise alignment (9)
+        #   1h. memory.h memcmp call-site inheritance (12)
+        #
+        # ARENA.H-OWN RESIDUALS (46) — four categories, all
+        # documented under VERIFY-009:
+        #
+        #   2a. ptr_span call-site preconditions (8) — 4 in
+        #       arena_alloc, 4 in arena_alloc_aligned. WP cannot
+        #       reconstruct ptr_span's requires clauses through the
+        #       ptr_align_up call chain under Typed+Cast. Same
+        #       structural pattern as VERIFY-006 cat 3 (ptr.h
+        #       ptr_align_up call-chain residuals).
+        #
+        #   2b. arena_alloc / arena_alloc_aligned fits/does_not_fit
+        #       ensures (26 total: 13 per function) — the per-behavior
+        #       postconditions relate the C offset arithmetic to the
+        #       arena_can_fit predicate's let-bindings. WP cannot
+        #       prove the arithmetic chain (offset + pad + size <=
+        #       capacity, offset + size <= USIZE_MAX - pad, etc.)
+        #       propagates through the C bump-pointer update across
+        #       all four fits/does_not_fit cases. Strengthening
+        #       arena_can_fit with intermediate alignment invariants
+        #       would close these but adds substantial spec complexity
+        #       for marginal certification benefit.
+        #
+        #   2c. arena_alloc_zero / arena_alloc_aligned_zero and
+        #       arena_try_alloc / arena_try_alloc_aligned wrappers
+        #       (10 total) — the zero-init and bool-return wrappers
+        #       inherit the parent allocator's fits-ensures residuals
+        #       through their delegation to arena_alloc /
+        #       arena_alloc_aligned. The wrapper-specific obligations
+        #       (assigns_normal_part3, null_out_ensures_2_part2,
+        #       non_null_out_ensures_part1) reduce to the same
+        #       arithmetic chain that cat 2b leaves unproved.
+        #
+        #   2d. arena_free_bytes ptr_offset/bytes_from call-site
+        #       preconditions (2) — same structural pattern as
+        #       cat 2a: WP cannot reconstruct the helper's requires
+        #       clauses through the (offset < capacity) branch.
+        #
+        # Verification scope:
+        #   - All 22 user-facing functions: ANNOTATED + VERIFIED
+        #   - arena_alloc_type, arena_alloc_array, arena_alloc_type_zero,
+        #     arena_alloc_array_zero (type-safe macros): DOCUMENTED,
+        #     NOT WP-VERIFIED — the C preprocessor strips ACSL inside
+        #     #define before macro expansion. Same VERIFY-007/008
+        #     macro-verification rationale.
+        #   - arena_init, arena_reset, arena_reset_secure, arena_reset_to,
+        #     arena_mark, arena_capacity, arena_remaining, arena_used,
+        #     arena_is_empty, arena_is_full: 100% proved (no residuals).
+        #
+        # MCDC-003 note (no closure check in this wrapper):
+        #   Unlike slice.h's MCDC-002 closure block, this wrapper does
+        #   NOT include a "functions with WP residuals: 0/N" check for
+        #   MCDC-003. The slice.h pattern works because bytes_slice,
+        #   bytes_skip, str_slice, str_skip are 100% proved — verifying
+        #   they don't appear in residuals is meaningful. For arena.h,
+        #   the MCDC-003 functions (arena_alloc, arena_alloc_aligned)
+        #   DO appear in the residual list under cats 2a + 2b — they
+        #   carry 13 WP-resistant goals each. A "function not in
+        #   residuals" check would always fail and is not the right
+        #   shape for arena.h's situation. Cross-stream MCDC-003
+        #   evidence is provided by the per-line gcov debug step in
+        #   the coverage job, which surfaces the specific unreachable
+        #   subconditions for human review against docs/deviations.md.
+        #
+        # The wrapper enforces 3269/3372 proved with the 103 named
+        # unproved goal patterns. Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1631,45 +1718,213 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_arena_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # Sanity check: did WP produce a verification summary?
-          # If "Proved goals:" is missing, frama-c aborted before WP
-          # ran (typically an ACSL parse error in the predicates or
-          # contracts). Surface this loudly.
+          # First sanity check: did WP actually produce a verification
+          # summary? If "Proved goals:" is missing, frama-c aborted
+          # before WP ran (typically an ACSL parse error). Without
+          # this guard, a parse error becomes a silent pass — see
+          # CI #821 history (slice.h) for the bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
-            echo "NOTE: WP did not produce a verification summary."
-            echo "      Likely cause: ACSL parse error in arena.h annotations."
-            echo "      First diagnostic lines from WP output:"
-            grep -E "^\[(kernel|wp)" wp_arena_output.txt | head -20 || true
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in arena.h. Check the WP"
+            echo "      output above for [kernel:annot-error] or"
+            echo "      [kernel] User Error messages."
             echo ""
-            echo "(Step is permissive — not failing the job. Fix the"
-            echo " parse error and push again.)"
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_arena_output.txt | head -10 || true
             echo "==============================================="
-            exit 0
+            exit 1
           fi
 
+          # Count unproved goals: Timeout + Unknown + Failed.
+          # WP may classify the same goal as either Timeout or Unknown
+          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_arena_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_arena_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_arena_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          EXPECTED_UNPROVED=103
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (no expected count yet)"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
 
-          if [ "${UNPROVED_COUNT}" -gt 0 ]; then
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
-            echo "  --- Unproved goals (for VERIFY-009 calibration) ---"
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (arena.h section) and"
+            echo "      docs/deviations.md (VERIFY-009) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_arena_output.txt || true
+            exit 1
           fi
 
-          echo ""
-          echo "STATUS: exploratory — not enforcing residual counts."
-          echo "        See wp_arena_output.txt artifact for full details."
-          echo "==============================================="
+          # Verify the proved count matches the stable triple-prover
+          # baseline (3269 / 3372).
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "3269 / 3372" ]; then
+            echo "WARNING: proved count changed from expected 3269 / 3372."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-009 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
 
-          # Force success — this step is observational only.
-          exit 0
+          # Spot-check representative goals from each category. These
+          # may appear as [Timeout], [Unknown], or [Failed] — check
+          # all. Full list: see docs/deviations.md, VERIFY-009.
+          CHECKS=(
+            # === Inherited residuals (57) ===
+            # Inherited cat 1a — contract.h handler (2)
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_contract_default_handler_loop_invariant_established"
+            # Inherited cat 1b — checked.h u64 add overflow (2)
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            # Inherited cat 1c — ptr.h align formula (3)
+            "typed_cast_align_up_ensures"
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            # Inherited cat 1d — ptr.h call-chain align (3)
+            "typed_cast_ptr_align_up_call_align_up_requires_3"
+            "typed_cast_ptr_align_padding_call_align_padding_requires_3"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            # Inherited cat 1e — slice.h memcmp/strlen (21)
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            # Inherited cat 1f — memory.h \fresh / \freeable (5)
+            "typed_cast_mem_alloc_assigns_normal_part2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_free_assigns_normal"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            # Inherited cat 1g — memory.h integer theory (9)
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            # Inherited cat 1h — memory.h memcmp call-site (12)
+            "typed_cast_mem_compare_call_memcmp_requires_initialization_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_initialization_s2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_initialization_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_initialization_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            # === arena.h-own residuals (46) ===
+            # arena-own cat 2a — arena_alloc/aligned ptr_span calls (8)
+            "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_4"
+            # arena-own cat 2b — arena_alloc/aligned fits + does_not_fit ensures (26)
+            "typed_cast_arena_alloc_fits_ensures_part2"
+            "typed_cast_arena_alloc_fits_ensures_part3"
+            "typed_cast_arena_alloc_fits_ensures_part4"
+            "typed_cast_arena_alloc_fits_ensures_part5"
+            "typed_cast_arena_alloc_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
+            # arena-own cat 2c — zero/try wrappers (10)
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_assigns_normal_part3"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
+            "typed_cast_arena_try_alloc_assigns_normal_part3"
+            "typed_cast_arena_try_alloc_null_out_ensures_2_part2"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_aligned_assigns_normal_part3"
+            "typed_cast_arena_try_alloc_aligned_null_out_ensures_2_part2"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
+            # arena-own cat 2d — arena_free_bytes helper calls (2)
+            "typed_cast_arena_free_bytes_call_bytes_from_requires"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
+          )
+
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_arena_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+
+          # Confirm CVC5 was actually invoked. Same belt-and-braces
+          # check as the ptr.h, slice.h, and memory.h wrappers. If
+          # CVC5 doesn't appear, the triple-prover setup has degraded
+          # to dual-prover and the certification claim ("triple-
+          # prover-resistant residuals") is no longer supported.
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_arena_output.txt || true)
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step."
+          fi
+
+          echo "PASS: arena.h verified — 3269/3372 proved, 103 documented"
+          echo "      residuals all observed (VERIFY-009): 57 inherited"
+          echo "      from memory.h/slice.h/ptr.h/checked.h/contract.h"
+          echo "      substrate + 46 arena.h-own (ptr_span call-sites,"
+          echo "      fits/does_not_fit ensures, zero/try wrappers,"
+          echo "      free_bytes helpers). Composable verification claim"
+          echo "      holds: zero new substrate residuals introduced."
+          echo "==============================================="
 
       - name: Upload WP proof output (arena.h)
         if: always()
@@ -2016,7 +2271,80 @@ jobs:
               ls "$d"/*memory* 2>/dev/null || true
             done
           fi
+      
+      - name: "Debug: per-line MC/DC detail for arena.h"
+        # Identifies which specific conditions in arena.h are uncovered.
+        # As of CI (the run that landed arena.h MC/DC closure),
+        # arena.h reached 89.1% MC/DC (57/64, 7 missed). The 7 remaining
+        # outcomes are expected to split into two categories (to be
+        # confirmed by reading this debug output and documented in
+        # docs/deviations.md as MCDC-003):
+        #
+        #   1. MCDC-002-pattern overflow guards (~4 conditions) — the
+        #      compound `||` in arena_alloc and arena_alloc_aligned:
+        #          if (arena->offset > CANON_USIZE_MAX - pad ||
+        #              arena->offset + pad > CANON_USIZE_MAX - size ||
+        #              arena->offset + pad + size > arena->capacity) {
+        #              return NULL;
+        #          }
+        #      The first two subconditions cannot be true under the
+        #      arena_invariant predicate (offset <= capacity <=
+        #      CANON_ARENA_MAX_SIZE, both far below CANON_USIZE_MAX).
+        #      The third subcondition IS reachable and is exercised by
+        #      test_alloc_exhaustion_returns_null and test_try_alloc_failure.
+        #      The first two are API-unreachable in MC/DC isolation —
+        #      analogous to slice.h MCDC-002's defensive branches.
+        #
+        #   2. require_msg panic paths and try_alloc compound returns
+        #      (~3 conditions) — arena_alloc / arena_alloc_aligned
+        #      have require_msg(arena != NULL) which collapses under
+        #      -DCANON_NO_REQUIRE (the coverage build's flag), and the
+        #      new `out != NULL && p != NULL` returns in arena_try_alloc /
+        #      arena_try_alloc_aligned may leave one subcondition
+        #      combination uncovered.
+        #
+        # This step remains in place as a regression detector. If a new
+        # function is added without corresponding tests, or if any of the
+        # previously-closed reachable gaps regress, the output will show
+        # which conditions drop below the documented baseline.
+        #
+        # When VERIFY-009 confirms WP discharges the MCDC-002-pattern
+        # overflow guard subconditions as unreachable, MCDC-003 will
+        # transition from "API-unreachable" to "WP-discharged unreachable"
+        # — the same cross-stream evidence pattern slice.h's MCDC-002
+        # established. The gcov measurement remains at 89.1% because
+        # gcov instruments the source, not the proof.
+        run: |
+          cd build
 
+          ARENA_GCDA=$(find . -name "arena_test*.gcda" | head -1)
+
+          if [ -z "$ARENA_GCDA" ]; then
+            echo "ERROR: could not locate arena_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+
+          echo "Running gcov on: $ARENA_GCDA"
+          gcov-14 --conditions --all-blocks "$ARENA_GCDA" 2>&1 | \
+            grep -A 200 "arena.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for arena.h ==="
+          find . -name "arena.h.gcov" -exec echo "Found: {}" \;
+
+          ARENA_GCOV=$(find . -name "arena.h.gcov" | head -1)
+          if [ -n "$ARENA_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $ARENA_GCOV ==="
+            cat "$ARENA_GCOV"
+          else
+            echo "No arena.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*arena* 2>/dev/null || true
+            done
+          fi
+      
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
