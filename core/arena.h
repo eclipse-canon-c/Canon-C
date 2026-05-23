@@ -83,10 +83,10 @@ typedef usize ArenaMark;
 /* ============================================================================
    ACSL predicates for verification
 
-   Logic counterparts for any C helper used inside contracts. ACSL identifier
-   resolution is separate from C identifier resolution: a C function like
-   is_power_of_two() in ptr.h is NOT directly callable from /*@ ... */ blocks.
-   The logic predicate below mirrors its semantics and is what contracts use.
+   Note: ACSL identifier resolution is separate from C identifier resolution.
+   C functions in ptr.h (like is_power_of_two) cannot be called directly from
+   inside ACSL annotation blocks. The is_power_of_two_logic predicate below
+   mirrors the semantics of the C function and is what contracts use.
    ============================================================================ */
 
 /*@
