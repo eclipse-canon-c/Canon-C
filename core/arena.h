@@ -82,9 +82,17 @@ typedef usize ArenaMark;
 
 /* ============================================================================
    ACSL predicates for verification
+
+   Logic counterparts for any C helper used inside contracts. ACSL identifier
+   resolution is separate from C identifier resolution: a C function like
+   is_power_of_two() in ptr.h is NOT directly callable from /*@ ... */ blocks.
+   The logic predicate below mirrors its semantics and is what contracts use.
    ============================================================================ */
 
 /*@
+  predicate is_power_of_two_logic(integer n) =
+      n > 0 && (n & (n - 1)) == 0;
+
   predicate arena_invariant(Arena *a) =
       \valid(a) &&
       a->capacity > 0 &&
@@ -351,7 +359,7 @@ static inline void* arena_alloc(Arena* arena, usize size) {
 
 /*@
   requires arena_invariant(arena);
-  requires is_power_of_two(alignment);
+  requires is_power_of_two_logic(alignment);
   assigns *arena;
   behavior size_zero:
     assumes size == 0;
@@ -424,7 +432,7 @@ static inline void* arena_alloc_zero(Arena* arena, usize size) {
 
 /*@
   requires arena_invariant(arena);
-  requires is_power_of_two(alignment);
+  requires is_power_of_two_logic(alignment);
   assigns *arena;
   ensures arena_invariant(arena);
   ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
@@ -467,7 +475,7 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
 
 /*@
   requires arena_invariant(arena);
-  requires is_power_of_two(alignment);
+  requires is_power_of_two_logic(alignment);
   requires out == \null || \valid(out);
   assigns *arena;
   behavior null_out:
