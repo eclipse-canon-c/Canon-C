@@ -1570,25 +1570,6 @@ jobs:
       # exercises a representative call sequence. Until then, WP is the
       # complete formal verification story for header-only modules.
 
-      # -- Next headers to annotate (bottom-up within core/) --
-      # Note: -warn-unsigned-overflow is intentionally NOT used. C defines
-      # unsigned arithmetic as modular (wraparound is well-defined), and
-      # several Canon-C primitives (notably checked.h's fallback paths)
-      # rely on this. -wp-rte still proves absence of signed overflow,
-      # division by zero, invalid shifts, null derefs, and out-of-bounds
-      # access — all the actual runtime errors you want to rule out.
-      #
-      # Candidate order, easiest first (based on current MC/DC standing
-      # and structural complexity):
-      #   - core/region.h         (95.5% MC/DC, small surface)
-      #   - core/arena.h          (73.2% MC/DC, allocation invariants)
-      #   - core/pool.h           (73.5% MC/DC, similar to arena)
-      #   - semantics/borrow.h    (87.5% MC/DC, lifetime tracking)
-      #   - semantics/error.h     (100% MC/DC, trivial)
-      # When ready, copy the slice.h or memory.h step structure above
-      # and adjust the file path, comment block, and (eventually) the
-      # residual enforcement.
-
       - name: "WP: core/arena.h"
         # arena.h is the seventh Canon-C header WP-verified and the
         # third non-primitives header (after slice.h and memory.h). It
@@ -1603,7 +1584,7 @@ jobs:
         # views, and several internal helpers; the default Typed
         # memory model rejects these casts.
         #
-        # Expected result: 3269 / 3372 proved, exactly 103 unproved.
+        # Expected result: 3369 / 3472 proved, exactly 103 unproved.
         # Established as the stable triple-prover baseline.
         # (commit TBD). The 103 unproved goals are documented in
         # docs/deviations.md under VERIFY-009. They split cleanly
@@ -1655,8 +1636,8 @@ jobs:
         #       inherit the parent allocator's fits-ensures residuals
         #       through their delegation to arena_alloc /
         #       arena_alloc_aligned. The wrapper-specific obligations
-        #       (assigns_normal_part3, null_out_ensures_2_part2,
-        #       non_null_out_ensures_part1) reduce to the same
+        #       (assigns_normal_part03, non_null_out_ensures_part1,
+        #       non_null_out_ensures_part2) reduce to the same
         #       arithmetic chain that cat 2b leaves unproved.
         #
         #   2d. arena_free_bytes ptr_offset/bytes_from call-site
@@ -1690,7 +1671,7 @@ jobs:
         #   the coverage job, which surfaces the specific unreachable
         #   subconditions for human review against docs/deviations.md.
         #
-        # The wrapper enforces 3269/3372 proved with the 103 named
+        # The wrapper enforces 3369/3472 proved with the 103 named
         # unproved goal patterns. Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
@@ -1763,11 +1744,11 @@ jobs:
           fi
 
           # Verify the proved count matches the stable triple-prover
-          # baseline (3269 / 3372).
+          # baseline (3369 / 3472).
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "3269 / 3372" ]; then
-            echo "WARNING: proved count changed from expected 3269 / 3372."
+          if [ "${PROVED_COUNT}" != "3369 / 3472" ]; then
+            echo "WARNING: proved count changed from expected 3369 / 3472."
             echo "         This may indicate added or removed functions,"
             echo "         a new timeout, or a newly-proved goal."
             echo "         Review the output and update VERIFY-009 in"
@@ -1886,12 +1867,12 @@ jobs:
             "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
             "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
-            "typed_cast_arena_try_alloc_assigns_normal_part3"
-            "typed_cast_arena_try_alloc_null_out_ensures_2_part2"
+            "typed_cast_arena_try_alloc_assigns_normal_part03"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
-            "typed_cast_arena_try_alloc_aligned_assigns_normal_part3"
-            "typed_cast_arena_try_alloc_aligned_null_out_ensures_2_part2"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
             "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
             # arena-own cat 2d — arena_free_bytes helper calls (2)
             "typed_cast_arena_free_bytes_call_bytes_from_requires"
             "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
@@ -1917,7 +1898,7 @@ jobs:
             echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo "PASS: arena.h verified — 3269/3372 proved, 103 documented"
+          echo "PASS: arena.h verified — 3369/3472 proved, 103 documented"
           echo "      residuals all observed (VERIFY-009): 57 inherited"
           echo "      from memory.h/slice.h/ptr.h/checked.h/contract.h"
           echo "      substrate + 46 arena.h-own (ptr_span call-sites,"
