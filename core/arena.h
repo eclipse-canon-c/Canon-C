@@ -447,6 +447,18 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
 
 /* ============================================================================
    Try-alloc variants (bool return, output via pointer)
+
+   Contract/code alignment note:
+     The ACSL ensures clause states
+         \result <==> (out != \null && *out != \null);
+     This means \result must be FALSE when out == NULL, regardless of
+     whether the internal allocation succeeded. The return expression
+     `out != NULL && p != NULL` matches this contract exactly. Returning
+     just `p != NULL` would violate the contract when caller passes
+     NULL out and allocation succeeds (code says true, contract says
+     false). The current form is the correct one — see
+     test/core/arena_test.c::test_try_alloc_null_out for the test that
+     pins this behaviour.
    ============================================================================ */
 
 /*@
@@ -470,7 +482,7 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
     if (out) *out = p;
-    return p != NULL;
+    return out != NULL && p != NULL;
 }
 
 /*@
@@ -495,7 +507,7 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
 static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
     if (out) *out = p;
-    return p != NULL;
+    return out != NULL && p != NULL;
 }
 
 /* ============================================================================
