@@ -192,11 +192,11 @@ library generic interface.
 
 **Mitigation**: compare.h achieves 208/208 proved goals (100%) with
 `Typed+Cast`. The flag is applied only to compare.h, ptr.h (see
-VERIFY-006), slice.h (see VERIFY-007), and memory.h (see VERIFY-008)
-— checked.h and bits.h use the default `Typed` model. The difference
-is documented in the CI YAML and in this deviations record. All 28
-comparators have 100% MC/DC coverage (8/8 condition outcomes) and
-pass fuzzing.
+VERIFY-006), slice.h (see VERIFY-007), memory.h (see VERIFY-008), and
+arena.h (see VERIFY-009) — checked.h and bits.h use the default `Typed`
+model. The difference is documented in the CI YAML and in this
+deviations record. All 28 comparators have 100% MC/DC coverage (8/8
+condition outcomes) and pass fuzzing.
 
 ---
 
@@ -272,6 +272,23 @@ c3df659 — none of the 214 inherited obligations entered the unproved
 list. The CI wrapper emits a `WARNING: proved count changed from
 expected 1729 / 1739` when the rebaseline first appeared and PASSes
 because all 10 expected named ptr.h goals are still present.
+
+**Forward-implication note on the empty `nonnull` behaviors**: ptr.h's
+`ptr_align_up`, `ptr_align_down`, `ptr_offset`, `ptr_offset_const`, and
+`ptr_retreat` declare `behavior nonnull: assumes p != \null;` with no
+`ensures` clause. The empty body is deliberate — adding postconditions
+like `\result != \null` or `\base_addr(\result) == \base_addr(p)` would
+itself require WP to discharge the uintptr_t round-trip (the same
+category 3 limitation above) on ptr.h's own bodies, which would
+introduce new ptr.h residuals rather than close existing ones.
+Downstream callers (arena.h in VERIFY-009 categories 2a and 2d, and
+memory.h's mem_align variants in VERIFY-008 category 2b) cannot
+reconstruct ptr_span's / bytes_from's call-site preconditions through
+this empty behavior, producing call-chain residuals at their own
+boundaries. The decision to leave the behavior empty is a deliberate
+trade — keep ptr.h's residual list at 10 named goals, accept that
+downstream headers inherit the cascade — and is recorded as forward
+context for any future attempt to strengthen ptr.h's contracts.
 
 ---
 
@@ -712,21 +729,408 @@ propagate without amplification — is now empirically supported
 by two data points: ptr.h → slice.h (where slice.h inherited
 ptr.h's 2 contract-handler residuals unchanged) and ptr.h/checked.h/
 slice.h → memory.h (where memory.h inherited 31 substrate residuals
-unchanged across two proof rounds). Future verification rounds
-(arena.h, pool.h, region.h) will provide additional data points for
-this claim.
+unchanged across two proof rounds). The arena.h verification (see
+VERIFY-009, shipped at CI #962) provides the third data point:
+arena.h inherits memory.h's full 57-goal residual surface
+byte-identically (zero new substrate residuals introduced), confirming
+that the propagation-without-amplification property extends through
+one more composition layer.
 
 ### Cross-references
 
 - Inherited residuals: VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
   VERIFY-007 (slice.h).
 - Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
+- Downstream confirmation: VERIFY-009 (arena.h inherits all 57
+  memory.h residuals unchanged).
 - Composable verification thesis: see README, "Composable
   verification" section.
 - Per-goal CI artifact: `wp-proof-memory` (full WP output, including
   goal-by-goal classification and Qed-and-prover timing).
 - Wrapper enforcement: `.github/workflows/cmake-multi-platform.yml`,
   step "WP: core/memory.h".
+
+---
+
+## VERIFY-009: WP Limitations Inherited from Substrate Plus ptr_span/Arithmetic-Chain Residuals (arena.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-009 |
+| **Date**       | 2026-05-24 |
+| **Baseline commit** | f53bddb (Canon-C CI #962) |
+| **Scope**      | arena.h — 103 goals across 8 categories (4 own + 4 inherited groups) |
+| **Category**   | Formal verification completeness |
+
+**Description**: 103 of 3472 proof obligations (2.97%) are not
+discharged by any prover in the triple-prover configuration (Alt-Ergo
+2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a 120-second timeout and
+`-wp-model Typed+Cast`. All 103 are triple-prover-resistant. The goals
+split cleanly into two top-level groups: **57 inherited from
+already-verified substrate headers** (re-emerging because arena.h
+includes memory.h, which transitively pulls in ptr.h, slice.h,
+checked.h, and contract.h) and **46 arena.h-own** residuals in four
+categories.
+
+arena.h extends the composable-verification thesis to a third data
+point. memory.h established it (31 inherited + 26 own); arena.h
+re-confirms it (57 inherited + 46 own). The full 57-goal residual
+surface from VERIFY-008 re-emerges byte-identically in the arena.h
+proof run — zero new substrate residuals are introduced at the arena.h
+boundary. Every inherited residual matches an already-documented goal
+by name; the wrapper enforces this with per-goal pattern checks.
+
+### Inherited residuals (57)
+
+These goals are not arena.h defects. They re-emerge in the arena.h
+proof run because arena.h includes memory.h, which transitively
+includes ptr.h, slice.h, checked.h, and contract.h. WP re-emits the
+relevant obligations at the new call sites. The full memory.h residual
+set (VERIFY-008's 31 inherited + 26 own = 57 total) is re-emitted as
+arena.h's inherited surface — arena.h, the first header to include
+memory.h transitively in WP scope, demonstrates that memory.h's
+residuals propagate as a unit just as the headers below it do.
+
+| # | Source            | Goals | Notes                                                            |
+|---|-------------------|-------|-------------------------------------------------------------------|
+| 1 | VERIFY-002        | 2     | checked.h u64 add overflow — via mem_alloc_array_checked          |
+| 2 | VERIFY-006 cat 2  | 3     | ptr.h align_up/down/padding integer theory                        |
+| 3 | VERIFY-006 cat 3  | 3     | ptr.h ptr_align_* call-chain                                      |
+| 4 | VERIFY-006 cat 4  | 2     | contract.h handler non-termination                                |
+| 5 | VERIFY-007 cat 1  | 20    | slice.h memcmp call-site preconditions (bytes/str equality, etc.) |
+| 6 | VERIFY-007 cat 2  | 1     | slice.h str_from_cstr strlen valid_string                         |
+| 7 | VERIFY-008 cat 1  | 5     | memory.h \fresh / \freeable (mem_alloc, mem_free, array_checked)  |
+| 8 | VERIFY-008 cat 2  | 9     | memory.h integer theory (mem_align, mem_is_aligned, etc.)         |
+| 9 | VERIFY-008 cat 3  | 12    | memory.h memcmp call-site (mem_compare, mem_equal, equal_bytes)   |
+
+**Inherited subtotal: 57 goals.** Byte-identical to memory.h's full
+residual list. The composable-verification claim, now empirically
+supported at three composition layers (ptr.h → slice.h with 2
+inherited; ptr.h/checked.h/slice.h → memory.h with 31 inherited;
+memory.h+substrate → arena.h with 57 inherited), is that substrate
+residuals propagate without amplification: a downstream header's
+inherited count equals the upstream's total, not greater.
+
+### arena.h-own residuals (46)
+
+Four categories. Cats 2a and 2d are call-chain residuals at ptr.h
+boundary functions whose `nonnull` behavior carries no `ensures` clause
+(see VERIFY-006 forward-implication note). Cat 2b is the
+arithmetic-chain residual at arena_alloc / arena_alloc_aligned. Cat 2c
+inherits from cat 2b through wrapper delegation.
+
+#### Category 2a: ptr_span call-site preconditions in arena_alloc / arena_alloc_aligned (8)
+
+| # | Goal                                                      |
+|---|------------------------------------------------------------|
+| 1 | `typed_cast_arena_alloc_call_ptr_span_requires`            |
+| 2 | `typed_cast_arena_alloc_call_ptr_span_requires_2`          |
+| 3 | `typed_cast_arena_alloc_call_ptr_span_requires_3`          |
+| 4 | `typed_cast_arena_alloc_call_ptr_span_requires_4`          |
+| 5 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires`    |
+| 6 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_2`  |
+| 7 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_3`  |
+| 8 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_4`  |
+
+**Functions affected**: `arena_alloc`, `arena_alloc_aligned`.
+
+**Root cause**: arena_alloc's body computes the alignment pad through
+three ptr.h calls:
+
+```c
+current     = ptr_offset(arena->buffer, arena->offset);
+aligned_ptr = ptr_align_up(current, CANON_DEFAULT_ALIGN);
+pad         = ptr_span(aligned_ptr, current);
+```
+
+ptr_span's four `requires` clauses are: `\valid_read((char*)to)`,
+`\valid_read((char*)from)`, `\base_addr((char*)to) ==
+\base_addr((char*)from)`, and `(char*)to >= (char*)from`. WP has to
+discharge each at the call site by tracing back through
+`ptr_align_up`'s and `ptr_offset`'s postconditions. Both of those
+functions declare `behavior nonnull: assumes p != \null;` with no
+`ensures` clause (see VERIFY-006 forward-implication note) — by
+design, because adding postconditions like `\base_addr(\result) ==
+\base_addr(p)` would require WP to discharge the uintptr_t round-trip
+in ptr.h's own bodies, which is the VERIFY-006 cat 3 limitation. The
+empty behavior leaves WP without the substrate facts it would need to
+reconstruct ptr_span's preconditions in arena.h.
+
+Strengthening arena.h's contracts cannot close these residuals; the
+facts needed are at ptr.h's boundary, not arena.h's. Strengthening
+ptr.h would shift residuals from arena.h's 8 to ptr.h's
+own — same total cost, different attribution — and would do nothing
+for the underlying uintptr_t-round-trip limitation. This is the same
+trade documented in VERIFY-006's forward-implication note.
+
+**Manual proof argument**: arena_invariant entails
+`\valid(arena->buffer + (0 .. arena->capacity - 1))`. Under the
+overflow guard `offset + pad + size > capacity → return NULL`, the
+arena_alloc bodies reach ptr_span with `current = buffer + offset`
+and `aligned_ptr = buffer + offset + pad` (post-alignment), both
+within the buffer's valid range and same-base-address as the buffer.
+The C semantics match ptr_span's preconditions exactly; the proof
+obstacle is WP's inability to track this through the uintptr_t casts
+in ptr_align_up's body. Same root cause as VERIFY-006 cat 3.
+
+#### Category 2b: arena_alloc / arena_alloc_aligned fits / does_not_fit ensures (26)
+
+| #  | Goal                                                                     |
+|----|--------------------------------------------------------------------------|
+| 1  | `typed_cast_arena_alloc_fits_ensures_part2`                              |
+| 2  | `typed_cast_arena_alloc_fits_ensures_part3`                              |
+| 3  | `typed_cast_arena_alloc_fits_ensures_part4`                              |
+| 4  | `typed_cast_arena_alloc_fits_ensures_part5`                              |
+| 5  | `typed_cast_arena_alloc_fits_ensures_2_part2`                            |
+| 6  | `typed_cast_arena_alloc_fits_ensures_2_part3`                            |
+| 7  | `typed_cast_arena_alloc_fits_ensures_2_part4`                            |
+| 8  | `typed_cast_arena_alloc_fits_ensures_2_part5`                            |
+| 9  | `typed_cast_arena_alloc_fits_ensures_3_part2`                            |
+| 10 | `typed_cast_arena_alloc_fits_ensures_3_part3`                            |
+| 11 | `typed_cast_arena_alloc_fits_ensures_3_part4`                            |
+| 12 | `typed_cast_arena_alloc_does_not_fit_ensures_part5`                      |
+| 13 | `typed_cast_arena_alloc_does_not_fit_ensures_2_part5`                    |
+| 14 | `typed_cast_arena_alloc_aligned_fits_ensures_part2`                      |
+| 15 | `typed_cast_arena_alloc_aligned_fits_ensures_part3`                      |
+| 16 | `typed_cast_arena_alloc_aligned_fits_ensures_part4`                      |
+| 17 | `typed_cast_arena_alloc_aligned_fits_ensures_part5`                      |
+| 18 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part2`                    |
+| 19 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part3`                    |
+| 20 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part4`                    |
+| 21 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part5`                    |
+| 22 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part2`                    |
+| 23 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part3`                    |
+| 24 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part4`                    |
+| 25 | `typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5`              |
+| 26 | `typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5`            |
+
+**Functions affected**: `arena_alloc`, `arena_alloc_aligned`. 13 per
+function: 4 × `fits_ensures_part{2,3,4,5}` + 4 ×
+`fits_ensures_2_part{2,3,4,5}` + 3 × `fits_ensures_3_part{2,3,4}` +
+1 × `does_not_fit_ensures_part5` + 1 ×
+`does_not_fit_ensures_2_part5`.
+
+**Root cause**: The behavioral contracts on arena_alloc and
+arena_alloc_aligned use the `arena_can_fit` predicate, which is
+defined with let-bindings:
+
+```c
+predicate arena_can_fit{L}(Arena *a, integer size, integer alignment) =
+    \let cur = a->offset;
+    \let pad = (alignment - (cur % alignment)) % alignment;
+    cur <= CANON_USIZE_MAX - pad &&
+    cur + pad <= CANON_USIZE_MAX - size &&
+    cur + pad + size <= a->capacity;
+```
+
+The `fits` behavior's ensures clauses (`\result != \null`,
+`\valid((u8*)\result + (0 .. size - 1))`, `arena->offset >=
+\old(arena->offset) + size`, `arena_invariant(arena)`) relate the
+post-state offset to the predicate's `\let pad = ...` expression. The
+C body computes pad via `pad = ptr_span(aligned_ptr, current)` where
+`aligned_ptr = ptr_align_up(current, alignment)`.
+
+To discharge the ensures clauses, WP must prove that the C pad
+(computed through ptr_align_up's uintptr_t round-trip) equals the
+ACSL pad (computed through the modular-arithmetic expression
+`(alignment - (cur % alignment)) % alignment`). This is the same
+bitwise-to-modular bridge documented in VERIFY-006 cat 2 (align_up's
+ensures clause), applied across two levels of composition (the
+predicate's let-binding plus arena.h's call-site bump-pointer update).
+
+The `does_not_fit` behavior's two `part5` residuals are the symmetric
+case: when `!arena_can_fit(...)`, the contract states `\result ==
+\null` and `arena->offset == \old(arena->offset)`. WP cannot discharge
+these because it cannot establish that the C compound-or guard
+`offset > USIZE_MAX - pad || offset + pad > USIZE_MAX - size || offset
++ pad + size > capacity` is equivalent to the negation of
+`arena_can_fit`. The equivalence holds mathematically but requires the
+same pad-equality WP cannot prove for the `fits` direction.
+
+This is the deepest residual class in arena.h. The category exists
+because Canon-C made a deliberate spec choice: keep the
+`arena_can_fit` predicate readable in the natural mathematical form
+(let-bindings + modular arithmetic) rather than rewriting it as a
+sequence of axioms that match ptr_align_up's bitwise body. The
+readable form preserves auditability for human reviewers; the proof
+cost is the 26 residuals.
+
+**Manual proof argument**: arena_invariant entails `offset <= capacity
+<= CANON_ARENA_MAX_SIZE`. When `arena_can_fit(arena, size, alignment)`
+holds, the predicate's let-bindings establish `cur + pad + size <=
+capacity`, so the C compound guard returns false and the function
+proceeds to update offset by `pad + size`. The new offset equals
+`cur + pad + size`, which is `\old(arena->offset) + pad + size >=
+\old(arena->offset) + size` (since `pad >= 0`) — exactly the
+`offset >= \old(arena->offset) + size` postcondition. arena_invariant
+is preserved because the new offset is bounded by capacity (from the
+guard) and capacity is unchanged. The pointer returned, `buffer +
+\old(offset) + pad`, is valid for `size` bytes because the validity
+range extends through `capacity - 1`. Each step is direct; the
+obstacle is WP's inability to prove the C pad equals the ACSL pad
+under Typed+Cast.
+
+#### Category 2c: zero / try wrappers (10)
+
+| #  | Goal                                                            |
+|----|------------------------------------------------------------------|
+| 1  | `typed_cast_arena_alloc_zero_ensures_3_part1`                   |
+| 2  | `typed_cast_arena_alloc_zero_assigns_normal_part3`              |
+| 3  | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1`           |
+| 4  | `typed_cast_arena_alloc_aligned_zero_assigns_normal_part3`      |
+| 5  | `typed_cast_arena_try_alloc_assigns_normal_part03`              |
+| 6  | `typed_cast_arena_try_alloc_non_null_out_ensures_part1`         |
+| 7  | `typed_cast_arena_try_alloc_non_null_out_ensures_part2`         |
+| 8  | `typed_cast_arena_try_alloc_aligned_assigns_normal_part03`      |
+| 9  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1` |
+| 10 | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2` |
+
+**Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
+`arena_try_alloc`, `arena_try_alloc_aligned`.
+
+**Root cause**: These wrappers delegate to arena_alloc /
+arena_alloc_aligned. The wrapper-specific obligations chain through
+the parent allocator's contract:
+
+- `arena_alloc_zero`'s `ensures_3_part1` is the
+  `\result != \null ==> \forall i; ... ((u8*)\result)[i] == 0`
+  postcondition. WP can discharge that mem_zero writes zeros, but
+  it cannot establish that the pointer returned from arena_alloc
+  satisfies `\valid((u8*)p + (0 .. size - 1))` because that fact is
+  itself one of cat 2b's unproved ensures.
+- `_assigns_normal_part3` residuals state the wrapper modifies the
+  same regions as the parent allocator. WP cannot fully discharge
+  the assigns clause because the parent's assigns clause is itself
+  partially unproved (cat 2b through-effect).
+- `arena_try_alloc`'s `non_null_out_ensures_part1` / `part2` cover
+  the contract `*out == \null || \valid((u8*)*out + (0 .. size - 1))`
+  and `\result <==> (*out != \null)`. Both chain through arena_alloc's
+  result, hitting cat 2b's pad-equality residuals.
+
+All 10 are inheritance from cat 2b through wrapper delegation. If
+cat 2b closes (via a different `arena_can_fit` formulation or a
+stronger ptr_align_up postcondition), cat 2c closes with it.
+
+**Manual proof argument**: Each wrapper's body is a 2–3 line
+delegation to the parent allocator. The manual arguments are
+mechanical: assume the parent's postconditions hold (per cat 2b's
+manual argument), apply mem_zero's verified postcondition or the
+boolean compound return's verified shape, conclude.
+
+#### Category 2d: arena_free_bytes ptr_offset / bytes_from call-site preconditions (2)
+
+| # | Goal                                                       |
+|---|-------------------------------------------------------------|
+| 1 | `typed_cast_arena_free_bytes_call_bytes_from_requires`      |
+| 2 | `typed_cast_arena_free_bytes_call_bytes_from_requires_2`    |
+
+**Functions affected**: `arena_free_bytes`.
+
+**Root cause**: arena_free_bytes returns either `bytes_empty()` (when
+offset >= capacity) or
+`bytes_from(ptr_offset(buffer, offset), capacity - offset)`. WP must
+discharge bytes_from's two `requires` clauses (likely validity and
+length-bound) at the call site. The pointer argument flows through
+ptr_offset, which carries the same empty `nonnull` behavior as
+ptr_align_up. Same root cause as cat 2a: ptr.h's deliberate empty
+postcondition shape leaves WP without the substrate facts it would
+need to reconstruct bytes_from's preconditions.
+
+**Manual proof argument**: arena_invariant gives `\valid(buffer + (0
+.. capacity - 1))`. The if-guard `offset >= capacity → return
+bytes_empty()` means the bytes_from call is reached only when `offset
+< capacity`, so `buffer + offset` is in the valid range and
+`capacity - offset > 0`. The validity and length bounds bytes_from
+requires are direct consequences; the obstacle is the uintptr_t
+round-trip through ptr_offset, identical to cat 2a's situation.
+
+### Summary of arena.h-own residuals
+
+| Category | Goals | Functions affected                                            | WP feature gap                              |
+|----------|-------|---------------------------------------------------------------|---------------------------------------------|
+| 2a       | 8     | arena_alloc, arena_alloc_aligned                              | ptr.h empty nonnull behavior (VERIFY-006)   |
+| 2b       | 26    | arena_alloc, arena_alloc_aligned                              | arithmetic chain through ptr_align_up       |
+| 2c       | 10    | arena_alloc_zero, arena_alloc_aligned_zero, arena_try_alloc{,_aligned} | Wrapper delegation through cat 2b          |
+| 2d       | 2     | arena_free_bytes                                              | ptr.h empty nonnull behavior (VERIFY-006)   |
+| **Total**| **46**|                                                               |                                             |
+
+Cats 2a, 2c, and 2d are downstream consequences of VERIFY-006's
+forward-implication note: ptr.h's `nonnull` behaviors carry no
+`ensures` clause because strengthening them would itself require
+WP to discharge the uintptr_t round-trip. arena.h is the first
+header to inherit the cascade through three call layers (arena.h →
+ptr.h → uintptr_t). Cat 2b is arena.h's own arithmetic-chain
+residual at the bump-pointer update; it could be reduced with
+spec-strengthening (alternative `arena_can_fit` formulations using
+function-call form, intermediate assertions in the function bodies)
+but the spec-complexity cost was deliberately not taken — the
+predicate's readable form was preserved.
+
+### Mitigation
+
+CI enforces exactly 103 unproved goals with the named goal patterns
+covering all 57 inherited and all 46 arena.h-own residuals. Any
+additional unproved goal or missing expected goal is a regression
+and fails the build. The exact-count enforcement with named patterns
+catches both count regressions (new residual class introduced) and
+rename regressions (a contract weakened in a way that produces a new
+residual under a different name).
+
+arena.h achieves 100% line coverage (97/97) and 90.6% MC/DC coverage
+(58/64) — the latter is the achievable ceiling under MCDC-003's
+structural unreachability and the gcov-14 release-build macro artifact
+(see MCDC-003). 22 of 22 user-facing functions are annotated and
+verified; 10 of them are 100% proved (no residuals at all):
+arena_init, arena_reset, arena_reset_secure, arena_reset_to, arena_mark,
+arena_capacity, arena_remaining, arena_used, arena_is_empty,
+arena_is_full. The remaining 12 functions carry the 46 own residuals
+analyzed above.
+
+Allocation behavior is tested by 46 unit tests in
+`test/core/arena_test.c` covering init/reset, alloc/alloc_aligned,
+zero variants, try variants (including the test_try_alloc_aligned_failure
+that closed MCDC-003's line 510 gap at CI #962), mark/reset_to,
+nested marks, byte views (including exhausted-arena cases), typed
+macros, debug stats under CANON_ARENA_DEBUG, and lifetime tracking
+under CANON_LIFETIME_DEBUG. Fuzzing exercises arena_alloc /
+arena_alloc_aligned / arena_alloc_zero / mark/reset_to / reset_secure
+through the CANON_FUZZING build in the same file. ASan + UBSan
+across all 16 CI configs verify absence of out-of-bounds writes,
+uninitialized reads, and lifetime violations. The substrate runtime
+substrate (OWN-001) tracks lifetime token validity for borrows
+captured from the arena.
+
+The composable-verification claim is confirmed at three composition
+layers: ptr.h → slice.h (slice.h inherited 2 of ptr.h's residuals
+unchanged); ptr.h/checked.h/slice.h → memory.h (memory.h inherited
+31 substrate residuals); memory.h+substrate → arena.h (arena.h
+inherited memory.h's full 57-goal residual list byte-identically).
+Each downstream header's inherited count equals the upstream total,
+not greater. arena.h is the first header to demonstrate
+propagation-through-two-composition-layers — memory.h's own 26
+residuals re-emerge as part of arena.h's inherited 57, along with
+memory.h's own 31 inherited (= memory.h's full residual surface).
+The thesis is empirically supported at the layer-count that v1.3.0's
+core/ stack reaches.
+
+### Cross-references
+
+- Inherited residuals: VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
+  VERIFY-007 (slice.h), VERIFY-008 (memory.h).
+- ptr.h forward-implication note: VERIFY-006 (the deliberate empty
+  `nonnull` behaviors that produce arena.h's cats 2a and 2d).
+- MC/DC coverage closure: MCDC-003 (arena.h MC/DC at 90.6% with 6
+  structurally unreachable / macro-artifact outcomes).
+- Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag, applied
+  consistently to arena.h's coverage build).
+- Substrate runtime tracking: OWN-001 (lifetime substrate covering
+  arena), OWN-002 (Arena/Pool per-TU counter migration).
+- Composable verification thesis: see README, "Composable
+  verification" section.
+- Per-goal CI artifact: `wp-proof-arena` (full WP output, including
+  goal-by-goal classification and Qed-and-prover timing).
+- Wrapper enforcement: `.github/workflows/ci.yml`, step
+  "WP: core/arena.h".
 
 ---
 
@@ -861,12 +1265,15 @@ library's robustness.
 
 **Pattern note**: The same pattern (public `{ptr, len}` types with
 `_empty()` constructors producing `{NULL, 0}`) recurs in other
-Canon-C headers in the 70-80% MC/DC range — `arena.h` (73.2%),
+Canon-C headers in the 70-80% MC/DC range — `arena.h` (90.6%),
 `pool.h` (73.5%), `stringbuf.h` (74.2%), and others. Each will need
 its own per-line audit (per the procedure validated here) before
 opening analogous deviations. Numbers will differ — slice.h's
 4-of-58 ratio (6.9% unreachable defensive) is not directly
-transferable.
+transferable. arena.h's analogous audit has shipped as MCDC-003,
+covering 4 structurally-unreachable overflow-guard subconditions and
+2 release-build macro artifacts; arena.h's 90.6% reflects a different
+unreachability pattern than slice.h's `!ptr` defensive branches.
 
 memory.h does NOT add to the MCDC-002 list. Its bytes_t/cbytes_t
 variants (`mem_copy_bytes`, `mem_move_bytes`, `mem_zero_bytes`,
@@ -939,11 +1346,222 @@ analogous type invariants. Until then, those headers' MC/DC ceilings
 remain "API-unreachable" — the WP-discharged upgrade is per-header
 and follows annotation, not preceding it.
 
+arena.h's annotation has shipped (VERIFY-009). Its MC/DC analysis
+(MCDC-003) found a *different* unreachability pattern than slice.h's:
+arena.h's structurally-unreachable outcomes are not `!ptr` defensive
+branches but overflow-guard subconditions that arena_invariant
+(combined with `CANON_ARENA_MAX_SIZE = CANON_GB`) renders provably
+unreachable. The cross-stream evidence pattern is the same (gcov
+measures source, WP discharges via invariant) but the source-level
+shape differs. The forward implication for pool.h and stringbuf.h
+holds: when their annotation lands, each will need its own per-header
+MCDC-NNN entry documenting whatever unreachability shape their
+invariants produce.
+
 **Verification status (cross-reference)**:
 - Public-API reachable branches: covered (54/54)
 - API-unreachable defensive branches: documented (4/4)
 - Total proved or documented: 58/58 (100%)
 - WP-discharged unreachable: 4/4 (since 2026-05-02)
+
+---
+
+## MCDC-003: Structurally Unreachable Overflow Guards and Macro Artifacts (arena.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-003 |
+| **Date**       | 2026-05-24 |
+| **Baseline commit** | f53bddb (Canon-C CI #962) |
+| **Scope**      | arena.h — 6 of 64 condition outcomes (4 unreachable + 2 macro artifact) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 6 of 64 condition outcomes in `core/arena.h` are not
+exercisable by tests. The gap splits cleanly into two categories with
+distinct dispositions:
+
+| # | Function            | Line | Subcondition not covered | Category |
+|---|---------------------|------|--------------------------|----------|
+| 1 | `arena_alloc`         | 346  | cond 0 true (`offset > CANON_USIZE_MAX - pad`)              | Unreachable under arena_invariant |
+| 2 | `arena_alloc`         | 346  | cond 1 true (`offset + pad > CANON_USIZE_MAX - size`)       | Mathematically impossible in MC/DC isolation |
+| 3 | `arena_alloc_aligned` | 401  | cond 0 true (`offset > CANON_USIZE_MAX - pad`)              | Unreachable under arena_invariant |
+| 4 | `arena_alloc_aligned` | 401  | cond 1 true (`offset + pad > CANON_USIZE_MAX - size`)       | Mathematically impossible in MC/DC isolation |
+| 5 | `arena_alloc`         | 356  | cond 0 false (`_arena_debug_update(arena)`)                 | Release-build macro no-op artifact |
+| 6 | `arena_alloc_aligned` | 411  | cond 0 false (`_arena_debug_update(arena)`)                 | Release-build macro no-op artifact |
+
+arena.h's gcov-measured MC/DC is 58/64 = 90.6%. The closure of the
+previously-missing `arena_try_alloc_aligned` line 510 outcome
+(`p != NULL` false branch) shipped at CI #962 via the new
+`test_try_alloc_aligned_failure` test; without that closure the
+baseline would have been 57/64 = 89.1%.
+
+### Category 1: Overflow guard structural unreachability (4 outcomes)
+
+`arena_alloc` and `arena_alloc_aligned` share the same compound-or
+overflow guard:
+
+```c
+if (arena->offset > CANON_USIZE_MAX - pad ||           // cond 0
+    arena->offset + pad > CANON_USIZE_MAX - size ||    // cond 1
+    arena->offset + pad + size > arena->capacity) {    // cond 2
+    return NULL;
+}
+```
+
+gcov reports cond 0 and cond 1 as `not covered (true)` in both
+functions — four outcomes total. Both subconditions are structurally
+unreachable under the `arena_invariant` predicate combined with the
+`CANON_ARENA_MAX_SIZE` constant from `core/primitives/limits.h`.
+
+**Cond 0 unreachability**: `arena_invariant` requires `capacity <=
+CANON_ARENA_MAX_SIZE`. `core/primitives/limits.h` defines
+`CANON_ARENA_MAX_SIZE = CANON_GB = (usize)1024 * (usize)1024 *
+(usize)1024 = 2^30`. The alignment pad is bounded by
+`CANON_DEFAULT_ALIGN - 1`, which is at most 15 (since
+`CANON_DEFAULT_ALIGN = 16` under the Frama-C C99 fallback, or
+`_Alignof(max_align_t)` which is 16 on every supported platform).
+Therefore `offset + pad <= 2^30 + 15`, which is far below
+`CANON_USIZE_MAX` (`SIZE_MAX = 2^32 - 1` on 32-bit, `2^64 - 1` on
+64-bit). Cond 0 (`offset > CANON_USIZE_MAX - pad`, equivalent to
+`offset + pad > CANON_USIZE_MAX`) cannot fire.
+
+**Cond 1 unreachability**: MC/DC requires each subcondition to flip
+the compound outcome independently. For cond 1 to flip the outcome
+to true, cond 0 must be false and cond 2 must be false. cond 2 false
+means `offset + pad + size <= capacity`. Since `capacity` is a `usize`
+(by C type), `capacity <= CANON_USIZE_MAX`. So `offset + pad + size <=
+CANON_USIZE_MAX`. But cond 1 true requires `offset + pad + size >
+CANON_USIZE_MAX`. Contradiction. Cond 1 cannot fire while cond 2 is
+false, regardless of `CANON_ARENA_MAX_SIZE`. This is a purely
+mathematical unreachability — independent of any project constant.
+
+### Category 2: Release-build macro no-op artifacts (2 outcomes)
+
+Lines 356 and 411 each show `condition 0 not covered (false)` on
+calls to `_arena_debug_update(arena)`. The macro is defined on line
+176:
+
+```c
+#define _arena_debug_update(a) ((void)0)
+```
+
+Under release builds (no `CANON_ARENA_DEBUG`, as in the coverage
+build's compile flags), the macro expands to a no-op. gcov-14 still
+registers a structural "condition" at the macro-expansion site and
+counts it as uncovered. This is not a real condition — there is no
+branch at runtime. The same pattern appears in every test row of the
+project under `contract.h 0/2` (the disabled `require_msg` site under
+`-DCANON_NO_REQUIRE`); it is the gcov-14 instrumentation behavior
+documented in MCDC-001.
+
+These 2 outcomes are not coverage gaps. No test could close them
+without re-enabling `CANON_ARENA_DEBUG` in the coverage build, which
+would change the code under measurement.
+
+### Rationale
+
+Category 1 is structural unreachability under the type invariant.
+arena_invariant is preserved by every public function in arena.h (WP
+verifies this in VERIFY-009; the cat 2b residuals are about the
+arithmetic ensures clauses, not the invariant itself — arena_invariant
+is in fact discharged for every alloc path). Combined with
+`CANON_ARENA_MAX_SIZE = CANON_GB`, the predicate guarantees that
+`offset + pad` cannot exceed `CANON_USIZE_MAX - size` for any callable
+`size`, making the overflow guard's first two subconditions
+defense-in-depth code that the type discipline already prevents.
+
+The overflow guard is preserved deliberately. Removing it to satisfy
+MC/DC would (a) eliminate documentation of the contract's safety
+boundary at the source-code site where readers most need to see it,
+and (b) couple the implementation to `CANON_ARENA_MAX_SIZE`'s current
+value in a way that would silently break if the constant were ever
+raised. The guard is correct under the current invariant, correct
+under any reasonable extension of the invariant, and zero-cost on
+release builds (the compiler optimizes the always-false subconditions
+out). The 4 uncovered outcomes are the gcov-measurement cost of
+keeping it.
+
+Category 2 is gcov-14 instrumentation behavior on no-op macro
+expansion, not a code property at all. It cannot be closed by tests;
+it can only be closed by changing the build flags, which would change
+the code being measured.
+
+### Mitigation
+
+1. **Cross-stream evidence via VERIFY-009**: arena_invariant is
+   verified by WP. Cond 0's unreachability follows from
+   arena_invariant + `CANON_ARENA_MAX_SIZE`'s value (a substrate
+   constant, not a proof obligation). Cond 1's unreachability is
+   mathematical and independent of any constant. The two streams
+   align: gcov reports source-level uncoverage; WP proves the
+   underlying invariant; together they establish that the 4 outcomes
+   are provably unexecutable code paths under the documented
+   preconditions, not coverage gaps. This is the same evidence
+   pattern MCDC-002 established for slice.h's `!ptr` defensive
+   branches.
+
+2. **CI regression detector**: The coverage job's "Debug: per-line
+   MC/DC detail for arena.h" step prints the gcov dump on every run.
+   If a future change closes one of the 6 outcomes (e.g., by raising
+   `CANON_ARENA_MAX_SIZE` close to `CANON_USIZE_MAX`, which would
+   make cond 0 reachable), the per-line detail will show it.
+   Conversely, if a future change opens a new uncovered outcome, the
+   debug step surfaces it for human review.
+
+3. **The achievable MC/DC ceiling under the current invariant +
+   constants is 58/64 = 90.6%**. Reaching 90.6% represents 100% of
+   API-reachable coverage. The 6 missing outcomes are documented
+   here and explained; they are not counted as a coverage regression.
+
+4. **Allocation behavior is otherwise exhaustively tested**.
+   `test/core/arena_test.c` covers 46 unit tests across init/reset,
+   alloc/alloc_aligned (including the exhaustion-returns-NULL path
+   that exercises cond 2 of the overflow guard, the one subcondition
+   that *is* reachable), zero variants, try variants (including the
+   new `test_try_alloc_aligned_failure` that closed the line 510
+   gap at CI #962), mark/reset_to, nested marks, byte views,
+   typed macros, debug stats under `CANON_ARENA_DEBUG`, and lifetime
+   tracking under `CANON_LIFETIME_DEBUG`. Fuzzing exercises the same
+   functions through randomly constructed inputs.
+
+### Line 510 closure (history)
+
+Prior to CI #962, arena.h's MC/DC baseline was 57/64 = 89.1%, with a
+7th missing outcome on `arena_try_alloc_aligned` line 510:
+`condition 1 not covered (false)` on the compound return
+`return out != NULL && p != NULL;`. The non-aligned variant
+(`arena_try_alloc` line 485) reported 4/4 coverage because
+`test_try_alloc_failure` exercises the case where `out != NULL`
+but the underlying allocation returns NULL. The aligned variant had
+no equivalent test.
+
+CI #962 added `test_try_alloc_aligned_failure` to
+`test/core/arena_test.c`, mirroring the non-aligned variant. Line 510
+now reports 4/4 and arena.h's MC/DC baseline moved from 57/64 to
+58/64. This was a real test gap, not an unreachability — closing it
+is the substantive improvement; the 6 remaining outcomes are the
+documented baseline ceiling.
+
+The audit that uncovered the asymmetry between line 485 and line 510
+also confirmed that no other reachable gaps exist on arena.h. The
+6 outcomes recorded in this entry are the residual after every
+reachable outcome has been closed.
+
+### Cross-references
+
+- VERIFY-009 — arena.h's full WP residual analysis, including the
+  arena_invariant preservation that establishes cond 0's
+  unreachability.
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology; the
+  `contract.h 0/2` instrumentation artifact this entry's cat 2
+  mirrors.
+- MCDC-002 — slice.h's analogous `API-unreachable` → `WP-discharged
+  unreachable` pattern. arena.h's structural unreachability is a
+  different source-level shape (overflow guards under
+  arena_invariant + capacity constant) but the same cross-stream
+  evidence pattern.
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
+  detail for arena.h" step in `.github/workflows/ci.yml`.
 
 ---
 
