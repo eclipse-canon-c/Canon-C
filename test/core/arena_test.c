@@ -9,7 +9,9 @@
  *   - arena_alloc_zero / arena_alloc_aligned_zero: memory is zeroed,
  *     exhaustion returns NULL (closes `if (p)` FALSE branch)
  *   - arena_try_alloc / arena_try_alloc_aligned: bool return variants,
- *     NULL out parameter handling (closes `if (out)` FALSE branch)
+ *     NULL out parameter handling (closes `if (out)` FALSE branch),
+ *     allocation-failure path with valid out (closes `p != NULL` FALSE
+ *     branch in the compound return)
  *   - arena_alloc_type / arena_alloc_array macros
  *   - arena_reset: fast reset, reuse after reset
  *   - arena_reset_secure: wipes consumed memory, empty-arena early return
@@ -288,6 +290,24 @@ static void test_try_alloc_aligned_success(void)
     EXPECT(ok);
     EXPECT_NOT_NULL(p);
     EXPECT(mem_is_aligned(p, 16));
+}
+
+/* MC/DC: closes the `p != NULL` FALSE branch in arena_try_alloc_aligned
+ * line 510. The non-aligned variant gets this coverage from
+ * test_try_alloc_failure (line 485 reports 4/4). The aligned variant
+ * had no equivalent test — gcov reported "condition 1 not covered (false)"
+ * on the compound return, dropping arena.h MC/DC to 89.1%.
+ *
+ * Mirrors test_try_alloc_failure: exhaust capacity, verify ok is false
+ * AND *out is set to NULL (the `if (out) *out = p;` assignment must
+ * still fire even on allocation failure). */
+static void test_try_alloc_aligned_failure(void)
+{
+    setup();
+    void* p  = NULL;
+    bool  ok = arena_try_alloc_aligned(&g_arena, BUF_SIZE * 2, 16, &p);
+    EXPECT(!ok);
+    EXPECT(p == NULL);
 }
 
 /* MC/DC: closes the `if (out)` FALSE branch in arena_try_alloc.
@@ -715,6 +735,7 @@ int main(void)
     test_try_alloc_success();
     test_try_alloc_failure();
     test_try_alloc_aligned_success();
+    test_try_alloc_aligned_failure();
     test_try_alloc_null_out();
     test_try_alloc_aligned_null_out();
 
