@@ -2255,46 +2255,71 @@ jobs:
       
       - name: "Debug: per-line MC/DC detail for arena.h"
         # Identifies which specific conditions in arena.h are uncovered.
-        # As of CI (the run that landed arena.h MC/DC closure),
-        # arena.h reached 89.1% MC/DC (57/64, 7 missed). The 7 remaining
-        # outcomes are expected to split into two categories (to be
-        # confirmed by reading this debug output and documented in
-        # docs/deviations.md as MCDC-003):
+        # As of the CI run that landed test_try_alloc_aligned_failure
+        # (closing the line 510 compound-return gap), arena.h reaches
+        # 90.6% MC/DC (58/64, 6 missed). The 6 remaining outcomes are
+        # documented in docs/deviations.md as MCDC-003 and split into
+        # two categories:
         #
-        #   1. MCDC-002-pattern overflow guards (~4 conditions) — the
-        #      compound `||` in arena_alloc and arena_alloc_aligned:
-        #          if (arena->offset > CANON_USIZE_MAX - pad ||
-        #              arena->offset + pad > CANON_USIZE_MAX - size ||
-        #              arena->offset + pad + size > arena->capacity) {
+        #   1. Overflow guard structural unreachability (4 outcomes) —
+        #      the compound `||` in arena_alloc (line 346) and
+        #      arena_alloc_aligned (line 401):
+        #          if (arena->offset > CANON_USIZE_MAX - pad ||      // cond 0
+        #              arena->offset + pad > CANON_USIZE_MAX - size ||// cond 1
+        #              arena->offset + pad + size > arena->capacity) // cond 2
         #              return NULL;
-        #          }
-        #      The first two subconditions cannot be true under the
-        #      arena_invariant predicate (offset <= capacity <=
-        #      CANON_ARENA_MAX_SIZE, both far below CANON_USIZE_MAX).
-        #      The third subcondition IS reachable and is exercised by
-        #      test_alloc_exhaustion_returns_null and test_try_alloc_failure.
-        #      The first two are API-unreachable in MC/DC isolation —
-        #      analogous to slice.h MCDC-002's defensive branches.
+        #      gcov reports cond 0 and cond 1 as "not covered (true)" in
+        #      both functions. Both subconditions are structurally
+        #      unreachable under the arena_invariant predicate:
+        #        - arena_invariant requires capacity <= CANON_ARENA_MAX_SIZE
+        #        - CANON_ARENA_MAX_SIZE = CANON_GB = 2^30 (limits.h)
+        #        - pad <= CANON_DEFAULT_ALIGN - 1 <= 15
+        #        - therefore offset + pad <= 2^30 + 15, well below
+        #          CANON_USIZE_MAX on both 32-bit and 64-bit platforms,
+        #          so cond 0 cannot fire
+        #        - cond 1 firing in MC/DC isolation requires
+        #          offset + pad + size > CANON_USIZE_MAX while cond 2 is
+        #          false (offset + pad + size <= capacity); since
+        #          capacity is a usize, this is mathematically
+        #          impossible regardless of CANON_ARENA_MAX_SIZE
+        #      Same "structurally unreachable under type invariants"
+        #      pattern as slice.h's MCDC-002.
         #
-        #   2. require_msg panic paths and try_alloc compound returns
-        #      (~3 conditions) — arena_alloc / arena_alloc_aligned
-        #      have require_msg(arena != NULL) which collapses under
-        #      -DCANON_NO_REQUIRE (the coverage build's flag), and the
-        #      new `out != NULL && p != NULL` returns in arena_try_alloc /
-        #      arena_try_alloc_aligned may leave one subcondition
-        #      combination uncovered.
+        #   2. Release-build macro no-op artifacts (2 outcomes) — the
+        #      `_arena_debug_update(arena)` calls on lines 356 and 411.
+        #      Under release builds (no CANON_ARENA_DEBUG, as in the
+        #      coverage build's compile flags), the macro expands to
+        #      `((void)0)` per arena.h:176. gcov-14 still registers a
+        #      structural "condition" there and counts it as
+        #      "condition 0 not covered (false)". Same artifact pattern
+        #      as the contract.h 0/2 entry that appears in every test
+        #      row across the project — not a real condition, not a
+        #      coverage gap.
+        #
+        # Previously this step described a third category — a real test
+        # gap on arena_try_alloc_aligned line 510 (`p != NULL` not
+        # covered false). That gap was closed by adding
+        # test_try_alloc_aligned_failure to arena_test.c. Line 510 now
+        # reports 4/4, matching line 485 (arena_try_alloc's compound
+        # return).
+        #
+        # Cross-stream evidence (VERIFY-009 + MCDC-003):
+        #   VERIFY-009 separately documents that WP verifies the
+        #   arena_invariant predicate is preserved across all alloc
+        #   paths, and that arena_invariant entails capacity <=
+        #   CANON_ARENA_MAX_SIZE, which is the substrate fact used to
+        #   establish the line 346/401 cond-0 unreachability. The
+        #   line 346/401 cond-1 unreachability is purely mathematical
+        #   (independent of any constant), so WP does not need to
+        #   discharge it specifically — it falls out of usize
+        #   arithmetic alone. This is the same cross-stream evidence
+        #   pattern slice.h's MCDC-002 established (gcov reports
+        #   uncovered, WP proves unreachable, both streams consistent).
         #
         # This step remains in place as a regression detector. If a new
-        # function is added without corresponding tests, or if any of the
-        # previously-closed reachable gaps regress, the output will show
-        # which conditions drop below the documented baseline.
-        #
-        # When VERIFY-009 confirms WP discharges the MCDC-002-pattern
-        # overflow guard subconditions as unreachable, MCDC-003 will
-        # transition from "API-unreachable" to "WP-discharged unreachable"
-        # — the same cross-stream evidence pattern slice.h's MCDC-002
-        # established. The gcov measurement remains at 89.1% because
-        # gcov instruments the source, not the proof.
+        # function is added without corresponding tests, or if any of
+        # the previously-closed reachable gaps regress, the output will
+        # show which conditions drop below the documented baseline.
         run: |
           cd build
 
