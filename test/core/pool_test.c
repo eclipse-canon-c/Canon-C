@@ -229,6 +229,41 @@ static void test_init_reservation_mul_overflow(void)
     EXPECT(arena_used(&g_arena) == 0);
 }
 
+/* Exercises pool_init's post-arena_alloc NULL guard (gcov L309): pool_init's
+ * own `needed > arena_remaining` check uses arena_remaining's RAW
+ * (capacity - offset) figure, which does NOT account for the alignment pad
+ * arena_alloc inserts before the region. From an unaligned offset there is a
+ * window where pool_init's guard passes (needed <= raw remaining) but
+ * arena_alloc then fails its own offset + pad + needed <= capacity check and
+ * returns NULL. This test lands exactly in that window: a 65-byte arena, a
+ * 1-byte throwaway alloc (offset = 1 → arena_alloc needs pad = 15), and a
+ * reservation of 16 * 4 = 64 bytes. raw remaining = 65 - 1 = 64, so the
+ * guard passes (64 > 64 is false); arena_alloc then computes
+ * 1 + 15 + 64 = 80 > 65 and returns NULL, so pool_init must return false via
+ * the line-309 guard. The arena offset is left at the 1-byte throwaway. */
+static void test_init_arena_alloc_fails_after_guard(void)
+{
+    static u8 small_buf[65];
+    Arena     small_arena;
+    void*     throwaway;
+    bool      ok;
+
+    memset(small_buf, 0xAB, sizeof(small_buf));
+    arena_init(&small_arena, small_buf, sizeof(small_buf)); /* capacity 65 */
+
+    /* Push offset to 1 (unaligned) → arena_alloc will insert pad = 15. */
+    throwaway = arena_alloc(&small_arena, 1);
+    EXPECT_NOT_NULL(throwaway);
+
+    /* needed = 16 * 4 = 64. raw remaining = 65 - 1 = 64 → guard passes.
+     * arena_alloc: 1 + 15 + 64 = 80 > 65 → NULL → pool_init false at L309. */
+    ok = pool_init(&g_pool, &small_arena, 16, 4);
+    EXPECT(!ok);
+    /* Only the 1-byte throwaway was consumed; the failed reservation left
+     * the arena offset untouched. */
+    EXPECT(arena_used(&small_arena) == 1);
+}
+
 /* ── pool_alloc ──────────────────────────────────────────────────────────── */
 
 static void test_alloc_returns_non_null(void)
@@ -427,7 +462,7 @@ static void test_get_const_returns_correct_slot(void)
  * test_get_out_of_bounds_returns_null, which previously only covered the
  * non-const pool_get. The cond 1 (!pool->arena) outcome remains uncovered —
  * it is unreachable under pool_invariant (a valid pool has a valid arena)
- * and is documented as a deviation, not a test gap. */
+ * and is documented as a deviation (MCDC-004), not a test gap. */
 static void test_get_const_null_and_oob_return_null(void)
 {
     setup();
@@ -630,7 +665,7 @@ static void test_as_bytes_null_safe(void)
 /* Exercises pool_reserved_bytes's null-pool outcome (gcov L557 cond 0),
  * mirroring test_as_bytes_null_safe for pool_as_bytes. The cond 1
  * (!pool->arena) outcome stays uncovered — unreachable under pool_invariant,
- * same as pool_as_bytes. */
+ * same as pool_as_bytes (MCDC-004). */
 static void test_reserved_bytes_null_safe(void)
 {
     bytes_t b = pool_reserved_bytes(NULL);
@@ -765,6 +800,7 @@ int main(void)
     test_init_unaligned_base_no_overrun();   /* regression */
     test_init_object_size_alignment_overflow();  /* MC/DC gap */
     test_init_reservation_mul_overflow();        /* MC/DC gap */
+    test_init_arena_alloc_fails_after_guard();   /* MC/DC gap — L309 */
 
     /* pool_alloc */
     test_alloc_returns_non_null();
