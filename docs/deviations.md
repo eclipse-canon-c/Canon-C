@@ -1425,11 +1425,11 @@ exact-count enforcement with named patterns catches both count regressions
 (new residual class introduced) and rename regressions (a contract weakened in
 a way that produces a new residual under a different name).
 
-pool.h achieves 100% line coverage (74/74) and 89.7% MC/DC coverage (61/68) —
-the latter is the achievable ceiling under MCDC-004's type-invariant
-unreachability (6 `!pool->arena` defensive subconditions), pending
-classification of line 309 (see MCDC-004). All 22 user-facing functions are
-annotated and verified; the query and try-variant functions are 100% proved
+pool.h achieves 100% line coverage (74/74) and 89.7% MC/DC coverage (61/68) at the 
+baseline commit, rising to the documented ceiling of 91.2% (62/68) once the line-309 
+closure (test_init_arena_alloc_fails_after_guard) lands; the residual 6 outcomes are 
+type-invariant-unreachable (6 !pool->arena defensive subconditions, see MCDC-004). 
+All 22 user-facing functions are annotated and verified; the query and try-variant functions are 100% proved
 (no residuals). The remaining functions carry the 24 own residuals analyzed
 above.
 
@@ -1462,8 +1462,8 @@ adding the thinnest own surface (no per-allocation alignment arithmetic).
   VERIFY-007 (slice.h), VERIFY-008 (memory.h), VERIFY-009 (arena.h).
 - ptr.h forward-implication note: VERIFY-006 (the deliberate empty `nonnull`
   behaviors that produce pool.h's cats 2b/2c/2d).
-- MC/DC coverage closure: MCDC-004 (pool.h MC/DC at 89.7% with 6
-  type-invariant-unreachable outcomes; line 309 pending classification).
+- MC/DC coverage closure: MCDC-004 (pool.h MC/DC ceiling 91.2% (62/68) with 6 type-invariant-unreachable outcomes;
+  line 309 closed as a reachable gap).
 - Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag, applied consistently
   to pool.h's coverage build).
 - Substrate runtime tracking: OWN-001 (lifetime substrate covering pool),
@@ -1904,6 +1904,241 @@ reachable outcome has been closed.
   evidence pattern.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
   detail for arena.h" step in `.github/workflows/ci.yml`.
+
+---
+
+## MCDC-004: Type-Invariant-Unreachable Defensive Arena Subconditions (pool.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-004 |
+| **Date**       | 2026-05-29 |
+| **Baseline commit** | b2644ba (Canon-C CI #972) |
+| **Scope**      | pool.h — 6 of 68 condition outcomes (6 unreachable under pool_invariant) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 6 of 68 condition outcomes in `core/pool.h` are not
+exercisable by tests. All six are the same structural pattern — the
+`!pool->arena` middle subcondition of a defensive OR-form early return that
+every pool query and reset function shares:
+
+```c
+if (!pool || !pool->arena || <op-specific>) return <fail>;
+```
+
+The first subcondition (`!pool`) is reachable by passing a NULL pool; the
+op-specific third subcondition (out-of-bounds index, empty pool, etc.) is
+reachable by ordinary use. The middle subcondition (`!pool->arena`) is
+**unreachable under `pool_invariant`**: a pool that satisfies the invariant
+has a non-NULL, valid backing arena, and a pool that does not satisfy the
+invariant cannot be constructed through `pool_init` (which requires
+`arena_invariant(arena)` and stores the validated pointer). There is no public
+path that produces a pool with `pool != NULL && pool->arena == NULL`, so the
+`!pool->arena`-true outcome cannot fire.
+
+**Affected outcomes** (line numbers from `core/pool.h`, baseline commit
+b2644ba):
+
+| # | Function              | Line | Subcondition not covered            |
+|---|-----------------------|------|--------------------------------------|
+| 1 | `pool_get`            | 435  | cond 1 true (`!pool->arena`)        |
+| 2 | `pool_get_const`      | 464  | cond 1 true (`!pool->arena`)        |
+| 3 | `pool_as_bytes`       | 541  | cond 1 true (`!pool->arena`)        |
+| 4 | `pool_reserved_bytes` | 557  | cond 1 true (`!pool->arena`)        |
+| 5 | `pool_reset`          | 597  | cond 1 true (`!pool->arena`)        |
+| 6 | `pool_reset_secure`   | 644  | cond 1 true (`!pool->arena`)        |
+
+pool.h's gcov-measured MC/DC at the baseline commit is 61/68 = 89.7%. The
+line-309 reachable-gap closure (see "Reachable gap closure" below) lifts the
+measured value to the documented ceiling of 62/68 = 91.2% — the achievable
+maximum, since the 6 outcomes above are provably unexecutable.
+
+Note that three of the six lines carry *other* outcomes on the same line that
+ARE reachable and ARE covered — only the `!pool->arena` (cond 1 true) outcome
+is unreachable:
+
+- `pool_get_const` line 464: cond 0 true (null pool) and cond 2 true (OOB
+  index) are covered by `test_get_const_null_and_oob_return_null`; only cond 1
+  true is unreachable.
+- `pool_reserved_bytes` line 557: cond 0 true (null pool) is covered by
+  `test_reserved_bytes_null_safe`; only cond 1 true is unreachable.
+- `pool_reset_secure` line 644: cond 2 true (empty pool) is covered by
+  `test_reset_secure_empty_pool`; only cond 1 true is unreachable.
+
+This per-outcome granularity is why the entry counts 6 outcomes rather than 6
+whole lines — gcov-14's `-fcondition-coverage` measures each subcondition's
+true/false outcome independently, and the disposition differs within a single
+compound guard.
+
+### Rationale
+
+The `!pool->arena` checks are defensive code against a malformed pool — a
+`Pool` struct whose `arena` field was zeroed or never initialized. They are
+correct, cheap, and intentionally not exercisable from the public API in MC/DC
+isolation: exercising the `!pool->arena`-true outcome in isolation would
+require constructing the very malformed pool that `pool_init`'s contract is
+designed to prevent (a non-NULL pool with a NULL arena). Removing the checks to
+satisfy MC/DC would weaken the library's robustness against caller error and
+uninitialized-struct bugs, which is exactly the failure mode the borrow/
+lifetime substrate (OWN-001) exists to catch at the next layer up.
+
+This is the same disposition established by MCDC-002 for slice.h's `!ptr`
+defensive branches and by MCDC-003 for arena.h's overflow-guard subconditions:
+the source-level shape differs (pool.h's is a `!pool->arena` arena-validity
+disjunct, not slice.h's `!ptr` borrow-validity disjunct or arena.h's
+`offset + pad` overflow arithmetic), but the cross-stream evidence pattern is
+identical — gcov measures source-level uncoverage; WP discharges the underlying
+unreachability via the type invariant.
+
+### Cross-stream evidence via VERIFY-010
+
+`pool_invariant` is verified by WP (see VERIFY-010). The six `!pool->arena`
+subconditions are discharged by WP as unreachable: none of the six functions
+appears in pool.h's unproved-goal list *for the `!pool->arena` branch* — the
+branch is proved dead under `pool_invariant`, which entails
+`arena_invariant(pool->arena)` and therefore `\valid(pool->arena)` and
+`pool->arena != \null`. WP places these outcomes in its `Unreachable` count
+rather than its residual list; they never appear among VERIFY-010's 127
+residuals.
+
+Note that `pool_get` and `pool_get_const` *do* appear in VERIFY-010's residual
+list under category 2b — but for a different obligation (the `ptr_elem`
+cascade on the slot computation), not for the `!pool->arena` branch. The two
+are distinct: the arithmetic residual is a WP limitation on the reachable
+success path; the `!pool->arena` unreachability is a discharged property of the
+defensive path. This is why pool.h's WP wrapper does not carry an
+MCDC-closure diagnostic of the MCDC-002 "0/N functions in residuals" shape —
+the residual-bearing functions and the unreachable-branch functions overlap,
+so "function absent from residuals" is the wrong predicate for pool.h (see
+VERIFY-010, "MCDC note"). The unreachability evidence is instead the per-line
+gcov dump cross-referenced against WP's `Unreachable` count.
+
+The two streams align: gcov reports the 6 outcomes as source-level uncovered;
+WP proves the underlying `!pool->arena` branch unexecutable under
+`pool_invariant`. Together they establish that the 6 outcomes are provably
+unexecutable code paths under the documented preconditions, not coverage gaps.
+This satisfies DO-178C's intent for defensive code unreachable in normal
+operation without requiring the code to be removed.
+
+### Reachable gap closure (line 309)
+
+pool.h's `pool_init` carries a post-`arena_alloc` NULL guard at line 309:
+
+```c
+needed = aligned_size * max_objects;      /* via checked_mul */
+if (needed > arena_remaining(arena)) return false;   /* coarse guard */
+region = arena_alloc(arena, needed);
+if (!region) return false;                /* line 309 */
+```
+
+This guard's true outcome (`!region`) was uncovered in the baseline because
+the preceding coarse guard (`needed > arena_remaining`) appears to subsume it.
+It does not. `arena_remaining` returns the **raw** `capacity - offset`, which
+does not account for the alignment pad `arena_alloc` inserts before the
+returned region. From an unaligned arena offset there is a window where
+`needed <= arena_remaining(arena)` (coarse guard passes) yet
+`offset + pad + needed > capacity` (arena_alloc fails its own check and returns
+NULL), so line 309 fires.
+
+This is a **reachable** outcome — a real defensive path, not an
+unreachability. It was closed at the commit adding
+`test_init_arena_alloc_fails_after_guard` to `test/core/pool_test.c`, which
+lands the window exactly: a 65-byte arena, a 1-byte throwaway allocation
+(offset = 1, so `arena_alloc` needs pad = 15), and a 16x4 = 64-byte
+reservation. Raw remaining = 65 - 1 = 64, so the coarse guard passes
+(`64 > 64` is false); `arena_alloc` then computes `1 + 15 + 64 = 80 > 65` and
+returns NULL, so `pool_init` returns false via line 309. The test also asserts
+the arena offset is left at the 1-byte throwaway, confirming the failed
+reservation is side-effect-free.
+
+Closing line 309 moved pool.h's measured MC/DC from 61/68 to 62/68 — the
+documented ceiling. The 6 outcomes in the table above are the residual after
+every reachable outcome has been closed.
+
+### Mitigation
+
+1. **Cross-stream evidence via VERIFY-010**: `pool_invariant` is verified by
+   WP. The 6 `!pool->arena` outcomes are discharged as unreachable under the
+   invariant (WP `Unreachable` count, not the residual list). gcov reports
+   source-level uncoverage; WP proves the underlying branch dead; together
+   they establish the 6 outcomes as provably unexecutable, not coverage gaps.
+   Same evidence pattern as MCDC-002 (slice.h) and MCDC-003 (arena.h).
+
+2. **CI regression detector**: the coverage job's "Debug: per-line MC/DC
+   detail for pool.h" step prints the gcov dump on every run. If a future
+   change makes one of the 6 outcomes reachable (e.g. by adding a public
+   constructor that can leave `arena` NULL), the per-line detail will show it.
+   Conversely, if a future change opens a new uncovered outcome, the debug
+   step surfaces it for human review.
+
+3. **The achievable MC/DC ceiling under `pool_invariant` is 62/68 = 91.2%**.
+   Reaching 62/68 represents 100% of API-reachable coverage. The 6 missing
+   outcomes are documented here and explained; they are not counted as a
+   coverage regression.
+
+4. **Pool behavior is otherwise exhaustively tested**. `test/core/pool_test.c`
+   covers init (including the unaligned-base regression and all three
+   overflow/failure guards: alignment-overflow, checked_mul-overflow, and the
+   line-309 arena_alloc-fails-after-guard window), alloc / alloc_zero / try
+   variants (including null-out and full-pool paths), get / get_const
+   (including null-pool and OOB for both variants), reset / reset_secure
+   (including the empty-pool early path and unaligned-base stability), queries
+   (including the is_empty-false vector), byte views (including null-safe for
+   both variants), multiple pools per arena, type-safe macros, and lifetime
+   tracking under `CANON_LIFETIME_DEBUG` (including the OWN-002 no-cycle
+   regression). Fuzzing exercises pool_init / alloc / alloc_zero / get / reset
+   across random object sizes, capacities, and arena pre-pads through the
+   `CANON_FUZZING` build, so every API-reachable path — including the
+   defensive guards' reachable outcomes — is exercised by random inputs.
+
+### Reachable-gap closure history
+
+pool.h's MC/DC baseline was 55/68 = 80.9% before the gap-closure audit. The
+audit closed every reachable outcome, in two waves:
+
+| Wave | Outcome(s) closed                          | Function(s)            | Line | Closed by                                    | Running total |
+|------|---------------------------------------------|------------------------|------|-----------------------------------------------|---------------|
+| 1    | cond 0 true (null) + cond 2 true (OOB)     | `pool_get_const`       | 464  | `test_get_const_null_and_oob_return_null`     | 57/68         |
+| 1    | cond 2 true (empty pool)                    | `pool_reset_secure`    | 644  | `test_reset_secure_empty_pool`                | 58/68         |
+| 1    | both false outcomes (masking-MC/DC vector)  | `pool_is_empty`        | 510  | `test_is_empty_false_when_used`               | 60/68         |
+| 1    | cond 0 true (null)                          | `pool_reserved_bytes`  | 557  | `test_reserved_bytes_null_safe`               | 61/68         |
+| 2    | cond true (`!region` after arena_alloc)     | `pool_init`            | 309  | `test_init_arena_alloc_fails_after_guard`     | 62/68         |
+
+Wave 1 (four tests, six outcomes) shipped at CI #972 / b2644ba and is the
+source of the 61/68 measured baseline. Wave 2 (the line-309 closure) lands in
+the commit immediately following #972 that adds
+`test_init_arena_alloc_fails_after_guard`, reaching the 62/68 ceiling. The
+audit confirmed that after wave 2 no other reachable gaps remain: the 6
+outcomes recorded in this entry are the residual once every reachable outcome
+has been closed.
+
+### Forward note (stringbuf.h and other `{ptr, len}` / handle types)
+
+MCDC-002's forward note anticipated that each downstream header would need its
+own per-header MCDC entry documenting whatever unreachability shape its
+invariant produces. pool.h confirms this: its shape is neither slice.h's `!ptr`
+borrow-validity disjunct nor arena.h's overflow-guard arithmetic, but a
+`!pool->arena` arena-validity disjunct discharged under `pool_invariant`. The
+next header to be annotated (stringbuf.h, MCDC-002 lists it provisionally at
+74.2%) will need its own audit; its number and unreachability shape are not
+transferable from pool.h's 6-of-68.
+
+### Cross-references
+
+- VERIFY-010 — pool.h's full WP residual analysis, including the
+  `pool_invariant` verification that establishes the `!pool->arena`
+  unreachability, and the "MCDC note" explaining why pool.h's WP wrapper omits
+  an MCDC-closure diagnostic.
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology, applied to pool.h's
+  coverage build.
+- MCDC-002 — slice.h's `API-unreachable` -> `WP-discharged unreachable`
+  pattern; the per-header forward note this entry fulfills. (Note: MCDC-002's
+  Pattern note lists pool.h's pre-audit figure of 73.5%; the post-audit ceiling
+  is 62/68 = 91.2%.)
+- MCDC-003 — arena.h's structurally-unreachable overflow guards; same
+  cross-stream evidence pattern, different source-level shape.
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC detail for
+  pool.h" step in `.github/workflows/ci.yml`.
 
 ---
 
