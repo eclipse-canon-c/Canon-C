@@ -1,9 +1,11 @@
 /**
  * @file pool_test.c
  * @brief Tests for pool.h — fixed-size object pool allocator
- * 
+ *
  * Covers:
  *   - pool_init: basic setup, arena reservation, failure cases
+ *   - pool_init from an UNALIGNED arena offset (regression: base_mark must be
+ *     the post-padding data start, not the pre-padding mark)
  *   - pool_alloc: sequential allocation, exhaustion, NULL pool
  *   - pool_alloc_zero: memory is zeroed
  *   - pool_try_alloc / pool_try_alloc_zero: bool return variants
@@ -21,7 +23,9 @@
  *
  * Fuzz entry point (CANON_FUZZING):
  *   - Feeds random allocation counts and object sizes into the pool,
- *     verifying no crash, no out-of-bounds access, and correct state.
+ *     plus a random pre-pad of the backing arena so the pool's base_mark
+ *     is exercised at every alignment, verifying no crash, no out-of-bounds
+ *     access, and correct state.
  */
 
 /* Must be defined in exactly one TU before including contract.h (via pool.h) */
@@ -140,6 +144,55 @@ static void test_init_post_arena_alloc_safe(void)
     EXPECT((u8*)extra >= g_buf + (usize)g_pool.end_mark);
 }
 
+/* ── pool_init from an unaligned arena offset (REGRESSION) ───────────────────
+ *
+ * arena_alloc inserts alignment padding BEFORE the pointer it returns. If
+ * pool_init captured base_mark from arena_mark() *before* the reservation
+ * (the pre-pad offset) instead of from arena_alloc's returned region (the
+ * post-pad data start), then with a non-aligned starting offset every pool
+ * slot would sit `pad` bytes below the reserved region and the last object
+ * would overrun end_mark. This test forces a non-aligned offset by doing a
+ * 1-byte arena_alloc first, then verifies the last object stays within the
+ * reserved region. It fails on the pre-fix code and passes on the fixed code.
+ */
+static void test_init_unaligned_base_no_overrun(void)
+{
+    void* throwaway;
+    Vec2* last;
+    u8*   last_end;
+    u8*   region_end;
+    usize i;
+    bool  ok;
+
+    setup();
+    /* Push the arena offset to a deliberately odd value. */
+    throwaway = arena_alloc(&g_arena, 1);
+    EXPECT_NOT_NULL(throwaway);
+
+    ok = pool_init(&g_pool, &g_arena, sizeof(Vec2), 4);
+    EXPECT(ok);
+
+    /* base_mark must be the post-pad data start: the byte at base_mark must
+     * be at or after the throwaway allocation's end, never before it. */
+    EXPECT((usize)g_pool.base_mark >=
+           (usize)((u8*)throwaway - g_buf) + 1);
+
+    /* Fill the pool and check the last object's end is within [base, end). */
+    for (i = 0; i < 4; i++) {
+        Vec2* v = pool_alloc_type(&g_pool, Vec2);
+        EXPECT_NOT_NULL(v);
+    }
+    last = pool_get_type(&g_pool, 3, Vec2);
+    EXPECT_NOT_NULL(last);
+
+    last_end   = (u8*)last + pool_object_size(&g_pool);
+    region_end = g_buf + (usize)g_pool.end_mark;
+    /* The crux: no overrun of the reserved region. */
+    EXPECT(last_end <= region_end);
+    /* And the first slot starts exactly at base_mark. */
+    EXPECT((u8*)pool_get_type(&g_pool, 0, Vec2) == g_buf + (usize)g_pool.base_mark);
+}
+
 /* ── pool_alloc ──────────────────────────────────────────────────────────── */
 
 static void test_alloc_returns_non_null(void)
@@ -195,10 +248,8 @@ static void test_alloc_zero_is_zeroed(void)
 {
     Vec2* v;
     setup();
-    pool_init_type(&g_pool, &g_arena, Vec2, 4);
-    /* poison the buffer first */
+    /* poison then re-init so the pool points at poisoned memory */
     memset(g_buf, 0xAB, ARENA_SIZE);
-    /* re-init so pool points at poisoned memory */
     arena_init(&g_arena, g_buf, ARENA_SIZE);
     pool_init_type(&g_pool, &g_arena, Vec2, 4);
     v = (Vec2*)pool_alloc_zero(&g_pool);
@@ -327,6 +378,32 @@ static void test_reset_null_safe(void)
 {
     pool_reset(NULL);
     EXPECT(1);
+}
+
+/* Reset must preserve base_mark/end_mark even when the pool was created at an
+ * unaligned offset — the re-reservation re-pads from an already-aligned
+ * base_mark (pad == 0), so the region lands at the same place. */
+static void test_reset_unaligned_base_stable(void)
+{
+    void*     throwaway;
+    ArenaMark base_before;
+    ArenaMark end_before;
+    Vec2*     a;
+    Vec2*     b;
+    setup();
+    throwaway = arena_alloc(&g_arena, 1);
+    EXPECT_NOT_NULL(throwaway);
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    base_before = g_pool.base_mark;
+    end_before  = g_pool.end_mark;
+    a = pool_alloc_type(&g_pool, Vec2);
+    EXPECT_NOT_NULL(a);
+    pool_reset(&g_pool);
+    EXPECT(g_pool.base_mark == base_before);
+    EXPECT(g_pool.end_mark  == end_before);
+    b = pool_alloc_type(&g_pool, Vec2);
+    EXPECT_NOT_NULL(b);
+    EXPECT(b == a);  /* same slot reused at same address */
 }
 
 /* ── pool_reset_secure ───────────────────────────────────────────────────── */
@@ -480,10 +557,8 @@ static void test_type_macro_round_trip(void)
  * when CANON_LIFETIME_DEBUG is defined. They verify state-level invariants
  * directly on g_pool.lt — they do NOT construct borrows or trigger
  * lifetime_assert_valid. The borrow-side validation path (fires require_msg
- * after reset) is covered in test/semantics/borrow_test.c, alongside the
- * borrow construction logic and the contract-trap helpers it needs.
+ * after reset) is covered in test/semantics/borrow_test.c.
  *
- * The contract under test is:
  *   - pool_init opens the lifetime: lt.open == true, lt.id is set.
  *   - pool_reset re-stamps lt.id: new ID differs from old ID.
  *   - pool_reset_secure also re-stamps lt.id.
@@ -499,9 +574,6 @@ static void test_lifetime_init_opens_token(void)
     setup();
     pool_init_type(&g_pool, &g_arena, Vec2, 4);
     EXPECT(g_pool.lt.open == true);
-    /* ID is address-derived, so for a non-NULL pool it is non-zero on
-     * any reasonable platform. We don't assert the exact value — just
-     * that the token is in the "open" state with some ID assigned. */
     EXPECT(g_pool.lt.id != REGION_ID_STATIC);
 }
 
@@ -521,13 +593,31 @@ static void test_lifetime_reset_secure_restamps_id(void)
     region_id_t before;
     setup();
     pool_init_type(&g_pool, &g_arena, Vec2, 4);
-    /* Allocate something so reset_secure has bytes to wipe — exercises
-     * the same restamp path as the empty-pool case. */
     pool_alloc(&g_pool);
     before = g_pool.lt.id;
     pool_reset_secure(&g_pool);
     EXPECT(g_pool.lt.id != before);
     EXPECT(g_pool.lt.open == true);
+}
+
+/* OWN-002 no-cycle property: two consecutive resets must produce three
+ * distinct IDs (no XOR-with-constant A -> A^K -> A cycle). Mirrors the
+ * arena/pool regression intent from OWN-002. */
+static void test_lifetime_two_resets_no_cycle(void)
+{
+    region_id_t id0;
+    region_id_t id1;
+    region_id_t id2;
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    id0 = g_pool.lt.id;
+    pool_reset(&g_pool);
+    id1 = g_pool.lt.id;
+    pool_reset(&g_pool);
+    id2 = g_pool.lt.id;
+    EXPECT(id0 != id1);
+    EXPECT(id1 != id2);
+    EXPECT(id0 != id2);  /* the property the XOR-with-constant scheme violated */
 }
 
 #endif /* CANON_LIFETIME_DEBUG */
@@ -542,6 +632,7 @@ int main(void)
     test_init_arena_too_small();
     test_init_type_macro();
     test_init_post_arena_alloc_safe();
+    test_init_unaligned_base_no_overrun();   /* regression */
 
     /* pool_alloc */
     test_alloc_returns_non_null();
@@ -567,6 +658,7 @@ int main(void)
     test_reset_clears_used();
     test_reset_allows_reuse();
     test_reset_null_safe();
+    test_reset_unaligned_base_stable();      /* regression companion */
 
     /* pool_reset_secure */
     test_reset_secure_wipes_memory();
@@ -593,6 +685,7 @@ int main(void)
     test_lifetime_init_opens_token();
     test_lifetime_reset_restamps_id();
     test_lifetime_reset_secure_restamps_id();
+    test_lifetime_two_resets_no_cycle();
 #endif
 
     if (g_failed == 0) {
@@ -613,6 +706,8 @@ int main(void)
  *   [2]    u8   n_allocs_raw  — number of allocs to attempt (raw % 33)
  *   [3]    u8   do_reset      — if non-zero, reset after allocs
  *   [4]    u8   n_allocs2_raw — allocs after reset (raw % 33)
+ *   [5]    u8   prepad_raw    — pre-pad the arena 0..15 bytes (raw % 16) so
+ *                              pool base_mark is exercised at every alignment
  */
 
 #define FUZZ_ARENA_SIZE ((usize)8192)
@@ -622,11 +717,12 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     static u8 fuzz_buf[FUZZ_ARENA_SIZE];
     Arena     arena;
     Pool      pool;
-    u8        raw[5];
+    u8        raw[6];
     usize     obj_size;
     usize     capacity;
     usize     n_allocs;
     usize     n_allocs2;
+    usize     prepad;
     bool      do_reset;
     usize     i;
     bool      ok;
@@ -640,8 +736,16 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     n_allocs  = (usize)(raw[2] % 33u);
     do_reset  = raw[3] != 0;
     n_allocs2 = (usize)(raw[4] % 33u);
+    prepad    = (usize)(raw[5] % 16u);
 
     arena_init(&arena, fuzz_buf, FUZZ_ARENA_SIZE);
+
+    /* Push the arena to an arbitrary offset before pool_init so base_mark
+     * is exercised at every alignment, not just the 16-aligned start. */
+    if (prepad > 0) {
+        if (arena_alloc(&arena, prepad) == NULL) return 0;
+    }
+
     ok = pool_init(&pool, &arena, obj_size, capacity);
     if (!ok) return 0;
 
@@ -654,7 +758,11 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
         }
         /* Verify pointer is inside the reserved region */
         if ((u8*)p < fuzz_buf + pool.base_mark)   __builtin_trap();
-        if ((u8*)p >= fuzz_buf + pool.end_mark)    __builtin_trap();
+        if ((u8*)p >= fuzz_buf + pool.end_mark)   __builtin_trap();
+        /* Verify the object's END also stays within the reserved region —
+         * this is the assertion that the base_mark fix protects. */
+        if ((u8*)p + pool_object_size(&pool) > fuzz_buf + pool.end_mark)
+            __builtin_trap();
         /* Verify used counter is consistent */
         if (pool_used(&pool) > pool_capacity(&pool)) __builtin_trap();
     }
@@ -668,6 +776,8 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             void* p = pool_alloc_zero(&pool);
             if (p == NULL) break;
             if (!mem_is_zero(p, pool_object_size(&pool))) __builtin_trap();
+            if ((u8*)p + pool_object_size(&pool) > fuzz_buf + pool.end_mark)
+                __builtin_trap();
             if (pool_used(&pool) > pool_capacity(&pool))  __builtin_trap();
         }
     }
