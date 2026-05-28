@@ -2041,9 +2041,9 @@ returned region. From an unaligned arena offset there is a window where
 NULL), so line 309 fires.
 
 This is a **reachable** outcome — a real defensive path, not an
-unreachability. It was closed at the commit adding
-`test_init_arena_alloc_fails_after_guard` to `test/core/pool_test.c`, which
-lands the window exactly: a 65-byte arena, a 1-byte throwaway allocation
+unreachability. It was closed at CI #974 / 98de378, which added 
+test_init_arena_alloc_fails_after_guard to test/core/pool_test.c 
+and lands the window exactly: a 65-byte arena, a 1-byte throwaway allocation
 (offset = 1, so `arena_alloc` needs pad = 15), and a 16x4 = 64-byte
 reservation. Raw remaining = 65 - 1 = 64, so the coarse guard passes
 (`64 > 64` is false); `arena_alloc` then computes `1 + 15 + 64 = 80 > 65` and
@@ -2104,13 +2104,11 @@ audit closed every reachable outcome, in two waves:
 | 1    | cond 0 true (null)                          | `pool_reserved_bytes`  | 557  | `test_reserved_bytes_null_safe`               | 61/68         |
 | 2    | cond true (`!region` after arena_alloc)     | `pool_init`            | 309  | `test_init_arena_alloc_fails_after_guard`     | 62/68         |
 
-Wave 1 (four tests, six outcomes) shipped at CI #972 / b2644ba and is the
-source of the 61/68 measured baseline. Wave 2 (the line-309 closure) lands in
-the commit immediately following #972 that adds
-`test_init_arena_alloc_fails_after_guard`, reaching the 62/68 ceiling. The
-audit confirmed that after wave 2 no other reachable gaps remain: the 6
-outcomes recorded in this entry are the residual once every reachable outcome
-has been closed.
+Wave 1 (four tests, six outcomes) shipped at CI #972 / b2644ba and is the source of the 61/68 measured baseline. 
+Wave 2 (the line-309 closure, test_init_arena_alloc_fails_after_guard) shipped at CI #974 / 98de378, reaching the 
+62/68 ceiling; this MCDC-004 entry and the accompanying coverage revisions were recorded at CI #975 / 630f68f. The
+audit confirmed that after wave 2 no other reachable gaps remain: the 6 outcomes recorded in this entry are the 
+residual once every reachable outcome has been closed.
 
 ### Forward note (stringbuf.h and other `{ptr, len}` / handle types)
 
