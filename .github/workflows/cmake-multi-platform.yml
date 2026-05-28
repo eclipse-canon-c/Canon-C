@@ -371,7 +371,11 @@ jobs:
   #
   #    Scope: core/primitives/checked.h, core/primitives/bits.h,
   #    core/primitives/compare.h, core/primitives/ptr.h,
-  #    core/slice.h, and core/memory.h (round 1).
+  #    core/slice.h, core/memory.h, and core/arena.h — all ENFORCED
+  #    (hard proved/unproved baselines). core/pool.h is present as a
+  #    REPORT-ONLY WP step with no enforced baseline yet; its measured
+  #    counts will be transcribed into hard enforcement in a follow-up,
+  #    matching the soft-then-hard path every prior header took.
   #
   #    checked.h is the first Canon-C header with full ACSL contracts
   #    (every unsigned function plus all three signed functions). bits.h
@@ -385,9 +389,10 @@ jobs:
   #    (bytes_t, cbytes_t, str_t) plus the DEFINE_SLICE(T) macro for
   #    typed element views. memory.h is the sixth — it adds a heap
   #    allocation surface (mem_alloc / mem_free / mem_alloc_array_checked)
-  #    and alignment helpers. memory.h is currently scoped to round 1
-  #    (predicates plus the simplest 9 functions); the remaining 22
-  #    functions in memory.h will land in round 2+.
+  #    and alignment helpers, full surface (22 functions, VERIFY-008).
+  #    arena.h is the seventh — a linear bump allocator (VERIFY-009).
+  #    pool.h is the eighth — a fixed-size object pool backed by an
+  #    arena, report-only pending its first measured WP baseline.
   #
   #    Installation: opam with aggressive caching + cvc5 from GitHub.
   #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
@@ -1913,7 +1918,92 @@ jobs:
         with:
           name: wp-proof-arena
           path: wp_arena_output.txt
+      
 
+      - name: "WP: core/pool.h (report-only)"
+        # REPORT-ONLY — this step never fails the build. pool.h has just
+        # been annotated with predicted ACSL contracts; nobody has run
+        # Frama-C on it yet, so there is no measured baseline to enforce.
+        # This step runs WP, prints the proved/unproved counts and the
+        # full unproved-goal list, and uploads the artifact so the real
+        # numbers can be transcribed into a hard-enforcement wrapper in a
+        # follow-up commit (same soft-then-hard path every header took).
+        #
+        # pool.h includes memory.h transitively, so memory.h's full
+        # annotated surface re-emerges as inherited residuals here. The
+        # pool.h-own residuals are expected to cluster at ptr_offset /
+        # ptr_elem call sites plus the checked_mul overflow goal — but
+        # "expected" is a prediction, not a measurement. Read the artifact.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/pool.h 2>&1 | tee wp_pool_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (pool.h) exit status: ${WP_EXIT}  [REPORT-ONLY]"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_pool_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          # Parse-error guard: if WP produced no summary, frama-c aborted
+          # before running (almost always an ACSL syntax error in the
+          # predicted contracts). Surface it loudly — but do NOT fail,
+          # since this step is diagnostic. The follow-up hard wrapper
+          # WILL fail on this; here we just want it visible.
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "NOTE: WP produced no verification summary."
+            echo "      frama-c likely aborted on an ACSL syntax error in"
+            echo "      pool.h's predicted contracts. Diagnostic lines:"
+            grep -E "^\[(kernel|wp)" wp_pool_output.txt | head -20 || true
+            echo "      (report-only step — not failing the build)"
+          fi
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_pool_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_pool_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_pool_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (MEASURED, not enforced): ${UNPROVED_COUNT}"
+
+          echo ""
+          echo "--- Full unproved-goal list (transcribe these into the"
+          echo "    hard wrapper's CHECKS=() array in the follow-up) ---"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_pool_output.txt || \
+            echo "  (none — pool.h fully proved, or summary missing)"
+
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_pool_output.txt || true)
+          echo ""
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          echo "==============================================="
+          echo "  REPORT-ONLY: see wp-proof-pool artifact for full output."
+          echo "==============================================="
+          # Deliberately no exit 1 anywhere — this step always passes.
+
+      - name: Upload WP proof output (pool.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-pool
+          path: wp_pool_output.txt
+      
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
@@ -2350,6 +2440,46 @@ jobs:
               ls "$d"/*arena* 2>/dev/null || true
             done
           fi
+
+      - name: "Debug: per-line MC/DC detail for pool.h"
+        # Surfaces which specific conditions in pool.h are uncovered.
+        # First measured baseline (this run's sibling coverage job):
+        # 73.5% MC/DC (50/68, 18 missed). The 18 missed outcomes are
+        # not yet classified — this dump is what lets us classify them
+        # (defensive-branch-unreachable vs require_msg-panic-artifact
+        # vs genuinely-untested-reachable) before writing a documented
+        # MCDC-NNN deviations entry. Report-only; never fails.
+        run: |
+          cd build
+
+          POOL_GCDA=$(find . -name "pool_test*.gcda" | head -1)
+
+          if [ -z "$POOL_GCDA" ]; then
+            echo "ERROR: could not locate pool_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+
+          echo "Running gcov on: $POOL_GCDA"
+          gcov-14 --conditions --all-blocks "$POOL_GCDA" 2>&1 | \
+            grep -A 200 "pool.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for pool.h ==="
+          find . -name "pool.h.gcov" -exec echo "Found: {}" \;
+
+          POOL_GCOV=$(find . -name "pool.h.gcov" | head -1)
+          if [ -n "$POOL_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $POOL_GCOV ==="
+            cat "$POOL_GCOV"
+          else
+            echo "No pool.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*pool* 2>/dev/null || true
+            done
+          fi
+      
       
       - name: Generate HTML coverage report
         run: |
