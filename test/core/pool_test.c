@@ -422,6 +422,22 @@ static void test_get_const_returns_correct_slot(void)
     EXPECT(got->x == 7 && got->y == 8);
 }
 
+/* Exercises pool_get_const's null-pool (gcov L464 cond 0) and OOB (cond 2)
+ * outcomes, mirroring test_get_null_pool_returns_null and
+ * test_get_out_of_bounds_returns_null, which previously only covered the
+ * non-const pool_get. The cond 1 (!pool->arena) outcome remains uncovered —
+ * it is unreachable under pool_invariant (a valid pool has a valid arena)
+ * and is documented as a deviation, not a test gap. */
+static void test_get_const_null_and_oob_return_null(void)
+{
+    setup();
+    EXPECT(pool_get_const(NULL, 0) == NULL);      /* null pool */
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    pool_alloc(&g_pool);
+    EXPECT(pool_get_const(&g_pool, 1)  == NULL);  /* used == 1, index 1 OOB */
+    EXPECT(pool_get_const(&g_pool, 99) == NULL);
+}
+
 /* ── pool_reset ──────────────────────────────────────────────────────────── */
 
 static void test_reset_clears_used(void)
@@ -510,6 +526,20 @@ static void test_reset_secure_null_safe(void)
     EXPECT(1);
 }
 
+/* Exercises pool_reset_secure's empty-pool path (gcov L644 cond 2): a
+ * non-null pool with used == 0 must route through the early pool_reset
+ * branch without calling mem_secure_zero. The baseline only covered the
+ * used > 0 secure-wipe path (test_reset_secure_wipes_memory). */
+static void test_reset_secure_empty_pool(void)
+{
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    pool_reset_secure(&g_pool);                   /* used == 0 → early path */
+    EXPECT(pool_used(&g_pool) == 0);
+    EXPECT(pool_is_empty(&g_pool));
+    EXPECT(pool_alloc(&g_pool) != NULL);          /* still usable after */
+}
+
 /* ── query functions ─────────────────────────────────────────────────────── */
 
 static void test_query_null_safe(void)
@@ -543,6 +573,19 @@ static void test_query_remaining_decreases(void)
     pool_alloc(&g_pool);
     EXPECT(pool_remaining(&g_pool) == before - 1);
     EXPECT(pool_used(&g_pool) + pool_remaining(&g_pool) == pool_capacity(&g_pool));
+}
+
+/* Exercises pool_is_empty's false outcomes (gcov L510): the baseline only
+ * called pool_is_empty on empty pools (post-init / post-reset), leaving the
+ * (non-null, used != 0) vector unexercised — the single vector needed for
+ * BOTH conditions' independence under masking MC/DC. One call closes both. */
+static void test_is_empty_false_when_used(void)
+{
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 4);
+    pool_alloc(&g_pool);
+    EXPECT(!pool_is_empty(&g_pool));
+    EXPECT(pool_used(&g_pool) == 1);
 }
 
 /* ── byte views ──────────────────────────────────────────────────────────── */
@@ -581,6 +624,16 @@ static void test_reserved_bytes(void)
 static void test_as_bytes_null_safe(void)
 {
     bytes_t b = pool_as_bytes(NULL);
+    EXPECT(b.ptr == NULL && b.len == 0);
+}
+
+/* Exercises pool_reserved_bytes's null-pool outcome (gcov L557 cond 0),
+ * mirroring test_as_bytes_null_safe for pool_as_bytes. The cond 1
+ * (!pool->arena) outcome stays uncovered — unreachable under pool_invariant,
+ * same as pool_as_bytes. */
+static void test_reserved_bytes_null_safe(void)
+{
+    bytes_t b = pool_reserved_bytes(NULL);
     EXPECT(b.ptr == NULL && b.len == 0);
 }
 
@@ -735,6 +788,7 @@ int main(void)
     test_get_out_of_bounds_returns_null();
     test_get_null_pool_returns_null();
     test_get_const_returns_correct_slot();
+    test_get_const_null_and_oob_return_null();   /* MC/DC gap */
 
     /* pool_reset */
     test_reset_clears_used();
@@ -745,17 +799,20 @@ int main(void)
     /* pool_reset_secure */
     test_reset_secure_wipes_memory();
     test_reset_secure_null_safe();
+    test_reset_secure_empty_pool();          /* MC/DC gap */
 
     /* query */
     test_query_null_safe();
     test_query_memory_used();
     test_query_remaining_decreases();
+    test_is_empty_false_when_used();         /* MC/DC gap */
 
     /* byte views */
     test_as_bytes_empty();
     test_as_bytes_after_alloc();
     test_reserved_bytes();
     test_as_bytes_null_safe();
+    test_reserved_bytes_null_safe();         /* MC/DC gap */
 
     /* multiple pools */
     test_two_pools_same_arena();
