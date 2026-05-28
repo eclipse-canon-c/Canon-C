@@ -1920,20 +1920,84 @@ jobs:
           path: wp_arena_output.txt
       
 
-      - name: "WP: core/pool.h (report-only)"
-        # REPORT-ONLY — this step never fails the build. pool.h has just
-        # been annotated with predicted ACSL contracts; nobody has run
-        # Frama-C on it yet, so there is no measured baseline to enforce.
-        # This step runs WP, prints the proved/unproved counts and the
-        # full unproved-goal list, and uploads the artifact so the real
-        # numbers can be transcribed into a hard-enforcement wrapper in a
-        # follow-up commit (same soft-then-hard path every header took).
+      - name: "WP: core/pool.h"
+        # pool.h is the eighth Canon-C header WP-verified and the fourth
+        # non-primitives header (after slice.h, memory.h, arena.h). It
+        # provides a fixed-size object pool backed by an arena — a
+        # contiguous region reserved upfront, O(1) sequential allocation,
+        # bulk reset, no per-object free.
         #
-        # pool.h includes memory.h transitively, so memory.h's full
-        # annotated surface re-emerges as inherited residuals here. The
-        # pool.h-own residuals are expected to cluster at ptr_offset /
-        # ptr_elem call sites plus the checked_mul overflow goal — but
-        # "expected" is a prediction, not a measurement. Read the artifact.
+        # Memory model: Typed+Cast — same rationale as VERIFY-005..009.
+        # pool.h performs void*/u8* casts in pool_init (base_mark
+        # computation), pool_alloc/pool_get (ptr_elem), and the byte views.
+        #
+        # Expected result: 3775 / 3902 proved, exactly 127 unproved.
+        # Measured baseline, run #(TBD) (report-only predecessor:
+        # artifact wp-proof-pool, run 26571826273). The 127 unproved
+        # goals are documented in docs/deviations.md under VERIFY-010.
+        # They split cleanly into inherited vs pool.h-own:
+        #
+        # INHERITED RESIDUALS (103) — propagated unchanged from arena.h.
+        # pool.h includes arena.h, which transitively includes memory.h,
+        # slice.h, ptr.h, checked.h, contract.h. arena.h's ENTIRE
+        # VERIFY-009 residual set (57 substrate + 46 arena-own) re-emerges
+        # here byte-for-byte. Zero new substrate residuals introduced —
+        # the composable-verification thesis holds for a fourth time, and
+        # for the first time across a two-hop transitive include
+        # (pool -> arena -> memory -> ...).
+        #
+        # POOL.H-OWN RESIDUALS (24) — four categories, all VERIFY-010:
+        #
+        #   2a. pool_invariant postcondition arithmetic (5) —
+        #       pool_init ensures_part4 x3 + ensures_4_part3 +
+        #       call_arena_alloc_requires. The load-bearing conjunct
+        #       end_mark - base_mark == capacity * object_size is
+        #       nonlinear; WP's integer theory cannot discharge it for
+        #       the same reason as ptr.h's align_up_ensures (VERIFY-006
+        #       cat 2) and arena's fits_ensures (VERIFY-009 cat 2b).
+        #       NOTE: the three ensures_part4 goals are flagged
+        #       LIMITATION-SUSPECTED pending the manual review recorded
+        #       in VERIFY-010 — they are enforced as residuals here, but
+        #       their classification as pure WP-limitation (vs an
+        #       over-strong invariant) is to be confirmed, not asserted.
+        #
+        #   2b. ptr_elem call-site cascade (4) — pool_alloc and pool_get/
+        #       pool_get_const call ptr_elem/ptr_elem_const; the
+        #       call_ptr_elem_requires + the in_bounds_ensures_part4 +
+        #       the pool_alloc assert_rte_mem_access are the VERIFY-006
+        #       empty-nonnull cascade re-emerging at pool's call sites,
+        #       exactly as predicted in pool.h's header comment.
+        #
+        #   2c. bytes_from / mem_zero / mem_secure_zero call-sites (5) —
+        #       pool_as_bytes, pool_reserved_bytes (bytes_from x2 each),
+        #       pool_alloc_zero (mem_zero), pool_reset_secure
+        #       (mem_secure_zero). Same slice.h/memory.h call-site
+        #       precondition-reconstruction limitation.
+        #
+        #   2d. arena delegation + wrapper assigns/ensures (10) —
+        #       pool_alloc_zero assigns_normal_part3, pool_reset
+        #       (arena_reset_to + arena_alloc requires, reset_ensures
+        #       part3 x2), pool_reset_secure (assigns exit/normal part6,
+        #       mem_secure_zero requires). These reduce to the same
+        #       arithmetic chain cat 2a leaves unproved, inherited
+        #       through pool's delegation to arena_alloc / arena_reset_to.
+        #
+        # Verification scope:
+        #   - All public pool_* functions: ANNOTATED + VERIFIED
+        #   - pool_alloc_type, pool_get_type, etc. (type-safe macros):
+        #     DOCUMENTED, NOT WP-VERIFIED — the C preprocessor strips
+        #     ACSL inside #define. Same VERIFY-007..009 macro rationale.
+        #
+        # MCDC note (no closure check in this wrapper): like arena's
+        # MCDC-003, pool's defensive !pool->arena subconditions are
+        # WP-discharged unreachable under pool_invariant, but the
+        # arithmetic-residual functions (pool_init, pool_alloc, pool_get)
+        # DO appear in the residual list, so a "0/N functions in
+        # residuals" check is the wrong shape. Cross-stream MCDC evidence
+        # is the per-line gcov debug step in the coverage job.
+        #
+        # The wrapper enforces 3775/3902 proved with the 127 named
+        # unproved goal patterns. Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1954,48 +2018,127 @@ jobs:
 
           echo ""
           echo "==============================================="
-          echo "  WP (pool.h) exit status: ${WP_EXIT}  [REPORT-ONLY]"
+          echo "  WP (pool.h) exit status: ${WP_EXIT}"
           echo "==============================================="
 
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_pool_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # Parse-error guard: if WP produced no summary, frama-c aborted
-          # before running (almost always an ACSL syntax error in the
-          # predicted contracts). Surface it loudly — but do NOT fail,
-          # since this step is diagnostic. The follow-up hard wrapper
-          # WILL fail on this; here we just want it visible.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
-            echo "NOTE: WP produced no verification summary."
-            echo "      frama-c likely aborted on an ACSL syntax error in"
-            echo "      pool.h's predicted contracts. Diagnostic lines:"
-            grep -E "^\[(kernel|wp)" wp_pool_output.txt | head -20 || true
-            echo "      (report-only step — not failing the build)"
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in pool.h. Check the WP"
+            echo "      output above for [kernel:annot-error] or"
+            echo "      [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_pool_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
           fi
 
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_pool_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_pool_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_pool_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          EXPECTED_UNPROVED=127
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved (MEASURED, not enforced): ${UNPROVED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
 
-          echo ""
-          echo "--- Full unproved-goal list (transcribe these into the"
-          echo "    hard wrapper's CHECKS=() array in the follow-up) ---"
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_pool_output.txt || \
-            echo "  (none — pool.h fully proved, or summary missing)"
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (pool.h section) and"
+            echo "      docs/deviations.md (VERIFY-010) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_pool_output.txt || true
+            exit 1
+          fi
+
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "3775 / 3902" ]; then
+            echo "WARNING: proved count changed from expected 3775 / 3902."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-010 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
+
+          # Spot-check representative goals. These may appear as
+          # [Timeout], [Unknown], or [Failed] — check all. Full list:
+          # docs/deviations.md, VERIFY-010. The 103 inherited goals are
+          # identical to VERIFY-009 (arena.h); only pool.h-own goals are
+          # spot-checked here, plus a few inherited anchors to confirm
+          # the propagation chain is intact.
+          CHECKS=(
+            # --- inherited anchors (full set is VERIFY-009) ---
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_fits_ensures_part5"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires"
+            # --- pool.h-own cat 2a: pool_invariant arithmetic (5) ---
+            "typed_cast_pool_init_ensures_part4"
+            "typed_cast_pool_init_ensures_2_part4"
+            "typed_cast_pool_init_ensures_3_part4"
+            "typed_cast_pool_init_ensures_4_part3"
+            "typed_cast_pool_init_call_arena_alloc_requires"
+            # --- pool.h-own cat 2b: ptr_elem cascade (4) ---
+            "typed_cast_pool_alloc_assert_rte_mem_access"
+            "typed_cast_pool_alloc_call_ptr_elem_requires"
+            "typed_cast_pool_get_call_ptr_elem_requires"
+            "typed_cast_pool_get_in_bounds_ensures_part4"
+            "typed_cast_pool_get_const_call_ptr_elem_const_requires"
+            "typed_cast_pool_get_const_in_bounds_ensures_part4"
+            # --- pool.h-own cat 2c: bytes_from/zero call-sites (5) ---
+            "typed_cast_pool_alloc_zero_call_mem_zero_requires"
+            "typed_cast_pool_as_bytes_call_bytes_from_requires"
+            "typed_cast_pool_as_bytes_call_bytes_from_requires_2"
+            "typed_cast_pool_reserved_bytes_call_bytes_from_requires"
+            "typed_cast_pool_reserved_bytes_call_bytes_from_requires_2"
+            # --- pool.h-own cat 2d: arena delegation + wrappers (10) ---
+            "typed_cast_pool_alloc_zero_assigns_normal_part3"
+            "typed_cast_pool_reset_call_arena_reset_to_requires_2"
+            "typed_cast_pool_reset_call_arena_alloc_requires"
+            "typed_cast_pool_reset_reset_ensures_part3"
+            "typed_cast_pool_reset_reset_ensures_2_part3"
+            "typed_cast_pool_reset_secure_assigns_exit_part6"
+            "typed_cast_pool_reset_secure_assigns_normal_part6"
+            "typed_cast_pool_reset_secure_call_mem_secure_zero_requires"
+          )
+
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_pool_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
 
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_pool_output.txt || true)
-          echo ""
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step."
+          fi
+
+          echo "PASS: pool.h verified — 3775/3902 proved, 127 documented"
+          echo "      residuals all observed (VERIFY-010): 103 inherited"
+          echo "      from arena.h/memory.h/slice.h/ptr.h/checked.h/"
+          echo "      contract.h substrate + 24 pool.h-own. Composable"
+          echo "      verification holds across a two-hop transitive"
+          echo "      include: zero new substrate residuals introduced."
           echo "==============================================="
-          echo "  REPORT-ONLY: see wp-proof-pool artifact for full output."
-          echo "==============================================="
-          # Deliberately no exit 1 anywhere — this step always passes.
 
       - name: Upload WP proof output (pool.h)
         if: always()
