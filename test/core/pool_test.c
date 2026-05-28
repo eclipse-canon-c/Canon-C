@@ -193,6 +193,42 @@ static void test_init_unaligned_base_no_overrun(void)
     EXPECT((u8*)pool_get_type(&g_pool, 0, Vec2) == g_buf + (usize)g_pool.base_mark);
 }
 
+/* ── pool_init overflow guards (MC/DC gap closure) ───────────────────────────
+ *
+ * These two tests exercise the overflow branches in pool_init that the
+ * baseline suite never reached (gcov L283 alignment-overflow, L291
+ * checked_mul-overflow — both reported "condition 0 not covered (true)").
+ * Both pass valid-but-pathological sizes that satisfy the > 0 preconditions
+ * yet trip the internal overflow guards, so pool_init must return false and
+ * leave the arena untouched.
+ */
+static void test_init_object_size_alignment_overflow(void)
+{
+    bool ok;
+    setup();
+    /* mem_align(CANON_USIZE_MAX) returns CANON_USIZE_MAX (overflow sentinel),
+     * so pool_init must reject at the aligned_size == CANON_USIZE_MAX guard.
+     * object_size > 0 holds, so the require_msg precondition is satisfied. */
+    ok = pool_init(&g_pool, &g_arena, CANON_USIZE_MAX, 1);
+    EXPECT(!ok);
+    EXPECT(arena_used(&g_arena) == 0);
+}
+
+static void test_init_reservation_mul_overflow(void)
+{
+    bool ok;
+    setup();
+    /* A large object_size times a large max_objects overflows usize in the
+     * reservation-size computation, so checked_mul fails and pool_init must
+     * return false. Both args are > 0, satisfying the preconditions. The
+     * exact product overflows on both 32- and 64-bit usize: half of
+     * CANON_USIZE_MAX times 4 wraps. */
+    usize big = (CANON_USIZE_MAX / 2u) + 1u;
+    ok = pool_init(&g_pool, &g_arena, big, 4);
+    EXPECT(!ok);
+    EXPECT(arena_used(&g_arena) == 0);
+}
+
 /* ── pool_alloc ──────────────────────────────────────────────────────────── */
 
 static void test_alloc_returns_non_null(void)
@@ -257,6 +293,24 @@ static void test_alloc_zero_is_zeroed(void)
     EXPECT(v->x == 0 && v->y == 0);
 }
 
+/* Exercises pool_alloc_zero's `if (p)` false branch (gcov L372): when the
+ * pool is full, pool_alloc returns NULL and alloc_zero must NOT call mem_zero
+ * — it returns NULL without dereferencing. */
+static void test_alloc_zero_full_returns_null(void)
+{
+    usize i;
+    void* p;
+    setup();
+    pool_init_type(&g_pool, &g_arena, Vec2, 2);
+    for (i = 0; i < 2; i++) {
+        p = pool_alloc_zero(&g_pool);
+        EXPECT(p != NULL);
+    }
+    /* Pool is now full — alloc_zero must return NULL via the !p path. */
+    EXPECT(pool_alloc_zero(&g_pool) == NULL);
+    EXPECT(pool_used(&g_pool) == 2);
+}
+
 /* ── pool_try_alloc ──────────────────────────────────────────────────────── */
 
 static void test_try_alloc_success(void)
@@ -292,6 +346,29 @@ static void test_try_alloc_zero_success(void)
     ok = pool_try_alloc_zero(&g_pool, &p);
     EXPECT(ok);
     EXPECT(p != NULL);
+}
+
+/* Exercises the `if (out)` false branch in pool_try_alloc (gcov L386) and
+ * pool_try_alloc_zero (gcov L400): passing out == NULL must still allocate
+ * and return the success bool, just without writing through the null out. */
+static void test_try_alloc_null_out(void)
+{
+    bool ok;
+    setup();
+    pool_init(&g_pool, &g_arena, sizeof(Vec2), 4);
+    ok = pool_try_alloc(&g_pool, NULL);
+    EXPECT(ok);
+    EXPECT(pool_used(&g_pool) == 1);
+}
+
+static void test_try_alloc_zero_null_out(void)
+{
+    bool ok;
+    setup();
+    pool_init(&g_pool, &g_arena, sizeof(Vec2), 4);
+    ok = pool_try_alloc_zero(&g_pool, NULL);
+    EXPECT(ok);
+    EXPECT(pool_used(&g_pool) == 1);
 }
 
 /* ── pool_get ────────────────────────────────────────────────────────────── */
@@ -633,6 +710,8 @@ int main(void)
     test_init_type_macro();
     test_init_post_arena_alloc_safe();
     test_init_unaligned_base_no_overrun();   /* regression */
+    test_init_object_size_alignment_overflow();  /* MC/DC gap */
+    test_init_reservation_mul_overflow();        /* MC/DC gap */
 
     /* pool_alloc */
     test_alloc_returns_non_null();
@@ -642,11 +721,14 @@ int main(void)
 
     /* pool_alloc_zero */
     test_alloc_zero_is_zeroed();
+    test_alloc_zero_full_returns_null();     /* MC/DC gap */
 
     /* pool_try_alloc */
     test_try_alloc_success();
     test_try_alloc_failure();
     test_try_alloc_zero_success();
+    test_try_alloc_null_out();               /* MC/DC gap */
+    test_try_alloc_zero_null_out();          /* MC/DC gap */
 
     /* pool_get */
     test_get_returns_correct_slot();
