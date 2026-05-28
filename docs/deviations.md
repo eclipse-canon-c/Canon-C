@@ -1134,6 +1134,348 @@ core/ stack reaches.
 
 ---
 
+## VERIFY-010: WP Limitations Inherited from Substrate Plus pool_invariant Arithmetic and ptr_elem Cascade Residuals (pool.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-010 |
+| **Date**       | 2026-05-29 |
+| **Baseline commit** | b2644ba (Canon-C CI #972) |
+| **Scope**      | pool.h — 127 goals across 6 categories (4 own + 2 inherited groups) |
+| **Category**   | Formal verification completeness |
+
+**Description**: 127 of 3902 proof obligations (3.25%) are not discharged by
+any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3 4.15.2 +
+CVC5 1.2.1) with a 120-second timeout and `-wp-model Typed+Cast`. All 127 are
+triple-prover-resistant. The goals split cleanly into two top-level groups:
+**103 inherited from already-verified substrate headers** (re-emerging because
+pool.h includes arena.h, which transitively pulls in memory.h, ptr.h, slice.h,
+checked.h, and contract.h) and **24 pool.h-own** residuals in four categories.
+
+pool.h extends the composable-verification thesis to a fourth data point and
+the first observation across a **two-hop transitive include**. memory.h
+established the thesis (31 inherited + 26 own); arena.h re-confirmed it (57
+inherited + 46 own); pool.h re-confirms it again (103 inherited + 24 own).
+arena.h's entire VERIFY-009 residual surface (57 substrate + 46 arena.h-own =
+103) re-emerges byte-identically in the pool.h proof run — zero new substrate
+residuals are introduced at the pool.h boundary. pool.h is a **sibling** of
+arena.h in the include graph sense at the memory.h layer, but a **descendant**
+of arena.h itself (`pool.h` includes `arena.h`), so its inherited surface is
+arena.h's *total*, not memory.h's. Every inherited residual matches an
+already-documented goal by name; the CI wrapper enforces this with per-goal
+pattern checks.
+
+### Inherited residuals (103)
+
+These goals are not pool.h defects. They re-emerge in the pool.h proof run
+because pool.h includes arena.h, which transitively includes memory.h, ptr.h,
+slice.h, checked.h, and contract.h. WP re-emits the relevant obligations at
+the new call sites. The full arena.h residual set (VERIFY-009's 57 inherited +
+46 own = 103 total) is re-emitted as pool.h's inherited surface.
+
+| # | Source            | Goals | Notes                                                              |
+|---|-------------------|-------|--------------------------------------------------------------------|
+| 1 | VERIFY-002        | 2     | checked.h u64 add overflow — via mem_alloc_array_checked / checked_mul |
+| 2 | VERIFY-006 cat 2  | 3     | ptr.h align_up/down/padding integer theory                         |
+| 3 | VERIFY-006 cat 3  | 3     | ptr.h ptr_align_* call-chain                                       |
+| 4 | VERIFY-006 cat 4  | 2     | contract.h handler non-termination                                 |
+| 5 | VERIFY-007 cat 1  | 20    | slice.h memcmp call-site preconditions (bytes/str equality, etc.)  |
+| 6 | VERIFY-007 cat 2  | 1     | slice.h str_from_cstr strlen valid_string                          |
+| 7 | VERIFY-008 cat 1  | 5     | memory.h \fresh / \freeable (mem_alloc, mem_free, array_checked)   |
+| 8 | VERIFY-008 cat 2  | 9     | memory.h integer theory (mem_align, mem_is_aligned, etc.)          |
+| 9 | VERIFY-008 cat 3  | 12    | memory.h memcmp call-site (mem_compare, mem_equal, equal_bytes)    |
+| 10| VERIFY-009 cat 2a | 8     | arena.h ptr_span call-site (arena_alloc, arena_alloc_aligned)      |
+| 11| VERIFY-009 cat 2b | 26    | arena.h fits/does_not_fit arithmetic chain                         |
+| 12| VERIFY-009 cat 2c | 10    | arena.h zero/try wrapper delegation                                |
+| 13| VERIFY-009 cat 2d | 2     | arena.h arena_free_bytes helper call-site                          |
+
+**Inherited subtotal: 103 goals.** Byte-identical to arena.h's full residual
+list (VERIFY-009's 57 inherited + 46 own). The composable-verification claim,
+now empirically supported at four composition layers (ptr.h → slice.h with 2
+inherited; ptr.h/checked.h/slice.h → memory.h with 31 inherited;
+memory.h+substrate → arena.h with 57 inherited; arena.h+substrate → pool.h
+with 103 inherited), is that substrate residuals propagate without
+amplification: a downstream header's inherited count equals the upstream's
+total, not greater. pool.h is the first header to observe propagation through
+two transitive include hops (pool → arena → memory → ...), and the 103 count
+confirms the property holds across the deeper graph.
+
+### pool.h-own residuals (24)
+
+Four categories. Cats 2a, 2c, and 2d are call-chain residuals at ptr.h /
+slice.h / arena.h boundary functions whose `nonnull` behavior carries no
+`ensures` clause (see VERIFY-006 forward-implication note). Cat 2b is the
+`pool_invariant` postcondition arithmetic at pool_init.
+
+As predicted in pool.h's header comment, pool.h-own residuals cluster at the
+ptr_offset / ptr_elem and bytes_from call sites (the VERIFY-006 empty `nonnull`
+cascade) plus the checked_mul overflow goal (VERIFY-002 class, counted in the
+inherited table above via mem_alloc_array_checked). pool.h has **no
+per-allocation alignment-pad arithmetic** — the region is reserved once at
+pool_init and slots are computed by fixed-stride `ptr_elem`, not re-aligned per
+allocation — so arena.h's cat 2b arithmetic-chain residual class does not
+recur in pool.h's own surface. pool.h's own cat 2b is a narrower
+`pool_invariant`-establishment arithmetic at pool_init, not a per-allocation
+chain.
+
+#### Category 2a: pool_invariant postcondition arithmetic at pool_init (5)
+
+| # | Goal                                                |
+|---|------------------------------------------------------|
+| 1 | `typed_cast_pool_init_ensures_part4`                |
+| 2 | `typed_cast_pool_init_ensures_2_part4`              |
+| 3 | `typed_cast_pool_init_ensures_3_part4`              |
+| 4 | `typed_cast_pool_init_ensures_4_part3`              |
+| 5 | `typed_cast_pool_init_call_arena_alloc_requires`    |
+
+**Functions affected**: `pool_init`.
+
+**Root cause**: pool_init's success postcondition is `\result == \true ==>
+pool_invariant(pool)`. The load-bearing conjunct of `pool_invariant` is
+`end_mark - base_mark == capacity * object_size`. pool_init establishes this
+by capturing `base_mark` from `arena_alloc`'s returned pointer and `end_mark`
+from `arena_mark(arena)` after the reservation, with `needed = object_size *
+capacity` (via `checked_mul`). To discharge the equality, WP must prove the
+C arithmetic chain (post-pad data start, plus `needed` bytes, equals
+`arena_mark`'s post-state) matches the predicate's `capacity * object_size`
+product. This is nonlinear and crosses the `arena_alloc` boundary, where the
+returned-pointer-to-offset computation flows through the empty `nonnull`
+behavior cascade (VERIFY-006). Same class of limitation as ptr.h's
+`align_up_ensures` (VERIFY-006 cat 2) and arena.h's `fits_ensures`
+(VERIFY-009 cat 2b), applied to pool_init's invariant establishment.
+
+`pool_init_call_arena_alloc_requires` is the call-site reconstruction of
+`arena_alloc`'s `requires arena_invariant(arena)` — unprovable through the
+same boundary, identical in shape to arena.h's own cat 2a.
+
+**Note — LIMITATION-SUSPECTED on the three `ensures_part4` goals**: the
+`pool_init_ensures{,_2,_3}_part4` goals are enforced as residuals here, but
+their classification as pure WP-limitation (versus an over-strong
+`pool_invariant` conjunct that could be weakened without losing the
+load-bearing region check) is to be confirmed by a manual review, not
+asserted. If the review finds the invariant can be restated to discharge them
+without weakening `pool_get`'s region check or `pool_as_bytes`'s length proof,
+they move from residual to proved in a follow-up. Until then they are enforced
+as residuals so a regression cannot slip past the count check.
+
+**Manual proof argument**: pool_init reserves exactly `needed = object_size *
+capacity` bytes via `arena_alloc`, captures `base_mark` from the returned
+(post-pad) pointer and `end_mark` from the post-reservation `arena_mark`.
+Because `arena_alloc` advances the offset by exactly `needed` past the
+post-pad start, `end_mark - base_mark == needed == object_size * capacity` by
+construction. The C arithmetic is direct; the proof obstacle is WP's inability
+to carry the offset arithmetic across `arena_alloc`'s empty `nonnull` boundary
+and to discharge the nonlinear `capacity * object_size` product.
+
+#### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (6)
+
+| # | Goal                                                       |
+|---|-------------------------------------------------------------|
+| 1 | `typed_cast_pool_alloc_assert_rte_mem_access`              |
+| 2 | `typed_cast_pool_alloc_call_ptr_elem_requires`            |
+| 3 | `typed_cast_pool_get_call_ptr_elem_requires`             |
+| 4 | `typed_cast_pool_get_in_bounds_ensures_part4`            |
+| 5 | `typed_cast_pool_get_const_call_ptr_elem_const_requires` |
+| 6 | `typed_cast_pool_get_const_in_bounds_ensures_part4`      |
+
+**Functions affected**: `pool_alloc`, `pool_get`, `pool_get_const`.
+
+**Root cause**: each computes a slot address via `base = ptr_offset(buffer,
+base_mark)` then `slot = ptr_elem(base, i, object_size)`. WP must discharge
+`ptr_elem`'s `requires` at the call site and, for the `_get` variants, the
+`in_bounds` ensures (`\result != \null`). Both flow through `ptr_offset`'s and
+`ptr_elem`'s empty `nonnull` behaviors (VERIFY-006), which leave WP without
+the substrate facts to reconstruct the preconditions or the result validity.
+`pool_alloc_assert_rte_mem_access` is the RTE mem-access check on the same slot
+computation. This is the VERIFY-006 empty-`nonnull` cascade re-emerging at
+pool.h's call sites, exactly as pool.h's header comment predicted.
+
+**Manual proof argument**: `pool_invariant` gives `end_mark - base_mark ==
+capacity * object_size` and `end_mark <= arena->capacity` with the arena
+buffer valid through `capacity - 1`. For `i < used <= capacity`, the slot
+`base_mark + i * object_size` lies in `[base_mark, end_mark)`, hence within the
+valid buffer range. The C computation matches `ptr_elem`'s contract; the
+obstacle is the uintptr_t round-trip through `ptr_offset` / `ptr_elem` bodies
+(VERIFY-006 cat 3), not a real bounds gap. `pool_get`'s runtime `require_msg`
+region check (`(u8*)p - buffer < end_mark`) is the runtime backstop, exercised
+at all build levels.
+
+#### Category 2c: bytes_from / mem_zero / mem_secure_zero call-sites (5)
+
+| # | Goal                                                          |
+|---|----------------------------------------------------------------|
+| 1 | `typed_cast_pool_alloc_zero_call_mem_zero_requires`           |
+| 2 | `typed_cast_pool_as_bytes_call_bytes_from_requires`           |
+| 3 | `typed_cast_pool_as_bytes_call_bytes_from_requires_2`         |
+| 4 | `typed_cast_pool_reserved_bytes_call_bytes_from_requires`     |
+| 5 | `typed_cast_pool_reserved_bytes_call_bytes_from_requires_2`   |
+
+**Functions affected**: `pool_alloc_zero`, `pool_as_bytes`,
+`pool_reserved_bytes` (and `pool_reset_secure`'s `mem_secure_zero`, counted in
+cat 2d).
+
+**Root cause**: `pool_as_bytes` and `pool_reserved_bytes` each call
+`bytes_from(ptr_offset(buffer, base_mark), len)`; `pool_alloc_zero` calls
+`mem_zero(p, object_size)`. WP cannot reconstruct `bytes_from`'s two `requires`
+(validity, length-bound) or `mem_zero`'s validity precondition through the
+`ptr_offset` empty `nonnull` boundary. Same root cause as VERIFY-009 cat 2d
+(arena.h's `arena_free_bytes` → `bytes_from`) and VERIFY-008 (memory.h's
+call-site preconditions).
+
+**Manual proof argument**: `pool_invariant` establishes the reserved region
+`[base_mark, end_mark)` is within the valid buffer, with
+`end_mark - base_mark == capacity * object_size`. The `len` passed to
+`bytes_from` is `object_size * used` (≤ region span, since `used <= capacity`)
+or `object_size * capacity` (= region span); both are within bounds, and the
+base pointer is valid. The C matches `bytes_from`'s contract; the obstacle is
+the `ptr_offset` round-trip.
+
+#### Category 2d: arena delegation + reset wrapper assigns/ensures (8)
+
+| # | Goal                                                          |
+|---|----------------------------------------------------------------|
+| 1 | `typed_cast_pool_alloc_zero_assigns_normal_part3`             |
+| 2 | `typed_cast_pool_reset_call_arena_reset_to_requires_2`       |
+| 3 | `typed_cast_pool_reset_call_arena_alloc_requires`           |
+| 4 | `typed_cast_pool_reset_reset_ensures_part3`                 |
+| 5 | `typed_cast_pool_reset_reset_ensures_2_part3`               |
+| 6 | `typed_cast_pool_reset_secure_assigns_exit_part6`           |
+| 7 | `typed_cast_pool_reset_secure_assigns_normal_part6`         |
+| 8 | `typed_cast_pool_reset_secure_call_mem_secure_zero_requires`|
+
+**Functions affected**: `pool_alloc_zero`, `pool_reset`, `pool_reset_secure`.
+
+**Root cause**: `pool_reset` delegates to `arena_reset_to` then re-reserves via
+`arena_alloc`; `pool_reset_secure` adds a `mem_secure_zero` over the allocated
+region before delegating to `pool_reset`. The wrapper-specific obligations
+chain through the parent allocators' contracts:
+
+- `pool_reset`'s `reset_ensures_part3` (re-establish `pool_invariant` after
+  rollback-and-re-reserve) and the `arena_reset_to` / `arena_alloc` call-site
+  preconditions reduce to the same arithmetic chain cat 2a leaves unproved,
+  inherited through the delegation to `arena_reset_to` / `arena_alloc`.
+- `pool_reset_secure`'s `assigns_{exit,normal}_part6` and the
+  `mem_secure_zero` validity precondition chain through the region computation
+  (cat 2c shape) plus the `pool_reset` delegation.
+- `pool_alloc_zero`'s `assigns_normal_part3` chains through `pool_alloc`'s
+  partially-unproved assigns (cat 2b through-effect).
+
+All eight are inheritance from cats 2a/2b/2c through wrapper delegation,
+structurally identical to arena.h's cat 2c. If cats 2a–2c close, cat 2d closes
+with them.
+
+**Manual proof argument**: each wrapper body is a short delegation. The manual
+arguments are mechanical: assume the parent allocator's / region helper's
+postconditions (per cats 2a–2c's manual arguments), apply `mem_secure_zero` /
+`mem_zero`'s verified zeroing postcondition or `arena_reset_to`'s rollback
+contract, conclude `pool_invariant` and the assigns shape.
+
+### Summary of pool.h-own residuals
+
+| Category | Goals | Functions affected                                   | WP feature gap                              |
+|----------|-------|------------------------------------------------------|---------------------------------------------|
+| 2a       | 5     | pool_init                                            | pool_invariant arithmetic across arena_alloc boundary (3 LIMITATION-SUSPECTED) |
+| 2b       | 6     | pool_alloc, pool_get, pool_get_const                | ptr_elem cascade (VERIFY-006 empty nonnull) |
+| 2c       | 5     | pool_alloc_zero, pool_as_bytes, pool_reserved_bytes | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
+| 2d       | 8     | pool_alloc_zero, pool_reset, pool_reset_secure      | arena delegation + wrapper assigns/ensures  |
+| **Total**| **24**|                                                      |                                             |
+
+Cats 2b, 2c, and 2d are downstream consequences of VERIFY-006's
+forward-implication note: ptr.h's `nonnull` behaviors carry no `ensures`
+clause because strengthening them would itself require WP to discharge the
+uintptr_t round-trip. pool.h inherits the cascade through up to four call
+layers (pool.h → arena.h → ptr.h → uintptr_t). Cat 2a is pool.h's own
+invariant-establishment arithmetic at pool_init; three of its five goals are
+LIMITATION-SUSPECTED pending the manual review noted above.
+
+### Verification scope
+
+- **All public `pool_*` functions: ANNOTATED + VERIFIED.** 22 user-facing
+  functions; the query functions (`pool_used`, `pool_capacity`,
+  `pool_remaining`, `pool_is_full`, `pool_is_empty`, `pool_object_size`,
+  `pool_memory_used`, `pool_memory_reserved`) and `pool_try_alloc` /
+  `pool_try_alloc_zero` carry no residuals.
+- **Type-safe macros (`pool_alloc_type`, `pool_get_type`,
+  `pool_alloc_type_zero`, `pool_get_type_const`, `pool_init_type`):
+  DOCUMENTED, NOT WP-VERIFIED** — the C preprocessor strips ACSL inside
+  `#define` before macro expansion. Same VERIFY-007/008/009
+  macro-verification rationale.
+- **`mem_alloc_array_checked` routing**: pool_init computes its reservation
+  size through `checked_mul` (checked.h's verified primitive), inheriting the
+  VERIFY-002 overflow residual rather than minting a pool-specific one (counted
+  in the inherited table).
+
+### MCDC note (no closure check in this wrapper)
+
+Like arena.h's MCDC-003, pool.h's defensive `!pool->arena` subconditions are
+WP-discharged unreachable under `pool_invariant` (see MCDC-004), but the
+arithmetic-residual functions (`pool_init`, `pool_alloc`, `pool_get`,
+`pool_get_const`) DO appear in the residual list under cats 2a–2c, so a
+"function not in residuals" check (the slice.h MCDC-002 shape) is the wrong
+shape for pool.h. The pool.h WP step therefore omits an MCDC closure
+diagnostic. Cross-stream MCDC evidence is provided by the per-line gcov debug
+step in the coverage job (see MCDC-004).
+
+### Mitigation
+
+CI enforces exactly 127 unproved goals with the named goal patterns covering
+all 103 inherited and all 24 pool.h-own residuals. Any additional unproved
+goal or missing expected goal is a regression and fails the build. The
+exact-count enforcement with named patterns catches both count regressions
+(new residual class introduced) and rename regressions (a contract weakened in
+a way that produces a new residual under a different name).
+
+pool.h achieves 100% line coverage (74/74) and 89.7% MC/DC coverage (61/68) —
+the latter is the achievable ceiling under MCDC-004's type-invariant
+unreachability (6 `!pool->arena` defensive subconditions), pending
+classification of line 309 (see MCDC-004). All 22 user-facing functions are
+annotated and verified; the query and try-variant functions are 100% proved
+(no residuals). The remaining functions carry the 24 own residuals analyzed
+above.
+
+Allocation, access, and reset behavior is tested by the unit suite in
+`test/core/pool_test.c` — init (including the unaligned-base regression and
+both overflow guards), alloc / alloc_zero / try variants (including
+null-out and full-pool paths), get / get_const (including null and OOB for
+both variants), reset / reset_secure (including empty-pool and unaligned-base
+stability), queries, byte views, multiple pools per arena, type-safe macros,
+and lifetime tracking under `CANON_LIFETIME_DEBUG` (including the OWN-002
+no-cycle regression). Fuzzing exercises pool_init / alloc / alloc_zero / get /
+reset across random object sizes, capacities, and arena pre-pads through the
+`CANON_FUZZING` build in the same file. ASan + UBSan across all 16 CI configs
+verify absence of out-of-bounds access, uninitialized reads, and lifetime
+violations. The runtime substrate (OWN-001 / OWN-002) tracks lifetime token
+validity for borrows captured from the pool.
+
+The composable-verification claim is confirmed at a fourth composition layer
+and the first two-hop transitive include: pool.h inherits arena.h's full
+103-goal residual surface byte-identically (zero new substrate residuals
+introduced), and adds 24 own residuals concentrated at the ptr_elem /
+bytes_from / pool_invariant call sites that pool.h's header comment predicted.
+The 103:24 inherited:own ratio is the most lopsided yet — a direct consequence
+of pool.h sitting atop the deepest substrate stack verified to date while
+adding the thinnest own surface (no per-allocation alignment arithmetic).
+
+### Cross-references
+
+- Inherited residuals: VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
+  VERIFY-007 (slice.h), VERIFY-008 (memory.h), VERIFY-009 (arena.h).
+- ptr.h forward-implication note: VERIFY-006 (the deliberate empty `nonnull`
+  behaviors that produce pool.h's cats 2b/2c/2d).
+- MC/DC coverage closure: MCDC-004 (pool.h MC/DC at 89.7% with 6
+  type-invariant-unreachable outcomes; line 309 pending classification).
+- Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag, applied consistently
+  to pool.h's coverage build).
+- Substrate runtime tracking: OWN-001 (lifetime substrate covering pool),
+  OWN-002 (Arena/Pool per-TU counter migration).
+- Composable verification thesis: see README, "Composable verification"
+  section.
+- Per-goal CI artifact: `wp-proof-pool` (full WP output, including
+  goal-by-goal classification and Qed-and-prover timing).
+- Wrapper enforcement: `.github/workflows/ci.yml`, step "WP: core/pool.h".
+
+---
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
