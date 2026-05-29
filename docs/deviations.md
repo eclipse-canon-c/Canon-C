@@ -1390,7 +1390,7 @@ LIMITATION-SUSPECTED pending the manual review noted above.
 
 ### Verification scope
 
-- **All public `pool_*` functions: ANNOTATED + VERIFIED.** 22 user-facing
+- **All public `pool_*` functions: ANNOTATED + VERIFIED.** 19 user-facing
   functions; the query functions (`pool_used`, `pool_capacity`,
   `pool_remaining`, `pool_is_full`, `pool_is_empty`, `pool_object_size`,
   `pool_memory_used`, `pool_memory_reserved`) and `pool_try_alloc` /
@@ -1429,7 +1429,7 @@ pool.h achieves 100% line coverage (74/74) and 89.7% MC/DC coverage (61/68) at t
 baseline commit, rising to the documented ceiling of 91.2% (62/68) once the line-309 
 closure (test_init_arena_alloc_fails_after_guard) lands; the residual 6 outcomes are 
 type-invariant-unreachable (6 !pool->arena defensive subconditions, see MCDC-004). 
-All 22 user-facing functions are annotated and verified; the query and try-variant functions are 100% proved
+All 19 user-facing functions are annotated and verified; the query and try-variant functions are 100% proved
 (no residuals). The remaining functions carry the 24 own residuals analyzed
 above.
 
