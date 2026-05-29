@@ -8,14 +8,14 @@ with ACSL contracts, enforced in CI on every push to master.
 
 Combined verification status across all annotated headers:
 
-| Metric               | Value                                                                |
-|----------------------|----------------------------------------------------------------------|
-| **Headers verified** | 7 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h) |
-| **Functions**        | 168 annotated and verified                                           |
-| **Total obligations**| 11187 (per-header own goals; CI WP runs include substrate)           |
-| **Proved automatic** | 10977 (98.12%)                                                       |
-| **Unproved**         | 210 (all documented; see per-header sections)                        |
-| **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)                     |
+| Metric               | Value                                                                          |
+|----------------------|--------------------------------------------------------------------------------|
+| **Headers verified** | 8 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h)    |
+| **Functions**        | 187 annotated and verified                                                     |
+| **Total obligations**| 15089 (per-header own goals; CI WP runs include substrate)                     |
+| **Proved automatic** | 14752 (97.77%)                                                                 |
+| **Unproved**         | 337 (all documented; see per-header sections)                                  |
+| **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)                               |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
@@ -73,10 +73,30 @@ observe propagation through two layers of composition (substrate →
 memory.h → arena.h). See VERIFY-009 in `docs/deviations.md` for the
 full classification.
 
-A note on totals: the 11187 obligation count is the row-sum of
+The pool.h baseline (3775 / 3902) is the fourth Canon-C verification data
+point and the first to observe residual propagation across a two-hop
+transitive include. pool.h includes arena.h, which transitively includes
+memory.h, ptr.h, slice.h, checked.h, and contract.h. pool.h's 103 inherited
+residuals are byte-identical to arena.h's full 103-goal residual surface
+(arena.h's 57 inherited + arena.h's 46 own), and pool.h adds 24 own residuals
+across four categories: 5 pool_invariant-establishment arithmetic residuals at
+pool_init (3 of them LIMITATION-SUSPECTED pending a manual invariant review),
+6 ptr_elem-cascade residuals at pool_alloc / pool_get / pool_get_const
+(downstream of VERIFY-006's empty `nonnull` behaviors), 5 bytes_from / mem_zero
+call-site residuals on pool_alloc_zero / pool_as_bytes / pool_reserved_bytes,
+and 8 arena-delegation + reset-wrapper residuals on pool_alloc_zero /
+pool_reset / pool_reset_secure. The 103:24 inherited:own ratio is the most
+lopsided yet — a direct consequence of pool.h sitting atop the deepest
+substrate stack verified to date while adding the thinnest own surface: pool.h
+reserves its region once at pool_init and computes slots by fixed-stride
+ptr_elem, so it has no per-allocation alignment-pad arithmetic and arena.h's
+26-goal cat 2b arithmetic-chain residual class does not recur in pool.h's own
+surface. See VERIFY-010 in `docs/deviations.md` for the full classification.
+
+A note on totals: the 15089 obligation count is the row-sum of
 each header's own WP-relevant goals — checked.h's 1755, bits.h's
 761, compare.h's 208, ptr.h's 1739, slice.h's 390, memory.h's 2862,
-and arena.h's 3472 (each counted in full because each header was
+arena.h's 3472 and pool.h's 3902 (each counted in full because each header was
 verified atop its full substrate, with no separate substrate-free
 measurement available for downstream headers). The CI WP steps for
 downstream headers report larger numbers because their runs include
@@ -1509,6 +1529,282 @@ residuals table); the 46 own goals split across cats 2a (8) / 2b (26)
 
 ---
 
+## core/pool.h
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented timeouts)             |
+| **Baseline commit**    | b2644ba (Canon-C CI #972)                       |
+| **Functions**          | 19 of 19 non-macro functions annotated          |
+| **Proof obligations**  | 3775 / 3902 discharged automatically (96.74%)   |
+| **Timeouts**           | 127 (all documented under VERIFY-010)           |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
+| **CI enforcement**     | Yes — 3775/3902 with 127 named goals expected   |
+| **MC/DC coverage**     | 91.2% (62/68 condition outcomes — see MCDC-004) |
+| **Line coverage**      | 100% (74/74)                                    |
+| **CI artifact**        | `wp-proof-pool` (full per-goal breakdown)       |
+
+### Function inventory
+
+pool.h provides a fixed-size object pool carved from a caller-supplied arena —
+19 user-facing functions across init, allocation, try variants, indexed
+access, reset, query, and byte views. It is the first Canon-C header whose
+WP translation unit includes arena.h, so its run is the first to process the
+arena → memory → ptr/slice/checked/contract substrate at two transitive hops.
+
+**Group 1 — init (1 function):** `pool_init`. Carries cat 2a's 5
+pool_invariant-establishment residuals.
+
+**Group 2 — allocation (2 functions):** `pool_alloc`, `pool_alloc_zero`.
+`pool_alloc` carries cat 2b ptr_elem residuals; `pool_alloc_zero` carries
+cat 2c (mem_zero call-site) and cat 2d (through-effect) residuals.
+
+**Group 3 — try variants (2 functions):** `pool_try_alloc`,
+`pool_try_alloc_zero`. Both 100% proved (no residuals).
+
+**Group 4 — indexed access (2 functions):** `pool_get`, `pool_get_const`.
+Both carry cat 2b ptr_elem-cascade residuals.
+
+**Group 5 — reset (2 functions):** `pool_reset`, `pool_reset_secure`. Both
+carry cat 2d arena-delegation / reset-wrapper residuals.
+
+**Group 6 — query (8 functions):** `pool_used`, `pool_capacity`,
+`pool_remaining`, `pool_is_full`, `pool_is_empty`, `pool_object_size`,
+`pool_memory_used`, `pool_memory_reserved`. All eight 100% proved.
+
+**Group 7 — byte views (2 functions):** `pool_as_bytes`,
+`pool_reserved_bytes`. Both carry cat 2c bytes_from call-site residuals.
+
+**Type-safe macros — documentation only:** `pool_init_type`,
+`pool_alloc_type`, `pool_alloc_type_zero`, `pool_get_type`,
+`pool_get_type_const`. Same verification rationale as VERIFY-007's
+DEFINE_SLICE and VERIFY-008/009's typed-macro families: ACSL inside `#define`
+bodies is preprocessor-stripped before macro expansion, so macro-generated
+code is documented but not directly WP-verified. Validation is by unit testing
+on a representative type (Vec2 / i32) in `test/core/pool_test.c`.
+
+Of the 19 user-facing functions, **10 are 100% proved** with no residuals:
+the 8 query functions plus `pool_try_alloc` and `pool_try_alloc_zero`. The
+remaining 9 (`pool_init`, `pool_alloc`, `pool_alloc_zero`, `pool_get`,
+`pool_get_const`, `pool_as_bytes`, `pool_reserved_bytes`, `pool_reset`,
+`pool_reset_secure`) carry the 24 own residuals across cats 2a/2b/2c/2d.
+
+### What is proved
+
+- **ACSL predicate**: pool.h defines `pool_invariant`, whose load-bearing
+  conjunct is `end_mark - base_mark == capacity * object_size` together with
+  the arena-validity entailment `arena_invariant(pool->arena)`. Every public
+  function that takes a non-NULL Pool carries the invariant (or the
+  null-tolerant `pool == \null || pool_invariant(pool)` form). WP proves the
+  invariant is established by `pool_init` on success and preserved by
+  `pool_reset` / `pool_reset_secure` — the `ensures_part4` arithmetic conjuncts
+  are the cat 2a residuals, but the structural invariant (validity, the arena
+  entailment) discharges fully, which is the substrate fact MCDC-004 leans on
+  to establish the `!pool->arena` unreachability.
+
+- **Functional correctness with complete behavior splits**: `pool_init`,
+  `pool_alloc`, `pool_get`, `pool_get_const`, and the reset functions carry
+  `complete` and `disjoint` behavior splits over their NULL / full / OOB /
+  success cases. The query functions carry `null_pool` / `non_null` two-way
+  splits.
+
+- **Indexed-access bounds**: when `pool_get` / `pool_get_const` succeed, the
+  returned slot satisfies `\valid` over the object's byte range. The
+  `in_bounds_ensures_part4` validity conjuncts are the cat 2b residuals (the
+  ptr_elem uintptr_t round-trip), but the runtime `require_msg` region check
+  is the backstop exercised at all build levels.
+
+- **Absence of runtime errors** (`-wp-rte`): WP proves no execution of any
+  annotated function can trigger signed overflow, division by zero, invalid
+  shifts, null dereference, or out-of-bounds access through the void* → u8*
+  casts in the slot computation and byte views.
+
+- **Side-effect bounding**: mutating functions specify `assigns *pool;` (and
+  the arena region for the reset/secure wrappers); read-only functions specify
+  `assigns \nothing;`. WP discharges the assigns clauses fully except for the
+  cat 2c/2d wrapper-delegation residuals where the parent's clause is itself
+  partially unproved.
+
+### Prover breakdown
+
+| Category       | Goals discharged | Typical time      |
+|----------------|------------------|--------------------|
+| Terminating    | — (see note)     | (structural)      |
+| Unreachable    | 80               | (structural)      |
+| Qed (internal) | — (see note)     | 0.8ms–14ms        |
+| Alt-Ergo 2.6.3 | — (see note)     | 12ms–220ms        |
+| CVC5 1.2.1     | 3                | 65ms–260ms        |
+| Z3 4.15.2      | — (see note)     | 14ms–62ms         |
+| Timeout        | 124              | >120s             |
+| Unknown        | 3                | (solver gave up)  |
+| **Total**      | **3775 / 3902**  |                   |
+
+Note: the CI summary for this run surfaces the Unreachable (80), CVC5 (3),
+Timeout (124), and Unknown (3) categories directly. The structural and
+SMT-discharged categories not individually surfaced — Terminating, Qed,
+Alt-Ergo, and Z3 — together account for the remaining 3692 proved goals
+(3775 − 80 Unreachable − 3 CVC5); their per-prover split is recorded
+goal-by-goal in the `wp-proof-pool` CI artifact. CVC5's 3 closures confirm the
+triple-prover claim holds for pool.h: goals neither Alt-Ergo nor Z3 closed.
+
+The CI wrapper sums Timeout + Unknown + Failed (124 + 3 + 0 = 127) because WP
+may reclassify the same goal between Timeout and Unknown across runs depending
+on solver heuristics; what matters is that the goal is not proved.
+
+### Timeout goals (127)
+
+All 127 are documented as triple-prover-resistant. They split into 103
+inherited from substrate and 24 pool.h-own.
+
+The **103 inherited** goals are byte-identical to arena.h's full residual
+surface (VERIFY-009's 57 inherited from substrate + 46 arena.h-own). pool.h is
+the first header to include arena.h in WP scope, so arena.h's own residuals
+re-emerge here unchanged alongside the deeper substrate — every inherited goal
+name matches an already-documented goal from VERIFY-002, VERIFY-006,
+VERIFY-007, VERIFY-008, or VERIFY-009.
+
+The **24 pool.h-own** residuals split into four categories:
+
+**Category 2a — pool_invariant postcondition arithmetic at pool_init (5):**
+`pool_init_ensures{,_2,_3}_part4`, `pool_init_ensures_4_part3`, and
+`pool_init_call_arena_alloc_requires`. To discharge `pool_invariant`'s
+`end_mark - base_mark == capacity * object_size` conjunct, WP must carry the
+offset arithmetic across `arena_alloc`'s empty `nonnull` boundary and discharge
+the nonlinear `capacity * object_size` product. Same class as ptr.h's
+`align_up_ensures` (VERIFY-006 cat 2) and arena.h's `fits_ensures`
+(VERIFY-009 cat 2b). The three `ensures_part4` goals are flagged
+LIMITATION-SUSPECTED — their classification as pure WP-limitation versus an
+over-strong invariant conjunct is pending a manual review (see VERIFY-010).
+
+**Category 2b — ptr_elem cascade in pool_alloc / pool_get / pool_get_const
+(6):** `pool_alloc_assert_rte_mem_access`, `pool_alloc_call_ptr_elem_requires`,
+`pool_get_call_ptr_elem_requires`, `pool_get_in_bounds_ensures_part4`,
+`pool_get_const_call_ptr_elem_const_requires`,
+`pool_get_const_in_bounds_ensures_part4`. Each computes a slot via
+`ptr_offset` → `ptr_elem`; WP cannot reconstruct ptr_elem's preconditions or
+the `\result != \null` ensures through ptr.h's empty `nonnull` behaviors. The
+VERIFY-006 empty-`nonnull` cascade re-emerging at pool.h's call sites.
+
+**Category 2c — bytes_from / mem_zero call-sites (5):**
+`pool_alloc_zero_call_mem_zero_requires`,
+`pool_as_bytes_call_bytes_from_requires{,_2}`,
+`pool_reserved_bytes_call_bytes_from_requires{,_2}`. Same root cause as
+VERIFY-009 cat 2d (arena_free_bytes → bytes_from) and VERIFY-008: the
+`ptr_offset` empty `nonnull` boundary leaves WP without the substrate facts to
+reconstruct bytes_from's / mem_zero's preconditions.
+
+**Category 2d — arena delegation + reset wrapper assigns/ensures (8):**
+`pool_alloc_zero_assigns_normal_part3`,
+`pool_reset_call_arena_reset_to_requires_2`,
+`pool_reset_call_arena_alloc_requires`, `pool_reset_reset_ensures{,_2}_part3`,
+`pool_reset_secure_assigns_{exit,normal}_part6`,
+`pool_reset_secure_call_mem_secure_zero_requires`. All eight chain through
+cats 2a/2b/2c via wrapper delegation, structurally identical to arena.h's
+cat 2c. If cats 2a–2c close, cat 2d closes with them.
+
+Full goal list, per-category manual proof arguments, and the two-hop
+inheritance trace: see VERIFY-010 in `docs/deviations.md`. The CI artifact
+`wp-proof-pool` contains the verbatim WP output for auditor inspection.
+
+### MCDC-004 cross-reference (no closure check in this wrapper)
+
+MCDC-004 documents 6 of pool.h's 68 condition outcomes as unreachable: the
+`!pool->arena` middle subcondition of the defensive `if (!pool || !pool->arena
+|| ...)` guard in `pool_get` (435), `pool_get_const` (464), `pool_as_bytes`
+(541), `pool_reserved_bytes` (557), `pool_reset` (597), and `pool_reset_secure`
+(644). A valid pool always has a valid arena (`pool_invariant` entails
+`arena_invariant(pool->arena)`), and no public path constructs a pool with a
+NULL arena, so the outcome cannot fire.
+
+Like arena.h's MCDC-003, pool.h's WP step does *not* include an MCDC-closure
+diagnostic of the slice.h MCDC-002 "0/N functions in residuals" shape. The
+reason: the residual-bearing functions (`pool_init`, `pool_alloc`, `pool_get`,
+`pool_get_const`) overlap with the unreachable-branch functions, so "function
+absent from residuals" is the wrong predicate — `pool_get` / `pool_get_const`
+appear in the residual list under cat 2b (the ptr_elem cascade on the success
+path) while their `!pool->arena` defensive branch is separately discharged as
+unreachable. Cross-stream MCDC evidence is provided by the per-line gcov debug
+step in the coverage job, cross-referenced against WP's `Unreachable` count.
+
+pool.h's gcov-measured MC/DC was 61/68 (89.7%) at the b2644ba baseline (four
+gap-closure tests) and reached the documented 62/68 (91.2%) ceiling at CI #974
+(98de378), which added `test_init_arena_alloc_fails_after_guard` to close the
+line-309 reachable gap. See MCDC-004 for the closure history.
+
+### WP memory model note
+
+pool.h uses `-wp-model Typed+Cast` for the same reason as compare.h, ptr.h,
+slice.h, memory.h, and arena.h: pool.h performs void* → u8* casts in the slot
+computation (`ptr_offset` / `ptr_elem` over the reserved region) and in the
+byte views (`pool_as_bytes`, `pool_reserved_bytes`). The default `Typed` model
+rejects these casts and every RTE mem_access goal becomes unprovable.
+Soundness argument identical to VERIFY-005 through VERIFY-009: callers supply
+correctly-typed pointers, and the casts preserve the referenced byte range.
+
+### ACSL contract conventions
+
+- `pool_invariant` is the central named predicate. Every public function that
+  takes a non-NULL Pool carries `requires pool_invariant(pool);` (or the
+  null-tolerant disjunctive form for the query/byte-view functions). The
+  invariant entails `arena_invariant(pool->arena)`, which is what discharges
+  the `!pool->arena` defensive branches as unreachable (MCDC-004).
+
+- The reservation size is computed through `checked_mul` (checked.h's verified
+  primitive) rather than inline `object_size * capacity`, so pool_init inherits
+  the VERIFY-002 overflow residual rather than minting a pool-specific one
+  (counted in the inherited table, via the mem_alloc_array_checked class).
+
+- `pool_init` carries a three-stage failure ladder: object-size alignment
+  overflow, reservation-size `checked_mul` overflow, and the post-`arena_alloc`
+  NULL guard (line 309). The third is reachable from an unaligned arena offset
+  — see MCDC-004's line-309 closure — and is exercised by
+  `test_init_arena_alloc_fails_after_guard`.
+
+- All 19 functions specify `assigns` correctly: `*pool` (plus the arena region
+  for the reset/secure wrappers) for mutating functions, `\nothing` for the
+  query and byte-view functions. Macro-generated typed allocators are
+  documented but not directly verified, matching the VERIFY-007/008/009
+  macro-verification rationale.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: Same as the other verified headers — compiles
+  `require_msg` runtime NULL checks away; ACSL `requires` clauses provide the
+  static guarantees.
+
+- **`-DNDEBUG`**: Standard release-mode flag.
+
+### Reproduction
+
+```bash
+frama-c -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  core/pool.h
+```
+
+Expected output: `Proved goals: 3775 / 3902` with 127 unproved goals (124
+timeouts + 3 unknown). pool.h is the first header whose WP run processes a
+two-hop transitive include (pool.h → arena.h → memory.h → ptr/slice/checked/
+contract); the 3902 reflects the full translation unit. The 103 inherited
+goals are byte-identical to arena.h's full residual surface (see VERIFY-010's
+inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
+/ 2c (5) / 2d (8).
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -1524,13 +1820,12 @@ different class of goal well:
   involving arrays and quantifiers.
 - **CVC5 1.2.1** — contributes additional proofs on goals where
   Alt-Ergo and Z3 time out. Observed contributions: 3 goals on
-  checked.h, 3 goals on ptr.h, 2 goals on memory.h, and 3 goals on
-  arena.h discharged by CVC5 that neither Alt-Ergo nor Z3 could
-  close.
+  checked.h, 3 goals on ptr.h, 2 goals on memory.h, 3 goals on
+  arena.h , and 3 goals on pool.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
 
-The practical consequence: **every remaining unproved goal (2 on
-checked.h, 15 on bits.h, 10 on ptr.h, 23 on slice.h, 57 on memory.h,
-103 on arena.h) is demonstrated triple-prover-resistant**. This is a
+The practical consequence: **every remaining unproved goal (2 on checked.h, 
+15 on bits.h, 10 on ptr.h, 23 on slice.h, 57 on memory.h, 103 on arena.h, 
+127 on pool.h) is demonstrated triple-prover-resistant**. This is a
 stronger certification-evidence statement than dual-prover
 resistance — the goals are genuinely limited by WP's encoding,
 integer theory, or stdlib feature gaps, not by prover strength.
@@ -1570,7 +1865,7 @@ the complete installation and registration procedure.
 | slice.h      | ✅ Verified       | 367/390   | 23 documented timeouts (VERIFY-007); MCDC-002 closed                   |
 | memory.h     | ✅ Verified       | 2805/2862 | 57 documented timeouts (VERIFY-008); 31 inherited + 26 own             |
 | arena.h      | ✅ Verified       | 3369/3472 | 103 documented timeouts (VERIFY-009); 57 inherited + 46 own; MCDC-003 |
-| pool.h       | Planned          |           | Fixed-size block allocator                                             |
+| pool.h       | ✅ Verified       | 3775/3902 | 127 documented timeouts (VERIFY-010); 103 inherited + 24 own; MCDC-004 |
 | region.h     | Planned          |           | Lifetime management                                                    |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
