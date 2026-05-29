@@ -1,3 +1,18 @@
+/***************************************************************************
+ * Copyright (C) 2026 Eclipse Canon-C contributors
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the MIT License which is available at
+ * https://opensource.org/licenses/MIT.
+ *
+ * AI Disclosure: This file was largely AI-generated.
+ * The AI-generated portions may be considered public domain (CC0-1.0)
+ * and not subject to the project's licence. The human contributor has
+ * reviewed and verified that the code is correct.
+ *
+ * SPDX-License-Identifier: MIT AND CC0-1.0
+ **************************************************************************/
+
 /**
  * @file any_all_test.c
  * @brief Tests for algo/any_all — existential and universal quantification
