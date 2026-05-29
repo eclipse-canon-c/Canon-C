@@ -1633,25 +1633,23 @@ remaining 9 (`pool_init`, `pool_alloc`, `pool_alloc_zero`, `pool_get`,
 
 | Category       | Goals discharged | Typical time      |
 |----------------|------------------|--------------------|
-| Terminating    | — (see note)     | (structural)      |
+| Terminating    | 77               | (structural)      |
 | Unreachable    | 80               | (structural)      |
-| Qed (internal) | — (see note)     | 0.8ms–14ms        |
-| Alt-Ergo 2.6.3 | — (see note)     | 12ms–220ms        |
-| CVC5 1.2.1     | 3                | 65ms–260ms        |
-| Z3 4.15.2      | — (see note)     | 14ms–62ms         |
-| Timeout        | 124              | >120s             |
-| Unknown        | 3                | (solver gave up)  |
+| Qed (internal) | 3201             | 0.67ms–63ms       |
+| Alt-Ergo 2.6.3 | 396              | 16ms–908ms        |
+| CVC5 1.2.1     | 2                | 81ms              |
+| Z3 4.15.2      | 19               | 13ms–1s           |
+| Timeout        | 123              | >120s             |
+| Unknown        | 4                | (solver gave up)  |
 | **Total**      | **3775 / 3902**  |                   |
 
-Note: the CI summary for this run surfaces the Unreachable (80), CVC5 (3),
-Timeout (124), and Unknown (3) categories directly. The structural and
-SMT-discharged categories not individually surfaced — Terminating, Qed,
-Alt-Ergo, and Z3 — together account for the remaining 3692 proved goals
-(3775 − 80 Unreachable − 3 CVC5); their per-prover split is recorded
-goal-by-goal in the `wp-proof-pool` CI artifact. CVC5's 3 closures confirm the
-triple-prover claim holds for pool.h: goals neither Alt-Ergo nor Z3 closed.
+The proved total breaks down as 77 Terminating + 80 Unreachable (structural)
++ 3201 Qed + 396 Alt-Ergo + 2 CVC5 + 19 Z3 = 3775. CVC5's 2 closures confirm
+the triple-prover claim holds for pool.h: those goals were closed by neither
+Alt-Ergo nor Z3. The full per-goal breakdown is recorded in the `wp-proof-pool`
+CI artifact.
 
-The CI wrapper sums Timeout + Unknown + Failed (124 + 3 + 0 = 127) because WP
+The CI wrapper sums Timeout + Unknown + Failed (123 + 4 + 0 = 127) because WP
 may reclassify the same goal between Timeout and Unknown across runs depending
 on solver heuristics; what matters is that the goal is not proved.
 
@@ -1795,8 +1793,8 @@ frama-c -wp -wp-rte \
   core/pool.h
 ```
 
-Expected output: `Proved goals: 3775 / 3902` with 127 unproved goals (124
-timeouts + 3 unknown). pool.h is the first header whose WP run processes a
+Expected output: `Proved goals: 3775 / 3902` with 127 unproved goals (123
+timeouts + 4 unknown). pool.h is the first header whose WP run processes a
 two-hop transitive include (pool.h → arena.h → memory.h → ptr/slice/checked/
 contract); the 3902 reflects the full translation unit. The 103 inherited
 goals are byte-identical to arena.h's full residual surface (see VERIFY-010's
@@ -1821,7 +1819,7 @@ different class of goal well:
 - **CVC5 1.2.1** — contributes additional proofs on goals where
   Alt-Ergo and Z3 time out. Observed contributions: 3 goals on
   checked.h, 3 goals on ptr.h, 2 goals on memory.h, 3 goals on
-  arena.h , and 3 goals on pool.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
+  arena.h, and 2 goals on pool.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
 
 The practical consequence: **every remaining unproved goal (2 on checked.h, 
 15 on bits.h, 10 on ptr.h, 23 on slice.h, 57 on memory.h, 103 on arena.h, 
