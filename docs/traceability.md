@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-05-24                                                   |
+| **Date**           | 2026-05-29                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | f53bddb                                                      |
-| **CI run**         | Canon-C CI #962                                              |
+| **Commit**         | 98de378                                                      |
+| **CI run**         | Canon-C CI #974                                              |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -54,16 +54,17 @@
 | **Tool**           | gcov-14 --conditions (MC/DC) + lcov (branch)                |
 | **Runner**         | ubuntu-latest (GitHub Actions)                               |
 | **Scope**          | Library headers only — test files excluded                   |
-| **Test binaries**  | 51 (contract_test excluded from coverage build)              |
+| **Test binaries**  | 50 (contract_test excluded from coverage build)              |
+
 
 ### Results
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.6%      | 2208       | 2310       |
+| Lines      | 95.6%      | 2210       | 2311       |
 | Functions  | 99.6%      | 521        | 523        |
-| Branches   | 85.9%      | 1437       | 1672       |
-| MC/DC      | 85.3%      | 1401       | 1642       |
+| Branches   | 86.6%      | 1448       | 1672       |
+| MC/DC      | 86.1%      | 1413       | 1642       |
 
 arena.h's MC/DC contribution at 90.6% (58/64) is the achievable
 ceiling under the documented MCDC-003 unreachability — see the
@@ -95,6 +96,17 @@ fallback-and-error paths that were previously dead-coded inside the
 macro expansion. The 15 remaining missed outcomes are defensive
 `require_msg` checks under `-DCANON_NO_REQUIRE`, the same coverage
 methodology pattern documented in MCDC-001.
+
+pool.h's MC/DC contribution reached 62/68 (91.2%) at this baseline, the
+achievable ceiling under MCDC-004. The four wave-1 gap-closure tests
+(b2644ba / CI #972) moved pool.h from 55/68 to 61/68, and
+`test_init_arena_alloc_fails_after_guard` (98de378 / CI #974) closed the
+line-309 reachable gap to reach 62/68 — the gcov dump confirms line 309 at
+2/2 condition outcomes. The two closures lifted the project MC/DC hit count
+from 1401 to 1413 of 1642 and the project branch hit count from 1437 to 1448
+of 1672. The 6 remaining missed outcomes on pool.h are the `!pool->arena`
+defensive subconditions documented in MCDC-004, unreachable under
+`pool_invariant`.
 
 ### Methodology changes since baseline
 
@@ -214,6 +226,29 @@ by methodology):
   baseline; the 6 remaining outcomes are the documented ceiling and
   not counted as a coverage regression.
 
+- **pool.h: 91.2% (62/68)** — the ceiling under MCDC-004. The 6
+  missed outcomes are all the same shape: the `!pool->arena` middle
+  subcondition of the defensive `if (!pool || !pool->arena || ...)`
+  early return in `pool_get` (line 435), `pool_get_const` (464),
+  `pool_as_bytes` (541), `pool_reserved_bytes` (557), `pool_reset`
+  (597), and `pool_reset_secure` (644). Each is unreachable under
+  `pool_invariant`, which entails `arena_invariant(pool->arena)` — a
+  valid pool always has a valid arena, and no public path constructs a
+  pool with `pool != \null && pool->arena == \null`, so the
+  `!pool->arena`-true outcome cannot fire. WP discharges these
+  branches as unreachable (placing them in its `Unreachable` count,
+  not the residual list); gcov measures 62/68 because it instruments
+  the source rather than the proof — the two evidence streams
+  complement each other, the same cross-stream pattern as MCDC-002 and
+  MCDC-003. pool.h's contribution rose from 61/68 (89.7%) at the
+  four-test b2644ba baseline to 62/68 (91.2%) at CI #974 (98de378),
+  which added `test_init_arena_alloc_fails_after_guard` to close the
+  line-309 reachable gap — a genuine test gap (arena_alloc can fail
+  after pool_init's coarse `arena_remaining` guard passes, because
+  arena_remaining returns raw `capacity - offset` without the
+  alignment pad), not an unreachability. The 6 remaining outcomes are
+  the documented ceiling and not counted as a coverage regression.
+
 Headers absent from the MC/DC table:
 
 `core/primitives/types.h`, `core/primitives/limits.h`,
@@ -263,14 +298,15 @@ full per-header detail):
 | slice.h    | 22        |  390              |  367 (94.10%)     | 23       | VERIFY-007   |
 | memory.h   | 27        | 2862              | 2805 (98.01%)     | 57       | VERIFY-008   |
 | arena.h    | 22        | 3472              | 3369 (97.03%)     | 103      | VERIFY-009   |
-| **Total**  | **168**   | **11187**         | **10977 (98.12%)**| **210**  |              |
+| pool.h     | 19        | 3902              | 3775 (96.74%)     | 127      | VERIFY-010   |
+| **Total**  | **187**   | **15089**         | **14752 (97.77%)**| **337**  |              |
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). All 210 unproved goals are demonstrated
+`-wp-timeout 120`). All 337 unproved goals are demonstrated
 triple-prover-resistant and carry written manual-proof arguments or
 documented WP feature-gap rationale in `docs/deviations.md`.
 
-**Note on totals**: the 11187 figure is the row-sum of independent
+**Note on totals**: the 15089 figure is the row-sum of independent
 per-header WP runs, where each row reports each header's own
 obligations (substrate goals are counted under their owning header,
 not duplicated into downstream rows). The CI WP step for ptr.h
@@ -282,13 +318,18 @@ transitively included; the 2862 figure for memory.h reflects the
 full run, but is shown here as memory.h's row because memory.h is
 the verification target. arena.h's CI step processes arena.h with
 memory.h and the full transitive substrate; the 3472 figure for
-arena.h likewise reflects the full run as arena.h's row. 57 of
-arena.h's 103 unproved goals are re-emerged residuals already
-documented under VERIFY-002/006/007/008 — byte-identical to memory.h's
-full 57-goal residual surface (see VERIFY-009 for the inheritance
-table). 31 of memory.h's 57 unproved goals are likewise re-emerged
-residuals already documented under VERIFY-002/006/007 (see
-VERIFY-008).
+arena.h likewise reflects the full run as arena.h's row. pool.h's CI
+step processes pool.h with arena.h and the full two-hop transitive
+substrate; the 3902 figure for pool.h likewise reflects the full run
+as pool.h's row. 103 of pool.h's 127 unproved goals are re-emerged
+residuals already documented under VERIFY-002/006/007/008/009 —
+byte-identical to arena.h's full 103-goal residual surface (see
+VERIFY-010 for the inheritance table). 57 of arena.h's 103 unproved
+goals are re-emerged residuals already documented under
+VERIFY-002/006/007/008 — byte-identical to memory.h's full 57-goal
+residual surface (see VERIFY-009 for the inheritance table). 31 of
+memory.h's 57 unproved goals are likewise re-emerged residuals already
+documented under VERIFY-002/006/007 (see VERIFY-008).
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 (5.9%) than the previously verified primitives headers because slice.h
@@ -332,6 +373,29 @@ in VERIFY-009 with manual-proof arguments. The 57:46 inherited:own
 ratio confirms the composable-verification claim at the third
 composition layer.
 
+The pool.h baseline (3775 / 3902) extends the composable-verification
+thesis to a fourth composition layer and is the first Canon-C header to
+observe residual propagation across a two-hop transitive include.
+pool.h includes arena.h, which transitively includes memory.h, ptr.h,
+slice.h, checked.h, and contract.h. pool.h's 103 inherited residuals
+are byte-identical to arena.h's full residual surface (arena.h's 57
+inherited + arena.h's 46 own = 103) — meaning arena.h's own residuals
+propagate as a unit just like the headers below it, now across two
+transitive hops. The 24 pool.h-own residuals fall into four categories:
+5 pool_invariant-establishment arithmetic residuals at pool_init (3
+LIMITATION-SUSPECTED pending a manual invariant review), 6
+ptr_elem-cascade residuals at pool_alloc / pool_get / pool_get_const
+(downstream of VERIFY-006's empty `nonnull` behaviors), 5 bytes_from /
+mem_zero call-site residuals on pool_alloc_zero / pool_as_bytes /
+pool_reserved_bytes, and 8 arena-delegation + reset-wrapper residuals
+on pool_alloc_zero / pool_reset / pool_reset_secure. All 24 are
+documented in VERIFY-010 with manual-proof arguments. The 103:24
+inherited:own ratio is the most lopsided in the core/ stack — pool.h
+sits atop the deepest substrate verified to date while adding the
+thinnest own surface, because it reserves its region once at pool_init
+and computes slots by fixed-stride ptr_elem, so arena.h's 26-goal
+per-allocation arithmetic-chain residual class does not recur.
+
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
 were discharged automatically — most by Qed, with smaller contributions
@@ -339,7 +403,7 @@ from Alt-Ergo and from WP's structural categories (Terminating /
 Unreachable). The two manually-discharged goals are unchanged from
 the previous baseline.
 
-### Cross-stream evidence: MCDC-002 and MCDC-003 closures
+### Cross-stream evidence: MCDC-002, MCDC-003, and MCDC-004 closures
 
 slice.h's MC/DC ceiling at 93.1% (54/58) and slice.h's WP discharge
 of the four MCDC-002 functions form complementary certification
@@ -374,18 +438,35 @@ future invariant relaxations) while the verification framework
 provides the unreachability evidence the testing framework cannot.
 See MCDC-003 in `docs/deviations.md` for the formal closure record.
 
+pool.h's MC/DC ceiling at 91.2% (62/68) and the MCDC-004 closure are
+the fourth instance of the same cross-stream pattern. gcov reports 6
+`!pool->arena` defensive subconditions as uncovered; WP discharges them
+as unreachable under `pool_invariant` (which entails
+`arena_invariant(pool->arena)`), placing them in its `Unreachable`
+count rather than the residual list. The line-309 reachable gap pool.h's
+audit uncovered — `arena_alloc` returning NULL after pool_init's coarse
+`arena_remaining` guard passes, because `arena_remaining` returns raw
+`capacity - offset` without the alignment pad — was a genuine test gap,
+not an unreachability, and was closed by a targeted boundary test
+(`test_init_arena_alloc_fails_after_guard`, CI #974) rather than
+documented as a deviation. See MCDC-004 in `docs/deviations.md` for the
+formal closure record and the full reachable-gap closure history.
+
 memory.h does not extend the MCDC-002 list because its bytes_t/cbytes_t
 variants inherit slice.h's `bytes_invariant` — the analogous `!ptr`
 defensive branches are discharged by the inherited invariant rather
 than introducing new public-API-unreachable code paths. arena.h's
-MCDC-003 is a *different* unreachability shape than slice.h's
-MCDC-002 (overflow-guard subconditions vs. `!ptr` defensive branches),
-but the same cross-stream evidence pattern (gcov measures source, WP
-discharges via invariant). Future headers that introduce their own
-public {ptr, len} types or analogous unreachable defensive code
-patterns (pool.h, stringbuf.h are candidates) will need their own
-per-header MCDC analyses; each header's specific unreachability
-shape will be documented separately.
+MCDC-003 and pool.h's MCDC-004 are each a *different* unreachability
+shape than slice.h's MCDC-002 (overflow-guard subconditions, and a
+`!pool->arena` arena-validity disjunct, respectively, vs. slice.h's
+`!ptr` defensive branches), but all share the same cross-stream
+evidence pattern (gcov measures source, WP discharges via invariant).
+pool.h has since shipped its own per-header analysis as MCDC-004,
+confirming the per-header expectation. Remaining headers that introduce
+their own public {ptr, len} types or analogous unreachable defensive
+code (stringbuf.h is the next candidate) will need their own per-header
+MCDC analyses; each header's specific unreachability shape will be
+documented separately.
 
 ### History
 
@@ -402,5 +483,6 @@ shape will be documented separately.
 | 2026-05-02 | 1e0d0fe | #821   | v1.3.0  | 95.7%  | 99.6%     | 85.2%    | 84.5%  | slice.h: ACSL contracts + new branch-isolation tests for MCDC-002 closure (+9 branches, +11 MCDC outcomes covered with no denominator growth — same code, more tests); MC/DC 93.1% ceiling (MCDC-002); WP 367/390 (VERIFY-007); MCDC-002 WP-discharged |
 | 2026-05-09 | b3e668b | #841   | v1.3.0  | 95.7%  | 99.6%     | 85.5%    | 84.8%  | memory.h: Phase 0 tests + Phase 1 refactor (mem_alloc_array_checked) at 4baf5c6 (CI #840), then ACSL contracts + WP enforcement YAML at b3e668b (CI #841); WP 2805/2862 (VERIFY-008); 88.3% MC/DC; 31 inherited + 26 own residuals. |
 | 2026-05-24 | f53bddb | #962   | v1.3.0  | 95.6%  | 99.6%     | 85.9%    | 85.3%  | arena.h: ACSL contracts + WP enforcement YAML; WP 3369/3472 (VERIFY-009); MC/DC 90.6% ceiling (MCDC-003); 57 inherited (memory.h's full residual surface) + 46 own (8 ptr_span call-sites + 26 fits/does_not_fit arithmetic chain + 10 wrapper delegation + 2 free_bytes helpers). test_try_alloc_aligned_failure closed the line 510 compound-return gap (+1 MC/DC outcome, +1 branch covered). Composable-verification thesis confirmed at third composition layer: arena.h inherits memory.h's full 57-goal residual surface byte-identically. |
+| 2026-05-29 | 98de378 | #974   | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | pool.h: ACSL contracts + WP enforcement (WP 3775/3902, VERIFY-010; 103 inherited = arena.h's full residual surface + 24 own across cats 2a/2b/2c/2d), first two-hop transitive include; MC/DC 91.2% ceiling (MCDC-004, 6 `!pool->arena` outcomes unreachable under pool_invariant). Gap-closure: four wave-1 tests (b2644ba/#972) 55→61/68; test_init_arena_alloc_fails_after_guard (98de378/#974) closed the line-309 reachable gap 61→62/68 (gcov confirms L309 2/2). Project MC/DC 1401→1413 of 1642, branches 1437→1448 of 1672. Composable-verification thesis confirmed at fourth composition layer; 103:24 inherited:own ratio. |
 
 ---
