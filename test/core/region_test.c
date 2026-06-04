@@ -20,6 +20,7 @@
  * Covers:
  *   - region_begin: initialization, ID assignment, open state
  *   - region_end: closes region, calls hooks LIFO, resets arena
+ *   - region_end: hooks may allocate from the attached arena before reset
  *   - region_attach_arena: arena reset on region_end
  *   - region_register: hook registration, LIFO call order, table full
  *   - region_set_parent / region_has_parent
@@ -83,6 +84,20 @@ static void hook_check_arena_live(void* ctx)
 {
     Arena* a = (Arena*)ctx;
     g_hook_saw_alloc = (arena_remaining(a) > 0) ? 1 : 0;
+}
+
+/* Hook that actively allocates from the attached arena during region_end.
+ * Confirms the arena is not merely un-reset but fully usable while hooks
+ * run — the contract's "hooks may still allocate from it" guarantee. */
+static u8    g_alloc_hook_buf[256];
+static Arena g_alloc_hook_arena;
+static int   g_alloc_hook_ptr_was_valid = 0;
+
+static void hook_alloc_from_arena(void* ctx)
+{
+    Arena* a = (Arena*)ctx;
+    void*  p = arena_alloc(a, 32);
+    g_alloc_hook_ptr_was_valid = (p != NULL) ? 1 : 0;
 }
 
 /* ── region_begin ────────────────────────────────────────────────────────── */
@@ -301,6 +316,25 @@ static void test_hooks_run_before_arena_reset(void)
 
     EXPECT(g_hook_saw_alloc == 1);
     EXPECT(arena_used(&g_hook_arena) == 0);
+}
+
+/* A hook allocates from the attached arena during region_end. The reorder in
+ * region_end (capture arena before hooks, reset after) must keep the arena
+ * fully usable while the hook runs, then reset it once all hooks return. */
+static void test_hook_can_alloc_from_arena(void)
+{
+    Region r;
+    memset(g_alloc_hook_buf, 0, sizeof(g_alloc_hook_buf));
+    arena_init(&g_alloc_hook_arena, g_alloc_hook_buf, sizeof(g_alloc_hook_buf));
+    g_alloc_hook_ptr_was_valid = 0;
+
+    region_begin(&r);
+    region_attach_arena(&r, &g_alloc_hook_arena);
+    region_register(&r, hook_alloc_from_arena, &g_alloc_hook_arena);
+    region_end(&r);
+
+    EXPECT(g_alloc_hook_ptr_was_valid == 1);       /* arena usable during hook */
+    EXPECT(arena_used(&g_alloc_hook_arena) == 0);  /* reset after hooks */
 }
 
 /* ── query — NULL safety ─────────────────────────────────────────────────── */
@@ -583,6 +617,7 @@ int main(void)
     test_register_returns_false_when_full();
     test_hook_ctx_null_ok();
     test_hooks_run_before_arena_reset();
+    test_hook_can_alloc_from_arena();
 
     /* query — NULL safety */
     test_query_null_safe();
