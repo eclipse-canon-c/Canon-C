@@ -155,11 +155,12 @@
  * function whose verification has an inherent boundary: it dispatches
  * caller-supplied cleanup hooks through an opaque function pointer, which
  * WP cannot reason about without a `calls` clause that the arbitrary-hook
- * design cannot supply. The hook dispatch is therefore modelled as
- * `assigns \everything`; the structural postconditions are re-established by
- * unconditional writes *after* the loop so they survive the havoc, and the
- * residual is documented (see docs/deviations.md VERIFY-011 / OWN-003 and
- * the report-only WP step in .github/workflows/ci.yml).
+ * design cannot supply. region_end() declares `assigns *r`; the structural
+ * postconditions are re-established by unconditional writes *after* the
+ * hook loop. WP cannot prove the indirect hook call respects the `*r`
+ * frame (a hook could, as far as WP knows, alias r), so that call is the
+ * documented region.h-own residual (see docs/deviations.md VERIFY-011 /
+ * OWN-003 and the report-only WP step in .github/workflows/ci.yml).
  *
  * Quick start:
  * ────────────────────────────────────────────────────────────────────────────
@@ -455,7 +456,7 @@ static inline void region_begin(Region* r) {
 /*@
   requires region_invariant(r);
   requires r->open;
-  assigns  \everything;
+  assigns  *r;
   ensures  r->open == \false;
   ensures  r->num_hooks == 0;
   ensures  r->arena == \null;
@@ -470,22 +471,24 @@ static inline void region_end(Region* r) {
     require_msg(r->open,   "region_end: region is already closed");
 
     /* Capture before the hooks run: a non-NULL value satisfies
-     * arena_invariant by region_invariant, and a local is immune to the
-     * `assigns \everything` of the opaque hook dispatch below. */
+     * arena_invariant by region_invariant, and a local is immune to any
+     * memory the opaque hook dispatch below may touch. */
     saved_arena = r->arena;
 
     /* Hooks — LIFO.
      * h->fn(h->ctx) is an indirect call through a caller-supplied pointer.
-     * WP has no `calls` clause to reason about it (hooks are arbitrary), so
-     * its effect is `assigns \everything`. The loop annotation below exists
-     * only to discharge the array-index RTE and termination; the function's
-     * structural postconditions are re-established by the unconditional
-     * writes after the loop. The indirect call and the arena_reset
-     * precondition through it are the documented region.h-own residuals
-     * (VERIFY-011 / OWN-003). */
+     * WP has no `calls` clause to reason about it (hooks are arbitrary).
+     * region_end's declared frame is `assigns *r`; the indirect call may,
+     * for all WP can prove, write through a pointer aliasing r, so the
+     * call's conformance to that frame is the documented region.h-own
+     * residual (VERIFY-011 / OWN-003). The loop annotation below bounds the
+     * loop's own writes (the counter and the cleanups array) so the array-
+     * index RTE and termination discharge; the function's structural
+     * postconditions are re-established by the unconditional writes after
+     * the loop. */
     /*@
       loop invariant 0 <= i <= REGION_MAX_CLEANUP;
-      loop assigns  \everything;
+      loop assigns  i, r->cleanups[0 .. REGION_MAX_CLEANUP - 1];
       loop variant  i;
     */
     for (i = r->num_hooks; i > 0; i--) {
