@@ -147,6 +147,20 @@
  * - lifetime_assert_valid: O(1) — always-on; disabled only by CANON_NO_REQUIRE
  * - sizeof(Region):      fixed — no dynamic sizing
  *
+ * Verification (Frama-C WP):
+ * ────────────────────────────────────────────────────────────────────────────
+ * Every function in this file carries an ACSL contract. region_invariant()
+ * is the central predicate (validity, hook-count bound, arena validity);
+ * it composes arena_invariant() from core/arena.h. region_end() is the one
+ * function whose verification has an inherent boundary: it dispatches
+ * caller-supplied cleanup hooks through an opaque function pointer, which
+ * WP cannot reason about without a `calls` clause that the arbitrary-hook
+ * design cannot supply. The hook dispatch is therefore modelled as
+ * `assigns \everything`; the structural postconditions are re-established by
+ * unconditional writes *after* the loop so they survive the havoc, and the
+ * residual is documented (see docs/deviations.md VERIFY-011 / OWN-003 and
+ * the report-only WP step in .github/workflows/ci.yml).
+ *
  * Quick start:
  * ────────────────────────────────────────────────────────────────────────────
  * @code
@@ -292,6 +306,9 @@
  *
  * Complexity: O(1)
  */
+/*@
+  assigns \nothing;
+*/
 static inline void lifetime_assert_valid(
     region_id_t source_id,
     bool        source_open,
@@ -358,6 +375,24 @@ struct Region {
 };
 
 /* ════════════════════════════════════════════════════════════════════════════
+   region_invariant — central ACSL predicate
+   ════════════════════════════════════════════════════════════════════════════
+   Mirrors the role arena_invariant / pool_invariant play in their headers:
+   a single named predicate carried as a precondition by every function that
+   takes a live Region, and re-established as a postcondition by every
+   mutating function. It composes arena_invariant from core/arena.h for the
+   optional attached arena. The hook count is bounded by REGION_MAX_CLEANUP
+   so the region_end() walk and region_register() store are in-bounds.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/*@
+  predicate region_invariant(Region *r) =
+      \valid(r)
+      && 0 <= r->num_hooks <= REGION_MAX_CLEANUP
+      && (r->arena == \null || arena_invariant(r->arena));
+*/
+
+/* ════════════════════════════════════════════════════════════════════════════
    Lifecycle
    ════════════════════════════════════════════════════════════════════════════ */
 
@@ -377,6 +412,15 @@ struct Region {
  *
  * Complexity: O(1)
  */
+/*@
+  requires \valid(r);
+  assigns  *r;
+  ensures  r->open == \true;
+  ensures  r->arena == \null;
+  ensures  r->num_hooks == 0;
+  ensures  r->id == (region_id_t)(uintptr_t)r;
+  ensures  region_invariant(r);
+*/
 static inline void region_begin(Region* r) {
     require_msg(r != NULL, "region_begin: r cannot be NULL");
     *r      = (Region){0};
@@ -400,15 +444,50 @@ static inline void region_begin(Region* r) {
  * @post r->num_hooks == 0
  *
  * Complexity: O(num_hooks)
+ *
+ * Verification note: the attached arena pointer is captured into a local
+ * BEFORE the hook loop, and r->arena is cleared unconditionally AFTER it.
+ * Functionally identical to clearing inside the `if` for any conforming use
+ * (hooks may allocate from the arena but must not repoint r->arena), and it
+ * lets WP discharge the arena_reset call against the captured (loop-immune)
+ * local rather than against a field the opaque hooks have havoc'd.
  */
+/*@
+  requires region_invariant(r);
+  requires r->open;
+  assigns  \everything;
+  ensures  r->open == \false;
+  ensures  r->num_hooks == 0;
+  ensures  r->arena == \null;
+  ensures  region_invariant(r);
+*/
 static inline void region_end(Region* r) {
     usize          i;
     RegionCleanup* h;
+    Arena*         saved_arena;
 
     require_msg(r != NULL, "region_end: r cannot be NULL");
     require_msg(r->open,   "region_end: region is already closed");
 
-    /* Hooks — LIFO */
+    /* Capture before the hooks run: a non-NULL value satisfies
+     * arena_invariant by region_invariant, and a local is immune to the
+     * `assigns \everything` of the opaque hook dispatch below. */
+    saved_arena = r->arena;
+
+    /* Hooks — LIFO.
+     * h->fn(h->ctx) is an indirect call through a caller-supplied pointer.
+     * WP has no `calls` clause to reason about it (hooks are arbitrary), so
+     * its effect is `assigns \everything`. The loop annotation below exists
+     * only to discharge the array-index RTE and termination; the function's
+     * structural postconditions are re-established by the unconditional
+     * writes after the loop. The indirect call and the arena_reset
+     * precondition through it are the documented region.h-own residuals
+     * (VERIFY-011 / OWN-003). */
+    /*@
+      loop invariant 0 <= i <= REGION_MAX_CLEANUP;
+      loop assigns  \everything;
+      loop variant  i;
+    */
     for (i = r->num_hooks; i > 0; i--) {
         h = &r->cleanups[i - 1];
         if (h->fn) {
@@ -420,10 +499,10 @@ static inline void region_end(Region* r) {
     r->num_hooks = 0;
 
     /* Reset attached arena (after hooks — hooks may still allocate from it) */
-    if (r->arena) {
-        arena_reset(r->arena);
-        r->arena = NULL;
+    if (saved_arena) {
+        arena_reset(saved_arena);
     }
+    r->arena = NULL;
 
     r->open = false;
 }
@@ -447,6 +526,14 @@ static inline void region_end(Region* r) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires region_invariant(r);
+  requires r->open;
+  requires arena_invariant(arena);
+  assigns  r->arena;
+  ensures  r->arena == arena;
+  ensures  region_invariant(r);
+*/
 static inline void region_attach_arena(Region* r, Arena* arena) {
     require_msg(r != NULL,     "region_attach_arena: r cannot be NULL");
     require_msg(r->open,       "region_attach_arena: region is not open");
@@ -475,6 +562,25 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires region_invariant(r);
+  requires r->open;
+  requires fn != \null;
+  assigns  r->cleanups[0 .. REGION_MAX_CLEANUP - 1], r->num_hooks;
+  ensures  region_invariant(r);
+  behavior full:
+    assumes r->num_hooks >= REGION_MAX_CLEANUP;
+    ensures \result == \false;
+    ensures r->num_hooks == \old(r->num_hooks);
+  behavior has_space:
+    assumes r->num_hooks < REGION_MAX_CLEANUP;
+    ensures \result == \true;
+    ensures r->num_hooks == \old(r->num_hooks) + 1;
+    ensures r->cleanups[\old(r->num_hooks)].fn  == fn;
+    ensures r->cleanups[\old(r->num_hooks)].ctx == ctx;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) {
     require_msg(r != NULL,  "region_register: r cannot be NULL");
     require_msg(r->open,    "region_register: region is not open");
@@ -513,6 +619,15 @@ static inline bool region_register(Region* r, void (*fn)(void* ctx), void* ctx) 
  *
  * Complexity: O(1)
  */
+/*@
+  requires region_invariant(r);
+  requires r->open;
+  requires \valid_read(parent);
+  requires parent->open;
+  assigns  r->parent;
+  ensures  r->parent == parent;
+  ensures  region_invariant(r);
+*/
 static inline void region_set_parent(Region* r, Region* parent) {
     require_msg(r != NULL,      "region_set_parent: r cannot be NULL");
     require_msg(r->open,        "region_set_parent: region is not open");
@@ -534,6 +649,18 @@ static inline void region_set_parent(Region* r, Region* parent) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+  behavior null:
+    assumes r == \null;
+    ensures \result == REGION_ID_STATIC;
+  behavior nonnull:
+    assumes r != \null;
+    ensures \result == r->id;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline region_id_t region_id(const Region* r) {
     return r ? r->id : REGION_ID_STATIC;
 }
@@ -545,6 +672,11 @@ static inline region_id_t region_id(const Region* r) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+  ensures  \result <==> (r != \null && r->open);
+*/
 static inline bool region_is_open(const Region* r) {
     return r != NULL && r->open;
 }
@@ -556,6 +688,19 @@ static inline bool region_is_open(const Region* r) {
  *
  * Complexity: O(1)
  */
+#ifdef CANON_NO_REGION_PARENT
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+  ensures  \result == \false;
+*/
+#else
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+  ensures  \result <==> (r != \null && r->parent != \null);
+*/
+#endif
 static inline bool region_has_parent(const Region* r) {
 #ifdef CANON_NO_REGION_PARENT
     (void)r;
@@ -572,6 +717,18 @@ static inline bool region_has_parent(const Region* r) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+  behavior null:
+    assumes r == \null;
+    ensures \result == 0;
+  behavior nonnull:
+    assumes r != \null;
+    ensures \result == r->num_hooks;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize region_hook_count(const Region* r) {
     return r ? r->num_hooks : 0;
 }
@@ -593,6 +750,10 @@ static inline usize region_hook_count(const Region* r) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+*/
 static inline void region_assert_open(const Region* r) {
     ensure_msg(r != NULL, "region_assert_open: r cannot be NULL");
     ensure_msg(r->open,   "region_assert_open: region is closed — borrow may be invalid");
@@ -615,6 +776,10 @@ static inline void region_assert_open(const Region* r) {
  *
  * Complexity: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns  \nothing;
+*/
 static inline void region_assert_borrow_valid(const Region* r, region_id_t borrow_rid) {
     if (borrow_rid == REGION_ID_STATIC) {
         return; /* static lifetime — always valid, no check needed */
