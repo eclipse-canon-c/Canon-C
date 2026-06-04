@@ -2147,6 +2147,131 @@ jobs:
           name: wp-proof-pool
           path: wp_pool_output.txt
       
+      - name: "WP: core/region.h (report-only)"
+        # region.h is the ninth Canon-C header to enter WP scope and the
+        # fifth non-primitives header (after slice.h, memory.h, arena.h,
+        # pool.h). It is wired REPORT-ONLY: this step prints region.h's
+        # proved/unproved counts and the residual goal names, uploads the
+        # full WP output as an artifact, and never fails the build. The
+        # enforced baseline (exact count + named-goal patterns, matching
+        # the other WP steps) is transcribed in a follow-up once the
+        # measured numbers are stable across a few CI runs — the same
+        # soft-then-hard path checked.h, bits.h, ..., pool.h each took.
+        #
+        # Memory model: Typed+Cast — region.h includes arena.h (which
+        # pulls in the full memory.h/ptr.h/slice.h/checked.h/contract.h
+        # substrate) and performs the same void*/u8* casts transitively.
+        # Same rationale as VERIFY-005..010.
+        #
+        # Expected residual shape (to be confirmed by this step's output,
+        # NOT asserted here):
+        #   INHERITED — region.h includes arena.h, so arena.h's full
+        #   residual surface (VERIFY-009's 103: 57 substrate + 46 own)
+        #   should re-emerge byte-identically, exactly as pool.h inherited
+        #   the same 103 (VERIFY-010). region.h is a SIBLING of pool.h over
+        #   arena.h, so its inherited surface should match pool.h's 103.
+        #   REGION.H-OWN — concentrated in region_end's opaque-hook-pointer
+        #   dispatch (the `assigns \everything` loop), slated for
+        #   VERIFY-011 / OWN-003. The indirect-call RTE and the arena_reset
+        #   precondition reached through the havoc'd state are the expected
+        #   region.h-own residuals; the post-loop unconditional writes that
+        #   re-establish region_invariant should prove.
+        #
+        # This step MEASURES the above; it does not enforce it.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            core/region.h 2>&1 | tee wp_region_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+ 
+          echo ""
+          echo "==============================================="
+          echo "  WP (region.h) exit status: ${WP_EXIT}"
+          echo "  REPORT-ONLY — this step never fails the build"
+          echo "==============================================="
+ 
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_region_output.txt || true)
+          echo "  ${PROVED_LINE}"
+ 
+          # Sanity check only (still report-only): if WP produced no summary
+          # at all, frama-c almost certainly aborted on an ACSL parse error.
+          # Surface it loudly but DO NOT fail — iteration is the whole point.
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "WARNING: WP produced no verification summary."
+            echo "         frama-c likely aborted before WP ran — probably an"
+            echo "         ACSL syntax error in region.h. First diagnostics:"
+            grep -E "^\[(kernel|wp)" wp_region_output.txt | head -15 || true
+            echo "         (Step is report-only; not failing the build.)"
+          fi
+ 
+          # Count unproved goals: Timeout + Unknown + Failed. No comparison
+          # to an expected number — just report what came out.
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_region_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_region_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_region_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (measured): ${UNPROVED_COUNT}"
+ 
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved (measured): ${PROVED_COUNT}"
+ 
+          # Print every unproved goal verbatim so the enforced step can be
+          # written straight from this output.
+          echo ""
+          echo "  --- All unproved goals (verbatim, for baseline authoring) ---"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt || \
+            echo "  (none — region.h fully proved, or WP did not run)"
+          echo "  -------------------------------------------------------------"
+ 
+          # Separate region.h-own residuals from the inherited substrate
+          # surface so the signal isn't buried in the ~103 inherited goals.
+          echo ""
+          echo "  --- region.h-own residual candidates (region_* / region_end / lifetime_*) ---"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt | \
+            grep -E "region|lifetime" || \
+            echo "  (none matched — all residuals appear to be inherited substrate goals)"
+          echo "  ----------------------------------------------------------------------------"
+ 
+          # Confirm CVC5 was actually invoked so the triple-prover claim
+          # holds for region.h too. Warn only.
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_region_output.txt || true)
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "  WARNING: CVC5 absent from WP output — triple-prover setup"
+            echo "           may have degraded to dual-prover."
+          fi
+ 
+          echo ""
+          echo "PASS (report-only): region.h WP measured. Transcribe the"
+          echo "      counts above into an enforced step + VERIFY-011 once"
+          echo "      stable across a few runs."
+          echo "==============================================="
+          # Explicit success — this step is diagnostic, never a gate.
+          exit 0
+ 
+      - name: Upload WP proof output (region.h)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-proof-region
+          path: wp_region_output.txt
+      
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
@@ -2677,7 +2802,58 @@ jobs:
           else
             echo "PASS: Branch coverage ${BRANCH_COV}% meets threshold ${THRESHOLD}%"
           fi
-
+      
+      
+      - name: "Debug: per-line MC/DC detail for region.h"
+        # First measured MC/DC baseline for region.h. Report-only: surfaces
+        # which condition outcomes are uncovered so they can be classified
+        # before an MCDC-NNN deviations entry is written. Never fails.
+        #
+        # Anticipated shapes to look for in the dump (classify, don't assume):
+        #   - ensure_msg artifacts: region_assert_open and
+        #     region_assert_borrow_valid use ensure_msg (NDEBUG-gated), so
+        #     they may show uncovered outcomes — analogous to the
+        #     contract.h 0/2 artifact in every test row (MCDC-001).
+        #   - require_msg artifacts: region_begin/end/attach_arena/register/
+        #     set_parent use require_msg, compiled out under the coverage
+        #     build's -DCANON_NO_REQUIRE — same pattern as other headers.
+        #   - genuinely reachable: region_register table-full branch
+        #     (num_hooks >= MAX) and region_end's `if (h->fn)` hook guard;
+        #     confirm region_test.c exercises both sides of each.
+        #   - CANON_NO_REGION_PARENT is NOT defined in the coverage build,
+        #     so region_has_parent / region_set_parent compile in; their
+        #     null/open subconditions should be reachable.
+        run: |
+          cd build
+ 
+          REGION_GCDA=$(find . -name "region_test*.gcda" | head -1)
+ 
+          if [ -z "$REGION_GCDA" ]; then
+            echo "ERROR: could not locate region_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+ 
+          echo "Running gcov on: $REGION_GCDA"
+          gcov-14 --conditions --all-blocks "$REGION_GCDA" 2>&1 | \
+            grep -A 200 "region.h" | head -500
+ 
+          echo ""
+          echo "=== Looking for the generated .gcov file for region.h ==="
+          find . -name "region.h.gcov" -exec echo "Found: {}" \;
+ 
+          REGION_GCOV=$(find . -name "region.h.gcov" | head -1)
+          if [ -n "$REGION_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $REGION_GCOV ==="
+            cat "$REGION_GCOV"
+          else
+            echo "No region.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*region* 2>/dev/null || true
+            done
+          fi
+      
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
   #
