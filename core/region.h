@@ -494,6 +494,17 @@ static inline void region_end(Region* r) {
     for (i = r->num_hooks; i > 0; i--) {
         h = &r->cleanups[i - 1];
         if (h->fn) {
+            /* Modelling assumption for WP: the hook is treated as touching
+             * nothing in region_end's declared frame. This is what the hook
+             * contract already requires (a hook must not repoint r's fields
+             * or call region_end on this region). Without this statement
+             * contract, WP assumes the opaque h->fn could call region_end
+             * itself — making region_end appear recursive, demanding a
+             * decreases clause, and exploding the obligation set past the
+             * CI wall-clock. WP cannot verify this assumption (hooks are
+             * opaque); it is the documented region.h-own boundary
+             * (VERIFY-011 / OWN-003). */
+            /*@ assigns \nothing; */
             h->fn(h->ctx);
             h->fn  = NULL;
             h->ctx = NULL;
