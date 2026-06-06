@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-05-29                                                   |
+| **Date**           | 2026-06-06                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 98de378                                                      |
-| **CI run**         | Canon-C CI #974                                              |
+| **Commit**         | c9172fc                                                      |
+| **CI run**         | Canon-C CI #992                                              |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -56,6 +56,15 @@
 | **Scope**          | Library headers only — test files excluded                   |
 | **Test binaries**  | 50 (contract_test excluded from coverage build)              |
 
+> Note: the aggregate coverage figures below are unchanged from CI #974
+> (commit 98de378). region.h has been built and coverage-measured since
+> Phase 1 of the lifetime substrate, so its 21/22 MC/DC contribution was
+> already folded into the project totals at every prior baseline. What
+> CI #992 added on the coverage side is region.h's *documented* MCDC
+> entry (MCDC-005), not a new measurement. The "Current Measurement"
+> metadata is advanced to #992 for consistency with the newest history
+> row; the Results table values repeat #974's because the measurement
+> did not move.
 
 ### Results
 
@@ -107,6 +116,7 @@ from 1401 to 1413 of 1642 and the project branch hit count from 1437 to 1448
 of 1672. The 6 remaining missed outcomes on pool.h are the `!pool->arena`
 defensive subconditions documented in MCDC-004, unreachable under
 `pool_invariant`.
+
 
 ### Methodology changes since baseline
 
@@ -249,6 +259,19 @@ by methodology):
   alignment pad), not an unreachability. The 6 remaining outcomes are
   the documented ceiling and not counted as a coverage regression.
 
+- **region.h: 95.5% (21/22)** — the ceiling under MCDC-005. The single
+  missed outcome is the `!h->fn` FALSE branch of the hook guard in
+  `region_end` (line 496), unreachable because `region_register`
+  enforces `fn != NULL` and the dispatch loop visits only filled slots,
+  so every dispatched hook has a non-NULL `fn`. WP discharges the
+  no-NULL-hook property; gcov measures 21/22 because it instruments the
+  source rather than the proof — the same cross-stream pattern as
+  MCDC-002/003/004. region.h's WP run (VERIFY-011, report-only) carries
+  126 residuals, 19 of them on `region_end`'s opaque-hook dispatch
+  (the verification boundary documented in OWN-003), distinct from this
+  guard branch. The 1 missed outcome is the documented ceiling and not
+  counted as a coverage regression.
+
 Headers absent from the MC/DC table:
 
 `core/primitives/types.h`, `core/primitives/limits.h`,
@@ -299,14 +322,15 @@ full per-header detail):
 | memory.h   | 27        | 2862              | 2805 (98.01%)     | 57       | VERIFY-008   |
 | arena.h    | 22        | 3472              | 3369 (97.03%)     | 103      | VERIFY-009   |
 | pool.h     | 19        | 3902              | 3775 (96.74%)     | 127      | VERIFY-010   |
-| **Total**  | **187**   | **15089**         | **14752 (97.77%)**| **337**  |              |
+| region.h   | 12        | 3643              | 3517 (96.54%)     | 126      | VERIFY-011   |
+| **Total**  | **199**   | **18732**         | **18269 (97.53%)**| **463**  |              |
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). All 337 unproved goals are demonstrated
+`-wp-timeout 120`). All 463 unproved goals are demonstrated
 triple-prover-resistant and carry written manual-proof arguments or
 documented WP feature-gap rationale in `docs/deviations.md`.
 
-**Note on totals**: the 15089 figure is the row-sum of independent
+**Note on totals**: the 18732 figure is the row-sum of independent
 per-header WP runs, where each row reports each header's own
 obligations (substrate goals are counted under their owning header,
 not duplicated into downstream rows). The CI WP step for ptr.h
@@ -321,7 +345,13 @@ memory.h and the full transitive substrate; the 3472 figure for
 arena.h likewise reflects the full run as arena.h's row. pool.h's CI
 step processes pool.h with arena.h and the full two-hop transitive
 substrate; the 3902 figure for pool.h likewise reflects the full run
-as pool.h's row. 103 of pool.h's 127 unproved goals are re-emerged
+as pool.h's row. region.h's CI step processes region.h with arena.h
+and the full two-hop transitive substrate; the 3643 figure for
+region.h likewise reflects the full run as region.h's row. 103 of
+region.h's 126 unproved goals are re-emerged residuals already
+documented under VERIFY-002/006/007/008/009 — byte-identical to
+arena.h's full 103-goal residual surface (see VERIFY-011 for the
+inheritance table). 103 of pool.h's 127 unproved goals are re-emerged
 residuals already documented under VERIFY-002/006/007/008/009 —
 byte-identical to arena.h's full 103-goal residual surface (see
 VERIFY-010 for the inheritance table). 57 of arena.h's 103 unproved
@@ -396,6 +426,37 @@ thinnest own surface, because it reserves its region once at pool_init
 and computes slots by fixed-stride ptr_elem, so arena.h's 26-goal
 per-allocation arithmetic-chain residual class does not recur.
 
+The region.h baseline (3517 / 3643) extends the composable-verification
+thesis to a fifth composition layer. region.h includes arena.h, which
+transitively includes memory.h, ptr.h, slice.h, checked.h, and
+contract.h — a two-hop transitive include, the same depth as pool.h.
+region.h is a *sibling* of pool.h at the arena.h layer (both include
+arena.h; neither includes the other), so its inherited surface is
+arena.h's *total* — VERIFY-009's 57 inherited + 46 arena.h-own = 103 —
+re-emitted byte-identically, with zero new substrate residuals
+introduced at the region.h boundary. The 23 region.h-own residuals
+fall into two categories: 19 region_end opaque-hook-dispatch residuals
+(WP cannot reason about the indirect call through the caller-supplied
+`h->fn` pointer — no `calls` clause is possible for an arbitrary hook,
+and `\valid_function` is unimplemented in Frama-C 29; this is the
+documented verification boundary, see OWN-003) and 4 region_invariant
+re-establishment residuals on the trivial mutators (region_begin,
+region_attach_arena, region_register, region_set_parent), which carry
+arena_invariant's composition weight at the postcondition. All 23 are
+documented in VERIFY-011 with manual-proof arguments. region.h's WP run
+is enforced **report-only** at this baseline (the first observed
+120s/`-wp-split` completion); exact-count CI enforcement is deferred
+until the 126 count and the 23 own goal names hold across 2-3 further
+runs, because 19 of the 23 own residuals are `-wp-split` fragments of
+region_end near the 120s per-goal boundary, the class most prone to
+Timeout/Proved flicker under runner load. The 103:23 inherited:own
+ratio confirms the composable-verification claim at the fifth
+composition layer, and 19 of the 23 own residuals concentrate on the
+single function (region_end) that region.h's header comment names as
+the verification boundary — the WP boundary landed exactly where the
+design predicted it. With region.h verified, the core/ layer is
+complete (every core/ header is verified or justified-N/A).
+
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
 were discharged automatically — most by Qed, with smaller contributions
@@ -403,7 +464,7 @@ from Alt-Ergo and from WP's structural categories (Terminating /
 Unreachable). The two manually-discharged goals are unchanged from
 the previous baseline.
 
-### Cross-stream evidence: MCDC-002, MCDC-003, and MCDC-004 closures
+### Cross-stream evidence: MCDC-002, MCDC-003, MCDC-004, and MCDC-005 closures
 
 slice.h's MC/DC ceiling at 93.1% (54/58) and slice.h's WP discharge
 of the four MCDC-002 functions form complementary certification
@@ -452,21 +513,45 @@ not an unreachability, and was closed by a targeted boundary test
 documented as a deviation. See MCDC-004 in `docs/deviations.md` for the
 formal closure record and the full reachable-gap closure history.
 
+region.h's MC/DC ceiling at 95.5% (21/22) and the MCDC-005 closure are
+the fifth instance of the same cross-stream pattern, with one wrinkle
+worth stating explicitly. gcov reports the single `!h->fn` FALSE branch
+of region_end's hook guard (line 496) as uncovered. Its unreachability
+rests not on an ACSL *type invariant* — as MCDC-002/003/004 do via
+`bytes_invariant` / `arena_invariant` / `pool_invariant` — but on the
+register/dispatch *runtime invariant*: `region_register` enforces
+`fn != NULL` as a precondition and increments `num_hooks` only after
+storing a non-NULL `fn`, and region_end's loop visits only filled slots
+`[0, num_hooks)`, so every dispatched slot has a non-NULL `fn`. The
+evidence shape is identical (gcov measures source-level uncoverage; the
+property establishes the branch dead), but the source of the guarantee
+is the API's construction discipline rather than a named predicate — so
+an auditor should not expect a "region_invariant discharges this branch"
+claim, because the guarantee is structural, not predicate-borne.
+Separately, region_end *does* carry WP residuals (VERIFY-011 category 1,
+the 19 opaque-hook-dispatch goals), but those are on the indirect-call
+obligations, a distinct concern from this guard branch — the guard
+branch is a structural defensive outcome, not a WP residual. See
+MCDC-005 in `docs/deviations.md` for the formal closure record.
+
 memory.h does not extend the MCDC-002 list because its bytes_t/cbytes_t
 variants inherit slice.h's `bytes_invariant` — the analogous `!ptr`
 defensive branches are discharged by the inherited invariant rather
 than introducing new public-API-unreachable code paths. arena.h's
-MCDC-003 and pool.h's MCDC-004 are each a *different* unreachability
-shape than slice.h's MCDC-002 (overflow-guard subconditions, and a
-`!pool->arena` arena-validity disjunct, respectively, vs. slice.h's
-`!ptr` defensive branches), but all share the same cross-stream
-evidence pattern (gcov measures source, WP discharges via invariant).
-pool.h has since shipped its own per-header analysis as MCDC-004,
-confirming the per-header expectation. Remaining headers that introduce
-their own public {ptr, len} types or analogous unreachable defensive
-code (stringbuf.h is the next candidate) will need their own per-header
-MCDC analyses; each header's specific unreachability shape will be
-documented separately.
+MCDC-003, pool.h's MCDC-004, and region.h's MCDC-005 are each a
+*different* unreachability shape than slice.h's MCDC-002 (overflow-guard
+subconditions; a `!pool->arena` arena-validity disjunct; and a `!h->fn`
+hook-slot guard, respectively, vs. slice.h's `!ptr` defensive branches),
+but all share the same cross-stream evidence pattern (gcov measures
+source, the proof establishes unreachability). region.h has shipped its
+own per-header analysis as MCDC-005, confirming the per-header
+expectation MCDC-002's forward note set out. With the core/ layer
+complete, the remaining headers that introduce their own public
+{ptr, len} types or analogous unreachable defensive code live in data/
+and util/ — stringbuf.h remains the next candidate (MCDC-002 lists it
+provisionally at 74.2%). Each will need its own per-header MCDC analysis;
+each header's specific unreachability shape will be documented
+separately.
 
 ### History
 
@@ -484,5 +569,6 @@ documented separately.
 | 2026-05-09 | b3e668b | #841   | v1.3.0  | 95.7%  | 99.6%     | 85.5%    | 84.8%  | memory.h: Phase 0 tests + Phase 1 refactor (mem_alloc_array_checked) at 4baf5c6 (CI #840), then ACSL contracts + WP enforcement YAML at b3e668b (CI #841); WP 2805/2862 (VERIFY-008); 88.3% MC/DC; 31 inherited + 26 own residuals. |
 | 2026-05-24 | f53bddb | #962   | v1.3.0  | 95.6%  | 99.6%     | 85.9%    | 85.3%  | arena.h: ACSL contracts + WP enforcement YAML; WP 3369/3472 (VERIFY-009); MC/DC 90.6% ceiling (MCDC-003); 57 inherited (memory.h's full residual surface) + 46 own (8 ptr_span call-sites + 26 fits/does_not_fit arithmetic chain + 10 wrapper delegation + 2 free_bytes helpers). test_try_alloc_aligned_failure closed the line 510 compound-return gap (+1 MC/DC outcome, +1 branch covered). Composable-verification thesis confirmed at third composition layer: arena.h inherits memory.h's full 57-goal residual surface byte-identically. |
 | 2026-05-29 | 98de378 | #974   | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | pool.h: ACSL contracts + WP enforcement (WP 3775/3902, VERIFY-010; 103 inherited = arena.h's full residual surface + 24 own across cats 2a/2b/2c/2d), first two-hop transitive include; MC/DC 91.2% ceiling (MCDC-004, 6 `!pool->arena` outcomes unreachable under pool_invariant). Gap-closure: four wave-1 tests (b2644ba/#972) 55→61/68; test_init_arena_alloc_fails_after_guard (98de378/#974) closed the line-309 reachable gap 61→62/68 (gcov confirms L309 2/2). Project MC/DC 1401→1413 of 1642, branches 1437→1448 of 1672. Composable-verification thesis confirmed at fourth composition layer; 103:24 inherited:own ratio. |
+| 2026-06-06 | c9172fc | #992   | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | region.h: ACSL contracts + WP (report-only) at 120s/split; WP 3517/3643 (VERIFY-011; 103 inherited = arena.h's full residual surface + 23 own: 19 region_end opaque-hook-dispatch + 4 region_invariant composition), first 120s/split completion, enforcement deferred pending count stability. MC/DC 95.5% (21/22) ceiling (MCDC-005, the `!h->fn` guard branch unreachable). region.h's coverage was already in the aggregate (Phase 1 substrate); this records its documented MCDC entry. core/ layer verification complete. Composable-verification thesis confirmed at fifth composition layer. |
 
 ---
