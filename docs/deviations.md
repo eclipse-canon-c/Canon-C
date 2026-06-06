@@ -1129,7 +1129,7 @@ core/ stack reaches.
   verification" section.
 - Per-goal CI artifact: `wp-proof-arena` (full WP output, including
   goal-by-goal classification and Qed-and-prover timing).
-- Wrapper enforcement: `.github/workflows/ci.yml`, step
+- Wrapper enforcement: `.github/workflows/cmake-multi-platform.yml`, step
   "WP: core/arena.h".
 
 ---
@@ -1472,7 +1472,7 @@ adding the thinnest own surface (no per-allocation alignment arithmetic).
   section.
 - Per-goal CI artifact: `wp-proof-pool` (full WP output, including
   goal-by-goal classification and Qed-and-prover timing).
-- Wrapper enforcement: `.github/workflows/ci.yml`, step "WP: core/pool.h".
+- Wrapper enforcement: `.github/workflows/cmake-multi-platform.yml`, step "WP: core/pool.h".
 
 ---
 
@@ -1903,7 +1903,7 @@ reachable outcome has been closed.
   arena_invariant + capacity constant) but the same cross-stream
   evidence pattern.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
-  detail for arena.h" step in `.github/workflows/ci.yml`.
+  detail for arena.h" step in `.github/workflows/cmake-multi-platform.yml`.
 
 ---
 
@@ -2136,7 +2136,7 @@ transferable from pool.h's 6-of-68.
 - MCDC-003 — arena.h's structurally-unreachable overflow guards; same
   cross-stream evidence pattern, different source-level shape.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC detail for
-  pool.h" step in `.github/workflows/ci.yml`.
+  pool.h" step in `.github/workflows/cmake-multi-platform.yml`.
 
 ---
 
