@@ -160,7 +160,7 @@
  * hook loop. WP cannot prove the indirect hook call respects the `*r`
  * frame (a hook could, as far as WP knows, alias r), so that call is the
  * documented region.h-own residual (see docs/deviations.md VERIFY-011 /
- * OWN-003 and the report-only WP step in .github/workflows/ci.yml).
+ * OWN-003 and the report-only WP step in .github/workflows/cmake-multi-platform.yml).
  *
  * Quick start:
  * ────────────────────────────────────────────────────────────────────────────
