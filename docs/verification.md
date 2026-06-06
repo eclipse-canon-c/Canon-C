@@ -12,7 +12,7 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 9 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h)    |
 | **Functions**        | 199 annotated and verified                                                     |
-| **Total obligations**| 15089 (per-header own goals; CI WP runs include substrate)                     |
+| **Total obligations**| 18732 (per-header own goals; CI WP runs include substrate)                     |
 | **Proved automatic** | 18269 (97.53%)                                                                 |
 | **Unproved**         | 463 (all documented; see per-header sections)                                  |
 | **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)                               |
@@ -1935,7 +1935,7 @@ identical to VERIFY-005 through VERIFY-010.
 
 ### Reproduction
 
-\```bash
+```bash
 frama-c -wp -wp-rte \
   -wp-model Typed+Cast \
   -wp-prover alt-ergo,z3,cvc5 \
