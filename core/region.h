@@ -494,17 +494,18 @@ static inline void region_end(Region* r) {
     for (i = r->num_hooks; i > 0; i--) {
         h = &r->cleanups[i - 1];
         if (h->fn) {
-            /* Modelling assumption for WP: the hook is treated as touching
-             * nothing in region_end's declared frame. This is what the hook
-             * contract already requires (a hook must not repoint r's fields
-             * or call region_end on this region). Without this statement
-             * contract, WP assumes the opaque h->fn could call region_end
-             * itself — making region_end appear recursive, demanding a
-             * decreases clause, and exploding the obligation set past the
-             * CI wall-clock. WP cannot verify this assumption (hooks are
-             * opaque); it is the documented region.h-own boundary
-             * (VERIFY-011 / OWN-003). */
-            /*@ assigns \nothing; */
+            /* h->fn is an opaque caller-supplied pointer with no `calls`
+             * clause. WP assumes it could call region_end itself, so it
+             * models region_end as potentially recursive (hence the
+             * Missing-decreases / non-terminating-call warnings). A
+             * statement-level `assigns` contract here is NOT honored —
+             * WP reports "Statement specifications not yet supported
+             * (skipped)". The honest boundary is documented as the
+             * region.h-own residual (VERIFY-011 / OWN-003); the
+             * report-only WP step samples it with a short per-goal
+             * timeout rather than discharging it. The hook contract
+             * (a hook must not call region_end on this region or repoint
+             * r's fields) is what makes the modelled recursion vacuous. */
             h->fn(h->ctx);
             h->fn  = NULL;
             h->ctx = NULL;
