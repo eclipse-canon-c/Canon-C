@@ -639,3 +639,122 @@ entry will gain cross-references to them.
 - **`test/semantics/borrow_test.c`** — substrate evidence stream that
   continues to validate end-to-end borrow behavior across Arena and
   Pool resets under the new restamp mechanism.
+
+  
+<!--
+  ============================================================================
+  OWN-003 — region_end opaque-hook-dispatch verification boundary
+  ----------------------------------------------------------------------------
+  Cross-references to confirm before pushing:
+    - VERIFY-011 (docs/deviations.md) — the proof-side companion; category 1
+      records the 19 region_end residuals this decision produces.
+    - core/region.h — the region_end verification note (the docblock above
+      region_end and the inline comment at the hook call) names VERIFY-011 /
+      OWN-003 as the home of this boundary.
+    - docs/decision-families.md — Category D (the OWN/VERIFY seam); OWN-003
+      is the first shipped Category D example.
+  ============================================================================
+-->
+
+## OWN-003 — region_end opaque-hook-dispatch verification boundary
+
+This entry records the architectural decision to dispatch region cleanup
+hooks through an opaque, caller-supplied function pointer with no ACSL
+`calls` clause, accepting the resulting WP residual as region.h's
+documented verification boundary rather than redesigning the hook
+mechanism to be WP-tractable. It is the first Category D entry per the
+Decision Families guide — a decision at the seam between the OWN- and
+VERIFY- namespaces, where the call is *what to prove / how to model the
+proof* rather than the proof itself.
+
+| Field          | Value                                                             |
+| -------------- | ----------------------------------------------------------------- |
+| Status         | Shipped (region.h verified report-only at CI #992)               |
+| Merged at      | CI #992 (`c9172fc`, region.h 120s/split WP completion)           |
+| Scope          | `core/region.h` — region_end hook dispatch                        |
+| Category       | D — Boundary decision with the verification layer. See `docs/decision-families.md`, "Category D — Boundary decisions with the verification layer." |
+| Cross-refs     | VERIFY-011 (proof-side companion, category 1); `core/region.h` region_end verification note; `docs/decision-families.md` Category D. |
+
+### 1. Context
+
+region_end calls registered cleanup hooks LIFO at region teardown. Each
+hook is a caller-supplied `void (*fn)(void* ctx)` dispatched through an
+indirect call `h->fn(h->ctx)`. This is the core of region.h's value —
+arbitrary cleanup (unlock a mutex, close a file, free a resource) runs
+unconditionally at region_end regardless of how the caller reached it.
+
+When region.h was annotated for WP (VERIFY-011), the indirect hook call
+became the one obligation WP could not discharge. WP has no `calls`
+clause for an arbitrary function pointer, so it must assume the hook
+could call region_end itself (modelling region_end as recursive) and
+could write through a pointer aliasing the Region (so the call may not
+respect region_end's `assigns *r` frame). Frama-C 29 additionally
+reports `\valid_function(h->fn)` as not-yet-implemented. The result is
+19 residual goals on region_end (VERIFY-011 category 1).
+
+### 2. Decision
+
+Keep the opaque-function-pointer hook design. Accept the 19 region_end
+residuals as region.h's documented verification boundary. Structure the
+function so that everything *except* the indirect call is provable:
+
+- The attached arena is captured into a loop-immune local (`saved_arena`)
+  *before* the hook loop, so arena_reset discharges against the local
+  rather than a field the hooks might havoc.
+- region_end's structural postconditions (`open == false`,
+  `num_hooks == 0`, `arena == null`, `region_invariant`) are
+  re-established by unconditional writes *after* the loop, so they
+  discharge independently of what the hooks did.
+- The loop's own writes (counter, cleanups array) carry a loop
+  invariant / loop assigns / loop variant so the array-index RTE and
+  loop termination discharge.
+
+The hook contract — documented in the region_register docblock — is the
+human-level discharge of the modelled recursion: *a hook must not call
+region_end on this region or repoint r's fields*. Under that contract
+the modelled recursion is vacuous and the `assigns *r` frame holds; WP
+simply has no ACSL mechanism to encode the contract.
+
+### 3. Alternatives considered
+
+**Redesign hooks as a closed enum of cleanup kinds.** Rejected. Replacing
+the function pointer with a tagged enum (`REGION_CLEANUP_ARENA_RESET`,
+`REGION_CLEANUP_MUTEX_UNLOCK`, ...) plus a WP-visible dispatch `switch`
+would let WP reason about every branch and close the 19 residuals. But it
+would cripple the hook mechanism's entire purpose: arbitrary
+caller-supplied cleanup. Every new cleanup kind any consumer needed would
+require a new enum member and a new dispatch arm in region.h itself —
+turning an open extension point into a closed, region.h-owned list. The
+generality of the hook API is the feature; trading it for proof
+convenience on a defensive teardown path is the wrong trade. The honest
+boundary (19 documented residuals on one function, with a written manual
+argument and a runtime-tested contract) costs less than the API
+regression.
+
+**Statement-level `assigns` contract on the hook call.** Rejected — it
+does not work. WP reports "Statement specifications not yet supported
+(skipped)" for a statement contract at the indirect call, so it provides
+no discharge. This is noted inline in region.h at the hook call.
+
+### 4. Verification posture
+
+region.h is verified report-only at CI #992 (VERIFY-011); the 19
+region_end residuals are the subject of this decision. The boundary is
+backed by three evidence streams: the manual proof argument in
+VERIFY-011 category 1, the documented hook contract in region.h, and
+runtime testing (`test/core/region_test.c` exercises LIFO dispatch,
+arena auto-reset after hooks, and the hook-table-full path) plus ASan +
+UBSan across all 16 CI configs. When VERIFY-011's count stabilizes and
+its CI step flips to enforced, this decision's residuals are pinned by
+the named-goal enforcement.
+
+### 5. Cross-references
+
+- **VERIFY-011** — the proof-side companion. Category 1 enumerates the
+  19 region_end residuals this decision produces and gives the manual
+  proof argument.
+- **`core/region.h`** — the region_end docblock and the inline comment
+  at the hook call describe this boundary and name VERIFY-011 / OWN-003.
+- **`docs/decision-families.md`** — Category D ("Boundary decisions with
+  the verification layer"). OWN-003 is the first shipped Category D
+  example.
