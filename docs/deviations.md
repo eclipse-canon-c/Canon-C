@@ -1587,6 +1587,122 @@ through an opaque function pointer `h->fn(h->ctx)` (line 509) for which
 no `calls` clause can exist — the hook is arbitrary by design. WP
 reports the boundary directly during the proof run:
 
+```
+[wp] core/region.h:509: Warning: Missing 'calls' for default behavior
+[wp] core/region.h:509: Warning:
+  Unknown callee, considering non-terminating call
+[wp] core/region.h:509: Warning:
+  Missing decreases clause on recursive function region_end, call must be unreachable
+[wp] core/region.h:509: Warning:
+  \valid_function not yet implemented
+  (rte: function_pointer: \valid_function(h->fn))
+```
+
+Because WP cannot rule out that an opaque hook calls region_end itself,
+it models region_end as potentially recursive (the `terminates_*` and
+`loop_variant_decrease_*` goals), and because the hook could — as far
+as WP can prove — write through a pointer aliasing `r`, it cannot
+discharge the function's `assigns *r` frame against the indirect call
+(the `assigns_*`, `loop_assigns_*`, `ensures_*`, `exits_*` goals). The
+`assert_rte_function_pointer` goal is the `\valid_function(h->fn)` RTE
+check, which WP reports as not-yet-implemented. This is the documented
+region.h verification boundary — see OWN-003 for the architectural
+decision to accept it rather than redesign the hook mechanism, and the
+region.h header comment (the region_end verification note) which names
+this entry.
+
+**Manual proof argument**: region_end's structural postconditions
+(`r->open == false`, `r->num_hooks == 0`, `r->arena == null`,
+`region_invariant(r)`) are re-established by unconditional writes
+*after* the hook loop (lines 514, 520, 522), and the attached arena is
+captured into a loop-immune local (`saved_arena`, line 476) before the
+loop so arena_reset discharges against the local rather than a
+hook-havoc'd field. The hook contract — a hook must not call region_end
+on this region or repoint r's fields — makes the modelled recursion
+vacuous. The C is correct by construction under that contract; the
+obstacle is that WP has no `calls` clause to encode it, and
+`\valid_function` is unimplemented in Frama-C 29. This is a verifier
+feature gap plus a deliberate API-generality choice, not a code defect.
+
+#### Category 2: region_invariant re-establishment on trivial mutators (4)
+
+| # | Goal                                              |
+|---|----------------------------------------------------|
+| 1 | `typed_cast_region_begin_ensures_5`               |
+| 2 | `typed_cast_region_attach_arena_ensures_2`        |
+| 3 | `typed_cast_region_register_ensures_part2`        |
+| 4 | `typed_cast_region_set_parent_ensures_2`          |
+
+**Functions affected**: `region_begin`, `region_attach_arena`,
+`region_register`, `region_set_parent`.
+
+**Root cause**: each goal is the `ensures region_invariant(r)`
+postcondition on a trivial mutator. region_invariant composes
+arena_invariant (`r->arena == \null || arena_invariant(r->arena)`), so
+re-establishing it carries arena.h's invariant-composition weight into
+region.h's run. The residual is the cost of composing the substrate
+invariant, the same class as the inherited arithmetic-chain goals, not
+a region.h logic gap.
+
+**Manual proof argument**: each mutator either leaves r->arena NULL
+(region_begin sets the whole struct to `{0}`) or stores a pointer the
+caller already proved satisfies arena_invariant (region_attach_arena's
+`requires arena_invariant(arena)`), so the `r->arena == \null ||
+arena_invariant(r->arena)` disjunct holds at the postcondition by
+construction. The hook-count bound (`0 <= num_hooks <=
+REGION_MAX_CLEANUP`) is maintained by the explicit guard in
+region_register. The C matches the predicate; the obstacle is WP
+carrying arena_invariant's composed body through the postcondition.
+
+### Summary of region.h-own residuals
+
+| Category | Goals | Functions affected                                            | WP feature gap                                   |
+|----------|-------|---------------------------------------------------------------|--------------------------------------------------|
+| 1        | 19    | region_end                                                    | opaque function-pointer dispatch: no `calls` clause, `\valid_function` unimplemented, modelled recursion |
+| 2        | 4     | region_begin, region_attach_arena, region_register, region_set_parent | region_invariant / arena_invariant composition weight |
+| **Total**| **23**|                                                               |                                                  |
+
+### Mitigation
+
+While report-only, the `frama-c-region` CI step measures and prints the
+full residual list on every run (artifact `wp-proof-region`) so the
+count and goal names can be observed for stability before enforcement.
+When stable, the step flips to exact-count enforcement with named
+patterns covering all 103 inherited and 23 own residuals, matching the
+other eight headers.
+
+region.h achieves 100% line coverage (45/45) and 95.5% MC/DC (21/22) —
+the achievable ceiling under MCDC-005 (the single uncovered outcome is
+the `if (h->fn)` FALSE branch, API-unreachable; see MCDC-005). Region
+behavior is tested by the unit suite in `test/core/region_test.c`
+covering begin/end, arena attachment and auto-reset, LIFO hook
+dispatch, the hook-table-full path, parent tracking, ID/open/hook-count
+inspection, the static-lifetime fast path, and lifetime_assert_valid.
+ASan + UBSan across all 16 CI configs verify absence of UB. The runtime
+lifetime substrate (OWN-001) covers region under CANON_LIFETIME_DEBUG.
+
+The composable-verification claim is confirmed at a fifth composition
+layer: region.h inherits arena.h's full 103-goal residual surface
+byte-identically (zero new substrate residuals introduced) and adds 23
+own residuals, 19 of which concentrate on the single function
+(region_end) that region.h's header comment names as the verification
+boundary. The WP boundary landed exactly where the design predicted it.
+
+### Cross-references
+
+- Inherited residuals: VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
+  VERIFY-007 (slice.h), VERIFY-008 (memory.h), VERIFY-009 (arena.h).
+- Architectural decision for the region_end boundary: OWN-003.
+- MC/DC coverage: MCDC-005 (region.h MC/DC ceiling 95.5%, the
+  `if (h->fn)` FALSE branch unreachable).
+- Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
+- Substrate runtime tracking: OWN-001, OWN-002.
+- Composable verification thesis: see README, "Composable
+  verification" section.
+- Per-goal CI artifact: `wp-proof-region` (full WP output).
+- Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
+  "WP: core/region.h (120s / split, REPORT-ONLY)".
+
 ---
 
 ## MCDC-001: Coverage Flags Methodology
