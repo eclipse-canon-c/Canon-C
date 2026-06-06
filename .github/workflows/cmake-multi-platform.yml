@@ -13,14 +13,15 @@ on:
 #   static-analysis — clang-tidy (Linux only) + Cppcheck (all platforms)
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
-#   frama-c         — Linux only, formal verification (WP proofs + Eva)
-#                     Currently scoped to core/primitives/checked.h,
-#                     core/primitives/bits.h, core/primitives/compare.h,
-#                     core/primitives/ptr.h, core/slice.h, and
-#                     core/memory.h (full surface, 22 functions across
-#                     alignment/allocation, raw memory ops, and
-#                     bytes_t/cbytes_t variants).
-#                     Additional headers will be added as they are annotated.
+#   frama-c-*       — Linux only, formal verification (WP proofs). One job
+#                     PER HEADER (frama-c-checked, -bits, -compare, -ptr,
+#                     -slice, -memory, -arena, -pool, -region), all running
+#                     in parallel and sharing the composite setup action at
+#                     .github/actions/framac-setup. checked..pool are ENFORCED
+#                     (hard proved/unproved baselines); region is REPORT-ONLY
+#                     (120s/split, isolated, never fails the build).
+#                     Additional headers are added as a new job each as they
+#                     are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
 #                     -DCANON_BITS_FORCE_FALLBACK so the fallback paths
@@ -366,287 +367,46 @@ jobs:
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config Debug --output-on-failure
 
-  # -------------------------------------------------------------------------
+  # =========================================================================
   # 5. Formal verification — Frama-C (Linux only)
   #
-  #    Scope: core/primitives/checked.h, core/primitives/bits.h,
-  #    core/primitives/compare.h, core/primitives/ptr.h,
-  #    core/slice.h, core/memory.h, and core/arena.h — all ENFORCED
-  #    (hard proved/unproved baselines). core/pool.h is present as a
-  #    REPORT-ONLY WP step with no enforced baseline yet; its measured
-  #    counts will be transcribed into hard enforcement in a follow-up,
-  #    matching the soft-then-hard path every prior header took.
+  #   The single monolithic `frama-c` job has been split into one job per
+  #   verified header. Each job:
+  #       checkout  ->  uses: ./.github/actions/framac-setup  ->  WP wrapper  ->  upload
+  #   The composite action reproduces the six setup steps (opam, cvc5, why3)
+  #   that the jobs share; the opam switch is cached on a key all jobs use,
+  #   so only the first cold job builds it and the rest restore in ~30s.
   #
-  #    checked.h is the first Canon-C header with full ACSL contracts
-  #    (every unsigned function plus all three signed functions). bits.h
-  #    is the second, covering portable bit manipulation with fallback
-  #    paths. compare.h is the third, covering three-way comparators
-  #    for all Canon primitive types including floating-point with NaN
-  #    handling. ptr.h is the fourth, covering explicit pointer
-  #    arithmetic, alignment, and bounds checking with NULL-handling
-  #    discipline. slice.h is the fifth and the first non-primitives
-  #    header — it defines the canonical {ptr, len} borrow types
-  #    (bytes_t, cbytes_t, str_t) plus the DEFINE_SLICE(T) macro for
-  #    typed element views. memory.h is the sixth — it adds a heap
-  #    allocation surface (mem_alloc / mem_free / mem_alloc_array_checked)
-  #    and alignment helpers, full surface (22 functions, VERIFY-008).
-  #    arena.h is the seventh — a linear bump allocator (VERIFY-009).
-  #    pool.h is the eighth — a fixed-size object pool backed by an
-  #    arena, report-only pending its first measured WP baseline.
+  #   Why per-header jobs instead of one serial job: steps within a job run
+  #   serially, separate jobs run in parallel. The workflow now gates on the
+  #   slowest single header (~pool) instead of the sum of all of them, which
+  #   keeps every header comfortably under GitHub's 6h per-job ceiling.
+  #   Enforcement is unchanged — each WP step proves the same translation unit
+  #   against the same baseline regardless of which job hosts it.
   #
-  #    Installation: opam with aggressive caching + cvc5 from GitHub.
-  #    Ubuntu 24.04 Noble no longer ships Frama-C in its default apt
-  #    repositories (it was available through 22.04 Jammy). The only
-  #    reliable install path on current runners is opam, which builds
-  #    OCaml and Frama-C from source. Without caching, this takes
-  #    30-60 minutes every run. With the cache below, the first run
-  #    pays that cost once and every subsequent run restores a ready
-  #    switch in ~30 seconds. The cache key includes OCAML_VERSION
-  #    and FRAMAC_VERSION so bumping either forces a clean rebuild.
+  #   ENFORCED (hard proved/unproved baselines): checked, bits, compare, ptr,
+  #   slice, memory, arena, pool. REPORT-ONLY: region (120s/split, isolated,
+  #   never fails the build; transcribe to an enforced step once stable).
   #
-  #    CVC5 binary: The opam `cvc5` package (1.3.0) ships only the
-  #    OCaml library bindings — not the CLI binary that why3 needs
-  #    for `-wp-prover cvc5`. We download the prebuilt CLI binary
-  #    from the official cvc5 GitHub release and install it to
-  #    /usr/local/bin. This is outside the opam cache (the cache
-  #    covers ~/.opam, not /usr/local) so the download happens on
-  #    every CI run, but at ~20 MB it adds only a few seconds.
-  #    Keeping cvc5 outside opam is actually cleaner because it
-  #    decouples the binary version from opam's build constraints.
+  #   Eva is intentionally NOT run on these headers: Eva needs an entry point
+  #   to anchor abstract interpretation, and these are header-only modules of
+  #   static inline functions with no main(). WP proves the contracts and the
+  #   absence of runtime errors for every function independently, so Eva is
+  #   not needed. When Canon-C grows real translation units (verification
+  #   driver files for macro-instantiated modules, or test files compiled as
+  #   standalone programs), Eva can run on those.
   #
-  #    Provers: Alt-Ergo + Z3 + CVC5 triple-prover setup.
-  #    Alt-Ergo handles linear arithmetic and most ACSL contracts very
-  #    fast. Z3 handles nonlinear integer reasoning (multiplication
-  #    contracts in checked_mul / checked_mul_u64 / checked_mul_isize)
-  #    that Alt-Ergo struggles with. CVC5 is a tertiary prover that
-  #    closes additional goals beyond what Alt-Ergo and Z3 can handle
-  #    (confirmed: CI #791 shows CVC5 discharging 3 goals on checked.h
-  #    and 3 goals on ptr.h). WP tries Alt-Ergo first, falls through
-  #    to Z3, then to CVC5 — keeping the common case fast while giving
-  #    hard goals three chances before timing out. Remaining unproved
-  #    goals (2 on checked.h, 15 on bits.h, 10 on ptr.h, 23 on
-  #    slice.h, 57 on memory.h) are therefore demonstrated triple-
-  #    prover-resistant, which is a stronger certification evidence
-  #    statement than single- or dual-prover.
-  #
-  #    CVC5 auto-detection: why3 config detect does NOT auto-register
-  #    cvc5 1.2.1 because why3 1.7.2's prover-detection regex expects
-  #    cvc5 version 1.0.x. However, the CVC5 family IS in why3 1.7.2's
-  #    known-provers list (confirmed via `why3 config list-supported-
-  #    provers`), so we register it manually with `why3 config
-  #    add-prover`, which stores the prover under a [partial_prover]
-  #    section with manual = true. This is the same workaround used
-  #    for Alt-Ergo and Z3 (which are auto-detected but flagged as
-  #    "unrecognized version" and accepted anyway).
-  #
-  #    WP (Weakest Precondition):
-  #      Proves ACSL contracts: requires, ensures, assigns, behaviors.
-  #      Proves absence of runtime errors via -wp-rte: overflows,
-  #      invalid shifts, null derefs, division by zero. Mathematical
-  #      proof — if WP says "Valid", the property holds for ALL inputs.
-  #
-  #    Eva is NOT run on these headers — see the comment below for the
-  #    rationale (header-only modules have no entry point).
-  #
-  #    __FRAMAC__ is automatically defined by Frama-C's preprocessor.
-  #    checked.h and bits.h use this to force the fallback path (WP
-  #    has no semantics for compiler builtins). compare.h has no
-  #    builtins — all code paths are verified directly. ptr.h uses
-  #    __FRAMAC__ transitively through contract.h, where the contract
-  #    handler body is replaced with a non-terminating loop to hide
-  #    stdio calls from WP while preserving the ensures \false
-  #    / exits \false contract that callers depend on. slice.h uses
-  #    __FRAMAC__ transitively through contract.h for the same
-  #    handler-discipline reason — its own require_msg calls collapse
-  #    under -DCANON_NO_REQUIRE so the WP and coverage evidence
-  #    streams measure the same source. memory.h follows the same
-  #    pattern: require_msg collapses under -DCANON_NO_REQUIRE for
-  #    both WP and coverage, and mem_secure_zero forces the volatile
-  #    write-loop fallback under __FRAMAC__ (memset_s is C11 Annex K
-  #    and rarely shipped on certification targets).
-  #
-  #    Certification evidence produced:
-  #      - Absence of runtime errors (all standards)
-  #      - Contract verification (requirement traceability)
-  #      - Formal proof artifacts (DO-178C objective substitution)
-  # -------------------------------------------------------------------------
-  frama-c:
+  #   Provers: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover). Every
+  #   remaining unproved goal is demonstrated triple-prover-resistant. See the
+  #   composite action for the install + why3 registration procedure.
+  # =========================================================================
+
+  frama-c-checked:
     needs: build
     runs-on: ubuntu-latest
-
-    env:
-      OCAML_VERSION: "4.14.2"
-      FRAMAC_VERSION: "29.0"
-      CVC5_VERSION: "1.2.1"
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install system dependencies for opam and Frama-C
-        # The opam cvc5 package is removed from this install list (see
-        # the separate CVC5 CLI installation step below for rationale).
-        # python3-tomli was a cvc5-opam-specific build dep — also removed.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            opam \
-            m4 \
-            pkg-config \
-            libgmp-dev \
-            zlib1g-dev \
-            autoconf \
-            autotools-dev \
-            graphviz \
-            libcairo2-dev \
-            libgtk-3-dev \
-            libgtksourceview-3.0-dev \
-            cmake \
-            wget
-
-      - name: Cache opam switch
-        id: cache-opam
-        uses: actions/cache@v4
-        with:
-          path: ~/.opam
-          # Cache key bumped to v8 because the cvc5 opam package was removed.
-          # The old v7 cache contains the library-only cvc5 build which we
-          # no longer need. v8 cache will be smaller and faster to restore.
-          key: opam-${{ runner.os }}-ocaml-${{ env.OCAML_VERSION }}-framac-${{ env.FRAMAC_VERSION }}-z3-v8
-
-      - name: Initialise opam (cache miss only)
-        # cvc5 is NO LONGER installed via opam here. The opam cvc5.1.3.0
-        # package ships only OCaml library bindings, not the CLI binary
-        # that why3 needs for `-wp-prover cvc5`. We fetch the official
-        # prebuilt cvc5 binary from GitHub releases in a separate step
-        # below. Removing cvc5 from opam also shrinks the cache and
-        # eliminates the conf-python3-tomli dependency chain.
-        if: steps.cache-opam.outputs.cache-hit != 'true'
-        run: |
-          rm -rf ~/.opam
-          opam init -y --bare --no-setup --disable-sandboxing
-          opam switch create frama-c ocaml-base-compiler.${OCAML_VERSION}
-          eval $(opam env --switch=frama-c)
-          opam install -y --confirm-level=unsafe-yes --assume-depexts \
-            frama-c.${FRAMAC_VERSION} alt-ergo why3 z3
-
-      - name: Install cvc5 CLI binary from GitHub releases
-        # The opam `cvc5` package installs OCaml bindings, not a CLI
-        # binary. WP + why3 need the standalone `cvc5` executable.
-        # We fetch it from the official cvc5 GitHub release and
-        # install to /usr/local/bin, which is on PATH by default.
-        #
-        # Version pinned to CVC5_VERSION env var so CI remains
-        # deterministic. Bumping the version is a one-line change
-        # that doesn't require cache invalidation (this install
-        # runs outside the opam cache).
-        #
-        # The download is ~20-30 MB and takes a few seconds. We do
-        # this on every run (cache hit or miss) because the binary
-        # lives outside ~/.opam — but it's cheap enough that this
-        # isn't worth optimizing further.
-        run: |
-          CVC5_URL="https://github.com/cvc5/cvc5/releases/download/cvc5-${CVC5_VERSION}/cvc5-Linux-x86_64-static.zip"
-          echo "Downloading cvc5 ${CVC5_VERSION} from ${CVC5_URL}"
-          wget -q "${CVC5_URL}" -O /tmp/cvc5.zip
-          unzip -q /tmp/cvc5.zip -d /tmp/cvc5-release
-          # The zip extracts to a directory like cvc5-Linux-x86_64-static/bin/cvc5
-          CVC5_EXTRACTED=$(find /tmp/cvc5-release -name cvc5 -type f | head -1)
-          if [ -z "${CVC5_EXTRACTED}" ]; then
-            echo "ERROR: cvc5 binary not found in downloaded archive"
-            echo "Archive contents:"
-            find /tmp/cvc5-release -type f
-            exit 1
-          fi
-          echo "Found cvc5 binary at: ${CVC5_EXTRACTED}"
-          sudo cp "${CVC5_EXTRACTED}" /usr/local/bin/cvc5
-          sudo chmod +x /usr/local/bin/cvc5
-          echo "Installed cvc5 to /usr/local/bin/cvc5"
-          /usr/local/bin/cvc5 --version | head -3
-
-      - name: Activate opam environment and configure Why3 provers
-        # why3 config detect auto-registers Alt-Ergo 2.6.3 and Z3 4.15.2
-        # (with "version not recognized" warnings because the installed
-        # versions are newer than why3 1.7.2's detection regex). It does
-        # NOT auto-register cvc5 because why3's version regex is tuned
-        # to cvc5 1.0.x. We work around this with `why3 config add-prover`,
-        # which bypasses version detection and stores the prover under
-        # [partial_prover] with manual = true.
-        #
-        # cvc5 binary location: /usr/local/bin/cvc5 (installed in the
-        # previous step from the official GitHub release). why3 needs
-        # an absolute path for add-prover, and /usr/local/bin is on
-        # PATH by default.
-        #
-        # Robustness: `set +e` and explicit error handling keep this
-        # step from failing catastrophically if cvc5 registration fails.
-        # The WP steps then fall back to Alt-Ergo + Z3 only, same as
-        # before cvc5 was introduced.
-        run: |
-          set +e
-          eval $(opam env --switch=frama-c)
-          OPAM_BIN="$(opam var --switch=frama-c bin)"
-          echo "${OPAM_BIN}" >> $GITHUB_PATH
-          export PATH="${OPAM_BIN}:${PATH}"
-
-          echo "--- Versions ---"
-          frama-c -version
-          alt-ergo --version
-
-          CVC5_BIN="/usr/local/bin/cvc5"
-          if [ -x "${CVC5_BIN}" ]; then
-            echo "cvc5 binary: ${CVC5_BIN}"
-            "${CVC5_BIN}" --version | head -5
-          else
-            echo "WARN: cvc5 binary not found at ${CVC5_BIN}"
-            echo "      WP will run without cvc5"
-          fi
-
-          echo ""
-          echo "--- Supported prover families (grep cvc5 for confirmation) ---"
-          why3 config list-supported-provers 2>&1 | grep -i cvc5 \
-            || echo "cvc5 family not found in why3 supported-provers list"
-
-          echo ""
-          echo "--- Auto-detect provers (why3 config detect) ---"
-          why3 config detect
-
-          if [ -x "${CVC5_BIN}" ]; then
-            echo ""
-            echo "--- Manual cvc5 registration (add-prover) ---"
-            # Try common cvc5 prover family names. why3's prover family
-            # naming has varied across versions; try lowercase first, then
-            # uppercase, fall through gracefully if both fail.
-            REGISTERED=0
-            for FAMILY_NAME in cvc5 CVC5; do
-              echo "Attempting: why3 config add-prover ${FAMILY_NAME} ${CVC5_BIN} cvc5"
-              if why3 config add-prover "${FAMILY_NAME}" "${CVC5_BIN}" cvc5 2>&1; then
-                echo "cvc5 registered successfully under family name '${FAMILY_NAME}'"
-                REGISTERED=1
-                break
-              else
-                echo "Registration with family name '${FAMILY_NAME}' failed, trying next..."
-              fi
-            done
-            if [ "${REGISTERED}" -ne 1 ]; then
-              echo "WARN: all cvc5 registration attempts failed — WP will run without cvc5"
-            fi
-          else
-            echo ""
-            echo "--- Skipping manual cvc5 registration (binary missing) ---"
-          fi
-
-          echo ""
-          echo "--- Registered provers after manual add (why3 config list-provers) ---"
-          why3 config list-provers 2>&1 || true
-
-          echo ""
-          echo "--- Registered prover sections in why3.conf ---"
-          grep -E '^\[(partial_)?prover\]|^name = |^version = ' ~/.why3.conf \
-            2>/dev/null || echo "(why3.conf not found or no prover sections)"
-
-          # Force exit 0 — this step is diagnostic configuration only;
-          # any individual command failure has been handled above.
-          exit 0
+      - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/primitives/checked.h"
         # WP is expected to leave exactly 2 goals unproven:
@@ -718,6 +478,13 @@ jobs:
           name: wp-proof-checked
           path: wp_output.txt
 
+  frama-c-bits:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
+
       - name: "WP: core/primitives/bits.h"
         # WP is expected to leave exactly 15 goals unproven (as Timeout
         # or Unknown — WP may classify the same goal differently across
@@ -757,8 +524,6 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_bits_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # Count unproved goals: Timeout + Unknown (WP may classify the
-          # same goal as either depending on solver heuristics per run).
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bits_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_bits_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -774,7 +539,6 @@ jobs:
             exit 1
           fi
 
-          # Verify the proved count matches expectations (746 of 761).
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
           if [ "${PROVED_COUNT}" != "746 / 761" ]; then
@@ -783,9 +547,6 @@ jobs:
             echo "         Review the output and update the enforcement wrapper."
           fi
 
-          # Spot-check representative goals from each unproved category.
-          # These may appear as [Timeout] or [Unknown] — check both.
-          # Full list: see docs/verification.md, bits.h section.
           CHECKS=(
             "typed_bits_clear_ensures"
             "typed_bits_popcount_ensures"
@@ -813,18 +574,17 @@ jobs:
           name: wp-proof-bits
           path: wp_bits_output.txt
 
+  frama-c-compare:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
+
       - name: "WP: core/primitives/compare.h"
         # compare.h achieved 208/208 (100%) with Typed+Cast model.
         # All 28 comparator functions are fully proved — functional
         # correctness, RTE absence, and assigns \nothing.
-        #
-        # -wp-model Typed+Cast: compare.h takes void* parameters and
-        # casts them to typed pointers inside the function body. WP's
-        # default Typed memory model treats void* as char* (sint8*) and
-        # flags incompatible pointer casts, preventing mem_access RTE
-        # goals from being proved. Typed+Cast relaxes the model to
-        # allow pointer casts between compatible-sized types, which is
-        # exactly what these comparators do (void* → const u32*, etc.).
         # See docs/deviations.md, entry VERIFY-005.
         run: |
           eval $(opam env --switch=frama-c)
@@ -884,36 +644,20 @@ jobs:
           name: wp-proof-compare
           path: wp_compare_output.txt
 
+  frama-c-ptr:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
+
       - name: "WP: core/primitives/ptr.h"
         # ptr.h uses Typed+Cast memory model for the same reason as
-        # compare.h — the header performs void* to u8* casts for
-        # byte-level pointer arithmetic. The default Typed memory
-        # model rejects these casts; Typed+Cast allows them under
-        # the same soundness argument as VERIFY-005.
-        #
-        # Expected result: 1729 / 1739 proved, exactly 10 unproved.
-        # This baseline is confirmed stable under the triple-prover
-        # configuration (Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1),
-        # as of CI #791. The 10 unproved goals are all documented in
-        # docs/deviations.md under VERIFY-006 with manual proof
-        # arguments. They fall into four categories:
-        #   - Transitive checked.h overflow (2): inherited from checked.h
-        #     VERIFY-001 (the 64-bit unsigned add wraparound pair)
-        #   - Align formula ensures (3): align_up_ensures,
-        #     align_down_ensures, align_padding_ensures — WP integer
-        #     theory cannot reason across bitwise AND with complement
-        #   - ptr_align_* call-chain (3): call-site reconstruction of
-        #     align_up / align_padding preconditions through pointer
-        #     casts — Typed+Cast model limitation
-        #   - Contract handler non-termination (2):
-        #     contract_default_handler_loop_invariant_established,
-        #     contract_default_handler_terminates — WP correctly
-        #     identifies the while(1) loop as non-terminating; this is
-        #     the intended ACSL idiom for a non-returning handler
-        #
-        # The wrapper below verifies WP fails on EXACTLY these 10 goals
-        # with Proved = 1729/1739. Any deviation is a regression and
-        # fails the job.
+        # compare.h. Expected result: 1729 / 1739 proved, exactly 10
+        # unproved (VERIFY-006). Four categories: transitive checked.h
+        # overflow (2), align formula ensures (3), ptr_align_* call-chain
+        # (3), contract handler non-termination (2). Any deviation is a
+        # regression and fails the job.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -940,9 +684,6 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_ptr_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # Count unproved goals: Timeout + Unknown + Failed.
-          # WP may classify the same goal as either Timeout or Unknown
-          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_ptr_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_ptr_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_ptr_output.txt || true)
@@ -964,8 +705,6 @@ jobs:
             exit 1
           fi
 
-          # Verify the proved count matches the stable triple-prover
-          # baseline (1729 / 1739).
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
           if [ "${PROVED_COUNT}" != "1729 / 1739" ]; then
@@ -975,9 +714,6 @@ jobs:
             echo "         docs/deviations.md before updating this wrapper."
           fi
 
-          # Spot-check representative goals from each unproved category.
-          # These may appear as [Timeout], [Unknown], or [Failed] — check all.
-          # Full list: see docs/deviations.md, entry VERIFY-006.
           CHECKS=(
             "typed_cast_checked_add_overflow_ensures"
             "typed_cast_checked_add_u64_overflow_ensures"
@@ -998,10 +734,6 @@ jobs:
             fi
           done
 
-          # Confirm CVC5 was actually invoked. If this count is 0 the
-          # triple-prover story is broken — the step should have caught
-          # registration failure earlier, but this is a belt-and-braces
-          # sanity check that the certification evidence is real.
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_ptr_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1021,69 +753,19 @@ jobs:
           name: wp-proof-ptr
           path: wp_ptr_output.txt
 
+  frama-c-slice:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
+
       - name: "WP: core/slice.h"
-        # slice.h is the first non-primitives header WP-verified in
-        # Canon-C. It defines the canonical {ptr, len} borrow types —
-        # bytes_t (mutable byte view), cbytes_t (read-only byte view),
-        # and str_t (read-only character view) — plus the
-        # DEFINE_SLICE(T) macro for typed element views.
-        #
-        # Memory model: Typed+Cast — same rationale as VERIFY-005
-        # (compare.h) and VERIFY-006 (ptr.h). slice.h performs void*
-        # to u8* casts in bytes_from / cbytes_from / slice_T_as_bytes;
-        # the default Typed memory model rejects these casts and
-        # every RTE mem_access goal becomes unprovable.
-        #
-        # Expected result: 367 / 390 proved, exactly 23 unproved.
-        # Established as the stable triple-prover baseline by CI #821
-        # (commit 1e0d0fe). The 23 unproved goals are documented in
-        # docs/deviations.md under VERIFY-007 with WP-warning evidence
-        # and category analysis. They fall into three categories:
-        #
-        #   1. memcmp call-site preconditions (20) — six per
-        #      bytes_equal/str_equal, four per str_starts_with/
-        #      str_ends_with. WP itself reports the limitation:
-        #        "Allocation, initialization and danglingness not yet
-        #         implemented (\dangling{L}((char *)s + i))"
-        #      ACSL's memcmp contract requires initialization and
-        #      danglingness reasoning that Frama-C 29 has not yet
-        #      implemented. Strengthening slice.h's predicates would
-        #      not close these — the verifier itself cannot process
-        #      the obligations.
-        #
-        #   2. strlen valid_string precondition (1) — str_from_cstr
-        #      deliberately omits valid_read_string to avoid a
-        #      project-wide -frama-c-stdlib dependency. See VERIFY-007
-        #      for the spec-strength tradeoff rationale.
-        #
-        #   3. Transitive contract.h handler non-termination (2) —
-        #      same two goals as VERIFY-006 category 4, re-emitted
-        #      because slice.h includes contract.h transitively.
-        #      Not new slice.h residuals.
-        #
-        # Verification scope:
-        #   - bytes_t / cbytes_t / str_t functions: ANNOTATED + VERIFIED
-        #   - DEFINE_SLICE(T) macro: DOCUMENTED, NOT WP-VERIFIED — the
-        #     C preprocessor strips ACSL inside #define before macro
-        #     expansion. Macro-generated functions are validated by
-        #     unit testing, fuzzing, and 93.1% MC/DC coverage on the
-        #     i32 instantiation.
-        #
-        # MCDC-002 closure:
-        #   The four `!ptr` defensive branches in bytes_slice (line
-        #   117), bytes_skip (line 130), str_slice (line 194), and
-        #   str_skip (line 207) — documented in MCDC-002 as
-        #   API-unreachable in MC/DC isolation — are formally proved
-        #   unreachable by WP under the bytes_invariant / str_invariant
-        #   type predicates. None of the four functions appear in the
-        #   unproved goal list. The wrapper below verifies this with
-        #   the diagnostic line `MCDC-002 functions with WP residuals:
-        #   0/4` — a regression here means the predicates were
-        #   weakened or the type invariants are no longer being
-        #   carried through the contracts.
-        #
-        # The wrapper enforces 367/390 proved with the 23 named
-        # unproved goal patterns. Any deviation is a regression.
+        # slice.h — Typed+Cast. Expected: 367 / 390 proved, exactly 23
+        # unproved (VERIFY-007): memcmp call-site preconditions (20),
+        # strlen valid_string (1), transitive contract.h handler (2).
+        # Also enforces the MCDC-002 closure (4/4 !ptr defensive branches
+        # discharged unreachable). Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1110,13 +792,6 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_slice_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # First sanity check: did WP actually produce a verification
-          # summary? If "Proved goals:" is missing, frama-c aborted
-          # before WP ran (typically an ACSL parse error). The
-          # unproved counters below would all read zero, falsely
-          # passing the count check. Without this guard, a parse
-          # error becomes a silent pass — see CI #821 history for the
-          # bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1131,9 +806,6 @@ jobs:
             exit 1
           fi
 
-          # Count unproved goals: Timeout + Unknown + Failed.
-          # WP may classify the same goal as either Timeout or Unknown
-          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_slice_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_slice_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_slice_output.txt || true)
@@ -1156,8 +828,6 @@ jobs:
             exit 1
           fi
 
-          # Verify the proved count matches the stable triple-prover
-          # baseline (367 / 390).
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
           if [ "${PROVED_COUNT}" != "367 / 390" ]; then
@@ -1168,11 +838,6 @@ jobs:
             echo "         docs/deviations.md before updating this wrapper."
           fi
 
-          # MCDC-002 closure check: verify WP discharged all four
-          # !ptr defensive branches as unreachable. If any of these
-          # functions appears in the unproved list, MCDC-002's
-          # WP-discharged status has regressed and the cross-stream
-          # certification evidence is no longer valid.
           MCDC002_GOALS=(
             "bytes_slice"
             "bytes_skip"
@@ -1199,12 +864,6 @@ jobs:
             exit 1
           fi
 
-          # Spot-check representative goals from each unproved category.
-          # These may appear as [Timeout], [Unknown], or [Failed] —
-          # check all. Full list: see docs/deviations.md, VERIFY-007.
-          # The check uses pattern-style names because WP emits one
-          # goal per memcmp aspect (valid/initialization/danglingness)
-          # times two arguments (s1/s2) per equality function.
           CHECKS=(
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_contract_default_handler_loop_invariant_established"
@@ -1238,11 +897,6 @@ jobs:
             fi
           done
 
-          # Confirm CVC5 was actually invoked. Same belt-and-braces
-          # check as the ptr.h wrapper. If CVC5 doesn't appear, the
-          # triple-prover setup has degraded to dual-prover and the
-          # certification claim ("triple-prover-resistant residuals")
-          # is no longer supported.
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_slice_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1263,112 +917,18 @@ jobs:
           name: wp-proof-slice
           path: wp_slice_output.txt
 
+  frama-c-memory:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
+
       - name: "WP: core/memory.h"
-        # memory.h is the sixth Canon-C header WP-verified and the
-        # second non-primitives header (after slice.h). It provides
-        # safe wrappers around memcpy/memmove/memset/memcmp,
-        # malloc/free, alignment helpers, and bytes_t/cbytes_t slice
-        # variants — 22 user-facing functions in three groups:
-        #
-        #   Group 1 — alignment and allocation (9 functions):
-        #     mem_regions_overlap, mem_alloc, mem_free,
-        #     mem_alloc_array_checked, mem_align, mem_align_to,
-        #     mem_is_aligned, mem_get_alignment, mem_is_power_of_two
-        #
-        #   Group 2 — raw memory operations (11 functions):
-        #     mem_copy, mem_move, mem_zero, mem_secure_zero, mem_set,
-        #     mem_compare, mem_equal, mem_is_all, mem_is_zero,
-        #     mem_swap, mem_swap_buf
-        #
-        #   Group 3 — bytes_t/cbytes_t variants (7 functions):
-        #     mem_copy_bytes, mem_move_bytes, mem_zero_bytes,
-        #     mem_set_bytes, mem_equal_bytes, mem_is_zero_bytes,
-        #     mem_secure_zero_bytes
-        #
-        # Memory model: Typed+Cast — same rationale as VERIFY-005
-        # (compare.h), VERIFY-006 (ptr.h), and VERIFY-007 (slice.h).
-        # memory.h performs void* to char*/u8* casts in many places
-        # (mem_alloc, mem_regions_overlap, all bytes_t variants);
-        # the default Typed memory model rejects these casts.
-        #
-        # Expected result: 2805 / 2862 proved, exactly 57 unproved.
-        # Established as the stable triple-prover baseline by CI #851
-        # (commit TBD). The 57 unproved goals are documented in
-        # docs/deviations.md under VERIFY-008 with WP-warning evidence
-        # and category analysis. They split cleanly into inherited
-        # vs memory.h-own:
-        #
-        # INHERITED RESIDUALS (31) — propagated unchanged from
-        # already-verified substrate headers. These are not memory.h
-        # defects; they are the substrate's documented residuals
-        # that re-emerge wherever memory.h's call paths reach them.
-        # The composable-verification thesis: substrate residuals
-        # propagate without amplification.
-        #
-        #   1a. contract.h handler non-termination (2) — same as
-        #       VERIFY-006 cat 4 (ptr.h) and slice.h cat 3.
-        #
-        #   1b. checked.h u64 add overflow (2) — same as VERIFY-001
-        #       (the manually-discharged checked_add_u64 pair).
-        #
-        #   1c. ptr.h align formula ensures (3) — same as VERIFY-006
-        #       cat 2 (align_up/down/padding integer theory).
-        #
-        #   1d. ptr.h call-chain align preconditions (3) — same as
-        #       VERIFY-006 cat 3 (ptr_align_up/padding).
-        #
-        #   1e. slice.h bytes_equal/str_equal/str_starts_with/
-        #       str_ends_with/str_from_cstr memcmp inheritance (21) —
-        #       same as VERIFY-007 cat 1 and cat 2. ACSL's memcmp
-        #       and strlen contracts use \dangling{L} and
-        #       \initialization clauses that Frama-C 29 has not yet
-        #       implemented.
-        #
-        # MEMORY.H-OWN RESIDUALS (26) — three categories, all
-        # documented under VERIFY-008:
-        #
-        #   2a. \fresh / \freeable allocation reasoning (5) —
-        #       mem_alloc, mem_free, mem_alloc_array_checked. WP
-        #       cannot reason across stdlib malloc/free's allocation
-        #       and freeability postconditions because Frama-C 29's
-        #       libc spec uses unsupported clauses:
-        #         "Allocation, initialization and danglingness not
-        #          yet implemented (\fresh{Old, Here}(...))"
-        #         "... (\freeable(p))"
-        #       Same WP limitation as the slice.h memcmp residuals.
-        #
-        #   2b. WP integer theory / bitwise alignment (9) —
-        #       mem_align, mem_align_to, mem_is_aligned,
-        #       mem_get_alignment. The "% alignment" ensures clauses
-        #       and bitwise alignment formulas exceed WP's integer
-        #       theory in the same pattern as ptr.h's align_up
-        #       residuals (VERIFY-006 cat 2). Strengthening contracts
-        #       cannot close these — the verifier itself cannot
-        #       process the obligations.
-        #
-        #   2c. memcmp call-site inheritance (12) — mem_compare,
-        #       mem_equal, mem_equal_bytes. Same root cause as
-        #       VERIFY-007 cat 1 (slice.h's bytes_equal/str_equal).
-        #       memory.h directly calls memcmp, so the same
-        #       \dangling/\initialization residuals re-emerge here
-        #       at memory.h's call sites.
-        #
-        # Verification scope:
-        #   - All 22 user-facing functions: ANNOTATED + VERIFIED
-        #   - mem_alloc_type, mem_alloc_array, mem_zero_type, etc.
-        #     (type-safe macros): DOCUMENTED, NOT WP-VERIFIED — the
-        #     C preprocessor strips ACSL inside #define before macro
-        #     expansion. Same VERIFY-007 macro-verification rationale
-        #     as slice.h's DEFINE_SLICE.
-        #   - mem_alloc_array_checked routes through checked_mul
-        #     (checked.h's verified primitive). The composable-
-        #     verification chain checked.h → memory.h is the first
-        #     transitive dependency on a verified primitive at this
-        #     layer; the inherited checked_add_u64 residual is the
-        #     concrete data point.
-        #
-        # The wrapper enforces 2805/2862 proved with the 57 named
-        # unproved goal patterns. Any deviation is a regression.
+        # memory.h — Typed+Cast. Expected: 2805 / 2862 proved, exactly 57
+        # unproved (VERIFY-008): 31 inherited from substrate + 26 own
+        # (\fresh/\freeable allocation 5, bitwise-alignment integer theory
+        # 9, memcmp call-site inheritance 12). Any deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1395,11 +955,6 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_memory_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # First sanity check: did WP actually produce a verification
-          # summary? If "Proved goals:" is missing, frama-c aborted
-          # before WP ran (typically an ACSL parse error). Without
-          # this guard, a parse error becomes a silent pass — see
-          # CI #821 history (slice.h) for the bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1414,9 +969,6 @@ jobs:
             exit 1
           fi
 
-          # Count unproved goals: Timeout + Unknown + Failed.
-          # WP may classify the same goal as either Timeout or Unknown
-          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_memory_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_memory_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_memory_output.txt || true)
@@ -1439,8 +991,6 @@ jobs:
             exit 1
           fi
 
-          # Verify the proved count matches the stable triple-prover
-          # baseline (2805 / 2862).
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
           if [ "${PROVED_COUNT}" != "2805 / 2862" ]; then
@@ -1451,30 +1001,17 @@ jobs:
             echo "         docs/deviations.md before updating this wrapper."
           fi
 
-          # Spot-check representative goals from each category. These
-          # may appear as [Timeout], [Unknown], or [Failed] — check
-          # all. Full list: see docs/deviations.md, VERIFY-008.
-          #
-          # The check uses pattern-style names because WP emits one
-          # goal per memcmp aspect (initialization/danglingness)
-          # times two arguments (s1/s2), and one goal per align
-          # behavior (part2/part3).
           CHECKS=(
-            # Inherited cat 1a — contract.h handler (2)
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_contract_default_handler_loop_invariant_established"
-            # Inherited cat 1b — checked.h u64 add overflow (2)
             "typed_cast_checked_add_overflow_ensures"
             "typed_cast_checked_add_u64_overflow_ensures"
-            # Inherited cat 1c — ptr.h align formula (3)
             "typed_cast_align_up_ensures"
             "typed_cast_align_down_ensures"
             "typed_cast_align_padding_ensures"
-            # Inherited cat 1d — ptr.h call-chain align (3)
             "typed_cast_ptr_align_up_call_align_up_requires_3"
             "typed_cast_ptr_align_padding_call_align_padding_requires_3"
             "typed_cast_ptr_align_padding_nonnull_ensures_part2"
-            # Inherited cat 1e — slice.h memcmp/strlen (21)
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
@@ -1496,13 +1033,11 @@ jobs:
             "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
-            # memory.h-own cat 2a — \fresh / \freeable allocation (5)
             "typed_cast_mem_alloc_assigns_normal_part2"
             "typed_cast_mem_alloc_nonzero_size_ensures_part2"
             "typed_cast_mem_free_assigns_normal"
             "typed_cast_mem_free_call_free_requires_freeable"
             "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
-            # memory.h-own cat 2b — WP integer theory (9)
             "typed_cast_mem_align_normal_ensures_part3"
             "typed_cast_mem_align_normal_ensures_2_part3"
             "typed_cast_mem_align_to_normal_ensures_part3"
@@ -1512,7 +1047,6 @@ jobs:
             "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
             "typed_cast_mem_get_alignment_nonnull_ensures_part2"
             "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
-            # memory.h-own cat 2c — memcmp call-site inheritance (12)
             "typed_cast_mem_compare_call_memcmp_requires_initialization_s1"
             "typed_cast_mem_compare_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
@@ -1534,11 +1068,6 @@ jobs:
             fi
           done
 
-          # Confirm CVC5 was actually invoked. Same belt-and-braces
-          # check as the ptr.h and slice.h wrappers. If CVC5 doesn't
-          # appear, the triple-prover setup has degraded to dual-
-          # prover and the certification claim ("triple-prover-
-          # resistant residuals") is no longer supported.
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_memory_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1550,9 +1079,8 @@ jobs:
           echo "PASS: memory.h verified — 2805/2862 proved, 57 documented"
           echo "      residuals all observed (VERIFY-008): 31 inherited"
           echo "      from ptr.h/slice.h/checked.h substrate + 26"
-          echo "      memory.h-own (allocation reasoning, integer theory,"
-          echo "      memcmp inheritance). Composable verification claim"
-          echo "      holds: zero new substrate residuals introduced."
+          echo "      memory.h-own. Composable verification claim holds:"
+          echo "      zero new substrate residuals introduced."
           echo "==============================================="
 
       - name: Upload WP proof output (memory.h)
@@ -1562,122 +1090,20 @@ jobs:
           name: wp-proof-memory
           path: wp_memory_output.txt
 
-      # -- Eva (Evolved Value Analysis) is intentionally NOT run on checked.h --
-      # Eva requires an entry point function to start abstract interpretation
-      # from. checked.h is a header full of static inline functions with no
-      # main() — Eva has nothing to anchor to and aborts with "cannot find
-      # entry point". WP already proves the contracts and absence of runtime
-      # errors for every function independently, so Eva is not needed here.
-      #
-      # When Canon-C grows real translation units (verification driver files
-      # for macro-instantiated modules, or test files compiled as standalone
-      # programs), Eva can run on those — pointing at a real main() that
-      # exercises a representative call sequence. Until then, WP is the
-      # complete formal verification story for header-only modules.
+  frama-c-arena:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/arena.h"
-        # arena.h is the seventh Canon-C header WP-verified and the
-        # third non-primitives header (after slice.h and memory.h). It
-        # provides a linear bump allocator with explicit lifetime
-        # control — 22 user-facing functions across init/reset,
-        # allocation, query, and checkpoint/rollback.
-        #
-        # Memory model: Typed+Cast — same rationale as VERIFY-005
-        # (compare.h), VERIFY-006 (ptr.h), VERIFY-007 (slice.h), and
-        # VERIFY-008 (memory.h). arena.h performs void* to u8* casts
-        # in arena_init, arena_alloc, arena_alloc_aligned, the byte
-        # views, and several internal helpers; the default Typed
-        # memory model rejects these casts.
-        #
-        # Expected result: 3369 / 3472 proved, exactly 103 unproved.
-        # Established as the stable triple-prover baseline.
-        # (commit TBD). The 103 unproved goals are documented in
-        # docs/deviations.md under VERIFY-009. They split cleanly
-        # into inherited vs arena.h-own — extending the composable-
-        # verification claim to a third data point (after slice.h
-        # inheriting from ptr.h, and memory.h inheriting from
-        # ptr.h+slice.h+checked.h):
-        #
-        # INHERITED RESIDUALS (57) — propagated unchanged from the
-        # already-verified substrate. memory.h's full residual set is
-        # re-emitted byte-for-byte because arena.h includes memory.h
-        # (which transitively includes ptr.h, slice.h, checked.h, and
-        # contract.h). Zero new substrate residuals introduced.
-        #
-        #   1a. contract.h handler non-termination (2)
-        #   1b. checked.h u64 add overflow (2)
-        #   1c. ptr.h align formula ensures (3)
-        #   1d. ptr.h call-chain align preconditions (3)
-        #   1e. slice.h memcmp/strlen inheritance (21)
-        #   1f. memory.h \fresh / \freeable allocation (5)
-        #   1g. memory.h WP integer theory / bitwise alignment (9)
-        #   1h. memory.h memcmp call-site inheritance (12)
-        #
-        # ARENA.H-OWN RESIDUALS (46) — four categories, all
-        # documented under VERIFY-009:
-        #
-        #   2a. ptr_span call-site preconditions (8) — 4 in
-        #       arena_alloc, 4 in arena_alloc_aligned. WP cannot
-        #       reconstruct ptr_span's requires clauses through the
-        #       ptr_align_up call chain under Typed+Cast. Same
-        #       structural pattern as VERIFY-006 cat 3 (ptr.h
-        #       ptr_align_up call-chain residuals).
-        #
-        #   2b. arena_alloc / arena_alloc_aligned fits/does_not_fit
-        #       ensures (26 total: 13 per function) — the per-behavior
-        #       postconditions relate the C offset arithmetic to the
-        #       arena_can_fit predicate's let-bindings. WP cannot
-        #       prove the arithmetic chain (offset + pad + size <=
-        #       capacity, offset + size <= USIZE_MAX - pad, etc.)
-        #       propagates through the C bump-pointer update across
-        #       all four fits/does_not_fit cases. Strengthening
-        #       arena_can_fit with intermediate alignment invariants
-        #       would close these but adds substantial spec complexity
-        #       for marginal certification benefit.
-        #
-        #   2c. arena_alloc_zero / arena_alloc_aligned_zero and
-        #       arena_try_alloc / arena_try_alloc_aligned wrappers
-        #       (10 total) — the zero-init and bool-return wrappers
-        #       inherit the parent allocator's fits-ensures residuals
-        #       through their delegation to arena_alloc /
-        #       arena_alloc_aligned. The wrapper-specific obligations
-        #       (assigns_normal_part03, non_null_out_ensures_part1,
-        #       non_null_out_ensures_part2) reduce to the same
-        #       arithmetic chain that cat 2b leaves unproved.
-        #
-        #   2d. arena_free_bytes ptr_offset/bytes_from call-site
-        #       preconditions (2) — same structural pattern as
-        #       cat 2a: WP cannot reconstruct the helper's requires
-        #       clauses through the (offset < capacity) branch.
-        #
-        # Verification scope:
-        #   - All 22 user-facing functions: ANNOTATED + VERIFIED
-        #   - arena_alloc_type, arena_alloc_array, arena_alloc_type_zero,
-        #     arena_alloc_array_zero (type-safe macros): DOCUMENTED,
-        #     NOT WP-VERIFIED — the C preprocessor strips ACSL inside
-        #     #define before macro expansion. Same VERIFY-007/008
-        #     macro-verification rationale.
-        #   - arena_init, arena_reset, arena_reset_secure, arena_reset_to,
-        #     arena_mark, arena_capacity, arena_remaining, arena_used,
-        #     arena_is_empty, arena_is_full: 100% proved (no residuals).
-        #
-        # MCDC-003 note (no closure check in this wrapper):
-        #   Unlike slice.h's MCDC-002 closure block, this wrapper does
-        #   NOT include a "functions with WP residuals: 0/N" check for
-        #   MCDC-003. The slice.h pattern works because bytes_slice,
-        #   bytes_skip, str_slice, str_skip are 100% proved — verifying
-        #   they don't appear in residuals is meaningful. For arena.h,
-        #   the MCDC-003 functions (arena_alloc, arena_alloc_aligned)
-        #   DO appear in the residual list under cats 2a + 2b — they
-        #   carry 13 WP-resistant goals each. A "function not in
-        #   residuals" check would always fail and is not the right
-        #   shape for arena.h's situation. Cross-stream MCDC-003
-        #   evidence is provided by the per-line gcov debug step in
-        #   the coverage job, which surfaces the specific unreachable
-        #   subconditions for human review against docs/deviations.md.
-        #
-        # The wrapper enforces 3369/3472 proved with the 103 named
-        # unproved goal patterns. Any deviation is a regression.
+        # arena.h — Typed+Cast. Expected: 3369 / 3472 proved, exactly 103
+        # unproved (VERIFY-009): 57 inherited (memory.h's full surface) +
+        # 46 own (ptr_span call-sites 8, fits/does_not_fit arithmetic 26,
+        # zero/try wrappers 10, free_bytes helpers 2). Any deviation is a
+        # regression. (MCDC-003 has no closure check here — the affected
+        # functions legitimately carry residuals; see the coverage job.)
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1704,11 +1130,6 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_arena_output.txt || true)
           echo "  ${PROVED_LINE}"
 
-          # First sanity check: did WP actually produce a verification
-          # summary? If "Proved goals:" is missing, frama-c aborted
-          # before WP ran (typically an ACSL parse error). Without
-          # this guard, a parse error becomes a silent pass — see
-          # CI #821 history (slice.h) for the bug this prevents.
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1723,9 +1144,6 @@ jobs:
             exit 1
           fi
 
-          # Count unproved goals: Timeout + Unknown + Failed.
-          # WP may classify the same goal as either Timeout or Unknown
-          # depending on solver heuristics per run.
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_arena_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_arena_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_arena_output.txt || true)
@@ -1748,8 +1166,6 @@ jobs:
             exit 1
           fi
 
-          # Verify the proved count matches the stable triple-prover
-          # baseline (3369 / 3472).
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
           if [ "${PROVED_COUNT}" != "3369 / 3472" ]; then
@@ -1760,26 +1176,17 @@ jobs:
             echo "         docs/deviations.md before updating this wrapper."
           fi
 
-          # Spot-check representative goals from each category. These
-          # may appear as [Timeout], [Unknown], or [Failed] — check
-          # all. Full list: see docs/deviations.md, VERIFY-009.
           CHECKS=(
-            # === Inherited residuals (57) ===
-            # Inherited cat 1a — contract.h handler (2)
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_contract_default_handler_loop_invariant_established"
-            # Inherited cat 1b — checked.h u64 add overflow (2)
             "typed_cast_checked_add_overflow_ensures"
             "typed_cast_checked_add_u64_overflow_ensures"
-            # Inherited cat 1c — ptr.h align formula (3)
             "typed_cast_align_up_ensures"
             "typed_cast_align_down_ensures"
             "typed_cast_align_padding_ensures"
-            # Inherited cat 1d — ptr.h call-chain align (3)
             "typed_cast_ptr_align_up_call_align_up_requires_3"
             "typed_cast_ptr_align_padding_call_align_padding_requires_3"
             "typed_cast_ptr_align_padding_nonnull_ensures_part2"
-            # Inherited cat 1e — slice.h memcmp/strlen (21)
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
@@ -1801,13 +1208,11 @@ jobs:
             "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
-            # Inherited cat 1f — memory.h \fresh / \freeable (5)
             "typed_cast_mem_alloc_assigns_normal_part2"
             "typed_cast_mem_alloc_nonzero_size_ensures_part2"
             "typed_cast_mem_free_assigns_normal"
             "typed_cast_mem_free_call_free_requires_freeable"
             "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
-            # Inherited cat 1g — memory.h integer theory (9)
             "typed_cast_mem_align_normal_ensures_part3"
             "typed_cast_mem_align_normal_ensures_2_part3"
             "typed_cast_mem_align_to_normal_ensures_part3"
@@ -1817,7 +1222,6 @@ jobs:
             "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
             "typed_cast_mem_get_alignment_nonnull_ensures_part2"
             "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
-            # Inherited cat 1h — memory.h memcmp call-site (12)
             "typed_cast_mem_compare_call_memcmp_requires_initialization_s1"
             "typed_cast_mem_compare_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
@@ -1830,8 +1234,6 @@ jobs:
             "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
-            # === arena.h-own residuals (46) ===
-            # arena-own cat 2a — arena_alloc/aligned ptr_span calls (8)
             "typed_cast_arena_alloc_call_ptr_span_requires"
             "typed_cast_arena_alloc_call_ptr_span_requires_2"
             "typed_cast_arena_alloc_call_ptr_span_requires_3"
@@ -1840,7 +1242,6 @@ jobs:
             "typed_cast_arena_alloc_aligned_call_ptr_span_requires_2"
             "typed_cast_arena_alloc_aligned_call_ptr_span_requires_3"
             "typed_cast_arena_alloc_aligned_call_ptr_span_requires_4"
-            # arena-own cat 2b — arena_alloc/aligned fits + does_not_fit ensures (26)
             "typed_cast_arena_alloc_fits_ensures_part2"
             "typed_cast_arena_alloc_fits_ensures_part3"
             "typed_cast_arena_alloc_fits_ensures_part4"
@@ -1867,7 +1268,6 @@ jobs:
             "typed_cast_arena_alloc_aligned_fits_ensures_3_part4"
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
-            # arena-own cat 2c — zero/try wrappers (10)
             "typed_cast_arena_alloc_zero_ensures_3_part1"
             "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
@@ -1878,7 +1278,6 @@ jobs:
             "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
             "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
-            # arena-own cat 2d — arena_free_bytes helper calls (2)
             "typed_cast_arena_free_bytes_call_bytes_from_requires"
             "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
           )
@@ -1890,11 +1289,6 @@ jobs:
             fi
           done
 
-          # Confirm CVC5 was actually invoked. Same belt-and-braces
-          # check as the ptr.h, slice.h, and memory.h wrappers. If
-          # CVC5 doesn't appear, the triple-prover setup has degraded
-          # to dual-prover and the certification claim ("triple-
-          # prover-resistant residuals") is no longer supported.
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_arena_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1904,12 +1298,9 @@ jobs:
           fi
 
           echo "PASS: arena.h verified — 3369/3472 proved, 103 documented"
-          echo "      residuals all observed (VERIFY-009): 57 inherited"
-          echo "      from memory.h/slice.h/ptr.h/checked.h/contract.h"
-          echo "      substrate + 46 arena.h-own (ptr_span call-sites,"
-          echo "      fits/does_not_fit ensures, zero/try wrappers,"
-          echo "      free_bytes helpers). Composable verification claim"
-          echo "      holds: zero new substrate residuals introduced."
+          echo "      residuals all observed (VERIFY-009): 57 inherited +"
+          echo "      46 arena.h-own. Composable verification claim holds:"
+          echo "      zero new substrate residuals introduced."
           echo "==============================================="
 
       - name: Upload WP proof output (arena.h)
@@ -1918,86 +1309,19 @@ jobs:
         with:
           name: wp-proof-arena
           path: wp_arena_output.txt
-      
+
+  frama-c-pool:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/pool.h"
-        # pool.h is the eighth Canon-C header WP-verified and the fourth
-        # non-primitives header (after slice.h, memory.h, arena.h). It
-        # provides a fixed-size object pool backed by an arena — a
-        # contiguous region reserved upfront, O(1) sequential allocation,
-        # bulk reset, no per-object free.
-        #
-        # Memory model: Typed+Cast — same rationale as VERIFY-005..009.
-        # pool.h performs void*/u8* casts in pool_init (base_mark
-        # computation), pool_alloc/pool_get (ptr_elem), and the byte views.
-        #
-        # Expected result: 3775 / 3902 proved, exactly 127 unproved.
-        # Measured baseline, run #(TBD) (report-only predecessor:
-        # artifact wp-proof-pool, run 26571826273). The 127 unproved
-        # goals are documented in docs/deviations.md under VERIFY-010.
-        # They split cleanly into inherited vs pool.h-own:
-        #
-        # INHERITED RESIDUALS (103) — propagated unchanged from arena.h.
-        # pool.h includes arena.h, which transitively includes memory.h,
-        # slice.h, ptr.h, checked.h, contract.h. arena.h's ENTIRE
-        # VERIFY-009 residual set (57 substrate + 46 arena-own) re-emerges
-        # here byte-for-byte. Zero new substrate residuals introduced —
-        # the composable-verification thesis holds for a fourth time, and
-        # for the first time across a two-hop transitive include
-        # (pool -> arena -> memory -> ...).
-        #
-        # POOL.H-OWN RESIDUALS (24) — four categories, all VERIFY-010:
-        #
-        #   2a. pool_invariant postcondition arithmetic (5) —
-        #       pool_init ensures_part4 x3 + ensures_4_part3 +
-        #       call_arena_alloc_requires. The load-bearing conjunct
-        #       end_mark - base_mark == capacity * object_size is
-        #       nonlinear; WP's integer theory cannot discharge it for
-        #       the same reason as ptr.h's align_up_ensures (VERIFY-006
-        #       cat 2) and arena's fits_ensures (VERIFY-009 cat 2b).
-        #       NOTE: the three ensures_part4 goals are flagged
-        #       LIMITATION-SUSPECTED pending the manual review recorded
-        #       in VERIFY-010 — they are enforced as residuals here, but
-        #       their classification as pure WP-limitation (vs an
-        #       over-strong invariant) is to be confirmed, not asserted.
-        #
-        #   2b. ptr_elem call-site cascade (4) — pool_alloc and pool_get/
-        #       pool_get_const call ptr_elem/ptr_elem_const; the
-        #       call_ptr_elem_requires + the in_bounds_ensures_part4 +
-        #       the pool_alloc assert_rte_mem_access are the VERIFY-006
-        #       empty-nonnull cascade re-emerging at pool's call sites,
-        #       exactly as predicted in pool.h's header comment.
-        #
-        #   2c. bytes_from / mem_zero / mem_secure_zero call-sites (5) —
-        #       pool_as_bytes, pool_reserved_bytes (bytes_from x2 each),
-        #       pool_alloc_zero (mem_zero), pool_reset_secure
-        #       (mem_secure_zero). Same slice.h/memory.h call-site
-        #       precondition-reconstruction limitation.
-        #
-        #   2d. arena delegation + wrapper assigns/ensures (10) —
-        #       pool_alloc_zero assigns_normal_part3, pool_reset
-        #       (arena_reset_to + arena_alloc requires, reset_ensures
-        #       part3 x2), pool_reset_secure (assigns exit/normal part6,
-        #       mem_secure_zero requires). These reduce to the same
-        #       arithmetic chain cat 2a leaves unproved, inherited
-        #       through pool's delegation to arena_alloc / arena_reset_to.
-        #
-        # Verification scope:
-        #   - All public pool_* functions: ANNOTATED + VERIFIED
-        #   - pool_alloc_type, pool_get_type, etc. (type-safe macros):
-        #     DOCUMENTED, NOT WP-VERIFIED — the C preprocessor strips
-        #     ACSL inside #define. Same VERIFY-007..009 macro rationale.
-        #
-        # MCDC note (no closure check in this wrapper): like arena's
-        # MCDC-003, pool's defensive !pool->arena subconditions are
-        # WP-discharged unreachable under pool_invariant, but the
-        # arithmetic-residual functions (pool_init, pool_alloc, pool_get)
-        # DO appear in the residual list, so a "0/N functions in
-        # residuals" check is the wrong shape. Cross-stream MCDC evidence
-        # is the per-line gcov debug step in the coverage job.
-        #
-        # The wrapper enforces 3775/3902 proved with the 127 named
-        # unproved goal patterns. Any deviation is a regression.
+        # pool.h — Typed+Cast. Expected: 3775 / 3902 proved, exactly 127
+        # unproved (VERIFY-010): 103 inherited (arena.h's full surface,
+        # two-hop transitive) + 24 own across cats 2a/2b/2c/2d. Any
+        # deviation is a regression.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -2070,14 +1394,7 @@ jobs:
             echo "         docs/deviations.md before updating this wrapper."
           fi
 
-          # Spot-check representative goals. These may appear as
-          # [Timeout], [Unknown], or [Failed] — check all. Full list:
-          # docs/deviations.md, VERIFY-010. The 103 inherited goals are
-          # identical to VERIFY-009 (arena.h); only pool.h-own goals are
-          # spot-checked here, plus a few inherited anchors to confirm
-          # the propagation chain is intact.
           CHECKS=(
-            # --- inherited anchors (full set is VERIFY-009) ---
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_checked_add_u64_overflow_ensures"
             "typed_cast_align_up_ensures"
@@ -2087,26 +1404,22 @@ jobs:
             "typed_cast_arena_alloc_fits_ensures_part5"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
             "typed_cast_arena_free_bytes_call_bytes_from_requires"
-            # --- pool.h-own cat 2a: pool_invariant arithmetic (5) ---
             "typed_cast_pool_init_ensures_part4"
             "typed_cast_pool_init_ensures_2_part4"
             "typed_cast_pool_init_ensures_3_part4"
             "typed_cast_pool_init_ensures_4_part3"
             "typed_cast_pool_init_call_arena_alloc_requires"
-            # --- pool.h-own cat 2b: ptr_elem cascade (4) ---
             "typed_cast_pool_alloc_assert_rte_mem_access"
             "typed_cast_pool_alloc_call_ptr_elem_requires"
             "typed_cast_pool_get_call_ptr_elem_requires"
             "typed_cast_pool_get_in_bounds_ensures_part4"
             "typed_cast_pool_get_const_call_ptr_elem_const_requires"
             "typed_cast_pool_get_const_in_bounds_ensures_part4"
-            # --- pool.h-own cat 2c: bytes_from/zero call-sites (5) ---
             "typed_cast_pool_alloc_zero_call_mem_zero_requires"
             "typed_cast_pool_as_bytes_call_bytes_from_requires"
             "typed_cast_pool_as_bytes_call_bytes_from_requires_2"
             "typed_cast_pool_reserved_bytes_call_bytes_from_requires"
             "typed_cast_pool_reserved_bytes_call_bytes_from_requires_2"
-            # --- pool.h-own cat 2d: arena delegation + wrappers (10) ---
             "typed_cast_pool_alloc_zero_assigns_normal_part3"
             "typed_cast_pool_reset_call_arena_reset_to_requires_2"
             "typed_cast_pool_reset_call_arena_alloc_requires"
@@ -2133,11 +1446,9 @@ jobs:
           fi
 
           echo "PASS: pool.h verified — 3775/3902 proved, 127 documented"
-          echo "      residuals all observed (VERIFY-010): 103 inherited"
-          echo "      from arena.h/memory.h/slice.h/ptr.h/checked.h/"
-          echo "      contract.h substrate + 24 pool.h-own. Composable"
-          echo "      verification holds across a two-hop transitive"
-          echo "      include: zero new substrate residuals introduced."
+          echo "      residuals all observed (VERIFY-010): 103 inherited +"
+          echo "      24 pool.h-own. Composable verification holds across a"
+          echo "      two-hop transitive include: zero new substrate residuals."
           echo "==============================================="
 
       - name: Upload WP proof output (pool.h)
@@ -2146,45 +1457,45 @@ jobs:
         with:
           name: wp-proof-pool
           path: wp_pool_output.txt
-      
-      - name: "WP: core/region.h (report-only)"
-        # region.h is the ninth Canon-C header to enter WP scope and the
-        # fifth non-primitives header (after slice.h, memory.h, arena.h,
-        # pool.h). It is wired REPORT-ONLY: this step prints region.h's
-        # proved/unproved counts and the residual goal names, uploads the
-        # full WP output as an artifact, and never fails the build. The
-        # enforced baseline (exact count + named-goal patterns, matching
-        # the other WP steps) is transcribed in a follow-up once the
-        # measured numbers are stable across a few CI runs — the same
-        # soft-then-hard path checked.h, bits.h, ..., pool.h each took.
-        #
-        # Memory model: Typed+Cast — region.h includes arena.h (which
-        # pulls in the full memory.h/ptr.h/slice.h/checked.h/contract.h
-        # substrate) and performs the same void*/u8* casts transitively.
-        # Same rationale as VERIFY-005..010.
-        #
-        # Expected residual shape (to be confirmed by this step's output,
-        # NOT asserted here):
-        #   INHERITED — region.h includes arena.h, so arena.h's full
-        #   residual surface (VERIFY-009's 103: 57 substrate + 46 own)
-        #   should re-emerge byte-identically, exactly as pool.h inherited
-        #   the same 103 (VERIFY-010). region.h is a SIBLING of pool.h over
-        #   arena.h, so its inherited surface should match pool.h's 103.
-        #   REGION.H-OWN — concentrated in region_end's opaque-hook-pointer
-        #   dispatch (the `assigns \everything` loop), slated for
-        #   VERIFY-011 / OWN-003. The indirect-call RTE and the arena_reset
-        #   precondition reached through the havoc'd state are the expected
-        #   region.h-own residuals; the post-loop unconditional writes that
-        #   re-establish region_invariant should prove.
-        #
-        # This step MEASURES the above; it does not enforce it.
+
+  # -------------------------------------------------------------------------
+  # region.h — REPORT-ONLY, 120s / -wp-split, in its own isolated job.
+  #
+  # Changed from the previous 30s/no-split report-only step: in its own job
+  # region gets a fresh 6h budget instead of the leftover at the tail of the
+  # old serial job, which is what makes 120s/split feasible to attempt.
+  #
+  # WARNING (honest): 120s/split has NEVER been observed to finish. -wp-split
+  # roughly doubles the goal count, and region_end's opaque h->fn hook is
+  # modelled as potentially recursive, minting terminates/decreases/_partN
+  # goals the splitter multiplies. Only 30s/no-split has ever completed.
+  # Isolated it has a real chance; if it doesn't fit, `timeout-minutes: 350`
+  # cancels cleanly at 5h50m (before GitHub's 6h hard kill, which would lose
+  # the artifact), and `tee` leaves a partial output worth inspecting.
+  # Either way this is report-only and isolated — nothing else is affected.
+  #
+  # If 350 min turns out to be where it lands, dial back to no-split or a
+  # lower timeout. Once a config produces a stable residual list across a few
+  # runs, transcribe it into an enforced step + VERIFY-011 (use the 120s
+  # numbers, not the old 30s ones).
+  # -------------------------------------------------------------------------
+  frama-c-region:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 350          # clean cancel before the 6h platform kill
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP: core/region.h (120s / split, REPORT-ONLY)"
         run: |
           eval $(opam env --switch=frama-c)
           set +e
           frama-c -wp -wp-rte \
             -wp-model Typed+Cast \
             -wp-prover alt-ergo,z3,cvc5 \
-            -wp-timeout 30 \
+            -wp-timeout 120 \
+            -wp-split \
             -cpp-extra-args=" \
               -I core/primitives \
               -I core \
@@ -2194,19 +1505,16 @@ jobs:
             core/region.h 2>&1 | tee wp_region_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
- 
+
           echo ""
           echo "==============================================="
           echo "  WP (region.h) exit status: ${WP_EXIT}"
           echo "  REPORT-ONLY — this step never fails the build"
           echo "==============================================="
- 
+
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_region_output.txt || true)
           echo "  ${PROVED_LINE}"
- 
-          # Sanity check only (still report-only): if WP produced no summary
-          # at all, frama-c almost certainly aborted on an ACSL parse error.
-          # Surface it loudly but DO NOT fail — iteration is the whole point.
+
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "WARNING: WP produced no verification summary."
@@ -2215,9 +1523,7 @@ jobs:
             grep -E "^\[(kernel|wp)" wp_region_output.txt | head -15 || true
             echo "         (Step is report-only; not failing the build.)"
           fi
- 
-          # Count unproved goals: Timeout + Unknown + Failed. No comparison
-          # to an expected number — just report what came out.
+
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_region_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_region_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_region_output.txt || true)
@@ -2226,51 +1532,44 @@ jobs:
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
           echo "  Total unproved (measured): ${UNPROVED_COUNT}"
- 
+
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved (measured): ${PROVED_COUNT}"
- 
-          # Print every unproved goal verbatim so the enforced step can be
-          # written straight from this output.
+
           echo ""
           echo "  --- All unproved goals (verbatim, for baseline authoring) ---"
           grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt || \
             echo "  (none — region.h fully proved, or WP did not run)"
           echo "  -------------------------------------------------------------"
- 
-          # Separate region.h-own residuals from the inherited substrate
-          # surface so the signal isn't buried in the ~103 inherited goals.
+
           echo ""
           echo "  --- region.h-own residual candidates (region_* / region_end / lifetime_*) ---"
           grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt | \
             grep -E "region|lifetime" || \
             echo "  (none matched — all residuals appear to be inherited substrate goals)"
           echo "  ----------------------------------------------------------------------------"
- 
-          # Confirm CVC5 was actually invoked so the triple-prover claim
-          # holds for region.h too. Warn only.
+
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_region_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
             echo "  WARNING: CVC5 absent from WP output — triple-prover setup"
             echo "           may have degraded to dual-prover."
           fi
- 
+
           echo ""
           echo "PASS (report-only): region.h WP measured. Transcribe the"
           echo "      counts above into an enforced step + VERIFY-011 once"
           echo "      stable across a few runs."
           echo "==============================================="
-          # Explicit success — this step is diagnostic, never a gate.
           exit 0
- 
+
       - name: Upload WP proof output (region.h)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wp-proof-region
           path: wp_region_output.txt
-      
+
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
@@ -2609,7 +1908,7 @@ jobs:
               ls "$d"/*memory* 2>/dev/null || true
             done
           fi
-      
+
       - name: "Debug: per-line MC/DC detail for arena.h"
         # Identifies which specific conditions in arena.h are uncovered.
         # As of the CI run that landed test_try_alloc_aligned_failure
@@ -2746,8 +2045,7 @@ jobs:
               ls "$d"/*pool* 2>/dev/null || true
             done
           fi
-      
-      
+
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
@@ -2801,8 +2099,7 @@ jobs:
           else
             echo "PASS: Branch coverage ${BRANCH_COV}% meets threshold ${THRESHOLD}%"
           fi
-      
-      
+
       - name: "Debug: per-line MC/DC detail for region.h"
         # First measured MC/DC baseline for region.h. Report-only: surfaces
         # which condition outcomes are uncovered so they can be classified
@@ -2824,23 +2121,23 @@ jobs:
         #     null/open subconditions should be reachable.
         run: |
           cd build
- 
+
           REGION_GCDA=$(find . -name "region_test*.gcda" | head -1)
- 
+
           if [ -z "$REGION_GCDA" ]; then
             echo "ERROR: could not locate region_test gcda file"
             find . -name "*.gcda" | head -20
             exit 0   # report-only — do not fail the coverage job
           fi
- 
+
           echo "Running gcov on: $REGION_GCDA"
           gcov-14 --conditions --all-blocks "$REGION_GCDA" 2>&1 | \
             grep -A 200 "region.h" | head -500
- 
+
           echo ""
           echo "=== Looking for the generated .gcov file for region.h ==="
           find . -name "region.h.gcov" -exec echo "Found: {}" \;
- 
+
           REGION_GCOV=$(find . -name "region.h.gcov" | head -1)
           if [ -n "$REGION_GCOV" ]; then
             echo ""
@@ -2852,7 +2149,7 @@ jobs:
               ls "$d"/*region* 2>/dev/null || true
             done
           fi
-      
+
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
   #
