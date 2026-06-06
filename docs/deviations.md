@@ -1476,6 +1476,119 @@ adding the thinnest own surface (no per-allocation alignment arithmetic).
 
 ---
 
+
+
+## VERIFY-011: WP Limitations Inherited from Substrate Plus region_end Opaque-Hook-Dispatch Residuals (region.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-011 |
+| **Date**       | 2026-06-06 |
+| **Baseline commit** | c9172fc (Canon-C CI #992) |
+| **Scope**      | region.h — 126 goals across 4 categories (2 own + 2 inherited groups) |
+| **Category**   | Formal verification completeness |
+| **Enforcement**| REPORT-ONLY — deferred pending count stability (see below) |
+
+**Description**: 126 of 3643 proof obligations (3.46%) are not discharged
+by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3
+4.15.2 + CVC5 1.2.1) with a 120-second timeout, `-wp-split`, and
+`-wp-model Typed+Cast`. The goals split into two top-level groups:
+**103 inherited from already-verified substrate headers** (re-emerging
+because region.h includes arena.h, which transitively pulls in memory.h,
+ptr.h, slice.h, checked.h, and contract.h) and **23 region.h-own**
+residuals in two categories.
+
+region.h extends the composable-verification thesis to a fifth
+composition layer. pool.h established the deepest prior point (103
+inherited + 24 own across a two-hop include); region.h is a **sibling**
+of pool.h at the arena.h layer (both include arena.h; neither includes
+the other). Its inherited surface is arena.h's *total* — VERIFY-009's
+57 inherited + 46 arena.h-own = 103 — re-emitted byte-identically. Zero
+new substrate residuals are introduced at the region.h boundary. Every
+inherited residual matches an already-documented goal by name.
+
+**Enforcement status — REPORT-ONLY, deferred.** This baseline is from
+the *first* observed completion of region.h's 120s/`-wp-split` proof
+run. The other eight headers earned exact-count CI enforcement after
+their residual counts and goal names were observed stable across
+multiple runs. region.h's `frama-c-region` job remains report-only
+(it measures and prints but never fails the build) until the 126 count
+and the 23 own goal names hold across 2-3 further runs. The rationale
+is specific: 19 of the 23 own residuals are `-wp-split` fragments of
+region_end (`_partN` goals) sitting near the 120s per-goal boundary,
+the class most likely to flip between Timeout and Proved under runner
+load. Enforcing an exact count on a once-observed, split-sensitive
+surface risks spurious red runs. When the count stabilizes, this entry
+and the CI step flip to enforced together.
+
+### Inherited residuals (103)
+
+These goals are not region.h defects. They re-emerge in the region.h
+proof run because region.h includes arena.h, which transitively
+includes memory.h, ptr.h, slice.h, checked.h, and contract.h. The full
+arena.h residual set (VERIFY-009's 57 inherited + 46 own = 103 total)
+is re-emitted as region.h's inherited surface.
+
+| # | Source            | Goals | Notes                                                              |
+|---|-------------------|-------|--------------------------------------------------------------------|
+| 1 | VERIFY-002        | 2     | checked.h u64 add overflow — via mem_alloc_array_checked           |
+| 2 | VERIFY-006 cat 2  | 3     | ptr.h align_up/down/padding integer theory                         |
+| 3 | VERIFY-006 cat 3  | 3     | ptr.h ptr_align_* call-chain                                       |
+| 4 | VERIFY-006 cat 4  | 2     | contract.h handler non-termination                                 |
+| 5 | VERIFY-007 cat 1  | 20    | slice.h memcmp call-site preconditions                             |
+| 6 | VERIFY-007 cat 2  | 1     | slice.h str_from_cstr strlen valid_string                          |
+| 7 | VERIFY-008 cat 1  | 5     | memory.h \fresh / \freeable                                        |
+| 8 | VERIFY-008 cat 2  | 9     | memory.h integer theory (mem_align, mem_is_aligned, etc.)          |
+| 9 | VERIFY-008 cat 3  | 12    | memory.h memcmp call-site                                          |
+| 10| VERIFY-009 cat 2a | 8     | arena.h ptr_span call-site                                         |
+| 11| VERIFY-009 cat 2b | 26    | arena.h fits/does_not_fit arithmetic chain                        |
+| 12| VERIFY-009 cat 2c | 10    | arena.h zero/try wrapper delegation                               |
+| 13| VERIFY-009 cat 2d | 2     | arena.h arena_free_bytes helper call-site                         |
+
+**Inherited subtotal: 103 goals.** Byte-identical to arena.h's full
+residual list. The composable-verification claim, now supported at five
+composition layers, holds: region.h's inherited count equals arena.h's
+total, not greater.
+
+### region.h-own residuals (23)
+
+Two categories. Category 1 (the dominant class) is the region_end
+opaque-hook-dispatch family; category 2 is region_invariant
+re-establishment arithmetic on the trivial mutators.
+
+#### Category 1: region_end opaque-hook-dispatch family (19)
+
+| #  | Goal                                                          |
+|----|----------------------------------------------------------------|
+| 1  | `typed_cast_region_end_terminates_part2`                       |
+| 2  | `typed_cast_region_end_terminates_part3`                       |
+| 3  | `typed_cast_region_end_ensures_2_part1`                        |
+| 4  | `typed_cast_region_end_ensures_4_part1`                        |
+| 5  | `typed_cast_region_end_exits_part1`                            |
+| 6  | `typed_cast_region_end_loop_invariant_preserved_part1`         |
+| 7  | `typed_cast_region_end_assert_rte_function_pointer`            |
+| 8  | `typed_cast_region_end_assert_rte_mem_access_6`                |
+| 9  | `typed_cast_region_end_assert_rte_mem_access_7`                |
+| 10 | `typed_cast_region_end_loop_assigns_part2`                     |
+| 11 | `typed_cast_region_end_loop_assigns_part4`                     |
+| 12 | `typed_cast_region_end_loop_assigns_part5`                     |
+| 13 | `typed_cast_region_end_loop_assigns_part6`                     |
+| 14 | `typed_cast_region_end_loop_assigns_part7`                     |
+| 15 | `typed_cast_region_end_loop_assigns_part8`                     |
+| 16 | `typed_cast_region_end_assigns_exit_part5`                     |
+| 17 | `typed_cast_region_end_assigns_normal_part5`                   |
+| 18 | `typed_cast_region_end_loop_variant_decrease_part1`            |
+| 19 | `typed_cast_region_end_call_arena_reset_requires`             |
+
+**Functions affected**: `region_end`.
+
+**Root cause**: region_end dispatches caller-supplied cleanup hooks
+through an opaque function pointer `h->fn(h->ctx)` (line 509) for which
+no `calls` clause can exist — the hook is arbitrary by design. WP
+reports the boundary directly during the proof run:
+
+---
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
@@ -2137,6 +2250,93 @@ transferable from pool.h's 6-of-68.
   cross-stream evidence pattern, different source-level shape.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC detail for
   pool.h" step in `.github/workflows/cmake-multi-platform.yml`.
+
+
+---
+
+## MCDC-005: API-Unreachable Hook-Guard Branch (region.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-005 |
+| **Date**       | 2026-06-06 |
+| **Baseline commit** | c9172fc (Canon-C CI #992) |
+| **Scope**      | region.h — 1 of 22 condition outcomes (1 unreachable) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 1 of 22 condition outcomes in `core/region.h` is not
+exercisable by tests. It is the FALSE side of the `if (h->fn)` hook
+guard inside region_end's LIFO cleanup loop:
+
+| # | Function     | Line | Subcondition not covered          |
+|---|--------------|------|------------------------------------|
+| 1 | `region_end` | 496  | cond 0 false (`!h->fn`)           |
+
+region.h's gcov-measured MC/DC is 21/22 = 95.5%. This is the achievable
+ceiling — the single uncovered outcome is unreachable by construction.
+
+### Rationale
+
+The `if (h->fn)` guard checks each cleanup slot before dispatching it.
+The FALSE branch (a registered slot with a NULL `fn`) is unreachable
+through the public API: `region_register` enforces `fn != NULL` as a
+precondition (`require_msg(fn != NULL, ...)`) and only increments
+`num_hooks` after storing a non-NULL `fn`, and region_end's loop visits
+only filled slots `[0, num_hooks)`. Every slot the loop reaches
+therefore has a non-NULL `fn`, so the guard's FALSE branch cannot fire.
+
+The guard is defensive code preserved deliberately — it documents the
+slot-validity contract at the dispatch site and protects against a
+malformed Region whose hook array was corrupted or hand-constructed.
+Removing it to satisfy MC/DC would weaken robustness against exactly
+the caller-error class region.h exists to surface. The 1 uncovered
+outcome is the gcov-measurement cost of keeping it.
+
+This is the same disposition established by MCDC-002 (slice.h `!ptr`
+branches), MCDC-003 (arena.h overflow guards), and MCDC-004 (pool.h
+`!pool->arena` disjunct): the source-level shape differs (a
+`!h->fn` hook-slot guard), but the cross-stream evidence pattern is
+identical — gcov measures source-level uncoverage; the unreachability
+follows from the no-NULL-hook property the register/dispatch pair
+maintains. VERIFY-011 records that region_end carries WP residuals on
+the *opaque-call* obligations (category 1) — those are a distinct
+concern from this guard branch, which is a structural defensive
+outcome, not a residual.
+
+### Mitigation
+
+1. **Reachability argument via the register/dispatch invariant**:
+   region_register's `fn != NULL` precondition plus the
+   `[0, num_hooks)` loop bound establish that every dispatched slot
+   has a non-NULL `fn`. The FALSE branch is provably dead under normal
+   operation.
+
+2. **CI regression detector**: the coverage job's "Debug: per-line
+   MC/DC detail for region.h" step prints the gcov dump every run. If
+   a future change makes the branch reachable (e.g. a public API that
+   can register a NULL `fn`), the per-line detail surfaces it.
+
+3. **The achievable MC/DC ceiling is 21/22 = 95.5%**. Reaching it
+   represents 100% of API-reachable coverage. The 1 missing outcome is
+   documented here and not counted as a coverage regression.
+
+4. **Region behavior is otherwise exhaustively tested**.
+   `test/core/region_test.c` exercises the TRUE branch (hooks with
+   non-NULL `fn` are dispatched LIFO), the empty-hook path, the
+   hook-table-full path, arena auto-reset, and parent tracking.
+
+### Cross-references
+
+- VERIFY-011 — region.h's WP residual analysis; the region_end
+  opaque-hook-dispatch residuals (category 1) are distinct from this
+  guard branch.
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology.
+- MCDC-002 / MCDC-003 / MCDC-004 — the same API-unreachable-defensive
+  disposition in slice.h / arena.h / pool.h; different source-level
+  shapes, same cross-stream pattern.
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
+  detail for region.h" step in
+  `.github/workflows/cmake-multi-platform.yml`.
 
 ---
 
