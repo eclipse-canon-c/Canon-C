@@ -1948,7 +1948,7 @@ frama-c -wp -wp-rte \
     -DCANON_NO_REQUIRE \
     -DNDEBUG" \
   core/region.h
-\```
+```
 
 Expected output: `Proved goals: 3517 / 3643` with 126 unproved goals
 (123 timeouts + 3 unknown). region.h's WP run processes a two-hop
