@@ -1836,7 +1836,7 @@ Why3 needs for `-wp-prover cvc5`. The Canon-C CI installs the prebuilt
 CVC5 1.2.1 binary directly from the official cvc5 GitHub release and
 registers it with Why3 using `why3 config add-prover` (Why3 1.7.2's
 auto-detection regex only recognizes CVC5 1.0.x, so manual registration
-is required). See the `frama-c` job in `.github/workflows/ci.yml` for
+is required). See the `frama-c` job in `.github/workflows/cmake-multi-platform.yml` for
 the complete installation and registration procedure.
 
 ---
