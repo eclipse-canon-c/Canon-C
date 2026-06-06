@@ -10,11 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 8 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h)    |
-| **Functions**        | 187 annotated and verified                                                     |
+| **Headers verified** | 9 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h)    |
+| **Functions**        | 199 annotated and verified                                                     |
 | **Total obligations**| 15089 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 14752 (97.77%)                                                                 |
-| **Unproved**         | 337 (all documented; see per-header sections)                                  |
+| **Proved automatic** | 18269 (97.53%)                                                                 |
+| **Unproved**         | 463 (all documented; see per-header sections)                                  |
 | **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)                               |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
@@ -93,7 +93,7 @@ ptr_elem, so it has no per-allocation alignment-pad arithmetic and arena.h's
 26-goal cat 2b arithmetic-chain residual class does not recur in pool.h's own
 surface. See VERIFY-010 in `docs/deviations.md` for the full classification.
 
-A note on totals: the 15089 obligation count is the row-sum of
+A note on totals: the 18732 obligation count is the row-sum of
 each header's own WP-relevant goals — checked.h's 1755, bits.h's
 761, compare.h's 208, ptr.h's 1739, slice.h's 390, memory.h's 2862,
 arena.h's 3472 and pool.h's 3902 (each counted in full because each header was
@@ -1803,6 +1803,161 @@ inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 
 ---
 
+## core/region.h
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (report-only; enforcement deferred)    |
+| **Baseline commit**    | c9172fc (Canon-C CI #992)                       |
+| **Functions**          | 12 of 12 non-macro functions annotated          |
+| **Proof obligations**  | 3517 / 3643 discharged automatically (96.54%)   |
+| **Unproved**           | 126 (all documented under VERIFY-011)           |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
+| **CI enforcement**     | REPORT-ONLY — deferred pending count stability (see VERIFY-011) |
+| **MC/DC coverage**     | 95.5% (21/22 condition outcomes — see MCDC-005) |
+| **Line coverage**      | 100% (45/45)                                    |
+| **CI artifact**        | `wp-proof-region` (full per-goal breakdown)     |
+
+### Enforcement status
+
+region.h's WP run is enforced **report-only**: the `frama-c-region` CI
+step measures and prints the full residual list but does not fail the
+build. This baseline is from the first observed completion of the
+120s/`-wp-split` run. The step flips to exact-count enforcement once the
+126 count and the 23 own goal names hold across 2-3 further runs — 19 of
+the 23 own residuals are `-wp-split` fragments of region_end near the
+120s boundary, the class most prone to Timeout/Proved flicker under
+runner load. See VERIFY-011 for the full rationale.
+
+### Function inventory
+
+region.h provides stack-allocated lifetime tokens — 12 user-facing
+non-macro functions across lifecycle, arena attachment, hook
+registration, parent tracking, inspection, and lifetime assertions.
+
+**Group 1 — lifecycle (2 functions):** `region_begin`, `region_end`.
+`region_end` carries category 1's 19 opaque-hook-dispatch residuals;
+`region_begin` carries one category 2 invariant-composition residual.
+
+**Group 2 — arena attachment (1 function):** `region_attach_arena`.
+One category 2 residual.
+
+**Group 3 — hook registration (1 function):** `region_register`. One
+category 2 residual.
+
+**Group 4 — parent tracking (1 function, under
+`!CANON_NO_REGION_PARENT`):** `region_set_parent`. One category 2
+residual.
+
+**Group 5 — inspection (4 functions):** `region_id`, `region_is_open`,
+`region_has_parent`, `region_hook_count`. All 100% proved.
+
+**Group 6 — lifetime assertions (3 functions):** `region_assert_open`,
+`region_assert_borrow_valid`, `lifetime_assert_valid`. All 100% proved.
+
+Of the 12 functions, **7 are 100% proved** (the 4 inspection functions
+plus the 3 assertion functions). The remaining 5 (`region_begin`,
+`region_end`, `region_attach_arena`, `region_register`,
+`region_set_parent`) carry the 23 own residuals.
+
+### What is proved
+
+- **ACSL predicate**: region.h defines `region_invariant(r)` —
+  `\valid(r) && 0 <= num_hooks <= REGION_MAX_CLEANUP && (arena == \null
+  || arena_invariant(arena))` — composing arena.h's invariant for the
+  optional attached arena. Every function taking a live Region carries
+  it as precondition; mutators re-establish it (the category 2
+  residuals are the arena_invariant-composition weight on this
+  re-establishment).
+- **Functional correctness with complete behavior splits**:
+  `region_register` (full/has_space), `region_id`, `region_hook_count`
+  (null/nonnull) carry `complete` and `disjoint` behavior splits, fully
+  proved.
+- **Absence of runtime errors** (`-wp-rte`): proved for all functions
+  except the region_end opaque-call obligations (VERIFY-011 cat 1,
+  including the `\valid_function` RTE check WP reports as
+  not-yet-implemented).
+- **Side-effect bounding**: region_end declares `assigns *r`; the
+  structural postconditions are re-established by unconditional writes
+  after the hook loop (see OWN-003). Read-only functions specify
+  `assigns \nothing`.
+
+### Prover breakdown
+
+| Category       | Goals discharged | Typical time      |
+|----------------|------------------|--------------------|
+| Terminating    | 80               | (structural)      |
+| Unreachable    | 83               | (structural)      |
+| Qed (internal) | 2988             | 0.62ms–35ms       |
+| Alt-Ergo 2.6.3 | 350              | 17ms–342ms        |
+| CVC5 1.2.1     | 4                | 81ms–278ms        |
+| Z3 4.15.2      | 12               | 15ms–76ms         |
+| Timeout        | 123              | >120s             |
+| Unknown        | 3                | (solver gave up)  |
+| **Total**      | **3517 / 3643**  |                   |
+
+CVC5's 4 closures confirm the triple-prover claim holds for region.h.
+The CI wrapper sums Timeout + Unknown + Failed (123 + 3 + 0 = 126).
+
+### Unproved goals (126)
+
+103 inherited from substrate (byte-identical to arena.h's full residual
+surface) + 23 region.h-own in two categories: 19 region_end
+opaque-hook-dispatch residuals (category 1) and 4 region_invariant
+re-establishment residuals on the trivial mutators (category 2). Full
+goal list, inheritance table, manual proof arguments, and the WP warning
+text quoted as evidence: see VERIFY-011 in `docs/deviations.md`. The
+architectural decision behind category 1 is OWN-003.
+
+### MCDC-005 cross-reference
+
+region.h's single uncovered condition outcome is the `if (h->fn)` FALSE
+branch in region_end (line 496), API-unreachable because
+region_register enforces `fn != NULL` and the dispatch loop visits only
+filled slots. 95.5% (21/22) is the achievable ceiling. See MCDC-005.
+
+### WP memory model note
+
+region.h uses `-wp-model Typed+Cast` for the same reason as the rest of
+the core/ stack: it composes arena.h (and transitively memory.h, ptr.h,
+slice.h), whose void* → u8* casts require the model. Soundness argument
+identical to VERIFY-005 through VERIFY-010.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: compiles `require_msg` runtime checks away;
+  ACSL `requires` clauses provide the static guarantees.
+- **`-DNDEBUG`**: standard release-mode flag.
+
+### Reproduction
+
+\```bash
+frama-c -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  core/region.h
+\```
+
+Expected output: `Proved goals: 3517 / 3643` with 126 unproved goals
+(123 timeouts + 3 unknown). region.h's WP run processes a two-hop
+transitive include (region.h → arena.h → memory.h → ...); the 103
+inherited goals are byte-identical to arena.h's full residual surface;
+the 23 own goals split across category 1 (19) / category 2 (4).
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -1819,11 +1974,11 @@ different class of goal well:
 - **CVC5 1.2.1** — contributes additional proofs on goals where
   Alt-Ergo and Z3 time out. Observed contributions: 3 goals on
   checked.h, 3 goals on ptr.h, 2 goals on memory.h, 3 goals on
-  arena.h, and 2 goals on pool.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
+  arena.h, 2 goals on pool.h, 4 on region.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
 
 The practical consequence: **every remaining unproved goal (2 on checked.h, 
 15 on bits.h, 10 on ptr.h, 23 on slice.h, 57 on memory.h, 103 on arena.h, 
-127 on pool.h) is demonstrated triple-prover-resistant**. This is a
+127 on pool.h, 126 on region.h) is demonstrated triple-prover-resistant**. This is a
 stronger certification-evidence statement than dual-prover
 resistance — the goals are genuinely limited by WP's encoding,
 integer theory, or stdlib feature gaps, not by prover strength.
@@ -1843,7 +1998,7 @@ the complete installation and registration procedure.
 
 ## Verification roadmap
 
-### core/primitives/ (current)
+### core/primitives/ (complete)
 
 | Header       | Status           | Proved    | Notes                              |
 |--------------|------------------|-----------|------------------------------------|
@@ -1856,7 +2011,7 @@ the complete installation and registration procedure.
 | lifetime.h   | N/A              |           | Layout convention only — three typedefs and one constant; no functions to verify. Exercised through borrow_test.c and per-container tests. |
 | contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h     |
 
-### core/ (in progress)
+### core/ (complete)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
@@ -1864,7 +2019,7 @@ the complete installation and registration procedure.
 | memory.h     | ✅ Verified       | 2805/2862 | 57 documented timeouts (VERIFY-008); 31 inherited + 26 own             |
 | arena.h      | ✅ Verified       | 3369/3472 | 103 documented timeouts (VERIFY-009); 57 inherited + 46 own; MCDC-003 |
 | pool.h       | ✅ Verified       | 3775/3902 | 127 documented timeouts (VERIFY-010); 103 inherited + 24 own; MCDC-004 |
-| region.h     | Planned          |           | Lifetime management                                                    |
+| region.h     | ✅ Verified       | 3517/3643 | 126 documented timeouts (VERIFY-011, report-only); 103 inherited + 23 own; MCDC-005 |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
