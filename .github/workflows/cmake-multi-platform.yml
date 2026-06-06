@@ -2184,8 +2184,7 @@ jobs:
           frama-c -wp -wp-rte \
             -wp-model Typed+Cast \
             -wp-prover alt-ergo,z3,cvc5 \
-            -wp-timeout 120 \
-            -wp-split \
+            -wp-timeout 30 \
             -cpp-extra-args=" \
               -I core/primitives \
               -I core \
