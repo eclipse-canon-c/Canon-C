@@ -161,7 +161,7 @@ written once and replayed under new goal names at each layer above.
 
 ### Verification status
 
-The substrate is not hypothetical. Headers under `core/primitives/` are
+The substrate is not hypothetical. Some of the headers are
 formally verified using Frama-C WP with ACSL contracts, and CI enforces
 the proof state on every push to master — any drift in the named
 residual goals fails the build.
@@ -292,11 +292,10 @@ What Canon-C provides instead:
    application layer.
 
 The full rationale — the C99 limits, the design paths considered, why
-each one breaks something — will be recorded in a forthcoming
-`docs/design-decisions.md` entry. The short version is that
-`DEFINE_OWNED` covers the type-distinction case the C99 type system
-can enforce, and static analyzers cover everything beyond it. The two
-together are the answer.
+each one breaks something — are recorded in `docs/design-decisions.md` 
+entry. The short version is that `DEFINE_OWNED` covers the 
+type-distinction case the C99 type system can enforce, and static analyzers
+cover everything beyond it. The two together are the answer.
 
 ### Open empirical question
 
