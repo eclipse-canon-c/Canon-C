@@ -445,7 +445,7 @@
         char* end;
         long val = strtol(str, &end, 10);
         if (end == str || *end != '\0') return result_int_error_err(ERR_INVALID_INPUT);
-        if (val > INT_MAX || val < INT_MIN) return result_int_error_err(ERR_INVALID_INPUT);
+        if (val > INT32_MAX || val < INT32_MIN) return result_int_error_err(ERR_INVALID_INPUT);
         return result_int_error_ok((int)val);
     }
 
@@ -511,7 +511,7 @@
     // Example 7: and_then() — chaining fallible operations
     // ────────────────────────────────────────────────────────────────────────
     result_int_error checked_double(int x) {
-        if (x > INT_MAX / 2) return result_int_error_err(ERR_IO);
+        if (x > INT32_MAX / 2) return result_int_error_err(ERR_IO);
         return result_int_error_ok(x * 2);
     }
 
