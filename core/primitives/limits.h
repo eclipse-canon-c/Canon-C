@@ -68,7 +68,22 @@
 #define CANON_CORE_PRIMITIVES_LIMITS_H
 
 #include "types.h"
-#include <limits.h>
+/* WARNING — header-name shadowing: under the build's -I core/primitives
+ * flag, `#include <limits.h>` from anywhere in a translation unit resolves
+ * to THIS file, not the system header (angle-bracket includes search -I
+ * directories before system directories; MSVC's /I behaves the same).
+ * From inside this file the include would resolve to itself and become a
+ * no-op via the include guard — the system <limits.h> is never reached.
+ * Consequently NOTHING in this header (or in any header relying on this
+ * one) may use system-<limits.h>-only symbols: CHAR_BIT, INT_MAX, UCHAR_MAX,
+ * and friends are NOT available. Every limit used here comes from
+ * <stdint.h> (UINT8_MAX .. INT64_MAX per C99 7.18.2, SIZE_MAX and
+ * PTRDIFF_MAX/MIN per C99 7.18.3), which is not shadowed. types.h enforces
+ * the 8-bit-byte requirement by implication from uint8_t's existence for
+ * the same reason. The former `#include <limits.h>` line was removed as
+ * inert; a rename of this file (e.g. canon_limits.h) would eliminate the
+ * shadow entirely but is a breaking include-path change — recorded here
+ * as a known trap instead. */
 #include <stddef.h>
 #include <stdint.h>
 
