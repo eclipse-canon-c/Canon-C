@@ -64,7 +64,13 @@
 #include <stddef.h>   /* size_t, ptrdiff_t */
 #include <stdint.h>   /* uint8_t … int64_t  */
 #include <stdbool.h>  /* bool, true, false  */
-#include <limits.h>   /* CHAR_BIT — platform contract below */
+/* NOTE: <limits.h> is deliberately NOT included here. The project's own
+ * core/primitives/limits.h shadows the system header under the build's
+ * -I core/primitives flag (angle-bracket includes search -I directories
+ * before system directories), so <limits.h> from this file would resolve
+ * to the Canon-C header and CHAR_BIT would never be defined. The 8-bit-
+ * byte requirement is instead enforced through the exact-width type
+ * check below, which implies it — see the platform contract comment. */
 
 /* ── Platform contract (Tier 0) ──────────────────────────────────────────────
  * Enforced here, once, at the bottom of the dependency rule. Every other
@@ -76,20 +82,29 @@
  * Per ISO C99 7.18.2.1, the UINTn_MAX / INTn_MAX macros are defined if
  * and only if the corresponding exact-width types exist, so testing the
  * macros is the standard-blessed detection for the types themselves.
+ *
+ * The 8-bit-byte requirement (CHAR_BIT == 8) is enforced by the same
+ * check, by implication rather than by reading CHAR_BIT directly:
+ * per C99 7.18.1.1, uint8_t has exactly 8 bits and no padding, and the
+ * smallest addressable object is one byte of CHAR_BIT bits — so
+ * 8 == CHAR_BIT * sizeof(uint8_t) with CHAR_BIT >= 8 forces
+ * CHAR_BIT == 8 and sizeof(uint8_t) == 1. A target where uint8_t exists
+ * is a target with 8-bit bytes; a target with non-8-bit bytes (e.g. a
+ * TI C2000-class DSP with CHAR_BIT == 16) cannot define UINT8_MAX and
+ * fails this check. CHAR_BIT itself is not consulted because the system
+ * <limits.h> is shadowed by the project's own limits.h under the build's
+ * include flags — see the include-section note above.
  * ──────────────────────────────────────────────────────────────────────── */
-#if CHAR_BIT != 8
-#  error "Canon-C platform contract (Tier 0): CHAR_BIT must be 8. \
-Targets with non-8-bit bytes (e.g. TI C2000-class DSPs) cannot host \
-Canon-C's byte-view semantics and are out of scope by design."
-#endif
-
 #if !defined(UINT8_MAX)  || !defined(UINT16_MAX) || \
     !defined(UINT32_MAX) || !defined(UINT64_MAX) || \
     !defined(INT8_MAX)   || !defined(INT16_MAX)  || \
     !defined(INT32_MAX)  || !defined(INT64_MAX)
 #  error "Canon-C platform contract (Tier 0): the C99 exact-width integer \
-types (uint8_t .. uint64_t, int8_t .. int64_t) are required. They are \
-optional in strict C99 but provided by every supported toolchain."
+types (uint8_t .. uint64_t, int8_t .. int64_t) are required. Their \
+existence also implies 8-bit bytes (C99 7.18.1.1: uint8_t is exactly 8 \
+bits, no padding, so CHAR_BIT == 8). Targets without them (e.g. \
+TI C2000-class DSPs with 16-bit bytes) cannot host Canon-C's byte-view \
+semantics and are out of scope by design."
 #endif
 
 /* ── Unsigned integers ───────────────────────────────────────────────────── */
