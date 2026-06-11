@@ -53,6 +53,24 @@
  * the shared types in primitives/ breaks the cycle: both arena.h and
  * region.h include this header without involving each other.
  *
+ * Portability:
+ * ────────────────────────────────────────────────────────────────────────────
+ * region_id_t is u64, which is guaranteed by the Tier 0 platform
+ * contract enforced in core/primitives/types.h (C99 exact-width types,
+ * 8-bit bytes) — this header is therefore safe on any target where
+ * types.h compiles, including 32-bit and 16-bit-size_t platforms, where
+ * u64 is synthesized from multiple machine words. The 64-bit width is a
+ * deliberate anti-wraparound choice, not an oversight: the per-TU
+ * restamp counters that feed region_id_t (see OWN-002) must not wrap on
+ * any realistic timescale, because a wrapped counter could hand a stale
+ * borrow its original ID back — exactly the re-validation bug class the
+ * substrate exists to catch. A 32-bit ID would wrap after 2^32 restamps
+ * (~50 days at 1000 resets/sec on a long-running device); a 64-bit ID
+ * does not wrap on any realistic timescale. Note that under
+ * CANON_LIFETIME_DEBUG, lifetime_t occupies 16 bytes on typical ABIs
+ * (8-byte id + 1-byte bool + padding to u64 alignment); default builds
+ * omit the field entirely, so production builds pay nothing.
+ *
  * What this header is NOT:
  * ────────────────────────────────────────────────────────────────────────────
  * - Not a lifetime-tracking runtime. The runtime check lives in
@@ -76,6 +94,7 @@
  * @sa core/region.h         — Region type and lifetime_assert_valid()
  * @sa core/arena.h          — Arena embeds lifetime_t under CANON_LIFETIME_DEBUG
  * @sa semantics/borrow.h    — borrow types that capture and validate IDs
+ * @sa core/primitives/types.h — Tier 0 platform contract that guarantees u64
  */
 
 /**
