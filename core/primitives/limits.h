@@ -161,8 +161,20 @@
  * needs the capacity-managed layers, that is a recorded design decision
  * with its own width-conditional constants and validation story, not a
  * macro escape hatch. See the README's bare-metal section.
+ *
+ * The defined(SIZE_MAX) gate exists for static analyzers, not compilers.
+ * Tools like Cppcheck do not expand system headers, so SIZE_MAX is
+ * undefined in their view and a bare `#if SIZE_MAX < 0xFFFFFFFF` evaluates
+ * the unknown identifier as 0 — firing this #error in every configuration
+ * the tool constructs and failing the analysis run on healthy 64-bit
+ * hosts. Gating on defined() gives such tools a valid error-free
+ * configuration (the same mechanism that lets them past types.h's
+ * defined()-based Tier 0 check). Real-compiler enforcement is unchanged:
+ * C99 7.18.3 makes SIZE_MAX MANDATORY in <stdint.h> — unlike the optional
+ * exact-width types — so every conforming toolchain, including every
+ * 16-bit one, defines it and the guard still fires exactly where it must.
  * ========================================================================= */
-#if SIZE_MAX < 0xFFFFFFFF
+#if defined(SIZE_MAX) && (SIZE_MAX < 0xFFFFFFFF)
 #  error "Canon-C platform contract (Tier 1): the size literals and \
 capacity constants below (and every header that uses them: arena, pool, \
 slice, collections) require size_t >= 32 bits. On this target, use the \
