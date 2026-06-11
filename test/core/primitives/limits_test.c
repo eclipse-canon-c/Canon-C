@@ -51,7 +51,7 @@
 #include "contract.h"   /* for static_require() */
 #include "limits.h"
 
-#include <limits.h>
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
