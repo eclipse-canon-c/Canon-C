@@ -88,7 +88,7 @@ jobs:
             c_compiler: gcc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set reusable strings
         id: strings
@@ -140,7 +140,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install clang-tidy and Cppcheck (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
@@ -331,7 +331,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Valgrind
         run: sudo apt-get install -y valgrind
@@ -365,7 +365,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Clang with libFuzzer runtime
         run: sudo apt-get install -y clang
@@ -429,7 +429,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/primitives/checked.h"
@@ -497,7 +497,7 @@ jobs:
 
       - name: Upload WP proof output (checked.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-checked
           path: wp_output.txt
@@ -506,7 +506,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/primitives/bits.h"
@@ -593,7 +593,7 @@ jobs:
 
       - name: Upload WP proof output (bits.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-bits
           path: wp_bits_output.txt
@@ -602,7 +602,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/primitives/compare.h"
@@ -663,7 +663,7 @@ jobs:
 
       - name: Upload WP proof output (compare.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-compare
           path: wp_compare_output.txt
@@ -672,7 +672,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/primitives/ptr.h"
@@ -772,7 +772,7 @@ jobs:
 
       - name: Upload WP proof output (ptr.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-ptr
           path: wp_ptr_output.txt
@@ -781,7 +781,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/slice.h"
@@ -936,7 +936,7 @@ jobs:
 
       - name: Upload WP proof output (slice.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-slice
           path: wp_slice_output.txt
@@ -945,7 +945,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/memory.h"
@@ -1109,7 +1109,7 @@ jobs:
 
       - name: Upload WP proof output (memory.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-memory
           path: wp_memory_output.txt
@@ -1118,7 +1118,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/arena.h"
@@ -1329,7 +1329,7 @@ jobs:
 
       - name: Upload WP proof output (arena.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-arena
           path: wp_arena_output.txt
@@ -1338,7 +1338,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/pool.h"
@@ -1477,7 +1477,7 @@ jobs:
 
       - name: Upload WP proof output (pool.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-pool
           path: wp_pool_output.txt
@@ -1508,7 +1508,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350          # clean cancel before the 6h platform kill
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/region.h (120s / split, REPORT-ONLY)"
@@ -1589,7 +1589,7 @@ jobs:
 
       - name: Upload WP proof output (region.h)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wp-proof-region
           path: wp_region_output.txt
@@ -1610,7 +1610,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install GCC 14 and lcov
         run: |
@@ -2081,7 +2081,7 @@ jobs:
             --ignore-errors unused
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-report
           path: |
@@ -2200,7 +2200,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Cppcheck
         run: sudo apt-get install -y cppcheck
@@ -2264,7 +2264,7 @@ jobs:
           # fi
 
       - name: Upload MISRA report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: misra-report
           path: misra_report.txt
@@ -2336,7 +2336,7 @@ jobs:
             c_compiler: gcc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set reusable strings
         id: strings
