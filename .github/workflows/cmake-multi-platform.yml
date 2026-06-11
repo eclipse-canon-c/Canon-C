@@ -151,15 +151,39 @@ jobs:
         run: brew install cppcheck
 
       - name: Install Cppcheck (Windows)
+        # Pinned direct download from the official GitHub release —
+        # same pattern as the CVC5 install in framac-setup, for the
+        # same reason: deterministic tool versions. winget was removed
+        # after 0x8a15000f stale-source failures on hosted runners
+        # (winget depends on msstore source state the runner images
+        # don't reliably ship). Note: the repo has moved to
+        # cppcheck-opensource/cppcheck; GitHub redirects danmar/ URLs.
+        # Bump $Version deliberately — cppcheck version changes can
+        # move findings, so re-check suppressions when bumping.
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          winget install --id Cppcheck.Cppcheck --silent `
-            --accept-package-agreements --accept-source-agreements
-          $path = (Get-ChildItem "C:\Program Files\Cppcheck" `
-            -Filter "cppcheck.exe" -ErrorAction SilentlyContinue |
-            Select-Object -First 1).DirectoryName
-          if ($path) { echo "$path" >> $env:GITHUB_PATH }
+          $Version  = "2.19.0"
+          $Checksum = "AAC15F6DC2B404B3B2562015419F11D91F391E686279CABD20627A8435782128"
+          $Url = "https://github.com/danmar/cppcheck/releases/download/$Version/cppcheck-$Version-x64-Setup.msi"
+
+          Invoke-WebRequest -Uri $Url -OutFile cppcheck.msi
+          $Actual = (Get-FileHash cppcheck.msi -Algorithm SHA256).Hash
+          if ($Actual -ne $Checksum) {
+            Write-Error "cppcheck MSI checksum mismatch. Expected $Checksum, got $Actual"
+            exit 1
+          }
+
+          Start-Process msiexec.exe -ArgumentList '/i','cppcheck.msi','/qn','/norestart' -Wait
+
+          $Exe = Get-ChildItem "C:\Program Files\Cppcheck" -Filter "cppcheck.exe" `
+            -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $Exe) {
+            Write-Error "cppcheck.exe not found after MSI install"
+            exit 1
+          }
+          Add-Content $env:GITHUB_PATH $Exe.DirectoryName
+          & $Exe.FullName --version
 
       - name: Configure CMake for compile_commands.json (Linux only)
         if: matrix.os == 'ubuntu-latest'
