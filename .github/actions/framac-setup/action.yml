@@ -5,7 +5,7 @@
 #   - uses: ./.github/actions/framac-setup
 # instead of duplicating ~80 lines of opam/cvc5/why3 boilerplate.
 #
-# IMPORTANT: the calling job MUST run `actions/checkout@v4` BEFORE this
+# IMPORTANT: the calling job MUST run `actions/checkout@v6` BEFORE this
 # action — a local composite action requires the repo already checked out.
 #
 # The job-level `env:` block (OCAML_VERSION / FRAMAC_VERSION / CVC5_VERSION)
@@ -56,7 +56,7 @@ runs:
 
     - name: Cache opam switch
       id: cache-opam
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.opam
         # Cache key bumped to v8 because the cvc5 opam package was removed.
