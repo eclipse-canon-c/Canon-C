@@ -24,9 +24,35 @@
  * Design:
  * ────────────────────────────────────────────────────────────────────────────
  * - Explicit: named constants replace magic numbers
- * - Portable: works on 16/32/64-bit, C99 and later
- * - Overridable: define any CANON_* constant before including to override
+ * - Portable: integer type limits work on any Tier-0 target; the size
+ *   literals and capacity constants (Tier 1) require size_t >= 32 bits,
+ *   enforced at compile time below — see "Platform tiers"
+ * - Overridable: define any CANON_* tuning constant before including to
+ *   override (tuning constants only — the tier contracts are not
+ *   overridable; see "Platform tiers")
  * - Zero overhead: all constants are compile-time, no code generated
+ *
+ * Platform tiers:
+ * ────────────────────────────────────────────────────────────────────────────
+ * This header spans two of Canon-C's platform tiers:
+ *
+ * - Integer Type Limits and Size Type Limits (top of file) are Tier 0 —
+ *   they work on any target satisfying the types.h platform contract,
+ *   including 16-bit size_t MCUs.
+ *
+ * - Size Literals and everything below them are Tier 1 — they require
+ *   size_t >= 32 bits. On a 16-bit size_t target, CANON_MB and CANON_GB
+ *   would wrap to 0 under well-defined unsigned arithmetic, silently
+ *   zeroing every capacity constant derived from them (CANON_ARENA_MAX_SIZE,
+ *   CANON_VEC_MAX_CAPACITY, ...) and rendering the allocator and
+ *   collection layers unusable with no diagnostic. The #error guard below
+ *   converts that silent breakage into a named compile-time refusal.
+ *   The guard is deliberately not overridable — an escape hatch into
+ *   silently-zero constants is a footgun, not a configuration.
+ *
+ * 16-bit size_t targets retain full use of the Tier-0 subset: types.h,
+ * this header's integer limits, checked.h, bits.h, compare.h, scope.h,
+ * and contract.h. See the README's bare-metal section for the tier model.
  *
  * Override pattern (define BEFORE including this header):
  * ────────────────────────────────────────────────────────────────────────────
@@ -35,7 +61,7 @@
  *   #define CANON_VEC_MAX_CAPACITY   (CANON_GB * 4)
  *   #include "core/primitives/limits.h"
  *
- * @sa types.h
+ * @sa types.h — Tier 0 platform contract (8-bit bytes, exact-width types)
  */
 
 #ifndef CANON_CORE_PRIMITIVES_LIMITS_H
@@ -48,6 +74,9 @@
 
 /* ============================================================================
  * Integer Type Limits
+ *
+ * Tier 0 — valid on any target satisfying the types.h platform contract,
+ * including 16-bit size_t MCUs.
  * ========================================================================= */
 
 /** @brief Max value of u8  — 255 */
@@ -78,6 +107,8 @@
 
 /* ============================================================================
  * Size Type Limits (Platform-Dependent)
+ *
+ * Tier 0 — these track the platform's own size_t / ptrdiff_t at any width.
  * ========================================================================= */
 
 /**
@@ -97,6 +128,34 @@
 #define CANON_ISIZE_MIN  PTRDIFF_MIN
 
 /* ============================================================================
+ * Platform contract (Tier 1) — size_t >= 32 bits
+ * ============================================================================
+ *
+ * Everything below this guard assumes a size_t of at least 32 bits. On a
+ * 16-bit size_t target the size literals would wrap to 0 (well-defined
+ * unsigned arithmetic — no warning, no UB, just wrong values), which would
+ * propagate zeros into every capacity constant and make arena_init,
+ * vector construction, and string building fail at runtime with no
+ * indication of why. This guard makes the boundary loud and names it.
+ *
+ * The requirement is enforced here — beside the constants that introduce
+ * it — rather than in types.h, so that the Tier-0 portions of this header
+ * and the freestanding primitives remain fully usable on 16-bit targets.
+ *
+ * This contract is NOT overridable. If a concrete 16-bit target ever
+ * needs the capacity-managed layers, that is a recorded design decision
+ * with its own width-conditional constants and validation story, not a
+ * macro escape hatch. See the README's bare-metal section.
+ * ========================================================================= */
+#if SIZE_MAX < 0xFFFFFFFF
+#  error "Canon-C platform contract (Tier 1): the size literals and \
+capacity constants below (and every header that uses them: arena, pool, \
+slice, collections) require size_t >= 32 bits. On this target, use the \
+Tier 0 subset only: types.h, the integer limits above, checked.h, bits.h, \
+compare.h, scope.h, contract.h. See the README's bare-metal section."
+#endif
+
+/* ============================================================================
  * Size Literals
  * ========================================================================= */
 
@@ -105,7 +164,9 @@
  *
  * All size literals use usize casts on every factor to avoid signed integer
  * overflow on 32-bit platforms where plain int arithmetic would overflow before
- * the outer cast takes effect.
+ * the outer cast takes effect. (On sub-32-bit size_t the casts would prevent
+ * the UB but still produce wrapped values — which is why the Tier 1 guard
+ * above refuses such targets outright.)
  */
 #define CANON_KB ((usize)1024)
 
@@ -250,6 +311,12 @@
  * @brief Soft maximum byte size for arenas — 1 GiB.
  *
  * Arenas larger than this are almost certainly a bug in the caller.
+ *
+ * Note: this constant is load-bearing for verification evidence — the
+ * MCDC-003 unreachability argument for arena.h's overflow-guard
+ * subconditions reasons from CANON_ARENA_MAX_SIZE's value. Overriding it
+ * to a value near CANON_USIZE_MAX makes those guards reachable; see
+ * MCDC-003 in docs/deviations.md before raising it.
  */
 #ifndef CANON_ARENA_MAX_SIZE
 #  define CANON_ARENA_MAX_SIZE CANON_GB
@@ -362,7 +429,7 @@
 /** @brief Size of a pointer in bytes — 4 on 32-bit, 8 on 64-bit. */
 #define CANON_POINTER_SIZE  ((usize)sizeof(void*))
 
-/** @brief Number of bits in a byte — always 8 on supported platforms. */
+/** @brief Number of bits in a byte — always 8 per the Tier 0 contract in types.h. */
 #define CANON_BITS_PER_BYTE ((usize)8)
 
 /** @brief Number of bits in a pointer — 32 or 64. */
