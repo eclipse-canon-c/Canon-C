@@ -403,11 +403,19 @@ static inline u8* bytes_at(bytes_t b, usize i) {
  *         require memcmp-axiomatic reasoning deferred to testing.
  *         See VERIFY-007 for scope.
  *
+ * @note On the compare path both views must contain initialized bytes
+ *       (ACSL \initialized precondition; the Valgrind CI job enforces
+ *       the same property at runtime).
+ *
  * @sa str_equal()
  */
 /*@
     requires bytes_valid_write(a);
     requires bytes_valid_write(b);
+    requires init_ab: (a.len == b.len && a.ptr != b.ptr &&
+                       a.ptr != \null && b.ptr != \null && a.len > 0) ==>
+             (\initialized((char*)a.ptr + (0 .. (integer)a.len - 1)) &&
+              \initialized((char*)b.ptr + (0 .. (integer)b.len - 1)));
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  a.len != b.len ==> \result == \false;
@@ -606,12 +614,19 @@ static inline bool str_is_empty(str_t s) {
  * @brief Returns true if a and b have identical contents (O(n))
  *
  * @remark Partial functional spec — see bytes_equal note and VERIFY-007.
+ * @note On the compare path both views must contain initialized bytes
+ *       (ACSL \initialized precondition; the Valgrind CI job enforces
+ *       the same property at runtime).
  *
  * @sa bytes_equal()
  */
 /*@
     requires str_valid(a);
     requires str_valid(b);
+    requires init_ab: (a.len == b.len && a.ptr != b.ptr &&
+                       a.ptr != \null && b.ptr != \null && a.len > 0) ==>
+             (\initialized((char*)a.ptr + (0 .. (integer)a.len - 1)) &&
+              \initialized((char*)b.ptr + (0 .. (integer)b.len - 1)));
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  a.len != b.len ==> \result == \false;
@@ -628,10 +643,17 @@ static inline bool str_equal(str_t a, str_t b) {
  * @brief Returns true if s begins with prefix. O(prefix.len)
  *
  * @remark Partial functional spec — see bytes_equal note and VERIFY-007.
+ * @note On the compare path the first prefix.len bytes of both views must
+ *       contain initialized bytes (ACSL \initialized precondition; the
+ *       Valgrind CI job enforces the same property at runtime).
  */
 /*@
     requires str_valid(s);
     requires str_valid(prefix);
+    requires init_sp: (prefix.len <= s.len && prefix.ptr != \null &&
+                       prefix.len > 0) ==>
+             (\initialized((char*)s.ptr + (0 .. (integer)prefix.len - 1)) &&
+              \initialized((char*)prefix.ptr + (0 .. (integer)prefix.len - 1)));
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  prefix.len > s.len ==> \result == \false;
@@ -647,10 +669,19 @@ static inline bool str_starts_with(str_t s, str_t prefix) {
  * @brief Returns true if s ends with suffix. O(suffix.len)
  *
  * @remark Partial functional spec — see bytes_equal note and VERIFY-007.
+ * @note On the compare path the trailing suffix.len bytes of s and all of
+ *       suffix must contain initialized bytes (ACSL \initialized
+ *       precondition; the Valgrind CI job enforces the same property at
+ *       runtime). Only the compared window of s carries the obligation.
  */
 /*@
     requires str_valid(s);
     requires str_valid(suffix);
+    requires init_ss: (suffix.len <= s.len && suffix.ptr != \null &&
+                       suffix.len > 0) ==>
+             (\initialized((char*)s.ptr + ((integer)s.len - (integer)suffix.len ..
+                                            (integer)s.len - 1)) &&
+              \initialized((char*)suffix.ptr + (0 .. (integer)suffix.len - 1)));
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  suffix.len > s.len ==> \result == \false;
