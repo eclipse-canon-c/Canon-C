@@ -37,8 +37,10 @@
  * This header spans two of Canon-C's platform tiers:
  *
  * - Integer Type Limits and Size Type Limits (top of file) are Tier 0 —
- *   they work on any target satisfying the types.h platform contract,
- *   including 16-bit size_t MCUs.
+ *   their definitions are width-correct on any target satisfying the
+ *   types.h platform contract. Note, however, that the Tier 1 #error
+ *   below refuses inclusion of this FILE on sub-32-bit size_t targets;
+ *   16-bit code takes the exact-width macros from <stdint.h> directly.
  *
  * - Size Literals and everything below them are Tier 1 — they require
  *   size_t >= 32 bits. On a 16-bit size_t target, CANON_MB and CANON_GB
@@ -50,9 +52,11 @@
  *   The guard is deliberately not overridable — an escape hatch into
  *   silently-zero constants is a footgun, not a configuration.
  *
- * 16-bit size_t targets retain full use of the Tier-0 subset: types.h,
- * this header's integer limits, checked.h, bits.h, compare.h, scope.h,
- * and contract.h. See the README's bare-metal section for the tier model.
+ * 16-bit size_t targets retain use of the Tier-0 subset: types.h, bits.h,
+ * compare.h, scope.h, and contract.h. (checked.h is conceptually Tier 0
+ * but currently rides Tier 1 because it includes this header for the
+ * CANON_*SIZE_* aliases — to be revisited with the 16-bit trigger.) See
+ * the README's bare-metal section for the tier model.
  *
  * Override pattern (define BEFORE including this header):
  * ────────────────────────────────────────────────────────────────────────────
@@ -90,8 +94,9 @@
 /* ============================================================================
  * Integer Type Limits
  *
- * Tier 0 — valid on any target satisfying the types.h platform contract,
- * including 16-bit size_t MCUs.
+ * Tier 0 — definitions are width-correct on any target satisfying the
+ * types.h platform contract (the Tier 1 guard below refuses inclusion of
+ * this file on sub-32-bit size_t targets; see the docblock).
  * ========================================================================= */
 
 /** @brief Max value of u8  — 255 */
@@ -178,8 +183,9 @@
 #  error "Canon-C platform contract (Tier 1): the size literals and \
 capacity constants below (and every header that uses them: arena, pool, \
 slice, collections) require size_t >= 32 bits. On this target, use the \
-Tier 0 subset only: types.h, the integer limits above, checked.h, bits.h, \
-compare.h, scope.h, contract.h. See the README's bare-metal section."
+Tier 0 subset only: types.h, bits.h, compare.h, scope.h, contract.h \
+(exact-width limit macros come from <stdint.h>). See the README's \
+bare-metal section."
 #endif
 
 /* ============================================================================
