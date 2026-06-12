@@ -292,8 +292,8 @@ What Canon-C provides instead:
    application layer.
 
 The full rationale — the C99 limits, the design paths considered, why
-each one breaks something — are recorded in `docs/design-decisions.md` 
-entry. The short version is that `DEFINE_OWNED` covers the 
+each one breaks something — is recorded in `docs/design-decisions.md`
+(OWN-001..003). The short version is that `DEFINE_OWNED` covers the 
 type-distinction case the C99 type system can enforce, and static analyzers
 cover everything beyond it. The two together are the answer.
 
@@ -840,13 +840,53 @@ For what Canon-C intentionally omits, established C libraries exist:
 > `core/primitives/types.h`, `core/primitives/limits.h`,
 > `core/primitives/bits.h`, `core/primitives/checked.h`, and
 > `core/primitives/compare.h` pull in only freestanding headers
-> (`<stdint.h>`, `<stddef.h>`, `<limits.h>`, `<stdbool.h>`) and are
-> safe on any target without modification. `core/scope.h` is the most
+> (`<stdint.h>`, `<stddef.h>`, `<stdbool.h>`) and are safe on any
+> 32-bit-or-wider target without modification; for 16-bit-`size_t`
+> targets see **Platform tiers** below. `core/scope.h` is the most
 > portable header in Canon-C — it has zero header dependencies at all,
 > not even freestanding ones, and is safe on any target including
 > bare-metal and freestanding environments with no libc. All other
 > `core/` headers include `contract.h` — they require the handler
 > replacement described above.
+>
+> **Platform tiers**
+>
+> Canon-C's platform requirements are layered and compile-time enforced —
+> each header guards the requirement it introduces, at its origin, once,
+> so an unsupported target fails loudly at the first header that needs
+> the missing capability, never silently.
+>
+> **Tier 0** — 8-bit bytes and the C99 exact-width integer types,
+> enforced in `types.h` and inherited by every header through inclusion.
+> The Tier 0 subset — `types.h`, `bits.h`, `compare.h`, `scope.h`,
+> `contract.h` — works on any conforming target, including
+> 16-bit-`size_t` MCUs (MSP430, AVR). Tier 0 means "freestanding plus
+> stub-capable libc headers": `contract.h` pulls in `<stdio.h>` and
+> `<stdlib.h>` for its default panic handler — swap the handler as
+> described above and stdio is never reached.
+>
+> **Tier 1** — `size_t` >= 32 bits, enforced in `limits.h` beside the
+> size literals that need it. Covers `limits.h`, `checked.h`, `ptr.h`,
+> and everything built on them: arenas, pools, slices, collections. On
+> a 16-bit-`size_t` target the size literals (`CANON_GB`) would wrap to
+> 0 under well-defined unsigned arithmetic and silently zero every
+> capacity constant; the guard turns that silent breakage into a named
+> compile-time refusal. (`checked.h`'s arithmetic is itself
+> width-correct — it sits at Tier 1 only because it includes `limits.h`
+> for the `CANON_*SIZE_*` aliases.)
+>
+> **Tier 2** — hosted libc: a working `malloc`, retargeted stdio, OS
+> clocks. Covers `memory.h`, `data/convenience/`, file I/O, logging,
+> parsing, and timing, with the mitigations described above. Hosted-ness
+> is a runtime/link property the preprocessor cannot test
+> (`__STDC_HOSTED__` tracks a compilation mode, not whether `malloc`
+> works), so Tier 2 is enforced by documentation at origin and by the
+> linker, not by guards.
+>
+> Full 16-bit support for the Tier 1 layers is deliberately deferred —
+> it would require width-conditional constants, a 16-bit verification
+> run, and per-width coverage re-derivation. It will be revisited if and
+> when a concrete user with a concrete 16-bit target materializes.
 
 ---
 
