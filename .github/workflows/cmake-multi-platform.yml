@@ -785,7 +785,7 @@ jobs:
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/slice.h"
-        # slice.h — Typed+Cast. Expected: 367 / 390 proved, exactly 23
+        # slice.h — Typed+Cast. Expected: 375 / 390 proved, exactly 15
         # unproved (VERIFY-007): memcmp call-site preconditions (20),
         # strlen valid_string (1), transitive contract.h handler (2).
         # Also enforces the MCDC-002 closure (4/4 !ptr defensive branches
@@ -854,8 +854,8 @@ jobs:
 
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "367 / 390" ]; then
-            echo "WARNING: proved count changed from expected 367 / 390."
+          if [ "${PROVED_COUNT}" != "375 / 390" ]; then
+            echo "WARNING: proved count changed from expected 375 / 390."
             echo "         This may indicate added or removed functions,"
             echo "         a new timeout, or a newly-proved goal."
             echo "         Review the output and update VERIFY-007 in"
@@ -893,23 +893,15 @@ jobs:
             "typed_cast_contract_default_handler_loop_invariant_established"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
             "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
             "typed_cast_str_equal_call_memcmp_requires_valid_s1"
             "typed_cast_str_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_str_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
-            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
-            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
           )
@@ -929,7 +921,7 @@ jobs:
             echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo "PASS: slice.h verified — 367/390 proved, 23 documented"
+          echo "PASS: slice.h verified — 375/390 proved, 15 documented"
           echo "      residuals all observed (VERIFY-007), MCDC-002"
           echo "      closure intact (4/4 defensive branches discharged)."
           echo "==============================================="
@@ -949,8 +941,8 @@ jobs:
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/memory.h"
-        # memory.h — Typed+Cast. Expected: 2805 / 2862 proved, exactly 57
-        # unproved (VERIFY-008): 31 inherited from substrate + 26 own
+        # memory.h — Typed+Cast. Expected: 2819 / 2862 proved, exactly 43
+        # unproved (VERIFY-008): 23 inherited from substrate + 20 own
         # (\fresh/\freeable allocation 5, bitwise-alignment integer theory
         # 9, memcmp call-site inheritance 12). Any deviation is a regression.
         run: |
@@ -1017,8 +1009,8 @@ jobs:
 
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "2805 / 2862" ]; then
-            echo "WARNING: proved count changed from expected 2805 / 2862."
+          if [ "${PROVED_COUNT}" != "2819 / 2862" ]; then
+            echo "WARNING: proved count changed from expected 2819 / 2862."
             echo "         This may indicate added or removed functions,"
             echo "         a new timeout, or a newly-proved goal."
             echo "         Review the output and update VERIFY-008 in"
@@ -1038,23 +1030,15 @@ jobs:
             "typed_cast_ptr_align_padding_nonnull_ensures_part2"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
             "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
             "typed_cast_str_equal_call_memcmp_requires_valid_s1"
             "typed_cast_str_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_str_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
-            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
-            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
             "typed_cast_mem_alloc_assigns_normal_part2"
@@ -1071,16 +1055,10 @@ jobs:
             "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
             "typed_cast_mem_get_alignment_nonnull_ensures_part2"
             "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
-            "typed_cast_mem_compare_call_memcmp_requires_initialization_s1"
-            "typed_cast_mem_compare_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
-            "typed_cast_mem_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_mem_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
-            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s1"
-            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
           )
@@ -1100,9 +1078,9 @@ jobs:
             echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo "PASS: memory.h verified — 2805/2862 proved, 57 documented"
-          echo "      residuals all observed (VERIFY-008): 31 inherited"
-          echo "      from ptr.h/slice.h/checked.h substrate + 26"
+          echo "PASS: memory.h verified — 2819/2862 proved, 43 documented"
+          echo "      residuals all observed (VERIFY-008): 23 inherited"
+          echo "      from ptr.h/slice.h/checked.h substrate + 20"
           echo "      memory.h-own. Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
           echo "==============================================="
@@ -1122,8 +1100,8 @@ jobs:
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/arena.h"
-        # arena.h — Typed+Cast. Expected: 3369 / 3472 proved, exactly 103
-        # unproved (VERIFY-009): 57 inherited (memory.h's full surface) +
+        # arena.h — Typed+Cast. Expected: 3383 / 3472 proved, exactly 89
+        # unproved (VERIFY-009): 43 inherited (memory.h's full surface) +
         # 46 own (ptr_span call-sites 8, fits/does_not_fit arithmetic 26,
         # zero/try wrappers 10, free_bytes helpers 2). Any deviation is a
         # regression. (MCDC-003 has no closure check here — the affected
@@ -1192,8 +1170,8 @@ jobs:
 
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "3369 / 3472" ]; then
-            echo "WARNING: proved count changed from expected 3369 / 3472."
+          if [ "${PROVED_COUNT}" != "3383 / 3472" ]; then
+            echo "WARNING: proved count changed from expected 3383 / 3472."
             echo "         This may indicate added or removed functions,"
             echo "         a new timeout, or a newly-proved goal."
             echo "         Review the output and update VERIFY-009 in"
@@ -1213,23 +1191,15 @@ jobs:
             "typed_cast_ptr_align_padding_nonnull_ensures_part2"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_bytes_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
             "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
             "typed_cast_str_equal_call_memcmp_requires_valid_s1"
             "typed_cast_str_equal_call_memcmp_requires_valid_s2"
-            "typed_cast_str_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
-            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_starts_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
-            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s1"
-            "typed_cast_str_ends_with_call_memcmp_requires_initialization_s2"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
             "typed_cast_mem_alloc_assigns_normal_part2"
@@ -1246,16 +1216,10 @@ jobs:
             "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
             "typed_cast_mem_get_alignment_nonnull_ensures_part2"
             "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
-            "typed_cast_mem_compare_call_memcmp_requires_initialization_s1"
-            "typed_cast_mem_compare_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
-            "typed_cast_mem_equal_call_memcmp_requires_initialization_s1"
-            "typed_cast_mem_equal_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
-            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s1"
-            "typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
             "typed_cast_arena_alloc_call_ptr_span_requires"
@@ -1321,8 +1285,8 @@ jobs:
             echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo "PASS: arena.h verified — 3369/3472 proved, 103 documented"
-          echo "      residuals all observed (VERIFY-009): 57 inherited +"
+          echo "PASS: arena.h verified — 3383/3472 proved, 89 documented"
+          echo "      residuals all observed (VERIFY-009): 43 inherited +"
           echo "      46 arena.h-own. Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
           echo "==============================================="
@@ -1342,8 +1306,8 @@ jobs:
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: core/pool.h"
-        # pool.h — Typed+Cast. Expected: 3775 / 3902 proved, exactly 127
-        # unproved (VERIFY-010): 103 inherited (arena.h's full surface,
+        # pool.h — Typed+Cast. Expected: 3789 / 3902 proved, exactly 113
+        # unproved (VERIFY-010): 89 inherited (arena.h's full surface,
         # two-hop transitive) + 24 own across cats 2a/2b/2c/2d. Any
         # deviation is a regression.
         run: |
@@ -1410,8 +1374,8 @@ jobs:
 
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "3775 / 3902" ]; then
-            echo "WARNING: proved count changed from expected 3775 / 3902."
+          if [ "${PROVED_COUNT}" != "3789 / 3902" ]; then
+            echo "WARNING: proved count changed from expected 3789 / 3902."
             echo "         This may indicate added or removed functions,"
             echo "         a new timeout, or a newly-proved goal."
             echo "         Review the output and update VERIFY-010 in"
@@ -1469,8 +1433,8 @@ jobs:
             echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo "PASS: pool.h verified — 3775/3902 proved, 127 documented"
-          echo "      residuals all observed (VERIFY-010): 103 inherited +"
+          echo "PASS: pool.h verified — 3789/3902 proved, 113 documented"
+          echo "      residuals all observed (VERIFY-010): 89 inherited +"
           echo "      24 pool.h-own. Composable verification holds across a"
           echo "      two-hop transitive include: zero new substrate residuals."
           echo "==============================================="
