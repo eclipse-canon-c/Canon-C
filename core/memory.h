@@ -619,6 +619,9 @@ static inline void mem_set(void* ptr, int value, usize size) {
  * size == 0 with valid pointers → 0.
  *
  * @note Not constant-time. Do not use to compare cryptographic secrets.
+ * @note On the compare path both regions must contain initialized bytes
+ *       (ACSL \initialized precondition; the Valgrind CI job enforces
+ *       the same property at runtime).
  */
 /*@
   requires a == \null || b == \null || size == 0 || a == b ||
@@ -644,6 +647,8 @@ static inline void mem_set(void* ptr, int value, usize size) {
 
   behavior memcmp:
     assumes a != b && a != \null && b != \null && size > 0;
+    requires init_a: \initialized((char*)a + (0 .. (integer)size - 1));
+    requires init_b: \initialized((char*)b + (0 .. (integer)size - 1));
 
   complete behaviors;
   disjoint behaviors;
@@ -659,6 +664,10 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
  * @brief Returns true if two memory regions are byte-for-byte identical
  *
  * NULL contract: both NULL → true. One NULL → false. size == 0 → true.
+ *
+ * @note On the compare path both regions must contain initialized bytes
+ *       (ACSL \initialized precondition; the Valgrind CI job enforces
+ *       the same property at runtime).
  */
 /*@
   requires a == \null || b == \null || size == 0 || a == b ||
@@ -680,6 +689,8 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
 
   behavior compare:
     assumes a != b && a != \null && b != \null && size > 0;
+    requires init_a: \initialized((char*)a + (0 .. (integer)size - 1));
+    requires init_b: \initialized((char*)b + (0 .. (integer)size - 1));
 
   complete behaviors;
   disjoint behaviors;
@@ -967,6 +978,10 @@ static inline void mem_set_bytes(bytes_t b, int value) {
  * @brief Returns true if two cbytes_t regions are byte-for-byte identical
  *
  * Different lengths → false. Both empty (len == 0, ptr may differ) → true.
+ *
+ * @note On the compare path both regions must contain initialized bytes
+ *       (ACSL \initialized precondition; the Valgrind CI job enforces
+ *       the same property at runtime).
  */
 /*@
   requires a.ptr == \null || b.ptr == \null || a.len == 0 || b.len == 0 ||
@@ -996,6 +1011,8 @@ static inline void mem_set_bytes(bytes_t b, int value) {
   behavior compare:
     assumes a.len == b.len && a.ptr != b.ptr &&
             a.ptr != \null && b.ptr != \null && a.len > 0;
+    requires init_a: \initialized((char*)a.ptr + (0 .. (integer)a.len - 1));
+    requires init_b: \initialized((char*)b.ptr + (0 .. (integer)b.len - 1));
 
   complete behaviors;
   disjoint behaviors;
