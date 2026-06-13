@@ -40,8 +40,10 @@ The four namespaces compose: a single piece of code can have entries
 in multiple files at once. The canonical example, traceable through
 the OWN-001 cross-references, is `core/slice.h`:
 
-- **VERIFY-007** records 23 documented unproved goals (memcmp call-site
-  preconditions, strlen valid_string, contract handler non-termination).
+- **VERIFY-007** records 15 documented unproved goals (memcmp call-site
+  valid/danglingness preconditions, strlen valid_string, contract handler
+  non-termination); the 8 initialization goals it formerly recorded were
+  closed by explicit `\initialized` preconditions (see VERIFY-012).
 - **MCDC-002** records four `!ptr` defensive branches measured as
   uncovered at 93.1% MC/DC, with WP discharging them as
   type-invariant-unreachable. The two evidence streams complement
