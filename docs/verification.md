@@ -13,16 +13,16 @@ Combined verification status across all annotated headers:
 | **Headers verified** | 9 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h)    |
 | **Functions**        | 199 annotated and verified                                                     |
 | **Total obligations**| 18732 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 18269 (97.53%)                                                                 |
-| **Unproved**         | 463 (all documented; see per-header sections)                                  |
+| **Proved automatic** | 18333 (97.79%)                                                                 |
+| **Unproved**         | 399 (all documented; see per-header sections)                                  |
 | **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)                               |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
 that crosses the C standard library boundary — it calls `memcmp` and
 `strlen`, whose ACSL contracts require initialization and danglingness
-reasoning that Frama-C 29 has not yet implemented. The 23 slice.h
-residuals (5.9% of slice.h's obligations) are therefore not specific
+reasoning that Frama-C 29 has not yet implemented. The 15 slice.h
+residuals (3.8% of slice.h's obligations) are therefore not specific
 to slice.h's design but are the cost of crossing into libc with the
 current verifier; future headers using these functions will incur the
 same residuals. See VERIFY-007 in `docs/deviations.md` for the full
@@ -30,24 +30,25 @@ classification.
 
 The memory.h baseline (2805 / 2862) is the first Canon-C verification
 round where inherited residuals from the substrate exceed memory.h-own
-residuals: 31 of memory.h's 57 unproved goals are byte-identical to
+residuals: 23 of memory.h's 43 unproved goals are byte-identical to
 goals already documented in VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
 and VERIFY-007 (slice.h), re-emitted in memory.h's run because
-memory.h includes these headers transitively. The 26 memory.h-own
+memory.h includes these headers transitively. The 20 memory.h-own
 residuals fall into three categories: 5 \fresh/\freeable allocation
 reasoning goals (mem_alloc/free/array_checked), 9 bitwise-alignment
-integer theory goals (mem_align/is_aligned/get_alignment), and 12
-memcmp call-site initialization/danglingness goals (mem_compare/equal/
-equal_bytes). All 26 are rooted in the same Frama-C 29 feature gaps
-that produced VERIFY-006 and VERIFY-007's residuals; none are fixable
-by strengthening memory.h's contracts. See VERIFY-008 in
+integer theory goals (mem_align/is_aligned/get_alignment), and 6
+memcmp call-site danglingness goals (mem_compare/equal/equal_bytes).
+The initialization sub-class formerly counted here (6 goals) was closed
+in VERIFY-012 by an explicit `\initialized` precondition; the remaining
+20 are rooted in the `\dangling`/`\fresh`/`\freeable` feature gaps that
+Frama-C 29 has not implemented. See VERIFY-008 in
 `docs/deviations.md` for the full classification.
 
-The 31:26 inherited:own ratio is the first quantitative data point
+The 23:20 inherited:own ratio is the first quantitative data point
 for the composable-verification thesis: substrate residuals propagate
 without amplification across composition layers, and a layer that
 builds on multiple already-verified headers inherits their residual
-fingerprints unchanged. The 31 inherited residuals are byte-identical
+fingerprints unchanged. The 23 inherited residuals are byte-identical
 between memory.h round 2 (before contract-shape fixes) and memory.h
 round 3 (after fixes) — the round 3 fix removed 10 contract-shape
 residuals and zero inherited ones, confirming that contract-level
@@ -56,9 +57,9 @@ edits do not perturb the substrate's residual surface.
 The arena.h baseline (3369 / 3472) is the third Canon-C verification
 data point and the first to demonstrate propagation through two
 composition layers. arena.h includes memory.h, which transitively
-includes ptr.h, slice.h, checked.h, and contract.h. arena.h's 57
-inherited residuals are byte-identical to memory.h's full 57-goal
-residual surface (memory.h's 31 inherited + memory.h's 26 own), and
+includes ptr.h, slice.h, checked.h, and contract.h. arena.h's 43
+inherited residuals are byte-identical to memory.h's full 43-goal
+residual surface (memory.h's 23 inherited + memory.h's 20 own), and
 arena.h adds 46 own residuals of its own across four categories:
 8 ptr_span call-site residuals at arena_alloc / arena_alloc_aligned
 (downstream of VERIFY-006's empty `nonnull` behaviors), 26
@@ -66,7 +67,7 @@ arithmetic-chain residuals at arena_alloc / arena_alloc_aligned (the
 deepest residual class, arising from the deliberate readable form of
 the `arena_can_fit` predicate), 10 wrapper-delegation residuals on
 the zero/try variants, and 2 arena_free_bytes helper call-site
-residuals. The 57:46 inherited:own ratio confirms the composable
+residuals. The 43:46 inherited:own ratio confirms the composable
 verification claim at a third composition layer — substrate residuals
 propagate without amplification, and arena.h is the first header to
 observe propagation through two layers of composition (substrate →
@@ -76,16 +77,16 @@ full classification.
 The pool.h baseline (3775 / 3902) is the fourth Canon-C verification data
 point and the first to observe residual propagation across a two-hop
 transitive include. pool.h includes arena.h, which transitively includes
-memory.h, ptr.h, slice.h, checked.h, and contract.h. pool.h's 103 inherited
-residuals are byte-identical to arena.h's full 103-goal residual surface
-(arena.h's 57 inherited + arena.h's 46 own), and pool.h adds 24 own residuals
+memory.h, ptr.h, slice.h, checked.h, and contract.h. pool.h's 89 inherited
+residuals are byte-identical to arena.h's full 89-goal residual surface
+(arena.h's 43 inherited + arena.h's 46 own), and pool.h adds 24 own residuals
 across four categories: 5 pool_invariant-establishment arithmetic residuals at
 pool_init (3 of them LIMITATION-SUSPECTED pending a manual invariant review),
 6 ptr_elem-cascade residuals at pool_alloc / pool_get / pool_get_const
 (downstream of VERIFY-006's empty `nonnull` behaviors), 5 bytes_from / mem_zero
 call-site residuals on pool_alloc_zero / pool_as_bytes / pool_reserved_bytes,
 and 8 arena-delegation + reset-wrapper residuals on pool_alloc_zero /
-pool_reset / pool_reset_secure. The 103:24 inherited:own ratio is the most
+pool_reset / pool_reset_secure. The 89:24 inherited:own ratio is the most
 lopsided yet — a direct consequence of pool.h sitting atop the deepest
 substrate stack verified to date while adding the thinnest own surface: pool.h
 reserves its region once at pool_init and computes slots by fixed-stride
@@ -651,12 +652,12 @@ checked.h's div/mod goals — see Baseline note above.)
 | **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | (Canon-C CI #821)                               |
 | **Functions**          | 22 of 22 non-macro functions annotated          |
-| **Proof obligations**  | 367 / 390 discharged automatically (94.10%)     |
-| **Timeouts**           | 23 (all documented under VERIFY-007)            |
+| **Proof obligations**  | 375 / 390 discharged automatically (96.15%)     |
+| **Timeouts**           | 15 (all documented under VERIFY-007)            |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 367/390 with 23 named goals expected      |
+| **CI enforcement**     | Yes — 375/390 with 15 named goals expected      |
 | **MC/DC coverage**     | 93.1% (54/58 condition outcomes — see MCDC-002) |
 | **CI artifact**        | `wp-proof-slice` (full per-goal breakdown)      |
 
@@ -733,36 +734,40 @@ target requires it.
 | Terminating    | 12               | (structural)      |
 | Unreachable    | 15               | (structural)      |
 | Qed (internal) | 292              | 0.6ms–11ms        |
-| Alt-Ergo 2.6.3 | 47               | 16ms–73ms         |
-| Z3 4.15.2      | 1                | 65ms              |
-| Timeout        | 23               | >120s (see below) |
-| **Total**      | **367 / 390**    |                    |
+| Alt-Ergo 2.6.3 | 54               | 16ms–73ms         |
+| Z3 4.15.2      | 2                | 65ms              |
+| Timeout        | 15               | >120s (see below) |
+| **Total**      | **375 / 390**    |                    |
 
-The 23 unproved goals belong to three documented categories (see
+The 15 unproved goals belong to three documented categories (see
 VERIFY-007); WP's discharge of the four MCDC-002 functions as
 unreachable is verified separately by the wrapper's
 `MCDC-002 functions with WP residuals: 0/4` diagnostic, which
 confirms none of `bytes_slice`, `bytes_skip`, `str_slice`, or
 `str_skip` appear in the unproved list.
 
-CVC5 1.2.1 is invoked as a tertiary prover but closes none of the 23
+CVC5 1.2.1 is invoked as a tertiary prover but closes none of the 15
 unproved goals — they are demonstrated triple-prover-resistant.
 
-### Timeout goals (23)
+### Timeout goals (15)
 
-All 23 are documented as triple-prover-resistant. They fall into three
+All 15 are documented as triple-prover-resistant. They fall into three
 categories:
 
-**memcmp call-site preconditions (20):** Six per `bytes_equal` and
-`str_equal`, four per `str_starts_with` and `str_ends_with`.
+**memcmp call-site preconditions (12):** Four per `bytes_equal` and
+`str_equal` (two `valid_*` on the bytes_t variant, two `danglingness_*`
+on each), two per `str_starts_with` and `str_ends_with`.
 Goal-name pattern:
 `typed_cast_<func>_call_memcmp_requires_<aspect>` where `<aspect>`
-ranges over `valid_s1`, `valid_s2`, `initialization_s1`,
-`initialization_s2`, `danglingness_s1`, `danglingness_s2`. The
-`valid_*` obligations appear only on the bytes_t variants because
-the str_t variants close them through `str_valid` predicate
-reasoning; the `initialization_*` and `danglingness_*` obligations
-appear on all four equality functions.
+ranges over `valid_s1`, `valid_s2`, `danglingness_s1`,
+`danglingness_s2`. The `valid_*` obligations appear only on the
+bytes_t variants because the str_t variants close them through
+`str_valid` predicate reasoning; the `danglingness_*` obligations
+appear on all four equality functions. The eight `initialization_*`
+obligations formerly in this category were closed in VERIFY-012 by
+stating `\initialized` as an explicit precondition on each equality
+function — WP discharges initialization once the contract asserts it,
+even though `\dangling` remains unimplemented.
 
 These are not solver-strength residuals. WP itself reports the
 limitation during the proof run:
@@ -778,8 +783,9 @@ establish that both buffer ranges are fully valid, fully initialized,
 and non-dangling. slice.h's `bytes_valid_write` and `str_valid`
 predicates establish validity, but the initialization and danglingness
 obligations cannot be discharged because the underlying logic is not
-yet implemented in Frama-C 29. Strengthening the slice.h predicates
-would not close these goals.
+yet implemented in Frama-C 29 for `\dangling`. (Initialization, by
+contrast, WP *can* discharge once stated — see VERIFY-012; that is how
+the eight `initialization_*` goals were closed.)
 
 **strlen valid_string precondition (1):**
 `typed_cast_str_from_cstr_call_strlen_requires_valid_string_s` —
@@ -890,7 +896,7 @@ frama-c -wp -wp-rte \
   core/slice.h
 ```
 
-Expected output: `Proved goals: 367 / 390` with 23 timeouts.
+Expected output: `Proved goals: 375 / 390` with 15 timeouts.
 
 ---
 
@@ -903,12 +909,12 @@ Expected output: `Proved goals: 367 / 390` with 23 timeouts.
 | **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | b3e668b (Canon-C CI #841)                       |
 | **Functions**          | 27 of 27 non-macro functions annotated          |
-| **Proof obligations**  | 2805 / 2862 discharged automatically (98.01%)   |
-| **Timeouts**           | 57 (all documented under VERIFY-008)            |
+| **Proof obligations**  | 2819 / 2862 discharged automatically (98.50%)   |
+| **Timeouts**           | 43 (all documented under VERIFY-008)            |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 2805/2862 with 57 named goals expected    |
+| **CI enforcement**     | Yes — 2819/2862 with 43 named goals expected    |
 | **MC/DC coverage**     | 88.3% (113/128 condition outcomes)              |
 | **CI artifact**        | `wp-proof-memory` (full per-goal breakdown)     |
 
@@ -1005,17 +1011,17 @@ type (i32) plus the dedicated overflow-test cases in
 | Terminating    | 60               | (structural)      |
 | Unreachable    | 63               | (structural)      |
 | Qed (internal) | 2427             | 0.88ms–11ms       |
-| Alt-Ergo 2.6.3 | 241              | 12ms–180ms        |
-| CVC5 1.2.1     | 2                | 62ms–81ms         |
-| Z3 4.15.2      | 12               | 14ms–45ms         |
-| Timeout        | 53               | >120s             |
-| Unknown        | 4                | (solver gave up)  |
-| **Total**      | **2805 / 2862**  |                    |
+| Alt-Ergo 2.6.3 | 248              | 12ms–180ms        |
+| CVC5 1.2.1     | 5                | 62ms–81ms         |
+| Z3 4.15.2      | 16               | 14ms–45ms         |
+| Timeout        | 40               | >120s             |
+| Unknown        | 3                | (solver gave up)  |
+| **Total**      | **2819 / 2862**  |                    |
 
-The 57 unproved goals (53 `[Timeout]` + 4 `[Unknown]` + 0 `[Failed]`)
+The 43 unproved goals (40 `[Timeout]` + 3 `[Unknown]` + 0 `[Failed]`)
 belong to seven categories — three memory.h-own and four inherited
-from substrate headers. CVC5 contributes 2 closures; Z3 contributes
-12; Alt-Ergo carries the bulk of the SMT load (241 goals) at typical
+from substrate headers. CVC5 contributes 5 closures; Z3 contributes
+16; Alt-Ergo carries the bulk of the SMT load (248 goals) at typical
 times in the tens of milliseconds.
 
 The CI wrapper sums Timeout + Unknown + Failed because WP may
@@ -1023,11 +1029,11 @@ reclassify the same goal between Timeout and Unknown across runs
 depending on solver heuristics — what matters is that the goal is not
 proved, not which category it lands in.
 
-### Timeout goals (57)
+### Timeout goals (43)
 
-All 57 are documented as triple-prover-resistant. They fall into
-seven categories: 4 inherited from already-verified substrate (31
-goals total) and 3 memory.h-own (26 goals total).
+All 43 are documented as triple-prover-resistant. They fall into
+seven categories: 4 inherited from already-verified substrate (23
+goals total) and 3 memory.h-own (20 goals total).
 
 **Inherited from VERIFY-002 (2):**
 `typed_cast_checked_add_overflow_ensures`,
@@ -1044,11 +1050,12 @@ as in VERIFY-002 and VERIFY-006.
 - 2 contract handler non-termination (cat 4):
   `typed_cast_contract_default_handler_terminates`, related.
 
-**Inherited from VERIFY-007 categories 1–2 (21):**
-- 20 memcmp call-site preconditions on slice.h's
+**Inherited from VERIFY-007 categories 1–2 (13):**
+- 12 memcmp call-site preconditions on slice.h's
   `bytes_equal`/`str_equal`/`str_starts_with`/`str_ends_with` —
   re-emerge here because memory.h includes slice.h transitively
-  through bytes_t/cbytes_t.
+  through bytes_t/cbytes_t. (Down from 20: the 8 `initialization_*`
+  goals were closed upstream in VERIFY-012.)
 - 1 strlen valid_string precondition on
   `typed_cast_str_from_cstr_call_strlen_requires_valid_string_s`.
 
@@ -1090,13 +1097,17 @@ re-emits the limitation at its own call sites because it specifies
 alignment ensures clauses in the modular form (the natural
 mathematical formulation in an `ensures` clause).
 
-**memory.h-own category 2c — memcmp call-site inheritance (12):**
-4 each on `mem_compare`, `mem_equal`, `mem_equal_bytes` —
-`requires_initialization_s1/s2` and `requires_danglingness_s1/s2`.
+**memory.h-own category 2c — memcmp call-site danglingness (6):**
+2 each on `mem_compare`, `mem_equal`, `mem_equal_bytes` —
+`requires_danglingness_s1/s2`. (Down from 12: the
+`requires_initialization_s1/s2` pair on each function was closed in
+VERIFY-012 by an explicit `\initialized` precondition. WP discharges
+initialization once the contract states it; `\dangling` remains
+unimplemented.)
 
-Identical root cause to VERIFY-007 category 1. memory.h directly
-calls `memcmp` from these three functions, so the same residual
-class re-emerges at memory.h's call sites.
+Identical root cause to VERIFY-007's danglingness residual. memory.h
+directly calls `memcmp` from these three functions, so the same
+residual class re-emerges at memory.h's call sites.
 
 Full goal list and per-category manual proof arguments: see
 VERIFY-008 in `docs/deviations.md`.
@@ -1113,8 +1124,11 @@ top-level `requires`. Round 3 (commit `b3e668b`, Canon-C CI #841)
 hoisted the non-overlap preconditions to top-level requires on
 `mem_copy`, `mem_copy_bytes`, `mem_swap`, and `mem_swap_buf`,
 removing those 10 contract-shape residuals without introducing any
-new ones. Final count: 57 residuals, byte-identical inherited count
-(31) between rounds 2 and 3.
+new ones. Final count (at the round-3 baseline): 57 residuals,
+byte-identical inherited count (31) between rounds 2 and 3. (VERIFY-012
+later lowered this to 43 = 23 inherited + 20 own, by closing the
+initialization sub-class; that closure is a contract addition, not a
+contract-shape fix, and likewise left the substrate fingerprint intact.)
 
 The round 3 fix is the empirical confirmation of the composable-
 verification thesis: contract-level edits within memory.h removed
@@ -1210,8 +1224,8 @@ frama-c -wp -wp-rte \
   core/memory.h
 ```
 
-Expected output: `Proved goals: 2805 / 2862` with 57 unproved goals
-(53 timeouts + 4 unknown).
+Expected output: `Proved goals: 2819 / 2862` with 43 unproved goals
+(40 timeouts + 3 unknown).
 
 ---
 
@@ -1224,12 +1238,12 @@ Expected output: `Proved goals: 2805 / 2862` with 57 unproved goals
 | **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | f53bddb (Canon-C CI #962)                       |
 | **Functions**          | 22 of 22 non-macro functions annotated          |
-| **Proof obligations**  | 3369 / 3472 discharged automatically (97.03%)   |
-| **Timeouts**           | 103 (all documented under VERIFY-009)           |
+| **Proof obligations**  | 3383 / 3472 discharged automatically (97.44%)   |
+| **Timeouts**           | 89 (all documented under VERIFY-009)            |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 3369/3472 with 103 named goals expected   |
+| **CI enforcement**     | Yes — 3383/3472 with 89 named goals expected    |
 | **MC/DC coverage**     | 90.6% (58/64 condition outcomes — see MCDC-003) |
 | **Line coverage**      | 100% (97/97)                                    |
 | **CI artifact**        | `wp-proof-arena` (full per-goal breakdown)      |
@@ -1333,19 +1347,19 @@ functions carry the 46 own residuals across cats 2a/2b/2c/2d.
 
 | Category       | Goals discharged | Typical time      |
 |----------------|------------------|--------------------|
-| Terminating    | 73               | (structural)      |
-| Unreachable    | 78               | (structural)      |
-| Qed (internal) | 2891             | 0.88ms–14ms       |
-| Alt-Ergo 2.6.3 | 313              | 12ms–220ms        |
+| Terminating    | 69               | (structural)      |
+| Unreachable    | 72               | (structural)      |
+| Qed (internal) | 2889             | 0.88ms–14ms       |
+| Alt-Ergo 2.6.3 | 327              | 12ms–220ms        |
 | CVC5 1.2.1     | 3                | 65ms–110ms        |
-| Z3 4.15.2      | 11               | 14ms–62ms         |
-| Timeout        | 96               | >120s             |
-| Unknown        | 7                | (solver gave up)  |
-| **Total**      | **3369 / 3472**  |                    |
+| Z3 4.15.2      | 23               | 14ms–62ms         |
+| Timeout        | 83               | >120s             |
+| Unknown        | 6                | (solver gave up)  |
+| **Total**      | **3383 / 3472**  |                    |
 
-The 103 unproved goals (96 `[Timeout]` + 7 `[Unknown]` + 0 `[Failed]`)
+The 89 unproved goals (83 `[Timeout]` + 6 `[Unknown]` + 0 `[Failed]`)
 belong to eight categories — four arena.h-own (46 goals total) and
-four inherited groups (57 goals total). The exact category and prover
+four inherited groups (43 goals total). The exact category and prover
 breakdowns above reflect the typical distribution across CI runs; WP
 may reclassify Timeout/Unknown goals between runs depending on solver
 heuristics.
@@ -1355,11 +1369,11 @@ is that the goal is not proved, not which category it lands in. The
 named-goal enforcement (per-pattern check in the wrapper) catches
 both count regressions and silent renames.
 
-### Timeout goals (103)
+### Timeout goals (89)
 
-All 103 are documented as triple-prover-resistant. The 57 inherited
+All 89 are documented as triple-prover-resistant. The 43 inherited
 goals are byte-identical to memory.h's full residual surface
-(VERIFY-008's 31 inherited from substrate + 26 memory.h-own).
+(VERIFY-008's 23 inherited from substrate + 20 memory.h-own).
 arena.h is the first downstream header to include memory.h in WP
 scope, so memory.h's own residuals re-emerge here unchanged — every
 inherited goal name matches an already-documented goal from VERIFY-002,
@@ -1521,8 +1535,8 @@ frama-c -wp -wp-rte \
   core/arena.h
 ```
 
-Expected output: `Proved goals: 3369 / 3472` with 103 unproved goals
-(96 timeouts + 7 unknown). The 57 inherited goals are byte-identical
+Expected output: `Proved goals: 3383 / 3472` with 89 unproved goals
+(83 timeouts + 6 unknown). The 43 inherited goals are byte-identical
 to memory.h's full residual surface (see VERIFY-009 inherited
 residuals table); the 46 own goals split across cats 2a (8) / 2b (26)
 / 2c (10) / 2d (2).
@@ -1538,12 +1552,12 @@ residuals table); the 46 own goals split across cats 2a (8) / 2b (26)
 | **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | b2644ba (Canon-C CI #972)                       |
 | **Functions**          | 19 of 19 non-macro functions annotated          |
-| **Proof obligations**  | 3775 / 3902 discharged automatically (96.74%)   |
-| **Timeouts**           | 127 (all documented under VERIFY-010)           |
+| **Proof obligations**  | 3789 / 3902 discharged automatically (97.10%)   |
+| **Timeouts**           | 113 (all documented under VERIFY-010)           |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 3775/3902 with 127 named goals expected   |
+| **CI enforcement**     | Yes — 3789/3902 with 113 named goals expected   |
 | **MC/DC coverage**     | 91.2% (62/68 condition outcomes — see MCDC-004) |
 | **Line coverage**      | 100% (74/74)                                    |
 | **CI artifact**        | `wp-proof-pool` (full per-goal breakdown)       |
@@ -1636,30 +1650,30 @@ remaining 9 (`pool_init`, `pool_alloc`, `pool_alloc_zero`, `pool_get`,
 | Terminating    | 77               | (structural)      |
 | Unreachable    | 80               | (structural)      |
 | Qed (internal) | 3201             | 0.67ms–63ms       |
-| Alt-Ergo 2.6.3 | 396              | 16ms–908ms        |
-| CVC5 1.2.1     | 2                | 81ms              |
-| Z3 4.15.2      | 19               | 13ms–1s           |
-| Timeout        | 123              | >120s             |
-| Unknown        | 4                | (solver gave up)  |
-| **Total**      | **3775 / 3902**  |                   |
+| Alt-Ergo 2.6.3 | 395              | 16ms–908ms        |
+| CVC5 1.2.1     | 10               | 81ms              |
+| Z3 4.15.2      | 26               | 13ms–1s           |
+| Timeout        | 110              | >120s             |
+| Unknown        | 3                | (solver gave up)  |
+| **Total**      | **3789 / 3902**  |                   |
 
 The proved total breaks down as 77 Terminating + 80 Unreachable (structural)
-+ 3201 Qed + 396 Alt-Ergo + 2 CVC5 + 19 Z3 = 3775. CVC5's 2 closures confirm
++ 3201 Qed + 395 Alt-Ergo + 10 CVC5 + 26 Z3 = 3789. CVC5's 10 closures confirm
 the triple-prover claim holds for pool.h: those goals were closed by neither
 Alt-Ergo nor Z3. The full per-goal breakdown is recorded in the `wp-proof-pool`
 CI artifact.
 
-The CI wrapper sums Timeout + Unknown + Failed (123 + 4 + 0 = 127) because WP
+The CI wrapper sums Timeout + Unknown + Failed (110 + 3 + 0 = 113) because WP
 may reclassify the same goal between Timeout and Unknown across runs depending
 on solver heuristics; what matters is that the goal is not proved.
 
-### Timeout goals (127)
+### Timeout goals (113)
 
-All 127 are documented as triple-prover-resistant. They split into 103
+All 113 are documented as triple-prover-resistant. They split into 89
 inherited from substrate and 24 pool.h-own.
 
-The **103 inherited** goals are byte-identical to arena.h's full residual
-surface (VERIFY-009's 57 inherited from substrate + 46 arena.h-own). pool.h is
+The **89 inherited** goals are byte-identical to arena.h's full residual
+surface (VERIFY-009's 43 inherited from substrate + 46 arena.h-own). pool.h is
 the first header to include arena.h in WP scope, so arena.h's own residuals
 re-emerge here unchanged alongside the deeper substrate — every inherited goal
 name matches an already-documented goal from VERIFY-002, VERIFY-006,
@@ -1793,10 +1807,10 @@ frama-c -wp -wp-rte \
   core/pool.h
 ```
 
-Expected output: `Proved goals: 3775 / 3902` with 127 unproved goals (123
-timeouts + 4 unknown). pool.h is the first header whose WP run processes a
+Expected output: `Proved goals: 3789 / 3902` with 113 unproved goals (110
+timeouts + 3 unknown). pool.h is the first header whose WP run processes a
 two-hop transitive include (pool.h → arena.h → memory.h → ptr/slice/checked/
-contract); the 3902 reflects the full translation unit. The 103 inherited
+contract); the 3902 reflects the full translation unit. The 89 inherited
 goals are byte-identical to arena.h's full residual surface (see VERIFY-010's
 inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 / 2c (5) / 2d (8).
@@ -1809,29 +1823,31 @@ inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
-| **Status**             | Verified (report-only; enforcement deferred)    |
+| **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | c9172fc (Canon-C CI #992)                       |
 | **Functions**          | 12 of 12 non-macro functions annotated          |
-| **Proof obligations**  | 3517 / 3643 discharged automatically (96.54%)   |
-| **Unproved**           | 126 (all documented under VERIFY-011)           |
+| **Proof obligations**  | 3531 / 3643 discharged automatically (96.92%)   |
+| **Unproved**           | 112 (all documented under VERIFY-011)           |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | REPORT-ONLY — deferred pending count stability (see VERIFY-011) |
+| **CI enforcement**     | Yes — 3531/3643 with 112 named goals expected   |
 | **MC/DC coverage**     | 95.5% (21/22 condition outcomes — see MCDC-005) |
 | **Line coverage**      | 100% (45/45)                                    |
 | **CI artifact**        | `wp-proof-region` (full per-goal breakdown)     |
 
 ### Enforcement status
 
-region.h's WP run is enforced **report-only**: the `frama-c-region` CI
-step measures and prints the full residual list but does not fail the
-build. This baseline is from the first observed completion of the
-120s/`-wp-split` run. The step flips to exact-count enforcement once the
-126 count and the 23 own goal names hold across 2-3 further runs — 19 of
-the 23 own residuals are `-wp-split` fragments of region_end near the
-120s boundary, the class most prone to Timeout/Proved flicker under
-runner load. See VERIFY-011 for the full rationale.
+region.h's WP run is **enforced** (as of CI #1022): the `frama-c-region`
+CI step fails the build on any deviation from 3531/3643 proved or 112
+unproved, and additionally roll-calls all 23 own goals plus a
+representative inherited sample by name. It was promoted from report-only
+once the residual set proved name-stable across the VERIFY-012
+initialization closures: those 14 goals left the inherited surface (126 →
+112) without disturbing the 23 region-own goals, and the 19 region_end
+`-wp-split` fragments near the 120s boundary all reproduce by name. The
+job runs ~1h40m in its own isolated runner with `timeout-minutes: 350`
+headroom. See VERIFY-011 for the full rationale.
 
 ### Function inventory
 
@@ -1893,19 +1909,19 @@ plus the 3 assertion functions). The remaining 5 (`region_begin`,
 | Terminating    | 80               | (structural)      |
 | Unreachable    | 83               | (structural)      |
 | Qed (internal) | 2988             | 0.62ms–35ms       |
-| Alt-Ergo 2.6.3 | 350              | 17ms–342ms        |
-| CVC5 1.2.1     | 4                | 81ms–278ms        |
-| Z3 4.15.2      | 12               | 15ms–76ms         |
-| Timeout        | 123              | >120s             |
-| Unknown        | 3                | (solver gave up)  |
-| **Total**      | **3517 / 3643**  |                   |
+| Alt-Ergo 2.6.3 | 352              | 16ms–295ms        |
+| CVC5 1.2.1     | 9                | 74ms–88ms         |
+| Z3 4.15.2      | 19               | 13ms–61ms         |
+| Timeout        | 107              | >120s             |
+| Unknown        | 5                | (solver gave up)  |
+| **Total**      | **3531 / 3643**  |                   |
 
-CVC5's 4 closures confirm the triple-prover claim holds for region.h.
-The CI wrapper sums Timeout + Unknown + Failed (123 + 3 + 0 = 126).
+CVC5's 9 closures confirm the triple-prover claim holds for region.h.
+The CI wrapper sums Timeout + Unknown + Failed (107 + 5 + 0 = 112).
 
-### Unproved goals (126)
+### Unproved goals (112)
 
-103 inherited from substrate (byte-identical to arena.h's full residual
+89 inherited from substrate (byte-identical to arena.h's full residual
 surface) + 23 region.h-own in two categories: 19 region_end
 opaque-hook-dispatch residuals (category 1) and 4 region_invariant
 re-establishment residuals on the trivial mutators (category 2). Full
@@ -1950,9 +1966,9 @@ frama-c -wp -wp-rte \
   core/region.h
 ```
 
-Expected output: `Proved goals: 3517 / 3643` with 126 unproved goals
-(123 timeouts + 3 unknown). region.h's WP run processes a two-hop
-transitive include (region.h → arena.h → memory.h → ...); the 103
+Expected output: `Proved goals: 3531 / 3643` with 112 unproved goals
+(107 timeouts + 5 unknown). region.h's WP run processes a two-hop
+transitive include (region.h → arena.h → memory.h → ...); the 89
 inherited goals are byte-identical to arena.h's full residual surface;
 the 23 own goals split across category 1 (19) / category 2 (4).
 
@@ -1973,12 +1989,12 @@ different class of goal well:
   involving arrays and quantifiers.
 - **CVC5 1.2.1** — contributes additional proofs on goals where
   Alt-Ergo and Z3 time out. Observed contributions: 3 goals on
-  checked.h, 3 goals on ptr.h, 2 goals on memory.h, 3 goals on
-  arena.h, 2 goals on pool.h, 4 on region.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
+  checked.h, 3 goals on ptr.h, 5 goals on memory.h, 3 goals on
+  arena.h, 10 goals on pool.h, 9 on region.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
 
 The practical consequence: **every remaining unproved goal (2 on checked.h, 
-15 on bits.h, 10 on ptr.h, 23 on slice.h, 57 on memory.h, 103 on arena.h, 
-127 on pool.h, 126 on region.h) is demonstrated triple-prover-resistant**. This is a
+15 on bits.h, 10 on ptr.h, 15 on slice.h, 43 on memory.h, 89 on arena.h, 
+113 on pool.h, 112 on region.h) is demonstrated triple-prover-resistant**. This is a
 stronger certification-evidence statement than dual-prover
 resistance — the goals are genuinely limited by WP's encoding,
 integer theory, or stdlib feature gaps, not by prover strength.
@@ -2015,11 +2031,11 @@ the complete installation and registration procedure.
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| slice.h      | ✅ Verified       | 367/390   | 23 documented timeouts (VERIFY-007); MCDC-002 closed                   |
-| memory.h     | ✅ Verified       | 2805/2862 | 57 documented timeouts (VERIFY-008); 31 inherited + 26 own             |
-| arena.h      | ✅ Verified       | 3369/3472 | 103 documented timeouts (VERIFY-009); 57 inherited + 46 own; MCDC-003 |
-| pool.h       | ✅ Verified       | 3775/3902 | 127 documented timeouts (VERIFY-010); 103 inherited + 24 own; MCDC-004 |
-| region.h     | ✅ Verified       | 3517/3643 | 126 documented timeouts (VERIFY-011, report-only); 103 inherited + 23 own; MCDC-005 |
+| slice.h      | ✅ Verified       | 375/390   | 15 documented timeouts (VERIFY-007/-012); MCDC-002 closed              |
+| memory.h     | ✅ Verified       | 2819/2862 | 43 documented timeouts (VERIFY-008/-012); 23 inherited + 20 own        |
+| arena.h      | ✅ Verified       | 3383/3472 | 89 documented timeouts (VERIFY-009/-012); 43 inherited + 46 own; MCDC-003 |
+| pool.h       | ✅ Verified       | 3789/3902 | 113 documented timeouts (VERIFY-010/-012); 89 inherited + 24 own; MCDC-004 |
+| region.h     | ✅ Verified       | 3531/3643 | 112 documented timeouts (VERIFY-011/-012); 89 inherited + 23 own; MCDC-005 |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
