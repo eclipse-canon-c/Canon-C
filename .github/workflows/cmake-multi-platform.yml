@@ -17,9 +17,9 @@ on:
 #                     PER HEADER (frama-c-checked, -bits, -compare, -ptr,
 #                     -slice, -memory, -arena, -pool, -region), all running
 #                     in parallel and sharing the composite setup action at
-#                     .github/actions/framac-setup. checked..pool are ENFORCED
-#                     (hard proved/unproved baselines); region is REPORT-ONLY
-#                     (120s/split, isolated, never fails the build).
+#                     .github/actions/framac-setup. All nine are ENFORCED
+#                     (hard proved/unproved baselines); region runs 120s/split
+#                     in its own isolated job (long run, ~1h40m, but enforced).
 #                     Additional headers are added as a new job each as they
 #                     are annotated.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
@@ -409,8 +409,8 @@ jobs:
   #   against the same baseline regardless of which job hosts it.
   #
   #   ENFORCED (hard proved/unproved baselines): checked, bits, compare, ptr,
-  #   slice, memory, arena, pool. REPORT-ONLY: region (120s/split, isolated,
-  #   never fails the build; transcribe to an enforced step once stable).
+  #   slice, memory, arena, pool, region. region runs 120s/split in its own
+  #   isolated job (long run, ~1h40m) but is enforced like the rest.
   #
   #   Eva is intentionally NOT run on these headers: Eva needs an entry point
   #   to anchor abstract interpretation, and these are header-only modules of
@@ -786,8 +786,11 @@ jobs:
 
       - name: "WP: core/slice.h"
         # slice.h — Typed+Cast. Expected: 375 / 390 proved, exactly 15
-        # unproved (VERIFY-007): memcmp call-site preconditions (20),
-        # strlen valid_string (1), transitive contract.h handler (2).
+        # unproved (VERIFY-007): memcmp call-site valid/danglingness
+        # preconditions (12), strlen valid_string (1), transitive
+        # contract.h handler (2). The 8 initialization preconditions this
+        # formerly recorded were closed by explicit \initialized requires
+        # (VERIFY-012).
         # Also enforces the MCDC-002 closure (4/4 !ptr defensive branches
         # discharged unreachable). Any deviation is a regression.
         run: |
@@ -1447,25 +1450,21 @@ jobs:
           path: wp_pool_output.txt
 
   # -------------------------------------------------------------------------
-  # region.h — REPORT-ONLY, 120s / -wp-split, in its own isolated job.
+  # region.h — ENFORCED, 120s / -wp-split, in its own isolated job.
   #
-  # Changed from the previous 30s/no-split report-only step: in its own job
-  # region gets a fresh 6h budget instead of the leftover at the tail of the
-  # old serial job, which is what makes 120s/split feasible to attempt.
+  # In its own job region gets a fresh 6h budget instead of the leftover at
+  # the tail of the old serial job, which is what makes 120s/split feasible.
+  # The run is long (~1h40m observed) because -wp-split roughly doubles the
+  # goal count and region_end's opaque h->fn hook is modelled as potentially
+  # recursive, minting terminates/decreases/_partN goals the splitter
+  # multiplies — but it completes, and `timeout-minutes: 350` still cancels
+  # cleanly at 5h50m (before GitHub's 6h hard kill) should a future change
+  # blow the budget, leaving a partial `tee` output worth inspecting.
   #
-  # WARNING (honest): 120s/split has NEVER been observed to finish. -wp-split
-  # roughly doubles the goal count, and region_end's opaque h->fn hook is
-  # modelled as potentially recursive, minting terminates/decreases/_partN
-  # goals the splitter multiplies. Only 30s/no-split has ever completed.
-  # Isolated it has a real chance; if it doesn't fit, `timeout-minutes: 350`
-  # cancels cleanly at 5h50m (before GitHub's 6h hard kill, which would lose
-  # the artifact), and `tee` leaves a partial output worth inspecting.
-  # Either way this is report-only and isolated — nothing else is affected.
-  #
-  # If 350 min turns out to be where it lands, dial back to no-split or a
-  # lower timeout. Once a config produces a stable residual list across a few
-  # runs, transcribe it into an enforced step + VERIFY-011 (use the 120s
-  # numbers, not the old 30s ones).
+  # Promoted from report-only to enforced as of CI #1022 (VERIFY-011/-012):
+  # 3531/3643 proved, exactly 112 unproved (89 inherited + 23 region-own).
+  # The residual set is name-stable — VERIFY-012's 14 initialization closures
+  # left the inherited surface (126 -> 112) without touching the 23 own goals.
   # -------------------------------------------------------------------------
   frama-c-region:
     needs: build
@@ -1475,7 +1474,17 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
-      - name: "WP: core/region.h (120s / split, REPORT-ONLY)"
+      - name: "WP: core/region.h"
+        # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
+        # Expected: 3531 / 3643 proved, exactly 112 unproved (VERIFY-011):
+        # 89 inherited (arena.h's full surface, three-hop transitive) + 23
+        # region.h-own (region_begin / region_end loop+terminates+assigns /
+        # attach_arena / register / set_parent). Any deviation is a regression.
+        #
+        # Promoted from report-only to enforced as of CI #1022 (VERIFY-012):
+        # the residual set is name-stable across runs — the 14 initialization
+        # goals that VERIFY-012 closed upstream simply left the inherited
+        # surface (126 -> 112), the 23 region-own goals are unchanged.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1497,7 +1506,6 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (region.h) exit status: ${WP_EXIT}"
-          echo "  REPORT-ONLY — this step never fails the build"
           echo "==============================================="
 
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_region_output.txt || true)
@@ -1505,51 +1513,110 @@ jobs:
 
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
-            echo "WARNING: WP produced no verification summary."
-            echo "         frama-c likely aborted before WP ran — probably an"
-            echo "         ACSL syntax error in region.h. First diagnostics:"
-            grep -E "^\[(kernel|wp)" wp_region_output.txt | head -15 || true
-            echo "         (Step is report-only; not failing the build.)"
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in region.h. Check the WP"
+            echo "      output above for [kernel:annot-error] or"
+            echo "      [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_region_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
           fi
 
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_region_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_region_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_region_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          EXPECTED_UNPROVED=112
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved (measured): ${UNPROVED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (region.h section) and"
+            echo "      docs/deviations.md (VERIFY-011) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt || true
+            exit 1
+          fi
 
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved (measured): ${PROVED_COUNT}"
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "3531 / 3643" ]; then
+            echo "WARNING: proved count changed from expected 3531 / 3643."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-011 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
 
-          echo ""
-          echo "  --- All unproved goals (verbatim, for baseline authoring) ---"
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt || \
-            echo "  (none — region.h fully proved, or WP did not run)"
-          echo "  -------------------------------------------------------------"
+          CHECKS=(
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_fits_ensures_part5"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires"
+            "typed_cast_region_begin_ensures_5"
+            "typed_cast_region_end_terminates_part2"
+            "typed_cast_region_end_terminates_part3"
+            "typed_cast_region_end_ensures_2_part1"
+            "typed_cast_region_end_ensures_4_part1"
+            "typed_cast_region_end_exits_part1"
+            "typed_cast_region_end_loop_invariant_preserved_part1"
+            "typed_cast_region_end_assert_rte_function_pointer"
+            "typed_cast_region_end_assert_rte_mem_access_6"
+            "typed_cast_region_end_assert_rte_mem_access_7"
+            "typed_cast_region_end_loop_assigns_part2"
+            "typed_cast_region_end_loop_assigns_part4"
+            "typed_cast_region_end_loop_assigns_part5"
+            "typed_cast_region_end_loop_assigns_part6"
+            "typed_cast_region_end_loop_assigns_part7"
+            "typed_cast_region_end_loop_assigns_part8"
+            "typed_cast_region_end_assigns_exit_part5"
+            "typed_cast_region_end_assigns_normal_part5"
+            "typed_cast_region_end_loop_variant_decrease_part1"
+            "typed_cast_region_end_call_arena_reset_requires"
+            "typed_cast_region_attach_arena_ensures_2"
+            "typed_cast_region_register_ensures_part2"
+            "typed_cast_region_set_parent_ensures_2"
+          )
 
-          echo ""
-          echo "  --- region.h-own residual candidates (region_* / region_end / lifetime_*) ---"
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt | \
-            grep -E "region|lifetime" || \
-            echo "  (none matched — all residuals appear to be inherited substrate goals)"
-          echo "  ----------------------------------------------------------------------------"
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_region_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
 
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_region_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
-            echo "  WARNING: CVC5 absent from WP output — triple-prover setup"
-            echo "           may have degraded to dual-prover."
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step."
           fi
 
-          echo ""
-          echo "PASS (report-only): region.h WP measured. Transcribe the"
-          echo "      counts above into an enforced step + VERIFY-011 once"
-          echo "      stable across a few runs."
+          echo "PASS: region.h verified — 3531/3643 proved, 112 documented"
+          echo "      residuals all observed (VERIFY-011): 89 inherited +"
+          echo "      23 region.h-own. Composable verification holds across a"
+          echo "      three-hop transitive include: zero new substrate residuals."
           echo "==============================================="
-          exit 0
 
       - name: Upload WP proof output (region.h)
         if: always()
