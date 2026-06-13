@@ -298,24 +298,27 @@ context for any future attempt to strengthen ptr.h's contracts.
 |----------------|-------|
 | **ID**         | VERIFY-007 |
 | **Date**       | 2026-05-02 |
-| **Scope**      | slice.h — 23 goals across 3 categories |
+| **Scope**      | slice.h — 15 goals across 3 categories |
 | **Category**   | Formal verification completeness |
 
-**Description**: 23 of 390 proof obligations (5.9%) are not discharged
+**Description**: 15 of 390 proof obligations (3.8%) are not discharged
 by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3
 4.15.2 + CVC5 1.2.1) with a 120-second timeout and `-wp-model
-Typed+Cast`. All 23 are triple-prover-resistant. The goals fall into
+Typed+Cast`. All 15 are triple-prover-resistant. The goals fall into
 three categories:
 
-1. **memcmp call-site preconditions** (20): Six per `bytes_equal`
-   and `str_equal`, four per `str_starts_with` and `str_ends_with`.
+1. **memcmp call-site preconditions** (12): Four per `bytes_equal`
+   and `str_equal`, two per `str_starts_with` and `str_ends_with`.
    Goal-name pattern: `typed_cast_<func>_call_memcmp_requires_<X>`
-   where `<X>` ranges over `valid_s1`, `valid_s2`, `initialization_s1`,
-   `initialization_s2`, `danglingness_s1`, `danglingness_s2`. The
-   `valid_*` obligations appear only on the bytes_t variants because
-   the str_t variants close them through `str_valid` predicate
-   reasoning; the `initialization_*` and `danglingness_*` obligations
-   appear on all four equality functions.
+   where `<X>` ranges over `valid_s1`, `valid_s2`, `danglingness_s1`,
+   `danglingness_s2`. The `valid_*` obligations appear only on the
+   bytes_t variants because the str_t variants close them through
+   `str_valid` predicate reasoning; the `danglingness_*` obligations
+   appear on all four equality functions. The eight `initialization_*`
+   obligations formerly in this category were closed in VERIFY-012 by
+   stating `\initialized` as an explicit precondition on each equality
+   function — WP discharges initialization once the contract asserts
+   it, even though `\dangling` remains unimplemented in Frama-C 29.
 
 2. **strlen valid_string precondition** (1):
    `typed_cast_str_from_cstr_call_strlen_requires_valid_string_s` —
@@ -348,10 +351,13 @@ ACSL's `memcmp` contract requires the caller to establish that both
 buffer ranges are fully valid, fully initialized, and non-dangling.
 slice.h's `bytes_valid_write` and `str_valid` predicates establish
 validity, but WP cannot discharge the `initialization` and
-`danglingness` obligations because the underlying logic is, per the
-WP warning, not yet implemented in Frama-C 29. Strengthening the
-slice.h predicates would not close these goals; the verifier itself
-cannot process the obligations.
+`danglingness` obligation because the underlying `\dangling` logic is,
+per the WP warning, not yet implemented in Frama-C 29. Strengthening
+the slice.h predicates does not close the danglingness goals; the
+verifier itself cannot process them. (The `initialization` obligation,
+by contrast, WP *can* discharge once the contract states `\initialized`
+as a precondition — that is precisely how VERIFY-012 closed the eight
+former `initialization_*` goals.)
 
 Category 2 (strlen) is a deliberate spec-strength tradeoff. Adding
 `requires valid_read_string(cstr)` would close the residual but
@@ -383,7 +389,7 @@ and length-pairing properties are proved, but `\result.len ==
 strlen(cstr)` is not, because asserting it requires the strlen logic
 function which is the same residual as category 2.
 
-**Mitigation**: CI enforces exactly 23 unproved goals with the named
+**Mitigation**: CI enforces exactly 15 unproved goals with the named
 goal pattern. Any additional unproved goal or missing expected goal
 is a regression and fails the build. slice.h achieves 93.1% MC/DC
 coverage (54/58 condition outcomes) — the achievable ceiling under
@@ -413,20 +419,20 @@ the MCDC-002 status update below for the formal closure.
 | **ID**         | VERIFY-008 |
 | **Date**       | 2026-05-09 |
 | **Baseline commit** | b3e668b (Canon-C CI #841) |
-| **Scope**      | memory.h — 57 goals across 7 categories (3 own + 4 inherited) |
+| **Scope**      | memory.h — 43 goals across 7 categories (3 own + 4 inherited) |
 | **Category**   | Formal verification completeness |
 
-**Description**: 57 of 2862 proof obligations (2.0%) are not discharged
+**Description**: 43 of 2862 proof obligations (1.5%) are not discharged
 by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3
 4.15.2 + CVC5 1.2.1) with a 120-second timeout and `-wp-model
-Typed+Cast`. All 57 are triple-prover-resistant. The goals split
-cleanly into two top-level groups: **31 inherited from already-verified
+Typed+Cast`. All 43 are triple-prover-resistant. The goals split
+cleanly into two top-level groups: **23 inherited from already-verified
 substrate headers** (re-emerging because memory.h includes those
-headers transitively) and **26 memory.h-own** residuals in three
+headers transitively) and **20 memory.h-own** residuals in three
 categories.
 
 This is the first Canon-C verification round where inherited
-residuals exceed own residuals. The 31:26 ratio is a quantitative
+residuals exceed own residuals. The 23:20 ratio is a quantitative
 expression of the composable-verification thesis: substrate residuals
 propagate without amplification across composition layers, so a layer
 that builds on five already-verified headers inherits their residual
@@ -434,7 +440,7 @@ fingerprints. memory.h does not introduce 31 new defects — it is the
 first place where every previously-documented residual category
 becomes simultaneously visible.
 
-### Inherited residuals (31)
+### Inherited residuals (23)
 
 These goals are not memory.h defects. They re-emerge in the memory.h
 proof run because memory.h includes ptr.h, checked.h, contract.h, and
@@ -453,13 +459,14 @@ the count column shows how many goals appear in the memory.h run.
 |   |                  |       | `ptr_align_padding_nonnull_ensures_part2`                          |
 | 4 | VERIFY-006 cat 4 | 2     | `typed_cast_contract_default_handler_terminates`,                  |
 |   |                  |       | `contract_default_handler_loop_invariant_established`              |
-| 5 | VERIFY-007 cat 1 | 20    | `typed_cast_bytes_equal_call_memcmp_requires_<aspect>` (6 goals),  |
-|   |                  |       | `str_equal_call_memcmp_requires_<aspect>` (6),                     |
-|   |                  |       | `str_starts_with_call_memcmp_requires_<aspect>` (4),               |
-|   |                  |       | `str_ends_with_call_memcmp_requires_<aspect>` (4)                  |
+| 5 | VERIFY-007 cat 1 | 12    | `typed_cast_bytes_equal_call_memcmp_requires_<aspect>` (4 goals),  |
+|   |                  |       | `str_equal_call_memcmp_requires_<aspect>` (4),                     |
+|   |                  |       | `str_starts_with_call_memcmp_requires_<aspect>` (2),               |
+|   |                  |       | `str_ends_with_call_memcmp_requires_<aspect>` (2); the 8           |
+|   |                  |       | `initialization_*` goals were closed in VERIFY-012                 |
 | 6 | VERIFY-007 cat 2 | 1     | `typed_cast_str_from_cstr_call_strlen_requires_valid_string_s`     |
 
-**Inherited subtotal: 31 goals.** These are the same goals counted in
+**Inherited subtotal: 23 goals.** These are the same goals counted in
 the originating deviations; they are not new memory.h residuals. The
 composable-verification claim is the empirical observation that this
 count is byte-identical between memory.h round 2 (before
@@ -468,11 +475,14 @@ contract-shape fixes) and memory.h round 3 (after fixes) — the round
 confirming that hoisting non-overlap preconditions does not perturb
 the substrate's residual surface.
 
-### memory.h-own residuals (26)
+### memory.h-own residuals (20)
 
-Three categories, each rooted in a documented WP feature gap. None
-are fixable by strengthening memory.h's contracts — the verifier
-itself cannot process the obligations.
+Three categories, each rooted in a documented WP feature gap. The
+initialization sub-class of category 3 was closed in VERIFY-012 by
+stating `\initialized` as an explicit precondition (WP discharges
+initialization once the contract asserts it); the remaining 20 are
+limited by the `\dangling`/`\fresh`/`\freeable` feature gaps the
+verifier itself cannot process.
 
 #### Category 1: \fresh / \freeable allocation reasoning (5)
 
@@ -614,22 +624,21 @@ underlying primitives (`align_up`, `is_power_of_two`,
 `ptr_is_aligned`) are tested independently in
 `test/core/primitives/ptr_test.c`.
 
-#### Category 3: memcmp call-site inheritance (12)
+#### Category 3: memcmp call-site danglingness (6)
 
 | #  | Goal                                                                       |
 |----|-----------------------------------------------------------------------------|
-| 1  | `typed_cast_mem_compare_call_memcmp_requires_initialization_s1`             |
-| 2  | `typed_cast_mem_compare_call_memcmp_requires_initialization_s2`             |
-| 3  | `typed_cast_mem_compare_call_memcmp_requires_danglingness_s1`               |
-| 4  | `typed_cast_mem_compare_call_memcmp_requires_danglingness_s2`               |
-| 5  | `typed_cast_mem_equal_call_memcmp_requires_initialization_s1`               |
-| 6  | `typed_cast_mem_equal_call_memcmp_requires_initialization_s2`               |
-| 7  | `typed_cast_mem_equal_call_memcmp_requires_danglingness_s1`                 |
-| 8  | `typed_cast_mem_equal_call_memcmp_requires_danglingness_s2`                 |
-| 9  | `typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s1`         |
-| 10 | `typed_cast_mem_equal_bytes_call_memcmp_requires_initialization_s2`         |
-| 11 | `typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1`           |
-| 12 | `typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2`           |
+| 1  | `typed_cast_mem_compare_call_memcmp_requires_danglingness_s1`               |
+| 2  | `typed_cast_mem_compare_call_memcmp_requires_danglingness_s2`               |
+| 3  | `typed_cast_mem_equal_call_memcmp_requires_danglingness_s1`                 |
+| 4  | `typed_cast_mem_equal_call_memcmp_requires_danglingness_s2`                 |
+| 5  | `typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1`           |
+| 6  | `typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2`           |
+
+The six `initialization_*` goals formerly in this category (one
+`_s1`/`_s2` pair per function) were closed in VERIFY-012 by stating
+`\initialized` as an explicit precondition on `mem_compare`,
+`mem_equal`, and `mem_equal_bytes`.
 
 **Functions affected**: `mem_compare`, `mem_equal`, `mem_equal_bytes`.
 
@@ -638,8 +647,9 @@ contract requires the caller to establish that both buffer ranges
 are fully valid, fully initialized, and non-dangling. memory.h's
 `mem_valid_read` predicate establishes validity, but the
 `initialization` and `danglingness` obligations cannot be discharged
-because the underlying logic — quoted from WP's own warning during
-the slice.h proof run — is "not yet implemented" in Frama-C 29:
+because the underlying `\dangling` logic — quoted from WP's own
+warning during the slice.h proof run — is "not yet implemented" in
+Frama-C 29:
 
 ```
 [wp] FRAMAC_SHARE/libc/string.h:38: Warning:
@@ -649,26 +659,25 @@ the slice.h proof run — is "not yet implemented" in Frama-C 29:
 
 memory.h directly calls `memcmp` from `mem_compare`, `mem_equal`,
 and `mem_equal_bytes`, so the same residual class re-emerges at
-memory.h's call sites. Note the count: 4 residuals per function ×
-3 functions = 12. This is fewer per function than slice.h's 6
-(for `bytes_equal` and `str_equal`) because the `valid_*` aspect
-discharges through `mem_valid_read` even when the
-`initialization`/`danglingness` aspects do not — memory.h's
-predicate is shaped slightly differently than slice.h's,
-specifically tuned to the call-site requirements.
+memory.h's call sites. Note the count: 2 residuals per function ×
+3 functions = 6, danglingness only. The `initialization_*` pair on
+each function was closed in VERIFY-012 (WP discharges initialization
+once `\initialized` is stated as a precondition); the `valid_*` aspect
+discharges through `mem_valid_read`, leaving only the `\dangling`
+aspect, which Frama-C 29 cannot process.
 
-**Manual proof argument**: For `mem_compare_call_memcmp_requires_initialization_s1`,
-the obligation is "before calling `memcmp(a, b, size)`, every byte
-in `[a, a + size)` is initialized". memory.h's contract requires
-`mem_valid_read((void *)a, (integer)size)` which establishes that
-the byte range is readable in the program memory state. C99's
-read-only semantics for `memcmp` accept arbitrary readable bytes —
-the function does not require the bytes to be initialized in any
-particular sense; uninitialized bytes are read as
-implementation-defined values that the function compares
-byte-by-byte. The ACSL contract is stricter than C99 requires; the
-unproved obligation reflects this strictness, not a real soundness
-gap.
+**Manual proof argument**: For `mem_compare_call_memcmp_requires_danglingness_s1`,
+the obligation is "before calling `memcmp(a, b, size)`, the pointer
+`a` is non-dangling over `[a, a + size)`". memory.h's contract
+requires `mem_valid_read((void *)a, (integer)size)`, which establishes
+the byte range is readable in the program memory state — a property
+that entails non-danglingness for any caller that can legally form the
+range. WP cannot discharge the `\dangling` obligation because the
+`\dangling` logic is, per the WP warning, not yet implemented in
+Frama-C 29; the unproved obligation reflects that verifier gap, not a
+real soundness gap. (The companion `initialization_s1/s2` obligations
+were closed in VERIFY-012 by stating `\initialized` explicitly — WP
+*can* discharge initialization once the contract asserts it.)
 
 **Verification**: 88.3% MC/DC on memory.h overall, with all branches
 in `mem_compare`, `mem_equal`, and `mem_equal_bytes` covered. 90+
@@ -684,19 +693,25 @@ of uninitialized-byte reads in real execution.
 |----------|-------|--------------------|--------------------------------|
 | 2a       | 5     | mem_alloc/free/array_checked | `\fresh`, `\freeable` |
 | 2b       | 9     | mem_align*, mem_is_aligned, mem_get_alignment | bitwise-alignment integer theory |
-| 2c       | 12    | mem_compare/equal/equal_bytes | `\dangling`, `\initialization` |
-| **Total**| **26**|                              |                                |
+| 2c       | 6     | mem_compare/equal/equal_bytes | `\dangling` (initialization closed, VERIFY-012) |
+| **Total**| **20**|                              |                                |
 
-All 26 residuals would be discharged by improvements to Frama-C's
-allocation-and-danglingness theory or its integer theory. None
-require contract changes from memory.h. Strengthening memory.h's
-predicates would produce no improvement; the verifier itself cannot
-process the obligations.
+All 20 residuals would be discharged by improvements to Frama-C's
+`\dangling`/`\fresh`/`\freeable` theory or its integer theory.
+**Correction (VERIFY-012, supersedes this entry's original claim):** an
+earlier version of this section stated that "strengthening memory.h's
+predicates would produce no improvement." That is now falsified.
+Stating `\initialized` as an explicit precondition closed 6 memory.h
+goals here (and 8 in slice.h) with no executable change — WP discharges
+initialization once the contract asserts it. What remains genuinely
+WP-blocked is `\dangling`/`\fresh`/`\freeable`, which Frama-C 29 does
+not implement (confirmed by A. Blanchard, CEA). Those are not closable
+by contract strengthening; initialization was.
 
 ### Mitigation
 
-CI enforces exactly 57 unproved goals with the named goal patterns
-covering all 31 inherited and all 26 memory.h-own residuals. Any
+CI enforces exactly 43 unproved goals with the named goal patterns
+covering all 23 inherited and all 20 memory.h-own residuals. Any
 additional unproved goal or missing expected goal is a regression
 and fails the build. The exact-count enforcement with named
 patterns means a renamed goal (silent regression: a contract was
@@ -716,9 +731,9 @@ removes. This is the same coverage methodology documented in
 MCDC-001.
 
 memory.h is the first Canon-C header to demonstrate the composable-
-verification thesis quantitatively. The 31 inherited residuals
+verification thesis quantitatively. The 23 inherited residuals
 propagated unchanged from the substrate (ptr.h's 8, checked.h's 2,
-slice.h's 21 — all visible in memory.h's 2862-goal run). The 26
+slice.h's 13 — all visible in memory.h's 2862-goal run). The 20
 memory.h-own residuals fall into three categories that are each
 rooted in a Frama-C feature gap, not in memory.h's design, and
 each category has a known-good mitigation strategy (allocation
@@ -728,10 +743,11 @@ The composable-verification claim — that substrate residuals
 propagate without amplification — is now empirically supported
 by two data points: ptr.h → slice.h (where slice.h inherited
 ptr.h's 2 contract-handler residuals unchanged) and ptr.h/checked.h/
-slice.h → memory.h (where memory.h inherited 31 substrate residuals
-unchanged across two proof rounds). The arena.h verification (see
+slice.h → memory.h (where memory.h inherited 23 substrate residuals
+unchanged across two proof rounds; 31 before VERIFY-012's upstream
+closures). The arena.h verification (see
 VERIFY-009, shipped at CI #962) provides the third data point:
-arena.h inherits memory.h's full 57-goal residual surface
+arena.h inherits memory.h's full 43-goal residual surface
 byte-identically (zero new substrate residuals introduced), confirming
 that the propagation-without-amplification property extends through
 one more composition layer.
@@ -741,7 +757,7 @@ one more composition layer.
 - Inherited residuals: VERIFY-002 (checked.h), VERIFY-006 (ptr.h),
   VERIFY-007 (slice.h).
 - Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
-- Downstream confirmation: VERIFY-009 (arena.h inherits all 57
+- Downstream confirmation: VERIFY-009 (arena.h inherits all 43
   memory.h residuals unchanged).
 - Composable verification thesis: see README, "Composable
   verification" section.
@@ -759,34 +775,34 @@ one more composition layer.
 | **ID**         | VERIFY-009 |
 | **Date**       | 2026-05-24 |
 | **Baseline commit** | f53bddb (Canon-C CI #962) |
-| **Scope**      | arena.h — 103 goals across 8 categories (4 own + 4 inherited groups) |
+| **Scope**      | arena.h — 89 goals across 8 categories (4 own + 4 inherited groups) |
 | **Category**   | Formal verification completeness |
 
-**Description**: 103 of 3472 proof obligations (2.97%) are not
+**Description**: 89 of 3472 proof obligations (2.56%) are not
 discharged by any prover in the triple-prover configuration (Alt-Ergo
 2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a 120-second timeout and
-`-wp-model Typed+Cast`. All 103 are triple-prover-resistant. The goals
-split cleanly into two top-level groups: **57 inherited from
+`-wp-model Typed+Cast`. All 89 are triple-prover-resistant. The goals
+split cleanly into two top-level groups: **43 inherited from
 already-verified substrate headers** (re-emerging because arena.h
 includes memory.h, which transitively pulls in ptr.h, slice.h,
 checked.h, and contract.h) and **46 arena.h-own** residuals in four
 categories.
 
 arena.h extends the composable-verification thesis to a third data
-point. memory.h established it (31 inherited + 26 own); arena.h
-re-confirms it (57 inherited + 46 own). The full 57-goal residual
+point. memory.h established it (23 inherited + 20 own); arena.h
+re-confirms it (43 inherited + 46 own). The full 43-goal residual
 surface from VERIFY-008 re-emerges byte-identically in the arena.h
 proof run — zero new substrate residuals are introduced at the arena.h
 boundary. Every inherited residual matches an already-documented goal
 by name; the wrapper enforces this with per-goal pattern checks.
 
-### Inherited residuals (57)
+### Inherited residuals (43)
 
 These goals are not arena.h defects. They re-emerge in the arena.h
 proof run because arena.h includes memory.h, which transitively
 includes ptr.h, slice.h, checked.h, and contract.h. WP re-emits the
 relevant obligations at the new call sites. The full memory.h residual
-set (VERIFY-008's 31 inherited + 26 own = 57 total) is re-emitted as
+set (VERIFY-008's 23 inherited + 20 own = 43 total) is re-emitted as
 arena.h's inherited surface — arena.h, the first header to include
 memory.h transitively in WP scope, demonstrates that memory.h's
 residuals propagate as a unit just as the headers below it do.
@@ -797,17 +813,17 @@ residuals propagate as a unit just as the headers below it do.
 | 2 | VERIFY-006 cat 2  | 3     | ptr.h align_up/down/padding integer theory                        |
 | 3 | VERIFY-006 cat 3  | 3     | ptr.h ptr_align_* call-chain                                      |
 | 4 | VERIFY-006 cat 4  | 2     | contract.h handler non-termination                                |
-| 5 | VERIFY-007 cat 1  | 20    | slice.h memcmp call-site preconditions (bytes/str equality, etc.) |
+| 5 | VERIFY-007 cat 1  | 12    | slice.h memcmp valid/danglingness (init closed, VERIFY-012)       |
 | 6 | VERIFY-007 cat 2  | 1     | slice.h str_from_cstr strlen valid_string                         |
 | 7 | VERIFY-008 cat 1  | 5     | memory.h \fresh / \freeable (mem_alloc, mem_free, array_checked)  |
 | 8 | VERIFY-008 cat 2  | 9     | memory.h integer theory (mem_align, mem_is_aligned, etc.)         |
-| 9 | VERIFY-008 cat 3  | 12    | memory.h memcmp call-site (mem_compare, mem_equal, equal_bytes)   |
+| 9 | VERIFY-008 cat 3  | 6     | memory.h memcmp danglingness (mem_compare/equal/equal_bytes; init closed, VERIFY-012) |
 
-**Inherited subtotal: 57 goals.** Byte-identical to memory.h's full
+**Inherited subtotal: 43 goals.** Byte-identical to memory.h's full
 residual list. The composable-verification claim, now empirically
 supported at three composition layers (ptr.h → slice.h with 2
-inherited; ptr.h/checked.h/slice.h → memory.h with 31 inherited;
-memory.h+substrate → arena.h with 57 inherited), is that substrate
+inherited; ptr.h/checked.h/slice.h → memory.h with 23 inherited;
+memory.h+substrate → arena.h with 43 inherited), is that substrate
 residuals propagate without amplification: a downstream header's
 inherited count equals the upstream's total, not greater.
 
@@ -1068,8 +1084,8 @@ predicate's readable form was preserved.
 
 ### Mitigation
 
-CI enforces exactly 103 unproved goals with the named goal patterns
-covering all 57 inherited and all 46 arena.h-own residuals. Any
+CI enforces exactly 89 unproved goals with the named goal patterns
+covering all 43 inherited and all 46 arena.h-own residuals. Any
 additional unproved goal or missing expected goal is a regression
 and fails the build. The exact-count enforcement with named patterns
 catches both count regressions (new residual class introduced) and
@@ -1103,13 +1119,14 @@ captured from the arena.
 The composable-verification claim is confirmed at three composition
 layers: ptr.h → slice.h (slice.h inherited 2 of ptr.h's residuals
 unchanged); ptr.h/checked.h/slice.h → memory.h (memory.h inherited
-31 substrate residuals); memory.h+substrate → arena.h (arena.h
-inherited memory.h's full 57-goal residual list byte-identically).
-Each downstream header's inherited count equals the upstream total,
-not greater. arena.h is the first header to demonstrate
-propagation-through-two-composition-layers — memory.h's own 26
-residuals re-emerge as part of arena.h's inherited 57, along with
-memory.h's own 31 inherited (= memory.h's full residual surface).
+23 substrate residuals; 31 before VERIFY-012's upstream closures);
+memory.h+substrate → arena.h (arena.h inherited memory.h's full
+43-goal residual list byte-identically). Each downstream header's
+inherited count equals the upstream total, not greater. arena.h is the
+first header to demonstrate propagation-through-two-composition-layers
+— memory.h's own 20 residuals re-emerge as part of arena.h's inherited
+43, along with memory.h's own 23 inherited (= memory.h's full residual
+surface).
 The thesis is empirically supported at the layer-count that v1.3.0's
 core/ stack reaches.
 
@@ -1141,23 +1158,23 @@ core/ stack reaches.
 | **ID**         | VERIFY-010 |
 | **Date**       | 2026-05-29 |
 | **Baseline commit** | b2644ba (Canon-C CI #972) |
-| **Scope**      | pool.h — 127 goals across 6 categories (4 own + 2 inherited groups) |
+| **Scope**      | pool.h — 113 goals across 6 categories (4 own + 2 inherited groups) |
 | **Category**   | Formal verification completeness |
 
-**Description**: 127 of 3902 proof obligations (3.25%) are not discharged by
+**Description**: 113 of 3902 proof obligations (2.90%) are not discharged by
 any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3 4.15.2 +
-CVC5 1.2.1) with a 120-second timeout and `-wp-model Typed+Cast`. All 127 are
+CVC5 1.2.1) with a 120-second timeout and `-wp-model Typed+Cast`. All 113 are
 triple-prover-resistant. The goals split cleanly into two top-level groups:
-**103 inherited from already-verified substrate headers** (re-emerging because
+**89 inherited from already-verified substrate headers** (re-emerging because
 pool.h includes arena.h, which transitively pulls in memory.h, ptr.h, slice.h,
 checked.h, and contract.h) and **24 pool.h-own** residuals in four categories.
 
 pool.h extends the composable-verification thesis to a fourth data point and
 the first observation across a **two-hop transitive include**. memory.h
-established the thesis (31 inherited + 26 own); arena.h re-confirmed it (57
-inherited + 46 own); pool.h re-confirms it again (103 inherited + 24 own).
-arena.h's entire VERIFY-009 residual surface (57 substrate + 46 arena.h-own =
-103) re-emerges byte-identically in the pool.h proof run — zero new substrate
+established the thesis (23 inherited + 20 own); arena.h re-confirmed it (43
+inherited + 46 own); pool.h re-confirms it again (89 inherited + 24 own).
+arena.h's entire VERIFY-009 residual surface (43 substrate + 46 arena.h-own =
+89) re-emerges byte-identically in the pool.h proof run — zero new substrate
 residuals are introduced at the pool.h boundary. pool.h is a **sibling** of
 arena.h in the include graph sense at the memory.h layer, but a **descendant**
 of arena.h itself (`pool.h` includes `arena.h`), so its inherited surface is
@@ -1165,13 +1182,13 @@ arena.h's *total*, not memory.h's. Every inherited residual matches an
 already-documented goal by name; the CI wrapper enforces this with per-goal
 pattern checks.
 
-### Inherited residuals (103)
+### Inherited residuals (89)
 
 These goals are not pool.h defects. They re-emerge in the pool.h proof run
 because pool.h includes arena.h, which transitively includes memory.h, ptr.h,
 slice.h, checked.h, and contract.h. WP re-emits the relevant obligations at
-the new call sites. The full arena.h residual set (VERIFY-009's 57 inherited +
-46 own = 103 total) is re-emitted as pool.h's inherited surface.
+the new call sites. The full arena.h residual set (VERIFY-009's 43 inherited +
+46 own = 89 total) is re-emitted as pool.h's inherited surface.
 
 | # | Source            | Goals | Notes                                                              |
 |---|-------------------|-------|--------------------------------------------------------------------|
@@ -1179,25 +1196,25 @@ the new call sites. The full arena.h residual set (VERIFY-009's 57 inherited +
 | 2 | VERIFY-006 cat 2  | 3     | ptr.h align_up/down/padding integer theory                         |
 | 3 | VERIFY-006 cat 3  | 3     | ptr.h ptr_align_* call-chain                                       |
 | 4 | VERIFY-006 cat 4  | 2     | contract.h handler non-termination                                 |
-| 5 | VERIFY-007 cat 1  | 20    | slice.h memcmp call-site preconditions (bytes/str equality, etc.)  |
+| 5 | VERIFY-007 cat 1  | 12    | slice.h memcmp valid/danglingness (init closed, VERIFY-012)        |
 | 6 | VERIFY-007 cat 2  | 1     | slice.h str_from_cstr strlen valid_string                          |
 | 7 | VERIFY-008 cat 1  | 5     | memory.h \fresh / \freeable (mem_alloc, mem_free, array_checked)   |
 | 8 | VERIFY-008 cat 2  | 9     | memory.h integer theory (mem_align, mem_is_aligned, etc.)          |
-| 9 | VERIFY-008 cat 3  | 12    | memory.h memcmp call-site (mem_compare, mem_equal, equal_bytes)    |
+| 9 | VERIFY-008 cat 3  | 6     | memory.h memcmp danglingness (mem_compare/equal/equal_bytes; init closed) |
 | 10| VERIFY-009 cat 2a | 8     | arena.h ptr_span call-site (arena_alloc, arena_alloc_aligned)      |
 | 11| VERIFY-009 cat 2b | 26    | arena.h fits/does_not_fit arithmetic chain                         |
 | 12| VERIFY-009 cat 2c | 10    | arena.h zero/try wrapper delegation                                |
 | 13| VERIFY-009 cat 2d | 2     | arena.h arena_free_bytes helper call-site                          |
 
-**Inherited subtotal: 103 goals.** Byte-identical to arena.h's full residual
-list (VERIFY-009's 57 inherited + 46 own). The composable-verification claim,
+**Inherited subtotal: 89 goals.** Byte-identical to arena.h's full residual
+list (VERIFY-009's 43 inherited + 46 own). The composable-verification claim,
 now empirically supported at four composition layers (ptr.h → slice.h with 2
-inherited; ptr.h/checked.h/slice.h → memory.h with 31 inherited;
-memory.h+substrate → arena.h with 57 inherited; arena.h+substrate → pool.h
-with 103 inherited), is that substrate residuals propagate without
+inherited; ptr.h/checked.h/slice.h → memory.h with 23 inherited;
+memory.h+substrate → arena.h with 43 inherited; arena.h+substrate → pool.h
+with 89 inherited), is that substrate residuals propagate without
 amplification: a downstream header's inherited count equals the upstream's
 total, not greater. pool.h is the first header to observe propagation through
-two transitive include hops (pool → arena → memory → ...), and the 103 count
+two transitive include hops (pool → arena → memory → ...), and the 89 count
 confirms the property holds across the deeper graph.
 
 ### pool.h-own residuals (24)
@@ -1418,8 +1435,8 @@ step in the coverage job (see MCDC-004).
 
 ### Mitigation
 
-CI enforces exactly 127 unproved goals with the named goal patterns covering
-all 103 inherited and all 24 pool.h-own residuals. Any additional unproved
+CI enforces exactly 113 unproved goals with the named goal patterns covering
+all 89 inherited and all 24 pool.h-own residuals. Any additional unproved
 goal or missing expected goal is a regression and fails the build. The
 exact-count enforcement with named patterns catches both count regressions
 (new residual class introduced) and rename regressions (a contract weakened in
@@ -1449,10 +1466,10 @@ validity for borrows captured from the pool.
 
 The composable-verification claim is confirmed at a fourth composition layer
 and the first two-hop transitive include: pool.h inherits arena.h's full
-103-goal residual surface byte-identically (zero new substrate residuals
+89-goal residual surface byte-identically (zero new substrate residuals
 introduced), and adds 24 own residuals concentrated at the ptr_elem /
 bytes_from / pool_invariant call sites that pool.h's header comment predicted.
-The 103:24 inherited:own ratio is the most lopsided yet — a direct consequence
+The 89:24 inherited:own ratio is the most lopsided yet — a direct consequence
 of pool.h sitting atop the deepest substrate stack verified to date while
 adding the thinnest own surface (no per-allocation alignment arithmetic).
 
@@ -1485,48 +1502,47 @@ adding the thinnest own surface (no per-allocation alignment arithmetic).
 | **ID**         | VERIFY-011 |
 | **Date**       | 2026-06-06 |
 | **Baseline commit** | c9172fc (Canon-C CI #992) |
-| **Scope**      | region.h — 126 goals across 4 categories (2 own + 2 inherited groups) |
+| **Scope**      | region.h — 112 goals across 4 categories (2 own + 2 inherited groups) |
 | **Category**   | Formal verification completeness |
-| **Enforcement**| REPORT-ONLY — deferred pending count stability (see below) |
+| **Enforcement**| Enforced (exact-count + by-name roll-call) as of CI #1022 |
 
-**Description**: 126 of 3643 proof obligations (3.46%) are not discharged
+**Description**: 112 of 3643 proof obligations (3.07%) are not discharged
 by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3
 4.15.2 + CVC5 1.2.1) with a 120-second timeout, `-wp-split`, and
 `-wp-model Typed+Cast`. The goals split into two top-level groups:
-**103 inherited from already-verified substrate headers** (re-emerging
+**89 inherited from already-verified substrate headers** (re-emerging
 because region.h includes arena.h, which transitively pulls in memory.h,
 ptr.h, slice.h, checked.h, and contract.h) and **23 region.h-own**
 residuals in two categories.
 
 region.h extends the composable-verification thesis to a fifth
-composition layer. pool.h established the deepest prior point (103
+composition layer. pool.h established the deepest prior point (89
 inherited + 24 own across a two-hop include); region.h is a **sibling**
 of pool.h at the arena.h layer (both include arena.h; neither includes
 the other). Its inherited surface is arena.h's *total* — VERIFY-009's
-57 inherited + 46 arena.h-own = 103 — re-emitted byte-identically. Zero
+43 inherited + 46 arena.h-own = 89 — re-emitted byte-identically. Zero
 new substrate residuals are introduced at the region.h boundary. Every
 inherited residual matches an already-documented goal by name.
 
-**Enforcement status — REPORT-ONLY, deferred.** This baseline is from
-the *first* observed completion of region.h's 120s/`-wp-split` proof
-run. The other eight headers earned exact-count CI enforcement after
-their residual counts and goal names were observed stable across
-multiple runs. region.h's `frama-c-region` job remains report-only
-(it measures and prints but never fails the build) until the 126 count
-and the 23 own goal names hold across 2-3 further runs. The rationale
-is specific: 19 of the 23 own residuals are `-wp-split` fragments of
-region_end (`_partN` goals) sitting near the 120s per-goal boundary,
-the class most likely to flip between Timeout and Proved under runner
-load. Enforcing an exact count on a once-observed, split-sensitive
-surface risks spurious red runs. When the count stabilizes, this entry
-and the CI step flip to enforced together.
+**Enforcement status — ENFORCED (as of CI #1022).** region.h's
+`frama-c-region` job now fails the build on any deviation from 3531/3643
+proved or 112 unproved, and additionally roll-calls all 23 own goals
+plus a representative inherited sample by name. It was promoted from its
+original report-only baseline (the first observed 120s/`-wp-split`
+completion, which carried 126 residuals) once the residual set proved
+name-stable: VERIFY-012's 14 initialization closures left the inherited
+surface (126 → 112) without disturbing the 23 region-own goals, and the
+19 region_end `-wp-split` `_partN` fragments near the 120s boundary all
+reproduce by name across runs. The 112 baseline supersedes the original
+126. The job runs ~1h40m in an isolated runner with `timeout-minutes:
+350` headroom.
 
-### Inherited residuals (103)
+### Inherited residuals (89)
 
 These goals are not region.h defects. They re-emerge in the region.h
 proof run because region.h includes arena.h, which transitively
 includes memory.h, ptr.h, slice.h, checked.h, and contract.h. The full
-arena.h residual set (VERIFY-009's 57 inherited + 46 own = 103 total)
+arena.h residual set (VERIFY-009's 43 inherited + 46 own = 89 total)
 is re-emitted as region.h's inherited surface.
 
 | # | Source            | Goals | Notes                                                              |
@@ -1535,17 +1551,17 @@ is re-emitted as region.h's inherited surface.
 | 2 | VERIFY-006 cat 2  | 3     | ptr.h align_up/down/padding integer theory                         |
 | 3 | VERIFY-006 cat 3  | 3     | ptr.h ptr_align_* call-chain                                       |
 | 4 | VERIFY-006 cat 4  | 2     | contract.h handler non-termination                                 |
-| 5 | VERIFY-007 cat 1  | 20    | slice.h memcmp call-site preconditions                             |
+| 5 | VERIFY-007 cat 1  | 12    | slice.h memcmp valid/danglingness (init closed, VERIFY-012)        |
 | 6 | VERIFY-007 cat 2  | 1     | slice.h str_from_cstr strlen valid_string                          |
 | 7 | VERIFY-008 cat 1  | 5     | memory.h \fresh / \freeable                                        |
 | 8 | VERIFY-008 cat 2  | 9     | memory.h integer theory (mem_align, mem_is_aligned, etc.)          |
-| 9 | VERIFY-008 cat 3  | 12    | memory.h memcmp call-site                                          |
+| 9 | VERIFY-008 cat 3  | 6     | memory.h memcmp danglingness (init closed, VERIFY-012)             |
 | 10| VERIFY-009 cat 2a | 8     | arena.h ptr_span call-site                                         |
 | 11| VERIFY-009 cat 2b | 26    | arena.h fits/does_not_fit arithmetic chain                        |
 | 12| VERIFY-009 cat 2c | 10    | arena.h zero/try wrapper delegation                               |
 | 13| VERIFY-009 cat 2d | 2     | arena.h arena_free_bytes helper call-site                         |
 
-**Inherited subtotal: 103 goals.** Byte-identical to arena.h's full
+**Inherited subtotal: 89 goals.** Byte-identical to arena.h's full
 residual list. The composable-verification claim, now supported at five
 composition layers, holds: region.h's inherited count equals arena.h's
 total, not greater.
@@ -1664,12 +1680,12 @@ carrying arena_invariant's composed body through the postcondition.
 
 ### Mitigation
 
-While report-only, the `frama-c-region` CI step measures and prints the
-full residual list on every run (artifact `wp-proof-region`) so the
-count and goal names can be observed for stability before enforcement.
-When stable, the step flips to exact-count enforcement with named
-patterns covering all 103 inherited and 23 own residuals, matching the
-other eight headers.
+The `frama-c-region` CI step enforces exactly 112 unproved goals (and
+3531/3643 proved) with named patterns covering all 89 inherited and all
+23 own residuals, matching the other eight headers, and prints the full
+residual list on every run (artifact `wp-proof-region`). Any additional
+unproved goal, missing expected goal, or count change is a regression
+and fails the build.
 
 region.h achieves 100% line coverage (45/45) and 95.5% MC/DC (21/22) —
 the achievable ceiling under MCDC-005 (the single uncovered outcome is
@@ -1682,7 +1698,7 @@ ASan + UBSan across all 16 CI configs verify absence of UB. The runtime
 lifetime substrate (OWN-001) covers region under CANON_LIFETIME_DEBUG.
 
 The composable-verification claim is confirmed at a fifth composition
-layer: region.h inherits arena.h's full 103-goal residual surface
+layer: region.h inherits arena.h's full 89-goal residual surface
 byte-identically (zero new substrate residuals introduced) and adds 23
 own residuals, 19 of which concentrate on the single function
 (region_end) that region.h's header comment names as the verification
@@ -1701,7 +1717,101 @@ boundary. The WP boundary landed exactly where the design predicted it.
   verification" section.
 - Per-goal CI artifact: `wp-proof-region` (full WP output).
 - Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
-  "WP: core/region.h (120s / split, REPORT-ONLY)".
+  "WP: core/region.h".
+
+---
+
+## VERIFY-012: Contract-Strengthening Closure of Initialization Preconditions (slice.h, memory.h, and downstream)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-012 |
+| **Date**       | 2026-06-13 |
+| **Baseline commit** | b78768e (Canon-C CI #1022) |
+| **Scope**      | 50 enforced goals closed across five verified headers (64 including region report-only at the time of authoring); zero executable change |
+| **Category**   | Specification correction |
+
+**Description**: A targeted contract-strengthening pass closed 50 enforced
+unproved goals — 8 in slice.h and 6 in memory.h directly, plus their
+re-emitted inherited copies in arena.h, pool.h, and region.h — by adding
+`\initialized` as an explicit input precondition where WP is able to discharge
+it. No function body changed; the closures are ACSL-only, and the preprocessed
+C is byte-identical before and after.
+
+**Trigger**: A correspondence from Allan Blanchard (CEA, a core Frama-C
+developer) pointed out that WP's warning text —
+
+> Allocation, initialization and danglingness not yet implemented
+
+— conflates three distinct features. Of the three, **`\initialized` is
+verifiable** in Frama-C 29 (and has been since roughly Frama-C 22) *provided
+the contract states it as an input precondition*: WP cannot synthesize
+initialization out of nothing, but once a `requires \initialized(...)` clause
+asserts it at the call boundary, WP propagates and discharges it. The other
+two features named in the warning — `\dangling` (and the related `\fresh` /
+`\freeable` / `\allocable` allocation predicates) — are genuinely unimplemented
+in Frama-C 29. The original VERIFY-007 and VERIFY-008 records treated all three
+as a single immovable feature gap; that was an over-broad reading of the
+warning.
+
+**What changed**:
+
+- **slice.h** — 4 guarded, implication-form `requires` added to the equality
+  functions `bytes_equal`, `str_equal`, `str_starts_with`, `str_ends_with`
+  (the `str_ends_with` clause uses the window range `(s.len - suffix.len ..
+  s.len - 1)`). These close the 8 `initialization_*` memcmp call-site goals
+  (two per function) that VERIFY-007 category 1 formerly carried. slice.h
+  residuals: 23 → 15.
+- **memory.h** — 6 behavior-local `\initialized` requires added to
+  `mem_compare`, `mem_equal`, `mem_equal_bytes` (two per function). These close
+  the 6 `initialization_*` goals that VERIFY-008 category 3 formerly carried.
+  memory.h residuals: 57 → 43 (23 inherited + 20 own).
+- **Downstream inheritance closures** (no edits to these headers — their
+  inherited surface simply shrank as the upstream goals vanished):
+  arena.h 103 → 89, pool.h 127 → 113, region.h 126 → 112.
+
+Project totals moved from 18269 → 18333 proved and 463 → 399 unproved; total
+obligations (18732) unchanged.
+
+**Enforced totals** (the five exact-count CI wrappers, all re-baselined and
+green at CI #1022): slice 375/390, memory 2819/2862, arena 3383/3472, pool
+3789/3902, region 3531/3643. region.h was additionally promoted from
+report-only to enforced in the same pass, the residual set having proved
+name-stable across the closure (the 14 initialization goals left the inherited
+surface without disturbing region's 23 own goals).
+
+**Freeze compliance**: All modules are frozen at v1.2.0. ACSL annotations are
+C comments — they are stripped by the preprocessor before compilation, so the
+preprocessed translation unit is byte-identical before and after this pass.
+The runtime behavior the new preconditions describe was already enforced by
+the existing Valgrind job (which flags uninitialized reads at execution time);
+VERIFY-012 only states in ACSL what the dynamic analysis already checked. The
+change is therefore freeze-compliant.
+
+**Consumer caveat**: The new `requires \initialized(...)` clauses are input
+preconditions. A verified caller of `mem_compare` / `mem_equal` /
+`mem_equal_bytes` or slice.h's equality functions now inherits the obligation
+to establish initialization of the compared ranges at its own call site — which
+is the correct, sound contract (comparing partially-uninitialized buffers was
+never well-defined). Callers that were already passing fully-initialized
+buffers are unaffected.
+
+**Correction to prior records**: VERIFY-008's summary previously asserted that
+"strengthening memory.h's predicates would produce no improvement." That claim
+is **falsified** and has been corrected in place: stating `\initialized`
+explicitly closed 6 memory.h goals (and 8 slice.h goals) with no executable
+change. What remains genuinely WP-blocked in Frama-C 29 is `\dangling`,
+`\fresh`, `\freeable`, and `\allocable` — confirmed by A. Blanchard. The
+danglingness, allocation, and freeability residuals documented in VERIFY-007
+through VERIFY-011 are unaffected by this pass and remain open on the verifier
+feature gap.
+
+**Cross-references**: VERIFY-007 (slice.h, 23 → 15), VERIFY-008 (memory.h,
+57 → 43, "no improvement" claim corrected), VERIFY-009 (arena.h, 103 → 89),
+VERIFY-010 (pool.h, 127 → 113), VERIFY-011 (region.h, 126 → 112, promoted to
+enforced). Per-goal CI artifacts: `wp-proof-{slice,memory,arena,pool,region}`
+at CI #1022. Wrapper enforcement: `.github/workflows/cmake-multi-platform.yml`,
+the five `frama-c-{slice,memory,arena,pool,region}` steps.
 
 ---
 
