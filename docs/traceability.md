@@ -266,8 +266,8 @@ by methodology):
   so every dispatched hook has a non-NULL `fn`. WP discharges the
   no-NULL-hook property; gcov measures 21/22 because it instruments the
   source rather than the proof — the same cross-stream pattern as
-  MCDC-002/003/004. region.h's WP run (VERIFY-011, report-only) carries
-  126 residuals, 19 of them on `region_end`'s opaque-hook dispatch
+  MCDC-002/003/004. region.h's WP run (VERIFY-011, enforced) carries
+  112 residuals, 19 of them on `region_end`'s opaque-hook dispatch
   (the verification boundary documented in OWN-003), distinct from this
   guard branch. The 1 missed outcome is the documented ceiling and not
   counted as a coverage regression.
@@ -312,21 +312,27 @@ under the coverage build's flag set, not a coverage gap.
 Per-header formal verification state (see `docs/verification.md` for
 full per-header detail):
 
+As of 2026-06-13 (CI #1022), VERIFY-012 closed 50 enforced goals across
+five verified headers by ACSL precondition alone — no executable change —
+by stating `\initialized` as an input precondition where WP can discharge
+it. This lowered the slice/memory/arena/pool/region residual counts to the
+values below (formerly 23/57/103/127/126).
+
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
 | checked.h  | 30        | 1755              | 1753 (99.89%)     | 2        | VERIFY-002   |
 | bits.h     | 18        |  761              |  746 (98.03%)     | 15       | VERIFY-003/4 |
 | compare.h  | 28        |  208              |  208 (100%)       | 0        | VERIFY-005   |
 | ptr.h      | 21        | 1739              | 1729 (99.43%)     | 10       | VERIFY-006   |
-| slice.h    | 22        |  390              |  367 (94.10%)     | 23       | VERIFY-007   |
-| memory.h   | 27        | 2862              | 2805 (98.01%)     | 57       | VERIFY-008   |
-| arena.h    | 22        | 3472              | 3369 (97.03%)     | 103      | VERIFY-009   |
-| pool.h     | 19        | 3902              | 3775 (96.74%)     | 127      | VERIFY-010   |
-| region.h   | 12        | 3643              | 3517 (96.54%)     | 126      | VERIFY-011   |
-| **Total**  | **199**   | **18732**         | **18269 (97.53%)**| **463**  |              |
+| slice.h    | 22        |  390              |  375 (96.15%)     | 15       | VERIFY-007/12|
+| memory.h   | 27        | 2862              | 2819 (98.50%)     | 43       | VERIFY-008/12|
+| arena.h    | 22        | 3472              | 3383 (97.44%)     | 89       | VERIFY-009/12|
+| pool.h     | 19        | 3902              | 3789 (97.10%)     | 113      | VERIFY-010/12|
+| region.h   | 12        | 3643              | 3531 (96.92%)     | 112      | VERIFY-011/12|
+| **Total**  | **199**   | **18732**         | **18333 (97.79%)**| **399**  |              |
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). All 463 unproved goals are demonstrated
+`-wp-timeout 120`). All 399 unproved goals are demonstrated
 triple-prover-resistant and carry written manual-proof arguments or
 documented WP feature-gap rationale in `docs/deviations.md`.
 
@@ -347,18 +353,18 @@ step processes pool.h with arena.h and the full two-hop transitive
 substrate; the 3902 figure for pool.h likewise reflects the full run
 as pool.h's row. region.h's CI step processes region.h with arena.h
 and the full two-hop transitive substrate; the 3643 figure for
-region.h likewise reflects the full run as region.h's row. 103 of
-region.h's 126 unproved goals are re-emerged residuals already
+region.h likewise reflects the full run as region.h's row. 89 of
+region.h's 112 unproved goals are re-emerged residuals already
 documented under VERIFY-002/006/007/008/009 — byte-identical to
-arena.h's full 103-goal residual surface (see VERIFY-011 for the
-inheritance table). 103 of pool.h's 127 unproved goals are re-emerged
+arena.h's full 89-goal residual surface (see VERIFY-011 for the
+inheritance table). 89 of pool.h's 113 unproved goals are re-emerged
 residuals already documented under VERIFY-002/006/007/008/009 —
-byte-identical to arena.h's full 103-goal residual surface (see
-VERIFY-010 for the inheritance table). 57 of arena.h's 103 unproved
+byte-identical to arena.h's full 89-goal residual surface (see
+VERIFY-010 for the inheritance table). 43 of arena.h's 89 unproved
 goals are re-emerged residuals already documented under
-VERIFY-002/006/007/008 — byte-identical to memory.h's full 57-goal
-residual surface (see VERIFY-009 for the inheritance table). 31 of
-memory.h's 57 unproved goals are likewise re-emerged residuals already
+VERIFY-002/006/007/008 — byte-identical to memory.h's full 43-goal
+residual surface (see VERIFY-009 for the inheritance table). 23 of
+memory.h's 43 unproved goals are likewise re-emerged residuals already
 documented under VERIFY-002/006/007 (see VERIFY-008).
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
@@ -367,19 +373,20 @@ is the first Canon-C header that crosses the C standard library
 boundary — its equality functions call `memcmp` and `str_from_cstr`
 calls `strlen`, both of which have ACSL contracts requiring
 initialization and danglingness reasoning that Frama-C 29 has not yet
-implemented (see VERIFY-007 for the full WP warning text). The 23
+implemented (see VERIFY-007 for the full WP warning text). The 15
 slice.h residuals are not specific to slice.h's design; future headers
 that use these libc functions will incur the same residual category.
 
 The memory.h baseline (2805 / 2862) is the first Canon-C verification
 round where inherited residuals from substrate headers exceed
-memory.h-own residuals — 31 of 57 are byte-identical to goals already
+memory.h-own residuals — 23 of 43 are byte-identical to goals already
 documented in VERIFY-002/006/007, re-emerging because memory.h
-includes those headers transitively. The 26 memory.h-own residuals
+includes those headers transitively. The 20 memory.h-own residuals
 fall into three categories that are each rooted in a Frama-C feature
 gap (\fresh/\freeable allocation reasoning, bitwise-alignment integer
-theory, memcmp call-site initialization/danglingness). All 26 are
-documented in VERIFY-008 with manual-proof arguments. The 31:26
+theory, memcmp call-site danglingness — the initialization sub-class was
+closed in VERIFY-012). All 20 are
+documented in VERIFY-008 with manual-proof arguments. The 23:20
 inherited:own ratio is the first quantitative data point for the
 composable-verification thesis: substrate residuals propagate without
 amplification across composition layers.
@@ -388,9 +395,9 @@ The arena.h baseline (3369 / 3472) extends the composable-verification
 thesis to a third composition layer. arena.h includes memory.h, which
 transitively includes ptr.h, slice.h, checked.h, and contract.h —
 making arena.h the first downstream header to observe propagation
-through *two* layers of composition. arena.h's 57 inherited residuals
-are byte-identical to memory.h's full residual surface (memory.h's 31
-inherited + memory.h's 26 own = 57 total) — meaning memory.h's own
+through *two* layers of composition. arena.h's 43 inherited residuals
+are byte-identical to memory.h's full residual surface (memory.h's 23
+inherited + memory.h's 20 own = 43 total) — meaning memory.h's own
 residuals propagate as a unit just like the headers below it. The 46
 arena.h-own residuals fall into four categories: 8 ptr_span call-site
 preconditions at arena_alloc / arena_alloc_aligned (downstream of
@@ -399,7 +406,7 @@ at the same allocators (the deepest residual class, arising from the
 deliberate readable form of the `arena_can_fit` predicate), 10
 wrapper-delegation residuals on the zero/try variants, and 2
 arena_free_bytes helper call-site residuals. All 46 are documented
-in VERIFY-009 with manual-proof arguments. The 57:46 inherited:own
+in VERIFY-009 with manual-proof arguments. The 43:46 inherited:own
 ratio confirms the composable-verification claim at the third
 composition layer.
 
@@ -407,9 +414,9 @@ The pool.h baseline (3775 / 3902) extends the composable-verification
 thesis to a fourth composition layer and is the first Canon-C header to
 observe residual propagation across a two-hop transitive include.
 pool.h includes arena.h, which transitively includes memory.h, ptr.h,
-slice.h, checked.h, and contract.h. pool.h's 103 inherited residuals
-are byte-identical to arena.h's full residual surface (arena.h's 57
-inherited + arena.h's 46 own = 103) — meaning arena.h's own residuals
+slice.h, checked.h, and contract.h. pool.h's 89 inherited residuals
+are byte-identical to arena.h's full residual surface (arena.h's 43
+inherited + arena.h's 46 own = 89) — meaning arena.h's own residuals
 propagate as a unit just like the headers below it, now across two
 transitive hops. The 24 pool.h-own residuals fall into four categories:
 5 pool_invariant-establishment arithmetic residuals at pool_init (3
@@ -419,7 +426,7 @@ ptr_elem-cascade residuals at pool_alloc / pool_get / pool_get_const
 mem_zero call-site residuals on pool_alloc_zero / pool_as_bytes /
 pool_reserved_bytes, and 8 arena-delegation + reset-wrapper residuals
 on pool_alloc_zero / pool_reset / pool_reset_secure. All 24 are
-documented in VERIFY-010 with manual-proof arguments. The 103:24
+documented in VERIFY-010 with manual-proof arguments. The 89:24
 inherited:own ratio is the most lopsided in the core/ stack — pool.h
 sits atop the deepest substrate verified to date while adding the
 thinnest own surface, because it reserves its region once at pool_init
@@ -432,7 +439,7 @@ transitively includes memory.h, ptr.h, slice.h, checked.h, and
 contract.h — a two-hop transitive include, the same depth as pool.h.
 region.h is a *sibling* of pool.h at the arena.h layer (both include
 arena.h; neither includes the other), so its inherited surface is
-arena.h's *total* — VERIFY-009's 57 inherited + 46 arena.h-own = 103 —
+arena.h's *total* — VERIFY-009's 43 inherited + 46 arena.h-own = 89 —
 re-emitted byte-identically, with zero new substrate residuals
 introduced at the region.h boundary. The 23 region.h-own residuals
 fall into two categories: 19 region_end opaque-hook-dispatch residuals
@@ -444,12 +451,13 @@ re-establishment residuals on the trivial mutators (region_begin,
 region_attach_arena, region_register, region_set_parent), which carry
 arena_invariant's composition weight at the postcondition. All 23 are
 documented in VERIFY-011 with manual-proof arguments. region.h's WP run
-is enforced **report-only** at this baseline (the first observed
-120s/`-wp-split` completion); exact-count CI enforcement is deferred
-until the 126 count and the 23 own goal names hold across 2-3 further
-runs, because 19 of the 23 own residuals are `-wp-split` fragments of
-region_end near the 120s per-goal boundary, the class most prone to
-Timeout/Proved flicker under runner load. The 103:23 inherited:own
+is **enforced** at this baseline (3531 / 3643 proved, exactly 112
+unproved): the residual set is name-stable across the VERIFY-012
+initialization closures — those 14 goals left the inherited surface
+(126 → 112) without disturbing the 23 region-own goals — so the
+exact-count + by-name CI gate was promoted from report-only as of
+CI #1022 (the 19 region_end `-wp-split` fragments near the 120s
+boundary all reproduce by name). The 89:23 inherited:own
 ratio confirms the composable-verification claim at the fifth
 composition layer, and 19 of the 23 own residuals concentrate on the
 single function (region_end) that region.h's header comment names as
@@ -570,5 +578,6 @@ separately.
 | 2026-05-24 | f53bddb | #962   | v1.3.0  | 95.6%  | 99.6%     | 85.9%    | 85.3%  | arena.h: ACSL contracts + WP enforcement YAML; WP 3369/3472 (VERIFY-009); MC/DC 90.6% ceiling (MCDC-003); 57 inherited (memory.h's full residual surface) + 46 own (8 ptr_span call-sites + 26 fits/does_not_fit arithmetic chain + 10 wrapper delegation + 2 free_bytes helpers). test_try_alloc_aligned_failure closed the line 510 compound-return gap (+1 MC/DC outcome, +1 branch covered). Composable-verification thesis confirmed at third composition layer: arena.h inherits memory.h's full 57-goal residual surface byte-identically. |
 | 2026-05-29 | 98de378 | #974   | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | pool.h: ACSL contracts + WP enforcement (WP 3775/3902, VERIFY-010; 103 inherited = arena.h's full residual surface + 24 own across cats 2a/2b/2c/2d), first two-hop transitive include; MC/DC 91.2% ceiling (MCDC-004, 6 `!pool->arena` outcomes unreachable under pool_invariant). Gap-closure: four wave-1 tests (b2644ba/#972) 55→61/68; test_init_arena_alloc_fails_after_guard (98de378/#974) closed the line-309 reachable gap 61→62/68 (gcov confirms L309 2/2). Project MC/DC 1401→1413 of 1642, branches 1437→1448 of 1672. Composable-verification thesis confirmed at fourth composition layer; 103:24 inherited:own ratio. |
 | 2026-06-06 | c9172fc | #992   | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | region.h: ACSL contracts + WP (report-only) at 120s/split; WP 3517/3643 (VERIFY-011; 103 inherited = arena.h's full residual surface + 23 own: 19 region_end opaque-hook-dispatch + 4 region_invariant composition), first 120s/split completion, enforcement deferred pending count stability. MC/DC 95.5% (21/22) ceiling (MCDC-005, the `!h->fn` guard branch unreachable). region.h's coverage was already in the aggregate (Phase 1 substrate); this records its documented MCDC entry. core/ layer verification complete. Composable-verification thesis confirmed at fifth composition layer. |
+| 2026-06-13 | b78768e | #1022  | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | VERIFY-012: contract-strengthening pass closing 50 enforced unproved goals across five verified headers by ACSL precondition alone — zero executable change. Stated `\initialized` as an input precondition where WP can discharge it (6 requires in memory.h, 4 in slice.h), closing 8 slice + 6 memory own goals and their downstream inherited copies: slice 23→15, memory 57→43, arena 103→89, pool 127→113, region 126→112; project 18269→18333 proved, 463→399 unproved. Falsifies VERIFY-008's earlier "strengthening memory.h's predicates would produce no improvement" (corrected in place). `\dangling`/`\fresh`/`\freeable` remain WP-blocked in Frama-C 29 (Blanchard). All five exact-count CI wrappers re-enforced; region.h promoted from report-only to enforced (residual set name-stable across the closure). No coverage/MC/DC change (closures touched no branches). |
 
 ---
