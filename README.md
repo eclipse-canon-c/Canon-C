@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-github.png" alt="Canon-C" width="600"/>
+  <img src="logo_transparent.png" alt="Canon-C" width="600"/>
 </p>
 
 # Canon-C 
