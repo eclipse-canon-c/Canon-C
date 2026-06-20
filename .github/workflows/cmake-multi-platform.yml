@@ -38,7 +38,7 @@ on:
 #                     The matrix mirrors the default `build` job so the
 #                     substrate is exercised under the same platform and
 #                     compiler combinations: GCC + Clang on Linux, MSVC
-#                     on Windows, Clang on macOS. Previously Linux-Clang
+#                     and Clang on Windows, Clang on macOS. Previously Linux-Clang
 #                     only — expanded after Phase 2 (dynvec, dynstring,
 #                     smallvec) embedded lifetime_t in five owning types
 #                     plus all macro-generated dynvec instantiations,
