@@ -15,7 +15,7 @@ on:
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c-*       — Linux only, formal verification (WP proofs). One job
 #                     PER HEADER (frama-c-checked, -bits, -compare, -ptr,
-#                     -slice, -memory, -arena, -pool, -region), all running
+#                     -slice, -memory, -arena, -pool, -region, -error), all running
 #                     in parallel and sharing the composite setup action at
 #                     .github/actions/framac-setup. All nine are ENFORCED
 #                     (hard proved/unproved baselines); region runs 120s/split
@@ -409,7 +409,7 @@ jobs:
   #   against the same baseline regardless of which job hosts it.
   #
   #   ENFORCED (hard proved/unproved baselines): checked, bits, compare, ptr,
-  #   slice, memory, arena, pool, region. region runs 120s/split in its own
+  #   slice, memory, arena, pool, region, error. Region runs 120s/split in its own
   #   isolated job (long run, ~1h40m) but is enforced like the rest.
   #
   #   Eva is intentionally NOT run on these headers: Eva needs an entry point
@@ -1624,7 +1624,111 @@ jobs:
         with:
           name: wp-proof-region
           path: wp_region_output.txt
+  
+  
+  # -------------------------------------------------------------------------
+  # semantics/error.h — ENFORCED. First header of the semantics/ layer.
+  #
+  # error.h is a plain int-backed enum plus four pure lookup/predicate
+  # functions. No void* casts, so it uses WP's DEFAULT Typed model (not
+  # Typed+Cast like the core/ headers from compare.h onward). All four
+  # functions are expected to prove fully automatically with ZERO residuals
+  # (VERIFY-013) — the calibration baseline for the semantics/ layer.
+  #
+  # error_message carries the weak postcondition `\result != \null` that the
+  # public contract actually guarantees, NOT full string validity. Asserting
+  # valid_read_string(\result) would cross the libc strlen/valid_string
+  # boundary documented in VERIFY-007 cat 2; the weak spec keeps error.h at
+  # 0 residuals. See docs/verification.md, error.h section.
+  # -------------------------------------------------------------------------
+  frama-c-error:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
 
+      - name: "WP: semantics/error.h"
+        # error.h is expected to prove 100% automatically — 0 unproved goals.
+        # Any unproved goal is a regression and fails the job. If a future
+        # edit strengthens error_message's spec to valid_read_string and that
+        # introduces a residual, this wrapper must be updated AND a VERIFY-013
+        # category added to docs/deviations.md before the count is changed.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            semantics/error.h 2>&1 | tee wp_error_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (error.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_error_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in error.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_error_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_error_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_error_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_error_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          EXPECTED_UNPROVED=0
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: error.h should have 0 unproved goals."
+            echo "      Found ${UNPROVED_COUNT} unproved goals — this is a"
+            echo "      regression. error.h is the semantics/ layer's clean"
+            echo "      baseline; any residual needs a VERIFY-013 category in"
+            echo "      docs/deviations.md before this wrapper is updated."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_error_output.txt || true
+            exit 1
+          fi
+
+          echo "PASS: error.h fully verified — all goals proved automatically,"
+          echo "      0 residuals. semantics/ layer baseline established."
+          echo "==============================================="
+
+      - name: Upload WP proof output (error.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-error
+          path: wp_error_output.txt
+  
+  
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
