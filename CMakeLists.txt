@@ -84,7 +84,7 @@ endif()
 # on PATH at runtime. This DLL is not automatically deployed in CI
 # environments and causes exit code 0xc0000135 (DLL not found). MSVC
 # builds therefore skip sanitizers entirely — memory safety on Windows
-# is covered by Dr. Memory in the dr-memory CI job instead.
+# is covered by the MSVC /W4 /WX build and by Valgrind on Linux.
 # ---------------------------------------------------------------------------
 if(ENABLE_SANITIZERS AND ENABLE_FUZZING)
     message(FATAL_ERROR
