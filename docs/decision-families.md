@@ -410,7 +410,7 @@ When in doubt, leave the section pending. A "Pending evidence"
 marker (as still used for MISRA-CFG- above) is more honest than a
 section that invents categories before the entries demand them. The
 OWN-, VERIFY-, and MCDC- sections have each crossed the threshold —
-four sourced OWN- categories, four VERIFY- shapes across twelve
+four sourced OWN- categories, four VERIFY- shapes across thirteen
 entries, three MCDC- shapes across five entries. MISRA-CFG- has not,
 and is marked accordingly.
 
@@ -421,7 +421,7 @@ and is marked accordingly.
 - **Entry counts or schedules.** How many OWN- or VERIFY- entries
   will exist at v2.0.0 is unknown; estimating it adds a forecast
   genre that decays. The stable content is the shape, not the count.
-  (Where this file names current entries — VERIFY-001 through 012,
+  (Where this file names current entries — VERIFY-001 through 013,
   OWN-001 through 003, MCDC-001 through 005 — it is recording the
   present state to ground the category descriptions, not forecasting
   a future total.)
