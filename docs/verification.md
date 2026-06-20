@@ -10,12 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 9 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h)    |
-| **Functions**        | 199 annotated and verified                                                     |
-| **Total obligations**| 18732 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 18333 (97.79%)                                                                 |
+| **Headers verified** | 10 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h) |
+| **Functions**        | 203 annotated and verified                                                     |
+| **Total obligations**| 18797 (per-header own goals; CI WP runs include substrate)                     |
+| **Proved automatic** | 18398 (97.88%)                                                                 |
 | **Unproved**         | 399 (all documented; see per-header sections)                                  |
-| **Prover setup**     | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple)                               |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
@@ -1974,6 +1973,161 @@ the 23 own goals split across category 1 (19) / category 2 (4).
 
 ---
 
+
+## semantics/error.h
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Fully verified — 100% automatic                |
+| **Baseline commit**    | ca9732d (Canon-C CI #1036)                      |
+| **Functions**          | 4 of 4 annotated and proved                    |
+| **Proof obligations**  | 65 / 65 discharged automatically (100%)         |
+| **Residuals**          | 0                                               |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120` (default Typed model) |
+| **CI enforcement**     | Yes — 65/65 required, 0 unproved allowed        |
+| **MC/DC coverage**     | 100% (trivial — no condition outcomes to miss)  |
+| **CI artifact**        | `wp-proof-error` (full per-goal breakdown)      |
+
+error.h is the first verified header of the semantics/ layer and the
+first header since compare.h (VERIFY-005) to prove fully automatically
+with zero residuals. It is also the first verified header to use the
+default `Typed` memory model rather than `Typed+Cast`: error.h contains
+no `void*` casts, so the cast-aware model is unnecessary.
+
+### Function inventory
+
+error.h provides a flat `Error` enum plus four pure functions:
+
+- `error_message` — switch-based lookup returning a static string
+  literal; never NULL.
+- `error_is_ok` — true iff `e == ERR_OK`.
+- `error_in_range` — true iff `(int)e` is in `[ERR_OK, ERR_COUNT)`.
+- `error_code` — returns `(int)e`.
+
+All four are `static inline`, take an `Error` by value, and carry
+`assigns \nothing`. There are no macro-templated surfaces, so the whole
+public API is directly WP-verified (no documentation-only macro family).
+
+### What is proved
+
+- **Never-NULL message lookup**: `error_message` carries
+  `ensures \result != \null;`. The `switch` is total — every named case
+  plus the `default:` arm returns a string literal — so WP proves the
+  postcondition for every input including gap values and out-of-range
+  casts (e.g. `(Error)(-1)`, `(Error)9999`).
+
+- **Exact-value predicate postconditions**: `error_is_ok` proves
+  `\result <==> (e == ERR_OK)`; `error_in_range` proves
+  `\result <==> ((int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT)`;
+  `error_code` proves `\result == (int)e`. The casts in the ACSL mirror
+  the casts in the C bodies, so WP reasons about the int-backed enum
+  directly without an enum/representation bridge.
+
+- **Absence of runtime errors** (`-wp-rte`): proved for all four
+  functions.
+
+- **Side-effect bounding**: all four specify `assigns \nothing;`.
+
+### Spec-strength note (error_message)
+
+`error_message`'s postcondition is the weak `\result != \null`, which is
+exactly what the public contract guarantees ("Never returns NULL"). It
+does **not** assert `valid_read_string(\result)`. Asserting full string
+validity would cross the same libc `strlen`/`valid_string` reasoning
+boundary documented in VERIFY-007 category 2 (`str_from_cstr`'s omitted
+`valid_string` precondition). Keeping the spec weak holds error.h at 0
+residuals while still proving the property callers depend on.
+
+### Prover breakdown
+
+| Category       | Goals discharged | Typical time      |
+|----------------|------------------|--------------------|
+| Terminating    | 4                | (structural)      |
+| Unreachable    | 4                | (structural)      |
+| Qed (internal) | 35               | 0.5ms-4ms         |
+| Alt-Ergo 2.6.3 | 22               | 25ms-43ms         |
+| **Total**      | **65 / 65**      |                    |
+
+Z3 4.15.2 and CVC5 1.2.1 are available in the prover chain but are not
+reached — every goal closes at Qed or Alt-Ergo. This is expected for a
+header this simple and is not a triple-prover degradation; the error.h
+CI wrapper omits the CVC5-presence check that the `Typed+Cast` headers
+carry, precisely because error.h's goals close before the heavier
+provers are invoked. The four `Terminating` and four `Unreachable`
+goals are WP's structural proofs (one termination proof per function;
+the dead-code-after-`return` obligations the `switch` generates,
+including the `default:` and explicit `case ERR_COUNT:` arms).
+
+### Advisory — pedantic-assigns
+
+WP emits one advisory on `error_message`:
+
+```
+[wp:pedantic-assigns] semantics/error.h: Warning:
+  No 'assigns \result \from ...' specification for function
+  'error_message' returning pointer type.
+```
+
+This is advisory, **not a residual** — the header proves 65/65 with the
+warning present. It is the same WP pedantry about pointer-returning
+functions already noted for ptr.h and slice.h (`bytes_at`, the align
+functions): `assigns \nothing` does not specify the provenance (`\from`)
+of the returned pointer. Consistent with that precedent, the advisory is
+accepted as-is and not silenced.
+
+### MC/DC note
+
+error.h's MC/DC is trivially 100%: the three predicate functions are
+single-expression, and `error_message`'s switch is fully exercised by
+`test/semantics/error_test.c` (every named case, ERR_COUNT, gap values,
+and out-of-range casts). There are no defensive or
+type-invariant-unreachable branches, so no MCDC-NNN entry is warranted —
+error.h is the header that demonstrates the MC/DC machinery correctly
+produces "nothing to document" when nothing is unreachable.
+
+### Composable-verification note
+
+error.h includes only `core/primitives/types.h` (type definitions only,
+no proof obligations of its own), so it inherits zero residuals. This is
+the trivial base case of the composability thesis at the bottom of a new
+layer — there is nothing upstream in semantics/ yet to inherit from. It
+establishes the layer's zero baseline against which the next semantics/
+headers (Option/Result, borrow, diag) will be measured for
+inherited-vs-own residuals.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: consistent with the other verified headers.
+  error.h itself contains no `require_msg` calls, so the flag is inert
+  here, but it is passed for CI uniformity.
+- **`-DNDEBUG`**: standard release-mode flag.
+
+### Reproduction
+
+```bash
+frama-c -wp -wp-rte \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I semantics \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  semantics/error.h
+```
+
+Expected output: `Proved goals: 65 / 65` with 0 unproved goals.
+
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -2039,9 +2193,18 @@ the complete installation and registration procedure.
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
-### semantics/ (after core/ complete)
+### semantics/ (in progress)
 
-Result, Option, borrow, diag — planned after core/ layer is verified.
+| Header   | Status      | Proved | Notes                                              |
+|----------|-------------|--------|-----------------------------------------------------|
+| error.h  | ✅ Verified  | 65/65  | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
+
+Result, Option, borrow, diag — planned next. The Option/Result types are
+macro-templated (`DEFINE_OPTION` / `CANON_RESULT`); their non-macro core
+is directly verifiable, while the macro-instantiated bodies will follow
+the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale)
+and likely need a verification-driver header instantiating a concrete
+type outside macro context.
 
 ### data/ and algo/ (longer term)
 
