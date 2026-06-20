@@ -36,6 +36,14 @@
  * Error representation: plain integer (enum).
  * Message lookup: switch-based (typically compiled to a jump table).
  *
+ * -- Verification -------------------------------------------------------------
+ * Verified by Frama-C WP (Typed model, default -- no void* casts in this
+ * header). All four functions are annotated and proved automatically with
+ * zero residuals (VERIFY-013). error_message carries the weak postcondition
+ * the public contract guarantees -- \result != \null -- rather than full
+ * string-validity, which would cross the libc valid_read_string boundary
+ * documented in VERIFY-007 cat 2. See docs/verification.md, error.h section.
+ *
  * -- Design -------------------------------------------------------------------
  * - Simple flat enum (no hierarchies).
  * - Zero runtime cost for error representation.
@@ -151,6 +159,10 @@ typedef enum {
  * @param e  Error code to describe.
  * @return   Pointer to a static, null-terminated string. Never NULL.
  */
+/*@
+    assigns \nothing;
+    ensures \result != \null;
+*/
 static inline const char *error_message(Error e) {
     switch (e) {
         case ERR_OK:                return "No error";
@@ -184,6 +196,10 @@ static inline const char *error_message(Error e) {
  * @param e  Error code to test.
  * @return   true if e == ERR_OK, false otherwise.
  */
+/*@
+    assigns \nothing;
+    ensures \result <==> (e == ERR_OK);
+*/
 static inline bool error_is_ok(Error e) {
     return e == ERR_OK;
 }
@@ -206,6 +222,10 @@ static inline bool error_is_ok(Error e) {
  * @param e  Error code to check.
  * @return   true if (int)e is in [0, ERR_COUNT), false otherwise.
  */
+/*@
+    assigns \nothing;
+    ensures \result <==> ((int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT);
+*/
 static inline bool error_in_range(Error e) {
     return (int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT;
 }
@@ -219,6 +239,10 @@ static inline bool error_in_range(Error e) {
  * @param e  Error code.
  * @return   Integer representation of e.
  */
+/*@
+    assigns \nothing;
+    ensures \result == (int)e;
+*/
 static inline int error_code(Error e) {
     return (int)e;
 }
