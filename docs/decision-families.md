@@ -161,14 +161,11 @@ composition rules.
 **Category D — Boundary decisions with the verification layer.**
 
 As WP coverage walks up the dependency tree from `core/primitives/`
-into the substrate headers, design choices will surface at the
-boundary between OWN- and VERIFY-. The CI file's *"Candidate order"*
-comment lists `region.h`, `arena.h`, `pool.h`, and `borrow.h` as the
-next headers to annotate. Each of those will produce VERIFY- entries
-recording the proof state. But the substrate headers also have
-macro-templated surfaces that WP cannot reach by construction
-(OWN-001 §7), and decisions about how to handle that boundary belong
-in OWN-, not VERIFY-:
+into the substrate headers, design choices surface at the boundary
+between OWN- and VERIFY-. The substrate headers have macro-templated
+surfaces that WP cannot reach by construction (OWN-001 §7), and
+decisions about how to handle that boundary belong in OWN-, not
+VERIFY-:
 
 - How to formalize the OWN-001 §3 contract table as ACSL
   specifications for the non-macro substrate functions.
@@ -176,9 +173,20 @@ in OWN-, not VERIFY-:
   templated functions via a code generator (a Category D + Category
   C decision: it changes the build process).
 - What to do about substrate-layer residuals that emerge once WP
-  reaches `arena.h` or `borrow.h` — Category D records the
-  architectural call; VERIFY-NNN records the specific residual class
-  with its manual discharge argument.
+  reaches a header — Category D records the architectural call;
+  VERIFY-NNN records the specific residual class with its manual
+  discharge argument.
+
+The canonical Category D example is OWN-003 (shipped at CI #992): the
+decision to dispatch region cleanup hooks through an opaque,
+caller-supplied function pointer with no ACSL `calls` clause,
+accepting the resulting 19 region_end WP residuals as region.h's
+documented verification boundary rather than redesigning the hook
+mechanism to be WP-tractable. OWN-003 is the worked example of a
+Category D decision: the call is *what to prove / how to model the
+proof* (keep the opaque hook, accept the residual), while its
+proof-side companion VERIFY-011 records the residual class itself
+with the manual discharge argument.
 
 Category D entries sit at the seam between the two namespaces. The
 rule of thumb: if the decision is *what to prove* or *how to model
@@ -218,14 +226,16 @@ should aim for:
 
 Future OWN- entries don't need to be as long as OWN-001 (which
 covers a five-phase substrate across twelve container types). Most
-will be shorter, covering one decision with one Honesty Boundary
-case. OWN-002 demonstrates the shorter shape: a single closure of a
-single bullet from OWN-001 §4, mechanical migration, regression
-tests pinning the no-cycle property, three commits across one CI
-run. But the shape — sourced status, explicit cross-references,
-honest about what isn't covered — is the template that scales from
-OWN-001's substrate-wide scope down to OWN-002's two-header
-migration.
+are shorter, covering one decision with one Honesty Boundary case.
+OWN-002 demonstrates the shorter shape: a single closure of a single
+bullet from OWN-001 §4, mechanical migration, regression tests
+pinning the no-cycle property, three commits across one CI run.
+OWN-003 demonstrates the Category D shape: a single architectural
+call at the OWN/VERIFY seam, its proof-side consequences recorded
+separately in VERIFY-011. But the shape — sourced status, explicit
+cross-references, honest about what isn't covered — is the template
+that scales from OWN-001's substrate-wide scope down to the
+single-decision entries above it.
 
 ---
 
@@ -236,22 +246,67 @@ details cross-referenced into `docs/deviations.md`. They record what
 WP proves for each verified header, what it leaves unproved, and the
 manual arguments that discharge the residuals.
 
-Entries to date: VERIFY-001 through VERIFY-008 cover `checked.h`,
-`bits.h`, `compare.h`, `ptr.h`, `slice.h`, and `memory.h`.
+Entries to date span the full `core/` stack: VERIFY-001 through
+VERIFY-012 cover `checked.h`, `bits.h`, `compare.h`, `ptr.h`,
+`slice.h`, `memory.h`, `arena.h`, `pool.h`, and `region.h`, plus the
+cross-cutting VERIFY-012 contract-strengthening pass that closed the
+initialization sub-class across five headers at once.
 
-Categories of VERIFY- decisions are not yet documented here because
-the established entries' shapes are still settling. The CI file's
-inline comments on each WP step (the per-header rationale blocks for
-the unproved goal counts and their categories) currently serve as the
-shape-of-entry documentation. Once the substrate-layer headers
-(`arena.h`, `pool.h`, `borrow.h`, etc.) land in VERIFY-, this
-section will document the patterns that emerged from accumulating
-~10+ entries.
+With the `core/` layer complete, enough VERIFY- entries now exist to
+describe the namespace's recurring shapes. The categories below are
+descriptive of patterns visible across VERIFY-002 through VERIFY-011.
 
-For now, the canonical references for VERIFY- entry shape are the CI
-file's WP wrapper steps (each names the expected proved/unproved goal
-counts and the categories) and the existing entries themselves in
-`docs/verification.md` and `docs/deviations.md`.
+### Recurring shapes of VERIFY- entries
+
+**Shape 1 — Manually discharged goals.** A small, named set of
+obligations that no automated prover closes, with a written
+mathematical argument standing in for the proof. VERIFY-002
+(checked.h's two u64-add-overflow goals, discharged by a
+modular-arithmetic argument) is the canonical instance. The defining
+feature is that the goal is *true and provable by hand* but outside
+the SMT solvers' default integer theory; CI enforces that exactly the
+named goals time out and no others.
+
+**Shape 2 — WP feature-gap residuals.** Obligations WP cannot
+discharge because the verifier itself has not implemented the relevant
+ACSL primitive. VERIFY-007 (slice.h's `\dangling` memcmp
+preconditions) and VERIFY-008 category 1 (memory.h's `\fresh` /
+`\freeable` allocation reasoning) are the instances. The defining
+feature is that strengthening the contract does *not* help — the gap
+is in Frama-C 29, confirmed by the WP warning text quoted verbatim in
+the entry. VERIFY-012 is the important counter-case: it proved that
+*one* member of this shape (`\initialized`) was misclassified — WP
+*can* discharge it once stated as a precondition — which is why
+VERIFY- entries quote the verifier's own warning rather than asserting
+a feature gap from inference.
+
+**Shape 3 — Inherited residuals.** Goals that re-emerge unchanged in a
+downstream header's proof run because it includes an already-verified
+header transitively. VERIFY-008 (memory.h inherits 23 from the
+substrate), VERIFY-009 (arena.h inherits memory.h's full 43),
+VERIFY-010 (pool.h inherits arena.h's full 89), and VERIFY-011
+(region.h inherits arena.h's full 89) are the instances. The defining
+feature is that the inherited count equals the upstream's *total*, not
+greater — the composable-verification thesis, supported across five
+composition layers. An inherited-residual section in a VERIFY- entry
+is a table mapping each goal back to its originating VERIFY- entry by
+name.
+
+**Shape 4 — Deliberate spec-strength tradeoffs.** A residual kept open
+on purpose because closing it would cost more than the residual does.
+VERIFY-007 category 2 (slice.h's `str_from_cstr` omitting
+`valid_string` to avoid a project-wide stdlib dependency) and
+VERIFY-006's forward-implication note (ptr.h's empty `nonnull`
+behaviors, kept empty so the residual cascade lands downstream rather
+than minting new ptr.h goals) are the instances. The defining feature
+is an explicit cost comparison: the entry argues why the residual is
+cheaper than the closure.
+
+The canonical references for VERIFY- entry *structure* (status box,
+per-category goal lists, manual proof arguments, CI wrapper
+enforcement) are the entries themselves in `docs/verification.md` and
+`docs/deviations.md`, and the CI file's WP wrapper steps, which name
+the expected proved/unproved counts per header.
 
 ---
 
@@ -263,20 +318,53 @@ classify each gap by its disposition: reachable-and-untested,
 API-unreachable, WP-discharged-unreachable, or
 defensively-redundant.
 
-Entries to date: MCDC-002 is the referenced example, covering four
-`!ptr` defensive branches in `bytes_slice`, `bytes_skip`,
-`str_slice`, and `str_skip` in `core/slice.h`. These are documented
-as API-unreachable in MC/DC isolation and (per VERIFY-007) formally
-proved unreachable by WP under the `bytes_invariant` /
-`str_invariant` type predicates.
+Entries to date: MCDC-001 (the coverage-flags methodology) plus
+MCDC-002 through MCDC-005, one per verified `core/` header that
+carries an unreachable defensive shape — slice.h (`!ptr` branches),
+arena.h (overflow-guard subconditions), pool.h (`!pool->arena`
+disjunct), and region.h (`!h->fn` hook guard).
 
-The MCDC- and VERIFY- composition shown in MCDC-002 (gcov measures
-the source, WP proves the predicate that makes the source
-unreachable, the two streams complement rather than converge) is
-likely the canonical category. Other categories — reachable gaps
-closed by new tests, defensively-redundant branches kept for
-robustness — will be documented here once enough entries exist to
-describe their shape.
+With four header-level entries accumulated, the namespace's recurring
+shape is now visible:
+
+**The cross-stream complement.** The dominant MCDC- category, present
+in all of MCDC-002 through MCDC-005, is the gcov/WP complement: gcov
+measures a defensive branch as source-level uncovered, and a separate
+evidence stream proves it unreachable. In MCDC-002/003/004 the proof
+is a *type invariant* (`bytes_invariant`, `arena_invariant`,
+`pool_invariant`); in MCDC-005 it is a *runtime construction
+invariant* (region_register's no-NULL-hook discipline) rather than a
+named predicate — a wrinkle worth flagging, because an auditor should
+not expect a "region_invariant discharges this" claim for MCDC-005.
+The two streams complement rather than converge: gcov instruments the
+source, the proof establishes reachability, and the entry documents
+both. Each header's *shape* differs (the specific defensive branch);
+the *evidence pattern* is identical.
+
+**The methodology artifact.** MCDC-001 is a different shape — not a
+per-header gap but the project-wide flags (`CANON_NO_REQUIRE`,
+`CANON_CHECKED_FORCE_FALLBACK`, `CANON_BITS_FORCE_FALLBACK`) that
+change the code under measurement to align coverage with the verified
+path. The recurring `contract.h 0/2` artifact and the
+`_arena_debug_update` no-op outcomes (MCDC-003 category 2) are
+instances of gcov-14 instrumentation behavior on disabled-macro
+expansion, traceable back to MCDC-001's methodology.
+
+**The reachable gap closed by a test.** A minority shape: an outcome
+that *looks* unreachable but is a genuine test gap, closed by a
+targeted test rather than documented as a deviation. MCDC-004's
+line-309 closure (`arena_alloc` failing after pool_init's coarse
+`arena_remaining` guard) and MCDC-003's line-510 closure
+(`arena_try_alloc_aligned`'s compound return) are the instances. The
+defining feature is that the entry distinguishes this from
+unreachability explicitly — it was a missing test, not a provable
+dead path, and the fix is a test, not a deviation record.
+
+A future header introducing its own public `{ptr, len}` type or
+analogous defensive code (stringbuf.h is the next candidate, listed
+provisionally at 74.2% in MCDC-002's pattern note) will need its own
+per-header MCDC- entry; its unreachability shape and number are not
+transferable from the existing entries.
 
 ---
 
@@ -287,18 +375,22 @@ unproved-goal entries cross-referenced from VERIFY-NNN. They record
 MISRA C:2012 rules that Canon-C deliberately deviates from, with
 rationale.
 
-Entries to date: the CI file's `misra` job runs MISRA advisory
-analysis via Cppcheck's MISRA addon and is currently non-blocking
-(*"Advisory only — does not fail the build"*). The job's output
-notes that Cppcheck covers approximately 60-70% of MISRA C:2012
-rules and that certification-grade analysis requires a qualified
-tool (Polyspace, LDRA, PC-lint, Parasoft).
+Entries to date: MISRA-CFG-001 (the Cppcheck `*_impl.h`
+macro-templated-header configuration limitation). The CI file's
+`misra` job runs MISRA advisory analysis via Cppcheck's MISRA addon
+and is currently non-blocking (*"Advisory only — does not fail the
+build"*). The job's output notes that Cppcheck covers approximately
+60-70% of MISRA C:2012 rules and that certification-grade analysis
+requires a qualified tool (Polyspace, LDRA, PC-lint, Parasoft).
 
-Categories of MISRA-CFG- decisions will be documented here once
-enough deviations accumulate to describe their shape. The current
-state — MISRA analysis is advisory, certification-tooling-dependent,
-and not yet producing committed entries — means this namespace is
-the least settled of the four.
+**Pending evidence.** With a single committed entry, the namespace's
+categories are not yet describable — MISRA-CFG-001 is a tool-limitation
+deviation, but whether that's the dominant category or just the first
+one cannot be known until more entries accumulate. This namespace
+remains the least settled of the four; the MISRA job stays advisory
+and certification-tooling-dependent until a qualified checker produces
+categorized output. Categories will be documented here once enough
+deviations accumulate to describe their shape.
 
 ---
 
@@ -315,11 +407,12 @@ A new section earns its place when:
    README's design philosophy.
 
 When in doubt, leave the section pending. A "Pending evidence"
-marker (as used for VERIFY-, MCDC-, and MISRA-CFG- above) is more
-honest than a section that invents categories before the entries
-demand them. The OWN- section above is the standard: four
-categories, each grounded in specific entries or sourced caveats
-visible in the codebase.
+marker (as still used for MISRA-CFG- above) is more honest than a
+section that invents categories before the entries demand them. The
+OWN-, VERIFY-, and MCDC- sections have each crossed the threshold —
+four sourced OWN- categories, four VERIFY- shapes across twelve
+entries, three MCDC- shapes across five entries. MISRA-CFG- has not,
+and is marked accordingly.
 
 ---
 
@@ -328,12 +421,17 @@ visible in the codebase.
 - **Entry counts or schedules.** How many OWN- or VERIFY- entries
   will exist at v2.0.0 is unknown; estimating it adds a forecast
   genre that decays. The stable content is the shape, not the count.
-- **Specific future entries.** OWN-002 was forward-referenced in
-  OWN-001 because that specific migration was implied by OWN-001's
-  Honesty Boundary; it earned the reference and has since shipped.
-  Speculation about OWN-003 or VERIFY-009 does not belong here —
-  forward references earn their place only when the originating
-  entry's Honesty Boundary or equivalent directly implies them.
+  (Where this file names current entries — VERIFY-001 through 012,
+  OWN-001 through 003, MCDC-001 through 005 — it is recording the
+  present state to ground the category descriptions, not forecasting
+  a future total.)
+- **Specific future entries.** OWN-002 and OWN-003 were
+  forward-referenced from OWN-001 because each was implied by
+  OWN-001's Honesty Boundary or §7 verification posture; they earned
+  the reference and have since shipped. Speculation about entries not
+  implied by an existing entry's Honesty Boundary or equivalent does
+  not belong here — forward references earn their place only when the
+  originating entry directly implies them.
 - **Project roadmap.** Roadmap belongs in CHANGELOG (for shipped
   releases) and in issue tracker / project board (for in-flight
   work). This file documents the decision-record system, not the
