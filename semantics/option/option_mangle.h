@@ -196,12 +196,12 @@
 /**
  * MANGLE_OPTION_IS_SOME(T)
  *
- * Returns non-zero when the option holds a value.
+ * Returns true when the option holds a value.
  *
  * Default : option_T_is_some   (e.g. option_int_is_some(opt))
  *
  * Signature:
- *   static inline int
+ *   static inline bool
  *   MANGLE_OPTION_IS_SOME(T)(MANGLE_OPTION_TYPE(T) opt);
  */
 #ifndef MANGLE_OPTION_IS_SOME
@@ -211,12 +211,12 @@
 /**
  * MANGLE_OPTION_IS_NONE(T)
  *
- * Returns non-zero when the option is absent.
+ * Returns true when the option is absent.
  *
  * Default : option_T_is_none   (e.g. option_int_is_none(opt))
  *
  * Signature:
- *   static inline int
+ *   static inline bool
  *   MANGLE_OPTION_IS_NONE(T)(MANGLE_OPTION_TYPE(T) opt);
  */
 #ifndef MANGLE_OPTION_IS_NONE
@@ -231,8 +231,8 @@
 /**
  * MANGLE_OPTION_GET(T)
  *
- * Writes the contained value into *out and returns non-zero on success.
- * Returns zero without modifying *out when the option is None.
+ * Writes the contained value into *out and returns true on success.
+ * Returns false without modifying *out when the option is None.
  *
  * Contract: out must not be NULL -- passing NULL is always a caller bug
  * and triggers a contract violation.
@@ -240,7 +240,7 @@
  * Default : option_T_get   (e.g. option_int_get(opt, &out))
  *
  * Signature:
- *   static inline int
+ *   static inline bool
  *   MANGLE_OPTION_GET(T)(MANGLE_OPTION_TYPE(T) opt, T *out);
  */
 #ifndef MANGLE_OPTION_GET
@@ -358,13 +358,13 @@
 /**
  * MANGLE_OPTION_FILTER(T)
  *
- * Returns Some(value) when pred(value) is non-zero, otherwise None.
+ * Returns Some(value) when pred(value) is true, otherwise None.
  *
  * Default : option_T_filter   (e.g. option_int_filter(opt, pred))
  *
  * Signature:
  *   static inline MANGLE_OPTION_TYPE(T)
- *   MANGLE_OPTION_FILTER(T)(MANGLE_OPTION_TYPE(T) opt, int (*pred)(T));
+ *   MANGLE_OPTION_FILTER(T)(MANGLE_OPTION_TYPE(T) opt, bool (*pred)(T));
  */
 #ifndef MANGLE_OPTION_FILTER
 #  define MANGLE_OPTION_FILTER(T)          option_##T##_filter
@@ -438,16 +438,16 @@
 /**
  * MANGLE_OPTION_EQ(T)
  *
- * Returns non-zero when both options are None, or both are Some and
- * eq_fn(a_value, b_value) returns non-zero.
+ * Returns true when both options are None, or both are Some and
+ * eq_fn(a_value, b_value) returns true.
  *
  * Default : option_T_eq   (e.g. option_int_eq(opt1, opt2, int_eq))
  *
  * Signature:
- *   static inline int
+ *   static inline bool
  *   MANGLE_OPTION_EQ(T)(MANGLE_OPTION_TYPE(T) a,
  *                        MANGLE_OPTION_TYPE(T) b,
- *                        int (*eq_fn)(T, T));
+ *                        bool (*eq_fn)(T, T));
  */
 #ifndef MANGLE_OPTION_EQ
 #  define MANGLE_OPTION_EQ(T)              option_##T##_eq
