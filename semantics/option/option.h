@@ -301,14 +301,6 @@
 #define CANON_OPTION(type) \
     DEFINE_OPTION_ALL(static inline, type)
 
-/**
- * @brief Legacy alias for CANON_OPTION.
- *
- * Kept for backward compatibility with existing Canon-C code.
- * New code should prefer CANON_OPTION() for consistency.
- */
-#define CANON_C_DEFINE_OPTION(type) CANON_OPTION(type)
-
 /* ════════════════════════════════════════════════════════════════════════════
    PROPAGATION & CONVENIENCE MACROS (GNU C EXTENSIONS OR C23)
    ════════════════════════════════════════════════════════════════════════════ */
