@@ -236,14 +236,6 @@
 #define CANON_RESULT(value_type, error_type) \
     DEFINE_RESULT_ALL(static inline, value_type, error_type)
 
-/**
- * @brief Legacy alias for CANON_RESULT
- *
- * Kept for backward compatibility. New code should use CANON_RESULT().
- */
-#define CANON_C_DEFINE_RESULT(value_type, error_type) \
-    CANON_RESULT(value_type, error_type)
-
 /* ════════════════════════════════════════════════════════════════════════════
    PROPAGATION MACROS — STRICT C99 (do-while, no statement expressions)
    ════════════════════════════════════════════════════════════════════════════ */
