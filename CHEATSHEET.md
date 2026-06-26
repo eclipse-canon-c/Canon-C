@@ -116,3 +116,86 @@ source. Where the two ever disagree, the header is correct and this document is
 stale.
 
 ---
+
+
+<a name="c-var"></a>
+## `Variable definition`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Headers: `types.h` (aliases), `limits.h` (range constants), `contract.h`
+> (`require_msg`). `limits.h` pulls in `types.h`, so:
+> ```c
+> #include "core/primitives/limits.h"
+> #include "core/primitives/contract.h"
+> ```
+
+A raw C variable definition has three independent failure modes. Find the one
+your code matches.
+
+---
+
+**1 — Read before assignment.**
+
+```c
+/* RAW — indeterminate value if a path reaches the use without assigning */
+usize count;
+/* ... */
+return count;
+```
+```c
+/* SAFE — define and initialize in one step */
+usize count = 0;
+return count;
+```
+> Buys you: no indeterminate-value read. A verifier rejects a read of a
+> possibly-uninitialized variable outright, so this is what lets the proof
+> proceed past the definition. Costs nothing at runtime.
+
+---
+
+**2 — Platform-width type where the width matters.**
+
+```c
+/* RAW — width and signedness left to the platform; intent unclear */
+unsigned long flags = 0;
+int           index = 0;
+long          offset = 0;
+```
+```c
+/* SAFE — explicit-width aliases (types.h); width is part of the name */
+u32   flags  = 0;   /* exactly 32 bits, unsigned                       */
+usize index  = 0;   /* unsigned, pointer-width — for sizes and indices */
+isize offset = 0;   /* signed, pointer-width — for differences/offsets */
+```
+> Buys you: overflow and truncation reasoning is local to the use site,
+> because the width is visible in the type name. Full set in `types.h`:
+> `u8 u16 u32 u64`, `i8 i16 i32 i64`, `usize`, `isize`, `f32`, `f64`.
+
+---
+
+**3 — Value that may not fit the type.**
+
+```c
+/* RAW — a value past the type's max is silently truncated on assignment.
+   i8 holds -128..127; 129 does not fit. */
+i8 level = (i8)v;      /* if v == 129, level becomes -127 — no warning */
+```
+```c
+/* SAFE — range-check against the type's named limit before narrowing */
+require_msg(v >= CANON_I8_MIN && v <= CANON_I8_MAX, "level out of i8 range");
+i8 level = (i8)v;      /* provably in range past this point */
+```
+> Buys you: an out-of-range narrowing is caught at the boundary instead of
+> silently wrapping. `require_msg` (contract.h) is **compiled out** under
+> `-DCANON_NO_REQUIRE` once the range is formally proved, so the check is
+> free in a verified build. Range constants per type are in `limits.h`
+> (`CANON_I8_MIN/MAX` … `CANON_I64_MIN/MAX`, `CANON_U8_MAX` … `CANON_U64_MAX`,
+> `CANON_USIZE_MAX`, `CANON_ISIZE_MIN/MAX`).
+>
+> If `level` only ever holds small constants, the real fix is simpler: pick a
+> type wide enough that the value always fits, and case 3 disappears.
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
