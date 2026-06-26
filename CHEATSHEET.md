@@ -523,3 +523,247 @@ u32 n  = bits_popcount(value);       /* set-bit count, 0..64 */
 [↑ Back to constructs](#table-of-c-constructs)
 
 ---
+
+<a name="c-compare"></a>
+## `Comparison (< > <= >= == !=)`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `compare.h` (`algo_cmp_i32`, `algo_cmp_f64`, … and the `algo_cmp_fn`
+> / `algo_pred_fn` typedefs). Pulls in `types.h`, so:
+> ```c
+> #include "core/primitives/compare.h"
+> ```
+
+**Plain comparison of two values is fine as-is.** `if (a < b)` on integers
+needs no Canon-C form — there is nothing unsafe about it. This entry is about
+the case that *does* go wrong: writing a **comparator** for sorting, searching,
+or an ordered container. Two classic comparator bugs have safe replacements
+here.
+
+<details>
+<summary><b>1 — Don't subtract to compare</b></summary>
+
+```c
+/* RAW — the "clever" comparator. a - b overflows for extreme values,
+   which is UB for signed and gives a wrong sign for unsigned. */
+int cmp(const void* a, const void* b) {
+    return *(const i32*)a - *(const i32*)b;   /* overflows; wrong order */
+}
+```
+```c
+/* SAFE — use the built-in comparator, or the same branchless pattern */
+/* built-in: */
+algo_cmp_fn cmp = algo_cmp_i32;        /* correct for the full i32 range */
+
+/* or, if you must hand-write one, the safe shape is: */
+int my_cmp(const void* a, const void* b, void* ctx) {
+    (void)ctx;
+    i32 x = *(const i32*)a, y = *(const i32*)b;
+    return (x > y) - (x < y);          /* always -1, 0, or +1; never overflows */
+}
+```
+> Buys you: a correct ordering across the whole value range. The `a - b` trick
+> overflows (UB for signed) and inverts for values far apart; the
+> `(x > y) - (x < y)` pattern the `algo_cmp_*` functions use is always exactly
+> -1/0/+1. Built-ins exist for every primitive width: `algo_cmp_u8` …
+> `algo_cmp_u64`, `algo_cmp_i8` … `algo_cmp_i64`, `algo_cmp_usize` /
+> `algo_cmp_isize`, each with an `_desc` descending variant. Note Canon-C's
+> comparator signature takes a third `void* ctx` argument (`algo_cmp_fn`).
+
+</details>
+
+<details>
+<summary><b>2 — Floating-point comparison with NaN</b></summary>
+
+```c
+/* RAW — raw < on floats is not a total order: every comparison with NaN is
+   false, so a NaN in the data breaks sorting (intransitive, undefined order). */
+int cmp(const void* a, const void* b) {
+    f64 x = *(const f64*)a, y = *(const f64*)b;
+    return (x < y) ? -1 : (x > y) ? 1 : 0;   /* NaN compares equal to all → broken */
+}
+```
+```c
+/* SAFE — built-in float comparator imposes a total order (NaN sorts last) */
+algo_cmp_fn cmp = algo_cmp_f64;        /* f32 variant: algo_cmp_f32 */
+```
+> Buys you: a usable total order in the presence of NaN. With raw `<`, a NaN
+> element makes every comparison against it false, so a sort can't place it and
+> the result is undefined. `algo_cmp_f32` / `algo_cmp_f64` define a total order
+> by sorting all NaNs to one end (last in ascending, and two NaNs compare
+> equal); the `_desc` variants reverse the numeric order and move NaN to the
+> front. If your float data can never contain NaN this doesn't bite — but a
+> built-in costs nothing and removes the assumption.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-assert"></a>
+## `assert`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `contract.h` (`require` / `require_msg`, `ensure` / `ensure_msg`,
+> `unreachable` / `unreachable_msg`, `panic`). Pulls in `types.h`, so:
+> ```c
+> #include "core/primitives/contract.h"
+> ```
+
+Plain `assert` is one tool for several different jobs, and it vanishes entirely
+under `NDEBUG`. Canon-C splits it by *intent*: a check on the caller's input, a
+check on your own logic, an impossible path, or an unconditional abort. Picking
+the right one is what makes the check survive (or correctly disappear) in the
+right build.
+
+<details>
+<summary><b>1 — Precondition on input → <code>require</code></b></summary>
+
+```c
+/* RAW — assert vanishes under NDEBUG, so an input check disappears in
+   exactly the release build where you still want it. */
+void process(Config* cfg, usize n) {
+    assert(cfg != NULL);
+    assert(n > 0);
+    /* ... */
+}
+```
+```c
+/* SAFE — require is always-on (off only with -DCANON_NO_REQUIRE) */
+void process(Config* cfg, usize n) {
+    require(cfg != NULL);
+    require_msg(n > 0, "process: n must be > 0");
+    /* ... */
+}
+```
+> Buys you: the input check survives into release. `require` / `require_msg`
+> are on by default and in `NDEBUG` builds; they compile out only under the
+> explicit `-DCANON_NO_REQUIRE` (for when formal proof has covered every call
+> site). Use these for things that are a *bug* if they happen — a NULL where
+> NULL is forbidden, a violated input range. Use `require_msg` when a message
+> aids debugging.
+
+</details>
+
+<details>
+<summary><b>2 — Check on your own logic → <code>ensure</code></b></summary>
+
+```c
+/* RAW — assert, no signal of whether this is an input check or a self-check */
+usize allocated = do_work(pool);
+assert(allocated <= pool->capacity);
+```
+```c
+/* SAFE — ensure: debug-only by default, promotable for certified builds */
+usize allocated = do_work(pool);
+ensure(allocated <= pool->capacity);   /* internal invariant */
+```
+> Buys you: an intent signal and the right build behavior. `ensure` /
+> `ensure_msg` check things your *own* code should guarantee (postconditions,
+> invariants). They are on in debug, off under `NDEBUG`, and — importantly —
+> promoted back to always-on by `-DCANON_STRICT` (for DO-178C / ISO 26262
+> builds where debug checks must survive). Rule of thumb: `require` guards what
+> comes *in*; `ensure` checks what your code *produced*.
+
+</details>
+
+<details>
+<summary><b>3 — Impossible path → <code>unreachable</code></b></summary>
+
+```c
+/* RAW — a default case that "can't happen" but returns garbage if it does */
+switch (state) {
+    case S_A: return a();
+    case S_B: return b();
+    default:  return 0;          /* silently wrong if a new state appears */
+}
+```
+```c
+/* SAFE — mark it unreachable: panics in debug, optimization hint in release */
+switch (state) {
+    case S_A: return a();
+    case S_B: return b();
+    default:  unreachable_msg("invalid state");
+}
+```
+> Buys you: a real signal instead of a fake return value. `unreachable` /
+> `unreachable_msg` (contract.h) fire the panic handler in debug builds, act as
+> a compiler optimization hint in release, and always panic under
+> `CANON_STRICT`. Use only for paths that genuinely cannot occur through your
+> API — for a recoverable "unexpected input", return an error value instead.
+
+</details>
+
+<details>
+<summary><b>4 — Unconditional fatal error → <code>panic</code></b></summary>
+
+```c
+/* RAW — abort() with no message, or assert(0) which NDEBUG removes */
+if (config_unparseable) {
+    abort();
+}
+```
+```c
+/* SAFE — panic: always-on, carries a message, routes through the handler */
+if (config_unparseable) {
+    panic("failed to parse configuration");
+}
+```
+> Buys you: an always-on fatal exit with a message, routed through the same
+> contract handler as everything else (so a custom handler — e.g. an embedded
+> `uart_print` + reset — applies here too). `panic` is never compiled out by
+> any flag. Reserve it for genuinely unrecoverable situations; for anything the
+> caller could handle, return an error value rather than aborting.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-staticassert"></a>
+## `Compile-time assertion`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `contract.h` (`static_require`). Pulls in `types.h`, so:
+> ```c
+> #include "core/primitives/contract.h"
+> ```
+
+Some assumptions should fail the *build*, not the program — a struct that must
+be exactly one cache line, a buffer that must be large enough, a config value
+within range. A runtime `assert` for these is both too late and removable;
+`static_require` checks them at compile time and can never be disabled.
+
+<details>
+<summary><b>1 — Pin a compile-time invariant</b></summary>
+
+```c
+/* RAW — the assumption lives in a comment and a runtime check that NDEBUG
+   removes; nothing actually enforces it at build time. */
+/* Header must stay 64 bytes for the on-wire format! */
+assert(sizeof(Header) == 64);          /* too late, and gone under NDEBUG */
+```
+```c
+/* SAFE — checked at compile time; build fails if the assumption breaks */
+static_require(sizeof(Header) == 64, header_must_be_64_bytes);
+static_require(BUFFER_SIZE >= 1024,   buffer_too_small);
+```
+> Buys you: the assumption is enforced where it can still be fixed — at
+> compile time — and can never be compiled out. `static_require(cond, msg)`
+> expands to C11 `_Static_assert` where available and a negative-size-array
+> trick on C99. The `msg` is an **identifier**, not a string: no spaces or
+> punctuation (`header_must_be_64_bytes`, not `"must be 64 bytes"`) — it shows
+> up verbatim in the compiler error. The condition must be a compile-time
+> constant expression; for runtime values, use `require` (see
+> [`assert`](#c-assert)).
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
