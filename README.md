@@ -196,7 +196,7 @@ For the construct-by-construct mapping — the raw C you wrote and the safe
 Canon-C form that replaces it — see [`CHEATSHEET.md`](CHEATSHEET.md). It is
 organized by C construct and kept current against the header sources.
 
-When a function is written using only these replacements, its
+When a construct is written using only these replacements, its
 verification reduces to discharging its specification-specific
 obligations (loop invariants, caller-state frame conditions, functional
 postconditions) over a verified substrate, plus a bounded set of
