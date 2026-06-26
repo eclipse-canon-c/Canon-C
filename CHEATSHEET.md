@@ -117,7 +117,6 @@ stale.
 
 ---
 
-
 <a name="c-var"></a>
 ## `Variable definition`
 
@@ -133,9 +132,8 @@ stale.
 A raw C variable definition has three independent failure modes. Find the one
 your code matches.
 
----
-
-**1 — Read before assignment.**
+<details>
+<summary><b>1 — Read before assignment</b></summary>
 
 ```c
 /* RAW — indeterminate value if a path reaches the use without assigning */
@@ -152,9 +150,10 @@ return count;
 > possibly-uninitialized variable outright, so this is what lets the proof
 > proceed past the definition. Costs nothing at runtime.
 
----
+</details>
 
-**2 — Platform-width type where the width matters.**
+<details>
+<summary><b>2 — Platform-width type where the width matters</b></summary>
 
 ```c
 /* RAW — width and signedness left to the platform; intent unclear */
@@ -172,9 +171,10 @@ isize offset = 0;   /* signed, pointer-width — for differences/offsets */
 > because the width is visible in the type name. Full set in `types.h`:
 > `u8 u16 u32 u64`, `i8 i16 i32 i64`, `usize`, `isize`, `f32`, `f64`.
 
----
+</details>
 
-**3 — Value that may not fit the type.**
+<details>
+<summary><b>3 — Value that may not fit the type</b></summary>
 
 ```c
 /* RAW — a value past the type's max is silently truncated on assignment.
@@ -187,14 +187,18 @@ require_msg(v >= CANON_I8_MIN && v <= CANON_I8_MAX, "level out of i8 range");
 i8 level = (i8)v;      /* provably in range past this point */
 ```
 > Buys you: an out-of-range narrowing is caught at the boundary instead of
-> silently wrapping. `require_msg` (contract.h) is **compiled out** under
-> `-DCANON_NO_REQUIRE` once the range is formally proved, so the check is
-> free in a verified build. Range constants per type are in `limits.h`
+> silently wrapping. Use `require_msg`, **not** `ensure_msg` — this guards an
+> input and must survive release builds; `ensure_msg` is compiled out under
+> `NDEBUG` unless `CANON_STRICT` is set. `require_msg` is itself compiled out
+> only under `-DCANON_NO_REQUIRE`, once the range is formally proved, so the
+> check is free in a verified build. Range constants per type are in `limits.h`
 > (`CANON_I8_MIN/MAX` … `CANON_I64_MIN/MAX`, `CANON_U8_MAX` … `CANON_U64_MAX`,
 > `CANON_USIZE_MAX`, `CANON_ISIZE_MIN/MAX`).
 >
 > If `level` only ever holds small constants, the real fix is simpler: pick a
 > type wide enough that the value always fits, and case 3 disappears.
+
+</details>
 
 [↑ Back to constructs](#table-of-c-constructs)
 
