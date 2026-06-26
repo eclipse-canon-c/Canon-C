@@ -192,28 +192,9 @@ measure one code path under three different lenses.
 
 ### Translation table
 
-Canon-C's primitive set covers the constructs that appear in most C
-functions:
-
-| Raw C construct        | Canon-C replacement                                  |
-| ---------------------- | ---------------------------------------------------- |
-| Arithmetic operations  | `checked.h`                                          |
-| Comparisons            | `compare.h`                                          |
-| Bit operations         | `bits.h`                                             |
-| Array indexing         | `slice_at` returning `Option`                        |
-| Pointer arithmetic     | `ptr.h`                                              |
-| Error propagation      | `Result` combinators (`TRY_UNWRAP`, `and_then`)      |
-| Optional values        | `Option` combinators (`unwrap_or`, `map`, `filter`)  |
-| Null checks            | `ptr_or`                                             |
-| Multi-way dispatch     | function pointer tables with `Option` lookup         |
-| Precondition guards    | `require_msg`                                        |
-| Counted loops          | `range` + `RANGE_FOR`                                |
-| Transform loops        | `algo_map`                                           |
-| Filter loops           | `algo_filter`                                        |
-| Reduce loops           | `algo_fold`                                          |
-| Search loops           | `algo_find`, `algo_search`, `algo_any_all`           |
-| Sort, unique, reverse  | corresponding algorithms                             |
-| Shared mutable state   | explicit parameters, regions, functional composition |
+For the construct-by-construct mapping — the raw C you wrote and the safe
+Canon-C form that replaces it — see [`CHEATSHEET.md`](CHEATSHEET.md). It is
+organized by C construct and kept current against the header sources.
 
 When a function is written using only these replacements, its
 verification reduces to discharging its specification-specific
