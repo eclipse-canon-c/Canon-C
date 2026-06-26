@@ -602,6 +602,352 @@ algo_cmp_fn cmp = algo_cmp_f64;        /* f32 variant: algo_cmp_f32 */
 
 ---
 
+<a name="c-subscript"></a>
+## `Subscript ([])`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `slice.h` (`bytes_from`, `bytes_at`, `DEFINE_SLICE`). Pulls in
+> `types.h` and `contract.h`, so:
+> ```c
+> #include "core/slice.h"
+> ```
+
+Raw `arr[i]` does no bounds checking — `i >= len` reads or writes out of
+bounds, which is undefined behavior and the root of most memory-corruption
+bugs. A *slice* carries its length alongside the pointer, so access can be
+checked against it.
+
+<details>
+<summary><b>1 — Byte buffer access</b></summary>
+
+```c
+/* RAW — no bound check; buf[i] with i >= len is out-of-bounds UB */
+u8 b = buf[i];
+buf[i] = 0;
+```
+```c
+/* SAFE — wrap the buffer as a slice; access through bytes_at (NULL on OOB) */
+bytes_t view = bytes_from(buf, len);
+u8* p = bytes_at(view, i);       /* NULL if view.ptr is NULL or i >= len */
+if (p) {
+    u8 b = *p;
+    *p = 0;
+}
+```
+> Buys you: an out-of-bounds index returns `NULL` instead of corrupting
+> memory. `bytes_at(b, i)` (slice.h) is NULL-safe and bounds-checked. Note it
+> returns a **raw pointer, not an `Option`** — `slice.h` lives in `core/` and
+> by design does not depend on `semantics/`, so the result is checked with a
+> plain `if (p)`. `bytes_from`/`bytes_at` and the slicing helpers
+> (`bytes_slice`, `bytes_take`, `bytes_skip`) are WP-verified.
+
+</details>
+
+<details>
+<summary><b>2 — Typed element access</b></summary>
+
+```c
+/* RAW — a typed array indexed with no bounds awareness */
+i32 v = arr[i];
+```
+```c
+/* SAFE — a typed slice with bounds-checked access */
+DEFINE_SLICE(i32)                       /* once, at file scope */
+
+slice_i32 s = slice_i32_from(arr, len);
+
+i32 v;
+if (!slice_i32_get(s, i, &v)) {         /* false if i >= len (copies element) */
+    return ERROR_INDEX;
+}
+/* or, for a pointer instead of a copy: */
+i32* p = slice_i32_at(s, i);            /* NULL if out of bounds */
+```
+> Buys you: bounds-checked typed access without carrying a separate length
+> parameter. `slice_T_get(s, i, &out)` copies the element and returns `false`
+> on out-of-bounds; `slice_T_at(s, i)` returns a pointer or `NULL`.
+> `DEFINE_SLICE(T)` is invoked once per element type at file scope to generate
+> the `slice_T` family.
+>
+> Honesty note: the `DEFINE_SLICE`-generated functions are validated by testing
+> and fuzzing but are **not** WP-verified in the current baseline (the
+> preprocessor strips ACSL annotations from macro bodies — VERIFY-007). The
+> `bytes_t` / `cbytes_t` / `str_t` functions in case 1 *are* proved; if you need
+> the verified path specifically, prefer the byte-view form.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-goto"></a>
+## `goto` / labels
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Headers: `scope.h` (`DEFER`), `arena.h` (`arena_mark`, `arena_reset_to`).
+> `scope.h` has no dependencies; `arena.h` pulls in `contract.h` for
+> `require_msg`:
+> ```c
+> #include "core/scope.h"
+> #include "core/arena.h"
+> ```
+
+Cleanup scattered across every exit path is easy to get wrong — miss one
+release and you leak, double one and you corrupt. There are two safe shapes,
+and which one you use depends on whether the block can exit early.
+
+<details>
+<summary><b>1 — Run-to-completion block → DEFER</b></summary>
+
+```c
+/* RAW — cleanup written manually at the end; easy to forget as the body grows,
+   and skipped entirely if someone adds an early return later */
+ArenaMark mark = arena_mark(&scratch);
+void* tmp = arena_alloc(&scratch, 1024);
+compute_with(tmp);
+arena_reset_to(&scratch, mark);
+```
+```c
+/* SAFE — DEFER pairs cleanup with acquisition; fires at the closing brace */
+ArenaMark mark = arena_mark(&scratch);
+DEFER(arena_reset_to(&scratch, mark)) {
+    void* tmp = arena_alloc(&scratch, 1024);
+    compute_with(tmp);
+}   /* arena reset to `mark` here */
+```
+> Buys you: cleanup is lexically tied to acquisition and runs at the end of the
+> block. `DEFER` (scope.h) is pure C99 and compiles to the same code as writing
+> the cleanup by hand — zero runtime cost.
+>
+> **Critical limit:** `DEFER` fires on normal fall-through and `continue`, but
+> **NOT** on `return`, `break`, or an outward `goto`. If the body can exit early
+> on an error path, the cleanup is silently skipped — use case 2 instead. Reserve
+> `DEFER` for blocks that run to completion, or for advisory cleanup (logging,
+> timing) where a skipped run is harmless. Never use it for security-critical
+> wipes.
+
+</details>
+
+<details>
+<summary><b>2 — Error-return paths → single goto cleanup</b></summary>
+
+```c
+/* RAW — cleanup duplicated on every exit; miss one and you leak */
+int load(const char* path) {
+    FILE* f = fopen(path, "r");
+    if (!f) return -1;
+    void* buf = malloc(4096);
+    if (!buf) { fclose(f); return -1; }
+    if (read_into(f, buf) < 0) { free(buf); fclose(f); return -1; }
+    use(buf);
+    free(buf); fclose(f);
+    return 0;
+}
+```
+```c
+/* SAFE — every exit routes through one cleanup block, reverse-order release */
+int load(const char* path) {
+    require_msg(path != NULL, "load: path is NULL");
+
+    int   rc  = 0;
+    FILE* f   = NULL;
+    void* buf = NULL;
+
+    f = fopen(path, "r");
+    if (!f) { rc = -1; goto done; }
+
+    buf = malloc(4096);
+    if (!buf) { rc = -1; goto done; }
+
+    if (read_into(f, buf) < 0) { rc = -1; goto done; }
+    use(buf);
+
+done:
+    if (buf) free(buf);     /* reverse acquisition order */
+    if (f)   fclose(f);
+    return rc;
+}
+```
+> Buys you: one cleanup block every path routes through; adding an error path
+> later is a single `goto done;` line. This is the portable shape — it works on
+> MSVC (unlike `__attribute__((cleanup))`) and is proven at scale in the Linux
+> kernel and glibc. Use this, **not** `DEFER`, whenever the function returns
+> early after acquiring a resource. The `if (buf)` / `if (f)` guards make the
+> label safe to reach before everything is acquired.
+>
+> For sensitive data (keys, passwords), wipe with `mem_secure_zero` (see
+> [`memcpy` / `memmove` / `memset` / `memcmp`](#c-mem)) *before* the free in the
+> cleanup block — and never rely on `DEFER` for that wipe, since an early
+> return would skip it.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-heap"></a>
+## `malloc` / `calloc` / `realloc` / `free`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Headers: `memory.h` (`mem_alloc`, `mem_free`, `mem_alloc_array`,
+> `mem_alloc_type`), `arena.h` (`arena_alloc`, `arena_alloc_array`). Both pull
+> in the substrate they need:
+> ```c
+> #include "core/memory.h"
+> #include "core/arena.h"
+> ```
+
+Raw `malloc` has two recurring hazards: the array-size multiply (`count *
+size`) can overflow `usize`, so you allocate too little and then write past the
+buffer — the classic integer-overflow-to-heap-overflow bug — and the matching
+`free` is easy to miss, double, or skip on an early return.
+
+<details>
+<summary><b>1 — Array allocation → mem_alloc_array (overflow-checked)</b></summary>
+
+```c
+/* RAW — count * sizeof(Item) can overflow usize, under-allocating; the
+   subsequent writes then overflow the heap buffer. */
+Item* arr = malloc(count * sizeof(Item));
+```
+```c
+/* SAFE — the size multiply goes through checked_mul; overflow → NULL */
+Item* arr = mem_alloc_array(Item, count);   /* NULL on overflow OR alloc failure */
+if (!arr) return ERROR_ALLOC;
+/* ... */
+mem_free(arr);                              /* NULL-safe */
+```
+> Buys you: the `count * size` overflow is detected and returns `NULL` instead
+> of silently under-allocating. `mem_alloc_array(Type, count)` (memory.h)
+> routes through `mem_alloc_array_checked`, which uses `checked_mul`. For a
+> single object use `mem_alloc_type(Type)`; for raw bytes, `mem_alloc(size)`.
+> Free anything from these with `mem_free` (NULL-safe; do not `free()` it with
+> libc, and do not `mem_free` arena/pool memory).
+
+</details>
+
+<details>
+<summary><b>2 — Scoped allocation → arena (no per-object free)</b></summary>
+
+```c
+/* RAW — heap allocation with a matching free you must not forget or double,
+   on every exit path */
+Item* arr = malloc(count * sizeof(Item));
+/* ... use ...; each early return must free(arr) exactly once */
+free(arr);
+```
+```c
+/* SAFE — allocate from an arena; release everything at once, no per-object free */
+Item* arr = arena_alloc_array(&scratch, Item, count);   /* NULL if it doesn't fit */
+if (!arr) return ERROR_ALLOC;
+/* ... use ...; no free — arena_reset(&scratch) (or a mark rollback) frees all */
+```
+> Buys you: no per-allocation `free`, so no leak-on-early-return and no
+> double-free. `arena_alloc_array(arena, Type, count)` (arena.h) bump-allocates
+> from a caller-owned buffer; the whole arena is released by `arena_reset` or a
+> mark rollback (see the `DEFER` + `arena_mark` pattern in
+> [`goto` / labels](#c-goto)). Prefer this for temporary, scoped allocations.
+> The tradeoff is the point of an arena: there is **no** individual free.
+>
+> Honesty note: unlike `mem_alloc_array`, the `arena_alloc_array` macro does a
+> **raw** `sizeof(Type) * (count)` with no overflow check. If `count` is
+> untrusted, compute the byte size with `checked_mul` first (or use
+> `mem_alloc_array`), then `arena_alloc(&scratch, bytes)`.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-mem"></a>
+## `memcpy` / `memmove` / `memset` / `memcmp`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `memory.h` (`mem_copy`, `mem_move`, `mem_zero`, `mem_set`,
+> `mem_secure_zero`, `mem_equal`, `mem_compare`). So:
+> ```c
+> #include "core/memory.h"
+> ```
+
+The raw `mem*` functions are undefined behavior on `NULL`, have no bounds
+awareness, and `memcpy` on overlapping regions is undefined. The Canon-C
+wrappers are NULL-safe and zero-size-safe, and the copy variant actively
+rejects overlap.
+
+<details>
+<summary><b>1 — Copy → mem_copy / mem_move</b></summary>
+
+```c
+/* RAW — UB if dest or src is NULL; memcpy on overlapping regions is undefined */
+memcpy(dest, src, n);
+```
+```c
+/* SAFE — NULL-safe; mem_copy rejects overlap, mem_move handles it */
+mem_copy(dest, src, n);   /* no-op if either is NULL or n == 0; requires no overlap */
+mem_move(dest, src, n);   /* use this when the regions may overlap */
+```
+> Buys you: `NULL`/zero-size become no-ops instead of UB, and `mem_copy`
+> (memory.h) fires a contract violation if the two regions overlap — pointing
+> you at `mem_move`, which handles overlap correctly. Reaching for `memcpy`
+> when you needed `memmove` is a real and silent bug; `mem_copy` catches it.
+
+</details>
+
+<details>
+<summary><b>2 — Zero / set → mem_zero / mem_set (and secure)</b></summary>
+
+```c
+/* RAW — fine until ptr is NULL; and the compiler may DELETE a final
+   memset(key, 0, n) it considers dead, leaving secrets in memory */
+memset(buf, 0, n);
+memset(key, 0, sizeof(key));   /* may be optimized away! */
+```
+```c
+/* SAFE — NULL-safe; the secure variant cannot be optimized away */
+mem_zero(buf, n);                  /* NULL / zero-size safe */
+mem_set(buf, value, n);
+mem_secure_zero(key, sizeof(key)); /* survives dead-store elimination — for secrets */
+```
+> Buys you: NULL-safe zero/set, plus `mem_secure_zero` (memory.h) for wiping
+> keys, passwords, and sensitive buffers. An ordinary `memset` whose result is
+> never read again is allowed to be removed by the optimizer, silently leaving
+> secrets in RAM; `mem_secure_zero` is written to survive that.
+
+</details>
+
+<details>
+<summary><b>3 — Compare → mem_equal / mem_compare</b></summary>
+
+```c
+/* RAW — UB on NULL; and memcmp is not constant-time (a timing side channel) */
+if (memcmp(a, b, n) == 0) { /* ... */ }
+```
+```c
+/* SAFE — NULL-safe equality / ordering */
+if (mem_equal(a, b, n)) { /* ... */ }   /* both NULL → true; one NULL → false */
+int c = mem_compare(a, b, n);            /* memcmp-style ordering, NULL-safe */
+```
+> Buys you: defined NULL behavior (both-NULL equal, one-NULL unequal) and
+> zero-size handled. One caveat is unchanged from the raw form: neither is
+> constant-time — do **not** use `mem_equal` / `mem_compare` to compare
+> cryptographic secrets, exactly as you would not use raw `memcmp` for that.
+>
+> Type-safe macros remove the `sizeof` boilerplate for same-type objects:
+> `mem_zero_type(ptr)`, `mem_copy_type(dest, src)`, `mem_equal_type(a, b)`.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
 <a name="c-assert"></a>
 ## `assert`
 
