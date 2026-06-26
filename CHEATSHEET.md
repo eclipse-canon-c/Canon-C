@@ -10,7 +10,6 @@
 ### Declarations
 - [`Variable definition`](#c-var)
 - [`Pointer definition`](#c-ptr)
-- [`void*` pointer](#c-voidptr)
 - [`Array`](#c-array)
 - [`String literal` / `char[]`](#c-strlit)
 - [`Integer types & widths`](#c-widths)
@@ -81,10 +80,10 @@ this piece of raw C — what is its safe Canon-C form?"* You read it
 construct-first.
 
 **Start from the Table of C constructs.** Find the construct your code uses —
-a `for` loop, a `malloc`, a `void*` cast, a `switch`. Each entry gives you, side
-by side, the raw C form you likely wrote and the Canon-C form that replaces it,
-plus a one-line note on what the safe form buys you and what it still leaves to
-you.
+a `for` loop, a `malloc`, a pointer dereference, a `switch`. Each entry gives
+you, side by side, the raw C form you likely wrote and the Canon-C form that
+replaces it, plus a one-line note on what the safe form buys you and what it
+still leaves to you.
 
 **Two kinds of replacement.** Some constructs translate to a *code shape* with
 no function behind it — an initialized-at-declaration variable, a `require_msg`
@@ -94,6 +93,17 @@ translate to a *real Canon-C function* — overflow-safe arithmetic, bounds-chec
 access, allocation — in which case the entry names the header that owns it
 (`checked.h`, `slice.h`, `arena.h`, …) so you can open that header for the exact
 signature, full example, and verification status.
+
+**Some hazards live inside another construct's entry.** Not every C hazard gets
+its own row. A `void*` cast-and-dereference, for instance, is covered under
+[`Pointer definition`](#c-ptr) (NULL and alignment) and [`Cast`](#c-cast)
+(casting back to a concrete type), because that is where a porter meets it. When
+a row would only repeat another, it points there instead of duplicating it.
+
+**Each entry lists the minimal include set.** An entry names only the
+header(s) you actually need to `#include` for that construct — relying on
+Canon-C's own transitive includes rather than listing the full chain. If
+`ptr.h` already pulls in `types.h`, the entry shows `ptr.h` alone.
 
 **A word on what "safe" means here.** Copying a form from this cheatsheet makes
 your code *verification-ready* — shaped so a verifier can reason about it and so
@@ -122,8 +132,8 @@ stale.
 
 [↑ Back to constructs](#table-of-c-constructs)
 
-> Headers: `types.h` (aliases), `limits.h` (range constants), `contract.h`
-> (`require_msg`). `limits.h` pulls in `types.h`, so:
+> Headers: `limits.h` (range constants), `contract.h` (`require_msg`).
+> `limits.h` pulls in `types.h` (the aliases), so:
 > ```c
 > #include "core/primitives/limits.h"
 > #include "core/primitives/contract.h"
@@ -197,6 +207,117 @@ i8 level = (i8)v;      /* provably in range past this point */
 >
 > If `level` only ever holds small constants, the real fix is simpler: pick a
 > type wide enough that the value always fits, and case 3 disappears.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-ptr"></a>
+## `Pointer definition`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `ptr.h` (`ptr_is_aligned`, `ptr_is_valid`, `ptr_or`, `ALIGN_OF`).
+> `ptr.h` pulls in `types.h` and `contract.h` (for `require_msg`), so:
+> ```c
+> #include "core/primitives/ptr.h"
+> ```
+
+A raw pointer definition has three failure modes. The first two are about the
+pointer *value*; the third is about whether you may dereference it as the type
+you cast to.
+
+<details>
+<summary><b>1 — Uninitialized pointer</b></summary>
+
+```c
+/* RAW — indeterminate; a stray dereference reads or writes a garbage address */
+Config* cfg;
+/* ... */
+use(cfg);
+```
+```c
+/* SAFE — initialize to NULL at definition; a NULL deref faults loudly
+   instead of corrupting a random address silently */
+Config* cfg = NULL;
+```
+> Buys you: a defined initial value. An uninitialized pointer dereference is
+> undefined behavior with no diagnostic; a NULL one is a deterministic fault.
+> This is the value half of the problem — see case 2 for the deref guard.
+
+</details>
+
+<details>
+<summary><b>2 — Dereference without a NULL guard</b></summary>
+
+```c
+/* RAW — undefined behavior if p is NULL */
+void f(Config* p) {
+    use(p->field);
+}
+```
+```c
+/* SAFE — guard as a precondition before any dereference */
+void f(Config* p) {
+    require_msg(ptr_is_valid(p), "f: p is NULL");
+    use(p->field);
+}
+```
+> Buys you: the NULL case is caught at the boundary. `ptr_is_valid(p)` (ptr.h)
+> is just an explicit `p != NULL` — the header recommends it inside contract
+> macros so the intent reads unambiguously; plain `p != NULL` is equally fine.
+>
+> Use `require_msg`, **not** `ensure_msg` — this guards an input and must
+> survive release; `ensure_msg` is compiled out under `NDEBUG` unless
+> `CANON_STRICT`. `require_msg` is compiled out only under `-DCANON_NO_REQUIRE`,
+> once the precondition is formally proved, so it is free in a verified build.
+>
+> **Which guard you need depends on NULL's meaning** (ptr.h's discipline):
+> if NULL is a *bug* (a required pointer is missing), guard with `require_msg`.
+> If NULL is a *valid input* with a sensible default, don't guard — fold it
+> with `ptr_or(p, fallback)` instead, which returns `fallback` when `p` is NULL.
+
+</details>
+
+<details>
+<summary><b>3 — Casting to a type the address may not be aligned for</b></summary>
+
+```c
+/* RAW — a NULL guard does NOT cover this. Dereferencing an int* whose
+   address isn't int-aligned is undefined behavior on its own. */
+void f(void* p) {
+    require_msg(ptr_is_valid(p), "f: p is NULL");
+    int* ip = (int*)p;
+    use(*ip);                /* UB if p is not int-aligned */
+}
+```
+```c
+/* SAFE — guard alignment as well as null before the typed dereference */
+void f(void* p) {
+    require_msg(ptr_is_valid(p), "f: p is NULL");
+    require_msg(ptr_is_aligned(p, ALIGN_OF(int)),
+               "f: p is not int-aligned");
+    int* ip = (int*)p;
+    use(*ip);                /* now safe to dereference as int */
+}
+```
+> Buys you: the second, easily-missed UB of a typed-pointer definition. A
+> `void*` (or any under-aligned pointer) cast to `int*` and dereferenced is
+> undefined behavior independent of whether it's NULL — the NULL guard alone
+> leaves it open. `ptr_is_aligned(p, align)` (ptr.h, null-tolerant: returns
+> `false` on NULL) tests it; `ALIGN_OF(type)` (ptr.h) gives the required
+> alignment at compile time.
+>
+> This only applies when you *cast and dereference* as a wider type — a
+> `char*`/`u8*` view needs only the NULL guard, since byte access has no
+> alignment requirement.
+>
+> Note: `ALIGN_OF` uses C11 `_Alignof` where available and an `offsetof`
+> fallback on C99. Under strict C99 (`CANON_NO_GNU_EXTENSIONS`) that fallback
+> emits a compiler warning (`-Wgnu-offsetof-extensions` on Clang, C4116 on
+> MSVC) — harmless, but expected. Compile as C11 to silence it.
 
 </details>
 
