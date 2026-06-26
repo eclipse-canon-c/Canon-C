@@ -324,3 +324,202 @@ void f(void* p) {
 [↑ Back to constructs](#table-of-c-constructs)
 
 ---
+
+<a name="c-arith"></a>
+## `Arithmetic (+ - * / %)`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `checked.h` (`checked_add`, `checked_sub`, `checked_mul`,
+> `checked_div`, `checked_mod`, signed/typed variants). Pulls in `types.h`
+> and `limits.h`, so:
+> ```c
+> #include "core/primitives/checked.h"
+> ```
+
+Raw integer arithmetic can overflow or divide by zero. For **signed** operands
+that is undefined behavior — the compiler may assume it never happens and
+delete the checks around it. For **unsigned** it wraps silently (defined, but
+almost always a bug). Each checked op does the operation only if it is safe,
+writes the result through an out-parameter, and returns `true`/`false`.
+
+<details>
+<summary><b>1 — Add / subtract / multiply (overflow)</b></summary>
+
+```c
+/* RAW — signed overflow is UB; unsigned silently wraps. Either way the
+   result is wrong and nothing tells you. */
+usize total = count * elem_size;     /* wraps small if it overflows */
+isize sum   = a + b;                 /* UB if a + b exceeds isize range */
+```
+```c
+/* SAFE — do the op only if it fits; branch on the boolean result */
+usize total;
+if (!checked_mul(count, elem_size, &total)) {
+    return ERROR_OVERFLOW;           /* handle as a value, not a crash */
+}
+
+isize sum;
+if (!checked_add_isize(a, b, &sum)) {
+    return ERROR_OVERFLOW;
+}
+```
+> Buys you: overflow becomes a handleable `false` instead of UB or a silent
+> wrap. `checked_add` / `checked_sub` / `checked_mul` operate on `usize`;
+> typed variants exist for the unsigned widths (`checked_add_u8` / `_u16` /
+> `_u32` / `_u64`, and likewise for sub/mul) and for **signed pointer-width**
+> (`checked_add_isize` / `_sub_isize` / `_mul_isize`).
+>
+> There is **no fixed-width signed** variant (`_i8` … `_i64`). To overflow-check
+> narrow signed arithmetic, do the checked op in `isize`, then narrow the
+> result with a range guard (see [`Variable definition`](#c-var) case 3). If you
+> find yourself needing this often, it usually means the value wants to live in
+> `isize`/`usize` in the first place.
+>
+> **Critical:** on overflow the function still writes `*result` (with the
+> wrapped value, when compiled with builtins) and returns `false`. Always
+> check the boolean **before** reading the result — never use `*result`
+> blind. The pattern is `if (!checked_op(...)) handle; /* then use result */`.
+
+</details>
+
+<details>
+<summary><b>2 — Divide / modulo (divide-by-zero, signed ISIZE_MIN / -1)</b></summary>
+
+```c
+/* RAW — division by zero is UB. For signed, ISIZE_MIN / -1 is ALSO UB
+   (the true quotient is unrepresentable), even though it looks harmless. */
+usize per = total / count;           /* UB if count == 0 */
+isize q   = num / den;               /* UB if den == 0, or num==MIN & den==-1 */
+```
+```c
+/* SAFE — both UB cases are detected and reported */
+usize per;
+if (!checked_div(total, count, &per)) {
+    return ERROR_DIV_BY_ZERO;
+}
+
+isize q;
+if (!checked_div_isize(num, den, &q)) {
+    return ERROR_DIV_INVALID;        /* covers zero AND ISIZE_MIN / -1 */
+}
+```
+> Buys you: the divide-by-zero guard, and — for the signed variant — the
+> `ISIZE_MIN / -1` overflow case that a hand-written `if (den == 0)` check
+> misses entirely. `checked_mod` / `checked_mod_isize` do the same for `%`.
+> The unsigned `checked_div` / `checked_mod` only fail on a zero divisor; that
+> is simple enough you could inline `if (b == 0)`, but they exist so you keep
+> one idiom across all five operations.
+
+</details>
+
+<details>
+<summary><b>3 — min / max / clamp (double-evaluation trap)</b></summary>
+
+```c
+/* RAW / NAIVE — a hand-rolled max macro evaluates its args twice */
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+usize n = MAX(i++, limit);           /* i++ happens twice — bug */
+```
+```c
+/* SAFE-ER — checked.h provides the macros, but the same caveat applies:
+   pass values with no side effects. */
+usize n = checked_max(i, limit);     /* fine: i has no side effect */
+usize c = checked_clamp(x, lo, hi);  /* clamp x into [lo, hi] */
+```
+> Buys you: a named, tested `checked_min` / `checked_max` / `checked_clamp`
+> instead of a per-file hand-rolled macro. These are **macros**, so the
+> double-evaluation rule still holds — never pass an argument with a side
+> effect (`i++`, a function call). Bind it to a variable first.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
+<a name="c-bitwise"></a>
+## `Bitwise (<< >> & | ^ ~)`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> Header: `bits.h` (`bits_set`, `bits_clear`, `bits_test`, `bits_extract`,
+> `bits_rotl`, `bits_clz`, `bits_popcount`, …). Pulls in `types.h`, so:
+> ```c
+> #include "core/primitives/bits.h"
+> ```
+
+Raw bit manipulation has one dominant UB source: **shifting by an amount ≥ the
+type's width**, including the easy-to-miss case where the shifted `1` is a
+plain `int`. The `bits_*` functions operate on `u64` and avoid the UB by
+construction.
+
+<details>
+<summary><b>1 — Set / clear / test / toggle a bit</b></summary>
+
+```c
+/* RAW — `1` is an int; `1 << bit` is UB once bit >= 31 (and certainly at
+   bit >= width). People write this meaning to touch a high bit and hit UB. */
+flags |=  (1 << bit);                /* UB for bit >= 31 */
+flags &= ~(1 << bit);
+bool on = (flags >> bit) & 1;
+```
+```c
+/* SAFE — named ops on u64; the shift constant is 1ULL internally */
+flags   = bits_set(flags, bit);      /* set bit */
+flags   = bits_clear(flags, bit);    /* clear bit */
+bool on = bits_test(flags, bit);     /* test bit */
+flags   = bits_toggle(flags, bit);   /* flip bit */
+```
+> Buys you: the high-bit UB disappears — `bits_*` shift `1ULL`, not `1`, and
+> work on `u64`. Precondition: `bit < 64`. Note these return `u64`; assign
+> back into a `u64`/`usize` flags word.
+
+</details>
+
+<details>
+<summary><b>2 — Shift count and hand-rolled rotation</b></summary>
+
+```c
+/* RAW — variable shift >= width is UB; and the classic rotate idiom is UB
+   when shift == 0, because `x >> (64 - 0)` shifts by the full width. */
+u64 r = (x << s) | (x >> (64 - s));  /* UB if s == 0, or s >= 64 */
+```
+```c
+/* SAFE — rotation that masks the count and special-cases 0 */
+u64 r = bits_rotl(x, s);             /* left-rotate; shift auto-masked to 0..63 */
+u64 l = bits_rotr(x, s);             /* right-rotate */
+```
+> Buys you: no shift-width UB. `bits_rotl` / `bits_rotr` mask the shift to
+> `0..63` and handle `shift == 0` correctly. They always rotate the full 64
+> bits — for a narrow (e.g. 8-bit) rotation, use the worked formula in the
+> `bits.h` docblock rather than masking the result, which can let high bits
+> bleed in.
+
+</details>
+
+<details>
+<summary><b>3 — Count leading/trailing zeros, popcount</b></summary>
+
+```c
+/* RAW — the compiler builtins are UB for a zero input on many platforms,
+   and hand-rolled bit-counting is easy to get subtly wrong. */
+u32 lz = __builtin_clzll(value);     /* UB when value == 0 */
+```
+```c
+/* SAFE — defined for every input, including zero */
+u32 lz = bits_clz(value);            /* leading zeros; returns 64 if value == 0 */
+u32 tz = bits_ctz(value);            /* trailing zeros; returns 64 if value == 0 */
+u32 n  = bits_popcount(value);       /* set-bit count, 0..64 */
+```
+> Buys you: a defined answer for `value == 0` (the raw builtins are UB there),
+> and tested popcount / clz / ctz that compile to a single instruction where
+> the hardware has it and fall back to portable C otherwise. Related:
+> `bits_ffs` / `bits_fls` (1-indexed first/last set bit, 0 if none),
+> `bits_is_power_of_two`, `bits_next_power_of_two`.
+
+</details>
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
