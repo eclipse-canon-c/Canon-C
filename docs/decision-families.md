@@ -58,6 +58,12 @@ A future maintainer asking "what's the verification story for
 piece of the story, and the cross-references make the composition
 explicit.
 
+A second composition is now visible at the `semantics/` layer:
+`option` carries **VERIFY-014** (driver WP run, 189/223, 34 documented
+residuals) and **MCDC-006** (the `expect` panic-on-absent branch,
+unreachable) at once, the first VERIFY-/MCDC- pair on a driver-verified
+Shape-B macro module rather than an in-place header.
+
 ---
 
 ## OWN-NNN — Ownership and lifetime substrate
@@ -191,7 +197,14 @@ with the manual discharge argument.
 Category D entries sit at the seam between the two namespaces. The
 rule of thumb: if the decision is *what to prove* or *how to model
 the proof*, it's an OWN- entry. If it's *the proof itself* or *the
-manual argument for an unproved goal*, it's a VERIFY- entry.
+manual argument for an unproved goal*, it's a VERIFY- entry. (Note
+that not every opaque-callee residual produces an OWN- entry:
+`option`'s combinators dispatch caller-supplied function pointers and
+incur the same WP residual class as OWN-003's hooks — see VERIFY-014 —
+but that is intrinsic to what a combinator *is*, with no
+path-not-taken to record, so it carries a VERIFY- entry and no OWN-
+one. Category D applies when there was an architectural choice about
+the boundary, not merely a residual at it.)
 
 ### Worked example: OWN-001
 
@@ -246,15 +259,21 @@ details cross-referenced into `docs/deviations.md`. They record what
 WP proves for each verified header, what it leaves unproved, and the
 manual arguments that discharge the residuals.
 
-Entries to date span the full `core/` stack: VERIFY-001 through
-VERIFY-012 cover `checked.h`, `bits.h`, `compare.h`, `ptr.h`,
-`slice.h`, `memory.h`, `arena.h`, `pool.h`, and `region.h`, plus the
-cross-cutting VERIFY-012 contract-strengthening pass that closed the
-initialization sub-class across five headers at once.
+Entries to date span the full `core/` stack and the first two
+`semantics/` modules: VERIFY-001 through VERIFY-012 cover `checked.h`,
+`bits.h`, `compare.h`, `ptr.h`, `slice.h`, `memory.h`, `arena.h`,
+`pool.h`, and `region.h`, plus the cross-cutting VERIFY-012
+contract-strengthening pass that closed the initialization sub-class
+across five headers at once; VERIFY-013 (`error.h`) and VERIFY-014
+(`option`) extend the namespace into `semantics/`, with VERIFY-014 the
+first **driver-verified** entry — a Shape-B macro module proved through
+`vmacros/vdrivers/option_verify.h` rather than an in-place header (see
+`docs/vmacros.md` for the driver mechanism).
 
-With the `core/` layer complete, enough VERIFY- entries now exist to
-describe the namespace's recurring shapes. The categories below are
-descriptive of patterns visible across VERIFY-002 through VERIFY-011.
+With the `core/` layer complete and the `semantics/` layer underway,
+enough VERIFY- entries now exist to describe the namespace's recurring
+shapes. The categories below are descriptive of patterns visible
+across VERIFY-002 through VERIFY-014.
 
 ### Recurring shapes of VERIFY- entries
 
@@ -271,26 +290,35 @@ named goals time out and no others.
 discharge because the verifier itself has not implemented the relevant
 ACSL primitive. VERIFY-007 (slice.h's `\dangling` memcmp
 preconditions) and VERIFY-008 category 1 (memory.h's `\fresh` /
-`\freeable` allocation reasoning) are the instances. The defining
-feature is that strengthening the contract does *not* help — the gap
-is in Frama-C 29, confirmed by the WP warning text quoted verbatim in
-the entry. VERIFY-012 is the important counter-case: it proved that
-*one* member of this shape (`\initialized`) was misclassified — WP
-*can* discharge it once stated as a precondition — which is why
-VERIFY- entries quote the verifier's own warning rather than asserting
-a feature gap from inference.
+`\freeable` allocation reasoning) are the allocation/danglingness
+instances; VERIFY-014 (option's combinator function-pointer dispatch —
+no `calls` clause for an arbitrary callee, `\valid_function`
+unimplemented in Frama-C 29) is the indirect-call variant of the same
+shape, sharing its root cause with region_end's opaque-hook residuals
+(VERIFY-011 category 1 / OWN-003). The defining feature is that
+strengthening the contract does *not* help — the gap is in Frama-C 29,
+confirmed by the WP warning text quoted verbatim in the entry.
+VERIFY-012 is the important counter-case: it proved that *one* member
+of this shape (`\initialized`) was misclassified — WP *can* discharge
+it once stated as a precondition — which is why VERIFY- entries quote
+the verifier's own warning rather than asserting a feature gap from
+inference.
 
 **Shape 3 — Inherited residuals.** Goals that re-emerge unchanged in a
 downstream header's proof run because it includes an already-verified
 header transitively. VERIFY-008 (memory.h inherits 23 from the
 substrate), VERIFY-009 (arena.h inherits memory.h's full 43),
 VERIFY-010 (pool.h inherits arena.h's full 89), and VERIFY-011
-(region.h inherits arena.h's full 89) are the instances. The defining
-feature is that the inherited count equals the upstream's *total*, not
-greater — the composable-verification thesis, supported across five
-composition layers. An inherited-residual section in a VERIFY- entry
-is a table mapping each goal back to its originating VERIFY- entry by
-name.
+(region.h inherits arena.h's full 89) are the substrate-stack
+instances; VERIFY-014 carries a minimal version of the same shape —
+option inherits exactly the 2 contract.h handler goals it reaches
+through `expect`, and nothing deeper, because it does not pull in the
+core/ substrate. The defining feature is that the inherited count
+equals the upstream's *total* for that include edge, not greater — the
+composable-verification thesis, supported across five core/ composition
+layers and now at the semantics/ boundary. An inherited-residual
+section in a VERIFY- entry is a table mapping each goal back to its
+originating VERIFY- entry by name.
 
 **Shape 4 — Deliberate spec-strength tradeoffs.** A residual kept open
 on purpose because closing it would cost more than the residual does.
@@ -319,27 +347,44 @@ API-unreachable, WP-discharged-unreachable, or
 defensively-redundant.
 
 Entries to date: MCDC-001 (the coverage-flags methodology) plus
-MCDC-002 through MCDC-005, one per verified `core/` header that
-carries an unreachable defensive shape — slice.h (`!ptr` branches),
-arena.h (overflow-guard subconditions), pool.h (`!pool->arena`
-disjunct), and region.h (`!h->fn` hook guard).
+MCDC-002 through MCDC-006. MCDC-002 through MCDC-005 are one per
+verified `core/` header that carries an unreachable defensive shape —
+slice.h (`!ptr` branches), arena.h (overflow-guard subconditions),
+pool.h (`!pool->arena` disjunct), and region.h (`!h->fn` hook guard).
+MCDC-006 is the first `semantics/`-layer and first Shape-B entry —
+`option`'s `expect` panic-on-absent branch, measured through the cover
+TU `vmacros/coverage/option_cover.c`.
 
-With four header-level entries accumulated, the namespace's recurring
-shape is now visible:
+With five header- and module-level entries accumulated, the
+namespace's recurring shape is now visible:
 
 **The cross-stream complement.** The dominant MCDC- category, present
-in all of MCDC-002 through MCDC-005, is the gcov/WP complement: gcov
+in all of MCDC-002 through MCDC-006, is the gcov/WP complement: gcov
 measures a defensive branch as source-level uncovered, and a separate
-evidence stream proves it unreachable. In MCDC-002/003/004 the proof
-is a *type invariant* (`bytes_invariant`, `arena_invariant`,
-`pool_invariant`); in MCDC-005 it is a *runtime construction
-invariant* (region_register's no-NULL-hook discipline) rather than a
-named predicate — a wrinkle worth flagging, because an auditor should
-not expect a "region_invariant discharges this" claim for MCDC-005.
-The two streams complement rather than converge: gcov instruments the
-source, the proof establishes reachability, and the entry documents
-both. Each header's *shape* differs (the specific defensive branch);
-the *evidence pattern* is identical.
+evidence stream proves it unreachable. The *source* of unreachability
+varies across three variants within this one shape. In
+MCDC-002/003/004 the proof is a *type invariant* (`bytes_invariant`,
+`arena_invariant`, `pool_invariant`). In MCDC-005 it is a *runtime
+construction invariant* (region_register's no-NULL-hook discipline)
+rather than a named predicate — a wrinkle worth flagging, because an
+auditor should not expect a "region_invariant discharges this" claim
+for MCDC-005. In MCDC-006 it is neither: it is a *contract-violation /
+panic* branch — `option`'s `expect` dispatches to the panic handler on
+the absent path, and WP models that call as non-terminating (it reports
+the handler call as a recursive call that "must be unreachable"), while
+gcov measures the same branch as not-executed under `CANON_NO_REQUIRE`.
+MCDC-006's unreachability source is closest to MCDC-001's `contract.h
+0/2` artifact — both rooted in the panic/disabled-contract machinery —
+even though its evidence pattern is the MCDC-002-through-005 cross-stream
+complement. The two streams complement rather than converge: gcov
+instruments the source, the proof establishes reachability, and the
+entry documents both. Each header's *shape* differs (the specific
+defensive branch and its unreachability source); the *evidence pattern*
+is identical. MCDC-006 is also the first MCDC- entry paired with a
+VERIFY- entry on a **driver-verified Shape-B module** (VERIFY-014)
+rather than an in-place header — the cover TU exists precisely because
+the Shape-B conditions are otherwise attributed to the excluded
+`_test.c` and filtered out (see `docs/vmacros.md`).
 
 **The methodology artifact.** MCDC-001 is a different shape — not a
 per-header gap but the project-wide flags (`CANON_NO_REQUIRE`,
@@ -348,7 +393,10 @@ change the code under measurement to align coverage with the verified
 path. The recurring `contract.h 0/2` artifact and the
 `_arena_debug_update` no-op outcomes (MCDC-003 category 2) are
 instances of gcov-14 instrumentation behavior on disabled-macro
-expansion, traceable back to MCDC-001's methodology.
+expansion, traceable back to MCDC-001's methodology. MCDC-006's single
+miss is downstream of the same methodology — `CANON_NO_REQUIRE` is what
+removes the `expect` panic path from the measured code, which is why the
+branch reads as uncovered rather than as a test gap.
 
 **The reachable gap closed by a test.** A minority shape: an outcome
 that *looks* unreachable but is a genuine test gap, closed by a
@@ -364,7 +412,11 @@ A future header introducing its own public `{ptr, len}` type or
 analogous defensive code (stringbuf.h is the next candidate, listed
 provisionally at 74.2% in MCDC-002's pattern note) will need its own
 per-header MCDC- entry; its unreachability shape and number are not
-transferable from the existing entries.
+transferable from the existing entries. Likewise, the remaining
+Shape-B macro modules (`result`, `vec`, `deque`, `fold`) will each get
+their own MCDC- entry paired with a driver, following option/MCDC-006's
+cover-TU pattern; their unreachability shapes are not transferable
+either.
 
 ---
 
@@ -410,8 +462,8 @@ When in doubt, leave the section pending. A "Pending evidence"
 marker (as still used for MISRA-CFG- above) is more honest than a
 section that invents categories before the entries demand them. The
 OWN-, VERIFY-, and MCDC- sections have each crossed the threshold —
-four sourced OWN- categories, four VERIFY- shapes across thirteen
-entries, three MCDC- shapes across five entries. MISRA-CFG- has not,
+four sourced OWN- categories, four VERIFY- shapes across fourteen
+entries, three MCDC- shapes across six entries. MISRA-CFG- has not,
 and is marked accordingly.
 
 ---
@@ -421,8 +473,8 @@ and is marked accordingly.
 - **Entry counts or schedules.** How many OWN- or VERIFY- entries
   will exist at v2.0.0 is unknown; estimating it adds a forecast
   genre that decays. The stable content is the shape, not the count.
-  (Where this file names current entries — VERIFY-001 through 013,
-  OWN-001 through 003, MCDC-001 through 005 — it is recording the
+  (Where this file names current entries — VERIFY-001 through 014,
+  OWN-001 through 003, MCDC-001 through 006 — it is recording the
   present state to ground the category descriptions, not forecasting
   a future total.)
 - **Specific future entries.** OWN-002 and OWN-003 were
