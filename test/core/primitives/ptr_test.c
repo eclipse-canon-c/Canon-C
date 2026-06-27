@@ -204,8 +204,8 @@ static CANON_MAYBE_UNUSED void test_is_power_of_two(void) {
     EXPECT_TRUE(is_power_of_two(64));
     EXPECT_TRUE(is_power_of_two(128));
     EXPECT_TRUE(is_power_of_two(256));
-    EXPECT_TRUE(is_power_of_two((usize)1 << 31));
-    EXPECT_TRUE(is_power_of_two((usize)1 << 62));
+    EXPECT_TRUE(is_power_of_two((usize)1 << (sizeof(usize) * 8 - 1)));
+    EXPECT_TRUE(is_power_of_two((usize)1 << (sizeof(usize) * 8 - 2)));
 
     /* Non-powers */
     EXPECT_FALSE(is_power_of_two(3));
