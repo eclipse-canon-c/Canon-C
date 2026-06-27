@@ -531,8 +531,8 @@ jobs:
   #   against the same baseline regardless of which job hosts it.
   #
   #   ENFORCED (hard proved/unproved baselines): checked, bits, compare, ptr,
-  #   slice, memory, arena, pool, region, error. Region runs 120s/split in its own
-  #   isolated job (long run, ~1h40m) but is enforced like the rest.
+  #   slice, memory, arena, pool, region, error, option. Region runs 120s/split
+  #   in its own isolated job (long run, ~1h40m) but is enforced like the rest.
   #
   #   Eva is intentionally NOT run on these headers: Eva needs an entry point
   #   to anchor abstract interpretation, and these are header-only modules of
