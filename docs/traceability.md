@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-06-06                                                   |
+| **Date**           | 2026-06-27                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | c9172fc                                                      |
-| **CI run**         | Canon-C CI #992                                              |
+| **Commit**         | 93bb107                                                      |
+| **CI run**         | Canon-C CI #1072                                             |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -53,40 +53,44 @@
 | **Flags**          | `--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_BITS_FORCE_FALLBACK -DCANON_NO_REQUIRE` |
 | **Tool**           | gcov-14 --conditions (MC/DC) + lcov (branch)                |
 | **Runner**         | ubuntu-latest (GitHub Actions)                               |
-| **Scope**          | Library headers only — test files excluded                   |
-| **Test binaries**  | 50 (contract_test excluded from coverage build)              |
+| **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
+| **Test binaries**  | 51 (50 test binaries + 1 Shape-B cover TU `option_cover`; contract_test excluded from the coverage build) |
 
-> Note: the aggregate coverage figures below are unchanged from CI #974
-> (commit 98de378). region.h has been built and coverage-measured since
-> Phase 1 of the lifetime substrate, so its 21/22 MC/DC contribution was
-> already folded into the project totals at every prior baseline. What
-> CI #992 added on the coverage side is region.h's *documented* MCDC
-> entry (MCDC-005), not a new measurement. The "Current Measurement"
-> metadata is advanced to #992 for consistency with the newest history
-> row; the Results table values repeat #974's because the measurement
-> did not move.
+> Note: this baseline advances from CI #974/#992 to CI #1072, where the
+> first Shape-B cover TU (`vmacros/coverage/option_cover.c`) entered the
+> coverage build. The cover TU re-instantiates `CANON_OPTION(int)` outside
+> `test/` so the option module's macro-generated condition outcomes — which
+> are filtered out when measured through `option_test.c` (a `/test/` path) —
+> are attributed to a surviving file and counted (see `docs/vmacros.md` and
+> MCDC-006). Adding the cover TU brings option's 30 condition outcomes into
+> the MC/DC denominator and also brings the TU's own scaffolding functions
+> and lines into the project line/function denominators. The aggregate moved
+> accordingly: MC/DC 86.1% → 86.2% (1443/1674), function coverage 99.6% →
+> 99.5% (546/549, the one new uncovered function being the `is_positive`
+> cover-driver helper, reachable only via the `filter` F&&_ short-circuit so
+> its body never runs). region.h's 21/22 MC/DC contribution was already in the
+> aggregate from Phase 1 of the lifetime substrate; CI #992 added only its
+> *documented* MCDC entry (MCDC-005), not a new measurement.
 
 ### Results
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.6%      | 2210       | 2311       |
-| Functions  | 99.6%      | 521        | 523        |
-| Branches   | 86.6%      | 1448       | 1672       |
-| MC/DC      | 86.1%      | 1413       | 1642       |
+| Lines      | 95.7%      | 2268       | 2371       |
+| Functions  | 99.5%      | 546        | 549        |
+| Branches   | 86.6%      | 1459       | 1684       |
+| MC/DC      | 86.2%      | 1443       | 1674       |
 
 arena.h's MC/DC contribution at 90.6% (58/64) is the achievable
 ceiling under the documented MCDC-003 unreachability — see the
 "Headers at their documented MC/DC ceiling" prose below. The
-contribution increased from 57/64 (89.1%) to 58/64 (90.6%) at this
-baseline because CI #962 closed the previously-missing
+contribution increased from 57/64 (89.1%) to 58/64 (90.6%) at the
+arena.h baseline because CI #962 closed the previously-missing
 `arena_try_alloc_aligned` line 510 outcome (the compound-return
 `out != NULL && p != NULL` false branch) by adding
 `test_try_alloc_aligned_failure` to `test/core/arena_test.c`,
 mirroring the non-aligned `arena_try_alloc` test that already
-covered line 485. The +1 covered outcome lifted the project MC/DC
-hit count by one (1400 → 1401 of 1642) and the project branch hit
-count by one (1436 → 1437 of 1672). The 6 remaining missed outcomes
+covered line 485. The 6 remaining missed outcomes
 on arena.h are documented in MCDC-003: 4 overflow-guard subconditions
 that are structurally unreachable under `arena_invariant +
 CANON_ARENA_MAX_SIZE = CANON_GB`, plus 2 release-build macro no-op
@@ -106,16 +110,33 @@ macro expansion. The 15 remaining missed outcomes are defensive
 `require_msg` checks under `-DCANON_NO_REQUIRE`, the same coverage
 methodology pattern documented in MCDC-001.
 
-pool.h's MC/DC contribution reached 62/68 (91.2%) at this baseline, the
+pool.h's MC/DC contribution reached 62/68 (91.2%) at its baseline, the
 achievable ceiling under MCDC-004. The four wave-1 gap-closure tests
 (b2644ba / CI #972) moved pool.h from 55/68 to 61/68, and
 `test_init_arena_alloc_fails_after_guard` (98de378 / CI #974) closed the
 line-309 reachable gap to reach 62/68 — the gcov dump confirms line 309 at
-2/2 condition outcomes. The two closures lifted the project MC/DC hit count
-from 1401 to 1413 of 1642 and the project branch hit count from 1437 to 1448
-of 1672. The 6 remaining missed outcomes on pool.h are the `!pool->arena`
-defensive subconditions documented in MCDC-004, unreachable under
-`pool_invariant`.
+2/2 condition outcomes. The 6 remaining missed outcomes on pool.h are the
+`!pool->arena` defensive subconditions documented in MCDC-004, unreachable
+under `pool_invariant`.
+
+option_cover.c's MC/DC contribution is 96.7% (29/30) at this baseline, the
+achievable ceiling under MCDC-006 and the first Shape-B (macro-templated)
+module to enter the per-file table. option's combinator conditions live in
+`IMPL_OPTION_*` macro bodies; measured through `option_test.c` they are
+attributed to a `/test/` path and filtered out, so
+`vmacros/coverage/option_cover.c` re-instantiates `CANON_OPTION(int)` outside
+`test/` to give them a surviving home (see `docs/vmacros.md`). Of
+option_cover.c's 30 condition outcomes, 26 are the generated `option_int_*`
+combinator conditions and 4 are the cover driver's own scaffolding
+(`half_if_even`'s even-check and `observe_opt`'s `get`-result branch, both
+covered); the single miss is the FALSE side of `option_int_expect`'s
+`has_value` guard — the panic-on-absent contract-violation branch, not
+exercised under `-DCANON_NO_REQUIRE` and cross-confirmed unreachable by WP
+(VERIFY-014). Adding the cover TU to the coverage build also brings its
+scaffolding functions and lines into the project denominators: function
+coverage moves to 99.5% (546/549) — the one new uncovered function is the
+`is_positive` helper, reachable only via the `filter` F&&_ short-circuit so
+its body never runs — and the project MC/DC aggregate to 86.2% (1443/1674).
 
 
 ### Methodology changes since baseline
@@ -131,6 +152,15 @@ and bswap instead of compiler builtins.
 `((void)0)`, removing NULL-check branches that ACSL `requires \valid(result)`
 has already proved unreachable under Frama-C. contract_test is excluded
 from the coverage build for the same reason.
+
+**Shape-B cover TUs** (added 2026-06-27): The coverage build now compiles
+the Shape-B macro-module cover translation units under
+`vmacros/coverage/` (starting with `option_cover.c`) so the macro-generated
+condition outcomes — otherwise attributed to `/test/` paths and filtered
+out — are measured against a surviving non-test file. The cover TUs are
+compiled with the same `-DCANON_NO_REQUIRE -DNDEBUG` as the WP run so the
+measured condition set equals the proof's goal set. See `docs/vmacros.md`
+and MCDC-006.
 
 ### Notes on per-test column attribution
 
@@ -272,6 +302,26 @@ by methodology):
   guard branch. The 1 missed outcome is the documented ceiling and not
   counted as a coverage regression.
 
+- **option_cover.c: 96.7% (29/30)** — the ceiling under MCDC-006, and
+  the first Shape-B (macro-templated) module to appear in the per-file
+  table. option's combinator conditions live in `IMPL_OPTION_*` macro
+  bodies; measured through `option_test.c` they are attributed to a
+  `/test/` path and filtered out, so `vmacros/coverage/option_cover.c`
+  re-instantiates `CANON_OPTION(int)` outside `test/` to give them a
+  surviving home (see `docs/vmacros.md`). The 30 outcomes are 26
+  generated `option_int_*` combinator conditions plus 4 cover-driver
+  scaffolding conditions (`half_if_even`'s even-check and `observe_opt`'s
+  `get`-result branch, both covered); the single miss is the FALSE side
+  of `option_int_expect`'s `has_value` guard — the panic-on-absent
+  contract-violation branch, not exercised under `-DCANON_NO_REQUIRE`
+  and cross-confirmed unreachable by WP, which reports `expect`'s handler
+  call as a non-terminating recursive call that "must be unreachable"
+  (VERIFY-014). Unlike MCDC-002/003/004/005, the unreachability source
+  is the panic handler's non-termination, not a type or construction
+  invariant — the same family as the `contract.h 0/2` artifact
+  (MCDC-001). The 1 missed outcome is the documented ceiling and not
+  counted as a coverage regression.
+
 Headers absent from the MC/DC table:
 
 `core/primitives/types.h`, `core/primitives/limits.h`,
@@ -316,7 +366,9 @@ As of 2026-06-13 (CI #1022), VERIFY-012 closed 50 enforced goals across
 five verified headers by ACSL precondition alone — no executable change —
 by stating `\initialized` as an input precondition where WP can discharge
 it. This lowered the slice/memory/arena/pool/region residual counts to the
-values below (formerly 23/57/103/127/126).
+values below (formerly 23/57/103/127/126). As of 2026-06-27 (CI #1067),
+option became the first driver-verified Shape-B module (VERIFY-014); its
+row is the driver's WP run over `vmacros/vdrivers/option_verify.h`.
 
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
@@ -330,15 +382,27 @@ values below (formerly 23/57/103/127/126).
 | pool.h     | 19        | 3902              | 3789 (97.10%)     | 113      | VERIFY-010/12|
 | region.h   | 12        | 3643              | 3531 (96.92%)     | 112      | VERIFY-011/12|
 | error.h    | 4         |   65              |   65 (100%)       | 0        | VERIFY-013   |
-| **Total**  | **203**   | **18797**         | **18398 (97.88%)**| **399**  |              |
+| option     | 16        |  223              |  189 (84.75%)     | 34       | VERIFY-014   |
+| **Total**  | **219**   | **19020**         | **18587 (97.72%)**| **433**  |              |
+
+The option row is the driver-verified Shape-B module: WP runs over
+`vmacros/vdrivers/option_verify.h`, which instantiates the real shipped
+`IMPL_OPTION_*` macros at `CANON_OPTION(int)`. Its 223 obligations are
+option's own generated-function goals plus the 2 contract.h handler goals
+it reaches transitively through `expect`; option does not pull in the
+core/ substrate stack. See VERIFY-014.
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). All 399 unproved goals are demonstrated
-triple-prover-resistant and carry written manual-proof arguments or
-documented WP feature-gap rationale in `docs/deviations.md`.
+`-wp-timeout 120`). Of the 433 unproved goals, the 399 in-place-header
+goals are demonstrated triple-prover-resistant and carry written
+manual-proof arguments or documented WP feature-gap rationale in
+`docs/deviations.md`. option's 34 are a distinct class — function-pointer-
+dispatch feature-gap residuals (no `calls` clause for an arbitrary callee;
+`\valid_function` unimplemented in Frama-C 29), the same class as
+region_end's opaque-hook dispatch (VERIFY-011 cat 1), documented in
+VERIFY-014.
 
-**Note on totals**: the 18732 figure is the row-sum of independent
-per-header WP runs, where each row reports each header's own
+**Note on totals**: each per-header row reports that header's own
 obligations (substrate goals are counted under their owning header,
 not duplicated into downstream rows). The CI WP step for ptr.h
 actually reports 1943/1953 because it processes ptr.h's translation
@@ -366,7 +430,10 @@ goals are re-emerged residuals already documented under
 VERIFY-002/006/007/008 — byte-identical to memory.h's full 43-goal
 residual surface (see VERIFY-009 for the inheritance table). 23 of
 memory.h's 43 unproved goals are likewise re-emerged residuals already
-documented under VERIFY-002/006/007 (see VERIFY-008).
+documented under VERIFY-002/006/007 (see VERIFY-008). option's 34
+unproved goals are 2 inherited from contract.h (VERIFY-006 cat 4) plus
+32 option-own combinator function-pointer-dispatch residuals (see
+VERIFY-014).
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 (5.9%) than the previously verified primitives headers because slice.h
@@ -466,6 +533,26 @@ the verification boundary — the WP boundary landed exactly where the
 design predicted it. With region.h verified, the core/ layer is
 complete (every core/ header is verified or justified-N/A).
 
+The option baseline (189 / 223) is the first **driver-verified** and
+first **Shape-B** module, and the first semantics/ header to carry
+residuals (error.h, VERIFY-013, proved 65/65 clean). WP runs over the
+driver `vmacros/vdrivers/option_verify.h` rather than a shipped header,
+because option's functions exist only as `IMPL_OPTION_*` macro bodies
+until `CANON_OPTION(int)` instantiates them. The 34 residuals are 2
+inherited from contract.h (the handler non-termination pair, VERIFY-006
+cat 4 — option reaches contract.h through `expect`) plus 32 option-own
+across the six combinators that dispatch a caller-supplied function
+pointer (`map`, `and_then`, `filter`, `combine_with` — 6 each;
+`or_else`, `eq` — 4 each). The own residuals are a function-pointer-
+dispatch feature gap — no `calls` clause for an arbitrary callee,
+`\valid_function` unimplemented in Frama-C 29 — the same limitation as
+region_end's opaque-hook dispatch (VERIFY-011 cat 1), not the SMT
+integer/libc residual classes of the core/ stack. Every non-combinator
+function proved fully. option uses the default `Typed` model (no void*
+casts), like error.h. All 34 are documented in VERIFY-014 with manual-
+proof arguments. option's WP run is enforced (exact-count + by-name
+roll-call) as of CI #1067.
+
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
 were discharged automatically — most by Qed, with smaller contributions
@@ -473,7 +560,7 @@ from Alt-Ergo and from WP's structural categories (Terminating /
 Unreachable). The two manually-discharged goals are unchanged from
 the previous baseline.
 
-### Cross-stream evidence: MCDC-002, MCDC-003, MCDC-004, and MCDC-005 closures
+### Cross-stream evidence: MCDC-002 through MCDC-006 closures
 
 slice.h's MC/DC ceiling at 93.1% (54/58) and slice.h's WP discharge
 of the four MCDC-002 functions form complementary certification
@@ -543,6 +630,26 @@ obligations, a distinct concern from this guard branch — the guard
 branch is a structural defensive outcome, not a WP residual. See
 MCDC-005 in `docs/deviations.md` for the formal closure record.
 
+option_cover.c's MC/DC ceiling at 96.7% (29/30) and the MCDC-006 closure
+are the sixth instance of the cross-stream pattern, and the first on a
+Shape-B (macro-templated) module measured through a cover TU. gcov
+reports the single `!o.has_value` FALSE branch of `option_int_expect` as
+uncovered. Its unreachability rests not on a *type invariant* — option
+has no `option_invariant`, and the by-value `{has_value, value}` tagged
+struct admits no malformed state to guard against — but on the
+**contract-violation discipline**: `expect`'s absent-path is a panic,
+deliberately unexercised under `-DCANON_NO_REQUIRE`. WP cross-confirms
+from the proof side, reporting `expect`'s handler call as a
+non-terminating recursive call that "must be unreachable" (VERIFY-014).
+The evidence shape is identical to MCDC-002 through MCDC-005 (gcov
+measures source-level uncoverage; a separate stream establishes the
+branch dead), but the source of the guarantee is the panic handler's
+non-termination, not a named predicate or a construction invariant — so
+an auditor should not expect an invariant-discharge claim. This is the
+same family as MCDC-001's `contract.h 0/2` artifact, here surfaced
+inside a generated combinator function. See MCDC-006 in
+`docs/deviations.md` for the formal closure record.
+
 memory.h does not extend the MCDC-002 list because its bytes_t/cbytes_t
 variants inherit slice.h's `bytes_invariant` — the analogous `!ptr`
 defensive branches are discharged by the inherited invariant rather
@@ -552,15 +659,16 @@ MCDC-003, pool.h's MCDC-004, and region.h's MCDC-005 are each a
 subconditions; a `!pool->arena` arena-validity disjunct; and a `!h->fn`
 hook-slot guard, respectively, vs. slice.h's `!ptr` defensive branches),
 but all share the same cross-stream evidence pattern (gcov measures
-source, the proof establishes unreachability). region.h has shipped its
-own per-header analysis as MCDC-005, confirming the per-header
-expectation MCDC-002's forward note set out. With the core/ layer
-complete, the remaining headers that introduce their own public
-{ptr, len} types or analogous unreachable defensive code live in data/
-and util/ — stringbuf.h remains the next candidate (MCDC-002 lists it
-provisionally at 74.2%). Each will need its own per-header MCDC analysis;
-each header's specific unreachability shape will be documented
-separately.
+source, the proof establishes unreachability). With the core/ layer
+complete, option's MCDC-006 is the first semantics/-layer and first
+Shape-B entry, carrying a sixth unreachability shape (a generated
+panic/contract-violation branch). The remaining headers that introduce
+their own public {ptr, len} types or analogous unreachable defensive
+code live in data/ and util/ — stringbuf.h remains the next candidate
+(MCDC-002 lists it provisionally at 74.2%) — and the remaining Shape-B
+cover TUs (result, vec, deque, fold) will follow option's pattern. Each
+will need its own per-header / per-module MCDC analysis; each specific
+unreachability shape will be documented separately.
 
 ### History
 
@@ -581,5 +689,6 @@ separately.
 | 2026-06-06 | c9172fc | #992   | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | region.h: ACSL contracts + WP (report-only) at 120s/split; WP 3517/3643 (VERIFY-011; 103 inherited = arena.h's full residual surface + 23 own: 19 region_end opaque-hook-dispatch + 4 region_invariant composition), first 120s/split completion, enforcement deferred pending count stability. MC/DC 95.5% (21/22) ceiling (MCDC-005, the `!h->fn` guard branch unreachable). region.h's coverage was already in the aggregate (Phase 1 substrate); this records its documented MCDC entry. core/ layer verification complete. Composable-verification thesis confirmed at fifth composition layer. |
 | 2026-06-13 | b78768e | #1022  | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | VERIFY-012: contract-strengthening pass closing 50 enforced unproved goals across five verified headers by ACSL precondition alone — zero executable change. Stated `\initialized` as an input precondition where WP can discharge it (6 requires in memory.h, 4 in slice.h), closing 8 slice + 6 memory own goals and their downstream inherited copies: slice 23→15, memory 57→43, arena 103→89, pool 127→113, region 126→112; project 18269→18333 proved, 463→399 unproved. Falsifies VERIFY-008's earlier "strengthening memory.h's predicates would produce no improvement" (corrected in place). `\dangling`/`\fresh`/`\freeable` remain WP-blocked in Frama-C 29 (Blanchard). All five exact-count CI wrappers re-enforced; region.h promoted from report-only to enforced (residual set name-stable across the closure). No coverage/MC/DC change (closures touched no branches). |
 | 2026-06-20 | ca9732d | #1036  | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | error.h: first semantics/ header verified. ACSL contracts + WP enforcement (65/65, VERIFY-013); default Typed model (no void* casts); 0 residuals — first clean header since compare.h. Calibration baseline for the semantics/ layer. No coverage change (error.h trivially 100% MC/DC, already in aggregate). |
+| 2026-06-27 | 93bb107 | #1072  | v1.3.0  | 95.7%  | 99.5%     | 86.6%    | 86.2%  | option: first Shape-B module covered via the vmacros cover-TU pattern (`option_cover.c`, `CANON_OPTION(int)` instantiated outside `test/`). MC/DC 96.7% (29/30) ceiling (MCDC-006, the `expect` panic-on-absent guard unreachable, cross-confirmed by WP). WP driver enforced 189/223 (VERIFY-014, #1067; report-only first at #1065). The cover TU enters the aggregate: project MC/DC 86.1% → 86.2% (1443/1674), branches 86.6% (1459/1684), functions 99.6% → 99.5% (546/549, the one new uncovered function being the `is_positive` cover-driver helper), lines 95.7% (2268/2371). option_cover.c contributes 29/30 at the file level (26 generated `option_int_*` conditions + 4 driver-scaffolding conditions). First vmacros driver + cover TU to land; Shape-B attribution pattern confirmed. |
 
 ---
