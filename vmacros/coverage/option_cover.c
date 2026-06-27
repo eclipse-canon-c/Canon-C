@@ -25,8 +25,8 @@
  * it is expanded. In test/semantics/option_test.c the expansion happens at
  * the CANON_OPTION(int) call site IN THAT TEST FILE, so gcov stamps every
  * option_int_* condition to option_test.c — which the coverage job's
- * `--remove '*/test/*'` filter then deletes. The conditions are measured and
- * thrown away.
+ * test-path removal filter (lcov --remove on the test directory glob) then
+ * deletes. The conditions are measured and thrown away.
  *
  * This file re-instantiates CANON_OPTION(int) OUTSIDE test/, so the identical
  * conditions are stamped to vmacros/coverage/option_cover.c and survive the
