@@ -10,6 +10,11 @@ on:
 # Job overview
 #
 #   build           — all platforms, Release + Debug, sanitizers
+#   build-32bit     — Linux GCC -m32, Release + Debug. Tier 1 size_t==32
+#                     width boundary; exercises the 32-bit arithmetic claims.
+#   mingw           — Windows MSYS2 UCRT64 (GCC), Release + Debug. The
+#                     GCC-on-Windows pairing the build job excludes; tests
+#                     the UCRT runtime / stdio format-specifier surface.
 #   static-analysis — clang-tidy (Linux only) + Cppcheck (all platforms)
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
@@ -127,6 +132,120 @@ jobs:
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 1b. 32-bit build + test — Linux GCC -m32
+  #
+  #    Exercises the width axis nothing else in the matrix hits: on -m32,
+  #    size_t is EXACTLY 32 bits (CANON_USIZE_MAX == 2^32-1), the minimum
+  #    Tier 1 promises to support. This is where the arena overflow-guard
+  #    unreachability argument (MCDC-003 / VERIFY-009, which reasons "on
+  #    both 32-bit and 64-bit platforms") actually runs, instead of being
+  #    asserted from a 64-bit-only matrix.
+  #
+  #    Sanitizers OFF: -m32 ASan/UBSan need the 32-bit runtime libs and are
+  #    historically flaky to stand up. Once green, -m32 UBSan (the higher-
+  #    value one for width-dependent overflow/shift UB) can be a follow-up.
+  # -------------------------------------------------------------------------
+  build-32bit:
+    needs: build
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install 32-bit GCC toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib
+
+      - name: Configure CMake (-m32)
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_FLAGS="-m32" \
+            -DCMAKE_EXE_LINKER_FLAGS="-m32" \
+            -DENABLE_SANITIZERS=OFF \
+            -S "${{ github.workspace }}"
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }}
+
+      - name: Test
+        working-directory: build
+        run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 1c. MinGW build + test — Windows, MSYS2 UCRT64 (GCC-on-Windows)
+  #
+  #    Fills the one (compiler, OS) pairing the `build` job excludes that
+  #    has a large real-world user base: the MSYS2/MinGW-w64 toolchain.
+  #    The compiler frontend is already covered by Linux GCC; the value
+  #    here is the C RUNTIME — UCRT instead of glibc. This is where the
+  #    classic C99 format-specifier landmine lives: usize is size_t, and
+  #    %zu / %llu against the wrong Windows CRT misbehaves. UCRT64 is the
+  #    correct, fixed target; this cell proves the stdio surface (contract
+  #    handler, diag.h, log.h, snprintf formatters) is sound on a Windows
+  #    libc under -Wall -Wextra -Wpedantic -Werror.
+  #
+  #    Sanitizers OFF: ASan/UBSan support on MinGW is limited. Windows
+  #    memory safety remains covered by the MSVC /W4 /WX build and by
+  #    Valgrind on Linux.
+  #
+  #    Notes on the invocation:
+  #      - Ninja is used (the path of least resistance inside the msys2
+  #        shell). It is a single-config generator, so the build type is
+  #        fixed at configure time — that is why the Build and Test steps
+  #        do not pass --config / --build-config like the multi-config jobs.
+  #      - -S . (not ${{ github.workspace }}) because the Windows workspace
+  #        path with backslashes confuses the msys2 bash shell; "." resolves
+  #        cleanly from the checkout directory.
+  # -------------------------------------------------------------------------
+  mingw:
+    needs: build
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=OFF \
+            -S .
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
 
   # -------------------------------------------------------------------------
   # 2. Static analysis
