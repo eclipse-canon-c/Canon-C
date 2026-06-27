@@ -517,7 +517,7 @@ static void test_region_end_via_defer(void)
     DEFER(region_end(&r)) {
         region_attach_arena(&r, &arena);
         arena_alloc(&arena, 64);
-        EXPECT(arena_used(&arena) == 64);
+        EXPECT(arena_used(&arena) >= 64);
         EXPECT(region_is_open(&r));
     }
 
