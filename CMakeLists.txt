@@ -20,6 +20,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ---------------------------------------------------------------------------
 option(ENABLE_SANITIZERS "Enable ASan + UBSan (GCC/Clang) or ASan (MSVC)" OFF)
 option(ENABLE_FUZZING    "Enable libFuzzer fuzz targets (Clang only)"       OFF)
+option(ENABLE_COVERAGE_TUS "Build MC/DC cover TUs for Shape-B macro modules (coverage job only)" OFF)
 
 # ---------------------------------------------------------------------------
 # Lifetime tracking — Phase 1 substrate
@@ -565,3 +566,35 @@ canon_c_test(
     INCLUDES core/primitives core . 
     FUZZABLE
 )
+
+# ---------------------------------------------------------------------------
+# MC/DC cover TUs — built ONLY by the coverage job (-DENABLE_COVERAGE_TUS=ON)
+#
+# Shape-B macro modules (option, and later result/vec/deque/fold) instantiate
+# their generated functions at the CANON_*(T) call site. In a _test.c that
+# site is inside test/, so gcov stamps the conditions to the test file and the
+# coverage filter (--remove '*/test/*') deletes them. These cover TUs
+# re-instantiate the same module OUTSIDE test/ so the conditions survive.
+#
+# These are NOT ctests: not registered with add_test(), not fuzzed, not built
+# by the default build / valgrind / fuzzing / lifetime jobs. The coverage job
+# builds them with the same -DCANON_NO_REQUIRE -DNDEBUG --coverage
+# -fcondition-coverage flags as the rest of the coverage build, then runs each
+# binary directly to emit its .gcda. Explicit targets only — never file(GLOB),
+# per docs/vmacros.md build isolation.
+# ---------------------------------------------------------------------------
+if(ENABLE_COVERAGE_TUS)
+    add_executable(option_cover vmacros/coverage/option_cover.c)
+    target_include_directories(option_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR})
+    # Match the WP run's flags exactly (option_verify.h used both):
+    # CANON_NO_REQUIRE also arrives via the coverage job's global C flags,
+    # but NDEBUG does not (CMAKE_BUILD_TYPE=Debug omits it) — set both here
+    # so the measured condition set equals WP's goal set regardless of the
+    # job's flag string.
+    target_compile_definitions(option_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover)")
+endif()
