@@ -19,14 +19,17 @@ on:
 #   valgrind        — Linux only, Debug, memory error detection
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c-*       — Linux only, formal verification (WP proofs). One job
-#                     PER HEADER (frama-c-checked, -bits, -compare, -ptr,
-#                     -slice, -memory, -arena, -pool, -region, -error), all running
-#                     in parallel and sharing the composite setup action at
-#                     .github/actions/framac-setup. All nine are ENFORCED
+#                     per verified header (frama-c-checked, -bits, -compare,
+#                     -ptr, -slice, -memory, -arena, -pool, -region, -error),
+#                     plus one per macro-module driver (frama-c-option, which
+#                     runs over in vmacros/vdrivers/ rather than a
+#                     header directly — the first Shape-B module). All run in
+#                     parallel and share the composite setup action at
+#                     .github/actions/framac-setup. All eleven are ENFORCED
 #                     (hard proved/unproved baselines); region runs 120s/split
 #                     in its own isolated job (long run, ~1h40m, but enforced).
 #                     Additional headers are added as a new job each as they
-#                     are annotated.
+#                     are annotated; macro-module drivers likewise.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
 #                     -DCANON_BITS_FORCE_FALLBACK so the fallback paths
@@ -1848,7 +1851,7 @@ jobs:
           path: wp_error_output.txt
 
   # -------------------------------------------------------------------------
-  # semantics/option — REPORT-ONLY. First Shape-B macro-module driver.
+  # semantics/option — ENFORCED. First Shape-B macro-module driver.
   #
   # option is the first verified module whose functions are macro-generated
   # (Shape B per vmacros.md): there is no option_int_* function to point WP
@@ -1856,28 +1859,38 @@ jobs:
   # WP runs over vmacros/vdrivers/option_verify.h — a driver that instantiates
   # the REAL shipped macros and attaches ACSL contracts to the generated
   # prototypes (integrity rule: one source of truth, never a verified copy).
+  # The driver's contracted prototypes are static inline to match the linkage
+  # of DEFINE_OPTION_FUNCTIONS(static inline, int) — a bare external-linkage
+  # prototype ahead of a static-inline definition is a C99 6.2.2p7 conflict.
   #
   # Default Typed model (NOT Typed+Cast): option_T is a by-value tagged struct
   # { bool has_value; T value; } with no void* casts — same situation as
   # error.h, so this job omits the CVC5-presence check the core/ headers carry.
   #
-  # Report-only, not enforced: the residual set is being named, not yet pinned.
-  # Two classes are expected (CONFIRM from the run, do not assume counts):
-  #   (a) INHERITED — contract-handler non-termination. option_impl.h includes
-  #       contract.h; error.h avoided this pair by including only types.h, but
-  #       option cannot (expect/get/unwrap/replace/take route through it). Same
-  #       goals as VERIFY-006 cat 4, re-emitted. option is the first semantics/
-  #       header to inherit them.
-  #   (b) OWN — function-pointer dispatch. map / and_then / or_else / filter /
-  #       combine_with / eq each call a caller-supplied pointer; WP has no
-  #       `calls` clause and \valid_function is unimplemented in Frama-C 29.
-  #       Same limitation as region_end (OWN-003 / VERIFY-011 cat 1), here
-  #       recurring across six combinators — its first appearance outside
-  #       region_end. The non-calling branch of each is specified and proved;
-  #       the calling branch is the documented residual.
+  # Promoted from report-only to enforced as of CI #1065 (VERIFY-014):
+  # 189 / 223 proved, exactly 34 unproved. Two categories:
+  #   (a) INHERITED (2) — contract.h handler non-termination. option_impl.h
+  #       includes contract.h; error.h avoided this pair by including only
+  #       types.h, but option cannot (expect/get/unwrap/replace/take route
+  #       through it). The VERIFY-006 cat-4 pair, re-emitted. option is the
+  #       first semantics/ header to inherit them.
+  #   (b) OWN (32) — function-pointer dispatch across the six combinators
+  #       (map / and_then / or_else / filter / combine_with / eq). WP has no
+  #       `calls` clause for an arbitrary pointer, \valid_function is
+  #       unimplemented in Frama-C 29, and the unknown callee is treated as
+  #       possibly non-terminating / memory-clobbering. Same limitation as
+  #       region_end (OWN-003 / VERIFY-011 cat 1) — its first recurrence
+  #       outside region_end. Every non-combinator function proves fully;
+  #       for each combinator the non-calling branch is proved and the
+  #       calling branch is the residual.
   #
-  # Promote to enforced (exact-count + by-name roll-call, the region.h pattern)
-  # and write VERIFY-014 once the residual set is stable across runs.
+  # The residual set is name-stable: category (b) is deterministic (each goal
+  # resolves in <5ms then buckets as unprovable — \valid_function will not
+  # prove in FC29), not solver-capacity-bound. Only the 2 category-(a) goals
+  # are genuine full timeouts, identical to the pair pinned in six other
+  # headers. The by-name roll-call below pins all 34: if a future Frama-C
+  # implements \valid_function, the count stays 34 but a name check fails,
+  # which is the signal to revisit rather than silently absorb.
   # -------------------------------------------------------------------------
   frama-c-option:
     needs: build
@@ -1886,17 +1899,19 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
-      - name: "WP: vmacros/vdrivers/option_verify.h (report-only)"
-        # First Shape-B macro-module driver. REPORT-ONLY until the residual
-        # set is named and stable; then add an exact-count + by-name wrapper
-        # (the region.h -> enforced pattern) and a VERIFY-014 entry.
-        # Default Typed model (no void* casts) — like error.h, so no
-        # CVC5-presence check. Expected: (a) ~2 inherited contract-handler
-        # goals, (b) per-combinator fn-pointer clusters on map/and_then/
-        # or_else/filter/combine_with/eq. Non-combinator surface should be
-        # clean. CONFIRM, don't assume.
+      - name: "WP: vmacros/vdrivers/option_verify.h"
+        # option — first Shape-B macro-module driver, default Typed model
+        # (by-value tagged struct, no void* casts — like error.h, so no
+        # CVC5-presence check). Expected: 189 / 223 proved, exactly 34
+        # unproved (VERIFY-014): 2 inherited (contract.h handler
+        # non-termination, the VERIFY-006 cat-4 pair) + 32 own across the
+        # six combinators (function-pointer dispatch — \valid_function
+        # unimplemented in FC29 + unknown-callee non-termination/assigns;
+        # the region_end / OWN-003 limitation, first recurrence outside
+        # region_end). Any deviation is a regression and fails the job.
         run: |
           eval $(opam env --switch=frama-c)
+          set +e
           frama-c -wp -wp-rte \
             -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
@@ -1909,12 +1924,115 @@ jobs:
               -DCANON_NO_REQUIRE \
               -DNDEBUG" \
             vmacros/vdrivers/option_verify.h 2>&1 | tee wp_option_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
 
           echo ""
-          echo "=== Proved line ==="
-          grep -E "^\[wp\] Proved goals:" wp_option_output.txt || true
-          echo "=== Unproved (classify these) ==="
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_option_output.txt || true
+          echo "==============================================="
+          echo "  WP (option_verify.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_option_output.txt || true)
+          echo "  ${PROVED_LINE}"
+
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in option_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_option_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_option_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_option_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_option_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          EXPECTED_UNPROVED=34
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (option section) and"
+            echo "      docs/deviations.md (VERIFY-014) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_option_output.txt || true
+            exit 1
+          fi
+
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "189 / 223" ]; then
+            echo "WARNING: proved count changed from expected 189 / 223."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-014 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
+
+          CHECKS=(
+            # (a) inherited — contract.h handler non-termination (VERIFY-006 cat 4)
+            "typed_contract_default_handler_terminates"
+            "typed_contract_default_handler_loop_invariant_established"
+            # (b) own — function-pointer dispatch (OWN-003 class), 6 combinators
+            "typed_option_int_map_terminates_part2"
+            "typed_option_int_map_terminates_part3"
+            "typed_option_int_map_exits_part1"
+            "typed_option_int_map_assert_rte_function_pointer"
+            "typed_option_int_map_assigns_exit_part2"
+            "typed_option_int_map_assigns_normal_part2"
+            "typed_option_int_and_then_terminates_part2"
+            "typed_option_int_and_then_terminates_part3"
+            "typed_option_int_and_then_exits_part1"
+            "typed_option_int_and_then_assert_rte_function_pointer"
+            "typed_option_int_and_then_assigns_exit_part2"
+            "typed_option_int_and_then_assigns_normal_part2"
+            "typed_option_int_or_else_terminates_part1"
+            "typed_option_int_or_else_terminates_part2"
+            "typed_option_int_or_else_assert_rte_function_pointer"
+            "typed_option_int_or_else_assigns_part2"
+            "typed_option_int_filter_terminates_part2"
+            "typed_option_int_filter_terminates_part3"
+            "typed_option_int_filter_exits_part1"
+            "typed_option_int_filter_assert_rte_function_pointer"
+            "typed_option_int_filter_assigns_exit_part2"
+            "typed_option_int_filter_assigns_normal_part2"
+            "typed_option_int_combine_with_terminates_part2"
+            "typed_option_int_combine_with_terminates_part3"
+            "typed_option_int_combine_with_exits_part1"
+            "typed_option_int_combine_with_assert_rte_function_pointer"
+            "typed_option_int_combine_with_assigns_exit_part2"
+            "typed_option_int_combine_with_assigns_normal_part2"
+            "typed_option_int_eq_terminates_part2"
+            "typed_option_int_eq_terminates_part4"
+            "typed_option_int_eq_assert_rte_function_pointer_part2"
+            "typed_option_int_eq_assigns_part5"
+          )
+
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_option_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+
+          echo "PASS: option verified — 189/223 proved, 34 documented"
+          echo "      residuals all observed (VERIFY-014): 2 inherited"
+          echo "      (contract.h handler) + 32 own (six combinators,"
+          echo "      function-pointer dispatch). First Shape-B module;"
+          echo "      every non-combinator function proved fully."
+          echo "==============================================="
 
       - name: Upload WP proof output (option)
         if: always()
