@@ -283,6 +283,17 @@ static inline bool diag_push(Diag       *d,
         dropped = true;
     }
 
+    /* Redundant under the require_msg invariant above and the overflow
+     * branch (which guarantees depth < DIAG_MAX_FRAMES here), but makes the
+     * d->depth < DIAG_MAX_FRAMES bound visible to the optimizer even under
+     * -DNDEBUG, where require_msg compiles out. Without this, GCC 16 at -O3
+     * mis-analyzes the inlined overflow path and fires a spurious
+     * -Wstringop-overflow on the f->message write below. No-op on every
+     * correct execution. */
+    if (d->depth >= DIAG_MAX_FRAMES) {
+        d->depth = DIAG_MAX_FRAMES - 1u;
+    }
+
     f = &d->frames[d->depth];
     d->depth++;
 
