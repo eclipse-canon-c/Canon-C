@@ -2716,11 +2716,10 @@ gcov reports `condition 0 not covered (true)` with the panic block
 marked `%%%%%` (never executed). option_cover.c's measured MC/DC is
 29/30 = 96.7% — the achievable ceiling.
 
-The 30 outcomes are option's **generated conditions only**. The cover
-driver's own scaffolding (`half_if_even`, `observe_opt`'s `get` call,
-and the helper predicates) carries its own conditions that gcov reports
-separately at 2/2; they are not part of the 30. Every generated
-combinator decision point is fully covered: `eq` 4/4 + 2/2,
+Of the 30 outcomes, 26 are the generated option_int_* combinator conditions
+and 4 are the cover driver's own scaffolding (half_if_even's even-check and
+observe_opt's get-result branch), all 4 covered. The single miss is in the
+generated set (expect). Every generated combinator decision point is fully covered: `eq` 4/4 + 2/2,
 `combine_with` 4/4, `filter` 4/4 (T&&T / T&&F / F&&_), and
 `or_else`/`and_then`/`map`/`get`/`unwrap_or` 2/2 each.
 
