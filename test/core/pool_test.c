@@ -692,7 +692,7 @@ static void test_reserved_bytes_null_safe(void)
 static void test_two_pools_same_arena(void)
 {
     Pool  pool_a;
-    Pool  pool_b;
+    Pool  pool_b = {0};
     Vec2* va;
     i32*  vb;
     bool  ok_a;
