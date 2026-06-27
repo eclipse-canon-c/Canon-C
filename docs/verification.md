@@ -10,11 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 10 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h) |
-| **Functions**        | 203 annotated and verified                                                     |
-| **Total obligations**| 18797 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 18398 (97.88%)                                                                 |
-| **Unproved**         | 399 (all documented; see per-header sections)                                  |
+| **Headers verified** | 11 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option) |
+| **Functions**        | 219 annotated and verified (203 in-place + 16 generated via the option driver) |
+| **Total obligations**| 19020 (per-header own goals; CI WP runs include substrate)                     |
+| **Proved automatic** | 18587 (97.72%)                                                                 |
+| **Unproved**         | 433 (all documented; see per-header sections)                                  |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
@@ -688,7 +688,8 @@ fuzzing, and 93.1% MC/DC coverage on the i32 instantiation. Full
 WP verification of the macro family will require a separate
 `slice_verify.h` driver instantiating `DEFINE_SLICE(i32)` outside
 the macro context — planned for a future commit if the certification
-target requires it.
+target requires it. (This is the same driver pattern option now uses —
+see the semantics/option section below and VERIFY-014.)
 
 ### What is proved
 
@@ -1824,7 +1825,6 @@ inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified (with documented timeouts)             |
 | **Baseline commit**    | c9172fc (Canon-C CI #992)                       |
-| **Functions**          | 12 of 12 non-macro functions annotated          |
 | **Proof obligations**  | 3531 / 3643 discharged automatically (96.92%)   |
 | **Unproved**           | 112 (all documented under VERIFY-011)           |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
@@ -2096,8 +2096,10 @@ no proof obligations of its own), so it inherits zero residuals. This is
 the trivial base case of the composability thesis at the bottom of a new
 layer — there is nothing upstream in semantics/ yet to inherit from. It
 establishes the layer's zero baseline against which the next semantics/
-headers (Option/Result, borrow, diag) will be measured for
-inherited-vs-own residuals.
+headers (option, then Result, borrow, diag) are measured for
+inherited-vs-own residuals. option (the next module, VERIFY-014) inherits
+exactly 2 residuals from contract.h and adds 32 of its own — the first
+non-trivial data point in the semantics/ layer.
 
 ### Preprocessing flags
 
@@ -2128,6 +2130,185 @@ Expected output: `Proved goals: 65 / 65` with 0 unproved goals.
 
 ---
 
+## semantics/option (driver-verified)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals) — driver-verified |
+| **Baseline commit**    | e2d908d (Canon-C CI #1067, enforced); report-only first at 83cfb16 (CI #1065) |
+| **Functions**          | 16 of 16 generated functions annotated and proved |
+| **Proof obligations**  | 189 / 223 discharged automatically (84.75%)     |
+| **Unproved**           | 34 (2 inherited + 32 own; all documented under VERIFY-014) |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120` (default Typed model) |
+| **CI enforcement**     | Yes — 189/223 with 34 named goals expected (enforced as of CI #1067) |
+| **MC/DC coverage**     | 96.7% (29/30 condition outcomes — see MCDC-006) |
+| **CI artifact**        | `wp-proof-option` (full per-goal breakdown)     |
+
+option is the **first driver-verified** Canon-C module and the first
+**Shape-B** (expression-macro-bodied) module verified. Its functions
+exist only as `IMPL_OPTION_*` macro bodies until instantiated, so WP is
+pointed not at a shipped header but at
+`vmacros/vdrivers/option_verify.h`, which instantiates the real shipped
+macros at `CANON_OPTION(int)` and attaches ACSL contracts to the concrete
+generated prototypes (see `docs/vmacros.md` for the driver mechanism). It
+is the second semantics/ module verified (after error.h, VERIFY-013) and
+the first semantics/ module to carry residuals — error.h proved 65/65
+clean.
+
+Like error.h, option uses the default `Typed` memory model rather than
+`Typed+Cast`: the by-value tagged struct `{ bool has_value; T value; }`
+performs no `void*` casts, so the cast-aware model is unnecessary. The
+option CI wrapper omits the CVC5-presence check the `Typed+Cast` headers
+carry, for the same reason error.h's does.
+
+### Function inventory
+
+`CANON_OPTION(int)` generates 16 `option_int_*` functions, all annotated
+and verified:
+
+**Non-combinator (10 functions, all 100% proved):** `some`, `none`,
+`is_some`, `is_none`, `get`, `unwrap`, `unwrap_or`, `expect`, `replace`,
+`take`. These carry no residuals — their structural postconditions (the
+result's `has_value` / `value` relationship to the inputs) discharge
+fully.
+
+**Combinators (6 functions, carry all 32 own residuals):** `map`,
+`and_then`, `filter`, `combine_with` (6 residuals each = 24); `or_else`,
+`eq` (4 residuals each = 8). Each dispatches a caller-supplied function
+pointer.
+
+### What is proved
+
+- **Structural correctness**: every function's result `has_value` /
+  `value` relationship to its inputs is proved for all inputs consistent
+  with the preconditions, including for the combinators (the structural
+  postconditions discharge; only the opaque-callee obligations remain —
+  see below).
+- **Absence of runtime errors** (`-wp-rte`): proved for all
+  non-combinator functions and for the non-opaque-call surface of the
+  combinators.
+- **Side-effect bounding**: `assigns` clauses discharge fully except on
+  the combinators, where the opaque callee's frame cannot be bounded
+  (the function-pointer-dispatch `assigns` residuals below).
+
+WP discharges 189 of the 223 obligations automatically — the majority at
+Qed, the remainder at Alt-Ergo. As with error.h, this is a small
+default-`Typed` run and Z3/CVC5 are available but not reached; the 34
+residuals are feature-gap goals (see below), not goals the heavier
+provers would close. The full per-goal breakdown is in the
+`wp-proof-option` CI artifact.
+
+### Residual goals (34)
+
+All 34 are documented under VERIFY-014. They split into 2 inherited and
+32 own.
+
+**Inherited from contract.h (2):**
+`typed_contract_default_handler_terminates`,
+`typed_contract_default_handler_loop_invariant_established` — option is
+the first semantics/ module to inherit the contract.h handler
+non-termination pair (VERIFY-006 cat 4), reached through `expect`'s
+`_CANON_INVOKE_HANDLER` path. Note the goal-name prefix is
+`typed_contract_default_handler_*` (the non-`_cast` form), because option
+runs under the default `Typed` model — the same two goals as VERIFY-006
+category 4, re-emitted in the option run under the Typed prefix.
+
+**option-own — combinator function-pointer dispatch (32):** each of the
+six combinators dispatches a caller-supplied function pointer (`f`,
+`pred`, `combine`, `fallback`, `eq`) for which no `calls` clause can
+exist — the callee is arbitrary by design. WP reports the boundary
+during the run:
+
+~~~
+[wp] vmacros/vdrivers/option_verify.h:283: Warning:
+  Unknown callee, considering non-terminating call
+[wp] vmacros/vdrivers/option_verify.h:283: Warning:
+  \valid_function not yet implemented
+  (rte: function_pointer: \valid_function(f))
+~~~
+
+Because WP cannot rule out that an opaque callee fails to terminate or
+writes through an aliasing pointer, it cannot discharge the combinators'
+`terminates`, `exits`, `assigns`, and `assert_rte_function_pointer`
+goals. The per-function residuals are the `_terminates_partN`,
+`_exits_partN`, `_assigns_{normal,exit}_partN`, and
+`_assert_rte_function_pointer` fragments visible in the WP log. This is
+the same root cause and the same class of residual as region_end's
+opaque-hook dispatch (VERIFY-011 category 1 / OWN-003) — different
+surface (six combinators vs one teardown loop), identical limitation: no
+`calls` clause for an arbitrary callee, plus `\valid_function`
+unimplemented in Frama-C 29. It is a verifier feature gap, not a
+prover-strength residual — additional solver power would not close it.
+
+Full goal list and per-combinator manual-proof arguments: see VERIFY-014
+in `docs/deviations.md`.
+
+### MCDC-006 cross-reference
+
+option's single uncovered MC/DC outcome — `option_int_expect`'s
+`has_value` FALSE (panic-on-absent) branch — is cross-confirmed by this
+run: WP reports `Missing decreases clause on recursive function
+option_int_expect, call must be unreachable`, modelling the panic
+handler's call as a non-terminating recursive call it treats as
+unreachable. gcov measures the same branch as not-executed under
+`-DCANON_NO_REQUIRE`. 96.7% (29/30) is the achievable ceiling; the
+condition set is measured through `vmacros/coverage/option_cover.c` (the
+paired cover TU, see MCDC-006), which re-instantiates the same
+`CANON_OPTION(int)` outside `test/` so the generated conditions survive
+the coverage filter. WP and gcov point at the same branch from opposite
+directions — proof unreachability and source non-execution.
+
+### Driver mechanism note
+
+option is the first module where WP runs over a *driver* rather than a
+shipped header. The driver `vmacros/vdrivers/option_verify.h` does three
+things: (1) `#include`s the shipped `semantics/option/option.h`; (2)
+instantiates `CANON_OPTION(int)` so the `IMPL_OPTION_*` macro bodies
+expand into concrete `option_int_*` function definitions with real source
+locations; (3) attaches ACSL contracts to those concrete prototypes. WP
+then verifies the instantiated functions exactly as it would
+hand-written ones. This is the same pattern slice.h's section anticipates
+for a future `slice_verify.h` (DEFINE_SLICE(i32) outside macro context),
+now realized for the first time. The four remaining Shape-B modules
+(result, vec, deque, fold) will each get their own `*_verify.h` driver
+following this template; see `docs/vmacros.md`.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: compiles `require_msg` runtime checks away;
+  ACSL `requires` clauses provide the static guarantees. (The `expect`
+  panic path, removed by this flag, is the MCDC-006 uncovered branch.)
+- **`-DNDEBUG`**: standard release-mode flag.
+
+### Reproduction
+
+```bash
+frama-c -wp -wp-rte \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I semantics \
+    -I vmacros \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  vmacros/vdrivers/option_verify.h
+```
+
+Expected output: `Proved goals: 189 / 223` with 34 unproved goals (the 2
+contract.h handler goals + 32 combinator function-pointer-dispatch
+goals).
+
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -2146,12 +2327,24 @@ different class of goal well:
   checked.h, 3 goals on ptr.h, 5 goals on memory.h, 3 goals on
   arena.h, 10 goals on pool.h, 9 on region.h discharged by CVC5 that neither Alt-Ergo nor Z3 could close.
 
-The practical consequence: **every remaining unproved goal (2 on checked.h, 
-15 on bits.h, 10 on ptr.h, 15 on slice.h, 43 on memory.h, 89 on arena.h, 
-113 on pool.h, 112 on region.h) is demonstrated triple-prover-resistant**. This is a
-stronger certification-evidence statement than dual-prover
-resistance — the goals are genuinely limited by WP's encoding,
-integer theory, or stdlib feature gaps, not by prover strength.
+The practical consequence: **every remaining unproved goal on the
+in-place headers (2 on checked.h, 15 on bits.h, 10 on ptr.h, 15 on
+slice.h, 43 on memory.h, 89 on arena.h, 113 on pool.h, 112 on region.h)
+is demonstrated triple-prover-resistant**. This is a stronger
+certification-evidence statement than dual-prover resistance — the goals
+are genuinely limited by WP's encoding, integer theory, or stdlib
+feature gaps, not by prover strength.
+
+option's 34 residuals are a distinct class and are deliberately *not*
+lumped into the triple-prover-resistant set above:
+function-pointer-dispatch feature-gap goals (no `calls` clause for an
+arbitrary callee; `\valid_function` unimplemented in Frama-C 29), the
+same class as region_end's opaque-hook dispatch (VERIFY-011 category 1).
+These are also not prover-strength residuals — additional solver power
+would not close them — but the limiting factor is WP's missing
+indirect-call support rather than its integer or stdlib theory, so they
+are characterized as a verifier feature gap rather than as
+triple-prover-resistant. error.h carries no residuals at all.
 
 ### CVC5 installation note
 
@@ -2195,16 +2388,21 @@ the complete installation and registration procedure.
 
 ### semantics/ (in progress)
 
-| Header   | Status      | Proved | Notes                                              |
-|----------|-------------|--------|-----------------------------------------------------|
-| error.h  | ✅ Verified  | 65/65  | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
+| Header           | Status      | Proved  | Notes                                              |
+|------------------|-------------|---------|-----------------------------------------------------|
+| error.h          | ✅ Verified  | 65/65   | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
+| option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
 
-Result, Option, borrow, diag — planned next. The Option/Result types are
-macro-templated (`DEFINE_OPTION` / `CANON_RESULT`); their non-macro core
-is directly verifiable, while the macro-instantiated bodies will follow
-the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale)
-and likely need a verification-driver header instantiating a concrete
-type outside macro context.
+Result, borrow, diag — planned next. Option has shipped as the first
+driver-verified module (see the semantics/option section above and
+VERIFY-014): the verification-driver approach the slice.h section
+anticipated — a header instantiating a concrete type (`CANON_OPTION(int)`)
+outside macro context, with ACSL contracts on the generated prototypes —
+is now confirmed working end to end (driver WP run + paired cover TU,
+both enforced in CI). Result is also macro-templated (`CANON_RESULT`);
+its macro-instantiated bodies will follow the same `option_verify.h`
+driver pattern, and its `expect`/`unwrap` family is the nearest analogue
+to option's combinators for the next MCDC-NNN audit.
 
 ### data/ and algo/ (longer term)
 
