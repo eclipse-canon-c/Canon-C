@@ -1846,7 +1846,82 @@ jobs:
         with:
           name: wp-proof-error
           path: wp_error_output.txt
-  
+
+  # -------------------------------------------------------------------------
+  # semantics/option — REPORT-ONLY. First Shape-B macro-module driver.
+  #
+  # option is the first verified module whose functions are macro-generated
+  # (Shape B per vmacros.md): there is no option_int_* function to point WP
+  # at until DEFINE_OPTION_FUNCTIONS(static inline, int) instantiates one.
+  # WP runs over vmacros/vdrivers/option_verify.h — a driver that instantiates
+  # the REAL shipped macros and attaches ACSL contracts to the generated
+  # prototypes (integrity rule: one source of truth, never a verified copy).
+  #
+  # Default Typed model (NOT Typed+Cast): option_T is a by-value tagged struct
+  # { bool has_value; T value; } with no void* casts — same situation as
+  # error.h, so this job omits the CVC5-presence check the core/ headers carry.
+  #
+  # Report-only, not enforced: the residual set is being named, not yet pinned.
+  # Two classes are expected (CONFIRM from the run, do not assume counts):
+  #   (a) INHERITED — contract-handler non-termination. option_impl.h includes
+  #       contract.h; error.h avoided this pair by including only types.h, but
+  #       option cannot (expect/get/unwrap/replace/take route through it). Same
+  #       goals as VERIFY-006 cat 4, re-emitted. option is the first semantics/
+  #       header to inherit them.
+  #   (b) OWN — function-pointer dispatch. map / and_then / or_else / filter /
+  #       combine_with / eq each call a caller-supplied pointer; WP has no
+  #       `calls` clause and \valid_function is unimplemented in Frama-C 29.
+  #       Same limitation as region_end (OWN-003 / VERIFY-011 cat 1), here
+  #       recurring across six combinators — its first appearance outside
+  #       region_end. The non-calling branch of each is specified and proved;
+  #       the calling branch is the documented residual.
+  #
+  # Promote to enforced (exact-count + by-name roll-call, the region.h pattern)
+  # and write VERIFY-014 once the residual set is stable across runs.
+  # -------------------------------------------------------------------------
+  frama-c-option:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP: vmacros/vdrivers/option_verify.h (report-only)"
+        # First Shape-B macro-module driver. REPORT-ONLY until the residual
+        # set is named and stable; then add an exact-count + by-name wrapper
+        # (the region.h -> enforced pattern) and a VERIFY-014 entry.
+        # Default Typed model (no void* casts) — like error.h, so no
+        # CVC5-presence check. Expected: (a) ~2 inherited contract-handler
+        # goals, (b) per-combinator fn-pointer clusters on map/and_then/
+        # or_else/filter/combine_with/eq. Non-combinator surface should be
+        # clean. CONFIRM, don't assume.
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/option_verify.h 2>&1 | tee wp_option_output.txt
+
+          echo ""
+          echo "=== Proved line ==="
+          grep -E "^\[wp\] Proved goals:" wp_option_output.txt || true
+          echo "=== Unproved (classify these) ==="
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_option_output.txt || true
+
+      - name: Upload WP proof output (option)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-option
+          path: wp_option_output.txt
   
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
