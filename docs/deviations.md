@@ -1815,6 +1815,127 @@ the five `frama-c-{slice,memory,arena,pool,region}` steps.
 
 ---
 
+## VERIFY-014: Function-Pointer-Dispatch and Inherited Residuals (option, first driver-verified module)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-014 |
+| **Date**       | 2026-06-27 |
+| **Baseline commit** | e2d908d (Canon-C CI #1067, enforced); report-only first at 83cfb16 (CI #1065) |
+| **Scope**      | semantics/option/ via `vmacros/vdrivers/option_verify.h` — 223 obligations, 34 unproved across 2 categories (1 own + 1 inherited group) |
+| **Category**   | Formal verification completeness |
+| **Enforcement**| Enforced (exact-count + by-name roll-call) as of CI #1067 |
+
+**Description**: 34 of 223 proof obligations (15.2%) on the option driver
+are not discharged by any prover in the triple-prover configuration
+(Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a 120-second timeout and
+`-wp-split`. option is the **first driver-verified module** — WP is
+pointed at `vmacros/vdrivers/option_verify.h`, which instantiates the
+real shipped `IMPL_OPTION_*` macros at `CANON_OPTION(int)` and attaches
+ACSL contracts to the concrete generated prototypes (see
+`docs/vmacros.md` for the mechanism). It is also the **first Shape-B
+module verified** and the first semantics/ header to carry residuals at
+all (error.h, VERIFY-013, proved 65/65 clean).
+
+option uses the default `Typed` memory model — the by-value tagged
+struct `{ bool has_value; T value; }` performs no `void*` casts, so the
+cast-aware model is unnecessary. As with error.h, the option CI wrapper
+omits the CVC5-presence check the `Typed+Cast` headers carry.
+
+The 34 split into **2 inherited from contract.h** and **32 option-own**
+function-pointer-dispatch residuals.
+
+### Inherited residuals (2)
+
+| # | Source           | Goals | Pattern                                                          |
+|---|------------------|-------|------------------------------------------------------------------|
+| 1 | VERIFY-006 cat 4 | 2     | `typed_contract_default_handler_terminates`, `typed_contract_default_handler_loop_invariant_established` |
+
+option is the first **semantics/** header to inherit the contract.h
+handler non-termination pair (it reaches contract.h through `expect`'s
+`_CANON_INVOKE_HANDLER` path). These are the same two goals documented
+in VERIFY-006 category 4 — the deliberate ACSL idiom for a non-returning
+panic handler, unprovable by construction.
+
+### option-own residuals (32)
+
+**Category 1 — combinator function-pointer dispatch (32)**
+
+**Functions affected**: `option_int_map`, `option_int_and_then`,
+`option_int_filter`, `option_int_combine_with` (6 goals each = 24);
+`option_int_or_else`, `option_int_eq` (4 goals each = 8).
+
+**Root cause**: each of the six combinators dispatches a caller-supplied
+function pointer (`f`, `pred`, `combine`, `fallback`, `eq`) for which no
+`calls` clause can exist — the callee is arbitrary by design. WP reports
+the boundary directly during the proof run:
+
+~~~
+[wp] vmacros/vdrivers/option_verify.h:283: Warning:
+  Unknown callee, considering non-terminating call
+[wp] vmacros/vdrivers/option_verify.h:283: Warning:
+  \valid_function not yet implemented
+  (rte: function_pointer: \valid_function(f))
+~~~
+
+Because WP cannot rule out that an opaque callee fails to terminate or
+writes through an aliasing pointer, it cannot discharge the combinators'
+`terminates`, `exits`, `assigns`, and `assert_rte_function_pointer`
+goals. The per-function residuals are the `_terminates_partN`,
+`_exits_partN`, `_assigns_{normal,exit}_partN`, and
+`_assert_rte_function_pointer` fragments visible in the WP log. This is
+the same root cause and the same class of residual as region_end's
+opaque-hook dispatch (OWN-003 / VERIFY-011 category 1) — different
+surface (six combinators vs one teardown loop), identical limitation:
+no `calls` clause for an arbitrary callee, plus `\valid_function`
+unimplemented in Frama-C 29.
+
+**Manual proof argument**: each combinator's structural postconditions
+(the result's `has_value` and `value` relationship to the inputs) hold
+by construction under the contract that the supplied callback is a valid
+function that terminates and does not repoint the option. WP has no ACSL
+mechanism to encode that callback contract, so the obligations remain
+residual. The functional shape is exercised exhaustively by
+`test/semantics/option_test.c` and by the cover TU (MCDC-006); ASan +
+UBSan across all 16 CI configs verify absence of UB on every combinator
+path.
+
+Every non-combinator function proved fully: `some`, `none`, `is_some`,
+`is_none`, `get`, `unwrap`, `unwrap_or`, `replace`, `take`, and
+`expect`'s reachable surface carry no residuals.
+
+### Mitigation
+
+The `frama-c-option` CI step enforces exactly 34 unproved goals (and
+189/223 proved) with named patterns covering the 2 inherited and all 32
+own residuals, and prints the full residual list on every run (artifact
+`wp-proof-option`). Any additional unproved goal, missing expected goal,
+or count change is a regression and fails the build.
+
+option achieves 96.7% MC/DC (29/30 condition outcomes — see MCDC-006).
+Functional behavior is tested by `test/semantics/option_test.c` and
+exercised for coverage by `vmacros/coverage/option_cover.c`. The single
+uncovered MC/DC outcome — `option_int_expect`'s panic-on-absent guard —
+is cross-confirmed by this entry's residual analysis: WP reports
+`Missing decreases clause on recursive function option_int_expect, call
+must be unreachable`, the same branch gcov measures as not-executed (see
+MCDC-006 for the cross-stream record).
+
+### Cross-references
+
+- Inherited residuals: VERIFY-006 (contract.h handler non-termination).
+- Architectural analogue: OWN-003 / VERIFY-011 category 1 (region_end
+  opaque-hook dispatch — same function-pointer limitation).
+- MC/DC coverage: MCDC-006 (option_cover.c ceiling 96.7%, the `expect`
+  panic guard unreachable).
+- Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
+- Driver mechanism: `docs/vmacros.md` (Shape-B verification drivers).
+- Per-goal CI artifact: `wp-proof-option` (full WP output).
+- Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
+  "WP: semantics/option (driver)".
+
+---
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
@@ -2563,6 +2684,142 @@ outcome, not a residual.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
   detail for region.h" step in
   `.github/workflows/cmake-multi-platform.yml`.
+
+---
+
+## MCDC-006: Contract-Violation Panic-Branch Unreachable (option, first Shape-B cover TU)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-006 |
+| **Date**       | 2026-06-27 |
+| **Baseline commit** | 93bb107 (Canon-C CI #1072) |
+| **Scope**      | `vmacros/coverage/option_cover.c` — 1 of 30 condition outcomes (1 unreachable) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 1 of 30 condition outcomes measured through the option
+cover TU is not exercisable by the cover driver. option is the **first
+Shape-B module** to appear in the MC/DC record at all — its conditions
+live in `IMPL_OPTION_*` macro bodies that have no source location until
+`CANON_OPTION(int)` expands, so in `option_test.c` they are stamped to a
+`/test/` path and deleted by the coverage filter. `option_cover.c`
+re-instantiates the identical macros outside `test/`, stamping the same
+conditions to `vmacros/coverage/option_cover.c`, where they survive (see
+`docs/vmacros.md`). The single uncovered outcome is the FALSE side of
+`option_int_expect`'s `has_value` guard:
+
+| # | Function            | Subcondition not covered                  |
+|---|---------------------|--------------------------------------------|
+| 1 | `option_int_expect` | cond 0 true (`!o.has_value`) — panic path |
+
+gcov reports `condition 0 not covered (true)` with the panic block
+marked `%%%%%` (never executed). option_cover.c's measured MC/DC is
+29/30 = 96.7% — the achievable ceiling.
+
+The 30 outcomes are option's **generated conditions only**. The cover
+driver's own scaffolding (`half_if_even`, `observe_opt`'s `get` call,
+and the helper predicates) carries its own conditions that gcov reports
+separately at 2/2; they are not part of the 30. Every generated
+combinator decision point is fully covered: `eq` 4/4 + 2/2,
+`combine_with` 4/4, `filter` 4/4 (T&&T / T&&F / F&&_), and
+`or_else`/`and_then`/`map`/`get`/`unwrap_or` 2/2 each.
+
+### Rationale
+
+`expect`'s `has_value` FALSE outcome is the **contract-violation branch**:
+when the option is absent, `expect` routes through the contract handler
+and panics. Under the coverage build's project-wide `-DCANON_NO_REQUIRE`
+this branch is the panic-on-absent path, deliberately not exercised —
+exercising it means triggering the very contract violation the build
+removes. The cover TU calls `option_int_expect` on a present option only
+(line 126), with the rationale stated inline (lines 123-124): "the None
+path is a panic; not exercised — it is the contract-violation branch,
+not an MC/DC condition under NO_REQUIRE."
+
+This is **not** a test gap and **not** a type-invariant-unreachable
+branch. Its disposition differs from MCDC-002 through MCDC-005, and the
+distinction is worth stating: those four are defensive branches proved
+dead by a *type invariant* (`bytes_invariant` / `arena_invariant` /
+`pool_invariant`) or a *runtime construction invariant* (region's
+no-NULL-hook discipline). option's miss has no such predicate — it is a
+panic branch, the same family as the `contract.h 0/2` artifact that
+appears on every test row (MCDC-001's methodology, here surfaced inside
+a generated function). An auditor should therefore not expect an
+"option_invariant discharges this" claim; the unreachability is the
+panic-handler's non-termination, not a predicate.
+
+### Cross-stream evidence via VERIFY-014
+
+WP and gcov point at the same branch from opposite directions. gcov
+measures `expect`'s `!has_value` outcome as not-executed. WP, verifying
+the same instantiation through the option driver, reports during its run:
+
+~~~
+[wp] vmacros/vdrivers/option_verify.h:283: Warning:
+  Missing decreases clause on recursive function option_int_expect, call must be unreachable
+~~~
+
+WP models the handler call as a potentially-recursive call it cannot
+prove terminating, and therefore treats it as unreachable. The two
+streams complement rather than converge: gcov instruments the source and
+finds the branch unexecuted; WP analyses the proof and finds the call
+unreachable. Together they establish the outcome as a provably
+unexecutable contract-violation path under the documented build flags,
+not a coverage gap — the same cross-stream pattern as MCDC-002 through
+MCDC-005, with the source of unreachability being the panic handler
+rather than a type invariant.
+
+### Mitigation
+
+1. **Cross-stream evidence via VERIFY-014**: gcov reports source-level
+   uncoverage; WP reports the `expect` handler call unreachable. Together
+   they establish the 1 outcome as provably unexecutable, not a gap.
+
+2. **CI regression detector**: the coverage job's "Debug: per-line MC/DC
+   detail for option (cover TU)" step prints the gcov dump on every run.
+   If a future change makes the panic branch reachable, or opens a new
+   uncovered outcome, the per-line detail surfaces it for human review.
+
+3. **The achievable MC/DC ceiling is 29/30 = 96.7%**. Reaching it
+   represents 100% of cover-reachable coverage. The 1 missing outcome is
+   documented here and not counted as a coverage regression.
+
+4. **Option behavior is otherwise exhaustively tested**.
+   `test/semantics/option_test.c` exercises every public function
+   including both expect-on-present and the panic-on-absent path (the
+   latter through the contract-handler test harness, which is excluded
+   from the coverage build). The cover TU drives both outcomes of every
+   reachable condition in every generated combinator.
+
+### Forward note (result, vec, deque, fold)
+
+option is the first of five Shape-B modules slated for cover TUs
+(`docs/vmacros.md`). It confirms the cover-TU attribution pattern works
+and establishes the disposition for a generated panic/contract-violation
+branch. The remaining Shape-B modules inherit the pattern but not the
+specific outcome count or shape; `result`'s `expect`/`unwrap` family is
+the nearest analogue and will need its own audit and its own MCDC-NNN
+entry.
+
+### Cross-references
+
+- VERIFY-014 — option's WP residual analysis; the `expect` "must be
+  unreachable" warning that cross-confirms this outcome, and the 32
+  combinator function-pointer-dispatch residuals.
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology; the
+  contract-violation-branch family this entry belongs to.
+- MCDC-002 — slice.h's per-header forward note, which anticipated each
+  new module needing its own MC/DC entry; option is the first Shape-B
+  fulfillment.
+- MCDC-003 / MCDC-004 / MCDC-005 — the same cross-stream evidence
+  pattern in arena.h / pool.h / region.h; different unreachability
+  source (type / construction invariant vs option's panic handler).
+- Driver and cover-TU mechanism: `docs/vmacros.md`.
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC detail
+  for option (cover TU)" step in
+  `.github/workflows/cmake-multi-platform.yml`.
+
+---
 
 ---
 
