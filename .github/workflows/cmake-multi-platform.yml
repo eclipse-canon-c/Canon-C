@@ -2086,6 +2086,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_BITS_FORCE_FALLBACK -DCANON_NO_REQUIRE" \
             -DENABLE_SANITIZERS=OFF \
+            -DENABLE_COVERAGE_TUS=ON \
             -S "${{ github.workspace }}"
 
       - name: Build
@@ -2105,6 +2106,13 @@ jobs:
         # library headers, not the assertion infrastructure itself.
         run: ctest --build-config Debug --output-on-failure --exclude-regex '^contract_test$'
 
+      - name: Run MC/DC cover TUs (Shape-B modules)
+        working-directory: build
+        # Cover TUs are not ctests — run them directly so their .gcda is
+        # written. They exit 0; they exist to emit coverage, not to assert.
+        run: |
+          ./option_cover
+      
       - name: Collect branch coverage data (lcov)
         run: |
           lcov --capture \
