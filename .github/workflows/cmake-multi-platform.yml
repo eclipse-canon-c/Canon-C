@@ -2628,7 +2628,51 @@ jobs:
               ls "$d"/*region* 2>/dev/null || true
             done
           fi
+      
+      - name: "Debug: per-line MC/DC detail for option (cover TU)"
+        # First measured MC/DC baseline for the option module: 29/30 (96.7%),
+        # exactly 1 condition outcome missed. Report-only — surfaces which
+        # single outcome is uncovered so it can be classified (defensive-
+        # branch-unreachable vs require_msg/NO_REQUIRE artifact vs genuinely
+        # reachable-and-testable) before an MCDC-NNN deviations entry is
+        # written. Never fails.
+        #
+        # NOTE: option is Shape B. The conditions live in IMPL_OPTION_* macro
+        # bodies and are stamped to the cover TU's instantiation site, so the
+        # gcov target here is option_cover.c (NOT an option_*.h header — the
+        # macro bodies have no own source location). The same reason the cover
+        # TU exists at all.
+        run: |
+          cd build
 
+          OPTION_GCDA=$(find . -name "option_cover*.gcda" | head -1)
+
+          if [ -z "$OPTION_GCDA" ]; then
+            echo "ERROR: could not locate option_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+
+          echo "Running gcov on: $OPTION_GCDA"
+          gcov-14 --conditions --all-blocks "$OPTION_GCDA" 2>&1 | \
+            grep -A 400 "option_cover.c" | head -600
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for option_cover.c ==="
+          find . -name "option_cover.c.gcov" -exec echo "Found: {}" \;
+
+          OPTION_GCOV=$(find . -name "option_cover.c.gcov" | head -1)
+          if [ -n "$OPTION_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $OPTION_GCOV ==="
+            cat "$OPTION_GCOV"
+          else
+            echo "No option_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*option_cover* 2>/dev/null || true
+            done
+          fi
+      
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
   #
