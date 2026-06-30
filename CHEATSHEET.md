@@ -16,6 +16,7 @@
 - [`Floating-point types`](#c-float)
 - [`typedef`](#c-typedef)
 - [`const` / `volatile` qualifiers](#c-qualifiers)
+- [`restrict` qualifier](#c-restrict)
 - [`Storage classes (static, extern, register, auto)`](#c-storage)
 - [`Designated & compound initializers`](#c-init)
 
@@ -48,6 +49,7 @@
 - [`do` / `while`](#c-do)
 - [`break` / `continue`](#c-breakcont)
 - [`goto` / labels](#c-goto)
+- [`setjmp` / `longjmp`](#c-setjmp)
 - [`return`](#c-return)
 
 ### Functions
@@ -105,6 +107,12 @@ header(s) you actually need to `#include` for that construct — relying on
 Canon-C's own transitive includes rather than listing the full chain. If
 `ptr.h` already pulls in `types.h`, the entry shows `ptr.h` alone.
 
+**A note on include paths.** Headers live at the layer they belong to, so the
+paths differ by design: core primitives are under `core/primitives/`
+(`types.h`, `contract.h`, `checked.h`, …), while higher core modules are under
+`core/` directly (`slice.h`, `scope.h`, `arena.h`, `memory.h`). The paths shown
+in each entry are real, not typos — copy them as written.
+
 **A word on what "safe" means here.** Copying a form from this cheatsheet makes
 your code *verification-ready* — shaped so a verifier can reason about it and so
 common undefined behavior is guarded — not automatically *verified*. Only the
@@ -113,11 +121,24 @@ proved when you run the verifier over it. The forms here are written to be the
 shape that does not fight the prover and does not strand a coverage outcome, so
 that when you do verify, these constructs are not what blocks you.
 
+**These are sequential safe forms — concurrency is yours to manage.** Every form
+in this cheatsheet is safe under *single-threaded access to a given object*. That
+is the precondition Canon-C's proofs assume, and it is a deliberate scope choice:
+the library provides no locks and makes no thread-safety guarantee. A Canon-C
+object — an arena, a flags word, a slice, a pool — shared across two preempting
+threads or touched from an ISR is outside the verified envelope, and the safety
+the form buys you no longer holds. When pairing Canon-C with an RTOS (ThreadX or
+otherwise), the discipline is: **thread-confine each object to one task, or guard
+every access with a kernel mutex**, and pass data between tasks through the
+kernel's own queues rather than a shared Canon-C container. The `compare.h`
+comparators are the one exception — they are pure and stateless, hence fully
+thread-safe.
+
 **Not everything has a Canon-C form.** A few constructs in the table —
-variadics, `volatile`, most of the preprocessor — exist in C but have no safe
-Canon-C replacement by design; their entries say so plainly rather than inventing
-one. When that happens, the honest move is the documented workaround, not a
-forced wrapper.
+variadics, `volatile`, `restrict`, `setjmp`/`longjmp`, most of the preprocessor —
+exist in C but have no safe Canon-C replacement by design; their entries say so
+plainly rather than inventing one. When that happens, the honest move is the
+documented workaround, not a forced wrapper.
 
 **The headers are the authority.** This cheatsheet orients you and gets you
 moving; for the exact signature, the full ACSL contract, and the precise
@@ -325,6 +346,47 @@ void f(void* p) {
 
 ---
 
+<a name="c-restrict"></a>
+## `restrict` qualifier
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> No Canon-C form. This entry is guidance, not a wrapper.
+
+`restrict` is a *promise to the compiler* that, for the lifetime of the pointer,
+the object it points to is accessed only through that pointer. The compiler
+trusts the promise and optimizes on it. If the promise is false — the regions
+actually alias — the result is undefined behavior, with no diagnostic and often
+no symptom until an optimization level changes.
+
+```c
+/* RAW — the promise is the danger. If src and dst overlap, this is UB,
+   silently, and only on the builds where the optimizer acts on restrict. */
+void copy(u8* restrict dst, const u8* restrict src, usize n) {
+    for (usize i = 0; i < n; i++) dst[i] = src[i];
+}
+```
+```c
+/* SAFER — drop restrict; if regions may overlap, use the form that handles it */
+void copy(u8* dst, const u8* src, usize n) {
+    mem_move(dst, src, n);   /* mem_move is overlap-correct; see the mem entry */
+}
+```
+> Why no wrapper: `restrict` carries no runtime representation — there is
+> nothing for Canon-C to check or prove. WP cannot verify a no-alias promise it
+> is simply told to trust, and a wrong promise is exactly the kind of UB the
+> rest of this library exists to remove. The honest guidance is: **prefer not to
+> use `restrict`** in code you intend to verify. If a hot path genuinely needs
+> it, isolate it, document the non-aliasing precondition explicitly, and treat
+> that function as a manually-reviewed deviation — not verification-ready.
+> For the common case where you reached for `restrict` to signal "these don't
+> overlap" around a copy, [`mem_copy`](#c-mem) (overlap-rejecting) or `mem_move`
+> (overlap-correct) expresses the intent without the open-ended promise.
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
 <a name="c-arith"></a>
 ## `Arithmetic (+ - * / %)`
 
@@ -454,6 +516,11 @@ type's width**, including the easy-to-miss case where the shifted `1` is a
 plain `int`. The `bits_*` functions operate on `u64` and avoid the UB by
 construction.
 
+> Concurrency: a `bits_*` call is a pure function of its inputs, but the *flags
+> word* you keep and reassign (`flags = bits_set(flags, bit)`) is shared mutable
+> state. If two tasks update the same flags word, confine it to one task or guard
+> it with a mutex — the read-modify-write is not atomic.
+
 <details>
 <summary><b>1 — Set / clear / test / toggle a bit</b></summary>
 
@@ -568,8 +635,23 @@ int my_cmp(const void* a, const void* b, void* ctx) {
 > `(x > y) - (x < y)` pattern the `algo_cmp_*` functions use is always exactly
 > -1/0/+1. Built-ins exist for every primitive width: `algo_cmp_u8` …
 > `algo_cmp_u64`, `algo_cmp_i8` … `algo_cmp_i64`, `algo_cmp_usize` /
-> `algo_cmp_isize`, each with an `_desc` descending variant. Note Canon-C's
-> comparator signature takes a third `void* ctx` argument (`algo_cmp_fn`).
+> `algo_cmp_isize`, each with an `_desc` descending variant.
+>
+> **Migrating from `qsort`?** Canon-C's comparator takes a **third** argument,
+> `void* ctx` (the `algo_cmp_fn` signature), where the standard `qsort`
+> comparator takes only two. The `ctx` is an optional caller context, may be
+> NULL, and is simply `(void)ctx;`-ignored by every built-in. To adapt an
+> existing two-arg comparator, add the third parameter and ignore it — the body
+> is otherwise unchanged.
+>
+> Verification scope (honesty note): the `algo_cmp_*` ACSL contracts prove
+> *memory safety* (`\valid_read` on the byte ranges) and bound the *result*
+> (`-1 <= \result <= 1`); they assign `\nothing` (pure). The full three-way
+> *semantics* (that the sign matches the ordering) rests on the branchless
+> pattern plus tests, not on an ACSL functional spec — Frama-C WP can't take a
+> `void*`→typed-pointer cast inside the contract clauses without "incompatible
+> pointer cast" warnings that block all goals, so the contracts reason at the
+> byte level. See the header's ACSL note for the detail.
 
 </details>
 
@@ -699,6 +781,10 @@ Cleanup scattered across every exit path is easy to get wrong — miss one
 release and you leak, double one and you corrupt. There are two safe shapes,
 and which one you use depends on whether the block can exit early.
 
+> Concurrency: an arena is shared mutable state. `arena_mark` / `arena_alloc` /
+> `arena_reset_to` on the same arena from two tasks will race — give each task
+> its own arena, or guard the arena with a mutex. The proofs assume one owner.
+
 <details>
 <summary><b>1 — Run-to-completion block → DEFER</b></summary>
 
@@ -789,6 +875,55 @@ done:
 
 ---
 
+<a name="c-setjmp"></a>
+## `setjmp` / `longjmp`
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+> No Canon-C form. This entry is guidance, not a wrapper.
+
+`setjmp`/`longjmp` perform a non-local jump: `longjmp` unwinds the stack back to
+a saved `setjmp` point, skipping every intervening function's normal exit. That
+is precisely the control flow Canon-C's cleanup discipline is built to make
+visible and provable — so the two are fundamentally at odds.
+
+```c
+/* RAW — longjmp skips every cleanup between here and the setjmp.
+   Any DEFER, any goto-cleanup, any free in an unwound frame is bypassed. */
+if (setjmp(env) == 0) {
+    void* buf = malloc(4096);
+    risky();                 /* if this longjmps, buf leaks — cleanup is skipped */
+    free(buf);
+} else {
+    /* jumped back here; buf is unreachable and leaked */
+}
+```
+```c
+/* SAFE — model the error as a value and return it through the normal path */
+Result_void r = risky_checked();     /* returns an error instead of jumping */
+if (result_is_err(r)) {
+    /* handle; every cleanup on the way out still runs */
+    return r;
+}
+```
+> Why no wrapper: there is nothing to wrap — the hazard is the mechanism itself.
+> `longjmp` defeats `DEFER` (which doesn't fire on non-local exit), defeats the
+> `goto cleanup` shape (the label is jumped over), and leaves any
+> partially-constructed object in an indeterminate state with no diagnostic.
+> Local objects modified between `setjmp` and `longjmp` and not declared
+> `volatile` are also undefined after the jump. The Canon-C model is the
+> opposite discipline: **errors are values**, propagated through `Result`/`Option`
+> on the normal return path, where every cleanup runs and the verifier can follow
+> the flow. If you have inherited code built on `setjmp`/`longjmp`, isolate it,
+> confine the jump to a single leaf scope that owns no resources, and convert the
+> boundary to a `Result` as soon as you can — and note that MISRA C:2012
+> (Rule 21.4) prohibits `<setjmp.h>` outright, which is the same conclusion from
+> the certification side.
+
+[↑ Back to constructs](#table-of-c-constructs)
+
+---
+
 <a name="c-heap"></a>
 ## `malloc` / `calloc` / `realloc` / `free`
 
@@ -806,6 +941,11 @@ Raw `malloc` has two recurring hazards: the array-size multiply (`count *
 size`) can overflow `usize`, so you allocate too little and then write past the
 buffer — the classic integer-overflow-to-heap-overflow bug — and the matching
 `free` is easy to miss, double, or skip on an early return.
+
+> Concurrency: an arena is single-owner by design (see the note in
+> [`goto` / labels](#c-goto)). `mem_alloc`/`mem_free` inherit the thread-safety
+> of the underlying allocator — on bare metal with no locked allocator, treat
+> them as unguarded and confine or mutex accordingly.
 
 <details>
 <summary><b>1 — Array allocation → mem_alloc_array (overflow-checked)</b></summary>
