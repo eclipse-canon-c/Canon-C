@@ -21,12 +21,15 @@ on:
 #   frama-c-*       — Linux only, formal verification (WP proofs). One job
 #                     per verified header (frama-c-checked, -bits, -compare,
 #                     -ptr, -slice, -memory, -arena, -pool, -region, -error),
-#                     plus one per macro-module driver (frama-c-option, which
-#                     runs over in vmacros/vdrivers/ rather than a
-#                     header directly — the first Shape-B module). All run in
-#                     parallel and share the composite setup action at
-#                     .github/actions/framac-setup. All eleven are ENFORCED
-#                     (hard proved/unproved baselines); region runs 120s/split
+#                     plus one per macro-module driver (frama-c-option,
+#                     frama-c-result), which run over a driver in
+#                     vmacros/vdrivers/ rather than a header directly
+#                     (Shape-B modules). All run in parallel and share the
+#                     composite setup action at .github/actions/framac-setup.
+#                     Eleven are ENFORCED (hard proved/unproved baselines);
+#                     frama-c-result is REPORT-ONLY pending its first-run
+#                     baseline (promotion checklist in docs/vmacros.md —
+#                     same sequence option followed). region runs 120s/split
 #                     in its own isolated job (long run, ~1h40m, but enforced).
 #                     Additional headers are added as a new job each as they
 #                     are annotated; macro-module drivers likewise.
@@ -2041,6 +2044,106 @@ jobs:
           name: wp-proof-option
           path: wp_option_output.txt
   
+  
+  # -------------------------------------------------------------------------
+  # semantics/result — REPORT-ONLY. Second Shape-B macro-module driver.
+  #
+  # WP runs over vmacros/vdrivers/result_verify.h, which instantiates the
+  # REAL shipped macros at (int, VErr) — same driver mechanism as option
+  # (docs/vmacros.md). Default Typed model: by-value tagged struct, no void*
+  # casts; no CVC5-presence check, as for error.h and option.
+  #
+  # REPORT-ONLY: this job never fails on proof counts. It exists to produce
+  # the baseline that VERIFY-015 will record. Three things to read off the
+  # first runs before promotion to enforced (exact-count + by-name roll-call,
+  # copied structurally from frama-c-option):
+  #
+  #   1. Inherited surface — expected: exactly the 2 contract.h handler goals
+  #      (definition-presence inheritance; result's require_msg panic surface
+  #      is fully compiled out under CANON_NO_REQUIRE, so no handler-CALL
+  #      goals of result's own are expected — a difference from option's
+  #      expect worth recording in VERIFY-015).
+  #   2. Own fn-pointer residuals — expected on map / map_err / and_then /
+  #      or_else / eq (five dispatching functions; eq has TWO calling
+  #      branches, both_ok -> eq_ok and both_err -> eq_err, and should carry
+  #      the largest cluster). Same class as VERIFY-014 / OWN-003.
+  #   3. Union-model goals — result is the FIRST union-typed module (option's
+  #      payload is a plain struct field). Any residual on the constructors'
+  #      compound-literal union writes or on and()/or()'s cross-value
+  #      union-member ensures is a NEW class with no option analogue.
+  #      Classify it in VERIFY-015 before pinning enforcement numbers; do
+  #      not absorb it into the fn-pointer class.
+  # -------------------------------------------------------------------------
+  frama-c-result:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/result_verify.h (report-only)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/result_verify.h 2>&1 | tee wp_result_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (result_verify.h) exit status: ${WP_EXIT}"
+          echo "  MODE: REPORT-ONLY — counts are informational"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_result_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in result_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_result_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_result_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_result_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_result_output.txt || true)
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo ""
+          echo "  Unproved goals (baseline candidates for VERIFY-015):"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_result_output.txt || \
+            echo "  (none — clean run)"
+          echo ""
+          echo "  Union/fn-pointer diagnostic warnings observed:"
+          grep -iE "union|valid_function|Unknown callee|not yet implemented" \
+            wp_result_output.txt | sort -u | head -20 || true
+          echo "==============================================="
+          echo "REPORT-ONLY: baseline captured; see wp-proof-result artifact."
+          echo "Promotion to enforced: docs/vmacros.md checklist (two+ green"
+          echo "runs with a name-stable residual set, then VERIFY-015)."
+      - name: Upload WP proof output (result)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-result
+          path: wp_result_output.txt
+  
+  
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
@@ -2112,6 +2215,7 @@ jobs:
         # written. They exit 0; they exist to emit coverage, not to assert.
         run: |
           ./option_cover
+          ./result_cover
       
       - name: Collect branch coverage data (lcov)
         run: |
@@ -2673,6 +2777,81 @@ jobs:
             done
           fi
       
+      - name: "Debug: Shape-B attribution check for result (result_test)"
+        # Per-module attribution confirmation (docs/vmacros.md checklist):
+        # option confirmed the Shape-B pattern, but each module gets its own
+        # cheap one-run check before its cover TU's numbers become the module
+        # baseline. Confirms result's macro-generated conditions are stamped
+        # to the instantiation TU (result_test.c) and therefore removed by
+        # the '*/test/*' lcov filter — the precondition for result_cover.c
+        # being the correct fix rather than a filter-narrowing change.
+        # Expected outcome: conditions owned by result_test.c. If result_impl.h
+        # appears as the owner instead, STOP — the cover TU is unnecessary
+        # for this module and the filter is the fix. Report-only; never fails.
+        run: |
+          cd build
+          RESULT_GCDA=$(find . -name "result_test*.gcda" | head -1)
+          if [ -z "$RESULT_GCDA" ]; then
+            echo "ERROR: could not locate result_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $RESULT_GCDA"
+          gcov-14 --conditions "$RESULT_GCDA" 2>/dev/null | \
+            grep -B 1 -A 3 -E "result_(test|impl|defn)" | head -120
+          echo ""
+          echo "=== File ownership of result-generated conditions ==="
+          gcov-14 --conditions "$RESULT_GCDA" 2>&1 | \
+            awk '/^File /{f=$0} /Condition outcomes covered:/{print f "\t" $0}' | \
+            grep -iE "result" || echo "(no result-owned condition rows found)"
+
+      
+      - name: "Debug: per-line MC/DC detail for result (cover TU)"
+        # First measured MC/DC baseline for the result module. Report-only —
+        # surfaces which condition outcomes (if any) are uncovered so they
+        # can be classified before an MCDC-NNN deviations entry is written.
+        # Never fails.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: unlike option (MCDC-006), result's
+        # entire panic surface (unwrap / unwrap_err / expect / get_* NULL
+        # guard) is plain require_msg, compiled to ((void)0) under this
+        # build's -DCANON_NO_REQUIRE. No handler-invocation path survives the
+        # flag, so the expected disposition is "no unreachable outcomes"
+        # (the error.h-style nothing-to-document case) rather than an
+        # MCDC-006-style ceiling. If uncovered outcomes appear anyway,
+        # classify (gcov artifact vs scaffolding vs genuine cover-TU gap —
+        # the last is fixed by extending result_cover.c's main(), not by a
+        # deviation entry).
+        #
+        # NOTE: result is Shape B. The conditions live in IMPL_RESULT_* macro
+        # bodies and are stamped to the cover TU's instantiation site, so the
+        # gcov target here is result_cover.c (NOT a result_*.h header).
+        run: |
+          cd build
+          RESULT_GCDA=$(find . -name "result_cover*.gcda" | head -1)
+          if [ -z "$RESULT_GCDA" ]; then
+            echo "ERROR: could not locate result_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $RESULT_GCDA"
+          gcov-14 --conditions --all-blocks "$RESULT_GCDA" 2>&1 | \
+            grep -A 400 "result_cover.c" | head -600
+          echo ""
+          echo "=== Looking for the generated .gcov file for result_cover.c ==="
+          find . -name "result_cover.c.gcov" -exec echo "Found: {}" \;
+          RESULT_GCOV=$(find . -name "result_cover.c.gcov" | head -1)
+          if [ -n "$RESULT_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $RESULT_GCOV ==="
+            cat "$RESULT_GCOV"
+          else
+            echo "No result_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*result_cover* 2>/dev/null || true
+            done
+          fi
+        
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
   #
