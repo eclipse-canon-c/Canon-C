@@ -27,7 +27,10 @@
  *     NULL out parameter handling (closes `if (out)` FALSE branch),
  *     allocation-failure path with valid out (closes `p != NULL` FALSE
  *     branch in the compound return)
- *   - arena_alloc_type / arena_alloc_array macros
+ *   - arena_alloc_type / arena_alloc_array macros, including the overflow
+ *     guard on the array variants: overflow returns NULL with arena state
+ *     untouched, the guard boundary reaches arena_alloc's does_not_fit
+ *     path, and count == 0 returns NULL via the size_zero behavior
  *   - arena_reset: fast reset, reuse after reset
  *   - arena_reset_secure: wipes consumed memory, empty-arena early return
  *   - arena_mark / arena_reset_to: checkpoint / rollback
@@ -600,6 +603,82 @@ static void test_alloc_array_zero_macro(void)
     for (i = 0; i < 8; i++) EXPECT(arr[i] == 0);
 }
 
+/* ── typed macros — overflow guard ───────────────────────────────────────── *
+ *
+ * The array macros guard `sizeof(Type) * (count)` and return NULL on
+ * overflow WITHOUT calling arena_alloc — the guard short-circuits, so
+ * arena state (offset, padding_accum, debug counters) must be untouched.
+ * See the "Typed allocation macros" block comment in arena.h.
+ *
+ * NULL from these macros therefore means one of three things, and in
+ * every case the arena is unchanged:
+ *   1. count * sizeof(Type) overflows usize  (guard FALSE — new)
+ *   2. the allocation does not fit           (guard TRUE, alloc fails)
+ *   3. count == 0                            (guard TRUE, size_zero)
+ * The tests below pin one path each; test_alloc_array_macro above covers
+ * the success path.
+ *
+ * All counts are bound to variables first — the macros evaluate `count`
+ * twice, so side-effecting expressions are forbidden (see the arena.h
+ * double-evaluation warning). */
+
+static void test_alloc_array_macro_overflow_returns_null(void)
+{
+    setup();
+    /* Smallest count whose byte size overflows usize. */
+    usize big          = (CANON_USIZE_MAX / sizeof(i32)) + 1;
+    usize used_before  = arena_used(&g_arena);
+    usize count_before = g_arena.alloc_count;
+
+    i32* arr = arena_alloc_array(&g_arena, i32, big);
+    EXPECT(arr == NULL);
+    EXPECT(arena_used(&g_arena) == used_before);   /* guard short-circuited */
+    EXPECT(g_arena.alloc_count  == count_before);  /* arena_alloc never ran */
+}
+
+static void test_alloc_array_zero_macro_overflow_returns_null(void)
+{
+    setup();
+    usize big          = (CANON_USIZE_MAX / sizeof(i32)) + 1;
+    usize used_before  = arena_used(&g_arena);
+    usize count_before = g_arena.alloc_count;
+
+    i32* arr = arena_alloc_array_zero(&g_arena, i32, big);
+    EXPECT(arr == NULL);
+    EXPECT(arena_used(&g_arena) == used_before);
+    EXPECT(g_arena.alloc_count  == count_before);
+}
+
+/* Boundary: the LARGEST count that passes the guard. The multiply does
+ * not overflow usize, so control reaches arena_alloc, which rejects it
+ * on capacity (does_not_fit behavior). Closes the guard-TRUE /
+ * alloc-fails path — distinct from the guard-FALSE path above. */
+static void test_alloc_array_macro_guard_boundary(void)
+{
+    setup();
+    usize boundary    = CANON_USIZE_MAX / sizeof(i32);
+    usize used_before = arena_used(&g_arena);
+
+    i32* arr = arena_alloc_array(&g_arena, i32, boundary);
+    EXPECT(arr == NULL);
+    EXPECT(arena_used(&g_arena) == used_before);   /* does_not_fit: offset preserved */
+}
+
+/* count == 0 passes the guard and reaches arena_alloc(arena, 0), which
+ * returns NULL via its size_zero behavior — unchanged from the pre-guard
+ * form of the macro. */
+static void test_alloc_array_macro_zero_count_returns_null(void)
+{
+    setup();
+    i32* arr = arena_alloc_array(&g_arena, i32, 0);
+    EXPECT(arr == NULL);
+    EXPECT(arena_is_empty(&g_arena));
+
+    arr = arena_alloc_array_zero(&g_arena, i32, 0);
+    EXPECT(arr == NULL);
+    EXPECT(arena_is_empty(&g_arena));
+}
+
 /* ── CANON_ARENA_DEBUG stats ─────────────────────────────────────────────── */
 
 static void test_debug_alloc_count(void)
@@ -782,6 +861,11 @@ int main(void)
     test_alloc_array_macro();
     test_alloc_type_zero_macro();
     test_alloc_array_zero_macro();
+
+    test_alloc_array_macro_overflow_returns_null();
+    test_alloc_array_zero_macro_overflow_returns_null();
+    test_alloc_array_macro_guard_boundary();
+    test_alloc_array_macro_zero_count_returns_null();
 
     test_debug_alloc_count();
     test_debug_peak();
