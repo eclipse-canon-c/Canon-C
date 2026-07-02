@@ -435,35 +435,35 @@ canon_c_test(
 canon_c_test(
     NAME     map_test
     SRC      test/algo/map_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     filter_test
     SRC      test/algo/filter_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     fold_test
     SRC      test/algo/fold_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     find_test
     SRC      test/algo/find_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     any_all_test
     SRC      test/algo/any_all_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 
 )
@@ -471,28 +471,28 @@ canon_c_test(
 canon_c_test(
     NAME     sort_test
     SRC      test/algo/sort_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     search_test
     SRC      test/algo/search_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     unique_test
     SRC      test/algo/unique_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
 canon_c_test(
     NAME     reverse_test
     SRC      test/algo/reverse_test.c
-    INCLUDES core/primitives core semantics semantics/convenience data algo .
+    INCLUDES core/primitives core semantics data algo .
     FUZZABLE
 )
 
@@ -544,13 +544,13 @@ canon_c_test(
 canon_c_test(
     NAME file_test 
     SRC test/util/file_test.c 
-    INCLUDES core/primitives core semantics semantics/convenience data algo util .
+    INCLUDES core/primitives core semantics data algo util .
 )
 
 canon_c_test(
     NAME parse_test 
     SRC test/util/parse_test.c 
-    INCLUDES core/primitives core semantics semantics/convenience data algo util .
+    INCLUDES core/primitives core semantics data algo util .
     FUZZABLE
 )
 
