@@ -596,5 +596,19 @@ if(ENABLE_COVERAGE_TUS)
     # so the measured condition set equals WP's goal set regardless of the
     # job's flag string.
     target_compile_definitions(option_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
-    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover)")
+
+    add_executable(result_cover vmacros/coverage/result_cover.c)
+    target_include_directories(result_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR})
+    # Match the WP run's flags exactly (result_verify.h uses both):
+    # CANON_NO_REQUIRE also arrives via the coverage job's global C flags,
+    # but NDEBUG does not (CMAKE_BUILD_TYPE=Debug omits it) — set both here
+    # so the measured condition set equals WP's goal set regardless of the
+    # job's flag string. (Same rationale as option_cover.)
+    target_compile_definitions(result_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover)")
+    
 endif()
