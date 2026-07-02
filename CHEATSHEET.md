@@ -130,9 +130,16 @@ threads or touched from an ISR is outside the verified envelope, and the safety
 the form buys you no longer holds. When pairing Canon-C with an RTOS (ThreadX or
 otherwise), the discipline is: **thread-confine each object to one task, or guard
 every access with a kernel mutex**, and pass data between tasks through the
-kernel's own queues rather than a shared Canon-C container. The `compare.h`
-comparators are the one exception — they are pure and stateless, hence fully
-thread-safe.
+kernel's own queues rather than a shared Canon-C container. Pure, stateless
+functions — everything in `checked.h`, `bits.h`, and `compare.h`, which read
+only their arguments and write only through caller-provided out-parameters —
+are safe to call from any thread: the hazard is shared mutable *objects*, not
+calls. One ISR-specific trap: the default contract handler prints via
+`fprintf`, so a contract firing in interrupt context before the handler has
+been retargeted is a hard fault with no diagnostics. On bare-metal or RTOS
+targets, install your replacement handler at startup — before any Canon-C
+call can occur in ISR context (the custom-handler hook is the same one the
+[`assert`](#c-assert) entry describes).
 
 **Not everything has a Canon-C form.** A few constructs in the table —
 variadics, `volatile`, `restrict`, `setjmp`/`longjmp`, most of the preprocessor —
@@ -900,10 +907,10 @@ if (setjmp(env) == 0) {
 ```
 ```c
 /* SAFE — model the error as a value and return it through the normal path */
-Result_void r = risky_checked();     /* returns an error instead of jumping */
-if (result_is_err(r)) {
+result_int_Error r = risky_checked();  /* returns an error instead of jumping */
+if (result_int_Error_is_err(r)) {
     /* handle; every cleanup on the way out still runs */
-    return r;
+    return r;              /* or: TRY(int, Error, risky_checked()); */
 }
 ```
 > Why no wrapper: there is nothing to wrap — the hazard is the mechanism itself.
@@ -914,7 +921,10 @@ if (result_is_err(r)) {
 > `volatile` are also undefined after the jump. The Canon-C model is the
 > opposite discipline: **errors are values**, propagated through `Result`/`Option`
 > on the normal return path, where every cleanup runs and the verifier can follow
-> the flow. If you have inherited code built on `setjmp`/`longjmp`, isolate it,
+> the flow. (For functions with no payload — the classic returns-0-or-−1
+> shape — there is no unit `Result` type; return the `Error` enum itself and
+> test it with `error_is_ok`.) If you have inherited code built on
+> `setjmp`/`longjmp`, isolate it,
 > confine the jump to a single leaf scope that owns no resources, and convert the
 > boundary to a `Result` as soon as you can — and note that MISRA C:2012
 > (Rule 21.4) prohibits `<setjmp.h>` outright, which is the same conclusion from
@@ -994,10 +1004,13 @@ if (!arr) return ERROR_ALLOC;
 > [`goto` / labels](#c-goto)). Prefer this for temporary, scoped allocations.
 > The tradeoff is the point of an arena: there is **no** individual free.
 >
-> Honesty note: unlike `mem_alloc_array`, the `arena_alloc_array` macro does a
-> **raw** `sizeof(Type) * (count)` with no overflow check. If `count` is
-> untrusted, compute the byte size with `checked_mul` first (or use
-> `mem_alloc_array`), then `arena_alloc(&scratch, bytes)`.
+> Overflow: `arena_alloc_array` and `arena_alloc_array_zero` guard the
+> `sizeof(Type) * (count)` multiply and return `NULL` on overflow with the
+> arena untouched — the same contract as `mem_alloc_array`. Macro caveat:
+> `count` is evaluated twice, so bind side-effecting expressions to a
+> variable first (the `checked_min`/`checked_max` rule). For *manual* size
+> computations feeding raw `arena_alloc`, still compute the byte count with
+> `checked_mul` first.
 
 </details>
 
