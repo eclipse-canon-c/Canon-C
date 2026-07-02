@@ -696,18 +696,86 @@ static inline bytes_t arena_free_bytes(const Arena* arena) {
 
 /* ============================================================================
    Typed allocation macros
+
+   DOCUMENTED, NOT WP-VERIFIED — the C preprocessor strips ACSL annotations
+   from macro bodies before expansion, so these macros follow the same
+   disposition as memory.h's mem_alloc_type family (see VERIFY-008 and the
+   DEFINE_SLICE precedent in VERIFY-007): documented here, validated by unit
+   tests in test/core/arena_test.c, expanded and exercised at call sites.
+
+   Overflow guard on the array variants
+   ─────────────────────────────────────────────────────────────────────────
+   arena_alloc_array and arena_alloc_array_zero guard the
+   `sizeof(Type) * (count)` multiply and return NULL on overflow, matching
+   the contract of memory.h's mem_alloc_array (which routes through
+   checked_mul). The guard is the division form:
+
+       (count) <= CANON_USIZE_MAX / sizeof(Type)
+
+   which is exact: sizeof(Type) is a compile-time constant and is never
+   zero in conforming C, so the division is safe and the bound is tight.
+   A `count` of 0 passes the guard and reaches arena_alloc(arena, 0),
+   which returns NULL via its size_zero behavior — unchanged from the
+   unguarded form.
+
+   On overflow the arena is untouched: the guard short-circuits before
+   arena_alloc is called, so offset, padding_accum, and debug counters
+   are all preserved. NULL from these macros therefore means either
+   "does not fit", "size was zero", or "count * sizeof(Type) overflows
+   usize" — in every case the arena state is unchanged.
+
+   WARNING — double evaluation
+   ─────────────────────────────────────────────────────────────────────────
+   `count` is evaluated TWICE in the array variants (once in the guard,
+   once in the multiply). Do not pass an expression with side effects
+   (`i++`, a function call). Bind it to a variable first. This is the
+   same rule as checked_min / checked_max / checked_clamp in checked.h.
+
+   `arena` and `Type` are evaluated once and are not affected.
    ============================================================================ */
 
+/**
+ * @brief Allocate one Type-sized object from the arena
+ *
+ * Equivalent to (Type*)arena_alloc(arena, sizeof(Type)).
+ * Returns NULL if the object does not fit.
+ */
 #define arena_alloc_type(arena, Type) \
     ((Type*)arena_alloc((arena), sizeof(Type)))
 
-#define arena_alloc_array(arena, Type, count) \
-    ((Type*)arena_alloc((arena), sizeof(Type) * (count)))
+/**
+ * @brief Allocate an array of `count` Type objects from the arena
+ *
+ * The sizeof(Type) * count multiply is overflow-guarded: on overflow the
+ * macro returns NULL without touching the arena (see block comment above).
+ *
+ * @warning `count` is evaluated twice — no side-effecting expressions.
+ */
+#define arena_alloc_array(arena, Type, count)                    \
+    ((Type*)((count) <= CANON_USIZE_MAX / sizeof(Type)           \
+        ? arena_alloc((arena), sizeof(Type) * (count))           \
+        : NULL))
 
+/**
+ * @brief Allocate one zero-initialized Type-sized object from the arena
+ *
+ * Equivalent to (Type*)arena_alloc_zero(arena, sizeof(Type)).
+ * Returns NULL if the object does not fit.
+ */
 #define arena_alloc_type_zero(arena, Type) \
     ((Type*)arena_alloc_zero((arena), sizeof(Type)))
 
-#define arena_alloc_array_zero(arena, Type, count) \
-    ((Type*)arena_alloc_zero((arena), sizeof(Type) * (count)))
+/**
+ * @brief Allocate a zero-initialized array of `count` Type objects
+ *
+ * The sizeof(Type) * count multiply is overflow-guarded: on overflow the
+ * macro returns NULL without touching the arena (see block comment above).
+ *
+ * @warning `count` is evaluated twice — no side-effecting expressions.
+ */
+#define arena_alloc_array_zero(arena, Type, count)               \
+    ((Type*)((count) <= CANON_USIZE_MAX / sizeof(Type)           \
+        ? arena_alloc_zero((arena), sizeof(Type) * (count))      \
+        : NULL))
 
 #endif /* CANON_CORE_ARENA_H */
