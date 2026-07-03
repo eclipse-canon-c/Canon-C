@@ -3001,7 +3001,11 @@ and establishes the disposition for a generated panic/contract-violation
 branch. The remaining Shape-B modules inherit the pattern but not the
 specific outcome count or shape; `result`'s `expect`/`unwrap` family is
 the nearest analogue and will need its own audit and its own MCDC-NNN
-entry.
+entry. (Fulfilled by MCDC-007, which landed **clean** — result's panic
+surface is `require_msg`-only and vanishes entirely under
+`-DCANON_NO_REQUIRE`, so no expect-style branch survives into its
+measured set; the analogy held for the audit obligation, not the
+outcome.)
 
 ### Cross-references
 
