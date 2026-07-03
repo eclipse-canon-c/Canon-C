@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-06-27                                                   |
+| **Date**           | 2026-07-03                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 93bb107                                                      |
-| **CI run**         | Canon-C CI #1072                                             |
+| **Commit**         | b528515                                                      |
+| **CI run**         | Canon-C CI #1089                                             |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -54,32 +54,36 @@
 | **Tool**           | gcov-14 --conditions (MC/DC) + lcov (branch)                |
 | **Runner**         | ubuntu-latest (GitHub Actions)                               |
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
-| **Test binaries**  | 51 (50 test binaries + 1 Shape-B cover TU `option_cover`; contract_test excluded from the coverage build) |
+| **Test binaries**  | 52 (50 test binaries + 2 Shape-B cover TUs `option_cover`, `result_cover`; contract_test excluded from the coverage build) |
 
-> Note: this baseline advances from CI #974/#992 to CI #1072, where the
-> first Shape-B cover TU (`vmacros/coverage/option_cover.c`) entered the
-> coverage build. The cover TU re-instantiates `CANON_OPTION(int)` outside
-> `test/` so the option module's macro-generated condition outcomes — which
-> are filtered out when measured through `option_test.c` (a `/test/` path) —
-> are attributed to a surviving file and counted (see `docs/vmacros.md` and
-> MCDC-006). Adding the cover TU brings option's 30 condition outcomes into
-> the MC/DC denominator and also brings the TU's own scaffolding functions
-> and lines into the project line/function denominators. The aggregate moved
-> accordingly: MC/DC 86.1% → 86.2% (1443/1674), function coverage 99.6% →
-> 99.5% (546/549, the one new uncovered function being the `is_positive`
-> cover-driver helper, reachable only via the `filter` F&&_ short-circuit so
-> its body never runs). region.h's 21/22 MC/DC contribution was already in the
-> aggregate from Phase 1 of the lifetime substrate; CI #992 added only its
-> *documented* MCDC entry (MCDC-005), not a new measurement.
+> Note: this baseline advances from CI #1072 to CI #1089, where the
+> second Shape-B cover TU (`vmacros/coverage/result_cover.c`) entered the
+> coverage build. The cover TU takes its `CANON_RESULT(int, VErr)`
+> instantiation from the WP driver it `#include`s
+> (`vmacros/vdrivers/result_verify.h`), so the module's 22 generated
+> condition outcomes are attributed to the **driver header** — the file
+> containing the `DEFINE_RESULT_FUNCTIONS` expansion site — and the TU's
+> own 6 scaffolding outcomes to `result_cover.c`; both paths survive the
+> `*/test/*` filter (see MCDC-007, finding 2, including the flagged
+> re-audit of option's attribution wording). result's per-module
+> attribution check confirmed the Shape-B pattern (result_test.c owns all
+> 256 test-measured outcomes; result_impl.h none) before these numbers
+> were baselined. All 28 new outcomes are covered — result has no
+> MCDC-006-style ceiling (its `require_msg`-only panic surface vanishes
+> under `-DCANON_NO_REQUIRE`; MCDC-007 is a clean audit). The aggregate
+> moved accordingly: MC/DC 86.2% → 86.4% (1471/1702); lines and functions
+> gain the cover TU's fully-executed scaffolding (lines ≈95.8%, functions
+> 99.5% — unlike option_cover there is no never-executed helper, so the
+> function percentage does not dip).
 
 ### Results
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.7%      | 2268       | 2371       |
-| Functions  | 99.5%      | 546        | 549        |
-| Branches   | 86.6%      | 1459       | 1684       |
-| MC/DC      | 86.2%      | 1443       | 1674       |
+| Lines      | 95.8%      | 2340       | 2443       |
+| Functions  | 99.5%      | 572        | 575        |
+| Branches   | ⟨#1089 lcov⟩ | ⟨#1089 lcov⟩ | ⟨#1089 lcov⟩ |
+| MC/DC      | 86.4%      | 1471       | 1702       |
 
 arena.h's MC/DC contribution at 90.6% (58/64) is the achievable
 ceiling under the documented MCDC-003 unreachability — see the
@@ -138,6 +142,23 @@ coverage moves to 99.5% (546/549) — the one new uncovered function is the
 `is_positive` helper, reachable only via the `filter` F&&_ short-circuit so
 its body never runs — and the project MC/DC aggregate to 86.2% (1443/1674).
 
+The result module's MC/DC contribution is 100% (28/28) at this
+baseline — the first Shape-B module with a **clean audit** (MCDC-007;
+no unreachable outcome exists, because result's `require_msg`-only
+panic surface vanishes under `-DCANON_NO_REQUIRE`, unlike option's
+handler-invoking `expect`). The 28 outcomes split across two surviving
+files: 22 generated `result_int_VErr_*` conditions attributed to
+`vmacros/vdrivers/result_verify.h` (the driver header containing the
+`DEFINE_RESULT_FUNCTIONS` expansion site the cover TU includes) and 6
+cover-driver scaffolding conditions in
+`vmacros/coverage/result_cover.c` (`checked_double`'s threshold and
+`observe_res`'s two `get_*`-result branches), all covered. result's
+per-module attribution check re-confirmed the Shape-B pattern before
+baselining: `result_test.c` owns all 256 of the module's test-measured
+outcomes, `result_impl.h` none. Unlike option_cover, result_cover adds
+no never-executed function to the denominator, so the function
+percentage holds.
+
 
 ### Methodology changes since baseline
 
@@ -153,14 +174,18 @@ and bswap instead of compiler builtins.
 has already proved unreachable under Frama-C. contract_test is excluded
 from the coverage build for the same reason.
 
-**Shape-B cover TUs** (added 2026-06-27): The coverage build now compiles
-the Shape-B macro-module cover translation units under
-`vmacros/coverage/` (starting with `option_cover.c`) so the macro-generated
-condition outcomes — otherwise attributed to `/test/` paths and filtered
-out — are measured against a surviving non-test file. The cover TUs are
-compiled with the same `-DCANON_NO_REQUIRE -DNDEBUG` as the WP run so the
-measured condition set equals the proof's goal set. See `docs/vmacros.md`
-and MCDC-006.
+**Shape-B cover TUs** (added 2026-06-27; second TU 2026-07-03): The
+coverage build compiles the Shape-B macro-module cover translation units
+under `vmacros/coverage/` (`option_cover.c`, `result_cover.c`) so the
+macro-generated condition outcomes — otherwise attributed to `/test/`
+paths and filtered out — are measured against surviving non-test files.
+When the cover TU takes its instantiation from the driver `#include`
+(result's form), gcov attributes the generated conditions to the
+**driver header** (`vmacros/vdrivers/<module>_verify.h`) and only the
+scaffolding to the `.c`; both survive the filter (MCDC-007, finding 2).
+The cover TUs are compiled with the same `-DCANON_NO_REQUIRE -DNDEBUG`
+as the WP run so the measured condition set equals the proof's goal set.
+See `docs/vmacros.md`, MCDC-006, and MCDC-007.
 
 ### Notes on per-test column attribution
 
@@ -322,6 +347,21 @@ by methodology):
   (MCDC-001). The 1 missed outcome is the documented ceiling and not
   counted as a coverage regression.
 
+- **result (via `result_cover`): 100% (28/28)** — the first Shape-B
+  module with a clean audit (MCDC-007): no unreachable outcome exists.
+  result's panic surface (`unwrap`/`unwrap_err`/`expect`/`get_*` NULL
+  guards) is `require_msg`-only and vanishes under
+  `-DCANON_NO_REQUIRE`, so there is no analogue of option's
+  handler-invoking `expect` branch — the same fact that leaves result's
+  WP run with no handler-call goals of its own (VERIFY-015): the two
+  evidence streams agree the surface is absent from the
+  measured/verified configuration. The 28 outcomes are attributed 22 to
+  `vmacros/vdrivers/result_verify.h` (the generated
+  `result_int_VErr_*` conditions — the expansion site is the driver
+  header the cover TU includes) and 6 to
+  `vmacros/coverage/result_cover.c` (scaffolding), all covered. Not a
+  ceiling claim: 28/28 is full coverage of the full measured set.
+
 Headers absent from the MC/DC table:
 
 `core/primitives/types.h`, `core/primitives/limits.h`,
@@ -368,7 +408,10 @@ by stating `\initialized` as an input precondition where WP can discharge
 it. This lowered the slice/memory/arena/pool/region residual counts to the
 values below (formerly 23/57/103/127/126). As of 2026-06-27 (CI #1067),
 option became the first driver-verified Shape-B module (VERIFY-014); its
-row is the driver's WP run over `vmacros/vdrivers/option_verify.h`.
+row is the driver's WP run over `vmacros/vdrivers/option_verify.h`. As
+of 2026-07-03 (CI #1090), result followed as the second driver-verified
+module and the first union-typed one (VERIFY-015); its row is the WP run
+over `vmacros/vdrivers/result_verify.h`.
 
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
@@ -383,24 +426,36 @@ row is the driver's WP run over `vmacros/vdrivers/option_verify.h`.
 | region.h   | 12        | 3643              | 3531 (96.92%)     | 112      | VERIFY-011/12|
 | error.h    | 4         |   65              |   65 (100%)       | 0        | VERIFY-013   |
 | option     | 16        |  223              |  189 (84.75%)     | 34       | VERIFY-014   |
-| **Total**  | **219**   | **19020**         | **18587 (97.72%)**| **433**  |              |
+| result     | 17        |  215              |  185 (86.05%)     | 30       | VERIFY-015   |
+| **Total**  | **236**   | **19235**         | **18772 (97.59%)**| **463**  |              |
 
 The option row is the driver-verified Shape-B module: WP runs over
 `vmacros/vdrivers/option_verify.h`, which instantiates the real shipped
 `IMPL_OPTION_*` macros at `CANON_OPTION(int)`. Its 223 obligations are
 option's own generated-function goals plus the 2 contract.h handler goals
 it reaches transitively through `expect`; option does not pull in the
-core/ substrate stack. See VERIFY-014.
+core/ substrate stack. See VERIFY-014. The result row is likewise
+driver-verified: WP runs over `vmacros/vdrivers/result_verify.h`,
+instantiating `CANON_RESULT(int, VErr)`. Its 215 obligations are
+result's own generated-function goals plus the 2 contract.h handler
+goals present via the transitive include (definition-presence only —
+result's `require_msg`-only panic surface contains no handler call
+under `-DCANON_NO_REQUIRE`); result does not pull in the core/
+substrate stack. See VERIFY-015.
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). Of the 433 unproved goals, the 399 in-place-header
+`-wp-timeout 120`). Of the 463 unproved goals, the 399 in-place-header
 goals are demonstrated triple-prover-resistant and carry written
 manual-proof arguments or documented WP feature-gap rationale in
-`docs/deviations.md`. option's 34 are a distinct class — function-pointer-
-dispatch feature-gap residuals (no `calls` clause for an arbitrary callee;
+`docs/deviations.md`. The 64 driver-module goals (option's 34 +
+result's 30) are a distinct class — function-pointer-dispatch
+feature-gap residuals (no `calls` clause for an arbitrary callee;
 `\valid_function` unimplemented in Frama-C 29), the same class as
-region_end's opaque-hook dispatch (VERIFY-011 cat 1), documented in
-VERIFY-014.
+region_end's opaque-hook dispatch (VERIFY-011 cat 1), plus each
+driver's 2 inherited contract.h handler goals — documented in
+VERIFY-014 and VERIFY-015. result additionally carries the union-model
+standing hypothesis (no goals; all union-member postconditions proved
+under a WP union model the tool itself flags — see VERIFY-015).
 
 **Note on totals**: each per-header row reports that header's own
 obligations (substrate goals are counted under their owning header,
@@ -665,10 +720,21 @@ Shape-B entry, carrying a sixth unreachability shape (a generated
 panic/contract-violation branch). The remaining headers that introduce
 their own public {ptr, len} types or analogous unreachable defensive
 code live in data/ and util/ — stringbuf.h remains the next candidate
-(MCDC-002 lists it provisionally at 74.2%) — and the remaining Shape-B
-cover TUs (result, vec, deque, fold) will follow option's pattern. Each
-will need its own per-header / per-module MCDC analysis; each specific
-unreachability shape will be documented separately.
+(MCDC-002 lists it provisionally at 74.2%). result's audit (MCDC-007)
+followed as the second Shape-B entry and the first **clean** one: no
+unreachable outcome exists, because result's `require_msg`-only panic
+surface vanishes under `-DCANON_NO_REQUIRE` — so unlike MCDC-002
+through MCDC-006 there is no branch for a second stream to establish
+dead. Its cross-stream content is instead the alignment of the measured
+set with the proof set (28 measured outcomes, no panic branches; WP's
+run has no handler-call goals of result's own), plus the runtime
+execution of every union read under its matching `is_ok` guard as
+operational support for VERIFY-015's union-model hypothesis. The
+remaining Shape-B cover TUs (vec, deque, fold) follow the same
+pattern; MCDC-007's forward note sets their audit expectations — a
+module's panic-surface routing determines whether it lands as a
+ceiling entry (MCDC-006's shape) or a clean audit (MCDC-007's shape),
+and each still gets its own per-module MCDC analysis.
 
 ### History
 
@@ -690,5 +756,6 @@ unreachability shape will be documented separately.
 | 2026-06-13 | b78768e | #1022  | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | VERIFY-012: contract-strengthening pass closing 50 enforced unproved goals across five verified headers by ACSL precondition alone — zero executable change. Stated `\initialized` as an input precondition where WP can discharge it (6 requires in memory.h, 4 in slice.h), closing 8 slice + 6 memory own goals and their downstream inherited copies: slice 23→15, memory 57→43, arena 103→89, pool 127→113, region 126→112; project 18269→18333 proved, 463→399 unproved. Falsifies VERIFY-008's earlier "strengthening memory.h's predicates would produce no improvement" (corrected in place). `\dangling`/`\fresh`/`\freeable` remain WP-blocked in Frama-C 29 (Blanchard). All five exact-count CI wrappers re-enforced; region.h promoted from report-only to enforced (residual set name-stable across the closure). No coverage/MC/DC change (closures touched no branches). |
 | 2026-06-20 | ca9732d | #1036  | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | error.h: first semantics/ header verified. ACSL contracts + WP enforcement (65/65, VERIFY-013); default Typed model (no void* casts); 0 residuals — first clean header since compare.h. Calibration baseline for the semantics/ layer. No coverage change (error.h trivially 100% MC/DC, already in aggregate). |
 | 2026-06-27 | 93bb107 | #1072  | v1.3.0  | 95.7%  | 99.5%     | 86.6%    | 86.2%  | option: first Shape-B module covered via the vmacros cover-TU pattern (`option_cover.c`, `CANON_OPTION(int)` instantiated outside `test/`). MC/DC 96.7% (29/30) ceiling (MCDC-006, the `expect` panic-on-absent guard unreachable, cross-confirmed by WP). WP driver enforced 189/223 (VERIFY-014, #1067; report-only first at #1065). The cover TU enters the aggregate: project MC/DC 86.1% → 86.2% (1443/1674), branches 86.6% (1459/1684), functions 99.6% → 99.5% (546/549, the one new uncovered function being the `is_positive` cover-driver helper), lines 95.7% (2268/2371). option_cover.c contributes 29/30 at the file level (26 generated `option_int_*` conditions + 4 driver-scaffolding conditions). First vmacros driver + cover TU to land; Shape-B attribution pattern confirmed. |
+| 2026-07-03 | b528515 | #1089  | v1.3.0  | 95.8%  | 99.5%     | ⟨#1089 lcov⟩ | 86.4%  | result: second Shape-B module via the vmacros pattern (`result_verify.h` driver + `result_cover.c` cover TU; `CANON_RESULT(int, VErr)`, first union-typed module). WP driver enforced 185/215 (VERIFY-015, #1090 at 6516ae5; report-only first at #1089): 2 inherited (contract.h handler, definition-presence only — require_msg panic surface fully compiled out) + 28 own fn-pointer-dispatch (map/map_err 6 each, and_then/or_else 4 each, eq 8 with one rte_function_pointer goal per pointer); all union-member postconditions proved under the VERIFY-015 union-model standing hypothesis ([wp:union] warnings expected). MC/DC 100% (28/28) — first clean Shape-B audit (MCDC-007), no MCDC-006-style ceiling; generated conditions attributed to the driver header result_verify.h (22/22) with scaffolding in result_cover.c (6/6) — attribution finding recorded in MCDC-007 with option's wording flagged for re-audit. Per-module attribution check confirmed (result_test.c owns all 256 test-measured outcomes). Aggregate MC/DC 86.2% → 86.4% (1471/1702). |
 
 ---
