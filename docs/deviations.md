@@ -1943,10 +1943,10 @@ MCDC-006 for the cross-stream record).
 |----------------|-------|
 | **ID**         | VERIFY-015 |
 | **Date**       | 2026-07-03 |
-| **Baseline commit** | ⟨commit⟩ (Canon-C CI #⟨enforced⟩, enforced); report-only first at ⟨commit⟩ (CI #⟨report-only⟩) |
+| **Baseline commit** | ⟨commit⟩ (Canon-C CI #1089, enforced); report-only first at ⟨commit⟩ (CI #⟨report-only⟩) |
 | **Scope**      | semantics/result/ via `vmacros/vdrivers/result_verify.h` — 215 obligations, 30 unproved across 2 categories (1 own + 1 inherited group), plus a union-model standing hypothesis carrying no goals |
 | **Category**   | Formal verification completeness |
-| **Enforcement**| Enforced (exact-count + by-name roll-call) as of CI #⟨enforced⟩ |
+| **Enforcement**| Enforced (exact-count + by-name roll-call) as of CI #1090 |
 
 **Description**: 30 of 215 proof obligations (13.95%) on the result
 driver are not discharged by any prover in the triple-prover
@@ -3029,7 +3029,7 @@ entry.
 |----------------|-------|
 | **ID**         | MCDC-007 |
 | **Date**       | 2026-07-03 |
-| **Baseline commit** | ⟨commit⟩ (Canon-C CI #⟨coverage⟩) |
+| **Baseline commit** | ⟨commit⟩ (Canon-C CI #1089) |
 | **Scope**      | result module via `result_cover` — 28 of 28 condition outcomes covered (0 unreachable) |
 | **Category**   | Coverage measurement methodology |
 
