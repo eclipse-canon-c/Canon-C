@@ -1934,6 +1934,209 @@ MCDC-006 for the cross-stream record).
 - Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
   "WP: semantics/option (driver)".
 
+
+---
+
+## VERIFY-015: Function-Pointer-Dispatch and Inherited Residuals, Plus Union-Model Hypothesis (result, second driver-verified module)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-015 |
+| **Date**       | 2026-07-03 |
+| **Baseline commit** | ⟨commit⟩ (Canon-C CI #⟨enforced⟩, enforced); report-only first at ⟨commit⟩ (CI #⟨report-only⟩) |
+| **Scope**      | semantics/result/ via `vmacros/vdrivers/result_verify.h` — 215 obligations, 30 unproved across 2 categories (1 own + 1 inherited group), plus a union-model standing hypothesis carrying no goals |
+| **Category**   | Formal verification completeness |
+| **Enforcement**| Enforced (exact-count + by-name roll-call) as of CI #⟨enforced⟩ |
+
+**Description**: 30 of 215 proof obligations (13.95%) on the result
+driver are not discharged by any prover in the triple-prover
+configuration (Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a
+120-second timeout and `-wp-split`. result is the **second
+driver-verified module** (after option, VERIFY-014) — WP is pointed at
+`vmacros/vdrivers/result_verify.h`, which instantiates the real shipped
+`IMPL_RESULT_*` macros at `CANON_RESULT(int, VErr)` (`VErr` a
+driver-local enum, chosen so T and E are distinct types and the payload
+union genuinely carries two member types) and attaches ACSL contracts to
+the concrete generated prototypes (see `docs/vmacros.md`). It is the
+second Shape-B module verified and the **first union-typed module** —
+result's payload is `union { T ok; E err; } val`, where option's is a
+plain struct field. All 30 unproved goals are Timeouts; 0 Unknown, 0
+Failed.
+
+result uses the default `Typed` memory model — the by-value tagged
+struct `{ bool is_ok; union { T ok; E err; } val; }` performs no `void*`
+casts, so the cast-aware model is unnecessary. As with error.h and
+option, the result CI wrapper omits the CVC5-presence check the
+`Typed+Cast` headers carry.
+
+The 30 split into **2 inherited from contract.h** and **28 result-own**
+function-pointer-dispatch residuals. There are **no union-related
+unproved goals** — see the union-model hypothesis below, which is the
+entry's third section precisely because it carries no goal count.
+
+### Inherited residuals (2)
+
+| # | Source           | Goals | Pattern                                                          |
+|---|------------------|-------|------------------------------------------------------------------|
+| 1 | VERIFY-006 cat 4 | 2     | `typed_contract_default_handler_terminates`, `typed_contract_default_handler_loop_invariant_established` |
+
+The same contract.h handler non-termination pair as VERIFY-006 category
+4 and VERIFY-014 — with one difference from option worth recording.
+option reaches the handler through `expect`'s `_CANON_INVOKE_HANDLER`
+path, which survives `-DCANON_NO_REQUIRE`; result's entire panic surface
+(`unwrap`, `unwrap_err`, `expect`, and the `get_ok`/`get_err` NULL
+out-pointer guards) routes exclusively through `require_msg`, which the
+flag compiles to `((void)0)`. In the verified configuration **no result
+function contains a handler call at all**: the 2 goals are pure
+definition-presence inheritance (the handler's definition is in the TU
+via the transitive contract.h include, and WP emits goals for every
+defined function), and — unlike option's `expect` — no result function
+carries handler-call or unreachable-recursion goals of its own. All
+fifteen non-handler-related, non-combinator obligations surfaces prove
+fully (see the own-residual section for the twelve fully-proved
+functions).
+
+### result-own residuals (28)
+
+**Category 1 — combinator function-pointer dispatch (28)**
+
+**Functions affected**: `result_int_VErr_map`,
+`result_int_VErr_map_err` (6 goals each = 12);
+`result_int_VErr_and_then`, `result_int_VErr_or_else` (4 goals each =
+8); `result_int_VErr_eq` (8 goals).
+
+**Root cause**: each of the five dispatching combinators calls a
+caller-supplied function pointer (`f`, `eq_ok`, `eq_err`) for which no
+`calls` clause can exist — the callee is arbitrary by design. WP reports
+the boundary directly during the proof run:
+
+~~~
+[wp] vmacros/vdrivers/result_verify.h:380: Warning:
+  Unknown callee, considering non-terminating call
+[wp] vmacros/vdrivers/result_verify.h:380: Warning:
+  \valid_function not yet implemented
+  (rte: function_pointer: \valid_function(f))
+~~~
+
+Because WP cannot rule out that an opaque callee fails to terminate or
+writes through an aliasing pointer, it cannot discharge the combinators'
+`terminates`, `exits`, `assigns`, and `assert_rte_function_pointer`
+goals. This is the same root cause and the same class as option's 32
+combinator residuals (VERIFY-014) and region_end's opaque-hook dispatch
+(OWN-003 / VERIFY-011 category 1): no `calls` clause for an arbitrary
+callee, plus `\valid_function` unimplemented in Frama-C 29. It is a
+verifier feature gap, not a prover-strength residual — every category-1
+goal resolves at Qed in 2–6ms and then buckets as unprovable, the same
+deterministic name-stable signature as option's.
+
+The per-function cluster sizes are structural, not incidental:
+`map`/`map_err` carry 6 each because the calling branch *rewraps* the
+callee's return through the known `ok`/`err` constructor (extra
+`assigns` split fragments); `and_then`/`or_else` carry 4 because they
+return the callee's Result directly; `eq` carries 8 because it
+dispatches **two** pointers across two calling branches (`both_ok` →
+`eq_ok`, `both_err` → `eq_err`), producing one
+`assert_rte_function_pointer` goal per pointer — the largest own
+cluster, against option_int_eq's 4 with one calling branch. The
+asymmetric `-wp-split` fragment numbering
+(`map…assigns_normal_part2` vs `map_err…assigns_normal_part3`;
+`and_then…assigns_part1` vs `or_else…assigns_part2`) is a split
+artifact, pinned by name in the CI roll-call as observed.
+
+**Manual proof argument**: each combinator's structural postconditions
+(the result's `is_ok` and active-member relationship to the inputs)
+prove on the non-calling branch, and on the calling branch hold by
+construction under the contract that the supplied callback is a valid
+function that terminates and does not repoint the result. WP has no ACSL
+mechanism to encode that callback contract, so the obligations remain
+residual. The functional shape is exercised exhaustively by
+`test/semantics/result_test.c` and by the cover TU (MCDC-007); ASan +
+UBSan across all 16 CI configs verify absence of UB on every combinator
+path.
+
+Every non-dispatching function proved fully: `ok`, `err`, `is_ok`,
+`is_err`, `get_ok`, `get_err`, `unwrap_or`, `unwrap`, `unwrap_err`,
+`expect`, `and`, and `or` carry no residuals — including `and`/`or`'s
+cross-value union-member postconditions
+(`other.is_ok ==> \result.val.ok == other.val.ok`, etc.).
+
+### Union-model hypothesis (no goals)
+
+result is the first verified module whose payload is a **union**, and
+its run introduces a documentation obligation that is not a goal count.
+All union-member postconditions **proved** — the constructors'
+compound-literal union writes, the passthrough branches' member
+equalities, and `and`/`or`'s cross-value guarded implications. However,
+WP emitted 14+ `[wp:union]` warnings during the run:
+
+~~~
+[wp:union] vmacros/vdrivers/result_verify.h:183: Warning:
+  Accessing union fields with WP might be unsound.
+  Please refer to WP manual.
+~~~
+
+WP's Typed model reasons about union members in a way that is unsound in
+the presence of **type punning** — reading a member other than the
+last-written one. The manual argument for validity here is that the
+generated result code never type-puns: every union write is paired with
+the `is_ok` value that selected the member, and every read — in the
+generated bodies (guarded by the `is_ok` tests/ternaries), in the
+driver's preconditions (`requires r.is_ok` before any spec reads
+`.val.ok`, and symmetrically for `.val.err`), and in the guarded
+`ensures` implications — occurs only under the matching `is_ok`. The
+punning scenario WP warns about is unreachable in the verified code.
+This discipline is cross-checked by the two other evidence streams,
+which execute the same read-after-matching-write pattern:
+`result_test.c` (functional assertions) and the MC/DC cover stream
+(MCDC-007).
+
+This is a **standing hypothesis** in the spirit of the
+LIMITATION-SUSPECTED tagging (VERIFY-010): the union-member proofs are
+valid conditional on the no-punning discipline, which WP cannot itself
+establish. The `[wp:union]` warnings are expected output of an
+enforced-green run. Triggers to revisit: a change in the warnings'
+character, any union goal turning unprovable, or any future result
+variant that reads an inactive member (none exists in the shipped
+macros). Future union-typed modules inherit this hypothesis pattern and
+must restate the discipline argument for their own read sites.
+
+### Mitigation
+
+The `frama-c-result` CI step enforces exactly 30 unproved goals (and
+185/215 proved) with named patterns covering the 2 inherited and all 28
+own residuals, and prints the full residual list on every run (artifact
+`wp-proof-result`). Any additional unproved goal, missing expected goal,
+or count change is a regression and fails the build.
+
+result achieves 100% MC/DC (28/28 condition outcomes — see MCDC-007,
+the first Shape-B module with no unreachable outcome; its
+require_msg-only panic surface vanishes entirely under
+`-DCANON_NO_REQUIRE`, so no analogue of option's MCDC-006 ceiling
+exists). Functional behavior is tested by
+`test/semantics/result_test.c` (two instantiations, including a
+by-value-struct payload) and exercised for coverage by
+`vmacros/coverage/result_cover.c` through the same `(int, VErr)`
+instantiation the proof uses.
+
+### Cross-references
+
+- Inherited residuals: VERIFY-006 (contract.h handler non-termination);
+  VERIFY-014 (option's inherited pair — note the
+  `_CANON_INVOKE_HANDLER` vs `require_msg` reachability difference
+  recorded above).
+- Architectural analogue: VERIFY-014 (option's 32 combinator
+  residuals); OWN-003 / VERIFY-011 category 1 (region_end opaque-hook
+  dispatch — same function-pointer limitation).
+- Union-model hypothesis precedent: VERIFY-010 (LIMITATION-SUSPECTED
+  tagging for goals resting on a manual review).
+- MC/DC coverage: MCDC-007 (result's clean 28/28 audit; attribution of
+  generated conditions to the driver header).
+- Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
+- Driver mechanism: `docs/vmacros.md` (Shape-B verification drivers).
+- Per-goal CI artifact: `wp-proof-result` (full WP output).
+- Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
+  "WP: vmacros/vdrivers/result_verify.h".
+
 ---
 
 ## MCDC-001: Coverage Flags Methodology
@@ -2819,6 +3022,125 @@ entry.
   `.github/workflows/cmake-multi-platform.yml`.
 
 ---
+
+## MCDC-007: Clean Shape-B Audit — No Unreachable Outcomes; Generated Conditions Attributed to the Driver Header (result)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-007 |
+| **Date**       | 2026-07-03 |
+| **Baseline commit** | ⟨commit⟩ (Canon-C CI #⟨coverage⟩) |
+| **Scope**      | result module via `result_cover` — 28 of 28 condition outcomes covered (0 unreachable) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: the result module's MC/DC audit is **clean** — all 28
+condition outcomes measured through the result cover TU are covered,
+with no unreachable outcome to document. This entry exists because
+MCDC-006's forward note commits each Shape-B module to its own audit
+record, and because result's audit produced two methodology findings
+that future Shape-B modules (vec, deque, fold) must inherit correctly.
+
+result is the second Shape-B module measured through the cover-TU
+pattern. Its per-module attribution check (the report-only "Debug:
+Shape-B attribution check for result" CI step) re-confirmed the pattern
+before baselining: `result_test`'s gcov output attributes all 256 of the
+module's measured condition outcomes to `result_test.c` (a `/test/`
+path, deleted by the coverage filter), with `result_impl.h` owning none
+— so the cover TU is the correct fix, exactly as on option.
+
+**Finding 1 — no unreachable outcomes (contrast with MCDC-006).**
+result's entire panic surface (`unwrap` on Err, `unwrap_err` on Ok,
+`expect` on Err, the `get_ok`/`get_err` NULL out-pointer guards) routes
+through plain `require_msg`, which the coverage build's
+`-DCANON_NO_REQUIRE` compiles to `((void)0)`. Unlike option's `expect`
+— whose `_CANON_INVOKE_HANDLER` invocation survives the flag and is
+MCDC-006's single uncovered outcome — result's generated bodies under
+the coverage flags contain **no panic branch at all**: `unwrap`,
+`unwrap_err`, and `expect` are straight-line functions with zero
+conditions. There is consequently no MCDC-006-style ceiling; 28/28 =
+100% is both the measurement and the maximum. The cover TU calls
+`unwrap`/`expect` on Ok values only and `unwrap_err` on Err only — with
+the guards compiled out, a wrong-variant call would read the inactive
+union member; those paths are contract violations, not conditions.
+
+**Finding 2 — generated conditions are attributed to the driver
+header.** The 28 outcomes split across two files:
+
+| File                                  | Outcomes | Content |
+|---------------------------------------|----------|---------|
+| `vmacros/vdrivers/result_verify.h`    | 22/22    | the generated `result_int_VErr_*` conditions (get_ok, get_err, unwrap_or, map, map_err, and_then, or_else, and, or ×1 each; eq ×2) |
+| `vmacros/coverage/result_cover.c`     | 6/6      | cover-driver scaffolding (`checked_double`'s threshold and `observe_res`'s two `get_*`-result branches) |
+
+gcov attributes a macro expansion to the file containing the expansion
+site, and result_cover.c takes its instantiation from the **driver
+include** — `DEFINE_RESULT_FUNCTIONS(static inline, int, VErr)` sits at
+`result_verify.h:380` — so the generated conditions are stamped to the
+driver header, not to the including `.c`. Both paths live under
+`vmacros/` and survive the `*/test/*` filter, so the measurement is
+unaffected; but the per-file coverage table's row for the module's
+generated conditions is **`result_verify.h`**, and regression diagnosis
+must read `result_verify.h.gcov`, not `result_cover.c.gcov` (the CI
+per-line debug step dumps both). This is the literal form of
+`docs/vmacros.md`'s one-instantiation-two-consumers rule: the cover TU
+adds only call sites; even the expansion site belongs to the driver.
+
+The `contract.h 0/2` rows in the cover binary are the pre-existing
+MCDC-001 artifact, unchanged.
+
+### Cross-stream evidence via VERIFY-015
+
+With no uncovered outcome there is no unreachability to close — the
+cross-stream relationship here is **alignment of the measured set with
+the proof set**. Both streams run under `-DCANON_NO_REQUIRE -DNDEBUG`,
+so the condition set gcov measures (28 outcomes, no panic branches) is
+the same body surface WP proves (185/215, no handler-call goals of
+result's own): the two evidence streams agree that the require_msg
+surface is absent from the verified/measured configuration, and the
+runtime execution of every union read under its matching `is_ok` guard
+is part of the operational evidence for VERIFY-015's union-model
+hypothesis.
+
+### Mitigation
+
+1. **CI regression detector**: the coverage job's "Debug: per-line
+   MC/DC detail for result (cover TU)" step prints the gcov dumps on
+   every run; a future change that introduces an uncovered outcome (or
+   re-introduces a panic branch into the measured set) surfaces there
+   for human review, at which point this entry is amended from clean
+   audit to gap record.
+2. **Attribution check retained**: the "Debug: Shape-B attribution
+   check for result" step remains report-only in the workflow as the
+   per-module confirmation record.
+3. **28/28 is not a ceiling claim** — it is full coverage of the full
+   measured set. No outcome is excluded from the denominator.
+
+### Forward note (vec, deque, fold)
+
+The remaining three Shape-B modules inherit both findings: (a) audit
+the panic surface's routing — a `require_msg`-only surface yields a
+clean audit like result's, a handler-invocation path yields an
+MCDC-006-style ceiling; do not assume either. (b) Expect the generated
+conditions under the module's `*_verify.h` driver header, with only
+scaffolding under `*_cover.c`, whenever the cover TU takes its
+instantiation from the driver include. option's records predate this
+finding and describe its 30 outcomes as option_cover.c's; re-audit
+option's per-line artifact to determine whether its 26 generated
+outcomes are likewise attributed to `option_verify.h`, and align
+MCDC-006's wording if so.
+
+### Cross-references
+
+- VERIFY-015 — result's WP residual analysis and the union-model
+  hypothesis this audit's runtime evidence supports.
+- MCDC-006 — option's ceiling entry and the forward note this entry
+  fulfills; the attribution wording flagged for re-audit above.
+- MCDC-001 — `-DCANON_NO_REQUIRE` methodology; the `contract.h 0/2`
+  artifact family.
+- Attribution mechanism and one-instantiation-two-consumers rule:
+  `docs/vmacros.md`.
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
+  detail for result (cover TU)" step in
+  `.github/workflows/cmake-multi-platform.yml`.
 
 ---
 
