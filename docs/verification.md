@@ -2316,14 +2316,14 @@ goals).
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified (with documented residuals) — driver-verified |
-| **Baseline commit**    | (Canon-C CI #1089, enforced); report-only first at (CI #1089) |
+| **Baseline commit**    | (Canon-C CI #1090, enforced); report-only first at (CI #1089) |
 | **Functions**          | 17 of 17 generated functions annotated and proved |
 | **Proof obligations**  | 185 / 215 discharged automatically (86.05%)     |
 | **Unproved**           | 30 (2 inherited + 28 own; all documented under VERIFY-015) |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120` (default Typed model) |
-| **CI enforcement**     | Yes — 185/215 with 30 named goals expected (enforced as of CI #1089) |
+| **CI enforcement**     | Yes — 185/215 with 30 named goals expected (enforced as of CI #1090) |
 | **MC/DC coverage**     | 100% (28/28 condition outcomes — see MCDC-007) |
 | **CI artifact**        | `wp-proof-result` (full per-goal breakdown)     |
 
