@@ -650,7 +650,7 @@ checked.h's div/mod goals — see Baseline note above.)
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified (with documented timeouts)             |
-| **Baseline commit**    | (Canon-C CI #821)                               |
+| **Baseline commit**    | 1e0d0fe (Canon-C CI #821)                       |
 | **Functions**          | 22 of 22 non-macro functions annotated          |
 | **Proof obligations**  | 375 / 390 discharged automatically (96.15%)     |
 | **Timeouts**           | 15 (all documented under VERIFY-007)            |
@@ -2316,7 +2316,7 @@ goals).
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
 | **Status**             | Verified (with documented residuals) — driver-verified |
-| **Baseline commit**    | (Canon-C CI #1090, enforced); report-only first at (CI #1089) |
+| **Baseline commit**    | 6516ae5 (Canon-C CI #1090, enforced); report-only first at b528515 (CI #1089) |
 | **Functions**          | 17 of 17 generated functions annotated and proved |
 | **Proof obligations**  | 185 / 215 discharged automatically (86.05%)     |
 | **Unproved**           | 30 (2 inherited + 28 own; all documented under VERIFY-015) |
