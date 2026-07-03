@@ -2561,6 +2561,8 @@ the complete installation and registration procedure.
 
 ### semantics/ (in progress)
 
+| Header       | Status           | Proved    | Notes                                                                  |
+|--------------|------------------|-----------|------------------------------------------------------------------------|
 | error.h          | ✅ Verified  | 65/65   | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
 | option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
 | result (driver)  | ✅ Verified  | 185/215 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 2 inherited + 28 own function-pointer-dispatch residuals; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
