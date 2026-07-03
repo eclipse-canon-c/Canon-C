@@ -2274,9 +2274,10 @@ locations; (3) attaches ACSL contracts to those concrete prototypes. WP
 then verifies the instantiated functions exactly as it would
 hand-written ones. This is the same pattern slice.h's section anticipates
 for a future `slice_verify.h` (DEFINE_SLICE(i32) outside macro context),
-now realized for the first time. The four remaining Shape-B modules
-(result, vec, deque, fold) will each get their own `*_verify.h` driver
-following this template; see `docs/vmacros.md`.
+now realized for the first time — and since followed by result (see the
+semantics/result section). The remaining Shape-B modules (vec, deque,
+fold) will each get their own `*_verify.h` driver following this
+template; see `docs/vmacros.md`.
 
 ### Preprocessing flags
 
