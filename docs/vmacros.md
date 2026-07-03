@@ -249,8 +249,9 @@ Shape is **confirmed** for `option`/`result` (B) and `map`/`hashmap` (A) by
 reading their `_impl.h`. For the rest it is **provisional** — inferred from
 presence/absence in the MC/DC table — and is confirmed per-module by the
 attribution debug run (see "Before building the cover TUs" below) before its
-cover TU is built. `option`'s attribution has been run and confirmed; the other
-four Shape-B modules still get their own confirming run.
+cover TU is built. `option`'s and `result`'s attribution runs have both been
+performed and confirmed; the other three Shape-B modules (`vec`, `deque`,
+`fold`) still get their own confirming run.
 
 **Cover TUs needed (Shape-B): five —** `option` (✅ landed), `result`
 (✅ landed), `vec`, `deque`, `fold`. The nine Shape-A modules already surface in the MC/DC table via
@@ -414,7 +415,8 @@ copy. The cover TU obeys the same rule: it `#include`s the driver and is a secon
   generate* is correct; it is demonstrated on the chosen instantiation(s), not
   separately re-proved for every `T` a user might instantiate. This is the
   standard macro-family disposition already used in the project. (`option` is
-  verified at `CANON_OPTION(int)`.)
+  verified at `CANON_OPTION(int)`; `result` at `CANON_RESULT(int, VErr)`, with
+  distinct T/E types so the payload union is genuinely two-typed.)
 
 ## File-placement conventions
 
@@ -427,7 +429,8 @@ copy. The cover TU obeys the same rule: it `#include`s the driver and is a secon
 - Each verified module gets a matching CI job (`frama-c-<module>`) that runs WP
   over its driver with a zero-residual (or documented-residual) enforcement
   gate, mirroring the existing per-header WP jobs. (`frama-c-option` enforces
-  189/223 with 34 named residuals, as of CI #1067.)
+  189/223 with 34 named residuals, as of CI #1067; `frama-c-result` enforces
+  185/215 with 30, as of CI #1090.)
 - **Shape-B modules only:** a cover TU `vmacros/coverage/<module>_cover.c` that
   `#include`s the driver and drives every generated function once — compiled
   **only** in the coverage job, with the same `-DCANON_NO_REQUIRE -DNDEBUG` the
@@ -482,8 +485,9 @@ generated `option_int_*` conditions + 4 cover-driver scaffolding conditions**
 
 This is module-specific evidence, not a blanket clearance. It confirms the
 *pattern* — Shape-B macro conditions attribute to the instantiation TU and need
-a cover TU — and the four remaining Shape-B modules (`result`, `vec`, `deque`,
-`fold`) inherit that confirmed pattern. But each should still get the same
+a cover TU — and the then-remaining Shape-B modules (`result`, `vec`,
+`deque`, `fold`) inherit that confirmed pattern (result's own confirming run
+has since landed — see the next subsection). But each should still get the same
 one-run attribution check before its own cover TU is built, since a module could
 in principle write its body shape differently; the per-module confirmation is
 cheap and stays in the checklist.
