@@ -10,11 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 11 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option) |
-| **Functions**        | 219 annotated and verified (203 in-place + 16 generated via the option driver) |
-| **Total obligations**| 19020 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 18587 (97.72%)                                                                 |
-| **Unproved**         | 433 (all documented; see per-header sections)                                  |
+| **Headers verified** | 12 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result) |
+| **Functions**        | 236 annotated and verified (203 in-place + 33 generated via the option and result drivers) |
+| **Total obligations**| 19235 (per-header own goals; CI WP runs include substrate)                     |
+| **Proved automatic** | 18772 (97.59%)                                                                 |
+| **Unproved**         | 463 (all documented; see per-header sections)                                  |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
@@ -93,10 +93,11 @@ ptr_elem, so it has no per-allocation alignment-pad arithmetic and arena.h's
 26-goal cat 2b arithmetic-chain residual class does not recur in pool.h's own
 surface. See VERIFY-010 in `docs/deviations.md` for the full classification.
 
-A note on totals: the 18732 obligation count is the row-sum of
+A note on totals: the 19235 obligation count is the row-sum of
 each header's own WP-relevant goals — checked.h's 1755, bits.h's
 761, compare.h's 208, ptr.h's 1739, slice.h's 390, memory.h's 2862,
-arena.h's 3472 and pool.h's 3902 (each counted in full because each header was
+arena.h's 3472, pool.h's 3902, region.h's 3643, error.h's 65,
+option's 223, and result's 215 (each counted in full because each header was
 verified atop its full substrate, with no separate substrate-free
 measurement available for downstream headers). The CI WP steps for
 downstream headers report larger numbers because their runs include
@@ -2306,6 +2307,177 @@ Expected output: `Proved goals: 189 / 223` with 34 unproved goals (the 2
 contract.h handler goals + 32 combinator function-pointer-dispatch
 goals).
 
+---
+
+## semantics/result (driver-verified)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals) — driver-verified |
+| **Baseline commit**    | ⟨commit⟩ (Canon-C CI #⟨enforced⟩, enforced); report-only first at ⟨commit⟩ (CI #⟨report-only⟩) |
+| **Functions**          | 17 of 17 generated functions annotated and proved |
+| **Proof obligations**  | 185 / 215 discharged automatically (86.05%)     |
+| **Unproved**           | 30 (2 inherited + 28 own; all documented under VERIFY-015) |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120` (default Typed model) |
+| **CI enforcement**     | Yes — 185/215 with 30 named goals expected (enforced as of CI #⟨enforced⟩) |
+| **MC/DC coverage**     | 100% (28/28 condition outcomes — see MCDC-007) |
+| **CI artifact**        | `wp-proof-result` (full per-goal breakdown)     |
+
+result is the **second driver-verified** Canon-C module and the second
+Shape-B module verified. WP is pointed at
+`vmacros/vdrivers/result_verify.h`, which instantiates the real shipped
+macros at `CANON_RESULT(int, VErr)` — `VErr` a driver-local enum,
+deliberately a distinct type from `int` so the payload union genuinely
+carries two member types — and attaches ACSL contracts to the concrete
+generated prototypes (see `docs/vmacros.md`). It is also the **first
+union-typed module** verified: result's payload is
+`union { T ok; E err; } val`, where option's is a plain struct field.
+All union-member postconditions proved, subject to the union-model
+standing hypothesis documented in VERIFY-015 (WP flags its union-field
+reasoning as potentially unsound under type punning; the generated code
+never puns — every union read occurs under the `is_ok` value that
+selected the write).
+
+Like error.h and option, result uses the default `Typed` memory model
+rather than `Typed+Cast`: the by-value tagged struct performs no `void*`
+casts. The result CI wrapper omits the CVC5-presence check the
+`Typed+Cast` headers carry, for the same reason.
+
+### Function inventory
+
+`CANON_RESULT(int, VErr)` generates 17 `result_int_VErr_*` functions,
+all annotated and verified:
+
+**Non-dispatching (12 functions, all 100% proved):** `ok`, `err`,
+`is_ok`, `is_err`, `get_ok`, `get_err`, `unwrap_or`, `unwrap`,
+`unwrap_err`, `expect`, `and`, `or`. These carry no residuals — their
+structural postconditions discharge fully, including `and`/`or`'s
+cross-value union-member implications and the eager `and`/`or`
+combinators (no function pointers).
+
+**Dispatching combinators (5 functions, carry all 28 own residuals):**
+`map`, `map_err` (6 residuals each = 12); `and_then`, `or_else` (4 each
+= 8); `eq` (8 — two function pointers, `eq_ok` and `eq_err`, across two
+calling branches). Each dispatches at least one caller-supplied function
+pointer.
+
+### What is proved
+
+- **Structural correctness**: every function's result `is_ok` /
+  active-member relationship to its inputs is proved for all inputs
+  consistent with the preconditions — including the union-member
+  postconditions on the constructors and passthrough branches, and
+  `and`/`or`'s cross-value member equalities. On the dispatching
+  combinators the non-calling branch is fully proved; only the
+  opaque-callee obligations remain (below).
+- **Absence of runtime errors** (`-wp-rte`): proved for all
+  non-dispatching functions and for the non-opaque-call surface of the
+  combinators.
+- **Side-effect bounding**: `assigns` clauses discharge fully except on
+  the dispatching combinators, where the opaque callee's frame cannot
+  be bounded.
+- **Panic-surface note**: `unwrap`, `unwrap_err`, and `expect` prove as
+  straight-line functions under `-DCANON_NO_REQUIRE` — result's panic
+  surface is `require_msg`-only, so unlike option's `expect` no result
+  function contains a handler call in the verified configuration; the
+  2 inherited handler goals are definition-presence inheritance only
+  (VERIFY-015).
+
+WP discharges 185 of the 215 obligations automatically — 138 at Qed, 15
+at Alt-Ergo, plus 13 Terminating and 19 Unreachable. As with error.h and
+option, this is a small default-`Typed` run; the 30 residuals are
+feature-gap goals, not goals the heavier provers would close (each
+resolves at Qed in 2–6ms then buckets). The full per-goal breakdown is
+in the `wp-proof-result` CI artifact.
+
+### Residual goals (30)
+
+All 30 are documented under VERIFY-015. They split into 2 inherited and
+28 own.
+
+**Inherited from contract.h (2):**
+`typed_contract_default_handler_terminates`,
+`typed_contract_default_handler_loop_invariant_established` — the
+VERIFY-006 category 4 pair, re-emitted under the Typed prefix. Unlike
+option (which reaches the handler through `expect`'s
+`_CANON_INVOKE_HANDLER`), result's `require_msg`-only panic surface is
+fully compiled out under `-DCANON_NO_REQUIRE`, so these 2 goals arise
+purely from the handler's definition being present in the TU; no result
+function calls it.
+
+**result-own — combinator function-pointer dispatch (28):** the same
+verifier feature gap as option's 32 (VERIFY-014) and region_end's
+opaque-hook dispatch (VERIFY-011 category 1 / OWN-003): no `calls`
+clause for an arbitrary callee, `\valid_function` unimplemented in
+Frama-C 29. Cluster sizes are structural — `map`/`map_err` 6 each
+(calling branch rewraps through the known constructor), `and_then`/
+`or_else` 4 each (return the callee's Result directly), `eq` 8 (one
+`assert_rte_function_pointer` goal per pointer across its two calling
+branches). Full goal list, split-numbering notes, and per-combinator
+manual-proof arguments: see VERIFY-015 in `docs/deviations.md`.
+
+### MCDC-007 cross-reference
+
+result's MC/DC audit is **clean**: 28/28 condition outcomes covered,
+measured through `vmacros/coverage/result_cover.c` — no MCDC-006-style
+ceiling exists because result's `require_msg`-only panic surface
+vanishes under `-DCANON_NO_REQUIRE`, leaving no panic branch in the
+measured set (the same fact that leaves result with no handler-call WP
+goals: the two evidence streams agree on the surface's absence). Of the
+28 outcomes, 22 are the generated `result_int_VErr_*` conditions —
+attributed to `vmacros/vdrivers/result_verify.h`, the file containing
+the `DEFINE_RESULT_FUNCTIONS` expansion site — and 6 are cover-driver
+scaffolding in `result_cover.c`. See MCDC-007 for the attribution
+finding and its forward implications for vec/deque/fold.
+
+### Driver mechanism note
+
+result follows option's driver template exactly (see the option
+section's driver mechanism note and `docs/vmacros.md`), with two
+module-specific choices worth recording: the representative
+instantiation uses **distinct T and E types** (`int`, enum `VErr`) so
+the tagged union is genuinely two-typed, and the driver verifies the
+**default named-`val`-member layout** (`CANON_RESULT_ANON_UNION` is not
+exercised — it changes field-access syntax, not logic, and keeping the
+proof and coverage streams on one layout keeps them comparable). The
+cover TU takes its instantiation from the driver include — the literal
+one-instantiation-two-consumers form — which is why the generated
+conditions attribute to the driver header (MCDC-007, finding 2).
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: compiles `require_msg` runtime checks away;
+  ACSL `requires` clauses provide the static guarantees. For result
+  this removes the *entire* panic surface — see the panic-surface note
+  above.
+- **`-DNDEBUG`**: standard release-mode flag.
+
+### Reproduction
+
+```bash
+frama-c -wp -wp-rte \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I semantics \
+    -I vmacros \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  vmacros/vdrivers/result_verify.h
+```
+
+Expected output: `Proved goals: 185 / 215` with 30 unproved goals (the 2
+contract.h handler goals + 28 combinator function-pointer-dispatch
+goals), and 14+ expected `[wp:union]` warnings (VERIFY-015's union-model
+hypothesis — not failures).
 
 ---
 
@@ -2388,21 +2560,23 @@ the complete installation and registration procedure.
 
 ### semantics/ (in progress)
 
-| Header           | Status      | Proved  | Notes                                              |
-|------------------|-------------|---------|-----------------------------------------------------|
 | error.h          | ✅ Verified  | 65/65   | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
 | option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
+| result (driver)  | ✅ Verified  | 185/215 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 2 inherited + 28 own function-pointer-dispatch residuals; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
 
-Result, borrow, diag — planned next. Option has shipped as the first
-driver-verified module (see the semantics/option section above and
-VERIFY-014): the verification-driver approach the slice.h section
-anticipated — a header instantiating a concrete type (`CANON_OPTION(int)`)
-outside macro context, with ACSL contracts on the generated prototypes —
-is now confirmed working end to end (driver WP run + paired cover TU,
-both enforced in CI). Result is also macro-templated (`CANON_RESULT`);
-its macro-instantiated bodies will follow the same `option_verify.h`
-driver pattern, and its `expect`/`unwrap` family is the nearest analogue
-to option's combinators for the next MCDC-NNN audit.
+Borrow, diag — planned next. Option and result have shipped as the
+first two driver-verified modules (see their sections above, VERIFY-014
+and VERIFY-015): the verification-driver approach the slice.h section
+anticipated — a header instantiating a concrete type outside macro
+context, with ACSL contracts on the generated prototypes — is confirmed
+working end to end on two modules (driver WP run + paired cover TU,
+both enforced in CI). Result additionally established the first
+union-typed proof (all union-member postconditions discharged, under
+the VERIFY-015 standing hypothesis) and the first clean Shape-B MC/DC
+audit (MCDC-007, 28/28 — its `require_msg`-only panic surface leaves no
+MCDC-006-style ceiling). The remaining Shape-B modules (vec, deque,
+fold — see `docs/vmacros.md`) follow the same driver + cover-TU
+template; MCDC-007's forward note governs their audit expectations.
 
 ### data/ and algo/ (longer term)
 
