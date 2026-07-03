@@ -1,18 +1,24 @@
 # Macro-Module Verification & Coverage (`vmacros/`)
 
-> **Status: in progress — first module landed.** The `vmacros/` mechanism is
-> **live**. `option` is the first macro module verified through it: both its WP
-> driver (`vmacros/vdrivers/option_verify.h` — enforced 189/223, VERIFY-014,
-> CI #1067) and its MC/DC cover TU (`vmacros/coverage/option_cover.c` — 96.7%,
-> 29/30, MCDC-006, CI #1072) are shipped and green. The Shape-B attribution
-> question this document flagged as a precondition has been **answered on the
-> real `option` run** (see "Before building the cover TUs" below): the
-> conditions are attributed to the instantiation TU exactly as predicted, so the
-> cover-TU pattern is confirmed correct and the cheaper filter-narrowing escape
-> hatch does not apply. The tree is populated one module at a time; this file
-> remains the single source for *why* the mechanism exists, *how* it works, and
-> *which* modules get which artifact. The remaining 13 multi-file modules are
-> still pending — see the Status table.
+> **Status: in progress — two modules landed.** The `vmacros/` mechanism is
+> **live**. `option` was the first macro module verified through it (WP driver
+> enforced 189/223, VERIFY-014, CI #1067; cover TU 96.7%, 29/30, MCDC-006, CI
+> #1072). `result` is the second: its WP driver
+> (`vmacros/vdrivers/result_verify.h` — enforced 185/215, VERIFY-015, CI
+> #1090; report-only first at #1089) and its MC/DC cover TU
+> (`vmacros/coverage/result_cover.c` — 100%, 28/28, MCDC-007, CI #1089)
+> are shipped and green; result is also the first union-typed module verified
+> and the first clean Shape-B MC/DC audit. The Shape-B attribution question has
+> been answered on both real runs (see "Before building the cover TUs" below):
+> conditions are attributed to the instantiation TU exactly as predicted, so
+> the cover-TU pattern is confirmed and the cheaper filter-narrowing escape
+> hatch does not apply. result's run additionally established *where* the
+> cover-TU's recovered conditions land — the driver header, when the TU takes
+> its instantiation from the driver include (see the attribution-nuance note
+> below). The tree is populated one module at a time; this file remains the
+> single source for *why* the mechanism exists, *how* it works, and *which*
+> modules get which artifact. The remaining 12 multi-file modules are still
+> pending — see the Status table.
 
 ## Why this exists: macro modules are the exception
 
@@ -53,8 +59,8 @@ coverage harness, analogous to a test tree, that lives outside the layered
 module tree (`core/primitives/ → core/ → semantics/ → data/ → algo/ → util/`).
 
 One driver exists per multi-file macro module. There are **14** such modules
-across three layers, listed in the tables below — `option` has landed; the other
-13 are pending.
+across three layers, listed in the tables below — `option` and `result` have
+landed; the other 12 are pending.
 
 ---
 
@@ -183,6 +189,30 @@ the combinator predicates; those helpers contribute 4 of the file's 30 condition
 outcomes and are why the per-file split is 26 generated + 4 scaffolding. See
 MCDC-006.)
 
+### Where the recovered conditions land (attribution nuance)
+
+gcov attributes a macro expansion's conditions to the file containing
+the **expansion site**. When the cover TU takes its instantiation from
+the driver `#include` — the literal one-instantiation-two-consumers
+form, and the recommended one — the `DEFINE_<MODULE>_FUNCTIONS` line
+sits inside `vmacros/vdrivers/<module>_verify.h`, so the generated
+conditions are attributed to the **driver header**, and only the TU's
+own scaffolding conditions to `vmacros/coverage/<module>_cover.c`. Both
+paths are outside `test/` and survive the filter, so the measurement is
+identical either way — but the per-file coverage table's row for the
+module's generated conditions is the *driver header*, and regression
+diagnosis must read `<module>_verify.h.gcov`, not only
+`<module>_cover.c.gcov` (the CI per-line debug steps dump both).
+
+result established this on its landing run: `result_verify.h` owns the
+22 generated outcomes (22/22), `result_cover.c` its 6 scaffolding
+outcomes (6/6) — MCDC-007, finding 2. Record the per-module ownership
+split when each cover TU lands. option's records (MCDC-006 and the
+traceability per-file prose) predate this finding and describe all 30
+outcomes under `option_cover.c`; re-audit option's per-line artifact to
+determine whether its 26 generated outcomes are likewise attributed to
+`option_verify.h`, and align the wording if so.
+
 ### Two hard requirements on the cover TU
 
 1. **Same `-D` flags as the WP run.** The driver is written for the WP build,
@@ -222,8 +252,8 @@ attribution debug run (see "Before building the cover TUs" below) before its
 cover TU is built. `option`'s attribution has been run and confirmed; the other
 four Shape-B modules still get their own confirming run.
 
-**Cover TUs needed (Shape-B): five —** `option` (✅ landed), `result`, `vec`,
-`deque`, `fold`. The nine Shape-A modules already surface in the MC/DC table via
+**Cover TUs needed (Shape-B): five —** `option` (✅ landed), `result`
+(✅ landed), `vec`, `deque`, `fold`. The nine Shape-A modules already surface in the MC/DC table via
 their `_impl.h` bodies and get **no** cover TU. `fold` is the one algo module
 absent from the table (its siblings all appear), which is why it is the only
 Shape-B entry in the algo layer.
@@ -233,7 +263,7 @@ Shape-B entry in the algo layer.
 | Driver            | Verifies module     | Shape          | Cover TU (MC/DC)                    |
 |-------------------|---------------------|----------------|-------------------------------------|
 | `option_verify.h` | `semantics/option/` | B (confirmed)  | ✅ `vmacros/coverage/option_cover.c` (landed, 96.7%, MCDC-006) |
-| `result_verify.h` | `semantics/result/` | B (confirmed)  | `vmacros/coverage/result_cover.c`   |
+| `result_verify.h` | `semantics/result/` | B (confirmed)  | ✅ `vmacros/coverage/result_cover.c` (landed, 100%, 28/28, MCDC-007) |
 
 ### data/ (3)
 
@@ -458,12 +488,43 @@ one-run attribution check before its own cover TU is built, since a module could
 in principle write its body shape differently; the per-module confirmation is
 cheap and stays in the checklist.
 
+### Resolved (result, CI #1089)
+
+result's per-module attribution check ran as a report-only debug step
+in the same coverage run that landed its cover TU, and **the confirmed
+pattern held**: `result_test`'s `gcov-14 --conditions` output
+attributes all 256 of the module's measured condition outcomes to
+**`result_test.c`** (the instantiation TU, covering both the
+`(int, MyError)` and `(Point, MyError)` instantiations plus test
+scaffolding), with `result_impl.h` owning none — so the conditions are
+genuinely lost to the `/test/` exclusion and the cover TU is the
+correct fix for result too.
+
+`vmacros/coverage/result_cover.c` measures **100% (28/28)** at CI
+#1089 — MCDC-007, the first *clean* Shape-B audit. No analogue of
+option's `expect` ceiling exists: result's entire panic surface routes
+through `require_msg` and vanishes under `-DCANON_NO_REQUIRE`, so no
+panic branch survives into the measured set (the same fact leaves
+result's WP run with no handler-call goals of its own — VERIFY-015).
+The 28 outcomes split **22 generated `result_int_VErr_*` conditions
+(attributed to `result_verify.h` — see the attribution nuance above) +
+6 cover-driver scaffolding conditions (`checked_double`'s threshold and
+`observe_res`'s two `get_*`-result branches, attributed to
+`result_cover.c`)**, all covered.
+
+Two Shape-B modules now confirm the pattern independently. The
+per-module attribution check remains in the checklist for `vec`,
+`deque`, and `fold`, and MCDC-007's forward note governs their audit
+expectations: the module's panic-surface routing (require_msg-only vs
+handler-invoking) determines clean audit vs ceiling entry — do not
+assume either.
+
 ## Status
 
 | Module   | Driver             | Layer      | WP status    | Cover TU (MC/DC)                    | Notes                          |
 |----------|--------------------|------------|--------------|-------------------------------------|--------------------------------|
 | option   | `option_verify.h`  | semantics/ | ✅ Verified 189/223 (VERIFY-014, enforced CI #1067; report-only #1065) | ✅ `option_cover.c` — landed, 96.7% (29/30), MCDC-006 (CI #1072) | First driver; pattern baseline confirmed; Shape B (confirmed) |
-| result   | `result_verify.h`  | semantics/ | Not started  | `result_cover.c` — not started (pattern confirmed on option; confirm own attribution) | Reuses the option pattern; Shape B |
+| result   | `result_verify.h`  | semantics/ | ✅ Verified 185/215 (VERIFY-015, enforced CI #1090; report-only #1089) | ✅ `result_cover.c` — landed, 100% (28/28), MCDC-007 (CI #1089); attribution confirmed | Second driver; first union-typed module (union-model hypothesis, VERIFY-015); first clean Shape-B audit; Shape B (confirmed) |
 | vec      | `vec_verify.h`     | data/      | Not started  | `vec_cover.c` — not started (pattern confirmed on option; confirm own attribution)    | Shape B (provisional)          |
 | deque    | `deque_verify.h`   | data/      | Not started  | `deque_cover.c` — not started (pattern confirmed on option; confirm own attribution)  | Shape B (provisional)          |
 | hashmap  | `hashmap_verify.h` | data/      | Not started  | — (Shape A; via `_impl.h`)          | Already in MC/DC table         |
@@ -477,9 +538,11 @@ cheap and stays in the checklist.
 | unique   | `unique_verify.h`  | algo/      | Not started  | — (Shape A; via `_impl.h`)          |                                |
 | reverse  | `reverse_verify.h` | algo/      | Not started  | — (Shape A; via `_impl.h`)          |                                |
 
-The `vmacros/` tree now holds its first driver and cover TU (`option`). Update
-each remaining row's WP status as its driver is written, and the Cover-TU column
-as each Shape-B cover TU lands (and as provisional Shape classifications are
-confirmed by the per-module attribution debug run). The six single-file macro
-families are tracked separately and are not part of this table until their
-disposition is decided.
+The `vmacros/` tree now holds two driver + cover-TU pairs (`option`,
+`result`). Update each remaining row's WP status as its driver is
+written, and the Cover-TU column as each Shape-B cover TU lands (and as
+provisional Shape classifications are confirmed by the per-module
+attribution debug run); record each module's generated-vs-scaffolding
+attribution split per the attribution-nuance note above. The six
+single-file macro families are tracked separately and are not part of
+this table until their disposition is decided.
