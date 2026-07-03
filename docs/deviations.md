@@ -1943,7 +1943,7 @@ MCDC-006 for the cross-stream record).
 |----------------|-------|
 | **ID**         | VERIFY-015 |
 | **Date**       | 2026-07-03 |
-| **Baseline commit** | (Canon-C CI #1090, enforced); report-only first at (CI #1089) |
+| **Baseline commit** | 6516ae5 (Canon-C CI #1090, enforced); report-only first at b528515 (CI #1089) |
 | **Scope**      | semantics/result/ via `vmacros/vdrivers/result_verify.h` — 215 obligations, 30 unproved across 2 categories (1 own + 1 inherited group), plus a union-model standing hypothesis carrying no goals |
 | **Category**   | Formal verification completeness |
 | **Enforcement**| Enforced (exact-count + by-name roll-call) as of CI #1090 |
@@ -3029,7 +3029,7 @@ entry.
 |----------------|-------|
 | **ID**         | MCDC-007 |
 | **Date**       | 2026-07-03 |
-| **Baseline commit** | (Canon-C CI #1089) |
+| **Baseline commit** | b528515 (Canon-C CI #1089) |
 | **Scope**      | result module via `result_cover` — 28 of 28 condition outcomes covered (0 unreachable) |
 | **Category**   | Coverage measurement methodology |
 
