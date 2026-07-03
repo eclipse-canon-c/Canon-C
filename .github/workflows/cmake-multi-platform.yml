@@ -26,10 +26,8 @@ on:
 #                     vmacros/vdrivers/ rather than a header directly
 #                     (Shape-B modules). All run in parallel and share the
 #                     composite setup action at .github/actions/framac-setup.
-#                     Eleven are ENFORCED (hard proved/unproved baselines);
-#                     frama-c-result is REPORT-ONLY pending its first-run
-#                     baseline (promotion checklist in docs/vmacros.md —
-#                     same sequence option followed). region runs 120s/split
+#                     All twelve are ENFORCED (hard proved/unproved
+#                     baselines); region runs 120s/split
 #                     in its own isolated job (long run, ~1h40m, but enforced).
 #                     Additional headers are added as a new job each as they
 #                     are annotated; macro-module drivers likewise.
@@ -2046,33 +2044,40 @@ jobs:
   
   
   # -------------------------------------------------------------------------
-  # semantics/result — REPORT-ONLY. Second Shape-B macro-module driver.
+  # semantics/result — second Shape-B macro-module driver, default Typed
+  # model (by-value tagged struct, no void* casts — like error.h and option,
+  # so no CVC5-presence check). WP runs over vmacros/vdrivers/result_verify.h,
+  # which instantiates the REAL shipped macros at (int, VErr) (docs/vmacros.md).
   #
-  # WP runs over vmacros/vdrivers/result_verify.h, which instantiates the
-  # REAL shipped macros at (int, VErr) — same driver mechanism as option
-  # (docs/vmacros.md). Default Typed model: by-value tagged struct, no void*
-  # casts; no CVC5-presence check, as for error.h and option.
+  # Expected: 185 / 215 proved, exactly 30 unproved (VERIFY-015):
+  #   (a) 2 inherited — contract.h handler non-termination (VERIFY-006 cat-4
+  #       pair). Definition-presence inheritance ONLY: result's entire panic
+  #       surface (unwrap / unwrap_err / expect / get_* NULL guard) is plain
+  #       require_msg, compiled out under -DCANON_NO_REQUIRE, so unlike
+  #       option's expect no result function contains a handler call and all
+  #       of them prove fully.
+  #   (b) 28 own — function-pointer dispatch (OWN-003 class, second
+  #       recurrence after option/VERIFY-014) across the five dispatching
+  #       combinators: map 6, map_err 6, and_then 4, or_else 4, eq 8. eq
+  #       carries the largest cluster: TWO pointers (eq_ok, eq_err) across
+  #       two calling branches, one rte_function_pointer goal per pointer.
+  #       For each combinator the non-calling branch is proved and the
+  #       calling branch is the residual.
   #
-  # REPORT-ONLY: this job never fails on proof counts. It exists to produce
-  # the baseline that VERIFY-015 will record. Three things to read off the
-  # first runs before promotion to enforced (exact-count + by-name roll-call,
-  # copied structurally from frama-c-option):
+  # NO union-goal residuals: result is the first union-typed module, and all
+  # union-member postconditions proved — under WP's union field model, which
+  # WP flags with [wp:union] "might be unsound" warnings. Soundness rests on
+  # the no-type-punning discipline documented in VERIFY-015 (every union
+  # read, in bodies and specs alike, is guarded by the is_ok value that
+  # selected the write). The warnings are expected and not failures.
   #
-  #   1. Inherited surface — expected: exactly the 2 contract.h handler goals
-  #      (definition-presence inheritance; result's require_msg panic surface
-  #      is fully compiled out under CANON_NO_REQUIRE, so no handler-CALL
-  #      goals of result's own are expected — a difference from option's
-  #      expect worth recording in VERIFY-015).
-  #   2. Own fn-pointer residuals — expected on map / map_err / and_then /
-  #      or_else / eq (five dispatching functions; eq has TWO calling
-  #      branches, both_ok -> eq_ok and both_err -> eq_err, and should carry
-  #      the largest cluster). Same class as VERIFY-014 / OWN-003.
-  #   3. Union-model goals — result is the FIRST union-typed module (option's
-  #      payload is a plain struct field). Any residual on the constructors'
-  #      compound-literal union writes or on and()/or()'s cross-value
-  #      union-member ensures is a NEW class with no option analogue.
-  #      Classify it in VERIFY-015 before pinning enforcement numbers; do
-  #      not absorb it into the fn-pointer class.
+  # The residual set is name-stable: category (b) is deterministic (each goal
+  # resolves in Qed 2-6ms then buckets as unprovable — \valid_function will
+  # not prove in FC29), not solver-capacity-bound. Only the 2 category-(a)
+  # goals are genuine full timeouts, identical to the pair pinned in six
+  # other headers. The by-name roll-call below pins all 30: if a future
+  # Frama-C implements \valid_function, the count stays 30 but a name check
+  # fails, which is the signal to revisit rather than silently absorb.
   # -------------------------------------------------------------------------
   frama-c-result:
     needs: build
@@ -2080,7 +2085,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: vmacros/vdrivers/result_verify.h (report-only)"
+      - name: "WP: vmacros/vdrivers/result_verify.h"
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -2101,7 +2106,6 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (result_verify.h) exit status: ${WP_EXIT}"
-          echo "  MODE: REPORT-ONLY — counts are informational"
           echo "==============================================="
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_result_output.txt || true)
           echo "  ${PROVED_LINE}"
@@ -2121,21 +2125,89 @@ jobs:
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_result_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_result_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_result_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          EXPECTED_UNPROVED=30
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo ""
-          echo "  Unproved goals (baseline candidates for VERIFY-015):"
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_result_output.txt || \
-            echo "  (none — clean run)"
-          echo ""
-          echo "  Union/fn-pointer diagnostic warnings observed:"
-          grep -iE "union|valid_function|Unknown callee|not yet implemented" \
-            wp_result_output.txt | sort -u | head -20 || true
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (result section) and"
+            echo "      docs/deviations.md (VERIFY-015) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_result_output.txt || true
+            exit 1
+          fi
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          echo "  Proved: ${PROVED_COUNT}"
+          if [ "${PROVED_COUNT}" != "185 / 215" ]; then
+            echo "WARNING: proved count changed from expected 185 / 215."
+            echo "         This may indicate added or removed functions,"
+            echo "         a new timeout, or a newly-proved goal."
+            echo "         Review the output and update VERIFY-015 in"
+            echo "         docs/deviations.md before updating this wrapper."
+          fi
+          CHECKS=(
+            # (a) inherited — contract.h handler non-termination (VERIFY-006 cat 4)
+            "typed_contract_default_handler_terminates"
+            "typed_contract_default_handler_loop_invariant_established"
+            # (b) own — function-pointer dispatch (OWN-003 class), 5 combinators
+            # map (6)
+            "typed_result_int_VErr_map_terminates_part2"
+            "typed_result_int_VErr_map_terminates_part3"
+            "typed_result_int_VErr_map_exits"
+            "typed_result_int_VErr_map_assert_rte_function_pointer"
+            "typed_result_int_VErr_map_assigns_exit_part2"
+            "typed_result_int_VErr_map_assigns_normal_part2"
+            # map_err (6) — note assigns_normal_part3, not part2: -wp-split
+            # numbering artifact, pinned as observed
+            "typed_result_int_VErr_map_err_terminates_part2"
+            "typed_result_int_VErr_map_err_terminates_part3"
+            "typed_result_int_VErr_map_err_exits"
+            "typed_result_int_VErr_map_err_assert_rte_function_pointer"
+            "typed_result_int_VErr_map_err_assigns_exit_part2"
+            "typed_result_int_VErr_map_err_assigns_normal_part3"
+            # and_then (4) — returns f's Result directly (no rewrap), hence
+            # the smaller cluster than map's
+            "typed_result_int_VErr_and_then_terminates_part1"
+            "typed_result_int_VErr_and_then_terminates_part2"
+            "typed_result_int_VErr_and_then_assert_rte_function_pointer"
+            "typed_result_int_VErr_and_then_assigns_part1"
+            # or_else (4)
+            "typed_result_int_VErr_or_else_terminates_part1"
+            "typed_result_int_VErr_or_else_terminates_part2"
+            "typed_result_int_VErr_or_else_assert_rte_function_pointer"
+            "typed_result_int_VErr_or_else_assigns_part2"
+            # eq (8) — TWO pointers, two calling branches; one
+            # rte_function_pointer goal per pointer
+            "typed_result_int_VErr_eq_terminates_part1"
+            "typed_result_int_VErr_eq_terminates_part2"
+            "typed_result_int_VErr_eq_terminates_part3"
+            "typed_result_int_VErr_eq_terminates_part4"
+            "typed_result_int_VErr_eq_assert_rte_function_pointer"
+            "typed_result_int_VErr_eq_assert_rte_function_pointer_2"
+            "typed_result_int_VErr_eq_assigns_part2"
+            "typed_result_int_VErr_eq_assigns_part4"
+          )
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_result_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+          echo "PASS: result verified — 185/215 proved, 30 documented"
+          echo "      residuals all observed (VERIFY-015): 2 inherited"
+          echo "      (contract.h handler) + 28 own (five combinators,"
+          echo "      function-pointer dispatch; eq largest with two"
+          echo "      pointers). Second Shape-B module; every"
+          echo "      non-combinator function proved fully, including all"
+          echo "      union-member postconditions (first union-typed"
+          echo "      module — see VERIFY-015 union-model note)."
           echo "==============================================="
-          echo "REPORT-ONLY: baseline captured; see wp-proof-result artifact."
-          echo "Promotion to enforced: docs/vmacros.md checklist (two+ green"
-          echo "runs with a name-stable residual set, then VERIFY-015)."
       - name: Upload WP proof output (result)
         if: always()
         uses: actions/upload-artifact@v6
