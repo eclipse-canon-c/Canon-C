@@ -25,8 +25,13 @@
  *     as_bytes (including overflow guard path)
  *   - NULL-safety: is_valid, len, at, slice, as_bytes — functions that accept
  *     NULL b and return a safe empty/zero value without firing require_msg.
- *     The _get functions fire require_msg on NULL b and are not called with
- *     NULL in tests — that is the correct behavior to verify.
+ *     The _get functions fire require_msg on NULL b in every build where the
+ *     assertion is live, so they are not called with NULL in those builds.
+ *     Under -DCANON_NO_REQUIRE (the coverage build) the assertion compiles
+ *     to ((void)0) and the defensive `if (b == NULL)` branch is the shipped,
+ *     documented behavior ("NULL -> safe empty") — a dedicated gated test
+ *     section below exercises exactly that path. See "_get defensive NULL
+ *     path" section for the MC/DC rationale.
  *   - Source tag round-trip (stored, not dereferenced)
  *   - borrowed_bytes_slice clamping and edge cases
  *   - borrowed_bytes_eq: content equality, length mismatch, empty regions,
@@ -764,6 +769,67 @@ static void test_source_tag_round_trip_all_types(void)
     EXPECT(bb.source == (const void *)&sentinel);
     EXPECT(bv.source == (const void *)&sentinel);
 }
+
+/* ============================================================================
+   _get defensive NULL path — coverage build only (CANON_NO_REQUIRE)
+   ============================================================================
+ *
+ * The three non-macro _get functions pair require_msg(b != NULL, ...) with
+ * a defensive `if (b == NULL) return <empty>;` branch that SURVIVES
+ * -DCANON_NO_REQUIRE. In every other CI job require_msg is live and calling
+ * _get(NULL) would fire the contract handler, so these tests are compiled
+ * only in builds where the assertion expands to ((void)0) — in practice,
+ * exactly the coverage build. There they exercise the shipped, documented
+ * release-mode contract ("NULL -> safe empty") and close the three
+ * NULL-true condition outcomes on borrow.h's MC/DC row (35/40 -> 38/40).
+ *
+ * This keeps the measured condition set aligned with the verified path:
+ * the planned ACSL contracts describe the same branch as a `null_b`
+ * behavior, so gcov and WP observe the same code under the same flags —
+ * the MCDC-001 "measure what you prove" methodology.
+ *
+ * The 2 outcomes that remain uncovered after this section (the one-NULL
+ * guard inside borrowed_bytes_eq) are deliberately NOT closed by tests:
+ * reaching them requires a {NULL, len>0} cbytes_t — the exact malformed
+ * value cbytes_invariant forbids and cbytes_from refuses to construct.
+ * Manufacturing it field-by-field in a test would exercise the invariant
+ * violation the API exists to prevent (the MCDC-002 rationale, verbatim).
+ * They are the MCDC-008 candidate, pending WP discharge under
+ * cbytes_invariant in the borrow.h verification run. 38/40 = 95.0% is the
+ * honest ceiling.
+ *
+ * borrowed_slice_int_get(NULL) is deliberately not exercised here: the
+ * DEFINE_BORROWED_SLICE conditions are stamped to this /test/ TU and
+ * removed by the coverage filter (Shape-B attribution, docs/vmacros.md),
+ * so the call would close nothing on borrow.h's row. The macro family's
+ * coverage disposition is tracked with the other single-file macro
+ * families in docs/vmacros.md.
+ */
+
+#ifdef CANON_NO_REQUIRE
+
+static void test_ptr_get_null_b_returns_null(void)
+{
+    /* require_msg is ((void)0) in this build — the defensive branch is
+     * the shipped behavior and must return NULL, not crash. */
+    EXPECT(borrowed_ptr_get(NULL) == NULL);
+}
+
+static void test_str_get_null_b_returns_empty(void)
+{
+    str_t s = borrowed_str_get(NULL);
+    EXPECT(s.ptr == NULL);
+    EXPECT(s.len == 0);
+}
+
+static void test_bytes_get_null_b_returns_empty(void)
+{
+    cbytes_t cb = borrowed_bytes_get(NULL);
+    EXPECT(cb.ptr == NULL);
+    EXPECT(cb.len == 0);
+}
+
+#endif /* CANON_NO_REQUIRE */
 
 /* ============================================================================
    CANON_LIFETIME_DEBUG — lifetime tracking end-to-end
@@ -1889,6 +1955,16 @@ int main(void)
 
     /* Source tag round-trip */
     test_source_tag_round_trip_all_types();
+
+    /* _get defensive NULL path — compiled only under CANON_NO_REQUIRE
+     * (the coverage build), where require_msg is ((void)0) and the
+     * defensive branch is the shipped behavior. Closes the three
+     * NULL-true MC/DC outcomes on borrow.h (35/40 -> 38/40). */
+#ifdef CANON_NO_REQUIRE
+    test_ptr_get_null_b_returns_null();
+    test_str_get_null_b_returns_empty();
+    test_bytes_get_null_b_returns_empty();
+#endif
 
 #ifdef CANON_LIFETIME_DEBUG
     /* Arena lifetime tests — Phase 1 coverage */
