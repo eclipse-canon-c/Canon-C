@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-07-03                                                   |
+| **Date**           | 2026-07-05                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | b528515                                                      |
-| **CI run**         | Canon-C CI #1089                                             |
+| **Commit**         | a76202d                                                      |
+| **CI run**         | Canon-C CI #1106                                             |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -75,6 +75,20 @@
 > (1469/1694), lines 95.8% (2323/2426), functions 99.5% (572/575) — the
 > cover TU's scaffolding is fully executed, so unlike option_cover there
 > is no never-executed helper and the function percentage does not dip.
+>
+> This baseline advances again from CI #1089 to CI #1106, where three
+> `#ifdef CANON_NO_REQUIRE`-gated tests entered `borrow_test.c` to
+> exercise the `_get(NULL)` defensive branches — real, documented
+> release-mode behavior ("NULL → safe empty") that survives
+> `-DCANON_NO_REQUIRE` and is therefore reachable by design in exactly
+> the coverage build. borrow.h's file-level MC/DC moved 35/40 → 38/40
+> (87.5% → 95.0%), its documented ceiling under MCDC-008 (the two
+> remaining outcomes are the one-NULL guard in `borrowed_bytes_eq`,
+> type-invariant-unreachable and WP-discharged dead at CI #1110). The
+> aggregate moved accordingly: MC/DC 86.4% → 86.6% (1474/1702),
+> branches 86.7% → 86.9% (1472/1694); lines and functions unchanged.
+> A per-line MC/DC debug step for borrow.h entered the coverage job in
+> the same change as the measurement stream's regression detector.
 
 ### Results
 
@@ -82,8 +96,8 @@
 |------------|------------|------------|------------|
 | Lines      | 95.8%      | 2323       | 2426       |
 | Functions  | 99.5%      | 572        | 575        |
-| Branches   | 86.7%      | 1469       | 1694       |
-| MC/DC      | 86.4%      | 1471       | 1702       |
+| Branches   | 86.9%      | 1472       | 1694       |
+| MC/DC      | 86.6%      | 1474       | 1702       |
 
 arena.h's MC/DC contribution at 90.6% (58/64) is the achievable
 ceiling under the documented MCDC-003 unreachability — see the
@@ -158,6 +172,19 @@ baselining: `result_test.c` owns all 256 of the module's test-measured
 outcomes, `result_impl.h` none. Unlike option_cover, result_cover adds
 no never-executed function to the denominator, so the function
 percentage holds.
+
+borrow.h's MC/DC contribution reached 38/40 (95.0%) at this baseline,
+its achievable ceiling under MCDC-008. The three-outcome improvement
+from 35/40 comes from the `CANON_NO_REQUIRE`-gated `_get(NULL)` tests
+(the defensive branches are the shipped release-mode contract and are
+reachable only where `require_msg` compiles away — exactly the
+coverage build, keeping the measured set aligned with the `null_b`
+behaviors the ACSL contracts verify). The 2 remaining missed outcomes
+are the NULL-true sides of the one-NULL guard in `borrowed_bytes_eq`
+(line 758 at this baseline), unreachable under `cbytes_invariant` and
+formally discharged dead by the named WP assertion `dead_by_invariant`
+at CI #1110 — the first closure carried as a single named proof goal
+(MCDC-008, VERIFY-016).
 
 
 ### Methodology changes since baseline
@@ -327,6 +354,25 @@ by methodology):
   guard branch. The 1 missed outcome is the documented ceiling and not
   counted as a coverage regression.
 
+- **borrow.h: 95.0% (38/40)** — the ceiling under MCDC-008. The 2
+  missed outcomes are the NULL-true sides of the one-NULL guard in
+  `borrowed_bytes_eq` (`a.bytes.ptr == NULL || b.bytes.ptr == NULL`),
+  each requiring a `{NULL, len>0}` cbytes_t — the exact malformed
+  value `cbytes_invariant` forbids and `cbytes_from` refuses to
+  construct; the guard sits behind three earlier exits (length
+  mismatch, zero length, same pointer), so no API path reaches it. WP
+  discharges the named in-body assertion `dead_by_invariant` under the
+  invariant preconditions (VERIFY-016), the first cross-stream closure
+  stated as a single named goal — checked by name in the proof stream
+  (frama-c-borrow wrapper) while the coverage stream's per-line debug
+  step watches the gcov side; gcov measures 38/40 because it
+  instruments the source rather than the proof, the same
+  complementary-evidence pattern as MCDC-002 through MCDC-005. The
+  three `_get(NULL)` defensive outcomes closed at CI #1106 by
+  `CANON_NO_REQUIRE`-gated tests were reachable by design in the
+  coverage build (the inverse disposition — a test closure, not a
+  deviation; see MCDC-008's description).
+
 - **option_cover.c: 96.7% (29/30)** — the ceiling under MCDC-006, and
   the first Shape-B (macro-templated) module to appear in the per-file
   table. option's combinator conditions live in `IMPL_OPTION_*` macro
@@ -411,7 +457,14 @@ option became the first driver-verified Shape-B module (VERIFY-014); its
 row is the driver's WP run over `vmacros/vdrivers/option_verify.h`. As
 of 2026-07-03 (CI #1090), result followed as the second driver-verified
 module and the first union-typed one (VERIFY-015); its row is the WP run
-over `vmacros/vdrivers/result_verify.h`.
+over `vmacros/vdrivers/result_verify.h`. As of 2026-07-05 (CI #1110,
+clean run at 262a503; report-only first at CI #1109; enforced as of
+#1111), borrow.h became the fourth semantics/ module verified and the
+second verified in place — 24 non-macro functions annotated in place
+under the default `CANON_LIFETIME`-off configuration (VERIFY-016),
+with `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the
+slice.h/DEFINE_SLICE in-place-surface + parked-family structure,
+first in semantics/).
 
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
@@ -427,7 +480,8 @@ over `vmacros/vdrivers/result_verify.h`.
 | error.h    | 4         |   65              |   65 (100%)       | 0        | VERIFY-013   |
 | option     | 16        |  223              |  189 (84.75%)     | 34       | VERIFY-014   |
 | result     | 17        |  215              |  185 (86.05%)     | 30       | VERIFY-015   |
-| **Total**  | **236**   | **19235**         | **18772 (97.59%)**| **463**  |              |
+| borrow.h   | 24        | 2452              | 2433 (99.23%)     | 19       | VERIFY-016   |
+| **Total**  | **260**   | **21687**         | **21205 (97.78%)**| **482**  |              |
 
 The option row is the driver-verified Shape-B module: WP runs over
 `vmacros/vdrivers/option_verify.h`, which instantiates the real shipped
@@ -444,8 +498,10 @@ under `-DCANON_NO_REQUIRE`); result does not pull in the core/
 substrate stack. See VERIFY-015.
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). Of the 463 unproved goals, the 399 in-place-header
-goals are demonstrated triple-prover-resistant and carry written
+`-wp-timeout 120`). Of the 482 unproved goals, the 418 in-place-header
+goals (including borrow.h's 19 — 17 inherited re-emissions plus 2
+memcmp-danglingness goals, VERIFY-016) are demonstrated
+triple-prover-resistant and carry written
 manual-proof arguments or documented WP feature-gap rationale in
 `docs/deviations.md`. The 64 driver-module goals (option's 34 +
 result's 30) are a distinct class — function-pointer-dispatch
@@ -488,7 +544,13 @@ memory.h's 43 unproved goals are likewise re-emerged residuals already
 documented under VERIFY-002/006/007 (see VERIFY-008). option's 34
 unproved goals are 2 inherited from contract.h (VERIFY-006 cat 4) plus
 32 option-own combinator function-pointer-dispatch residuals (see
-VERIFY-014).
+VERIFY-014). borrow.h's CI step
+processes borrow.h with slice.h and checked.h transitively included;
+the 2452 figure for borrow.h likewise reflects the full run as
+borrow.h's row. 17 of borrow.h's 19 unproved goals are re-emerged
+residuals already documented under VERIFY-002/006/007 — slice.h's
+full 15-goal surface plus checked.h's pair, byte-identical (see
+VERIFY-016 for the inheritance table).
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 (5.9%) than the previously verified primitives headers because slice.h
@@ -615,7 +677,7 @@ from Alt-Ergo and from WP's structural categories (Terminating /
 Unreachable). The two manually-discharged goals are unchanged from
 the previous baseline.
 
-### Cross-stream evidence: MCDC-002 through MCDC-006 closures
+### Cross-stream evidence: MCDC-002 through MCDC-008 closures
 
 slice.h's MC/DC ceiling at 93.1% (54/58) and slice.h's WP discharge
 of the four MCDC-002 functions form complementary certification
@@ -736,6 +798,29 @@ module's panic-surface routing determines whether it lands as a
 ceiling entry (MCDC-006's shape) or a clean audit (MCDC-007's shape),
 and each still gets its own per-module MCDC analysis.
 
+borrow.h's MCDC-008 is the seventh closure entry and the first in
+semantics/ on an in-place-annotated header. Its unreachability shape is
+MCDC-002's nearest relative — a `ptr == NULL` disjunct dead under a
+slice.h type invariant (`cbytes_invariant`, here guarding
+`borrowed_bytes_eq`'s compare path rather than a slicing entry) — but
+its closure mechanics are new in two ways. First, the proof-side
+evidence is a **named in-body assertion** (`dead_by_invariant:
+\false`) that WP discharges directly, rather than unreachability
+inferred from invariant-preservation proofs: the closure is a single
+goal the proof stream checks by name every run. Second, the closure
+therefore has a regression detector in **both** streams — the coverage
+job's per-line debug step (measurement) and the frama-c-borrow
+wrapper's proved-set check (proof) — where prior entries had only the
+gcov-side detector. gcov still measures 38/40 because it instruments
+the source rather than the proof; the complementary-evidence pattern
+is unchanged. The same commit-pair also demonstrates the inverse
+disposition cleanly: borrow.h's three `_get(NULL)` defensive outcomes
+were *closed by tests* (CANON_NO_REQUIRE-gated, CI #1106) because the
+coverage build is precisely the configuration where those branches are
+the shipped behavior — reachable-by-design branches get tests,
+invariant-dead branches get proofs. See MCDC-008 in
+`docs/deviations.md` for the formal closure record.
+
 ### History
 
 | Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | MC/DC  | Notes                                                                    |
@@ -757,5 +842,7 @@ and each still gets its own per-module MCDC analysis.
 | 2026-06-20 | ca9732d | #1036  | v1.3.0  | 95.6%  | 99.6%     | 86.6%    | 86.1%  | error.h: first semantics/ header verified. ACSL contracts + WP enforcement (65/65, VERIFY-013); default Typed model (no void* casts); 0 residuals — first clean header since compare.h. Calibration baseline for the semantics/ layer. No coverage change (error.h trivially 100% MC/DC, already in aggregate). |
 | 2026-06-27 | 93bb107 | #1072  | v1.3.0  | 95.7%  | 99.5%     | 86.6%    | 86.2%  | option: first Shape-B module covered via the vmacros cover-TU pattern (`option_cover.c`, `CANON_OPTION(int)` instantiated outside `test/`). MC/DC 96.7% (29/30) ceiling (MCDC-006, the `expect` panic-on-absent guard unreachable, cross-confirmed by WP). WP driver enforced 189/223 (VERIFY-014, #1067; report-only first at #1065). The cover TU enters the aggregate: project MC/DC 86.1% → 86.2% (1443/1674), branches 86.6% (1459/1684), functions 99.6% → 99.5% (546/549, the one new uncovered function being the `is_positive` cover-driver helper), lines 95.7% (2268/2371). option_cover.c contributes 29/30 at the file level (26 generated `option_int_*` conditions + 4 driver-scaffolding conditions). First vmacros driver + cover TU to land; Shape-B attribution pattern confirmed. |
 | 2026-07-03 | b528515 | #1089  | v1.3.0  | 95.8%  | 99.5%     | 86.7%    | 86.4%  | result: second Shape-B module via the vmacros pattern (`result_verify.h` driver + `result_cover.c` cover TU; `CANON_RESULT(int, VErr)`, first union-typed module). WP driver enforced 185/215 (VERIFY-015, #1090 at 6516ae5; report-only first at #1089): 2 inherited (contract.h handler, definition-presence only — require_msg panic surface fully compiled out) + 28 own fn-pointer-dispatch (map/map_err 6 each, and_then/or_else 4 each, eq 8 with one rte_function_pointer goal per pointer); all union-member postconditions proved under the VERIFY-015 union-model standing hypothesis ([wp:union] warnings expected). MC/DC 100% (28/28) — first clean Shape-B audit (MCDC-007), no MCDC-006-style ceiling; generated conditions attributed to the driver header result_verify.h (22/22) with scaffolding in result_cover.c (6/6) — attribution finding recorded in MCDC-007 with option's wording flagged for re-audit. Per-module attribution check confirmed (result_test.c owns all 256 test-measured outcomes). Aggregate MC/DC 86.2% → 86.4% (1471/1702). |
+| 2026-07-05 | a76202d | #1106  | v1.3.0  | 95.8%  | 99.5%     | 86.9%    | 86.6%  | borrow.h MC/DC ceiling reached: three CANON_NO_REQUIRE-gated `_get(NULL)` tests close the defensive-branch outcomes (35/40 → 38/40, 95.0%); the 2 remaining outcomes are `borrowed_bytes_eq`'s one-NULL guard (MCDC-008 measurement half; gcov dump confirms line 758 conds 0/1 true, guard body `#####`). Per-line MC/DC debug step for borrow.h added to the coverage job as the measurement-stream regression detector. Aggregate MC/DC 86.4% → 86.6% (1474/1702), branches 86.7% → 86.9% (1472/1694). |
+| 2026-07-05 | 262a503 | #1110  | v1.3.0  | 95.8%  | 99.5%     | 86.9%    | 86.6%  | borrow.h: ACSL contracts + WP (VERIFY-016) — fourth semantics/ module, second verified in place; 24 non-macro functions in place, DEFINE_BORROWED_SLICE parked per docs/vmacros.md (the slice.h/DEFINE_SLICE structure, first in semantics/), Typed+Cast, verified config CANON_LIFETIME off (OWN-001 §7). WP 2433/2452, exactly 19 unproved: 17 inherited (slice.h's full 15 + checked.h's 2, byte-identical; composability confirmation #6, smallest inherited surface since memory.h) + 2 own memcmp danglingness at the header's only libc call — no new residual class (first since error.h). Round 1 report-only at 383bf9f/#1109 (27 unproved; 8 call-site chaining goals closed by aligning four contracts to slice.h's real clauses, zero executable change). `dead_by_invariant` named assert proved — MCDC-008 cross-stream closure complete (first named-assert closure; detectors in both streams). Enforced as of #1111. No coverage change (ACSL comments touch no branches). |
 
 ---
