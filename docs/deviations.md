@@ -2139,7 +2139,7 @@ instantiation the proof uses.
 
 ---
 
-## VERIFY-016: Inherited-Substrate and memcmp-Danglingness Residuals (borrow.h, first hybrid Shape-A/Shape-B header)
+## VERIFY-016: Inherited-Substrate and memcmp-Danglingness Residuals (borrow.h, fourth semantics/ module, verified in place)
 
 | Field          | Value |
 |----------------|-------|
@@ -2158,15 +2158,20 @@ configuration (Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a
 `(const u8 *)` cast in `borrowed_bytes_slice`). All 19 are Timeouts;
 0 Unknown, 0 Failed.
 
-borrow.h is the third semantics/ module verified (after error.h,
-VERIFY-013, and the two driver modules) and the project's **first
-hybrid Shape-A/Shape-B header**: its 24 non-macro functions
-(`borrowed_ptr` ×6, `borrowed_str` ×9, `borrowed_bytes` ×9, counting
-the two `_from_lifetime` variants) are annotated **in place**,
-slice.h-style, while `DEFINE_BORROWED_SLICE` is outside the verified
-surface — it sits on the single-file macro-family list in
-`docs/vmacros.md` whose disposition is deliberately open (the
-DEFINE_SLICE precedent: documented + tested, not WP-verified).
+borrow.h is the fourth semantics/ module verified (after error.h,
+VERIFY-013, and the option/result driver modules) and the second
+semantics/ header verified **in place** (after error.h). Its 24
+non-macro functions (`borrowed_ptr` ×6, `borrowed_str` ×9,
+`borrowed_bytes` ×9, counting the two `_from_lifetime` variants) are
+annotated in place, while `DEFINE_BORROWED_SLICE` is outside the
+verified surface — it sits on the single-file macro-family list in
+`docs/vmacros.md`, whose disposition is deliberately open. This
+in-place-verified-surface + parked-macro-family structure is not new:
+slice.h established it with DEFINE_SLICE (VERIFY-007), and borrow.h is
+the first semantics/ header to carry it. (Note the single-file macro
+families are a category distinct from the multi-file Shape-B driver
+modules — see `docs/vmacros.md`'s classification — so the split here
+is in-place-verified vs. parked, not Shape A vs. Shape B.)
 
 **Verified configuration.** The verified build is the default
 configuration (`CANON_LIFETIME` off, `-DCANON_NO_REQUIRE -DNDEBUG`):
