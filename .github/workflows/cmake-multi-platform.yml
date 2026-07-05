@@ -2923,6 +2923,81 @@ jobs:
               ls "$d"/*result_cover* 2>/dev/null || true
             done
           fi
+      
+      - name: "Debug: per-line MC/DC detail for borrow.h"
+        # First measured MC/DC ceiling for borrow.h: 95.0% (38/40) as of
+        # CI #1106 (a76202d), reached by the CANON_NO_REQUIRE-gated
+        # _get(NULL) tests that closed the three defensive NULL-branch
+        # outcomes (35/40 -> 38/40).
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: the 2 remaining uncovered
+        # outcomes are expected to be the two NULL-true sides of the
+        # one-NULL guard inside borrowed_bytes_eq:
+        #
+        #     if (a.bytes.ptr == NULL || b.bytes.ptr == NULL) {
+        #         return false; /* impossible by construction */
+        #     }
+        #
+        # Reaching either outcome requires a {NULL, len>0} cbytes_t — the
+        # exact malformed value cbytes_invariant forbids and cbytes_from
+        # refuses to construct (the guard sits behind three earlier exits:
+        # lengths equal, len > 0, pointers differ). This is the slice.h
+        # MCDC-002 shape. If the dump confirms it, the two outcomes are
+        # the MCDC-008 candidate — "API-unreachable, deviation pending"
+        # until the borrow.h WP run discharges the branch under
+        # cbytes_invariant, at which point MCDC-008 is written with the
+        # full cross-stream record. If the dump shows a DIFFERENT open
+        # outcome (e.g. in borrowed_bytes_slice's clamping chain), that
+        # is a reachable test gap (MCDC-003 line-510 shape) — fix it with
+        # an ordinary ungated test, not a deviation entry.
+        #
+        # NOTE on scope: borrow.h is a hybrid Shape-A/Shape-B header. The
+        # 40-outcome denominator covers ONLY the non-macro functions
+        # (borrowed_ptr / borrowed_str / borrowed_bytes). The
+        # DEFINE_BORROWED_SLICE conditions are stamped to borrow_test.c
+        # (a /test/ path) and removed by the coverage filter — the known
+        # Shape-B attribution, docs/vmacros.md. Do not read this row as
+        # covering the macro family; its disposition is tracked with the
+        # other single-file macro families.
+        #
+        # This step remains in place as a regression detector. If a
+        # future change opens a new uncovered outcome or closes one of
+        # the two documented ones, the output surfaces it for human
+        # review. Report-only; never fails.
+        run: |
+          cd build
+
+          BORROW_GCDA=$(find . -name "borrow_test*.gcda" | head -1)
+
+          if [ -z "$BORROW_GCDA" ]; then
+            echo "ERROR: could not locate borrow_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+
+          echo "Running gcov on: $BORROW_GCDA"
+          gcov-14 --conditions --all-blocks "$BORROW_GCDA" 2>&1 | \
+            grep -A 200 "borrow.h" | head -500
+
+          echo ""
+          echo "=== Looking for the generated .gcov file for borrow.h ==="
+          find . -name "borrow.h.gcov" -exec echo "Found: {}" \;
+
+          BORROW_GCOV=$(find . -name "borrow.h.gcov" | head -1)
+          if [ -n "$BORROW_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $BORROW_GCOV ==="
+            cat "$BORROW_GCOV"
+            echo ""
+            echo "=== Uncovered condition outcomes (quick filter) ==="
+            grep -n "not covered" "$BORROW_GCOV" || \
+              echo "(no 'not covered' lines found — check the full dump above)"
+          else
+            echo "No borrow.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*borrow* 2>/dev/null || true
+            done
+          fi
         
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
