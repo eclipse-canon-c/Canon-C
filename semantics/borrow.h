@@ -279,23 +279,25 @@
 /* ============================================================================
    ACSL verification predicates (Frama-C/WP)
    ============================================================================
-   Well-formedness of the wrapped views. Both predicates state the same
-   constructor-enforced shape: a NULL data pointer implies zero length.
-   cbytes_from / str_from_cstr refuse to construct {NULL, len>0}, and every
-   function below preserves the shape. borrow_cbytes_ok is exactly the fact
-   needed to discharge the "impossible by construction" one-NULL guard in
-   borrowed_bytes_eq as dead code (the MCDC-008 cross-stream argument).
+   borrow.h defines no predicates of its own: the wrapped views reuse
+   slice.h's exported predicates verbatim —
 
-   Note the direction: NULL ==> empty. A non-NULL pointer with len == 0 is
-   well-formed (see test_bytes_eq_zero_length_different_ptrs), so the
-   converse is deliberately not stated.
+     cbytes_invariant(c) :  c.ptr != \null || c.len == 0
+     str_invariant(s)    :  s.ptr != \null || s.len == 0
+     str_valid(s)        :  str_invariant(s) &&
+                            (s.len > 0 ==> \valid_read(s.ptr + ..))
+
+   The invariant is the constructor-enforced shape: cbytes_from refuses
+   {NULL, len>0} (it is a stated precondition there), and every function
+   below preserves it. cbytes_invariant is exactly the fact needed to
+   discharge the "impossible by construction" one-NULL guard in
+   borrowed_bytes_eq as dead code (the MCDC-008 cross-stream argument —
+   see the named assert dead_by_invariant in that function).
+
+   Note the direction: the invariant permits a non-NULL pointer with
+   len == 0 (see test_bytes_eq_zero_length_different_ptrs); only
+   {NULL, len>0} is malformed.
    ============================================================================ */
-
-/*@
-  predicate borrow_cbytes_ok(cbytes_t c) = c.ptr == \null ==> c.len == 0;
-
-  predicate borrow_str_ok(str_t s) = s.ptr == \null ==> s.len == 0;
-*/
 
 /* ============================================================================
    borrowed_ptr — generic non-owning pointer
@@ -682,27 +684,25 @@ static inline usize borrowed_str_len(const borrowed_str *b)
  * @param b Second borrowed_str (by value).
  * @return  1 if str_equal(a.str, b.str), 0 otherwise.
  */
-/*@ requires ok_a: borrow_str_ok(a.str);
-    requires ok_b: borrow_str_ok(b.str);
-    requires valid_a:
-      a.str.len > 0 && a.str.ptr != b.str.ptr ==>
-        \valid_read(a.str.ptr + (0 .. a.str.len - 1));
-    requires valid_b:
-      b.str.len > 0 && a.str.ptr != b.str.ptr ==>
-        \valid_read(b.str.ptr + (0 .. b.str.len - 1));
-    requires init_a:
-      a.str.len > 0 && a.str.ptr != b.str.ptr ==>
-        \initialized(a.str.ptr + (0 .. a.str.len - 1));
-    requires init_b:
-      b.str.len > 0 && a.str.ptr != b.str.ptr ==>
-        \initialized(b.str.ptr + (0 .. b.str.len - 1));
+/*@ requires ok_a: str_valid(a.str);
+    requires ok_b: str_valid(b.str);
+    requires init_ab:
+      (a.str.len == b.str.len && a.str.ptr != b.str.ptr &&
+       a.str.ptr != \null && b.str.ptr != \null && a.str.len > 0) ==>
+        (\initialized((char*)a.str.ptr + (0 .. (integer)a.str.len - 1)) &&
+         \initialized((char*)b.str.ptr + (0 .. (integer)b.str.len - 1)));
     assigns \nothing;
-    ensures content_eq_def:
-      (\result != 0) <==>
-        (a.str.len == b.str.len &&
-         \forall integer i; 0 <= i < a.str.len ==>
-           a.str.ptr[i] == b.str.ptr[i]);
+    ensures bool_result:  \result == \true || \result == \false;
+    ensures len_mismatch: a.str.len != b.str.len ==> \result == \false;
+    ensures same_view:
+      (a.str.ptr == b.str.ptr && a.str.len == b.str.len) ==>
+        \result == \true;
 */
+/* Partial functional spec by delegation: str_equal's own contract is
+   deliberately partial (see slice.h remark and VERIFY-007), so full
+   content equality is not stated here — it cannot be derived from the
+   callee. Contrast borrowed_bytes_eq below, whose body is self-contained
+   and carries the full content-equality postcondition.                  */
 static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b)
 {
     return str_equal(a.str, b.str);
@@ -720,7 +720,8 @@ static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b)
  * @param end   One-past-last byte index (exclusive).
  * @return      A new borrowed_str covering [start, end).
  */
-/*@ assigns \nothing;
+/*@ requires ok_b: str_valid(b.str);
+    assigns \nothing;
     ensures source_inherited: \result.source == b.source;
 */
 static inline borrowed_str borrowed_str_slice(borrowed_str b,
@@ -770,14 +771,14 @@ typedef struct {
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_bytes wrapping the region.
  */
-/*@ requires readable_region:
-      ptr != \null && len > 0 ==> \valid_read((u8 *)ptr + (0 .. len - 1));
+/*@ requires shape: ptr != \null || len == 0;
+    requires readable_region:
+      len > 0 ==> \valid_read((const u8 *)ptr + (0 .. len - 1));
     assigns \nothing;
     ensures source_stored: \result.source == source;
-    ensures shape_ok: borrow_cbytes_ok(\result.bytes);
+    ensures shape_ok: cbytes_invariant(\result.bytes);
     ensures stored:
-      ptr != \null ==>
-        \result.bytes.ptr == (u8 *)ptr && \result.bytes.len == len;
+      \result.bytes.ptr == (const u8 *)ptr && \result.bytes.len == len;
 */
 static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
                                                   const void *source)
@@ -800,14 +801,14 @@ static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
  * @param source_lt Pointer to source's embedded lifetime_t (may be NULL).
  * @param source    Address of the owning object (debug tag; may be NULL).
  */
-/*@ requires readable_region:
-      ptr != \null && len > 0 ==> \valid_read((u8 *)ptr + (0 .. len - 1));
+/*@ requires shape: ptr != \null || len == 0;
+    requires readable_region:
+      len > 0 ==> \valid_read((const u8 *)ptr + (0 .. len - 1));
     assigns \nothing;
     ensures source_stored: \result.source == source;
-    ensures shape_ok: borrow_cbytes_ok(\result.bytes);
+    ensures shape_ok: cbytes_invariant(\result.bytes);
     ensures stored:
-      ptr != \null ==>
-        \result.bytes.ptr == (u8 *)ptr && \result.bytes.len == len;
+      \result.bytes.ptr == (const u8 *)ptr && \result.bytes.len == len;
 */
 static inline borrowed_bytes borrowed_bytes_from_lifetime(
     const void *ptr, usize len,
@@ -832,12 +833,12 @@ static inline borrowed_bytes borrowed_bytes_from_lifetime(
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_bytes wrapping cb.
  */
-/*@ requires ok_cb: borrow_cbytes_ok(cb);
+/*@ requires ok_cb: cbytes_invariant(cb);
     assigns \nothing;
     ensures bytes_stored:
       \result.bytes.ptr == cb.ptr && \result.bytes.len == cb.len;
     ensures source_stored: \result.source == source;
-    ensures shape_ok: borrow_cbytes_ok(\result.bytes);
+    ensures shape_ok: cbytes_invariant(\result.bytes);
 */
 static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
                                                          const void *source)
@@ -856,7 +857,7 @@ static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
 /*@ assigns \nothing;
     ensures empty_bytes: \result.bytes.ptr == \null && \result.bytes.len == 0;
     ensures null_source: \result.source == \null;
-    ensures shape_ok:    borrow_cbytes_ok(\result.bytes);
+    ensures shape_ok:    cbytes_invariant(\result.bytes);
 */
 static inline borrowed_bytes borrowed_bytes_empty(void)
 {
@@ -960,8 +961,8 @@ static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
  * @return  1 if regions have equal length and identical byte content,
  *          0 otherwise.
  */
-/*@ requires ok_a: borrow_cbytes_ok(a.bytes);
-    requires ok_b: borrow_cbytes_ok(b.bytes);
+/*@ requires ok_a: cbytes_invariant(a.bytes);
+    requires ok_b: cbytes_invariant(b.bytes);
     requires valid_a:
       a.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
         \valid_read(a.bytes.ptr + (0 .. a.bytes.len - 1));
@@ -994,7 +995,7 @@ static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
     }
     if (a.bytes.ptr == NULL || b.bytes.ptr == NULL) {
         /* One NULL, one non-NULL, same length > 0 — impossible by
-           construction (borrow_cbytes_ok forbids {NULL, len>0}) but
+           construction (cbytes_invariant forbids {NULL, len>0}) but
            guarded for safety. The assert below asks WP to prove this
            path infeasible under the invariant preconditions: on this
            path len_a == len_b > 0 and one pointer is NULL, so ok_a/ok_b
