@@ -2216,7 +2216,7 @@ jobs:
           path: wp_result_output.txt
   
   # -------------------------------------------------------------------------
-  # borrow.h — REPORT-ONLY (first run pending), 120s / -wp-split.
+  # borrow.h — ENFORCED, 120s / -wp-split.
   #
   # First verified header in semantics/ with in-place contracts, and the
   # project's first hybrid Shape-A/Shape-B header: the 24 non-macro
@@ -2233,33 +2233,37 @@ jobs:
   # stays covered by borrow_test.c across the CI matrix, including the
   # OWN-002 double-reset regression guards.
   #
-  # Composability check #6: the TU's substrate is checked.h + slice.h (no
-  # ptr.h, no memory.h — slice.h does not pull them), so the inherited
-  # surface is predicted at exactly 17 goals re-emitted byte-identically:
+  # Composability check #6 — CONFIRMED: the TU's substrate is checked.h +
+  # slice.h (no ptr.h, no memory.h — slice.h does not pull them), and the
+  # inherited surface is exactly 17 goals re-emitted byte-identically:
   # slice.h's 15 (VERIFY-007/-012) + checked.h's 2 (VERIFY-002, prefix
-  # flipped typed_ -> typed_cast_ under this TU's model). Own residuals are
-  # predicted at 2-4, all on borrowed_bytes_eq's memcmp call site — the
-  # only direct libc call in the header. Zero function-pointer residuals
-  # expected: borrow.h has no combinators or hooks, which would make it
-  # the first downstream header since error.h to add no new residual
-  # class at all.
+  # flipped typed_ -> typed_cast_ under this TU's model). Own residuals:
+  # exactly 2, both on borrowed_bytes_eq's memcmp call site (the only
+  # direct libc call in the header) — the danglingness_s1/s2 pair; the
+  # valid_s1/s2 and initialization goals closed via the day-one guarded
+  # \valid_read/\initialized requires. Zero function-pointer residuals:
+  # borrow.h has no combinators or hooks — the first downstream header
+  # since error.h to add no new residual class at all.
   #
   # Cross-stream tie-in: gcov reports borrow.h at 38/40 MC/DC (95.0%,
   # CI #1106) with exactly 2 outcomes open — the NULL-true sides of the
   # one-NULL guard in borrowed_bytes_eq. The named goal dead_by_invariant
-  # (an /*@ assert \false */ inside that guard) asks WP to prove the path
-  # infeasible under borrow_cbytes_ok; when it proves, those 2 outcomes
-  # upgrade from "API-unreachable, deviation pending" to the full MCDC-008
-  # cross-stream record (MCDC-002 shape, seventh instance, first in
-  # semantics/). The per-line coverage debug step in the coverage job is
-  # the measurement half's regression detector.
+  # (an /*@ assert \false */ inside that guard) PROVED at CI #1110 under
+  # cbytes_invariant, completing the MCDC-008 cross-stream record
+  # (MCDC-002 shape, seventh instance, first in semantics/, first carried
+  # by a named assert). This job's proved-set check on dead_by_invariant
+  # is the proof-stream regression detector; the per-line coverage debug
+  # step in the coverage job is the measurement-stream one.
   #
-  # Report-only until the residual set reproduces name-stable (the
-  # option/result promotion pattern). The ENFORCE flag inside the step
-  # keeps all enforcement checks running and printing on every run;
-  # promotion is the checklist in the step comment: pin the counts, harden
-  # the watchlist, set ENFORCE=1, and land VERIFY-016 + MCDC-008 in the
-  # same PR. No timeout-minutes override: this TU is slice.h-sized, not
+  # Promoted from report-only to enforced as of {TODO: promotion CI #}
+  # (VERIFY-016/MCDC-008 landed in the same PR): report-only first at
+  # 383bf9f (CI #1109, 27 unproved — the final 19 plus 8 call-site
+  # chaining goals from slice.h contracts mirrored by shape); aligned to
+  # slice.h's real clauses at 262a503 (CI #1110): 2433/2452 proved,
+  # exactly 19 unproved (17 inherited + 2 own), 0 Unknown, 0 Failed,
+  # zero outside prediction, dead_by_invariant proved. The 19 are the
+  # identical named subset of #1109's 27 — name-stable across both runs.
+  # No timeout-minutes override: this TU is slice.h-sized, not
   # region.h-sized — the default job budget is ample.
   # -------------------------------------------------------------------------
   frama-c-borrow:
@@ -2268,12 +2272,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: semantics/borrow.h (report-only)"
-        # borrow.h — Typed+Cast. REPORT-ONLY (ENFORCE=0): this job never
-        # fails while the residual set is being pinned. Promotion pattern
-        # per option/result: land report-only -> confirm the residual set
-        # reproduces name-stable across runs -> pin the numbers below and
-        # set ENFORCE=1.
+      - name: "WP: semantics/borrow.h"
+        # borrow.h — Typed+Cast. Expected: 2433 / 2452 proved, exactly 19
+        # unproved (VERIFY-016): 17 inherited (slice.h's full 15-goal
+        # surface incl. the contract.h handler pair, + checked.h's 2 with
+        # the typed_ -> typed_cast_ prefix flip) + 2 borrow-own (memcmp
+        # danglingness at borrowed_bytes_eq, the header's only libc call).
+        # Also enforces the MCDC-008 closure: the named in-body assert
+        # dead_by_invariant must remain in the proved set. Any deviation
+        # is a regression.
         #
         # First hybrid Shape-A/Shape-B header: the 24 non-macro functions
         # are annotated in place (slice.h-style); DEFINE_BORROWED_SLICE is
@@ -2283,47 +2290,14 @@ jobs:
         # ABI guarantee; the lifetime-debug path stays runtime-verified by
         # borrow_test.c across the CI matrix (OWN-001 §7).
         #
-        # PREDICTIONS THIS JOB REPORTS AGAINST (VERIFY-016, pending):
-        #
-        #   Inherited residuals — 17, byte-identical re-emission of the
-        #   TU's substrate (composability check #6):
-        #     - 15 from slice.h (VERIFY-007/-012 list, same goal names as
-        #       the frama-c-slice CHECKS array)
-        #     - 2 from checked.h (VERIFY-002 pair; prefix flips from
-        #       typed_ to typed_cast_ because this TU uses Typed+Cast —
-        #       same flip the memory.h/region.h jobs exhibit)
-        #
-        #   Own residuals — predicted 2-4, ALL confined to the memcmp
-        #   call site in borrowed_bytes_eq:
-        #     - danglingness_s1/s2 expected to remain (the known memcmp
-        #       class, VERIFY-007 category)
-        #     - valid_s1/s2 may close or remain depending on whether the
-        #       guarded \valid_read requires chain the way str_equal's do
-        #     - initialization_s1/s2 expected to CLOSE (guarded
-        #       \initialized requires present from day one — VERIFY-012
-        #       lesson applied at authoring time, not retrofitted)
-        #
-        #   Key single goal — dead_by_invariant (the named assert inside
-        #   borrowed_bytes_eq's one-NULL guard): expected PROVED. That
-        #   proof is the cross-stream half of MCDC-008 — it upgrades the
-        #   2 uncovered gcov outcomes on that guard from "API-unreachable,
-        #   deviation pending" to "WP-discharged dead under
-        #   borrow_cbytes_ok". If this goal is UNPROVED, do not write
-        #   MCDC-008 yet.
-        #
-        # PROMOTION CHECKLIST (flip to enforcement):
-        #   1. Two+ runs with a name-stable residual set
-        #   2. Fill EXPECTED_UNPROVED and EXPECTED_PROVED below from the
-        #      observed numbers
-        #   3. Move the observed own-residual names from the WATCH list
-        #      into the CHECKS-style hard roll-call
-        #   4. Set ENFORCE=1
-        #   5. Write VERIFY-016 + MCDC-008 in the same PR
+        # Promoted from report-only as of {TODO: promotion CI #}; see the
+        # banner above for the #1109 -> #1110 chronology and VERIFY-016 in
+        # docs/deviations.md for the full residual classification.
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0
-          EXPECTED_UNPROVED=""   # pin at promotion (predicted 19-21 total)
-          EXPECTED_PROVED=""     # pin at promotion, format "N / M"
+          ENFORCE=1
+          EXPECTED_UNPROVED=19
+          EXPECTED_PROVED="2433 / 2452"
           FAILURES=0
           note_fail() {
             echo "$1"
@@ -2417,49 +2391,57 @@ jobs:
               note_fail "FAIL: inherited set differs from the composability prediction."
             fi
             echo ""
-            echo "  --- Own-residual watchlist (borrowed_bytes_eq memcmp) ---"
-            WATCH=(
-              "typed_cast_borrowed_bytes_eq_call_memcmp_requires_valid_s1"
-              "typed_cast_borrowed_bytes_eq_call_memcmp_requires_valid_s2"
+            echo "  --- Own-residual roll-call (borrowed_bytes_eq memcmp) ---"
+            OWN_CHECKS=(
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
             )
             OWN_SEEN=0
-            for goal in "${WATCH[@]}"; do
+            for goal in "${OWN_CHECKS[@]}"; do
               if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_borrow_output.txt; then
-                echo "  observed: ${goal}"
                 OWN_SEEN=$((OWN_SEEN + 1))
+              else
+                note_fail "FAIL: expected unproved goal ${goal} not observed."
               fi
             done
-            echo "  Own residuals observed: ${OWN_SEEN} (predicted 2-4)"
+            echo "  Own residuals observed: ${OWN_SEEN}/2 (expected 2)"
             OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
-            echo "  Unproved outside prediction: ${OTHER_UNPROVED} (predicted 0)"
+            echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
             if [ "${OTHER_UNPROVED}" -ne 0 ]; then
-              note_fail "FAIL: unpredicted residuals present — contract iteration needed."
+              note_fail "FAIL: undocumented residuals present — see VERIFY-016."
             fi
             echo ""
             echo "  --- MCDC-008 cross-stream goal ---"
             if grep -qE "\[(Timeout|Unknown|Failed)\].*dead_by_invariant" wp_borrow_output.txt; then
               note_fail "FAIL: dead_by_invariant UNPROVED — one-NULL guard not discharged."
-              echo "      Do NOT write MCDC-008 until this goal proves."
+              echo "      This regresses the MCDC-008 cross-stream closure. Investigate"
+              echo "      the cbytes_invariant preconditions on borrowed_bytes_eq."
             else
               echo "  dead_by_invariant: PROVED — one-NULL guard formally dead"
-              echo "  under borrow_cbytes_ok. MCDC-008 cross-stream half OK."
+              echo "  under cbytes_invariant. MCDC-008 closure intact."
             fi
             CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_borrow_output.txt || true)
             echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+            if [ "${CVC5_INVOKED}" -eq 0 ]; then
+              echo "WARNING: CVC5 does not appear in WP output."
+              echo "         The triple-prover setup may have degraded to"
+              echo "         dual-prover. Check the prover configuration step."
+            fi
           fi
           echo ""
           echo "==============================================="
           if [ "${FAILURES}" -eq 0 ]; then
-            echo "REPORT: all predictions held on this run."
+            echo "PASS: borrow.h verified — 2433/2452 proved, 19 documented"
+            echo "      residuals all observed (VERIFY-016): 17 inherited +"
+            echo "      2 own, zero new residual classes; dead_by_invariant"
+            echo "      proved (MCDC-008 closure intact). Composability"
+            echo "      confirmation #6."
           else
-            echo "REPORT: ${FAILURES} prediction(s) missed — see FAIL lines above."
+            echo "FAIL: ${FAILURES} enforcement check(s) missed — see FAIL lines above."
           fi
           if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -ne 0 ]; then
             exit 1
           fi
-          echo "(report-only: job passes regardless; ENFORCE=${ENFORCE})"
           echo "==============================================="
       - name: Upload WP proof output (borrow.h)
         if: always()
