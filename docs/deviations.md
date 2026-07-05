@@ -2139,6 +2139,161 @@ instantiation the proof uses.
 
 ---
 
+## VERIFY-016: Inherited-Substrate and memcmp-Danglingness Residuals (borrow.h, first hybrid Shape-A/Shape-B header)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-016 |
+| **Date**       | 2026-07-05 |
+| **Baseline commit** | 262a503 (Canon-C CI #1110, clean run); report-only first at 383bf9f (CI #1109) |
+| **Scope**      | semantics/borrow.h non-macro surface — 2452 obligations, 19 unproved across 2 categories (1 own + 1 inherited group) |
+| **Category**   | Formal verification completeness |
+| **Enforcement**| Enforced (exact-count + by-name roll-call) as of #1111 |
+
+**Description**: 19 of 2452 proof obligations (0.77%) on borrow.h's
+translation unit are not discharged by any prover in the triple-prover
+configuration (Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a
+120-second timeout and `-wp-split`, under the `Typed+Cast` memory model
+(forced transitively by slice.h's casts, plus borrow.h's own
+`(const u8 *)` cast in `borrowed_bytes_slice`). All 19 are Timeouts;
+0 Unknown, 0 Failed.
+
+borrow.h is the third semantics/ module verified (after error.h,
+VERIFY-013, and the two driver modules) and the project's **first
+hybrid Shape-A/Shape-B header**: its 24 non-macro functions
+(`borrowed_ptr` ×6, `borrowed_str` ×9, `borrowed_bytes` ×9, counting
+the two `_from_lifetime` variants) are annotated **in place**,
+slice.h-style, while `DEFINE_BORROWED_SLICE` is outside the verified
+surface — it sits on the single-file macro-family list in
+`docs/vmacros.md` whose disposition is deliberately open (the
+DEFINE_SLICE precedent: documented + tested, not WP-verified).
+
+**Verified configuration.** The verified build is the default
+configuration (`CANON_LIFETIME` off, `-DCANON_NO_REQUIRE -DNDEBUG`):
+the `BORROW_LT_FIELDS_` / `BORROW_LT_CHECK_` / `BORROW_LT_INHERIT_`
+macros expand to nothing, so WP verifies the exact shipped bodies the
+v1.2.x ABI guarantee describes. The lifetime-debug path is
+runtime-only by construction (OWN-001 §7) and remains validated by
+`test/semantics/borrow_test.c` across all 16 CI configs, including
+the OWN-002 double-reset regression guards. The `source` debug tag
+appears in no validity clause anywhere in the header's contracts:
+borrow.h never dereferences it, so to the specs it is inert data —
+stored and propagated, never read through.
+
+**Specification vocabulary.** borrow.h defines **no ACSL predicates of
+its own**: every contract uses slice.h's exported predicates verbatim
+(`cbytes_invariant`, `str_invariant`, `str_valid`). The first landing
+(CI #1109) carried two borrow-local predicates and 8 additional
+residuals — all call-site precondition (or delegated-ensures) goals
+into slice.h functions whose contracts had been mirrored by shape
+rather than by sight (`cbytes_from`'s two requires clauses,
+`str_slice`'s and `str_equal`'s `str_valid` requires, and a full
+content-equality postcondition on `borrowed_str_eq` that `str_equal`'s
+deliberately partial spec cannot support). Aligning the four affected
+contracts to slice.h's real clauses (262a503) closed all 8 and removed
+the duplicate predicates; `borrowed_str_eq` now carries `str_equal`'s
+partial ensures trio with an in-source comment recording why —
+contrast `borrowed_bytes_eq`, whose self-contained body carries (and
+proves) the full content-equality postcondition.
+
+### Inherited residuals (17)
+
+| # | Source                          | Goals | Pattern                                                          |
+|---|---------------------------------|-------|------------------------------------------------------------------|
+| 1 | VERIFY-007/-012 (slice.h)       | 13    | memcmp call-site valid/danglingness at `bytes_equal`, `str_equal`, `str_starts_with`, `str_ends_with` (12) + `str_from_cstr` strlen `valid_string` (1) |
+| 2 | VERIFY-006 cat 4 (via slice.h)  | 2     | `typed_cast_contract_default_handler_terminates`, `typed_cast_contract_default_handler_loop_invariant_established` |
+| 3 | VERIFY-002 (checked.h)          | 2     | `typed_cast_checked_add_overflow_ensures`, `typed_cast_checked_add_u64_overflow_ensures` — prefix flipped `typed_` → `typed_cast_` under this TU's model, the same flip the memory.h/region.h runs exhibit |
+
+This is the **sixth composability data point**, and the smallest
+inherited surface since memory.h: borrow.h's TU pulls in checked.h +
+slice.h only (slice.h includes neither ptr.h nor memory.h), so no
+alignment, allocation, or arena-chain residuals exist to inherit. All
+17 re-emitted **byte-identically** (names verified one-for-one by the
+CI wrapper's inherited roll-call on both #1109 and #1110) — the
+substrate's residual fingerprint propagated unchanged through a new
+downstream header, again.
+
+### borrow-own residuals (2)
+
+**Category 1 — memcmp call-site danglingness (2)**
+
+**Function affected**: `borrowed_bytes_eq` — the header's only direct
+libc call.
+
+**Goals**: `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1`,
+`typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2`.
+
+**Root cause**: the `\dangling` feature gap in Frama-C 29 (Blanchard)
+— the same class as VERIFY-007's memcmp sites and VERIFY-008's
+`mem_compare`/`mem_equal` goals, at one new call site. Notably, the
+`valid_s1/s2` and `initialization` goals at the same call site
+**closed**: borrow.h is the first header to carry guarded
+`\valid_read` and `\initialized` preconditions (in implication form
+mirroring the short-circuit structure) from day one rather than as a
+VERIFY-012-style retrofit, and they discharged exactly as VERIFY-012
+predicted for authored-at-annotation-time clauses.
+
+**Manual proof argument**: on the path reaching memcmp, the two views
+have equal non-zero lengths, distinct non-NULL pointers, and
+`\valid_read`/`\initialized` regions established by precondition; a
+pointer that is `\valid_read` over the compared range in the call
+state is not dangling. ASan and Valgrind execute the same call on
+every `_eq` test path across the CI matrix.
+
+**Zero new residual classes.** borrow.h is the first downstream header
+since error.h to add **no new residual class**: its own residuals are
+strictly the known memcmp class at one new site. It has no combinators
+or hooks, so — unlike option, result, and region_end — no
+function-pointer-dispatch residuals exist.
+
+The named in-body assertion `dead_by_invariant` (inside
+`borrowed_bytes_eq`'s one-NULL guard) **proved**, formally discharging
+the guard as dead code under `cbytes_invariant` — the cross-stream
+half of MCDC-008 (see that entry).
+
+### Mitigation
+
+The `frama-c-borrow` CI step enforces exactly 19 unproved goals (and
+2433/2452 proved) with a by-name roll-call of all 17 inherited and
+both own residuals, plus an inverted check that `dead_by_invariant`
+remains proved; the full residual list prints on every run (artifact
+`wp-proof-borrow`). Landed report-only at CI #1109 per the
+option/result promotion pattern; the residual set was name-stable
+across #1109/#1110 (the 19 are the identical named subset of #1109's
+27, the 8 delta being the contract-alignment closures described
+above).
+
+borrow.h's gcov-measured MC/DC is 38/40 = 95.0%, its documented
+ceiling — see MCDC-008. Functional behavior, including the
+lifetime-debug configuration this entry does not verify, is tested by
+`test/semantics/borrow_test.c` (all 16 configs; ASan + UBSan on
+Linux/macOS debug builds) and fuzzed via its `CANON_FUZZING` entry
+point (`borrowed_bytes_slice` clamping and the
+`borrowed_slice_int_as_bytes` overflow guard).
+
+### Cross-references
+
+- Inherited residuals: VERIFY-007/-012 (slice.h memcmp/strlen
+  surface); VERIFY-006 category 4 (contract.h handler pair);
+  VERIFY-002 (checked.h overflow pair; prefix flip).
+- Own-residual class precedent: VERIFY-007 (memcmp danglingness),
+  VERIFY-008 (mem_compare/equal sites); `\dangling` feature-gap
+  rationale in VERIFY-012's closing note.
+- MC/DC coverage: MCDC-008 (the 38/40 ceiling; the `dead_by_invariant`
+  named-assert closure; the CANON_NO_REQUIRE-gated `_get(NULL)` tests
+  that closed the three reachable outcomes at CI #1106).
+- Substrate decision record: OWN-001 §7 (macro-templated vs non-macro
+  verification posture — this entry is the cross-reference §7
+  promised); OWN-002 (double-reset regression guards in the runtime
+  evidence stream).
+- Macro-family disposition: `docs/vmacros.md` single-file list
+  (`DEFINE_BORROWED_SLICE` remains parked).
+- Per-goal CI artifact: `wp-proof-borrow` (full WP output).
+- Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
+  "WP: semantics/borrow.h".
+
+---
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
@@ -3144,6 +3299,115 @@ MCDC-006's wording if so.
   `docs/vmacros.md`.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
   detail for result (cover TU)" step in
+  `.github/workflows/cmake-multi-platform.yml`.
+
+---
+
+## MCDC-008: Type-Invariant-Unreachable One-NULL Guard, First Named-Assert Cross-Stream Closure (borrow.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-008 |
+| **Date**       | 2026-07-05 |
+| **Baseline commit** | a76202d (Canon-C CI #1106, measurement); cross-stream closure at 262a503 (CI #1110) |
+| **Scope**      | semantics/borrow.h — 2 of 40 condition outcomes (2 unreachable) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 2 of 40 condition outcomes in `semantics/borrow.h`
+are not exercisable by tests. They are the two NULL-true sides of the
+one-NULL guard inside `borrowed_bytes_eq`:
+
+| # | Function            | Line (at baseline) | Subcondition not covered        |
+|---|---------------------|--------------------|----------------------------------|
+| 1 | `borrowed_bytes_eq` | 758                | cond 0 true (`a.bytes.ptr == NULL`) |
+| 2 | `borrowed_bytes_eq` | 758                | cond 1 true (`b.bytes.ptr == NULL`) |
+
+The guard body (line 759, `return false`) shows `#####` — never
+executed across the entire coverage run. (Line numbers cite the
+measurement baseline a76202d; the ACSL pass at 262a503 shifted the
+guard to line 996 with the named assert at 1005. The coverage debug
+step identifies the guard by function and condition, not by line, so
+the drift is cosmetic.)
+
+borrow.h's gcov-measured MC/DC is 38/40 = 95.0%. This is the
+achievable ceiling — the two uncovered outcomes are unreachable by
+construction. The ceiling was reached at CI #1106, when three
+`#ifdef CANON_NO_REQUIRE`-gated tests closed the three `_get(NULL)`
+defensive-branch outcomes (35/40 → 38/40): those branches survive
+`-DCANON_NO_REQUIRE` and are the shipped, documented release-mode
+behavior ("NULL → safe empty"), so in the coverage build they are
+reachable by design and were closed by tests, not documented as a
+deviation — the inverse disposition of the two outcomes this entry
+records.
+
+### Rationale
+
+The guard sits behind three earlier exits: lengths equal, length
+non-zero, pointers distinct. Reaching either NULL-true outcome
+therefore requires a `cbytes_t` with a NULL pointer and non-zero
+length — exactly the malformed value `cbytes_invariant` forbids
+(`ptr != \null || len == 0`) and `cbytes_from` refuses to construct
+(it is a stated precondition there). No public path produces such a
+value. Manufacturing one field-by-field in a test would exercise the
+invariant violation the API exists to prevent — the MCDC-002
+rationale, verbatim; the guard is defensive code preserved
+deliberately, documenting the view-validity contract at the compare
+site.
+
+This is the **seventh cross-stream instance** (after MCDC-002/-003/
+-004/-005/-006's differing source-level shapes) and the **first in
+semantics/** on an in-place-annotated header. Its distinguishing
+feature: the closure is carried by a **named in-body assertion** —
+`/*@ assert dead_by_invariant: \false; */` placed inside the guard
+body — which WP **proved** at CI #1110 under the `cbytes_invariant`
+preconditions on `borrowed_bytes_eq` (a `\false` assertion is
+provable exactly when the path condition is contradictory, i.e. the
+path is infeasible). Prior closures established unreachability as a
+consequence of invariant-preservation proofs; this one states it as a
+single named goal the CI wrapper checks by name on every run.
+
+### Mitigation
+
+1. **Reachability argument via the type invariant**: `cbytes_invariant`
+   plus the guard's position behind the length/pointer exits make the
+   NULL-true outcomes contradictory; WP discharges the named
+   `dead_by_invariant` assertion, formally establishing the path
+   infeasible (VERIFY-016).
+
+2. **Two regression detectors, one per evidence stream** — a first:
+   the coverage job's "Debug: per-line MC/DC detail for borrow.h" step
+   prints the gcov dump and a `not covered` quick-filter every run
+   (measurement stream); the `frama-c-borrow` wrapper fails if
+   `dead_by_invariant` ever leaves the proved set (proof stream). A
+   future change making the branch reachable, or weakening the
+   invariant, surfaces in both.
+
+3. **The achievable MC/DC ceiling is 38/40 = 95.0%**, reached at
+   CI #1106 and representing 100% of API-reachable coverage. The 2
+   missing outcomes are documented here and not counted as a coverage
+   regression.
+
+4. **borrowed_bytes_eq is otherwise exhaustively tested**:
+   `test/semantics/borrow_test.c` isolates every reachable link of the
+   compare chain — length mismatch, both-empty, zero-length with
+   distinct pointers, same-pointer short-circuit, partial overlap,
+   single-byte match/mismatch — and the guard's FALSE outcomes (both
+   conditions) are covered on every memcmp-reaching call.
+
+### Cross-references
+
+- VERIFY-016 — borrow.h's WP residual analysis; the `dead_by_invariant`
+  proof; note the two memcmp danglingness residuals at the same
+  function are a distinct concern (libc feature-gap goals, not this
+  guard).
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology (also the
+  mechanism that makes the three `_get(NULL)` defensive branches
+  testable in the coverage build).
+- MCDC-002 through MCDC-006 — the same API-unreachable-defensive
+  disposition across slice.h/arena.h/pool.h/region.h/option; different
+  source-level shapes, same cross-stream pattern.
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
+  detail for borrow.h" step in
   `.github/workflows/cmake-multi-platform.yml`.
 
 ---
