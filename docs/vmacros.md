@@ -306,7 +306,12 @@ their own driver, or document-only per the existing macro-disposition rule):
 - `DEFINE_ARRAY` in `data/array.h`
 - `DECLARE_QUEUE` in `data/queue.h`
 - `DECLARE_STACK` in `data/stack.h`
-- `DEFINE_BORROWED_SLICE` in `semantics/borrow.h`
+- `DEFINE_BORROWED_SLICE` in `semantics/borrow.h` — note: borrow.h's
+  **non-macro** surface (24 functions) is now WP-verified in place
+  (VERIFY-016), the same in-place-surface + parked-family structure
+  slice.h has with `DEFINE_SLICE`; that changes nothing for this list
+  — the macro family's disposition remains open exactly as for
+  `DEFINE_SLICE`
 
 These are listed for completeness but are **out of scope for the initial
 `vmacros/` rollout**, which targets the 14 multi-file modules above. Their
