@@ -162,6 +162,25 @@
  * These differ because the underlying types have different natural equality.
  * Source tags and lifetime fields are always ignored by all _eq functions.
  *
+ * Formal verification (Frama-C/WP):
+ * --------------------------------------------------------------------------
+ * The non-macro functions in this header carry ACSL contracts and are
+ * verified with Frama-C/WP in the default configuration (CANON_LIFETIME
+ * off, -DCANON_NO_REQUIRE -DNDEBUG) — i.e. the exact shipped bodies the
+ * ABI guarantee describes; the BORROW_LT_* macros expand to nothing in
+ * that configuration and the lifetime-debug path remains runtime-verified
+ * by borrow_test.c across the CI matrix (see OWN-001 §7).
+ *
+ * The `source` field appears in no validity clause anywhere below: this
+ * header never dereferences it (it is a debug tag), so to the specs it is
+ * inert data — stored and propagated, never read through.
+ *
+ * DEFINE_BORROWED_SLICE is deliberately outside the verified surface —
+ * macro-family disposition tracked in docs/vmacros.md alongside
+ * DEFINE_SLICE (documented + tested, not WP-verified).
+ *
+ * See docs/deviations.md VERIFY-016 for the goal inventory and residuals.
+ *
  * Dependency rule:
  * --------------------------------------------------------------------------
  * borrow.h lives in semantics/ and may include core/ only.
@@ -258,6 +277,27 @@
 #endif
 
 /* ============================================================================
+   ACSL verification predicates (Frama-C/WP)
+   ============================================================================
+   Well-formedness of the wrapped views. Both predicates state the same
+   constructor-enforced shape: a NULL data pointer implies zero length.
+   cbytes_from / str_from_cstr refuse to construct {NULL, len>0}, and every
+   function below preserves the shape. borrow_cbytes_ok is exactly the fact
+   needed to discharge the "impossible by construction" one-NULL guard in
+   borrowed_bytes_eq as dead code (the MCDC-008 cross-stream argument).
+
+   Note the direction: NULL ==> empty. A non-NULL pointer with len == 0 is
+   well-formed (see test_bytes_eq_zero_length_different_ptrs), so the
+   converse is deliberately not stated.
+   ============================================================================ */
+
+/*@
+  predicate borrow_cbytes_ok(cbytes_t c) = c.ptr == \null ==> c.len == 0;
+
+  predicate borrow_str_ok(str_t s) = s.ptr == \null ==> s.len == 0;
+*/
+
+/* ============================================================================
    borrowed_ptr — generic non-owning pointer
    ============================================================================ */
 
@@ -297,6 +337,10 @@ typedef struct {
  * tracked lifetime (source_lt == NULL); _get will skip the lifetime
  * check. Use borrowed_ptr_from_lifetime() to opt into tracking.
  */
+/*@ assigns \nothing;
+    ensures ptr_stored:    \result.ptr    == ptr;
+    ensures source_stored: \result.source == source;
+*/
 static inline borrowed_ptr borrowed_ptr_from(const void *ptr,
                                               const void *source)
 {
@@ -320,6 +364,10 @@ static inline borrowed_ptr borrowed_ptr_from(const void *ptr,
  * @param source    Address of the owning object (debug tag; may be NULL).
  * @return          A borrowed_ptr wrapping ptr with captured lifetime.
  */
+/*@ assigns \nothing;
+    ensures ptr_stored:    \result.ptr    == ptr;
+    ensures source_stored: \result.source == source;
+*/
 static inline borrowed_ptr borrowed_ptr_from_lifetime(
     const void *ptr,
 #ifdef CANON_LIFETIME_DEBUG
@@ -341,6 +389,10 @@ static inline borrowed_ptr borrowed_ptr_from_lifetime(
  * @brief Constructs a NULL / absent borrowed_ptr.
  * @return A borrowed_ptr with ptr == NULL and source == NULL.
  */
+/*@ assigns \nothing;
+    ensures null_ptr:    \result.ptr    == \null;
+    ensures null_source: \result.source == \null;
+*/
 static inline borrowed_ptr borrowed_ptr_null(void)
 {
     borrowed_ptr b;
@@ -366,6 +418,17 @@ static inline borrowed_ptr borrowed_ptr_null(void)
  * @param b Pointer to borrowed_ptr; must not be NULL.
  * @return  Stored const void * (may itself be NULL).
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures null_result: \result == \null;
+    behavior non_null:
+      assumes b != \null;
+      ensures stored_result: \result == b->ptr;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline const void *borrowed_ptr_get(const borrowed_ptr *b)
 {
     require_msg(b != NULL, "borrowed_ptr_get: b must not be NULL");
@@ -379,6 +442,17 @@ static inline const void *borrowed_ptr_get(const borrowed_ptr *b)
  * @param b Pointer to borrowed_ptr (may be NULL).
  * @return  1 if valid, 0 otherwise.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures is_false: \result == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures validity_def: (\result != 0) <==> b->ptr != \null;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline bool borrowed_ptr_is_valid(const borrowed_ptr *b)
 {
     return (b != NULL) && (b->ptr != NULL);
@@ -395,6 +469,9 @@ static inline bool borrowed_ptr_is_valid(const borrowed_ptr *b)
  * @param b Second borrowed_ptr (by value).
  * @return  1 if a.ptr == b.ptr, 0 otherwise.
  */
+/*@ assigns \nothing;
+    ensures identity_def: (\result != 0) <==> a.ptr == b.ptr;
+*/
 static inline bool borrowed_ptr_eq(borrowed_ptr a, borrowed_ptr b)
 {
     return a.ptr == b.ptr;
@@ -433,6 +510,10 @@ typedef struct {
  * In CANON_LIFETIME_DEBUG builds the borrow is untracked. Use
  * borrowed_str_from_lifetime() to opt into tracking.
  */
+/*@ assigns \nothing;
+    ensures str_stored:    \result.str.ptr == s.ptr && \result.str.len == s.len;
+    ensures source_stored: \result.source == source;
+*/
 static inline borrowed_str borrowed_str_from(str_t s, const void *source)
 {
     borrowed_str b;
@@ -452,6 +533,10 @@ static inline borrowed_str borrowed_str_from(str_t s, const void *source)
  * @param source_lt Pointer to source's embedded lifetime_t (may be NULL).
  * @param source    Address of the owning object (debug tag; may be NULL).
  */
+/*@ assigns \nothing;
+    ensures str_stored:    \result.str.ptr == s.ptr && \result.str.len == s.len;
+    ensures source_stored: \result.source == source;
+*/
 static inline borrowed_str borrowed_str_from_lifetime(
     str_t s,
 #ifdef CANON_LIFETIME_DEBUG
@@ -478,6 +563,11 @@ static inline borrowed_str borrowed_str_from_lifetime(
  * String literals have static lifetime; this constructor produces an
  * untracked borrow appropriate for that case.
  */
+/*@ assigns \nothing;
+    ensures source_stored: \result.source == source;
+    ensures null_cstr_empty:
+      cstr == \null ==> \result.str.ptr == \null && \result.str.len == 0;
+*/
 static inline borrowed_str borrowed_str_from_cstr(const char *cstr,
                                                    const void *source)
 {
@@ -492,6 +582,10 @@ static inline borrowed_str borrowed_str_from_cstr(const char *cstr,
  * @brief Constructs an empty (zero-length, NULL ptr) borrowed_str.
  * @return A borrowed_str with str == str_empty() and source == NULL.
  */
+/*@ assigns \nothing;
+    ensures empty_str:   \result.str.ptr == \null && \result.str.len == 0;
+    ensures null_source: \result.source == \null;
+*/
 static inline borrowed_str borrowed_str_empty(void)
 {
     borrowed_str b;
@@ -514,6 +608,18 @@ static inline borrowed_str borrowed_str_empty(void)
  * @param b Pointer to borrowed_str; must not be NULL.
  * @return  The wrapped str_t.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures empty_result: \result.ptr == \null && \result.len == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures stored_result:
+        \result.ptr == b->str.ptr && \result.len == b->str.len;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline str_t borrowed_str_get(const borrowed_str *b)
 {
     require_msg(b != NULL, "borrowed_str_get: b must not be NULL");
@@ -527,6 +633,17 @@ static inline str_t borrowed_str_get(const borrowed_str *b)
  * @param b Pointer to borrowed_str (may be NULL).
  * @return  1 if valid, 0 otherwise.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures is_false: \result == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures validity_def: (\result != 0) <==> b->str.ptr != \null;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline bool borrowed_str_is_valid(const borrowed_str *b)
 {
     return (b != NULL) && (b->str.ptr != NULL);
@@ -537,6 +654,17 @@ static inline bool borrowed_str_is_valid(const borrowed_str *b)
  * @param b Pointer to borrowed_str (may be NULL, returns 0).
  * @return  b->str.len, or 0 if b is NULL.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures zero_len: \result == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures stored_len: \result == b->str.len;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline usize borrowed_str_len(const borrowed_str *b)
 {
     return (b != NULL) ? b->str.len : (usize)0;
@@ -554,6 +682,27 @@ static inline usize borrowed_str_len(const borrowed_str *b)
  * @param b Second borrowed_str (by value).
  * @return  1 if str_equal(a.str, b.str), 0 otherwise.
  */
+/*@ requires ok_a: borrow_str_ok(a.str);
+    requires ok_b: borrow_str_ok(b.str);
+    requires valid_a:
+      a.str.len > 0 && a.str.ptr != b.str.ptr ==>
+        \valid_read(a.str.ptr + (0 .. a.str.len - 1));
+    requires valid_b:
+      b.str.len > 0 && a.str.ptr != b.str.ptr ==>
+        \valid_read(b.str.ptr + (0 .. b.str.len - 1));
+    requires init_a:
+      a.str.len > 0 && a.str.ptr != b.str.ptr ==>
+        \initialized(a.str.ptr + (0 .. a.str.len - 1));
+    requires init_b:
+      b.str.len > 0 && a.str.ptr != b.str.ptr ==>
+        \initialized(b.str.ptr + (0 .. b.str.len - 1));
+    assigns \nothing;
+    ensures content_eq_def:
+      (\result != 0) <==>
+        (a.str.len == b.str.len &&
+         \forall integer i; 0 <= i < a.str.len ==>
+           a.str.ptr[i] == b.str.ptr[i]);
+*/
 static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b)
 {
     return str_equal(a.str, b.str);
@@ -571,6 +720,9 @@ static inline bool borrowed_str_eq(borrowed_str a, borrowed_str b)
  * @param end   One-past-last byte index (exclusive).
  * @return      A new borrowed_str covering [start, end).
  */
+/*@ assigns \nothing;
+    ensures source_inherited: \result.source == b.source;
+*/
 static inline borrowed_str borrowed_str_slice(borrowed_str b,
                                                usize start, usize end)
 {
@@ -618,6 +770,15 @@ typedef struct {
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_bytes wrapping the region.
  */
+/*@ requires readable_region:
+      ptr != \null && len > 0 ==> \valid_read((u8 *)ptr + (0 .. len - 1));
+    assigns \nothing;
+    ensures source_stored: \result.source == source;
+    ensures shape_ok: borrow_cbytes_ok(\result.bytes);
+    ensures stored:
+      ptr != \null ==>
+        \result.bytes.ptr == (u8 *)ptr && \result.bytes.len == len;
+*/
 static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
                                                   const void *source)
 {
@@ -639,6 +800,15 @@ static inline borrowed_bytes borrowed_bytes_from(const void *ptr, usize len,
  * @param source_lt Pointer to source's embedded lifetime_t (may be NULL).
  * @param source    Address of the owning object (debug tag; may be NULL).
  */
+/*@ requires readable_region:
+      ptr != \null && len > 0 ==> \valid_read((u8 *)ptr + (0 .. len - 1));
+    assigns \nothing;
+    ensures source_stored: \result.source == source;
+    ensures shape_ok: borrow_cbytes_ok(\result.bytes);
+    ensures stored:
+      ptr != \null ==>
+        \result.bytes.ptr == (u8 *)ptr && \result.bytes.len == len;
+*/
 static inline borrowed_bytes borrowed_bytes_from_lifetime(
     const void *ptr, usize len,
 #ifdef CANON_LIFETIME_DEBUG
@@ -662,6 +832,13 @@ static inline borrowed_bytes borrowed_bytes_from_lifetime(
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_bytes wrapping cb.
  */
+/*@ requires ok_cb: borrow_cbytes_ok(cb);
+    assigns \nothing;
+    ensures bytes_stored:
+      \result.bytes.ptr == cb.ptr && \result.bytes.len == cb.len;
+    ensures source_stored: \result.source == source;
+    ensures shape_ok: borrow_cbytes_ok(\result.bytes);
+*/
 static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
                                                          const void *source)
 {
@@ -676,6 +853,11 @@ static inline borrowed_bytes borrowed_bytes_from_cbytes(cbytes_t cb,
  * @brief Constructs an empty (zero-length, NULL ptr) borrowed_bytes.
  * @return A borrowed_bytes with bytes == cbytes_empty() and source == NULL.
  */
+/*@ assigns \nothing;
+    ensures empty_bytes: \result.bytes.ptr == \null && \result.bytes.len == 0;
+    ensures null_source: \result.source == \null;
+    ensures shape_ok:    borrow_cbytes_ok(\result.bytes);
+*/
 static inline borrowed_bytes borrowed_bytes_empty(void)
 {
     borrowed_bytes b;
@@ -698,6 +880,18 @@ static inline borrowed_bytes borrowed_bytes_empty(void)
  * @param b Pointer to borrowed_bytes; must not be NULL.
  * @return  The wrapped cbytes_t.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures empty_result: \result.ptr == \null && \result.len == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures stored_result:
+        \result.ptr == b->bytes.ptr && \result.len == b->bytes.len;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline cbytes_t borrowed_bytes_get(const borrowed_bytes *b)
 {
     require_msg(b != NULL, "borrowed_bytes_get: b must not be NULL");
@@ -711,6 +905,17 @@ static inline cbytes_t borrowed_bytes_get(const borrowed_bytes *b)
  * @param b Pointer to borrowed_bytes (may be NULL, returns 0).
  * @return  b->bytes.len, or 0 if b is NULL.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures zero_len: \result == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures stored_len: \result == b->bytes.len;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline usize borrowed_bytes_len(const borrowed_bytes *b)
 {
     return (b != NULL) ? b->bytes.len : (usize)0;
@@ -721,6 +926,17 @@ static inline usize borrowed_bytes_len(const borrowed_bytes *b)
  * @param b Pointer to borrowed_bytes (may be NULL).
  * @return  1 if valid, 0 otherwise.
  */
+/*@ requires readable_b: b != \null ==> \valid_read(b);
+    assigns \nothing;
+    behavior null_b:
+      assumes b == \null;
+      ensures is_false: \result == 0;
+    behavior non_null:
+      assumes b != \null;
+      ensures validity_def: (\result != 0) <==> b->bytes.ptr != \null;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
 {
     return (b != NULL) && (b->bytes.ptr != NULL);
@@ -744,6 +960,27 @@ static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
  * @return  1 if regions have equal length and identical byte content,
  *          0 otherwise.
  */
+/*@ requires ok_a: borrow_cbytes_ok(a.bytes);
+    requires ok_b: borrow_cbytes_ok(b.bytes);
+    requires valid_a:
+      a.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
+        \valid_read(a.bytes.ptr + (0 .. a.bytes.len - 1));
+    requires valid_b:
+      b.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
+        \valid_read(b.bytes.ptr + (0 .. b.bytes.len - 1));
+    requires init_a:
+      a.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
+        \initialized(a.bytes.ptr + (0 .. a.bytes.len - 1));
+    requires init_b:
+      b.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
+        \initialized(b.bytes.ptr + (0 .. b.bytes.len - 1));
+    assigns \nothing;
+    ensures content_eq_def:
+      (\result != 0) <==>
+        (a.bytes.len == b.bytes.len &&
+         \forall integer i; 0 <= i < a.bytes.len ==>
+           a.bytes.ptr[i] == b.bytes.ptr[i]);
+*/
 static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
 {
     if (a.bytes.len != b.bytes.len) {
@@ -756,8 +993,16 @@ static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
         return true; /* same pointer, same length — identical by definition */
     }
     if (a.bytes.ptr == NULL || b.bytes.ptr == NULL) {
-        return false; /* one NULL, one non-NULL, same length>0 — impossible
-                         by construction but guard for safety               */
+        /* One NULL, one non-NULL, same length > 0 — impossible by
+           construction (borrow_cbytes_ok forbids {NULL, len>0}) but
+           guarded for safety. The assert below asks WP to prove this
+           path infeasible under the invariant preconditions: on this
+           path len_a == len_b > 0 and one pointer is NULL, so ok_a/ok_b
+           force a contradiction. This named goal is the cross-stream
+           half of MCDC-008 — the two condition outcomes gcov reports
+           uncovered here are dead code under the type invariant.       */
+        /*@ assert dead_by_invariant: \false; */
+        return false;
     }
     return memcmp(a.bytes.ptr, b.bytes.ptr, a.bytes.len) == 0;
 }
@@ -781,6 +1026,24 @@ static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
  * @param end   One-past-last byte index (exclusive).
  * @return      A new borrowed_bytes covering [start, end).
  */
+/*@ requires readable_region:
+      b.bytes.ptr != \null && b.bytes.len > 0 ==>
+        \valid_read(b.bytes.ptr + (0 .. b.bytes.len - 1));
+    assigns \nothing;
+    behavior returns_empty:
+      assumes b.bytes.ptr == \null || start >= b.bytes.len || end <= start;
+      ensures empty_ptr:    \result.bytes.ptr == \null;
+      ensures empty_len:    \result.bytes.len == 0;
+      ensures empty_source: \result.source == \null;
+    behavior returns_sub:
+      assumes b.bytes.ptr != \null && start < b.bytes.len && start < end;
+      ensures sub_ptr:    \result.bytes.ptr == b.bytes.ptr + start;
+      ensures sub_len:
+        \result.bytes.len == \min(end, b.bytes.len) - start;
+      ensures sub_source: \result.source == b.source;
+    complete behaviors;
+    disjoint behaviors;
+*/
 static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
                                                    usize start, usize end)
 {
