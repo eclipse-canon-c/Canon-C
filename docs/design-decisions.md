@@ -17,8 +17,9 @@
       — verified present; documents the ABI guarantee.
     - docs/verification.md, docs/deviations.md, docs/traceability.md
       — referenced as the canonical homes for VERIFY-NNN / MCDC-NNN entries.
-      Substrate header entries land there as the non-macro substrate gets
-      annotated; OWN-001 will gain ID-specific cross-references at that point.
+      Non-macro substrate entries landed: VERIFY-009/-010/-011 and, closing
+      the set, VERIFY-016 + MCDC-008 (borrow.h, CI #1110); §7 and §8 carry
+      the ID-specific cross-references OWN-001 promised.
     - CHANGELOG entry for v1.3.0 — TODO: confirm anchor when CHANGELOG is
       updated for the release. Inline as {TODO: CHANGELOG v1.3.0 anchor}.
     - OWN-002 — Arena/Pool restamp migration; shipped post-v1.3.0 at
@@ -43,7 +44,7 @@ formally-verified primitive layer described in the README's
 | Last green     | CI #938 across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug) at v1.3.0 ship. Subsequent extensions tracked under their own entries (see OWN-002 for the post-v1.3.0 Arena/Pool migration). |
 | Scope          | All owning container types in `core/` and `data/`                 |
 | Build knob     | `CANON_LIFETIME=off` (default) or `CANON_LIFETIME=debug` — see `CMakeLists.txt` |
-| Verification   | Runtime-validated via `test/semantics/borrow_test.c` across all 16 configs. WP coverage of the non-macro substrate headers (`lifetime.h`, `region.h`, `arena.h`, `pool.h`, and the non-macro surface of `borrow.h`) is on the verification roadmap per `docs/verification.md` — they sit in the queue alongside the headers walking up from `core/primitives/`. Macro-templated bodies remain runtime-only by construction (see §7). |
+| Verification   | Runtime-validated via `test/semantics/borrow_test.c` across all 16 configs. The non-macro substrate is now WP-verified end to end: `arena.h` (VERIFY-009), `pool.h` (VERIFY-010), `region.h` including `lifetime_assert_valid` (VERIFY-011), `lifetime.h` (N/A — typedefs only), and the non-macro surface of `semantics/borrow.h` (VERIFY-016, verified under the default `CANON_LIFETIME`-off configuration — the exact shipped ABI bodies). Macro-templated bodies remain runtime-only by construction (see §7). |
 | Cross-refs     | README sections *"Borrow lifetime — know when a borrowed value is still valid"*, *"What about compile-time ownership enforcement?"*, *"From shared vocabulary to compositional verification"*; `CMakeLists.txt` `CANON_LIFETIME` block; `docs/verification.md`, `docs/deviations.md`, `docs/traceability.md` (substrate VERIFY-NNN entries land here as headers get annotated); {TODO: CHANGELOG v1.3.0 anchor}; OWN-002 (Arena/Pool restamp migration, shipped post-v1.3.0). |
 
 ### Phase chronology
@@ -381,18 +382,26 @@ code generator or a switch to a different annotation toolchain.
 Neither is in scope for v1.3.0; if it ever becomes a priority, it
 will get its own entry.
 
-**Non-macro substrate — on the verification roadmap.**
+**Non-macro substrate — WP-verified (roadmap complete).**
 `core/primitives/lifetime.h`, `core/region.h`'s `lifetime_assert_valid`,
 the lifecycle functions in `core/arena.h` and `core/pool.h`, and the
 non-macro surface of `semantics/borrow.h` are all conventional C99
-inline functions amenable to WP. Per the CI file's candidate list,
-they sit in the verification queue alongside the rest of the headers
-walking up from `core/primitives/`. When they land — under
-`VERIFY-NNN` entries in `docs/verification.md` and `docs/deviations.md`
-— OWN-001 will gain cross-references to those entries, but the
-substrate's behavioral contracts documented above will not change.
-The contract table in §3 is the spec; the verification entries will
-add formal evidence that the implementation meets it.
+inline functions amenable to WP, and all have now landed:
+arena.h under VERIFY-009, pool.h under VERIFY-010, region.h (including
+`lifetime_assert_valid`) under VERIFY-011, lifetime.h as N/A (three
+typedefs and a constant — nothing to prove), and borrow.h's 24
+non-macro functions under **VERIFY-016** (this is the cross-reference
+this paragraph promised). borrow.h's entry makes the §-boundary
+explicit from the verification side: the verified configuration is the
+default build, where the `BORROW_LT_*` macros expand to nothing — WP
+proves the exact shipped ABI bodies, and the lifetime-debug
+instrumentation above remains runtime-only per this section. As
+anticipated, the substrate's behavioral contracts did not change: the
+contract table in §3 is the spec; the verification entries added
+formal evidence that the implementation meets it. borrow.h's MC/DC
+record landed alongside as MCDC-008 (its `borrowed_bytes_eq` one-NULL
+guard proved dead under `cbytes_invariant` via a named in-body
+assertion).
 
 **Current evidence stream.** While the WP work walks up to the
 substrate headers, the substrate is validated at runtime via
@@ -429,16 +438,19 @@ sits alongside formal proof for the non-macro headers once they land.
   and the inheriting `_slice` / `_as_bytes` accessors.
 - **`test/semantics/borrow_test.c`** — substrate evidence stream.
 - **`docs/verification.md`** — canonical home for `VERIFY-NNN` entries.
-  Substrate header entries land here as the non-macro substrate
-  surface gets WP-annotated; OWN-001 will cross-reference those by ID
-  when they exist.
+  The non-macro substrate entries have landed: VERIFY-009 (arena.h),
+  VERIFY-010 (pool.h), VERIFY-011 (region.h, incl.
+  `lifetime_assert_valid`), and VERIFY-016 (borrow.h's non-macro
+  surface, verified under `CANON_LIFETIME` off — see §7).
 - **`docs/deviations.md`** — canonical home for documented unproved
-  goals with their manual proof arguments. Substrate residuals (if
-  any) will land here once the non-macro substrate headers are
-  WP-annotated.
-- **`docs/traceability.md`** — MC/DC coverage record. Substrate
-  headers join the per-header coverage table as they get instrumented
-  and annotated.
+  goals with their manual proof arguments. Substrate residuals live
+  under the same IDs; borrow.h's are VERIFY-016 (2 memcmp-danglingness
+  goals + 17 inherited) and MCDC-008 (the `borrowed_bytes_eq` one-NULL
+  guard, proved dead via the named `dead_by_invariant` assertion).
+- **`docs/traceability.md`** — MC/DC coverage record. borrow.h sits at
+  its documented 38/40 = 95.0% ceiling (MCDC-008); the three
+  `_get(NULL)` defensive outcomes are closed by
+  `CANON_NO_REQUIRE`-gated tests in `borrow_test.c`.
 - **CHANGELOG**, v1.3.0 — `{TODO: CHANGELOG v1.3.0 anchor}`.
 - **OWN-002** — Arena/Pool restamp migration. Shipped at CI #944
   (commits 2a7c0ba / a7c0413 / 83fa70b). Closes the two-reset cycle
