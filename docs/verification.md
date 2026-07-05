@@ -10,11 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 12 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result) |
-| **Functions**        | 236 annotated and verified (203 in-place + 33 generated via the option and result drivers) |
-| **Total obligations**| 19235 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 18772 (97.59%)                                                                 |
-| **Unproved**         | 463 (all documented; see per-header sections)                                  |
+| **Headers verified** | 13 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h) |
+| **Functions**        | 260 annotated and verified (227 in-place + 33 generated via the option and result drivers) |
+| **Total obligations**| 21687 (per-header own goals; CI WP runs include substrate)                     |
+| **Proved automatic** | 21205 (97.78%)                                                                 |
+| **Unproved**         | 482 (all documented; see per-header sections)                                  |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
@@ -2482,6 +2482,175 @@ hypothesis — not failures).
 
 ---
 
+## semantics/borrow.h
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals) — in place |
+| **Baseline commit**    | 262a503 (Canon-C CI #1110); report-only first at 383bf9f (CI #1109); enforced as of #1111 |
+| **Functions**          | 24 of 24 non-macro functions annotated and proved |
+| **Proof obligations**  | 2433 / 2452 discharged automatically (99.23%)   |
+| **Unproved**           | 19 (17 inherited + 2 own; all documented under VERIFY-016) |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast` |
+| **CI enforcement**     | Yes — 2433/2452 with 19 named goals expected    |
+| **MC/DC coverage**     | 95.0% (38/40 condition outcomes — see MCDC-008) |
+| **CI artifact**        | `wp-proof-borrow` (full per-goal breakdown)     |
+
+borrow.h is the fourth semantics/ module verified and the second
+semantics/ header verified **in place** (after error.h): its 24
+non-macro functions are annotated in place, slice.h-style, while
+`DEFINE_BORROWED_SLICE` remains outside the verified surface — parked
+on the single-file macro-family list in `docs/vmacros.md`, per the
+DEFINE_SLICE disposition. That pairing (in-place-verified non-macro
+surface + parked macro family) is slice.h's structure (VERIFY-007);
+borrow.h is the first semantics/ header to carry it. The single-file
+families are a distinct category from the multi-file Shape-B driver
+modules per `docs/vmacros.md` — the split here is in-place-verified
+vs. parked, not Shape A vs. Shape B. It uses `Typed+Cast` — forced
+transitively by slice.h's casts plus borrow.h's own `(const u8 *)`
+cast in `borrowed_bytes_slice` — so, unlike error.h/option/result,
+its CI wrapper retains the CVC5-presence check the `Typed+Cast`
+headers carry.
+
+The verified configuration is the **default build** (`CANON_LIFETIME`
+off, `-DCANON_NO_REQUIRE -DNDEBUG`): the `BORROW_LT_*` macros expand
+to nothing, so WP sees the exact shipped bodies of the v1.2.x ABI
+guarantee. The lifetime-debug path is runtime-only by construction
+(OWN-001 §7), validated by `test/semantics/borrow_test.c` across all
+16 CI configs.
+
+### Function inventory
+
+All 24 non-macro functions annotated and proved (residuals are
+call-site/feature-gap goals, not function failures):
+
+- **borrowed_ptr (6)**: `from`, `from_lifetime`, `null`, `get`,
+  `is_valid`, `eq`
+- **borrowed_str (9)**: `from`, `from_lifetime`, `from_cstr`, `empty`,
+  `get`, `is_valid`, `len`, `eq`, `slice`
+- **borrowed_bytes (9)**: `from`, `from_lifetime`, `from_cbytes`,
+  `empty`, `get`, `len`, `is_valid`, `eq`, `slice`
+
+The two `_from_lifetime` variants are contract-identical to their
+`_from` counterparts in the verified configuration (the lifetime
+parameters are consumed by no-op macros).
+
+### What is proved
+
+- **No specification vocabulary of its own**: every contract uses
+  slice.h's exported predicates (`cbytes_invariant`, `str_invariant`,
+  `str_valid`) directly — borrow.h defines zero ACSL predicates.
+- **Defensive NULL semantics as behaviors**: the three `_get`
+  functions (and `is_valid`/`len`) carry complete + disjoint
+  `null_b`/`non_null` behavior splits matching the shipped
+  release-mode contract ("NULL → safe empty") — the same branches the
+  CANON_NO_REQUIRE-gated tests cover in the measurement stream.
+- **Full functional spec where the body is self-contained**:
+  `borrowed_bytes_slice` proves a complete two-behavior clamping spec
+  (`returns_empty`/`returns_sub`, complete + disjoint), and
+  `borrowed_bytes_eq` proves the **full content-equality
+  postcondition** through memcmp's libc contract.
+- **Partial spec by delegation where the callee's is partial**:
+  `borrowed_str_eq` carries `str_equal`'s partial ensures trio
+  (boolean result, length-mismatch ⇒ false, same-view ⇒ true) with an
+  in-source comment recording why full content equality cannot be
+  stated (str_equal's spec is deliberately partial — VERIFY-007).
+- **Day-one initialization/validity clauses**: guarded `\valid_read`
+  and `\initialized` preconditions in implication form (the
+  VERIFY-012 lesson applied at authoring time) closed the memcmp
+  `valid_s1/s2` and all initialization goals at
+  `borrowed_bytes_eq`'s call site — only the two danglingness goals
+  remain (the `\dangling` feature gap).
+- **Dead-guard discharge as a named goal**: the assertion
+  `dead_by_invariant: \false` inside `borrowed_bytes_eq`'s one-NULL
+  guard **proved**, formally establishing the guard unreachable under
+  `cbytes_invariant` — the cross-stream half of MCDC-008.
+- **Source-tag inertness**: the `source` debug field appears in no
+  validity clause; the header never dereferences it.
+
+### Contract-alignment note (round 2)
+
+The first landing (CI #1109) mirrored slice.h's callee contracts by
+shape and carried 27 unproved — the final 19 plus 8 call-site
+chaining goals (`cbytes_from`'s two requires clauses at both `_from`
+constructors, `str_valid` requires at `str_slice`/`str_equal` call
+sites, and an unprovable full-equality ensures on `borrowed_str_eq`).
+Aligning the four affected contracts to slice.h's real clauses
+(262a503, CI #1110) closed all 8 with zero executable change and
+removed two duplicate borrow-local predicates. The 19-goal residual
+set is the identical named subset of #1109's 27 — name-stable across
+both runs by construction.
+
+### Residual goals (19)
+
+All 19 are documented under VERIFY-016. All are Timeouts (0 Unknown,
+0 Failed). They split into 17 inherited and 2 own.
+
+**Inherited (17)**: slice.h's full 15-goal surface (VERIFY-007/-012 —
+12 memcmp valid/danglingness + 1 strlen valid_string + the 2
+contract.h handler goals), re-emitted byte-identically, plus
+checked.h's 2 (VERIFY-002), prefix-flipped `typed_` → `typed_cast_`
+under this TU's model. The sixth composability confirmation, and the
+smallest inherited surface since memory.h — borrow.h's TU pulls in
+checked.h + slice.h only (no ptr.h, no memory.h).
+
+**borrow-own (2)**:
+`typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1/s2`
+— the known memcmp `\dangling` feature-gap class (VERIFY-007/-008)
+at the header's only direct libc call. **No new residual class**: the
+first downstream header since error.h to add none (no combinators, no
+hooks, no function-pointer dispatch).
+
+### MCDC-008 cross-reference
+
+borrow.h's gcov-measured MC/DC is 38/40 = 95.0%, its documented
+ceiling. The three `_get(NULL)` defensive outcomes were closed at
+CI #1106 by `CANON_NO_REQUIRE`-gated tests (reachable by design in
+the coverage build); the two remaining outcomes are the one-NULL
+guard this section's `dead_by_invariant` goal proves dead — the
+seventh cross-stream closure and the first carried by a named
+in-body assertion, giving the closure a regression detector in
+**both** evidence streams (the coverage job's per-line debug step and
+the WP wrapper's proved-set check). See MCDC-008.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: compiles `require_msg` runtime checks
+  away; ACSL `requires` clauses provide the static guarantees. Unlike
+  memory.h's panic surface, borrow.h's `_get` functions pair the
+  assertion with a defensive branch that survives the flag — specced
+  as the `null_b` behaviors, covered by the gated tests.
+- **`-DNDEBUG`**: standard release-mode flag.
+- **`CANON_LIFETIME` off (default)**: the verified configuration; see
+  the summary note and OWN-001 §7.
+
+### Reproduction
+
+```bash
+frama-c -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  semantics/borrow.h
+```
+
+Expected output: `Proved goals: 2433 / 2452` with the 19 documented
+unproved goals (VERIFY-016).
+
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -2566,8 +2735,19 @@ the complete installation and registration procedure.
 | error.h          | ✅ Verified  | 65/65   | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
 | option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
 | result (driver)  | ✅ Verified  | 185/215 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 2 inherited + 28 own function-pointer-dispatch residuals; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
+| borrow.h         | ✅ Verified  | 2433/2452 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 17 inherited + 2 own memcmp-danglingness residuals — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (38/40 ceiling, first named-assert closure) |
 
-Borrow, diag — planned next. Option and result have shipped as the
+diag — planned next. borrow.h has shipped as the fourth semantics/
+module and the second verified in place (see its section above,
+VERIFY-016): its 24 non-macro functions verified in place with
+`DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` — the
+slice.h/DEFINE_SLICE structure, first in semantics/ — under the default configuration
+(`CANON_LIFETIME` off — the runtime lifetime substrate's verification
+posture is per OWN-001 §7), inheriting checked.h + slice.h's 17-goal
+residual surface byte-identically (composability confirmation #6) and
+adding only the known memcmp-danglingness class at one call site — the
+first downstream header since error.h with no new residual class.
+Option and result shipped before it as the
 first two driver-verified modules (see their sections above, VERIFY-014
 and VERIFY-015): the verification-driver approach the slice.h section
 anticipated — a header instantiating a concrete type outside macro
