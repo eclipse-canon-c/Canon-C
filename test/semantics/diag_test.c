@@ -32,7 +32,13 @@
  *   - diag_root: first frame, empty chain, NULL diag
  *   - diag_latest: last frame, single frame, empty chain, NULL diag
  *   - diag_root_code / diag_latest_code: correct codes, empty/NULL chains
- *   - diag_print: NULL-safe (diag NULL, stream NULL, empty chain)
+ *   - diag_print: NULL-safe (diag NULL, stream NULL, empty chain),
+ *                 non-empty chain output, "?" / "(no message)" placeholders
+ *   - diag_render_frame: content and format, snprintf return semantics,
+ *                        truncation, placeholders, NULL/0-size guards
+ *   - diag_render: full-chain content and ordering, would-be total under
+ *                  truncation, placeholders, NULL/0 guards, empty chain,
+ *                  cross-check against per-frame renders
  *   - DIAG_RETURN_IF: pushes and returns on true condition, skips on false
  *   - DIAG_PROPAGATE: pushes and returns when call returns false, skips on true
  *   - Reuse after diag_clear: new pushes land at index 0
@@ -661,7 +667,7 @@ static void test_latest_code_null_returns_err_ok(void)
 }
 
 /* ============================================================================
-   diag_print — NULL-safety (output correctness verified visually / valgrind)
+   diag_print — NULL-safety and rendered-output correctness
    ============================================================================ */
 
 static void test_print_null_diag_no_crash(void)
@@ -683,6 +689,271 @@ static void test_print_empty_chain_no_crash(void)
     Diag d = diag_init();
     diag_print(&d, stderr);
     EXPECT(1);
+}
+
+static void test_print_nonempty_chain_writes_output(void)
+{
+    Diag  d = diag_init();
+    FILE *f = tmpfile();
+    long  pos;
+
+    if (f == NULL) {
+        /* Restricted environment (e.g. a Windows runner denying temp-file
+         * creation) — skip. The coverage job runs on Linux, where tmpfile()
+         * succeeds, so the MC/DC outcomes are still measured. */
+        EXPECT(1);
+        return;
+    }
+
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_PARSE_FAILED, "root");
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_IO_FAILED,    "surface");
+
+    diag_print(&d, f);
+
+    pos = ftell(f);
+    EXPECT(pos > 0);
+    fclose(f);
+}
+
+static void test_print_placeholders_for_null_fields(void)
+{
+    /* Frames with NULL file/func/msg must print "?" / "(no message)" —
+     * exercises the false side of all three ternaries in diag_print. */
+    Diag  d = diag_init();
+    FILE *f = tmpfile();
+    char  buf[512];
+    usize nread;
+
+    if (f == NULL) { EXPECT(1); return; }
+
+    diag_push(&d, NULL, 0u, NULL, ERR_UNKNOWN, NULL);
+    diag_print(&d, f);
+
+    rewind(f);
+    nread = fread(buf, 1u, sizeof(buf) - 1u, f);
+    buf[nread] = '\0';
+    fclose(f);
+
+    EXPECT(nread > 0u);
+    EXPECT(strstr(buf, "?")            != NULL);
+    EXPECT(strstr(buf, "(no message)") != NULL);
+}
+
+/* ============================================================================
+   diag_render_frame — content, snprintf semantics, truncation, guards
+   ============================================================================ */
+
+static void test_render_frame_basic_content_and_length(void)
+{
+    Diag             d = diag_init();
+    char             buf[256];
+    usize            n;
+    const DiagFrame *f;
+
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__,
+              ERR_OUT_OF_RANGE, "hello render");
+    f = diag_root(&d);
+    EXPECT_NOT_NULL(f);
+
+    n = diag_render_frame(f, 0u, buf, sizeof(buf));
+
+    EXPECT(n > 0u);
+    EXPECT(n == strlen(buf));                  /* untruncated: n == strlen */
+    EXPECT(strstr(buf, "hello render") != NULL);
+    EXPECT(strstr(buf, "[0]") == buf);         /* index prefix leads */
+    EXPECT(strchr(buf, '\n') == NULL);         /* no trailing newline */
+}
+
+static void test_render_frame_truncation_semantics(void)
+{
+    /* snprintf semantics: returns the would-be length regardless of
+     * buf_size; truncated output is null-terminated at buf_size - 1. */
+    Diag             d = diag_init();
+    char             big[256];
+    char             small[16];
+    usize            n_big;
+    usize            n_small;
+    const DiagFrame *f;
+
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__,
+              ERR_UNKNOWN, "a message long enough to truncate");
+    f = diag_root(&d);
+    EXPECT_NOT_NULL(f);
+
+    n_big   = diag_render_frame(f, 0u, big,   sizeof(big));
+    n_small = diag_render_frame(f, 0u, small, sizeof(small));
+
+    EXPECT(n_small == n_big);                  /* would-be count, not written */
+    EXPECT(n_small >= sizeof(small));          /* truncation detectable */
+    EXPECT(strlen(small) == sizeof(small) - 1u);
+}
+
+static void test_render_frame_placeholders_for_null_fields(void)
+{
+    Diag             d = diag_init();
+    char             buf[256];
+    usize            n;
+    const DiagFrame *f;
+
+    diag_push(&d, NULL, 0u, NULL, ERR_UNKNOWN, NULL);
+    f = diag_root(&d);
+    EXPECT_NOT_NULL(f);
+
+    n = diag_render_frame(f, 3u, buf, sizeof(buf));
+
+    EXPECT(n > 0u);
+    EXPECT(strstr(buf, "?")            != NULL);
+    EXPECT(strstr(buf, "(no message)") != NULL);
+    EXPECT(strstr(buf, "[3]") == buf);         /* caller-supplied index used */
+}
+
+static void test_render_frame_null_frame_returns_zero(void)
+{
+    char buf[64];
+    buf[0] = 'X';
+    EXPECT(diag_render_frame(NULL, 0u, buf, sizeof(buf)) == 0u);
+    EXPECT(buf[0] == '\0');                    /* cleared by initial guard */
+}
+
+static void test_render_frame_null_buf_returns_zero(void)
+{
+    Diag d = diag_init();
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "x");
+    EXPECT(diag_render_frame(diag_root(&d), 0u, NULL, 64u) == 0u);
+}
+
+static void test_render_frame_zero_size_returns_zero_buf_untouched(void)
+{
+    Diag d = diag_init();
+    char buf[8];
+    buf[0] = 'X';
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "x");
+    EXPECT(diag_render_frame(diag_root(&d), 0u, buf, 0u) == 0u);
+    EXPECT(buf[0] == 'X');                     /* size 0: nothing written */
+}
+
+/* ============================================================================
+   diag_render — full chain, total accounting, truncation, guards
+   ============================================================================ */
+
+static void test_render_full_chain_content_and_total(void)
+{
+    Diag        d = diag_init();
+    char        buf[1024];
+    char        line[256];
+    usize       total;
+    usize       sum      = 0u;
+    usize       newlines = 0u;
+    usize       i;
+    const char *pa;
+    const char *pb;
+    const char *pc;
+
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_PARSE_FAILED,   "aaa");
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_INVALID_FORMAT, "bbb");
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_INVALID_STATE,  "ccc");
+
+    total = diag_render(&d, buf, sizeof(buf));
+
+    EXPECT(total > 0u);
+    EXPECT(total == strlen(buf));              /* untruncated: total == strlen */
+
+    for (i = 0u; buf[i] != '\0'; i++) {
+        if (buf[i] == '\n') { newlines++; }
+    }
+    EXPECT(newlines == 3u);                    /* one newline per frame */
+
+    pa = strstr(buf, "\"aaa\"");
+    pb = strstr(buf, "\"bbb\"");
+    pc = strstr(buf, "\"ccc\"");
+    EXPECT(pa != NULL);
+    EXPECT(pb != NULL);
+    EXPECT(pc != NULL);
+    EXPECT(pa != NULL && pb != NULL && pa < pb);   /* root-to-surface order */
+    EXPECT(pb != NULL && pc != NULL && pb < pc);
+
+    /* Cross-check against diag_render_frame: the chain total must equal
+     * the sum of per-frame renders plus one newline per frame. */
+    for (i = 0u; i < diag_depth(&d); i++) {
+        sum += diag_render_frame(diag_frame_at(&d, i), i, line, sizeof(line));
+        sum += 1u; /* '\n' appended per frame by diag_render */
+    }
+    EXPECT(sum == total);
+}
+
+static void test_render_truncated_returns_full_total(void)
+{
+    /* Exercises the buffer-full measuring path: once total >= buf_size,
+     * remaining frames go through the (dst = buf, rem = 0) branch. The
+     * return value must equal the untruncated would-be total. */
+    Diag  d = diag_init();
+    char  big[1024];
+    char  tiny[8];
+    usize total_big;
+    usize total_tiny;
+
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "frame one");
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "frame two");
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "frame three");
+
+    total_big  = diag_render(&d, big,  sizeof(big));
+    total_tiny = diag_render(&d, tiny, sizeof(tiny));
+
+    EXPECT(total_tiny == total_big);           /* total independent of buf_size */
+    EXPECT(total_tiny >= sizeof(tiny));        /* truncation detectable */
+    EXPECT(strlen(tiny) == sizeof(tiny) - 1u); /* null-terminated at limit */
+}
+
+static void test_render_placeholders_for_null_fields(void)
+{
+    Diag  d = diag_init();
+    char  buf[512];
+    usize total;
+
+    diag_push(&d, NULL, 0u, NULL, ERR_UNKNOWN, NULL);
+    total = diag_render(&d, buf, sizeof(buf));
+
+    EXPECT(total > 0u);
+    EXPECT(strstr(buf, "?")            != NULL);
+    EXPECT(strstr(buf, "(no message)") != NULL);
+}
+
+static void test_render_null_diag_returns_zero(void)
+{
+    char buf[64];
+    buf[0] = 'X';
+    EXPECT(diag_render(NULL, buf, sizeof(buf)) == 0u);
+    EXPECT(buf[0] == '\0');                    /* cleared by initial guard */
+}
+
+static void test_render_empty_chain_returns_zero_empty_buf(void)
+{
+    Diag d = diag_init();
+    char buf[64];
+    buf[0] = 'X';
+    EXPECT(diag_render(&d, buf, sizeof(buf)) == 0u);
+    EXPECT(buf[0] == '\0');
+}
+
+static void test_render_null_buf_returns_zero(void)
+{
+    /* Documents the "buf NULL-safe: returns 0" contract. Requires the
+     * diag_render guard that rejects buf == NULL — against the pre-fix
+     * header this call would reach snprintf(NULL, n > 0), the UB that
+     * guard exists to prevent. */
+    Diag d = diag_init();
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "x");
+    EXPECT(diag_render(&d, NULL, 64u) == 0u);
+}
+
+static void test_render_zero_size_returns_zero_buf_untouched(void)
+{
+    Diag d = diag_init();
+    char buf[8];
+    buf[0] = 'X';
+    diag_push(&d, __FILE__, (usize)__LINE__, __func__, ERR_UNKNOWN, "x");
+    EXPECT(diag_render(&d, buf, 0u) == 0u);
+    EXPECT(buf[0] == 'X');                     /* size 0: nothing written */
 }
 
 /* ============================================================================
@@ -906,6 +1177,25 @@ int main(void)
     test_print_null_diag_no_crash();
     test_print_null_stream_no_crash();
     test_print_empty_chain_no_crash();
+    test_print_nonempty_chain_writes_output();
+    test_print_placeholders_for_null_fields();
+
+    /* diag_render_frame */
+    test_render_frame_basic_content_and_length();
+    test_render_frame_truncation_semantics();
+    test_render_frame_placeholders_for_null_fields();
+    test_render_frame_null_frame_returns_zero();
+    test_render_frame_null_buf_returns_zero();
+    test_render_frame_zero_size_returns_zero_buf_untouched();
+
+    /* diag_render */
+    test_render_full_chain_content_and_total();
+    test_render_truncated_returns_full_total();
+    test_render_placeholders_for_null_fields();
+    test_render_null_diag_returns_zero();
+    test_render_empty_chain_returns_zero_empty_buf();
+    test_render_null_buf_returns_zero();
+    test_render_zero_size_returns_zero_buf_untouched();
 
     /* Frame ordering */
     test_frame_ordering_three_pushes();
