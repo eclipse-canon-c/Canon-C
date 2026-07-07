@@ -568,6 +568,20 @@ static inline usize diag_render_frame(const DiagFrame *f,
         return 0u;
     }
 
+    /* GCC's -Wformat-truncation (a middle-end warning, active under
+     * optimization) statically proves truncation whenever a caller passes
+     * a fixed-size buffer smaller than the worst-case rendering — but
+     * truncation is this API's documented, intended behaviour: snprintf
+     * return semantics exist precisely so the caller can detect it.
+     * Without suppression, correct user code fails under -Wall -Werror
+     * at -O2+ (first observed on MinGW-UCRT GCC 14, reproducible on
+     * Linux GCC 14 when inlining propagates the buffer size). The
+     * diagnostic is attributed to this line, so the suppression must
+     * live here, not at call sites. Scope: exactly this snprintf. */
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
     n = snprintf(buf, buf_size,
                  "[%zu] %s:%zu in %s() -- error %d: \"%s\"",
                  index,
@@ -576,6 +590,9 @@ static inline usize diag_render_frame(const DiagFrame *f,
                  (f->func != NULL) ? f->func : "?",
                  (int)f->code,
                  (f->message[0] != '\0') ? f->message : "(no message)");
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
 
     return (n < 0) ? 0u : (usize)n;
 }
@@ -656,6 +673,14 @@ static inline usize diag_render(const Diag *d,
             rem = 0u;
         }
 
+        /* Same -Wformat-truncation suppression as diag_render_frame:
+         * truncation into a small caller buffer is documented behaviour
+         * (the would-be total is returned for detection). See the comment
+         * on the snprintf in diag_render_frame above. */
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
         n = snprintf(dst, rem,
                      "[%zu] %s:%zu in %s() -- error %d: \"%s\"\n",
                      i,
@@ -664,6 +689,9 @@ static inline usize diag_render(const Diag *d,
                      (f->func != NULL) ? f->func : "?",
                      (int)f->code,
                      (f->message[0] != '\0') ? f->message : "(no message)");
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic pop
+#endif
 
         if (n < 0) { continue; } /* encoding error — skip frame */
         total += (usize)n;
