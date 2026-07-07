@@ -182,6 +182,35 @@ typedef struct {
 } Diag;
 
 /* ════════════════════════════════════════════════════════════════════════════
+   ACSL predicates — shared verification vocabulary (Frama-C/WP)
+   ════════════════════════════════════════════════════════════════════════════
+
+   Verification round-1 notes (VERIFY-017 candidate):
+   - Predicted own-residual classes: (a) memmove/memcpy call-site goals in
+     diag_push — the byte-level libc specs vs. Typed field reasoning class
+     known from prior headers, at new sites; (b) snprintf/fprintf goals in
+     the rendering functions — variadic translation plus deliberately weak
+     stdio specs, a class new to the project and intrinsic to stdio-facing
+     code.
+   - The overflow clamp in diag_push carries a named dead-code assert
+     (dead_by_invariant_clamp), closing the MC/DC line-293 partial
+     cross-stream once discharged.
+   - Libc-facing clauses are drafted against Frama-C's stock libc specs and
+     must be aligned to the actual specs from the first WP output, not
+     defended against it. */
+
+/*@
+  predicate diag_invariant(Diag d) =
+    d.depth <= DIAG_MAX_FRAMES;
+
+  predicate frame_strings_ok(DiagFrame f) =
+    (f.file == \null || valid_read_string(f.file)) &&
+    (f.func == \null || valid_read_string(f.func)) &&
+    (\exists integer k;
+       0 <= k < DIAG_MAX_MSG_LEN && f.message[k] == '\0');
+*/
+
+/* ════════════════════════════════════════════════════════════════════════════
    Construction & reset
    ════════════════════════════════════════════════════════════════════════════ */
 
@@ -196,10 +225,20 @@ typedef struct {
  * Time:  O(N × M) — memset over sizeof(Diag).
  * Space: O(1) — returned by value, no heap.
  */
+/*@
+  assigns \nothing;
+  ensures init_empty: \result.depth == 0;
+*/
 static inline Diag diag_init(void)
 {
     Diag d;
     memset(&d, 0, sizeof(d));
+    /* Redundant with the memset, but restates depth == 0 as a typed
+     * store: WP derives the postcondition directly instead of through
+     * byte-level reinterpretation of the memset, which the Typed memory
+     * model cannot do. Same authoring-time pattern as the overflow clamp
+     * in diag_push. The optimizer folds the dead store. */
+    d.depth = 0;
     return d;
 }
 
@@ -215,6 +254,18 @@ static inline Diag diag_init(void)
  *
  * @param d  Diag pointer. NULL-safe: no-op when NULL.
  */
+/*@
+  behavior null_diag:
+    assumes d == \null;
+    assigns \nothing;
+  behavior valid_diag:
+    assumes d != \null;
+    requires clear_valid: \valid(d);
+    assigns d->depth;
+    ensures clear_empty: d->depth == 0;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void diag_clear(Diag *d)
 {
     if (d != NULL) {
@@ -253,6 +304,48 @@ static inline void diag_clear(Diag *d)
  * @return      true if the oldest frame was dropped due to overflow,
  *              false otherwise (including when d is NULL).
  */
+/*@
+  behavior null_diag:
+    assumes d == \null;
+    assigns \nothing;
+    ensures push_null_noop: \result == \false;
+
+  behavior valid_diag:
+    assumes d != \null;
+    requires push_valid:     \valid(d);
+    requires push_invariant: diag_invariant(*d);
+    requires push_msg_read:  msg == \null || valid_read_string(msg);
+    requires push_no_alias:  msg == \null ||
+             \separated(msg + (0 .. strlen(msg)),
+                        (char *)d + (0 .. sizeof(Diag) - 1));
+    assigns d->depth, d->frames[0 .. DIAG_MAX_FRAMES - 1];
+    ensures push_depth_bounds: 1 <= d->depth <= DIAG_MAX_FRAMES;
+    ensures push_depth_step:
+      d->depth == (\old(d->depth) == DIAG_MAX_FRAMES
+                   ? DIAG_MAX_FRAMES
+                   : \old(d->depth) + 1);
+    ensures push_overflow_flag:
+      \result <==> (\old(d->depth) == DIAG_MAX_FRAMES);
+    ensures push_frame_file: d->frames[d->depth - 1].file == file;
+    ensures push_frame_func: d->frames[d->depth - 1].func == func;
+    ensures push_frame_line: d->frames[d->depth - 1].line == line;
+    ensures push_frame_code: d->frames[d->depth - 1].code == code;
+    ensures push_msg_terminated:
+      \exists integer k;
+        0 <= k < DIAG_MAX_MSG_LEN
+        && d->frames[d->depth - 1].message[k] == '\0';
+    ensures push_shift_semantics:
+      \old(d->depth) == DIAG_MAX_FRAMES ==>
+        (\forall integer j; 0 <= j < DIAG_MAX_FRAMES - 1 ==>
+           d->frames[j].code == \old(d->frames[j + 1].code));
+    ensures push_frames_preserved:
+      \old(d->depth) < DIAG_MAX_FRAMES ==>
+        (\forall integer j; 0 <= j < \old(d->depth) ==>
+           d->frames[j].code == \old(d->frames[j].code));
+
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool diag_push(Diag       *d,
                               const char *file,
                               usize       line,
@@ -291,6 +384,7 @@ static inline bool diag_push(Diag       *d,
      * -Wstringop-overflow on the f->message write below. No-op on every
      * correct execution. */
     if (d->depth >= DIAG_MAX_FRAMES) {
+        /*@ assert dead_by_invariant_clamp: \false; */
         d->depth = DIAG_MAX_FRAMES - 1u;
     }
 
@@ -309,6 +403,13 @@ static inline bool diag_push(Diag       *d,
          * We manually find the length, clamp it, copy, and null-terminate.
          */
         len = 0u;
+        /*@
+          loop invariant copy_len_bounds: 0 <= len <= DIAG_MAX_MSG_LEN - 1;
+          loop invariant copy_scanned:
+            \forall integer k; 0 <= k < len ==> msg[k] != '\0';
+          loop assigns len;
+          loop variant DIAG_MAX_MSG_LEN - 1 - len;
+        */
         while (len < (DIAG_MAX_MSG_LEN - 1u) && msg[len] != '\0') {
             len++;
         }
@@ -385,6 +486,12 @@ static inline bool diag_push(Diag       *d,
  *
  * @param d  Diag pointer. NULL-safe: returns 0.
  */
+/*@
+  requires depth_read: d == \null || \valid_read(d);
+  assigns \nothing;
+  ensures depth_null: d == \null ==> \result == 0;
+  ensures depth_value: d != \null ==> \result == d->depth;
+*/
 static inline usize diag_depth(const Diag *d)
 {
     return (d != NULL) ? d->depth : (usize)0;
@@ -398,6 +505,11 @@ static inline usize diag_depth(const Diag *d)
  *
  * @param d  Diag pointer. NULL-safe: returns false.
  */
+/*@
+  requires he_read: d == \null || \valid_read(d);
+  assigns \nothing;
+  ensures he_iff: \result <==> (d != \null && d->depth > 0);
+*/
 static inline bool diag_has_error(const Diag *d)
 {
     return (d != NULL) && (d->depth > 0u);
@@ -413,6 +525,13 @@ static inline bool diag_has_error(const Diag *d)
  * @param i  Frame index. Returns NULL if i >= depth.
  * @return   Pointer to DiagFrame, or NULL if out of range.
  */
+/*@
+  requires fa_read: d == \null || \valid_read(d);
+  requires fa_inv:  d == \null || diag_invariant(*d);
+  assigns \nothing;
+  ensures fa_miss: (d == \null || i >= d->depth) ==> \result == \null;
+  ensures fa_hit:  (d != \null && i <  d->depth) ==> \result == &d->frames[i];
+*/
 static inline const DiagFrame *diag_frame_at(const Diag *d, usize i)
 {
     if (d == NULL || i >= d->depth) {
@@ -430,6 +549,13 @@ static inline const DiagFrame *diag_frame_at(const Diag *d, usize i)
  * @param d  Diag pointer. NULL-safe: returns NULL.
  * @return   Pointer to DiagFrame, or NULL if chain is empty.
  */
+/*@
+  requires root_read: d == \null || \valid_read(d);
+  requires root_inv:  d == \null || diag_invariant(*d);
+  assigns \nothing;
+  ensures root_miss: (d == \null || d->depth == 0) ==> \result == \null;
+  ensures root_hit:  (d != \null && d->depth > 0)  ==> \result == &d->frames[0];
+*/
 static inline const DiagFrame *diag_root(const Diag *d)
 {
     return diag_frame_at(d, 0u);
@@ -444,6 +570,14 @@ static inline const DiagFrame *diag_root(const Diag *d)
  * @param d  Diag pointer. NULL-safe: returns NULL.
  * @return   Pointer to DiagFrame, or NULL if chain is empty.
  */
+/*@
+  requires lat_read: d == \null || \valid_read(d);
+  requires lat_inv:  d == \null || diag_invariant(*d);
+  assigns \nothing;
+  ensures lat_miss: (d == \null || d->depth == 0) ==> \result == \null;
+  ensures lat_hit:
+    (d != \null && d->depth > 0) ==> \result == &d->frames[d->depth - 1];
+*/
 static inline const DiagFrame *diag_latest(const Diag *d)
 {
     if (d == NULL || d->depth == 0u) {
@@ -461,6 +595,14 @@ static inline const DiagFrame *diag_latest(const Diag *d)
  * @param d  Diag pointer. NULL-safe: returns ERR_OK.
  * @return   Error code, or ERR_OK if the chain is empty.
  */
+/*@
+  requires rc_read: d == \null || \valid_read(d);
+  requires rc_inv:  d == \null || diag_invariant(*d);
+  assigns \nothing;
+  ensures rc_empty: (d == \null || d->depth == 0) ==> \result == ERR_OK;
+  ensures rc_value:
+    (d != \null && d->depth > 0) ==> \result == d->frames[0].code;
+*/
 static inline Error diag_root_code(const Diag *d)
 {
     const DiagFrame *f = diag_root(d);
@@ -476,6 +618,15 @@ static inline Error diag_root_code(const Diag *d)
  * @param d  Diag pointer. NULL-safe: returns ERR_OK.
  * @return   Error code, or ERR_OK if the chain is empty.
  */
+/*@
+  requires lc_read: d == \null || \valid_read(d);
+  requires lc_inv:  d == \null || diag_invariant(*d);
+  assigns \nothing;
+  ensures lc_empty: (d == \null || d->depth == 0) ==> \result == ERR_OK;
+  ensures lc_value:
+    (d != \null && d->depth > 0) ==>
+      \result == d->frames[d->depth - 1].code;
+*/
 static inline Error diag_latest_code(const Diag *d)
 {
     const DiagFrame *f = diag_latest(d);
@@ -507,6 +658,24 @@ static inline Error diag_latest_code(const Diag *d)
  * @param d       Diag pointer. NULL-safe: no-op.
  * @param stream  Output FILE*. NULL-safe: no-op.
  */
+/*@
+  requires pr_read: d == \null || \valid_read(d);
+  requires pr_inv:  d == \null || diag_invariant(*d);
+  requires pr_strings: d == \null ||
+    (\forall integer j;
+       0 <= j < d->depth ==> frame_strings_ok(d->frames[j]));
+  requires pr_stream: stream == \null || \valid(stream);
+
+  behavior noop:
+    assumes d == \null || stream == \null
+            || (d != \null && d->depth == 0);
+    assigns \nothing;
+  behavior prints:
+    assumes d != \null && stream != \null && d->depth > 0;
+    assigns *stream;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void diag_print(const Diag *d, FILE *stream)
 {
     usize i;
@@ -515,6 +684,11 @@ static inline void diag_print(const Diag *d, FILE *stream)
         return;
     }
 
+    /*@
+      loop invariant print_i_bounds: 0 <= i <= d->depth;
+      loop assigns i, *stream;
+      loop variant d->depth - i;
+    */
     for (i = 0u; i < d->depth; i++) {
         const DiagFrame *f = &d->frames[i];
         fprintf(stream,
@@ -553,6 +727,29 @@ static inline void diag_print(const Diag *d, FILE *stream)
  * @param buf_size  Size of buf in bytes. 0-safe: returns 0.
  * @return          Bytes that would be written (excluding null terminator).
  */
+/*@
+  requires rf_frame:   f == \null || \valid_read(f);
+  requires rf_strings: f == \null || frame_strings_ok(*f);
+  requires rf_buf:
+    buf == \null || buf_size == 0 || \valid(buf + (0 .. buf_size - 1));
+
+  behavior no_buffer:
+    assumes buf == \null || buf_size == 0;
+    assigns \nothing;
+    ensures rf_nb_zero: \result == 0;
+  behavior null_frame:
+    assumes buf != \null && buf_size > 0 && f == \null;
+    assigns buf[0];
+    ensures rf_nf_zero: \result == 0;
+    ensures rf_nf_cleared: buf[0] == '\0';
+  behavior rendered:
+    assumes buf != \null && buf_size > 0 && f != \null;
+    assigns buf[0 .. buf_size - 1];
+    ensures rf_terminated:
+      \exists integer k; 0 <= k < buf_size && buf[k] == '\0';
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize diag_render_frame(const DiagFrame *f,
                                        usize            index,
                                        char            *buf,
@@ -631,6 +828,33 @@ static inline usize diag_render_frame(const DiagFrame *f,
  *                  terminator). Compare against buf_size to detect
  *                  truncation.
  */
+/*@
+  requires r_read: d == \null || \valid_read(d);
+  requires r_inv:  d == \null || diag_invariant(*d);
+  requires r_strings: d == \null ||
+    (\forall integer j;
+       0 <= j < d->depth ==> frame_strings_ok(d->frames[j]));
+  requires r_buf:
+    buf == \null || buf_size == 0 || \valid(buf + (0 .. buf_size - 1));
+
+  behavior no_buffer:
+    assumes buf == \null || buf_size == 0;
+    assigns \nothing;
+    ensures r_nb_zero: \result == 0;
+  behavior nothing_to_render:
+    assumes buf != \null && buf_size > 0
+            && (d == \null || (d != \null && d->depth == 0));
+    assigns buf[0];
+    ensures r_ntr_zero: \result == 0;
+    ensures r_ntr_cleared: buf[0] == '\0';
+  behavior rendered:
+    assumes buf != \null && buf_size > 0 && d != \null && d->depth > 0;
+    assigns buf[0 .. buf_size - 1];
+    ensures r_terminated:
+      \exists integer k; 0 <= k < buf_size && buf[k] == '\0';
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize diag_render(const Diag *d,
                                  char       *buf,
                                  usize       buf_size)
@@ -651,6 +875,11 @@ static inline usize diag_render(const Diag *d,
         return 0u;
     }
 
+    /*@
+      loop invariant render_i_bounds: 0 <= i <= d->depth;
+      loop assigns i, total, buf[0 .. buf_size - 1];
+      loop variant d->depth - i;
+    */
     for (i = 0u; i < d->depth; i++) {
         const DiagFrame *f = &d->frames[i];
         usize            rem;
