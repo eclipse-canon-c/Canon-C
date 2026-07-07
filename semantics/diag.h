@@ -744,6 +744,7 @@ static inline void diag_print(const Diag *d, FILE *stream)
     ensures rf_nf_cleared: buf[0] == '\0';
   behavior rendered:
     assumes buf != \null && buf_size > 0 && f != \null;
+    requires rf_rendered_valid: \valid(buf + (0 .. buf_size - 1));
     assigns buf[0 .. buf_size - 1];
     ensures rf_terminated:
       \exists integer k; 0 <= k < buf_size && buf[k] == '\0';
@@ -849,6 +850,7 @@ static inline usize diag_render_frame(const DiagFrame *f,
     ensures r_ntr_cleared: buf[0] == '\0';
   behavior rendered:
     assumes buf != \null && buf_size > 0 && d != \null && d->depth > 0;
+    requires r_rendered_valid: \valid(buf + (0 .. buf_size - 1));
     assigns buf[0 .. buf_size - 1];
     ensures r_terminated:
       \exists integer k; 0 <= k < buf_size && buf[k] == '\0';
