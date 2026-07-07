@@ -2516,7 +2516,7 @@ jobs:
           ENFORCE=0                       # flip to 1 only after VERIFY-017
           EXPECTED_UNPROVED=""            # {TODO: from first run}
           EXPECTED_PROVED=""              # {TODO: "P / T" from first run}
-          WP_MODEL="Typed"                # {TODO: confirm; may be Typed+Cast}
+          WP_MODEL="Typed+Cast"           # CONFIRMED by CI first-run cast warnings (l.235/320/372/373)
           # ------------------------------------------------------------------
 
           FAILURES=0
