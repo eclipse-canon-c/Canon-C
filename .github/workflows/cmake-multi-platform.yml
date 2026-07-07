@@ -2449,6 +2449,242 @@ jobs:
         with:
           name: wp-proof-borrow
           path: wp_borrow_output.txt
+
+  frama-c-diag:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: semantics/diag.h"
+        # ═══════════════════════════════════════════════════════════════════
+        # ROUND-1 REPORT-ONLY JOB — ENFORCE=0.  READ BEFORE PROMOTING.
+        #
+        # Unlike the borrow.h job this was cloned from, the numbers below are
+        # NOT yet measured. No WP run on diag.h has happened. This job is
+        # written to DISCOVER the baseline: on first CI run it prints the
+        # proved/total split and the exact residual goal names, WITHOUT
+        # gating. That output is the raw material for VERIFY-017. Only after
+        # a human records those numbers here do you flip ENFORCE=1 and fill
+        # the {TODO} fields. This mirrors borrow.h's own #1109 (report-only)
+        # -> #1110 (enforced) chronology.
+        #
+        # PREDICTED shape (to confirm against the first run, not to assert):
+        #   diag.h is Shape-A: 13 `static inline` functions annotated in
+        #   place. The four DIAG_PUSH* macros are call-site wrappers outside
+        #   the verified surface (docs/vmacros.md). Verified configuration is
+        #   the default shipped build (-DCANON_NO_REQUIRE -DNDEBUG); under
+        #   NO_REQUIRE the require_msg in diag_push compiles out, so
+        #   contract.h contributes only the definition-presence handler pair,
+        #   in result-mode.
+        #
+        #   Predicted residual CLASSES (counts unknown until measured):
+        #     - INHERITED: the contract.h handler pair only. error.h is
+        #       VERIFY-013 clean and contributes nothing. Predicted smallest
+        #       inherited surface of any residual-carrying header (~2).
+        #     - OWN, memmove/memcpy class: the frame-shift memmove and the
+        #       message copy in diag_push — the known libc byte-spec vs Typed
+        #       reasoning class at new sites. Danglingness pair(s) expected.
+        #     - OWN, snprintf/fprintf class (NEW to the project): the three
+        #       rendering functions. Intrinsic to stdio-facing code, like
+        #       option.h's combinator residuals — a VERIFY entry, not a gap.
+        #       Count genuinely unpredictable; Frama-C's variadic stdio specs
+        #       are its least-exercised libc area. Deliberately weak specs on
+        #       diag_print (the FILE* path); fuller specs on the render pair
+        #       where the buffer arithmetic is diag's own.
+        #
+        #   MCDC cross-stream goal: the named `dead_by_invariant_clamp`
+        #   assert at the diag_push overflow clamp (MC/DC line-293 partial).
+        #   When WP proves it \false under diag_invariant, the MCDC-009
+        #   entry is written with the full cross-stream record. The line-668
+        #   libc-environmental residual (diag_render's n<0 skip) is NOT
+        #   WP-closable — it depends on the stdio spec, not diag's contracts —
+        #   so it stays a permanent documented residual, never a deviation
+        #   that closes. Do not expect a WP goal to retire it.
+        #
+        #   MEMORY MODEL: open. diag.h has no void*->typed casts of its own,
+        #   which argues plain Typed (error/option/result precedent). The
+        #   memmove-over-structs site may force Typed+Cast the way slice.h's
+        #   libc sites did. START Typed; flip to Typed+Cast only if mem_access
+        #   goals come back Stronger, and update the residual name prefix
+        #   (typed_ -> typed_cast_) to match. The value below is a GUESS.
+        # ═══════════════════════════════════════════════════════════════════
+        run: |
+          eval $(opam env --switch=frama-c)
+
+          # ---- ENFORCEMENT VALUES: all placeholders until the first run ----
+          ENFORCE=0                       # flip to 1 only after VERIFY-017
+          EXPECTED_UNPROVED=""            # {TODO: from first run}
+          EXPECTED_PROVED=""              # {TODO: "P / T" from first run}
+          WP_MODEL="Typed"                # {TODO: confirm; may be Typed+Cast}
+          # ------------------------------------------------------------------
+
+          FAILURES=0
+          note_fail() {
+            echo "$1"
+            FAILURES=$((FAILURES + 1))
+          }
+
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            semantics/diag.h 2>&1 | tee wp_diag_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo ""
+          echo "==============================================="
+          echo "  WP (diag.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          echo "==============================================="
+
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_diag_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      frama-c likely aborted on an ACSL syntax error in"
+            echo "      diag.h (this header's annotations have NOT been"
+            echo "      parse-checked by Frama-C yet). Look for"
+            echo "      [kernel:annot-error] or [kernel] User Error above."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_diag_output.txt | head -20 || true
+          else
+            TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_diag_output.txt || true)
+            UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_diag_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_diag_output.txt || true)
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+            echo "  Timeouts: ${TIMEOUT_COUNT}"
+            echo "  Unknown:  ${UNKNOWN_COUNT}"
+            echo "  Failed:   ${FAILED_COUNT}"
+            echo "  Total unproved: ${UNPROVED_COUNT}"
+
+            # Count checks only run once pinned (ENFORCE guards the exit).
+            if [ -n "${EXPECTED_UNPROVED}" ] && \
+               [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
+            fi
+            PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+            echo "  Proved: ${PROVED_COUNT}"
+            if [ -n "${EXPECTED_PROVED}" ] && \
+               [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved count ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            echo "  COPY THESE INTO THE ROLL-CALLS BELOW WHEN PINNING:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_diag_output.txt || \
+              echo "  (none — diag.h fully proved?)"
+
+            # ---- INHERITED roll-call: fill from first run (predicted: the
+            #      contract.h handler pair only). Names below are PREDICTED
+            #      and prefixed for WP_MODEL=Typed; re-prefix if Typed+Cast.
+            echo ""
+            echo "  --- Inherited roll-call ({TODO} expected re-emissions) ---"
+            INHERITED=(
+              # {TODO: confirm exact names from the first-run dump above}
+              "typed_contract_default_handler_terminates"
+              "typed_contract_default_handler_loop_invariant_established"
+            )
+            INHERITED_SEEN=0
+            for goal in "${INHERITED[@]}"; do
+              if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_diag_output.txt; then
+                INHERITED_SEEN=$((INHERITED_SEEN + 1))
+              else
+                echo "  (not yet observed / name TBD): ${goal}"
+              fi
+            done
+            echo "  Inherited residuals observed: ${INHERITED_SEEN}/{TODO}"
+
+            # ---- OWN roll-call: the diag_push memmove/memcpy + render
+            #      snprintf goals. Names UNKNOWN until measured — the dump
+            #      above supplies them. Left empty so this block is inert
+            #      until pinned.
+            echo ""
+            echo "  --- Own-residual roll-call ({TODO} from first run) ---"
+            OWN_CHECKS=(
+              # {TODO: e.g. typed_diag_push_call_memmove_requires_danglingness_*}
+              # {TODO: e.g. typed_diag_render_frame_call_snprintf_*}
+            )
+            OWN_SEEN=0
+            for goal in "${OWN_CHECKS[@]}"; do
+              if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_diag_output.txt; then
+                OWN_SEEN=$((OWN_SEEN + 1))
+              else
+                note_fail "FAIL: expected unproved goal ${goal} not observed."
+              fi
+            done
+            echo "  Own residuals observed: ${OWN_SEEN}/{TODO}"
+
+            if [ -n "${EXPECTED_UNPROVED}" ]; then
+              OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
+              echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
+              if [ "${OTHER_UNPROVED}" -ne 0 ]; then
+                note_fail "FAIL: undocumented residuals present — see VERIFY-017."
+              fi
+            fi
+
+            echo ""
+            echo "  --- MCDC-009 cross-stream goal ---"
+            if grep -qE "\[(Timeout|Unknown|Failed)\].*dead_by_invariant_clamp" wp_diag_output.txt; then
+              echo "  dead_by_invariant_clamp: UNPROVED (round-1 expected until"
+              echo "  the invariant is strong enough). When this flips to"
+              echo "  proved, write MCDC-009 with the cross-stream record"
+              echo "  (gcov line-293 unreachable; WP goal proved \\false)."
+              # Not a note_fail while ENFORCE=0 — this is the thing we are
+              # working toward, not a regression yet.
+            else
+              if grep -qE "dead_by_invariant_clamp" wp_diag_output.txt; then
+                echo "  dead_by_invariant_clamp: PROVED — clamp true-side"
+                echo "  formally dead under diag_invariant. MCDC-009 closure"
+                echo "  ready to record."
+              else
+                echo "  dead_by_invariant_clamp: assert not found in WP output"
+                echo "  — confirm the named assert survived annotation."
+              fi
+            fi
+
+            CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_diag_output.txt || true)
+            echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+            if [ "${CVC5_INVOKED}" -eq 0 ]; then
+              echo "WARNING: CVC5 absent — triple-prover may have degraded to"
+              echo "         dual-prover. Check the framac-setup prover config."
+            fi
+          fi
+
+          echo ""
+          echo "==============================================="
+          if [ "${ENFORCE}" -eq 0 ]; then
+            echo "REPORT-ONLY: frama-c-diag is discovering its baseline."
+            echo "  Record proved/total and the residual names above into"
+            echo "  VERIFY-017 and docs/deviations.md, fill the {TODO} fields,"
+            echo "  then set ENFORCE=1. Until then this job never fails."
+          elif [ "${FAILURES}" -eq 0 ]; then
+            echo "PASS: diag.h verified — ${EXPECTED_PROVED} proved,"
+            echo "      all documented residuals observed (VERIFY-017)."
+          else
+            echo "FAIL: ${FAILURES} enforcement check(s) missed — see FAIL lines."
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -ne 0 ]; then
+            exit 1
+          fi
+          echo "==============================================="
+      - name: Upload WP proof output (diag.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-diag
+          path: wp_diag_output.txt
   
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
@@ -3232,6 +3468,113 @@ jobs:
               ls "$d"/*borrow* 2>/dev/null || true
             done
           fi
+      
+
+      - name: "Debug: per-line MC/DC detail for diag.h"
+        # First measured MC/DC ceiling for diag.h: 97.67% (84/86) as of
+        # CI #1120 (93fa22c), reached by the render/print gap-closure tests
+        # that took the header from 73.91% (34/46). The denominator grew
+        # 46 -> 86 because diag_render and diag_render_frame were entirely
+        # uncalled before this pass: uncalled `static inline` functions are
+        # invisible to gcov, so the render pair was silently excluded from
+        # the old baseline rather than counted as missed. The gap-closure
+        # pass also surfaced two pre-verification defects on the newly
+        # exercised path — a contract-violating NULL guard in diag_render
+        # (a snprintf(NULL, >0) UB path) and a -Werror=format-truncation
+        # break on the documented truncation path (CI #1120) — both fixed
+        # before this ceiling was pinned.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: the 2 remaining uncovered
+        # outcomes are expected to be two distinct dead-true-sides, of two
+        # DIFFERENT dispositions (unlike borrow.h, whose pair shared one):
+        #
+        #   (a) line 293 — the GCC-16 overflow-clamp guard in diag_push:
+        #
+        #         if (d->depth >= DIAG_MAX_FRAMES) {
+        #             d->depth = DIAG_MAX_FRAMES - 1u;   /* clamp */
+        #         }
+        #
+        #       The true side is unreachable on every correct execution:
+        #       the memmove branch immediately above already holds depth at
+        #       DIAG_MAX_FRAMES - 1, so depth >= DIAG_MAX_FRAMES is false by
+        #       construction here. This is invariant-dead defensive code —
+        #       the slice.h MCDC-002 / borrow.h MCDC-008 shape. The header
+        #       carries a named `/*@ assert dead_by_invariant_clamp: \false; */`
+        #       at this site; when the diag.h WP run discharges it under
+        #       diag_invariant, the MCDC entry is written with the full
+        #       cross-stream record (gcov: outcome unreachable; WP: goal
+        #       proved \false). Until then: "invariant-dead, deviation
+        #       pending".
+        #
+        #   (b) line 668 — the snprintf encoding-error skip in diag_render:
+        #
+        #         if (n < 0) { continue; }   /* encoding error — skip frame */
+        #
+        #       The true side is LIBC-ENVIRONMENTAL, not invariant-dead:
+        #       it is unreachable because these format strings with valid
+        #       arguments cannot provoke an encoding error on any hosted
+        #       libc, NOT because any diag invariant forbids it. This is a
+        #       NEW disposition flavor for the traceability record — do not
+        #       file it under the invariant-dead family. WP will not
+        #       discharge it from diag's own contracts (it depends on the
+        #       stdio spec), so it remains a permanent documented residual
+        #       rather than a deviation that later closes. The sibling
+        #       encoding-error skip in diag_render_frame is expected to be
+        #       gimplified out of the condition denominator (value-selecting
+        #       context), so it is not counted here; if the dump shows it
+        #       open, that is a real gap.
+        #
+        # If the dump shows a DIFFERENT open outcome — anywhere in the
+        # inspectors, the diag_push copy loop, or the render total/rem
+        # accounting — that is a reachable test gap (MCDC-003 line-510
+        # shape), NOT a deviation: fix it with an ordinary ungated test,
+        # not a records entry.
+        #
+        # NOTE on scope: diag.h is a Shape-A header. The 86-outcome
+        # denominator covers the 13 `static inline` functions. The four
+        # DIAG_PUSH / DIAG_PUSH_FMT / DIAG_RETURN_IF / DIAG_PROPAGATE
+        # macros are call-site expansion wrappers: their conditions are
+        # stamped to diag_test.c (a /test/ path) and removed by the
+        # coverage filter — the known single-file macro attribution,
+        # docs/vmacros.md. Do not read this row as covering the macros;
+        # they are documented-not-verified, exercised by diag_test.c.
+        #
+        # This step remains in place as a regression detector. If a future
+        # change opens a new uncovered outcome or closes one of the two
+        # documented ones, the output surfaces it for human review.
+        # Report-only; never fails.
+        run: |
+          cd build
+          DIAG_GCDA=$(find . -name "diag_test*.gcda" | head -1)
+          if [ -z "$DIAG_GCDA" ]; then
+            echo "ERROR: could not locate diag_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $DIAG_GCDA"
+          gcov-14 --conditions --all-blocks "$DIAG_GCDA" 2>&1 | \
+            grep -A 200 "diag.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for diag.h ==="
+          find . -name "diag.h.gcov" -exec echo "Found: {}" \;
+          DIAG_GCOV=$(find . -name "diag.h.gcov" | head -1)
+          if [ -n "$DIAG_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $DIAG_GCOV ==="
+            cat "$DIAG_GCOV"
+            echo ""
+            echo "=== Uncovered condition outcomes (quick filter) ==="
+            grep -n "not covered" "$DIAG_GCOV" || \
+              echo "(no 'not covered' lines found — check the full dump above)"
+            echo ""
+            echo "=== Expected ceiling: lines 293 (invariant-dead) and 668 (libc-environmental) ==="
+          else
+            echo "No diag.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*diag* 2>/dev/null || true
+            done
+          fi
+      
         
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
