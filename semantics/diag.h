@@ -625,7 +625,12 @@ static inline usize diag_render(const Diag *d,
         buf[0] = '\0';
     }
 
-    if (d == NULL || d->depth == 0u) {
+    /* buf/buf_size must be rejected here, not just above: the loop below
+     * passes dst = buf + total to snprintf with rem > 0 when total <
+     * buf_size, which requires a valid pointer. Rejecting NULL/0 enforces
+     * the documented "NULL-safe: returns 0" / "0-safe: returns 0" contract
+     * and matches diag_render_frame's guard shape. */
+    if (d == NULL || buf == NULL || buf_size == 0u || d->depth == 0u) {
         return 0u;
     }
 
