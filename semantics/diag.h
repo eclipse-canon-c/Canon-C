@@ -199,45 +199,6 @@ typedef struct {
      must be aligned to the actual specs from the first WP output, not
      defended against it. */
 
-#ifdef __FRAMAC__
-/* ────────────────────────────────────────────────────────────────────────
-   WP-only bounded specs for the variadic stdio functions used below.
-
-   Without these, Frama-C's kernel generates a default `assigns buf[0..]`
-   for the char* buffer parameter of snprintf — an infinite range WP
-   rejects at the call site with:
-       User Error: Invalid infinite range buf_1+(0..)
-   aborting the whole run before any summary. (Frama-C GitLab issue #113;
-   fc-discuss 2018-12: the abort is caused by the *missing/open* callee
-   assigns, and supplying a bounded one resolves it.)
-
-   These prototypes are visible ONLY to Frama-C (__FRAMAC__), never to the
-   C compiler, so they cannot clash with the real <stdio.h> declarations in
-   a normal build. They bound the write to the caller's buffer, which is
-   exactly the documented behaviour of snprintf. fprintf writes a stream,
-   not the caller buffer, so it only needs a finite (stream) assigns.
-
-   The snprintf return value is left unconstrained here: the rendering
-   functions treat both the >= buf_size (truncation) and < 0 (encoding
-   error, the line-668 libc-environmental residual) cases, so no return
-   postcondition is asserted at this spec level. */
-/*@
-  requires \valid(buf + (0 .. size - 1));
-  assigns  buf[0 .. size - 1];
-  assigns  \result \from indirect:size, indirect:buf[0 .. size - 1];
-  ensures  \result >= 0 ==> buf[size - 1] == buf[size - 1];
-*/
-extern int snprintf(char * restrict buf, size_t size,
-                    const char * restrict format, ...);
-
-/*@
-  requires \valid(stream);
-  assigns  *stream \from *stream;
-  assigns  \result \from indirect:*stream;
-*/
-extern int fprintf(FILE * restrict stream, const char * restrict format, ...);
-#endif /* __FRAMAC__ */
-
 /*@
   predicate diag_invariant(Diag d) =
     d.depth <= DIAG_MAX_FRAMES;
