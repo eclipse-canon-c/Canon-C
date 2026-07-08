@@ -569,7 +569,8 @@ static inline bool diag_has_error(const Diag *d)
 /*@
   requires fa_read: d == \null || \valid_read(d);
   requires fa_inv:  d == \null || diag_invariant(*d);
-  assigns \nothing;
+  assigns \result \from indirect: d, indirect: i,
+                        indirect: (d == \null ? 0 : d->depth);
   ensures fa_miss: (d == \null || i >= d->depth) ==> \result == \null;
   ensures fa_hit:  (d != \null && i <  d->depth) ==> \result == &d->frames[i];
 */
@@ -593,7 +594,8 @@ static inline const DiagFrame *diag_frame_at(const Diag *d, usize i)
 /*@
   requires root_read: d == \null || \valid_read(d);
   requires root_inv:  d == \null || diag_invariant(*d);
-  assigns \nothing;
+  assigns \result \from indirect: d,
+                        indirect: (d == \null ? 0 : d->depth);
   ensures root_miss: (d == \null || d->depth == 0) ==> \result == \null;
   ensures root_hit:  (d != \null && d->depth > 0)  ==> \result == &d->frames[0];
 */
@@ -614,7 +616,8 @@ static inline const DiagFrame *diag_root(const Diag *d)
 /*@
   requires lat_read: d == \null || \valid_read(d);
   requires lat_inv:  d == \null || diag_invariant(*d);
-  assigns \nothing;
+  assigns \result \from indirect: d,
+                        indirect: (d == \null ? 0 : d->depth);
   ensures lat_miss: (d == \null || d->depth == 0) ==> \result == \null;
   ensures lat_hit:
     (d != \null && d->depth > 0) ==> \result == &d->frames[d->depth - 1];
