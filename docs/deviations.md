@@ -2299,6 +2299,240 @@ point (`borrowed_bytes_slice` clamping and the
 
 ---
 
+## VERIFY-017: libc Byte-View and Inherited Residuals, Plus Trusted Stdio Axioms (diag.h, fifth semantics/ module, verified in place)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-017 |
+| **Date**       | 2026-07-08 |
+| **Baseline commit** | bb269f9 (Canon-C CI #1134, actions run 28967245082); report-only first at d8566d5 (CI #1132, 59 unproved, 300s), re-measured name-stable at 1597a51 (CI #1133, 59 unproved, 120s) |
+| **Scope**      | semantics/diag.h — 3060 obligations, 10 unproved across 2 categories (1 own + 1 inherited pair), plus 2 documented trusted axioms |
+| **Category**   | Formal verification completeness |
+| **Enforcement**| Enforced (exact-count + by-name roll-call) as of 1965b23 (#1135) |
+
+**Description**: 10 of 3060 proof obligations (0.33%) on diag.h's
+translation unit are not discharged by any prover in the triple-prover configuration (Alt-Ergo 2.6.3 + Z3 4.15.2
++ CVC5 1.2.1) with a 120-second timeout and `-wp-split`, under the
+`Typed+Cast` memory model. The model is forced by diag.h's **own**
+byte-view casts — the `(char *)` views of `Diag` and `DiagFrame` at
+the memset/memmove sites and in `push_no_alias`'s `\separated` clause
+(WP cast warnings at the diag_init memset, the diag_push memmove pair,
+and the `(char *)d` separation term) — making diag.h the first
+semantics/ header to *originate* the Typed+Cast requirement rather
+than inherit it transitively. All 10 are Timeouts at the pinning run;
+the diag_init memset goal oscillates between Unknown and Timeout
+across runs (Unknown at #1132, Timeout at #1133 and the pinning run) —
+the wrapper deliberately counts the two classes together, so the
+oscillation is pin-safe.
+
+diag.h is the fifth semantics/ module verified (after error.h,
+VERIFY-013; the option/result driver modules, VERIFY-014/-015; and
+borrow.h, VERIFY-016) and the third verified **in place**. Its 13
+`static inline` functions are annotated in place. The four call-site
+expansion macros (`DIAG_PUSH`, `DIAG_PUSH_FMT`, `DIAG_RETURN_IF`,
+`DIAG_PROPAGATE`) are outside the verified surface — they sit on the
+single-file macro-family list in `docs/vmacros.md` (the
+DEFINE_SLICE/DEFINE_BORROWED_SLICE disposition), exercised by
+`test/semantics/diag_test.c`.
+
+**Verified configuration.** The verified build is the default shipped
+configuration (`-DCANON_NO_REQUIRE -DNDEBUG`): `require_msg` in
+diag_push and `DIAG_PUSH_FMT` compiles out, so contract.h contributes
+only the definition-presence handler pair (see inherited residuals).
+The stdio surface is verified against the two `__FRAMAC__`-gated
+redeclarations described under **Trusted stdio axioms** below; the
+real `<stdio.h>` never sees them.
+
+**Round-1 chronology and spec alignment.** The report-only first run
+(CI #1132) returned 2968/3027 with 59 unproved. 49 of the 59 traced to
+two clauses in the round-1 trusted stdio specs, not to the code or the
+in-place contracts: (a) a `valid_read_string(format)` requires on the
+snprintf/fprintf redeclarations minted 32 caller obligations that time
+out even on string literals under this model — 8 at diag_print's
+fprintf, 8 at diag_render_frame's snprintf, 16 at diag_render's
+snprintf, the 8/8/16 fan-out being `-wp-split` over the three
+field-defaulting ternaries in each call's argument list (2³ = 8; ×2
+for diag_render's `total < buf_size` branch); and (b) the round-1
+snprintf axiom havocked `buf[0 .. size-1]` with no termination
+ensures, leaving WP unable to re-establish the `rf_terminated` /
+`r_terminated` postconditions after the call (17 goals). An
+intermediate run (CI #1133, workflow-only change, 120s) re-measured
+the round-1 header goal-for-goal identically to #1132's 300s run,
+establishing the residual set as name-stable across both timeouts and
+refuting the time-starvation hypothesis directly. The pinning run
+replaces (a) with `format != \null` (Qed-instant at every call site —
+all pass literals) and closes (b) with a conditional termination
+ensures on the axiom plus a termination loop invariant in diag_render:
+59 → 10, with the total growing 3027 → 3060 (the render_terminated
+loop-invariant goals and the re-labeled `fmt_nonnull` obligations, all
+proved). The 10 remaining goals are the identical named subset of
+#1132's/#1133's 59 — name-stable across three runs. The toolchain was
+byte-identical throughout (same opam cache key, same Why3 1.7.x with
+its "version not recognized" warnings for all three provers — the same
+warnings every enforced baseline in the project was measured under):
+the 49-goal collapse was produced by specification alignment alone,
+which empirically closes the question of whether the residuals were a
+prover-recognition artifact.
+
+### Trusted stdio axioms (documented, deliberate)
+
+The `__FRAMAC__`-gated redeclarations of `snprintf` and `fprintf` are
+**assumed specifications**: extern prototypes with no body, which WP
+takes as axioms and never proves. They exist because Frama-C 29's
+stock variadic handling emits `assigns *(buf+(0..))` — an open range
+the Typed+Cast model rejects with 'Invalid infinite range', aborting
+the run — and they require `-variadic-no-translation` in the WP job so
+the spec binds to the untranslated call. Two clauses are deliberate
+judgment calls and are recorded here as part of the trusted base:
+
+1. **`format != \null` only** (no `valid_read_string`): the string
+   validity of the format literal is not asserted, because the goal is
+   triple-prover-resistant under this model and every call site passes
+   a literal whose validity is a compiler guarantee, not a proof
+   target.
+
+2. **Unconditional termination ensures** (`size > 0 ==> ∃k < size:
+   buf[k] == '\0'`): ISO C99 guarantees null-termination on the
+   success path but is silent on the encoding-error path (`\result <
+   0`). Asserting termination unconditionally rests on the
+   environmental assumption that these format strings with valid
+   arguments do not provoke encoding errors on any hosted libc — **the
+   same assumption, cited by both evidence streams**, that MCDC-009
+   records for the permanently-uncovered `n < 0` true side in
+   diag_render (line 968 at d8566d5). One assumption, two records,
+   both pointing here. The variadic arguments themselves are invisible
+   to the axiom (untranslated variadics carry no argument spec), so no
+   read-validity of the rendered fields is assumed or checked at the
+   axiom level; those are covered by `frame_strings_ok` preconditions
+   on the callers.
+
+Round-1 clauses removed at pinning: the `\from` dependency lists
+(ignored by WP; carried an open `format[0 ..]` range as a parse
+hazard) and `ensures \result >= -1` (stronger than ISO C, which
+permits any negative value on error; no code path depends on it — both
+render functions branch only on `n < 0`).
+
+### Inherited residuals (2)
+
+| # | Source                          | Goals | Pattern |
+|---|---------------------------------|-------|---------|
+| 1 | VERIFY-006 cat 4 (contract.h)   | 2     | `typed_cast_contract_default_handler_terminates`, `typed_cast_contract_default_handler_loop_invariant_established` |
+
+Definition-presence inheritance only, as with option/result
+(VERIFY-014/-015): under `-DCANON_NO_REQUIRE` no diag function
+contains a handler call, so the pair is emitted for the handler's own
+definition. The prefix is `typed_cast_` (not `typed_` as in the
+option/result drivers) because this TU's model is Typed+Cast — the
+same prefix flip VERIFY-016 recorded for borrow.h's checked.h pair.
+This is the **smallest inherited surface of any residual-carrying
+header** (2 goals): diag.h's TU pulls in types.h, contract.h, and
+error.h only — error.h is VERIFY-013 clean and contributes nothing —
+exactly as the round-1 prediction anticipated. Seventh composability
+data point.
+
+### diag-own residuals (8)
+
+**Category 1 — libc byte-view through Typed+Cast (8)**
+
+**Functions affected**: `diag_init` (1), `diag_push` (7).
+
+**Goals**:
+
+- `typed_cast_diag_init_call_memset_requires_valid_s` (Unknown) —
+  `\valid` of the `(char *)` byte view over a local `Diag` at the
+  memset call.
+- `typed_cast_diag_push_call_memmove_requires_valid_dest`,
+  `typed_cast_diag_push_call_memmove_requires_valid_src` — byte-view
+  validity over `DiagFrame` subarrays at the overflow-shift memmove.
+- `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part05`
+  / `_part06` / `_part07` — field-level `.code` equality across the
+  shift; the memmove axiom moves bytes, and reconstructing typed field
+  equalities from a byte-level copy is the known byte-spec-vs-Typed
+  reasoning gap (VERIFY-007/-008 class) at a new site. The spec
+  deliberately pins **only** `.code` across the shift
+  (`push_shift_semantics`) — full-frame fidelity
+  (file/func/line/message) is a deliberately weak spec in the
+  error_message sense, runtime-verified by diag_test.c's overflow
+  tests rather than formally specified, precisely because the byte-
+  level memmove spec cannot support it.
+- `typed_cast_diag_push_valid_diag_assigns_exit_part02`,
+  `typed_cast_diag_push_valid_diag_assigns_normal_part03` — framing of
+  the byte-level memmove write against the typed
+  `assigns d->frames[0 .. DIAG_MAX_FRAMES - 1]` clause; same root
+  cause.
+
+**Root cause**: all 8 are the libc byte-view class — Frama-C's
+memset/memmove specs are stated over `(char *)` views, and relating
+byte-range validity/writes to typed struct locations is the documented
+Typed+Cast reasoning gap (VERIFY-007 memcmp sites, VERIFY-008
+mem_copy/mem_move surface) at two new sites. This matches round-1
+predicted class (a) exactly; predicted class (b) (stdio-intrinsic
+residuals) **vanished at pinning** — with sound axioms, the stdio
+surface contributes zero residuals, so no new residual class enters
+the project ledger. Notably, the depth-tracking goals *through* the
+memmove all proved (`push_depth_bounds`, `push_depth_step`,
+`push_overflow_flag`, and the `dead_by_invariant_clamp` assertion —
+see MCDC-009): WP frames `d->depth` correctly past the byte-level
+write; only the frame-content and byte-range-validity goals resist.
+
+**Manual proof argument**: on the overflow path, `d` is `\valid` by
+precondition, so its full object — including the `(char *)` byte view
+of `frames[0 .. DIAG_MAX_FRAMES-1]` and any subarray — is valid for
+read and write; the memmove copies `(DIAG_MAX_FRAMES-1) ×
+sizeof(DiagFrame)` bytes from `&frames[1]` to `&frames[0]`, which is
+precisely a one-slot field-preserving shift, so `frames[j].code ==
+\old(frames[j+1].code)` for all shifted `j`, and every byte written
+lies inside the typed assigns footprint. For diag_init, `d` is a local
+of complete type `Diag`, valid over its full `sizeof` by construction.
+ASan and Valgrind execute the overflow shift on every
+`test_push_overflow*` path across the CI matrix.
+
+### Mitigation
+
+The `frama-c-diag` CI step enforces exactly 10 unproved goals
+(and 3050/3060 proved) with a by-name roll-call of both inherited
+and all 8 own residuals, plus an inverted check that
+`dead_by_invariant_clamp` remains in the proved set (absence from the
+unproved list is the proof — WP prints only unproved goals by name);
+the full residual list prints on every run (artifact `wp-proof-diag`).
+Landed report-only at CI #1132 per the option/result/borrow promotion
+pattern; the pinned set is the identical named subset of #1132's/
+#1133's 59, the 49-goal delta being the trusted-spec alignment
+described above.
+`-wp-timeout` is 120s as for every other enforced header (the round-1
+runs used 300s while the spec noise was being diagnosed; with 59
+unproved goals at 300s × 3 sequential provers the job ran 3h20m —
+reverted at pinning).
+
+diag.h's gcov-measured MC/DC is 84/86 = 97.67%, its documented ceiling
+— see MCDC-009. Functional behavior, including the full-frame overflow
+shift this entry's weak spec does not pin and the truncation paths, is
+tested by `test/semantics/diag_test.c` (all CI configs; ASan + UBSan
+on Linux/macOS debug builds) and fuzzed via its `CANON_FUZZING` entry
+point.
+
+### Cross-references
+
+- Inherited residuals: VERIFY-006 category 4 (contract.h handler
+  pair); definition-presence-only precedent VERIFY-014/-015; prefix
+  flip precedent VERIFY-016.
+- Own-residual class precedent: VERIFY-007/-008 (libc byte-spec vs
+  Typed reasoning); VERIFY-003 (Unknown-class residuals).
+- Trusted axioms: this entry's "Trusted stdio axioms" section is the
+  normative record; the shared environmental assumption is cited by
+  MCDC-009 (the `n < 0` permanent measurement residual).
+- MC/DC coverage: MCDC-009 (84/86 ceiling; `dead_by_invariant_clamp`
+  named-assert closure; denominator history).
+- Macro-family disposition: `docs/vmacros.md` single-file list (the
+  four DIAG_* macros).
+- Per-goal CI artifact: `wp-proof-diag` (full WP output).
+- Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
+  "WP: semantics/diag.h".
+
+---
+
+---
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
@@ -3414,6 +3648,175 @@ single named goal the CI wrapper checks by name on every run.
 - Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
   detail for borrow.h" step in
   `.github/workflows/cmake-multi-platform.yml`.
+
+---
+
+## MCDC-009: Invariant-Dead Overflow Clamp and Libc-Environmental Encoding-Error Skip — Two Dispositions in One Header, Second Named-Assert Closure (diag.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-009 |
+| **Date**       | 2026-07-08 |
+| **Baseline commit** | 93fa22c (Canon-C CI #1120, ceiling measurement); cross-stream closure at d8566d5 (CI #1132), re-confirmed on every WP run since; proof-stream detector enforced as of 1965b23 (CI #1135) |
+| **Scope**      | semantics/diag.h — 2 of 86 condition outcomes (2 unreachable, distinct dispositions) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 2 of 86 condition outcomes in `semantics/diag.h` are
+not exercisable by tests. Unlike every prior entry in this family,
+the two outcomes have **different dispositions** — one is
+invariant-dead (the MCDC-002 family, WP-closable), the other is
+libc-environmental (a new disposition, permanently open by design):
+
+| # | Function      | Line (at d8566d5) | Subcondition not covered | Disposition |
+|---|---------------|-------------------|--------------------------|-------------|
+| 1 | `diag_push`   | 427 (body 429)    | cond 0 true (`d->depth >= DIAG_MAX_FRAMES`) | Invariant-dead; WP-closed |
+| 2 | `diag_render` | 968               | cond 0 true (`n < 0`)    | Libc-environmental; permanent |
+
+Both guard bodies show `#####` / `%%%%%` — never executed across the
+coverage run. (Line numbers cite d8566d5; earlier CI comments cite the
+pre-annotation lines 293 and 668 — the ACSL pass shifted the header.
+The coverage debug step identifies both outcomes by function and
+condition, so the drift is cosmetic — the trusted-axiom pass at the
+VERIFY-017 pinning commit shifted the file again, without changing
+either outcome.)
+
+**Denominator history.** diag.h's measured ceiling is 84/86 = 97.67%,
+reached at CI #1120. The denominator grew 46 → 86 in the same pass:
+`diag_render` and `diag_render_frame` were entirely uncalled before
+it, and uncalled `static inline` functions are invisible to gcov, so
+the render pair had been silently excluded from the old 73.91% (34/46)
+baseline rather than counted as missed. The gap-closure pass also
+surfaced two pre-verification defects on the newly exercised path — a
+contract-violating NULL guard in diag_render that permitted a
+`snprintf(NULL, >0, …)` UB call, and a `-Werror=format-truncation`
+break on the documented truncation path — both fixed before the
+ceiling was pinned (CI #1120). The ceiling is unchanged at d8566d5
+(84/86, same two outcomes).
+
+### Outcome 1 — the overflow clamp (invariant-dead, WP-closed)
+
+The clamp in diag_push:
+
+```c
+if (d->depth >= DIAG_MAX_FRAMES) {
+    /*@ assert dead_by_invariant_clamp: \false; */
+    d->depth = DIAG_MAX_FRAMES - 1u;
+}
+```
+
+exists to make the `depth < DIAG_MAX_FRAMES` bound visible to the
+optimizer under `-DNDEBUG` (GCC 16 at `-O3` otherwise fires a spurious
+`-Wstringop-overflow` on the message write). Its true side is
+unreachable on every correct execution: under `diag_invariant`
+(`depth <= DIAG_MAX_FRAMES`, a precondition of the valid_diag
+behavior), either `depth == DIAG_MAX_FRAMES` and the overflow branch
+immediately above has already decremented it to `DIAG_MAX_FRAMES - 1`,
+or `depth < DIAG_MAX_FRAMES` unchanged — both contradict the clamp
+condition.
+
+This is the **eighth cross-stream instance** and the **second carried
+by a named in-body assertion** (after MCDC-008's
+`dead_by_invariant`): WP **proved** `dead_by_invariant_clamp` at CI
+#1132 (a `\false` assertion is provable exactly when the path
+condition is contradictory, i.e. the path is infeasible). The proof is
+notable for *what it traverses*: on the `depth == DIAG_MAX_FRAMES`
+path, the contradiction depends on the decrement surviving the
+byte-level memmove between the branch and the clamp — WP frames
+`d->depth` correctly past the `(char *)` write (the memmove's assigns
+footprint covers `frames` bytes only), even while the frame-content
+goals at the same call site remain residuals (VERIFY-017 category 1).
+The clamp is deliberately preserved: it is toolchain-defensive code
+whose absence breaks the build on a supported compiler.
+
+### Outcome 2 — the encoding-error skip (libc-environmental, permanent)
+
+The skip in diag_render's loop:
+
+```c
+if (n < 0) { continue; } /* encoding error — skip frame */
+```
+
+is unreachable **not** because any diag invariant forbids it, but
+because these format strings (`%zu`, `%s`, `%d` over
+invariant-satisfying fields) with valid arguments cannot provoke a
+`snprintf` encoding error on any hosted libc. This is a **new
+disposition flavor** for the traceability record — do not file it
+under the invariant-dead family:
+
+- No WP goal can retire it: the unreachability depends on the stdio
+  implementation's behavior, not on diag's contracts, so it is a
+  **permanent documented residual**, never a deviation that later
+  closes.
+- It is the measurement-stream citation of the **same environmental
+  assumption** VERIFY-017's trusted snprintf axiom makes in the proof
+  stream (the unconditional termination ensures on the
+  encoding-error-free path). One assumption, two records, each
+  pointing at the other.
+- The skip is deliberately preserved: it is the documented
+  defensive handling of a return value ISO C permits, and removing it
+  would convert a hypothetical negative return into unsigned
+  wraparound of `total`.
+
+The sibling encoding-error handling in `diag_render_frame`
+(`return (n < 0) ? 0u : (usize)n;`) is confirmed **absent from the
+condition denominator**: gcov emits no condition row for it (the
+ternary is gimplified as value selection, not a branch), matching the
+round-1 prediction. If a future toolchain surfaces it as a condition,
+it joins this outcome's disposition, not a test gap.
+
+### Mitigation
+
+1. **Outcome 1, reachability argument via the invariant**:
+   `diag_invariant` plus the overflow branch make the clamp's true
+   side contradictory; WP discharges the named
+   `dead_by_invariant_clamp` assertion, formally establishing the path
+   infeasible (VERIFY-017).
+
+2. **Outcome 2, environmental argument**: hosted-libc encoding-error
+   freedom for these formats, recorded as a trusted assumption shared
+   with VERIFY-017's snprintf axiom; exercised as the FALSE outcome on
+   every render call across the matrix, including the MinGW-UCRT job
+   (the CRT most likely to differ).
+
+3. **Two regression detectors, one per evidence stream** (outcome 1):
+   the coverage job's "Debug: per-line MC/DC detail for diag.h" step
+   prints the gcov dump and a `not covered` quick-filter every run
+   (measurement stream); the `frama-c-diag` wrapper fails if
+   `dead_by_invariant_clamp` ever leaves the proved set (proof
+   stream). Outcome 2 has one detector by nature — the coverage dump —
+   plus the axiom's presence in VERIFY-017's trusted base.
+
+4. **The achievable MC/DC ceiling is 84/86 = 97.67%**, reached at CI
+   #1120 and representing 100% of API-reachable coverage under a
+   hosted libc. The 2 missing outcomes are documented here and not
+   counted as a coverage regression.
+
+5. **The surrounding paths are exhaustively tested**:
+   `test/semantics/diag_test.c` exercises the overflow shift (both
+   sides of the `depth == DIAG_MAX_FRAMES` branch, 8 overflow pushes
+   observed in the run), the render truncation path (both sides of
+   `total < buf_size`, including the measure-only `rem = 0` re-entry),
+   NULL/empty guards on all three rendering functions (6/6 and 8/8
+   compound outcomes), and the message-copy loop at all four
+   outcomes.
+
+### Cross-references
+
+- VERIFY-017 — diag.h's WP residual analysis; the
+  `dead_by_invariant_clamp` proof; the trusted stdio axioms sharing
+  outcome 2's environmental assumption.
+- MCDC-008 — the first named-assert closure (borrow.h); this entry's
+  outcome 1 is the same mechanism, second instance.
+- MCDC-002 through MCDC-006 — the invariant-dead/API-unreachable
+  disposition family that outcome 1 joins and outcome 2 deliberately
+  does not.
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology (why
+  diag_push's `require_msg` contributes no outcomes here).
+- Per-line gcov dump: CI artifact via the "Debug: per-line MC/DC
+  detail for diag.h" step in
+  `.github/workflows/cmake-multi-platform.yml`.
+
+---
 
 ---
 
