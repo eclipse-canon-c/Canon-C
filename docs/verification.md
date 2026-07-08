@@ -10,11 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 13 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h) |
-| **Functions**        | 260 annotated and verified (227 in-place + 33 generated via the option and result drivers) |
-| **Total obligations**| 21687 (per-header own goals; CI WP runs include substrate)                     |
-| **Proved automatic** | 21205 (97.78%)                                                                 |
-| **Unproved**         | 482 (all documented; see per-header sections)                                  |
+| **Headers verified** | 14 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h) |
+| **Functions**        | 273 annotated and verified (240 in-place + 33 generated via the option and result drivers) |
+| **Total obligations**| 24747 (per-header own goals; CI WP runs include substrate)                     |
+| **Proved automatic** | 24255 (98.01%)                                                                 |
+| **Unproved**         | 492 (all documented; see per-header sections)                                  |
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 than the four primitives headers because it is the first Canon-C header
@@ -93,11 +93,12 @@ ptr_elem, so it has no per-allocation alignment-pad arithmetic and arena.h's
 26-goal cat 2b arithmetic-chain residual class does not recur in pool.h's own
 surface. See VERIFY-010 in `docs/deviations.md` for the full classification.
 
-A note on totals: the 19235 obligation count is the row-sum of
+A note on totals: the 24747 obligation count is the row-sum of
 each header's own WP-relevant goals — checked.h's 1755, bits.h's
 761, compare.h's 208, ptr.h's 1739, slice.h's 390, memory.h's 2862,
 arena.h's 3472, pool.h's 3902, region.h's 3643, error.h's 65,
-option's 223, and result's 215 (each counted in full because each header was
+option's 223, result's 215, borrow.h's 2452, and diag.h's 3060 (each
+counted in full because each header was
 verified atop its full substrate, with no separate substrate-free
 measurement available for downstream headers). The CI WP steps for
 downstream headers report larger numbers because their runs include
@@ -2651,6 +2652,194 @@ unproved goals (VERIFY-016).
 
 ---
 
+## semantics/diag.h
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals) — in place |
+| **Baseline commit**    | bb269f9 (Canon-C CI #1134, actions run 28967245082); report-only first at d8566d5 (CI #1132, 300s), re-measured name-stable at 1597a51 (CI #1133, 120s); enforced as of 1965b23 (#1135) |
+| **Functions**          | 13 of 13 non-macro functions annotated and proved |
+| **Proof obligations**  | 3050 / 3060 discharged automatically (99.67%)   |
+| **Unproved**           | 10 (2 inherited + 8 own; all documented under VERIFY-017) |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-variadic-no-translation -wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast` |
+| **CI enforcement**     | Yes — 3050/3060 with 10 named goals expected    |
+| **MC/DC coverage**     | 97.67% (84/86 condition outcomes — see MCDC-009) |
+| **CI artifact**        | `wp-proof-diag` (full per-goal breakdown)       |
+
+diag.h is the fifth semantics/ module verified and the third verified
+**in place** (after error.h and borrow.h) — completing the semantics/
+layer. Its 13 `static inline` functions are annotated in place; the
+four call-site expansion macros (`DIAG_PUSH`, `DIAG_PUSH_FMT`,
+`DIAG_RETURN_IF`, `DIAG_PROPAGATE`) are outside the verified surface,
+parked on the single-file macro-family list in `docs/vmacros.md` and
+exercised by `test/semantics/diag_test.c`. It uses `Typed+Cast` —
+uniquely, forced by diag.h's **own** byte-view casts (the `(char *)`
+views of `Diag`/`DiagFrame` at the memset/memmove sites and in
+`push_no_alias`'s `\separated` clause), making it the first
+semantics/ header to originate the model requirement rather than
+inherit it transitively — so its CI wrapper retains the CVC5-presence
+check the `Typed+Cast` headers carry.
+
+The verified configuration is the default shipped build
+(`-DCANON_NO_REQUIRE -DNDEBUG`): `require_msg` in diag_push and
+`DIAG_PUSH_FMT` compiles out, so contract.h contributes only the
+definition-presence handler pair.
+
+### Function inventory
+
+All 13 non-macro functions annotated and proved (residuals are
+call-site/feature-gap goals, not function failures):
+
+- **Construction & reset (2)**: `diag_init`, `diag_clear`
+- **Pushing (1)**: `diag_push`
+- **Inspection (8)**: `diag_depth`, `diag_has_error`, `diag_frame_at`,
+  `diag_root`, `diag_latest`, `diag_root_code`, `diag_latest_code`
+  (+ the shared `frame_strings_ok`/`diag_invariant` predicate
+  vocabulary they consume)
+- **Output (3)**: `diag_print`, `diag_render_frame`, `diag_render`
+
+### What is proved
+
+- **Complete + disjoint behavior splits everywhere the API is
+  NULL-safe**: `diag_clear` and `diag_push` carry
+  `null_diag`/`valid_diag` splits; all three rendering functions carry
+  three-way `no_buffer`/`null-or-empty`/`rendered` splits matching the
+  documented "NULL-safe: returns 0 / no-op" contracts.
+- **Full push semantics through a byte-level libc call**: on the
+  overflow path, `push_depth_bounds`, `push_depth_step`, and
+  `push_overflow_flag` all **prove through the memmove** — WP frames
+  `d->depth` correctly past the `(char *)` write. `push_shift_semantics`
+  deliberately pins only `.code` across the shift (full-frame fidelity
+  is a documented weak spec in the `error_message` sense,
+  runtime-verified by diag_test.c's overflow tests; the byte-level
+  memmove spec cannot support field-level equalities — the residual
+  class).
+- **Message termination**: `push_msg_terminated` proves via the
+  bounded scan loop's invariants (`copy_len_bounds`, `copy_scanned`)
+  plus the explicit terminator write.
+- **Buffer termination through trusted stdio axioms**: `rf_terminated`
+  and `r_terminated` prove against the snprintf axiom's conditional
+  `term` ensures; diag_render carries a `render_terminated` loop
+  invariant that survives both the writing (`rem > 0`, fresh witness
+  from the axiom) and measure-only (`rem == 0`, empty assigns range)
+  iterations.
+- **Dead-guard discharge as a named goal**: the assertion
+  `dead_by_invariant_clamp: \false` inside diag_push's overflow clamp
+  **proved** — under `diag_invariant`, both paths reaching the clamp
+  give `depth < DIAG_MAX_FRAMES`, so the path is infeasible. Notable
+  for what the proof traverses: on the overflow path the contradiction
+  depends on the decrement surviving the memmove, so the proof
+  demonstrates precisely where the byte-view gap ends (depth framing
+  holds) even while frame-content goals at the same call site resist.
+  The cross-stream half of MCDC-009 outcome 1.
+
+### Trusted stdio axioms
+
+diag.h carries two `__FRAMAC__`-gated redeclarations of `snprintf` and
+`fprintf` — **assumed specifications** (extern, no body; WP axioms)
+that exist because Frama-C 29's stock variadic handling emits an open
+`assigns *(buf+(0..))` range the Typed+Cast model rejects ('Invalid
+infinite range', aborting the run). They require
+`-variadic-no-translation` so the specs bind to the untranslated
+calls. Two clauses are deliberate judgment calls, recorded normatively
+in VERIFY-017: `format != \null` instead of `valid_read_string`
+(the validity goal is triple-prover-resistant even for literals — 32
+caller obligations, all timeouts, at CI #1132/#1133 — and every call
+site passes a literal), and an unconditional termination ensures whose
+encoding-error side rests on the same hosted-libc environmental
+assumption as MCDC-009's permanent outcome-2 measurement residual —
+one assumption, cited by both evidence streams.
+
+### Spec-alignment chronology (round 1 → pinning)
+
+The report-only first run (d8566d5, CI #1132, 300s) returned 2968/3027
+with 59 unproved. 49 of the 59 traced to the round-1 stdio specs, not
+the code or the in-place contracts: 32 `valid_read_string(format)`
+caller obligations plus 17 `rf_/r_terminated` casualties of the
+ensures-free round-1 snprintf axiom. An intermediate run (1597a51,
+CI #1133, 120s) re-measured the same header goal-for-goal identically
+to the 300s run — the residual set is name-stable across both
+timeouts, refuting time-starvation directly. The trusted-axiom
+alignment closed all 49 with zero executable change (bb269f9,
+CI #1134: 3050/3060, exactly 10 unproved), the toolchain byte-identical across
+all three runs. The 10 are the identical named subset of the round-1
+59 — name-stable across three runs by construction.
+
+### Residual goals (10)
+
+All 10 are documented under VERIFY-017. All Timeouts at the pinning
+run; the diag_init memset goal oscillates Timeout/Unknown across runs
+(the wrapper counts the classes together). They split 2 inherited +
+8 own.
+
+**Inherited (2)**: `typed_cast_contract_default_handler_terminates` /
+`_loop_invariant_established` — VERIFY-006 cat 4, definition-presence
+only under `CANON_NO_REQUIRE` (no diag function contains a handler
+call), prefix `typed_cast_` per this TU's model (the VERIFY-016 flip).
+The **smallest inherited surface of any residual-carrying header**:
+diag.h's TU pulls in types.h, contract.h, and error.h only, and
+error.h is VERIFY-013 clean. Seventh composability confirmation.
+
+**diag-own (8)**: the libc byte-view class (VERIFY-007/-008 pattern at
+two new sites) — diag_init's memset byte-view validity (1), diag_push's
+memmove call-site validity pair (2), the `.code`-equality
+`push_shift_semantics` parts (3), and the assigns-framing pair against
+the byte-level write (2). **No new residual class**: round-1's
+predicted stdio-intrinsic class did not materialize — with sound
+axioms the stdio surface contributes zero residuals.
+
+### MCDC-009 cross-reference
+
+diag.h's gcov-measured MC/DC is 84/86 = 97.67%, its documented ceiling
+(reached at CI #1120, when the render-pair gap closure grew the
+denominator 46 → 86 and surfaced two pre-verification defects, both
+fixed). The two open outcomes have **distinct dispositions** — a first:
+the diag_push overflow clamp is invariant-dead and WP-closed via the
+named `dead_by_invariant_clamp` assertion (the eighth cross-stream
+closure, second named-assert, detectors in both streams), while
+diag_render's `n < 0` encoding-error skip is **libc-environmental** —
+permanently open by design, with no corresponding WP goal, sharing its
+assumption with the snprintf axiom's `term` ensures. See MCDC-009.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: compiles `require_msg` runtime checks
+  away; ACSL `requires` clauses provide the static guarantees.
+- **`-DNDEBUG`**: standard release-mode flag.
+- **`-variadic-no-translation`** (WP invocation, not a preprocessor
+  define): required for the trusted stdio axioms to bind — see the
+  axioms section above.
+
+### Reproduction
+
+```bash
+frama-c \
+  -variadic-no-translation \
+  -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I semantics \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  semantics/diag.h
+```
+
+Expected output: `Proved goals: 3050 / 3060` with the 10 documented
+unproved goals (VERIFY-017).
+
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -2728,7 +2917,7 @@ the complete installation and registration procedure.
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
-### semantics/ (in progress)
+### semantics/ (complete)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
@@ -2736,30 +2925,34 @@ the complete installation and registration procedure.
 | option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
 | result (driver)  | ✅ Verified  | 185/215 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 2 inherited + 28 own function-pointer-dispatch residuals; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
 | borrow.h         | ✅ Verified  | 2433/2452 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 17 inherited + 2 own memcmp-danglingness residuals — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (38/40 ceiling, first named-assert closure) |
+| diag.h           | ✅ Verified  | 3050/3060 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 2 inherited (contract.h handler pair — smallest inherited surface of any residual-carrying header) + 8 own libc byte-view residuals — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
 
-diag — planned next. borrow.h has shipped as the fourth semantics/
-module and the second verified in place (see its section above,
-VERIFY-016): its 24 non-macro functions verified in place with
-`DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` — the
-slice.h/DEFINE_SLICE structure, first in semantics/ — under the default configuration
-(`CANON_LIFETIME` off — the runtime lifetime substrate's verification
-posture is per OWN-001 §7), inheriting checked.h + slice.h's 17-goal
-residual surface byte-identically (composability confirmation #6) and
-adding only the known memcmp-danglingness class at one call site — the
-first downstream header since error.h with no new residual class.
-Option and result shipped before it as the
-first two driver-verified modules (see their sections above, VERIFY-014
-and VERIFY-015): the verification-driver approach the slice.h section
-anticipated — a header instantiating a concrete type outside macro
-context, with ACSL contracts on the generated prototypes — is confirmed
-working end to end on two modules (driver WP run + paired cover TU,
-both enforced in CI). Result additionally established the first
-union-typed proof (all union-member postconditions discharged, under
-the VERIFY-015 standing hypothesis) and the first clean Shape-B MC/DC
-audit (MCDC-007, 28/28 — its `require_msg`-only panic surface leaves no
-MCDC-006-style ceiling). The remaining Shape-B modules (vec, deque,
-fold — see `docs/vmacros.md`) follow the same driver + cover-TU
-template; MCDC-007's forward note governs their audit expectations.
+**The semantics/ layer is complete.** diag.h shipped as the fifth and
+final semantics/ module (see its section above, VERIFY-017): 13
+functions verified in place under the default configuration, with the
+four `DIAG_*` call-site macros parked per `docs/vmacros.md` — the
+slice.h/borrow.h in-place-surface + parked-family structure. Its run
+originated (rather than inherited) the `Typed+Cast` model, carried the
+smallest inherited surface of any residual-carrying header (the
+contract.h handler pair alone — composability confirmation #7), added
+no new residual class, and introduced the project's first **trusted
+stdio axioms** — two documented `__FRAMAC__`-gated assumed
+specifications whose environmental assumption is cited by both
+evidence streams (VERIFY-017 / MCDC-009 outcome 2). Its pinning
+chronology (d8566d5/#1132 → 1597a51/#1133 → bb269f9/#1134) also produced the cleanest
+methodology validation to date: the 10-goal residual set and both
+roll-calls were predicted from goal-by-goal classification before the
+pinning run and confirmed 10-for-10 with zero goals outside the
+documented set — the residual classes are now demonstrably predictive
+across new headers, not merely descriptive. borrow.h preceded it as
+the fourth module (VERIFY-016, composability confirmation #6); option
+and result shipped as the first two driver-verified Shape-B modules
+(VERIFY-014/-015), confirming the driver + cover-TU template end to
+end, with result additionally establishing the first union-typed proof
+and the first clean Shape-B MC/DC audit (MCDC-007). The remaining
+Shape-B modules (vec, deque, fold — see `docs/vmacros.md`) follow the
+same driver + cover-TU template as verification moves into data/;
+MCDC-007's forward note governs their audit expectations.
 
 ### data/ and algo/ (longer term)
 
