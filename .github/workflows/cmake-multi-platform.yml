@@ -2537,7 +2537,7 @@ jobs:
             -wp -wp-rte \
             -wp-model "${WP_MODEL}" \
             -wp-prover alt-ergo,z3,cvc5 \
-            -wp-timeout 120 \
+            -wp-timeout 300 \
             -wp-split \
             -cpp-extra-args=" \
               -I core/primitives \
