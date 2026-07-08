@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-07-05                                                   |
+| **Date**           | 2026-07-07                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | a76202d                                                      |
-| **CI run**         | Canon-C CI #1106                                             |
+| **Commit**         | 197ef8e                                                      |
+| **CI run**         | Canon-C CI #1122                                             |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -89,15 +89,38 @@
 > branches 86.7% → 86.9% (1472/1694); lines and functions unchanged.
 > A per-line MC/DC debug step for borrow.h entered the coverage job in
 > the same change as the measurement stream's regression detector.
+>
+> This baseline advances again from CI #1106 to CI #1122 (197ef8e),
+> capturing diag.h's render gap-closure arc (CI #1118–#1120) and the
+> per-line diag.h debug step that entered the coverage job alongside
+> the `frama-c-diag` WP job at #1122. diag.h's file-level MC/DC moved
+> 73.91% (34/46) → 97.67% (84/86): the denominator grew 46 → 86
+> because `diag_render` and `diag_render_frame` were entirely uncalled
+> before the pass — uncalled `static inline` functions are invisible
+> to gcov, so the render pair had been silently excluded rather than
+> counted as missed. The gap-closure pass surfaced two
+> pre-verification defects on the newly exercised path (a
+> contract-violating NULL guard permitting a `snprintf(NULL, >0, …)`
+> UB call, and a `-Werror=format-truncation` break on the documented
+> truncation path), both fixed before the ceiling was pinned at
+> CI #1120 (93fa22c). The two remaining outcomes are diag.h's
+> documented ceiling under MCDC-009 — one invariant-dead (the
+> diag_push overflow clamp, later WP-discharged via the named
+> `dead_by_invariant_clamp` assertion) and one libc-environmental
+> (diag_render's `n < 0` encoding-error skip, permanently open by
+> design). The aggregate moved accordingly: MC/DC 86.6% → 87.5%
+> (1524/1742), branches 86.9% → 87.7% (1520/1734), lines 95.8% →
+> 96.1% (2366/2461), functions 572/575 → 574/577 (the render pair
+> entering both function denominator and covered set).
 
 ### Results
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 95.8%      | 2323       | 2426       |
-| Functions  | 99.5%      | 572        | 575        |
-| Branches   | 86.9%      | 1472       | 1694       |
-| MC/DC      | 86.6%      | 1474       | 1702       |
+| Lines      | 96.1%      | 2366       | 2461       |
+| Functions  | 99.5%      | 574        | 577        |
+| Branches   | 87.7%      | 1520       | 1734       |
+| MC/DC      | 87.5%      | 1524       | 1742       |
 
 arena.h's MC/DC contribution at 90.6% (58/64) is the achievable
 ceiling under the documented MCDC-003 unreachability — see the
@@ -185,6 +208,26 @@ are the NULL-true sides of the one-NULL guard in `borrowed_bytes_eq`
 formally discharged dead by the named WP assertion `dead_by_invariant`
 at CI #1110 — the first closure carried as a single named proof goal
 (MCDC-008, VERIFY-016).
+
+diag.h's MC/DC contribution reached 84/86 (97.67%) at this baseline,
+its achievable ceiling under MCDC-009. The 50-outcome improvement from
+34/46 (73.91%) comes from the render gap-closure pass (CI #1118–#1120):
+`diag_render` and `diag_render_frame` were entirely uncalled before it
+and therefore invisible to gcov, so the denominator grew 46 → 86 as
+the pair entered measurement, and the pass surfaced (and fixed) two
+pre-verification defects on the newly exercised path. The 2 remaining
+missed outcomes have **distinct dispositions** — a first for the
+ceiling family: the true side of diag_push's overflow clamp
+(invariant-dead under `diag_invariant`, later formally discharged by
+the named WP assertion `dead_by_invariant_clamp` at CI #1132) and the
+true side of diag_render's `n < 0` encoding-error skip
+(libc-environmental: unreachable because these formats with valid
+arguments cannot provoke a snprintf encoding error on a hosted libc —
+permanently open by design, with no WP goal to retire it, sharing its
+assumption with VERIFY-017's trusted snprintf axiom). The sibling
+encoding-error ternary in `diag_render_frame` is gimplified as value
+selection and emits no condition row — confirmed absent from the
+denominator, matching prediction (MCDC-009).
 
 
 ### Methodology changes since baseline
@@ -373,6 +416,28 @@ by methodology):
   coverage build (the inverse disposition — a test closure, not a
   deviation; see MCDC-008's description).
 
+- **diag.h: 97.7% (84/86)** — the ceiling under MCDC-009, and the
+  first ceiling entry whose two outcomes carry **different
+  dispositions**. The clamp outcome (diag_push's
+  `d->depth >= DIAG_MAX_FRAMES` true side) is the familiar
+  invariant-dead shape — unreachable because the overflow branch above
+  it already holds depth at `DIAG_MAX_FRAMES - 1` under
+  `diag_invariant` — and is WP-discharged via the named in-body
+  assertion `dead_by_invariant_clamp` (proved at CI #1132; the second
+  named-assert closure after MCDC-008, with detectors in both streams:
+  the coverage job's per-line diag.h debug step and the frama-c-diag
+  wrapper's proved-set check, enforced as of #1135). The skip outcome
+  (diag_render's `n < 0` true side) is **libc-environmental** — a new
+  disposition: unreachable because of the stdio implementation's
+  behavior, not any diag invariant, so no WP goal can retire it and it
+  is a permanent documented residual rather than a deviation that
+  later closes. It is the measurement-stream citation of the same
+  hosted-libc assumption VERIFY-017's trusted snprintf axiom makes in
+  the proof stream. gcov measures 84/86 because it instruments the
+  source rather than the proof or the platform — the
+  complementary-evidence pattern, now spanning three kinds of
+  unreachability argument.
+
 - **option_cover.c: 96.7% (29/30)** — the ceiling under MCDC-006, and
   the first Shape-B (macro-templated) module to appear in the per-file
   table. option's combinator conditions live in `IMPL_OPTION_*` macro
@@ -464,7 +529,18 @@ second verified in place — 24 non-macro functions annotated in place
 under the default `CANON_LIFETIME`-off configuration (VERIFY-016),
 with `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the
 slice.h/DEFINE_SLICE in-place-surface + parked-family structure,
-first in semantics/).
+first in semantics/). As of 2026-07-08 (pinning measurement at
+bb269f9, CI #1134, actions run 28967245082; enforced as of 1965b23,
+CI #1135),
+diag.h became the fifth semantics/ module verified and the third
+verified in place, completing the semantics/ layer (VERIFY-017) — its
+run originated the `Typed+Cast` model from its own byte-view casts,
+carried the smallest inherited surface of any residual-carrying header
+(the contract.h handler pair alone), and introduced the project's
+first documented trusted stdio axioms; its 10-goal residual set was
+predicted by name before the pinning run and confirmed with zero goals
+outside the documented set (report-only chronology: d8566d5/#1132 at
+300s, 1597a51/#1133 name-stable at 120s).
 
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
@@ -481,7 +557,8 @@ first in semantics/).
 | option     | 16        |  223              |  189 (84.75%)     | 34       | VERIFY-014   |
 | result     | 17        |  215              |  185 (86.05%)     | 30       | VERIFY-015   |
 | borrow.h   | 24        | 2452              | 2433 (99.23%)     | 19       | VERIFY-016   |
-| **Total**  | **260**   | **21687**         | **21205 (97.78%)**| **482**  |              |
+| diag.h     | 13        | 3060              | 3050 (99.67%)     | 10       | VERIFY-017   |
+| **Total**  | **273**   | **24747**         | **24255 (98.01%)**| **492**  |              |
 
 The option row is the driver-verified Shape-B module: WP runs over
 `vmacros/vdrivers/option_verify.h`, which instantiates the real shipped
@@ -498,9 +575,11 @@ under `-DCANON_NO_REQUIRE`); result does not pull in the core/
 substrate stack. See VERIFY-015.
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
-`-wp-timeout 120`). Of the 482 unproved goals, the 418 in-place-header
+`-wp-timeout 120`). Of the 492 unproved goals, the 428 in-place-header
 goals (including borrow.h's 19 — 17 inherited re-emissions plus 2
-memcmp-danglingness goals, VERIFY-016) are demonstrated
+memcmp-danglingness goals, VERIFY-016 — and diag.h's 10 — the
+contract.h handler pair plus 8 libc byte-view goals at its
+memset/memmove sites, VERIFY-017) are demonstrated
 triple-prover-resistant and carry written
 manual-proof arguments or documented WP feature-gap rationale in
 `docs/deviations.md`. The 64 driver-module goals (option's 34 +
@@ -550,7 +629,14 @@ the 2452 figure for borrow.h likewise reflects the full run as
 borrow.h's row. 17 of borrow.h's 19 unproved goals are re-emerged
 residuals already documented under VERIFY-002/006/007 — slice.h's
 full 15-goal surface plus checked.h's pair, byte-identical (see
-VERIFY-016 for the inheritance table).
+VERIFY-016 for the inheritance table). diag.h's CI step processes
+diag.h with types.h, contract.h, and error.h transitively included
+(error.h is VERIFY-013 clean and contributes nothing); the 3060 figure
+for diag.h likewise reflects the full run as diag.h's row. 2 of
+diag.h's 10 unproved goals are the re-emerged contract.h handler pair
+(VERIFY-006 cat 4) — the smallest inherited surface of any
+residual-carrying header; the 8 diag-own goals are the libc byte-view
+class (see VERIFY-017).
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 (5.9%) than the previously verified primitives headers because slice.h
@@ -821,6 +907,31 @@ the shipped behavior — reachable-by-design branches get tests,
 invariant-dead branches get proofs. See MCDC-008 in
 `docs/deviations.md` for the formal closure record.
 
+diag.h's MCDC-009 is the eighth closure entry, the second carried by a
+named in-body assertion, and the first whose two open outcomes carry
+**different dispositions**. Outcome 1 (the diag_push overflow clamp)
+extends MCDC-008's mechanics — `dead_by_invariant_clamp: \false`
+discharged directly by WP, detectors in both streams (the coverage
+job's per-line diag.h debug step and the frama-c-diag wrapper's
+proved-set check, enforced as of #1135) — with a proof that is itself
+informative: on the overflow path the contradiction depends on
+`d->depth` surviving the byte-level memmove, so the discharged goal
+demonstrates exactly where the Typed+Cast byte-view gap ends (depth
+framing holds) while the frame-content goals at the same call site
+remain VERIFY-017 residuals. Outcome 2 (diag_render's `n < 0`
+encoding-error skip) opens a **new disposition flavor**:
+libc-environmental unreachability, resting on the stdio
+implementation's behavior rather than any diag invariant — no WP goal
+can ever retire it, so it is a permanent documented residual, and it
+is the measurement-stream citation of the same hosted-libc assumption
+VERIFY-017's trusted snprintf axiom makes in the proof stream (one
+assumption, two records, each pointing at the other). Future
+ceiling-family entries should classify against three shapes, not two:
+test-closable, invariant-dead (proof-closable), and environmental
+(permanent). See MCDC-009 in `docs/deviations.md` for the formal
+record, including the denominator-growth history and the two defects
+the gap closure surfaced.
+
 ### History
 
 | Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | MC/DC  | Notes                                                                    |
@@ -844,5 +955,7 @@ invariant-dead branches get proofs. See MCDC-008 in
 | 2026-07-03 | b528515 | #1089  | v1.3.0  | 95.8%  | 99.5%     | 86.7%    | 86.4%  | result: second Shape-B module via the vmacros pattern (`result_verify.h` driver + `result_cover.c` cover TU; `CANON_RESULT(int, VErr)`, first union-typed module). WP driver enforced 185/215 (VERIFY-015, #1090 at 6516ae5; report-only first at #1089): 2 inherited (contract.h handler, definition-presence only — require_msg panic surface fully compiled out) + 28 own fn-pointer-dispatch (map/map_err 6 each, and_then/or_else 4 each, eq 8 with one rte_function_pointer goal per pointer); all union-member postconditions proved under the VERIFY-015 union-model standing hypothesis ([wp:union] warnings expected). MC/DC 100% (28/28) — first clean Shape-B audit (MCDC-007), no MCDC-006-style ceiling; generated conditions attributed to the driver header result_verify.h (22/22) with scaffolding in result_cover.c (6/6) — attribution finding recorded in MCDC-007 with option's wording flagged for re-audit. Per-module attribution check confirmed (result_test.c owns all 256 test-measured outcomes). Aggregate MC/DC 86.2% → 86.4% (1471/1702). |
 | 2026-07-05 | a76202d | #1106  | v1.3.0  | 95.8%  | 99.5%     | 86.9%    | 86.6%  | borrow.h MC/DC ceiling reached: three CANON_NO_REQUIRE-gated `_get(NULL)` tests close the defensive-branch outcomes (35/40 → 38/40, 95.0%); the 2 remaining outcomes are `borrowed_bytes_eq`'s one-NULL guard (MCDC-008 measurement half; gcov dump confirms line 758 conds 0/1 true, guard body `#####`). Per-line MC/DC debug step for borrow.h added to the coverage job as the measurement-stream regression detector. Aggregate MC/DC 86.4% → 86.6% (1474/1702), branches 86.7% → 86.9% (1472/1694). |
 | 2026-07-05 | 262a503 | #1110  | v1.3.0  | 95.8%  | 99.5%     | 86.9%    | 86.6%  | borrow.h: ACSL contracts + WP (VERIFY-016) — fourth semantics/ module, second verified in place; 24 non-macro functions in place, DEFINE_BORROWED_SLICE parked per docs/vmacros.md (the slice.h/DEFINE_SLICE structure, first in semantics/), Typed+Cast, verified config CANON_LIFETIME off (OWN-001 §7). WP 2433/2452, exactly 19 unproved: 17 inherited (slice.h's full 15 + checked.h's 2, byte-identical; composability confirmation #6, smallest inherited surface since memory.h) + 2 own memcmp danglingness at the header's only libc call — no new residual class (first since error.h). Round 1 report-only at 383bf9f/#1109 (27 unproved; 8 call-site chaining goals closed by aligning four contracts to slice.h's real clauses, zero executable change). `dead_by_invariant` named assert proved — MCDC-008 cross-stream closure complete (first named-assert closure; detectors in both streams). Enforced as of #1111. No coverage change (ACSL comments touch no branches). |
+| 2026-07-07 | 197ef8e | #1122  | v1.3.0  | 96.1%  | 99.5%     | 87.7%    | 87.5%  | diag.h MC/DC ceiling baselined + `frama-c-diag` job lands (report-only). Render gap-closure arc (#1118–#1120): diag_render/diag_render_frame were uncalled and invisible to gcov — denominator 46 → 86 as the pair entered measurement; two pre-verification defects surfaced and fixed (NULL-guard snprintf UB; -Werror=format-truncation on the documented truncation path); ceiling 84/86 (97.67%) pinned at #1120 (93fa22c). The 2 open outcomes are MCDC-009's pair: the invariant-dead overflow clamp and the libc-environmental `n < 0` skip. Per-line diag.h debug step enters the coverage job as the measurement-stream detector. Aggregate MC/DC 86.6% → 87.5% (1524/1742), branches 86.9% → 87.7% (1520/1734), lines 95.8% → 96.1% (2366/2461), functions 574/577. |
+| 2026-07-08 | 1965b23 | #1135  | v1.3.0  | 96.1%  | 99.5%     | 87.7%    | 87.5%  | diag.h: ACSL contracts + WP enforced (VERIFY-017) — fifth semantics/ module, third verified in place; **semantics/ layer complete**. WP 3050/3060, exactly 10 unproved: 2 inherited (contract.h handler pair — smallest inherited surface of any residual-carrying header; composability confirmation #7) + 8 own libc byte-view goals at the memset/memmove sites — no new residual class (round-1's predicted stdio class did not materialize under sound axioms). Typed+Cast originated by diag.h's own casts; first documented trusted stdio axioms (`-variadic-no-translation`; format-nonnull + conditional termination ensures sharing MCDC-009 outcome 2's hosted-libc assumption). Chronology: report-only d8566d5/#1132 (300s, 59), 1597a51/#1133 (120s, 59 name-stable — refuting time-starvation), pinning bb269f9/#1134 (actions run 28967245082: 49 closed by trusted-axiom alignment, zero executable change, toolchain byte-identical); residual set and both roll-calls predicted by name before the pinning run, confirmed 10/10 with 0 outside the set. `dead_by_invariant_clamp` named assert proved — MCDC-009 outcome-1 cross-stream closure (second named-assert closure; detectors in both streams). Enforced as of #1135. No coverage change (ACSL and axiom edits touch no branches). |
 
 ---
