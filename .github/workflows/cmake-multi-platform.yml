@@ -2526,12 +2526,19 @@ jobs:
           }
 
           set +e
-          frama-c -wp -wp-rte \
+          # -variadic-no-translation: stop the Variadic plug-in from
+          # rewriting snprintf(...) into snprintf_va_* instances whose
+          # generated `assigns *(buf+(0..))` (an open range) aborts WP
+          # with 'Invalid infinite range'. Frama-C 29 (Copper). See the
+          # Variadic plug-in docs and the -generated-spec-* option family
+          # named in the run's first missing-spec warnings.
+          frama-c \
+            -variadic-no-translation \
+            -wp -wp-rte \
             -wp-model "${WP_MODEL}" \
             -wp-prover alt-ergo,z3,cvc5 \
             -wp-timeout 120 \
             -wp-split \
-            -wp-no-callee-precond \
             -cpp-extra-args=" \
               -I core/primitives \
               -I core \
