@@ -2451,62 +2451,54 @@ jobs:
           path: wp_borrow_output.txt
 
   # -------------------------------------------------------------------------
-  # semantics/diag.h — REPORT-ONLY prediction-checking run (ENFORCE=0).
+  # semantics/diag.h — ENFORCED. Fifth verified semantics/ module, third
+  # verified in place (after error.h and borrow.h).
   #
-  # Chronology: round-1 report-only at d8566d5 (CI #1132, 300s): 2968/3027
-  # proved, 59 unproved. 49 of the 59 traced to two clauses in the round-1
-  # trusted stdio specs, not to the code or the in-place contracts:
-  #   (a) 32 — valid_read_string(format) requires on the snprintf/fprintf
-  #       redeclarations, minting triple-prover-resistant caller goals at
-  #       every call site (all pass literals); replaced by format != \null.
-  #   (b) 17 — rf_terminated / r_terminated casualties of the round-1
-  #       snprintf axiom havocking buf[0..size-1] with no termination
-  #       ensures; closed by the conditional `term` ensures on the axiom
-  #       plus the render_terminated loop invariant in diag_render.
-  # The \from clauses and `\result >= -1` were also removed (WP ignores
-  # \from; the result bound was stronger than ISO C). See VERIFY-017's
-  # "Trusted stdio axioms" section for the normative record.
-  #
-  # PREDICTED baseline after the spec alignment (this run confirms it):
-  # exactly 10 unproved — 2 inherited (contract.h handler pair,
-  # definition-presence only under CANON_NO_REQUIRE; typed_cast_ prefix
-  # per this TU's model) + 8 diag-own (libc byte-view through Typed+Cast:
-  # diag_init memset 1 [the Unknown], diag_push memmove valid_dest/src 2,
+  # PINNED baseline: 3050 / 3060 proved, exactly 10 unproved (VERIFY-017):
+  # 2 inherited (contract.h handler pair — definition-presence only under
+  # CANON_NO_REQUIRE; typed_cast_ prefix per this TU's model, the
+  # VERIFY-016 prefix-flip precedent) + 8 diag-own (libc byte-view through
+  # Typed+Cast: diag_init memset 1, diag_push memmove valid_dest/src 2,
   # push_shift_semantics .code-equality parts 3, push assigns framing 2).
-  # The 10 are the identical named subset of #1132's 59.
+  # All Timeout-class at pinning; the diag_init memset goal has also been
+  # observed as Unknown (#1132) — the wrapper counts the classes together,
+  # so the oscillation is pin-safe. Smallest inherited surface of any
+  # residual-carrying header; composability confirmation #7.
+  #
+  # Chronology: report-only first at d8566d5 (CI #1132, 300s, 59 unproved);
+  # re-measured name-stable at 1597a51 (CI #1133, 120s, 59 — same goal set
+  # at both timeouts, refuting time-starvation); pinned at {TODO: sha}
+  # (CI #{TODO}, actions run 28967245082, 120s, 17m21s) after the trusted-
+  # stdio-axiom alignment in diag.h closed 49 of the 59 (32 valid_fmt
+  # caller obligations deleted by weakening the axiom requires to
+  # format != \null; 17 rf_/r_terminated goals closed by the axiom's
+  # conditional `term` ensures plus diag_render's render_terminated loop
+  # invariant). Toolchain byte-identical across all three runs — the
+  # collapse was specification alignment alone. See VERIFY-017's "Trusted
+  # stdio axioms" section for the normative record of the two deliberate
+  # judgment calls in the __FRAMAC__ block.
   #
   # MODEL: Typed+Cast, forced by diag.h's OWN byte-view casts (the
   # (char *) views of Diag/DiagFrame at the memset/memmove sites and in
   # push_no_alias) — first semantics/ header to originate the requirement
-  # rather than inherit it. Confirmed by the four WP cast warnings on the
-  # first run.
-  #
-  # TIMEOUT: 120s, same as every other enforced header. Round-1 used 300s
-  # while the spec noise was being diagnosed; with 59 unproved goals at
-  # 300s x 3 sequential provers the job ran 3h20m. The 120->300 experiment
-  # moved no goal into the proved set — these residuals are
-  # model-limitation/invalid-as-stated, not time-starved.
+  # rather than inherit it.
   #
   # MCDC-009 cross-stream: the named assert dead_by_invariant_clamp at the
-  # diag_push overflow clamp (line 427 at d8566d5) PROVED at CI #1132.
+  # diag_push overflow clamp PROVED (#1132, re-confirmed every run since).
   # WP prints only unproved goals by name, so absence from the unproved
   # list (given a summary exists) IS the proof — the check below uses the
-  # borrow.h inverted form. gcov holds the matching outcome open at 84/86
-  # (97.67%, ceiling since CI #1120); diag_render's n<0 skip (line 968) is
-  # the libc-environmental permanent residual, NOT WP-closable — no goal
-  # will ever retire it, do not add a check for it here.
+  # borrow.h inverted form and is the proof-stream regression detector;
+  # the coverage job's per-line diag.h debug step is the measurement-
+  # stream one. gcov holds the matching outcome open at 84/86 (97.67%,
+  # ceiling since CI #1120). diag_render's n<0 encoding-error skip is the
+  # libc-environmental permanent residual (MCDC-009 outcome 2) — NOT
+  # WP-closable, deliberately no check here; its assumption is the same
+  # one the snprintf axiom's `term` ensures rests on.
   #
-  # PROMOTION (after this run confirms the prediction):
-  #   1. Fill EXPECTED_PROVED from the summary line.
-  #   2. Set ENFORCE=1.
-  #   3. Land VERIFY-017 + MCDC-009 in docs/deviations.md, the diag.h
-  #      section in docs/verification.md, and the traceability.md row in
-  #      the same PR. Record the pinning CI # in this banner.
-  # If the run does NOT match the prediction (count != 10 or a roll-call
-  # name missing), do NOT pin — the deltas are axiom-chaining stragglers
-  # (most likely the new render_terminated loop-invariant goals or an
-  # r_terminated part); record the observed names, update the OWN list and
-  # VERIFY-017, and re-run.
+  # -variadic-no-translation is REQUIRED: the trusted stdio axioms bind to
+  # the untranslated snprintf/fprintf calls; with translation ON the calls
+  # become snprintf_va_* (spec never attaches) and the generated variadic
+  # spec's open assigns range aborts WP with 'Invalid infinite range'.
   # -------------------------------------------------------------------------
   frama-c-diag:
     needs: build
@@ -2516,22 +2508,18 @@ jobs:
       - uses: ./.github/actions/framac-setup
 
       - name: "WP: semantics/diag.h"
-        # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation
-        # (required so the trusted stdio axioms bind to the untranslated
-        # snprintf/fprintf calls; with translation ON the calls become
-        # snprintf_va_* and the specs never attach — and the generated
-        # variadic spec's open assigns range aborts WP entirely).
-        # Expected: {TODO: P} / {TODO: T} proved, exactly 10 unproved
-        # (VERIFY-017): 2 inherited + 8 own. Also enforces the MCDC-009
-        # closure: dead_by_invariant_clamp must remain in the proved set.
-        # Any deviation is a regression once ENFORCE=1.
+        # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation.
+        # Expected: 3050 / 3060 proved, exactly 10 unproved (VERIFY-017):
+        # 2 inherited + 8 own. Also enforces the MCDC-009 closure:
+        # dead_by_invariant_clamp must remain in the proved set. Any
+        # deviation is a regression and fails the job.
         run: |
           eval $(opam env --switch=frama-c)
 
-          # ---- ENFORCEMENT VALUES ------------------------------------------
-          ENFORCE=0                     # flip to 1 at promotion (see banner)
-          EXPECTED_UNPROVED=10          # predicted; confirmed by this run
-          EXPECTED_PROVED=""            # {TODO: "P / T" from this run's summary}
+          # ---- ENFORCEMENT VALUES: pinned at CI #{TODO} ({TODO: sha}) ----
+          ENFORCE=1
+          EXPECTED_UNPROVED=10
+          EXPECTED_PROVED="3050 / 3060"
           WP_MODEL="Typed+Cast"         # diag.h's own casts force it
           # ------------------------------------------------------------------
 
@@ -2563,7 +2551,11 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (diag.h) exit status: ${WP_EXIT}"
-          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          if [ "${ENFORCE}" -eq 1 ]; then
+            echo "  MODE: ENFORCED  MODEL: ${WP_MODEL}"
+          else
+            echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          fi
           echo "==============================================="
 
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_diag_output.txt || true)
@@ -2584,7 +2576,7 @@ jobs:
             FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_diag_output.txt || true)
             UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
             echo "  Timeouts: ${TIMEOUT_COUNT}"
-            echo "  Unknown:  ${UNKNOWN_COUNT}   (expected 1 — the diag_init memset goal)"
+            echo "  Unknown:  ${UNKNOWN_COUNT}   (0-1 — the diag_init memset goal oscillates Timeout/Unknown)"
             echo "  Failed:   ${FAILED_COUNT}"
             echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
 
@@ -2629,7 +2621,7 @@ jobs:
             done
             echo "  Inherited residuals observed: ${INHERITED_SEEN}/2"
             if [ "${INHERITED_SEEN}" -ne 2 ]; then
-              note_fail "FAIL: inherited set differs from the composability prediction."
+              note_fail "FAIL: inherited set differs from the composability record."
             fi
 
             echo ""
@@ -2640,7 +2632,8 @@ jobs:
             # PROVE (incl. dead_by_invariant_clamp below); only frame-content
             # and byte-range-validity goals resist.
             OWN_CHECKS=(
-              # diag_init — byte view of a local Diag at the memset (the Unknown)
+              # diag_init — byte view of a local Diag at the memset
+              # (oscillates Timeout/Unknown across runs)
               "typed_cast_diag_init_call_memset_requires_valid_s"
               # diag_push — overflow-shift memmove call site
               "typed_cast_diag_push_call_memmove_requires_valid_dest"
@@ -2667,9 +2660,9 @@ jobs:
             echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
             if [ "${OTHER_UNPROVED}" -ne 0 ]; then
               note_fail "FAIL: undocumented residuals present — see VERIFY-017."
-              echo "      Likely axiom-chaining stragglers (render_terminated"
-              echo "      loop-invariant goals or an r_terminated part) — see"
-              echo "      the promotion note in this job's banner."
+              echo "      If the new names are render_terminated loop-invariant"
+              echo "      or r_terminated goals, the diag_render loop invariant"
+              echo "      or the snprintf axiom's term ensures has been weakened."
             fi
 
             echo ""
@@ -2701,17 +2694,15 @@ jobs:
           echo "==============================================="
           if [ "${ENFORCE}" -eq 0 ]; then
             if [ "${FAILURES}" -eq 0 ]; then
-              echo "REPORT-ONLY: prediction CONFIRMED — 10 documented residuals"
-              echo "  (2 inherited + 8 own), dead_by_invariant_clamp proved."
-              echo "  Ready to pin: fill EXPECTED_PROVED from the summary above,"
-              echo "  set ENFORCE=1, land VERIFY-017/MCDC-009 in the same PR."
+              echo "REPORT-ONLY: all pinned checks match — safe to (re)enable"
+              echo "  enforcement (ENFORCE=1)."
             else
-              echo "REPORT-ONLY: ${FAILURES} prediction check(s) missed — see FAIL"
-              echo "  lines above. Do NOT pin against this run; classify the"
-              echo "  deltas, update VERIFY-017 and the roll-calls, re-run."
+              echo "REPORT-ONLY: ${FAILURES} check(s) missed — see FAIL lines"
+              echo "  above. Classify the deltas against VERIFY-017 before"
+              echo "  (re)enabling enforcement."
             fi
           elif [ "${FAILURES}" -eq 0 ]; then
-            echo "PASS: diag.h verified — ${EXPECTED_PROVED} proved, 10 documented"
+            echo "PASS: diag.h verified — 3050/3060 proved, 10 documented"
             echo "      residuals all observed (VERIFY-017): 2 inherited"
             echo "      (contract.h handler pair) + 8 own (libc byte-view"
             echo "      through Typed+Cast at the memset/memmove sites);"
