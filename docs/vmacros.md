@@ -312,6 +312,22 @@ their own driver, or document-only per the existing macro-disposition rule):
   slice.h has with `DEFINE_SLICE`; that changes nothing for this list
   — the macro family's disposition remains open exactly as for
   `DEFINE_SLICE`
+- `DIAG_PUSH` / `DIAG_PUSH_FMT` / `DIAG_RETURN_IF` / `DIAG_PROPAGATE`
+  in `semantics/diag.h` — note: these are **call-site expansion
+  wrappers** (capturing `__FILE__`/`__LINE__`/`__func__`, formatting,
+  or guard-and-return around `diag_push`) rather than
+  type-instantiating families, so they have even less verifiable
+  surface than the `DEFINE_*` entries: their bodies are argument
+  plumbing plus a call into the verified function. diag.h's
+  **non-macro** surface (13 functions) is WP-verified in place
+  (VERIFY-017) — the slice.h/borrow.h structure, completing the
+  semantics/ layer — and the wrappers are exercised by
+  `test/semantics/diag_test.c`; their conditions measured through the
+  test TU are stamped to the `/test/` path and filtered (the known
+  single-file attribution), which is acceptable here because the
+  wrapped logic they add (one `if` each in `DIAG_RETURN_IF` /
+  `DIAG_PROPAGATE`) is caller-side control flow, not library
+  computation. Disposition remains open with the rest of this list
 
 These are listed for completeness but are **out of scope for the initial
 `vmacros/` rollout**, which targets the 14 multi-file modules above. Their
