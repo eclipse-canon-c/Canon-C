@@ -24,6 +24,47 @@
 #include <string.h>  /* memmove, memcpy */
 #include <stdio.h>   /* FILE, fprintf, snprintf */
 
+#ifdef __FRAMAC__
+/* ────────────────────────────────────────────────────────────────────────
+   WP-only bounded assigns for the buffer-writing stdio functions.
+
+   Root cause (diagnosed via the borrow.h contrast): borrow.h's libc calls
+   (memcmp/strlen) have bounded assigns and verify cleanly as residuals.
+   snprintf WRITES the caller buffer, and the spec WP resolves for it in
+   Frama-C 29 carries `assigns *(buf+(0..))` — an open range WP's Typed+Cast
+   model rejects with 'Invalid infinite range', aborting the whole run
+   before any summary. Bounding the write to buf[0..size-1] gives WP a
+   finite location.
+
+   These redeclarations are visible ONLY to Frama-C (__FRAMAC__), never to
+   the C compiler, so they cannot clash with the real <stdio.h>. They
+   require -variadic-no-translation in the WP job: with translation ON the
+   call is rewritten to snprintf_va_2 before WP runs and a spec on plain
+   `snprintf` never binds. With translation OFF the call stays `snprintf`
+   and this spec attaches.
+
+   Return value left loosely bounded: the render functions handle both
+   truncation (>= size) and the n<0 encoding-error path (the line-668
+   libc-environmental residual), so no exact return relation is asserted. */
+/*@
+  requires valid_buf: \valid(((char *)buf) + (0 .. size - 1));
+  requires valid_fmt: valid_read_string(format);
+  assigns  ((char *)buf)[0 .. size - 1];
+  assigns  \result \from indirect: size, indirect: ((char *)buf)[0 .. size - 1],
+                         indirect: format[0 .. ];
+  ensures  bounded: \result >= -1;
+*/
+extern int snprintf(char *buf, size_t size, const char *format, ...);
+
+/*@
+  requires valid_stream: \valid(stream);
+  requires valid_fmt: valid_read_string(format);
+  assigns  *stream \from *stream, indirect: format[0 .. ];
+  assigns  \result \from indirect: *stream;
+*/
+extern int fprintf(FILE *stream, const char *format, ...);
+#endif /* __FRAMAC__ */
+
 /**
  * @file semantics/diag.h
  * @brief Structured diagnostic frames — context chain for error propagation
