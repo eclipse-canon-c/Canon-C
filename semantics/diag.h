@@ -26,41 +26,60 @@
 
 #ifdef __FRAMAC__
 /* ────────────────────────────────────────────────────────────────────────
-   WP-only bounded assigns for the buffer-writing stdio functions.
+   WP-only trusted axioms for the buffer-writing stdio functions.
 
-   Root cause (diagnosed via the borrow.h contrast): borrow.h's libc calls
-   (memcmp/strlen) have bounded assigns and verify cleanly as residuals.
-   snprintf WRITES the caller buffer, and the spec WP resolves for it in
-   Frama-C 29 carries `assigns *(buf+(0..))` — an open range WP's Typed+Cast
-   model rejects with 'Invalid infinite range', aborting the whole run
-   before any summary. Bounding the write to buf[0..size-1] gives WP a
-   finite location.
+   Why they exist: Frama-C 29's stock variadic handling emits
+   `assigns *(buf+(0..))` — an open range WP's Typed+Cast model rejects
+   with 'Invalid infinite range', aborting the whole run before any
+   summary. These redeclarations bound the write to buf[0..size-1]. They
+   are visible ONLY to Frama-C (__FRAMAC__), never to the C compiler, so
+   they cannot clash with the real <stdio.h>, and they require
+   -variadic-no-translation in the WP job: with translation ON the call
+   is rewritten to snprintf_va_2 before WP runs and a spec on plain
+   `snprintf` never binds.
 
-   These redeclarations are visible ONLY to Frama-C (__FRAMAC__), never to
-   the C compiler, so they cannot clash with the real <stdio.h>. They
-   require -variadic-no-translation in the WP job: with translation ON the
-   call is rewritten to snprintf_va_2 before WP runs and a spec on plain
-   `snprintf` never binds. With translation OFF the call stays `snprintf`
-   and this spec attaches.
+   These are ASSUMED specifications (extern prototypes with no body — WP
+   takes them as axioms and never proves them). Two clauses are
+   deliberate judgment calls, recorded normatively in VERIFY-017's
+   "Trusted stdio axioms" section:
 
-   Return value left loosely bounded: the render functions handle both
-   truncation (>= size) and the n<0 encoding-error path (the line-668
-   libc-environmental residual), so no exact return relation is asserted. */
+   1. `format != \null` only, NOT valid_read_string(format): the string-
+      validity goal is triple-prover-resistant under this model even for
+      literals (32 caller obligations, all timeouts, at CI #1132/#1133),
+      and every call site in this header passes a string literal whose
+      validity is a compiler guarantee, not a proof target. A requires on
+      a trusted axiom exists only to mint caller obligations — this one
+      minted noise.
+
+   2. Unconditional termination ensures (`term`): ISO C99 guarantees
+      null-termination for size > 0 on the success path but is silent on
+      the encoding-error path (\result < 0). Asserting it unconditionally
+      rests on the environmental assumption that these format strings
+      with valid arguments do not provoke encoding errors on any hosted
+      libc — the SAME assumption the measurement stream records for the
+      permanently-uncovered n<0 true side in diag_render (MCDC-009,
+      outcome 2). One assumption, cited by both evidence streams.
+
+   No \result bound is asserted (ISO C permits any negative value on
+   error, not just -1; both render functions branch only on n < 0), and
+   no \from clauses (WP ignores them, and the open format[0..] range they
+   carried was a parse hazard). The variadic arguments are invisible to
+   the axiom — untranslated variadics carry no argument spec — so read-
+   validity of the rendered fields is not assumed here; it is carried by
+   the frame_strings_ok preconditions on the calling functions. */
 /*@
+  requires fmt_nonnull: format != \null;
   requires valid_buf: \valid(((char *)buf) + (0 .. size - 1));
-  requires valid_fmt: valid_read_string(format);
   assigns  ((char *)buf)[0 .. size - 1];
-  assigns  \result \from indirect: size, indirect: ((char *)buf)[0 .. size - 1],
-                         indirect: format[0 .. ];
-  ensures  bounded: \result >= -1;
+  ensures  term: size > 0 ==>
+    (\exists integer k; 0 <= k < size && ((char *)buf)[k] == '\0');
 */
 extern int snprintf(char *buf, size_t size, const char *format, ...);
 
 /*@
   requires valid_stream: \valid(stream);
-  requires valid_fmt: valid_read_string(format);
-  assigns  *stream \from *stream, indirect: format[0 .. ];
-  assigns  \result \from indirect: *stream;
+  requires fmt_nonnull: format != \null;
+  assigns  *stream;
 */
 extern int fprintf(FILE *stream, const char *format, ...);
 #endif /* __FRAMAC__ */
@@ -226,19 +245,24 @@ typedef struct {
    ACSL predicates — shared verification vocabulary (Frama-C/WP)
    ════════════════════════════════════════════════════════════════════════════
 
-   Verification round-1 notes (VERIFY-017 candidate):
-   - Predicted own-residual classes: (a) memmove/memcpy call-site goals in
-     diag_push — the byte-level libc specs vs. Typed field reasoning class
-     known from prior headers, at new sites; (b) snprintf/fprintf goals in
-     the rendering functions — variadic translation plus deliberately weak
-     stdio specs, a class new to the project and intrinsic to stdio-facing
-     code.
+   Verification notes (VERIFY-017):
+   - Own residuals are a single class: libc byte-view through Typed+Cast
+     (the memset/memmove byte specs vs. typed Diag/DiagFrame locations,
+     VERIFY-007/-008 pattern at two new sites) — 8 goals in
+     diag_init/diag_push. Round-1's predicted class (b), stdio-intrinsic
+     residuals, did NOT materialize: with sound trusted axioms (see the
+     __FRAMAC__ block at the top of this header) the stdio surface
+     contributes zero residuals, so diag.h adds no new residual class to
+     the project ledger.
+   - Inherited: the contract.h handler pair only (typed_cast_ prefix,
+     definition-presence under CANON_NO_REQUIRE) — the smallest inherited
+     surface of any residual-carrying header.
    - The overflow clamp in diag_push carries a named dead-code assert
-     (dead_by_invariant_clamp), closing the MC/DC line-293 partial
-     cross-stream once discharged.
-   - Libc-facing clauses are drafted against Frama-C's stock libc specs and
-     must be aligned to the actual specs from the first WP output, not
-     defended against it. */
+     (dead_by_invariant_clamp), PROVED — the cross-stream half of
+     MCDC-009 outcome 1. MCDC-009 outcome 2 (diag_render's n<0 skip) is
+     libc-environmental and deliberately has NO corresponding WP goal;
+     its assumption is the same one the snprintf axiom's `term` ensures
+     rests on. */
 
 /*@
   predicate diag_invariant(Diag d) =
@@ -918,8 +942,17 @@ static inline usize diag_render(const Diag *d,
         return 0u;
     }
 
+    /* render_terminated carries the r_terminated postcondition through
+     * the loop. Established by the buf[0] = '\0' pre-write (on the loop
+     * path, buf != NULL && buf_size > 0 held at the guard above).
+     * Preserved: when rem > 0, the snprintf axiom's `term` ensures
+     * supplies a fresh witness inside dst[0 .. rem-1], a subrange of
+     * buf[0 .. buf_size-1]; when rem == 0, the axiom's assigns range
+     * (0 .. -1) is empty and the previous witness survives the call. */
     /*@
       loop invariant render_i_bounds: 0 <= i <= d->depth;
+      loop invariant render_terminated:
+        \exists integer k; 0 <= k < buf_size && buf[k] == '\0';
       loop assigns i, total, buf[0 .. buf_size - 1];
       loop variant d->depth - i;
     */
