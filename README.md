@@ -1,6 +1,6 @@
 <p align="center">
   <img src="logo_transparent.png" alt="Canon-C" width="600"/>
-</p>
+</p> 
 
 # Canon-C 
 
