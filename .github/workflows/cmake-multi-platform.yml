@@ -3743,6 +3743,106 @@ jobs:
             done
           fi
       
+      - name: "Debug: Shape-B attribution check for vec (vec_test)"
+        # Per-module attribution confirmation (docs/vmacros.md checklist):
+        # option and result confirmed the Shape-B pattern; vec gets its own
+        # cheap one-run check before vec_cover.c's numbers become the module
+        # baseline. Confirms vec's macro-generated CONDITIONS are stamped to
+        # the instantiation TU (vec_test.c) and therefore removed by the
+        # '*/test/*' lcov filter — the precondition for vec_cover.c being
+        # the correct fix rather than a filter-narrowing change.
+        #
+        # VEC-SPECIFIC EXPECTATION: vec_impl.h itself IS expected to appear
+        # in the ownership table — but with the result__Bool_Error
+        # fingerprint only: 4 functions / 1 line (the guarded
+        # CANON_RESULT(bool, Error) emission at file scope, vec_impl.h
+        # ~line 113) and ZERO conditions. CI #1147's genhtml already showed
+        # exactly this (lines=1 functions=4), as did deque_impl.h and
+        # fold_impl.h (same guarded emission). For the MCDC-010 split this
+        # is a functions-only reclassification note (result-module
+        # inherited); nothing moves in the condition accounting.
+        #
+        # STOP SIGNAL: vec_impl.h owning CONDITION rows (not just function
+        # rows) would mean the cover TU is unnecessary for this module and
+        # the filter is the fix. Expected outcome: condition rows owned by
+        # vec_test.c only. Report-only; never fails.
+        run: |
+          cd build
+          VEC_GCDA=$(find . -name "vec_test*.gcda" | head -1)
+          if [ -z "$VEC_GCDA" ]; then
+            echo "ERROR: could not locate vec_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $VEC_GCDA"
+          gcov-14 --conditions "$VEC_GCDA" 2>/dev/null | \
+            grep -B 1 -A 3 -E "vec_(test|impl|defn|mangle)" | head -120
+          echo ""
+          echo "=== File ownership of vec-generated conditions ==="
+          gcov-14 --conditions "$VEC_GCDA" 2>&1 | \
+            awk '/^File /{f=$0} /Condition outcomes covered:/{print f "\t" $0}' | \
+            grep -iE "vec" || echo "(no vec-owned condition rows found)"
+      
+      
+      - name: "Debug: per-line MC/DC detail for vec (cover TU)"
+        # First measured MC/DC baseline for the vec module: 155/158 (98.1%),
+        # exactly 3 condition outcomes missed as of CI #1147 (cc1fa2b).
+        # Report-only — surfaces WHICH three outcomes are uncovered so the
+        # MCDC-010 deviations entry can pin them by name rather than by
+        # count. Never fails.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: the 3 missed outcomes are the
+        # three written down in vec_cover.c's header BEFORE the first run:
+        #   U1  alloc:       `!checked_mul(...)` true-outcome — INFEASIBLE.
+        #       The preceding capacity <= CANON_VEC_MAX_CAPACITY/sizeof(type)
+        #       guard bounds the product; the multiplication cannot overflow.
+        #   U2  arena_alloc: same condition, same argument — INFEASIBLE.
+        #   U3  alloc:       `!buf` true-outcome — heap OOM not portably
+        #       forcible from a cover TU (ENVIRONMENT). The arena analogue
+        #       IS covered (deterministic exhaustion), so U3 is heap-only.
+        # Disposition if confirmed: U1/U2 -> justified-infeasible rows,
+        # U3 -> justified-environment row in MCDC-010. If any of the three
+        # lands on a different line, that is a cover-TU gap — fixed by
+        # extending vec_cover.c's main(), not by a deviation entry.
+        # (WP cross-check: VERIFY-018 predicts the U1/U2 branches are
+        # proved DEAD — the two evidence streams should agree.)
+        #
+        # NOTE: vec is Shape B. The conditions live in IMPL_VEC_* macro
+        # bodies and are stamped to the instantiation site — vec_cover.c
+        # itself (vec_cover instantiates DEFINE_VEC directly, unlike
+        # result_cover, which takes its instantiation from the driver
+        # include, so result's conditions attribute to result_verify.h).
+        # Both conventions survive the '*/test/*' filter; the gcov target
+        # here is vec_cover.c.
+        run: |
+          cd build
+          VEC_GCDA=$(find . -name "vec_cover*.gcda" | head -1)
+          if [ -z "$VEC_GCDA" ]; then
+            echo "ERROR: could not locate vec_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $VEC_GCDA"
+          gcov-14 --conditions --all-blocks "$VEC_GCDA" 2>&1 | \
+            grep -A 400 "vec_cover.c" | head -600
+          echo ""
+          echo "=== Looking for the generated .gcov file for vec_cover.c ==="
+          find . -name "vec_cover.c.gcov" -exec echo "Found: {}" \;
+          VEC_GCOV=$(find . -name "vec_cover.c.gcov" | head -1)
+          if [ -n "$VEC_GCOV" ]; then
+            echo ""
+            echo "=== Uncovered condition outcomes in vec_cover.c ==="
+            grep -n -B 6 "not covered" "$VEC_GCOV" | head -80
+            echo ""
+            echo "=== Full contents of $VEC_GCOV ==="
+            cat "$VEC_GCOV"
+          else
+            echo "No vec_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*vec_cover* 2>/dev/null || true
+            done
+          fi
+
         
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
