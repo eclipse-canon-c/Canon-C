@@ -596,7 +596,7 @@ if(ENABLE_COVERAGE_TUS)
     # so the measured condition set equals WP's goal set regardless of the
     # job's flag string.
     target_compile_definitions(option_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
-
+ 
     add_executable(result_cover vmacros/coverage/result_cover.c)
     target_include_directories(result_cover PRIVATE
         ${CMAKE_SOURCE_DIR}/core/primitives
@@ -609,6 +609,24 @@ if(ENABLE_COVERAGE_TUS)
     # so the measured condition set equals WP's goal set regardless of the
     # job's flag string. (Same rationale as option_cover.)
     target_compile_definitions(result_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
-    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover)")
-    
+ 
+    add_executable(vec_cover vmacros/coverage/vec_cover.c)
+    target_include_directories(vec_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR}/data
+        ${CMAKE_SOURCE_DIR})
+    # Match the WP run's flags exactly (vec_verify.h uses both) — same
+    # rationale as option_cover / result_cover. First data/-layer cover TU:
+    # includes the vec.h facade (slice + byte views) so data/ joins the
+    # include-dir list. The global coverage flags also carry
+    # CANON_CHECKED_FORCE_FALLBACK, which is correct here too: vec routes
+    # size arithmetic through checked_add/checked_mul, and the fallback
+    # path is the one WP verified (MCDC-010 measures what VERIFY-018 proved).
+    target_compile_definitions(vec_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+ 
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover)")
+ 
 endif()
+
