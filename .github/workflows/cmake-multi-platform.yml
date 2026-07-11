@@ -2215,6 +2215,133 @@ jobs:
           name: wp-proof-result
           path: wp_result_output.txt
   
+  
+  # -------------------------------------------------------------------------
+  # data/vec — third Shape-B macro-module driver, FIRST data/-layer module,
+  # and the first driver on the Typed+Cast model: unlike option/result
+  # (by-value structs, plain Typed), vec crosses void* boundaries —
+  # (int*)mem_alloc(bytes), int* buffers through mem_copy/mem_move's void*
+  # parameters. The model, prover set, and timeout match the memory.h and
+  # arena.h jobs exactly (their contracts are the ones vec's call sites
+  # must discharge), so the CVC5-presence check from those jobs applies.
+  #
+  # WP runs over vmacros/vdrivers/vec_verify.h, which instantiates the REAL
+  # shipped macros at int via the DEFINE_VEC_STRUCTS / DEFINE_VEC_FUNCTIONS
+  # split (docs/vmacros.md). Verified config: -DCANON_NO_REQUIRE -DNDEBUG,
+  # CANON_LIFETIME off — under it vec's entire panic surface (3 require_msg,
+  # 10 ensure_msg, zero direct handler calls) compiles away; the driver's
+  # requires clauses are load-bearing.
+  #
+  # REPORT-ONLY (region.h -> enforced pattern). Predictions on record, to be
+  # tested by this job's first runs (driver header carries the full list):
+  #   (a) 2 inherited contract-handler goals — definition-presence only
+  #   (b) memory.h/arena.h inherited surface — largest of any driver
+  #   (c) checked.h re-proves; alloc/arena_alloc !checked_mul branches DEAD
+  #   (d) 4 confirmed-expected residuals: insert/remove/append/extend
+  #       element-transfer ensures (mem_copy/mem_move are frame-only)
+  #   (e) no allocation-model residuals (mem_free has no frees clause;
+  #       driver follows precedent)
+  #   (f) ZERO rte_function_pointer goals — first module without the
+  #       OWN-003 class; any appearance is a bug in the driver
+  #   plus: NO ptr.h goals (minimal scope — ptr.h enters only via the
+  #   facade, not vec_defn.h), fill()'s subtraction as invariant canary,
+  #   F2's slice_init RTE goal appears iff its exclusion requires is
+  #   removed, and [wp:union] warnings on the .val.err postconditions are
+  #   EXPECTED and not failures (same as result / VERIFY-015).
+  # -------------------------------------------------------------------------
+  frama-c-vec:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/vec_verify.h (VERIFY-018, report-only)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/vec_verify.h 2>&1 | tee wp_vec_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
+          echo "  MODE: REPORT-ONLY — goal counts do not gate."
+          echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
+          echo "  config=-DCANON_NO_REQUIRE -DNDEBUG (CANON_LIFETIME off)"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_vec_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in vec_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_vec_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT}"
+          echo ""
+          echo "── unproved goal roll-call (for VERIFY-018 classification) ──"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_vec_output.txt || echo "  (none)"
+          echo ""
+          echo "── prediction spot-checks (informational, non-gating) ──"
+          FP_GOALS=$(grep -cE "rte_function_pointer" wp_vec_output.txt || true)
+          echo "  rte_function_pointer goals: ${FP_GOALS} (predicted 0 — class f)"
+          PTR_GOALS=$(grep -cE "\[(Timeout|Unknown|Failed)\].*ptr_" wp_vec_output.txt || true)
+          echo "  ptr.h-attributed unproved:  ${PTR_GOALS} (predicted 0 — minimal scope)"
+          UNION_WARN=$(grep -cE "wp:union" wp_vec_output.txt || true)
+          echo "  [wp:union] warnings:        ${UNION_WARN} (expected >0, not failures)"
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_vec_output.txt || true)
+          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step."
+          fi
+          echo ""
+          echo "REPORT-ONLY PASS: run completed with a WP summary."
+          echo "  Promotion checklist (after classifying this run into"
+          echo "  VERIFY-018 in docs/deviations.md / docs/verification.md):"
+          echo "    1. set EXPECTED_UNPROVED to the classified count"
+          echo "    2. paste the by-name CHECKS array from the roll-call above"
+          echo "    3. pin the Proved-count string"
+          echo "    4. replace this report-only tail with the option/result-"
+          echo "       style enforcement block"
+          echo "==============================================="
+      - name: Upload WP proof output (vec)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-vec
+          path: wp_vec_output.txt
+
+  
+  
   # -------------------------------------------------------------------------
   # borrow.h — ENFORCED, 120s / -wp-split.
   #
@@ -2798,6 +2925,7 @@ jobs:
         run: |
           ./option_cover
           ./result_cover
+          ./vec_cover
       
       - name: Collect branch coverage data (lcov)
         run: |
