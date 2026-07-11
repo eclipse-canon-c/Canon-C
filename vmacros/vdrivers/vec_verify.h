@@ -163,7 +163,7 @@ DEFINE_VEC_STRUCTS(int)
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*@
-  predicate vec_int_view(vec_int const * v) =
+  predicate vec_int_view(vec_int * v) =
     \valid_read(v)
     && v->len <= v->capacity
     && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(int)
@@ -175,7 +175,7 @@ DEFINE_VEC_STRUCTS(int)
     && \valid(v)
     && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)));
 
-  predicate vec_int_slice_view(vec_int_slice const * s) =
+  predicate vec_int_slice_view(vec_int_slice * s) =
     \valid_read(s)
     && (s->len > 0 ==> \valid_read(s->items + (0 .. s->len - 1)));
 */
