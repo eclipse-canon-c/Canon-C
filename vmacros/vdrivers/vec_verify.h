@@ -349,7 +349,7 @@ static inline int vec_int_get_unchecked(borrowed(const vec_int*) v, usize i);
 /*@ requires vec_int_view(v);
     requires i < v->len;
     assigns \nothing;
-    ensures \result == &v->items[i];
+    ensures \result == v->items + i;
 */
 static inline borrowed(int*) vec_int_at(borrowed(const vec_int*) v, usize i);
 
@@ -373,21 +373,22 @@ static inline bool vec_int_set(borrowed(vec_int*) v, usize i, int val);
 
 /*@ requires v == \null || vec_int_view(v);
     assigns \nothing;
-    ensures (v != \null && v->len > 0) ==> \result == &v->items[0];
+    ensures (v != \null && v->len > 0) ==> \result == v->items;
     ensures (v == \null || v->len == 0) ==> \result == \null;
 */
 static inline borrowed(int*) vec_int_first(borrowed(const vec_int*) v);
 
 /*@ requires v == \null || vec_int_view(v);
     assigns \nothing;
-    ensures (v != \null && v->len > 0) ==> \result == &v->items[v->len - 1];
+    ensures (v != \null && v->len > 0) ==> \result == v->items + (v->len - 1);
     ensures (v == \null || v->len == 0) ==> \result == \null;
 */
 static inline borrowed(int*) vec_int_last(borrowed(const vec_int*) v);
 
 /*@ requires v == \null || vec_int_view(v);
     assigns \nothing;
-    ensures \result == (v == \null ? \null : v->items);
+    ensures v == \null ==> \result == \null;
+    ensures v != \null ==> \result == v->items;
 */
 static inline borrowed(int*) vec_int_data(borrowed(const vec_int*) v);
 
@@ -758,7 +759,7 @@ static inline vec_int_slice vec_int_slice_init(borrowed(vec_int*) v, usize start
 /*@ requires vec_int_slice_view(s);
     requires i < s->len;
     assigns \nothing;
-    ensures \result == &s->items[i];
+    ensures \result == s->items + i;
 */
 static inline borrowed(int*) vec_int_slice_get(borrowed(const vec_int_slice*) s, usize i);
 
