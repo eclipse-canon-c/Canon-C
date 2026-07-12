@@ -2232,30 +2232,34 @@ jobs:
   # 10 ensure_msg, zero direct handler calls) compiles away; the driver's
   # requires clauses are load-bearing.
   #
-  # REPORT-ONLY (region.h -> enforced pattern). Predictions on record, to be
-  # tested by this job's first runs (driver header carries the full list):
-  #   (a) 2 inherited contract-handler goals — definition-presence only
-  #   (b) memory.h/arena.h inherited surface — largest of any driver
-  #   (c) checked.h re-proves; alloc/arena_alloc !checked_mul branches DEAD
-  #   (d) 4 confirmed-expected residuals: insert/remove/append/extend
-  #       element-transfer ensures (mem_copy/mem_move are frame-only)
-  #   (e) no allocation-model residuals (mem_free has no frees clause;
-  #       driver follows precedent)
-  #   (f) ZERO rte_function_pointer goals — first module without the
-  #       OWN-003 class; any appearance is a bug in the driver
-  #   plus: NO ptr.h goals (minimal scope — ptr.h enters only via the
-  #   facade, not vec_defn.h), fill()'s subtraction as invariant canary,
-  #   F2's slice_init RTE goal appears iff its exclusion requires is
-  #   removed, and [wp:union] warnings on the .val.err postconditions are
-  #   EXPECTED and not failures (same as result / VERIFY-015).
+  # ENFORCED (promoted from report-only after 3 runs; option/result house
+  # style, exact-match). Baseline: CI #1152 (96dd41d) — 5184/5380 proved,
+  # 193 Timeout + 3 Unknown + 0 Failed = 196 unproved, classified in
+  # docs/verification.md VERIFY-018 and the driver header:
+  #   inherited 143 (option/result combinators, contract handler, checked/
+  #     align model-variance re-emissions, memcmp/strlen libc plumbing,
+  #     memory.h/arena.h surface incl. ptr.h via arena)
+  #   vec-own 53 = (e) 2 allocation-model (\fresh/\freeable unimplemented)
+  #              + (g) 24 fill macro-body-loop cluster (unprovable by
+  #                construction: ACSL loop annotations cannot survive macro
+  #                definition — forward-flag for deque's shift loops)
+  #              + (d) 5 element-transfer ensures (mem_copy/mem_move are
+  #                frame-only) + (h) 22 Typed+Cast int<->char bridging
+  # Gates: pinned Proved line, 0 Failed ever, exact count, by-name roll-call
+  # (= set equality). ANY change to the residual set, either direction,
+  # fails CI; the fix is the acknowledged ratchet — update the pinned
+  # Proved line, EXPECTED_UNPROVED, and CHECKS together in one commit.
+  # A goal flipping to Proved on a fast prover day is a red run carrying
+  # good news: ratchet down, do not widen.
   # -------------------------------------------------------------------------
   frama-c-vec:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: vmacros/vdrivers/vec_verify.h (VERIFY-018, report-only)"
+      - name: "WP: vmacros/vdrivers/vec_verify.h (VERIFY-018, enforced)"
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -2278,7 +2282,8 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
-          echo "  MODE: REPORT-ONLY — goal counts do not gate."
+          echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
+          echo "  baseline: CI #1152 (96dd41d): 5184/5380, 196 unproved"
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
           echo "  config=-DCANON_NO_REQUIRE -DNDEBUG (CANON_LIFETIME off)"
           echo "==============================================="
@@ -2297,6 +2302,30 @@ jobs:
             echo "==============================================="
             exit 1
           fi
+          # Prover-environment check (informational, kept from report-only):
+          # if CVC5 vanished from the prover set, its 8 baseline goals will
+          # flip and the gates below will fail — this warning names the
+          # likely cause before the confusing diff does.
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_vec_output.txt || true)
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step;"
+            echo "         expect gate failures below if so."
+          fi
+          # Gate 0 — pinned goal surface (promotion checklist step 3).
+          # Catches silent drift of the goal set itself (a function dropping
+          # out of the TU, a deleted contract, an include-graph change)
+          # that gates 1-3 could miss.
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 5184 / 5380" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5184 / 5380)."
+            echo "      The goal surface drifted — reclassify in VERIFY-018,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
+          # VERIFY-018 baseline residual count.
+          EXPECTED_UNPROVED=196
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
@@ -2304,34 +2333,245 @@ jobs:
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT}"
-          echo ""
-          echo "── unproved goal roll-call (for VERIFY-018 classification) ──"
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_vec_output.txt || echo "  (none)"
-          echo ""
-          echo "── prediction spot-checks (informational, non-gating) ──"
-          FP_GOALS=$(grep -cE "rte_function_pointer" wp_vec_output.txt || true)
-          echo "  rte_function_pointer goals: ${FP_GOALS} (predicted 0 — class f)"
-          PTR_GOALS=$(grep -cE "\[(Timeout|Unknown|Failed)\].*ptr_" wp_vec_output.txt || true)
-          echo "  ptr.h-attributed unproved:  ${PTR_GOALS} (predicted 0 — minimal scope)"
-          UNION_WARN=$(grep -cE "wp:union" wp_vec_output.txt || true)
-          echo "  [wp:union] warnings:        ${UNION_WARN} (expected >0, not failures)"
-          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_vec_output.txt || true)
-          echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
-          if [ "${CVC5_INVOKED}" -eq 0 ]; then
-            echo "WARNING: CVC5 does not appear in WP output."
-            echo "         The triple-prover setup may have degraded to"
-            echo "         dual-prover. Check the prover configuration step."
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          # Gate 1 — no Failed verdicts, ever. Timeout/Unknown are the
+          # classified residual verdicts; Failed means a contract is WRONG.
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout) —"
+            echo "      a contract in vec_verify.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_vec_output.txt
+            exit 1
+          fi
+          # Gate 2 — exact count.
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo "FAIL: unproved count ${UNPROVED_COUNT} != ${EXPECTED_UNPROVED}."
+            echo "      Higher: regression or new residual — classify in"
+            echo "      VERIFY-018 before touching this job. Lower: a goal"
+            echo "      newly proved — ratchet CHECKS, EXPECTED_UNPROVED and"
+            echo "      the pinned Proved line down in the same PR. Diff"
+            echo "      against CHECKS below:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_vec_output.txt || true
+            exit 1
+          fi
+          # Gate 3 — by-name roll-call: every classified residual must be
+          # present. With gate 2's exact count and unique names, presence
+          # of all of them == set equality (a swap — one goal regressing
+          # while another improves, count unchanged — fails here).
+          CHECKS=(
+            "typed_cast_contract_default_handler_loop_invariant_established"
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_option_int_map_terminates_part2"
+            "typed_cast_option_int_map_terminates_part3"
+            "typed_cast_option_int_map_exits_part1"
+            "typed_cast_option_int_map_assert_rte_function_pointer"
+            "typed_cast_option_int_map_assigns_exit_part2"
+            "typed_cast_option_int_map_assigns_normal_part2"
+            "typed_cast_option_int_and_then_terminates_part2"
+            "typed_cast_option_int_and_then_terminates_part3"
+            "typed_cast_option_int_and_then_exits_part1"
+            "typed_cast_option_int_and_then_assert_rte_function_pointer"
+            "typed_cast_option_int_and_then_assigns_exit_part2"
+            "typed_cast_option_int_and_then_assigns_normal_part2"
+            "typed_cast_option_int_or_else_terminates_part1"
+            "typed_cast_option_int_or_else_terminates_part2"
+            "typed_cast_option_int_or_else_assert_rte_function_pointer"
+            "typed_cast_option_int_or_else_assigns_part2"
+            "typed_cast_option_int_filter_terminates_part2"
+            "typed_cast_option_int_filter_terminates_part3"
+            "typed_cast_option_int_filter_exits_part1"
+            "typed_cast_option_int_filter_assert_rte_function_pointer"
+            "typed_cast_option_int_filter_assigns_exit_part2"
+            "typed_cast_option_int_filter_assigns_normal_part2"
+            "typed_cast_option_int_combine_with_terminates_part2"
+            "typed_cast_option_int_combine_with_terminates_part3"
+            "typed_cast_option_int_combine_with_exits_part1"
+            "typed_cast_option_int_combine_with_assert_rte_function_pointer"
+            "typed_cast_option_int_combine_with_assigns_exit_part2"
+            "typed_cast_option_int_combine_with_assigns_normal_part2"
+            "typed_cast_option_int_eq_terminates_part2"
+            "typed_cast_option_int_eq_terminates_part4"
+            "typed_cast_option_int_eq_assert_rte_function_pointer_part2"
+            "typed_cast_option_int_eq_assigns_part5"
+            "typed_cast_result_Bool_Error_get_ok_assert_rte_mem_access"
+            "typed_cast_result_Bool_Error_get_err_assert_rte_mem_access"
+            "typed_cast_result_Bool_Error_map_terminates_part2"
+            "typed_cast_result_Bool_Error_map_terminates_part3"
+            "typed_cast_result_Bool_Error_map_exits"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_terminates_part2"
+            "typed_cast_result_Bool_Error_map_err_terminates_part3"
+            "typed_cast_result_Bool_Error_map_err_exits"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_and_then_terminates_part1"
+            "typed_cast_result_Bool_Error_and_then_terminates_part2"
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_terminates_part1"
+            "typed_cast_result_Bool_Error_or_else_terminates_part2"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_terminates_part1"
+            "typed_cast_result_Bool_Error_eq_terminates_part2"
+            "typed_cast_result_Bool_Error_eq_terminates_part3"
+            "typed_cast_result_Bool_Error_eq_terminates_part4"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_ptr_align_up_call_align_up_requires_3"
+            "typed_cast_ptr_align_padding_call_align_padding_requires_3"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_alloc_assigns_normal_part2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_free_assigns_normal"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_fits_ensures_part2"
+            "typed_cast_arena_alloc_fits_ensures_part3"
+            "typed_cast_arena_alloc_fits_ensures_part4"
+            "typed_cast_arena_alloc_fits_ensures_part5"
+            "typed_cast_arena_alloc_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_assigns_normal_part3"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
+            "typed_cast_arena_try_alloc_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
+            "typed_cast_vec_int_alloc_call_vec_int_init_requires_2"
+            "typed_cast_vec_int_free_call_mem_free_requires"
+            "typed_cast_vec_int_pop_ok_ensures_4_part5"
+            "typed_cast_vec_int_insert_assigns_exit_part2"
+            "typed_cast_vec_int_insert_assigns_normal_part10"
+            "typed_cast_vec_int_insert_call_mem_move_requires"
+            "typed_cast_vec_int_insert_call_mem_move_requires_2"
+            "typed_cast_vec_int_insert_ok_ensures_5_part5"
+            "typed_cast_vec_int_insert_ok_assigns_exit_part2"
+            "typed_cast_vec_int_insert_ok_assigns_normal_part10"
+            "typed_cast_vec_int_remove_assigns_exit_part3"
+            "typed_cast_vec_int_remove_assigns_normal_part13"
+            "typed_cast_vec_int_remove_call_mem_move_requires"
+            "typed_cast_vec_int_remove_call_mem_move_requires_2"
+            "typed_cast_vec_int_remove_ok_ensures_4_part6"
+            "typed_cast_vec_int_remove_ok_ensures_4_part7"
+            "typed_cast_vec_int_remove_ok_ensures_5_part6"
+            "typed_cast_vec_int_remove_ok_assigns_exit_part3"
+            "typed_cast_vec_int_remove_ok_assigns_normal_part13"
+            "typed_cast_vec_int_append_array_assigns_exit_part4"
+            "typed_cast_vec_int_append_array_assigns_normal_part14"
+            "typed_cast_vec_int_append_array_call_mem_copy_requires"
+            "typed_cast_vec_int_append_array_call_mem_copy_requires_2"
+            "typed_cast_vec_int_append_array_call_mem_copy_requires_3"
+            "typed_cast_vec_int_append_array_ok_ensures_4_part5"
+            "typed_cast_vec_int_append_array_ok_assigns_exit_part4"
+            "typed_cast_vec_int_append_array_ok_assigns_normal_part14"
+            "typed_cast_vec_int_extend_ok_assigns_normal_part1"
+            "typed_cast_vec_int_fill_terminates_part1"
+            "typed_cast_vec_int_fill_terminates_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_4_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_4_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_5_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_5_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_6_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_6_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_7_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_7_part2"
+            "typed_cast_vec_int_fill_assigns_part3"
+            "typed_cast_vec_int_fill_assigns_part4"
+            "typed_cast_vec_int_fill_assigns_part5"
+            "typed_cast_vec_int_fill_assigns_part6"
+            "typed_cast_vec_int_fill_live_ensures_part3"
+            "typed_cast_vec_int_fill_live_ensures_part4"
+            "typed_cast_vec_int_fill_live_ensures_2_part3"
+            "typed_cast_vec_int_fill_live_ensures_2_part4"
+            "typed_cast_vec_int_fill_live_ensures_3_part3"
+            "typed_cast_vec_int_fill_live_ensures_3_part4"
+            "typed_cast_vec_int_fill_live_assigns_part3"
+            "typed_cast_vec_int_fill_live_assigns_part4"
+            "typed_cast_vec_int_fill_live_assigns_part5"
+            "typed_cast_vec_int_fill_live_assigns_part6"
+            "typed_cast_vec_int_swap_ensures"
+          )
+          MISSING=0
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_vec_output.txt; then
+              echo "MISSING from unproved set (newly proved or renamed): ${goal}"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ "${MISSING}" -ne 0 ]; then
+            echo "FAIL: ${MISSING} CHECKS goal(s) not in this run's unproved"
+            echo "      set while the count still matched — a swap occurred"
+            echo "      (something regressed AND something improved). Diff"
+            echo "      the roll-call above against CHECKS and reclassify."
+            exit 1
           fi
           echo ""
-          echo "REPORT-ONLY PASS: run completed with a WP summary."
-          echo "  Promotion checklist (after classifying this run into"
-          echo "  VERIFY-018 in docs/deviations.md / docs/verification.md):"
-          echo "    1. set EXPECTED_UNPROVED to the classified count"
-          echo "    2. paste the by-name CHECKS array from the roll-call above"
-          echo "    3. pin the Proved-count string"
-          echo "    4. replace this report-only tail with the option/result-"
-          echo "       style enforcement block"
+          echo "VERIFY-018 ENFORCED PASS: 0 Failed, count ${UNPROVED_COUNT}/${EXPECTED_UNPROVED},"
+          echo "all ${EXPECTED_UNPROVED} classified residuals verified by name."
           echo "==============================================="
       - name: Upload WP proof output (vec)
         if: always()
