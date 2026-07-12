@@ -205,6 +205,20 @@
  * name-for-name. Classification is by module ownership, with the model
  * variance recorded once.
  *
+ * ── RUN 3 = ENFORCED BASELINE (5184/5380, 193 T / 3 U / 0 F = 196) ─────────
+ * v3 validated: all 9 delegate-narrowing goals gone; inherited 143
+ * IDENTICAL name-for-name to run 2 (the stability subset-enforcement
+ * relies on). Retry candidates failed a third consecutive run — PINNED
+ * into class (h): pop_ok_ensures_4_part5, swap_ensures.
+ * Final vec-own classification (53): (e)=2, (g)=24, (d)=5, (h)=22.
+ * Enforcement (option/result house style): the 196 names live inline in
+ * the frama-c-vec job's CHECKS array. Gates: 0 Failed verdicts, exact
+ * unproved count, by-name roll-call. ANY change to the residual set —
+ * including a timeout flipping to Proved on a fast prover day — fails the
+ * job; the fix is the acknowledged ratchet (update CHECKS +
+ * EXPECTED_UNPROVED). Full classification: docs/verification.md
+ * VERIFY-018.
+ *
  * ── Findings already on record from the pre-run read (docs follow-ups) ─────
  *   F1. append_array/extend: shipped doc does not forbid src overlapping
  *       the vec's own buffer; mem_copy (memcpy semantics) makes self-append
