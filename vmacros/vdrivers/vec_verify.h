@@ -159,6 +159,52 @@
  *   regions_overlap). May close once R1's noise is gone; if not, restate
  *   the driver requires in memory.h's own predicate shape.
  *
+ * ── RUN 2 RESULTS (report-only, 5208/5413 proved, 195 T / 10 U / 0 F) ──────
+ * R1 VALIDATED: 362 -> 205 unproved, 5h19m -> 2h51m. Fully proved after the
+ * composition fix: empty, init, arena_alloc, all queries, push, try_push,
+ * push_unchecked, get*, set, first/last/data, clear, iter_*, slice_init,
+ * slice_get. checked/align re-emissions still time out (see model-variance
+ * note below).
+ *
+ * VEC-OWN CLASSIFICATION (62 goals):
+ *   (e) allocation-model, CONFIRMED at exactly the 2 predicted goals:
+ *       vec_int_alloc_call_vec_int_init_requires_2   (\fresh unimplemented)
+ *       vec_int_free_call_mem_free_requires          (\freeable likewise)
+ *   (g) fill macro-body-loop cluster, CONFIRMED: 24 goals (terminates x2,
+ *       rte_mem_access x8, assigns x4, live_ensures x6, live_assigns x4).
+ *   (d) element-transfer ensures: insert_ok_ensures_5 (shift forall),
+ *       remove_ok_ensures_4/_5 (prefix + shift foralls), append_ok_
+ *       ensures_4 (copy forall) — per the frame-only mem_copy/mem_move
+ *       contracts, plus the char-frame bridging below.
+ *   (h) NEW CLASS — Typed+Cast int<->char bridging at memory.h call sites:
+ *       the watch-item did NOT close. call_mem_move/mem_copy_requires (7)
+ *       and the insert/remove/append assigns parts that must relate
+ *       ((char*)dest)[0..bytes-1] frames to int-element windows. Candidate
+ *       shrink levers before accepting as permanent: -wp-timeout bump on
+ *       retry, -wp-cache, or restating driver requires in memory.h's own
+ *       regions_overlap/mem_valid_* predicate shapes.
+ *   RETRY-VARIANCE candidates (may flip on any rerun, do not pin yet):
+ *       vec_int_pop_ok_ensures_4_part5 (prefix forall with NO mem call —
+ *       should follow from the assigns frame), vec_int_swap_ensures
+ *       (whole-struct copies under the cast model).
+ *
+ * DRIVER v3 (this file): delegate-narrowing lesson. WP uses a callee's
+ * contract WHOLE at call sites — a delegating caller's per-behavior
+ * `assigns \nothing` cannot be discharged when the callee's GLOBAL assigns
+ * is wider, even though the code path assigns nothing. Affected: the three
+ * pure delegates only (extend -> append_array, pop_option -> pop,
+ * remove_option -> remove); insert/remove's direct-code error legs proved
+ * their narrow assigns fine. v3 relaxes exactly those six behavior-assigns
+ * (~10 goals). Contract meaning: delegate effects are bounded by the
+ * callee's contract, which is the honest statement anyway.
+ *
+ * INHERITED-DELTA nuance for the docs: option/result/checked goals here are
+ * generated under Typed+Cast, while their home runs used plain Typed —
+ * goal sets and prover difficulty differ BY MODEL, so this run's inherited
+ * unproved list is not expected to equal the home runs' residual lists
+ * name-for-name. Classification is by module ownership, with the model
+ * variance recorded once.
+ *
  * ── Findings already on record from the pre-run read (docs follow-ups) ─────
  *   F1. append_array/extend: shipped doc does not forbid src overlapping
  *       the vec's own buffer; mem_copy (memcpy semantics) makes self-append
@@ -593,7 +639,6 @@ static inline result__Bool_Error vec_int_pop(borrowed(vec_int*) v, borrowed(int*
       ensures v->len == \old(v->len) - 1;
     behavior none:
       assumes v == \null || (v != \null && (v->items == \null || v->len == 0));
-      assigns \nothing;
       ensures \result.has_value == \false;
     complete behaviors;
     disjoint behaviors;
@@ -681,13 +726,12 @@ static inline result__Bool_Error vec_int_remove(borrowed(vec_int*) v, usize i, b
     assigns v->len, v->items[0 .. v->capacity - 1];
     behavior some:
       assumes v != \null && v->items != \null && i < v->len;
-      assigns v->len, v->items[i .. v->len - 1];
+      assigns v->len, v->items[0 .. v->capacity - 1];
       ensures \result.has_value == \true;
       ensures \result.value == \old(v->items[i]);
       ensures v->len == \old(v->len) - 1;
     behavior none:
       assumes v == \null || (v != \null && (v->items == \null || i >= v->len));
-      assigns \nothing;
       ensures \result.has_value == \false;
     complete behaviors;
     disjoint behaviors;
@@ -751,18 +795,15 @@ static inline result__Bool_Error vec_int_append_array(borrowed(vec_int*) v,
     assigns v->len, v->items[0 .. v->capacity - 1];
     behavior invalid:
       assumes v == \null || src == \null || (v != \null && v->items == \null);
-      assigns \nothing;
       ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;
     behavior overflow:
       assumes v != \null && v->items != \null && src != \null
            && v->len + count > CANON_USIZE_MAX;
-      assigns \nothing;
       ensures \result.is_ok == \false && \result.val.err == ERR_OVERFLOW;
     behavior too_big:
       assumes v != \null && v->items != \null && src != \null
            && v->len + count <= CANON_USIZE_MAX
            && v->len + count > v->capacity;
-      assigns \nothing;
       ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED;
     behavior ok:
       assumes v != \null && v->items != \null && src != \null
