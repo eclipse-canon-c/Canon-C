@@ -2533,6 +2533,231 @@ point.
 
 ---
 
+## VERIFY-018: Inherited Mega-TU Surface Plus Macro-Body-Loop, Element-Transfer, Bridging, and Allocation-Model Residuals (vec, third driver-verified module, first data/-layer module)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-018 |
+| **Date**       | 2026-07-12 |
+| **Baseline commit** | 96dd41d (Canon-C CI #1152, run 3); report-only chronology 1eeb58c (CI #1150, run 1) → 8a3bb1e (CI #1151, run 2); enforced as of e663e2c (CI #1154) |
+| **Scope**      | data/vec/ via `vmacros/vdrivers/vec_verify.h` — 5380 obligations, 196 unproved (143 inherited across 8 source families + 53 vec-own across 4 categories) |
+| **Category**   | Formal verification completeness |
+| **Enforcement**| Enforced (pinned Proved line + zero-Failed + exact count + by-name roll-call) as of CI #1154 |
+
+**Description**: 196 of 5380 proof obligations (3.64%) on the vec driver
+are not discharged by any prover in the triple-prover configuration
+(Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1) with a 120-second timeout and
+`-wp-split`; 193 are Timeouts, 3 Unknowns, and **0 Failed** — no
+contract is falsified. vec is the **third driver-verified module**
+(after option, VERIFY-014, and result, VERIFY-015), the **first
+data/-layer module verified**, and the **first driver on the
+`Typed+Cast` model**: unlike option/result (by-value structs, plain
+Typed), vec crosses `void*` boundaries — `(int*)mem_alloc(bytes)` and
+`int*` buffers through `mem_copy`/`mem_move`'s `void*` parameters. WP
+runs over `vmacros/vdrivers/vec_verify.h`, which instantiates the real
+shipped macros at `int` via the `DEFINE_VEC_STRUCTS` /
+`DEFINE_VEC_FUNCTIONS` split (finding F3 below; `docs/vmacros.md`).
+The verified configuration is the default shipped build
+(`-DCANON_NO_REQUIRE -DNDEBUG`, `CANON_LIFETIME` off): vec's entire
+panic surface (3 `require_msg`, 10 `ensure_msg`, zero direct handler
+calls) compiles away, so the driver's `requires` clauses are
+load-bearing and contract.h contributes only the definition-presence
+handler pair.
+
+vec's TU is the **largest verified to date** (5380 goals): the facade
+pulls slice.h, ptr.h, arena.h → memory.h and the full substrate, plus
+the option and result instantiations the driver composes. Its
+196-goal residual set is correspondingly the largest, but decomposes
+exactly and was name-stable across three consecutive runs before
+enforcement (runs 2, 3, and the enforced run 4).
+
+### Run chronology and method lessons (recorded forward for deque/hashmap)
+
+**Run 1** (1eeb58c, CI #1150, 5h21m): 4988/5350, 362 unproved. Root
+cause **R1 — spec-less callees**: the driver's uncontracted lifetime
+helpers and bare option/result instantiations made WP treat every
+constructor call as potentially assigning the world, drowning goals
+that were individually provable. The cure was **driver composition**
+(contracting the composed instantiations), not weaker vec specs.
+**Lesson**: in a mega-TU, an unproved-goal explosion is more likely a
+spec-less-callee cascade than a contract-quality problem — check the
+`Missing 'calls'` / `assigns everything` warnings before touching
+ensures clauses.
+
+**Run 2** (8a3bb1e, CI #1151, 2h52m): 5208/5413, 205 unproved. The
+composition fix collapsed the noise; the inherited surface stabilized
+at 143 names. vec-own stood at 62.
+
+**Run 3 — baseline** (96dd41d, CI #1152, 2h52m): 5184/5380, 196
+unproved (193 Timeout + 3 Unknown + 0 Failed). A delegate-narrowing
+relaxation closed 9 vec-own goals (62 → 53) as predicted; the two
+retry-variance candidates failed a **third consecutive run** and were
+pinned rather than excused. Inherited 143 identical name-for-name with
+run 2 — the stability evidence enforcement requires.
+
+**Run 4 — enforced** (e663e2c, CI #1154, 2h50m): green on the first
+enforced run, with the 196 set name-identical for the third
+consecutive run. The run also validated the gate design empirically:
+prover attribution shifted (Alt-Ergo 524 → 534, CVC5 8 → 4, Z3
+43 → 37) without any name change; the driver's diagnostics moved 14
+lines (a comment-only commit) without any name change; and two
+roll-call lines emitted in swapped order — all three variances are
+absorbed by name-only, order-independent matching and would have made
+line-, count-per-prover-, or order-sensitive pinning flaky.
+
+### Inherited residuals (143)
+
+Re-emissions of already-documented residual classes under this TU's
+`Typed+Cast` model (names carry the `typed_cast_` prefix), by source
+family:
+
+| # | Source family | Goals | Documented under |
+|---|---------------|-------|------------------|
+| 1 | arena.h own surface (ptr_span call-sites, fits/does_not_fit arithmetic chains, zero/try wrappers, free_bytes helpers) | 46 | VERIFY-009 |
+| 2 | option combinator function-pointer dispatch | 32 | VERIFY-014 |
+| 3 | result combinator function-pointer dispatch + union `get_*` mem-access pair | 22 | VERIFY-015 |
+| 4 | memory.h own surface (allocation-model, alignment, memcmp danglingness) | 20 | VERIFY-008 |
+| 5 | slice.h libc boundary (str_* / bytes_equal memcmp + strlen) | 13 | VERIFY-007 |
+| 6 | ptr.h align call-sites | 3 | VERIFY-006 |
+| 7 | checked.h / align model-variance re-emissions | 5 | VERIFY-002/-008 (see note) |
+| 8 | contract.h handler pair (definition-presence only) | 2 | VERIFY-006 cat 4 |
+
+**Model-variance note (family 7)**: `checked_add`/`checked_add_u64`
+overflow-ensures and the three `align_*` ensures prove in their home
+TUs but time out under this mega-TU's Typed+Cast context. They failed
+three consecutive runs (including both retry-variance candidacies) and
+are pinned as model-variance re-emissions, not reclassifications of
+their home entries. Note the inherited surface is a **model-variant
+subset**, not the byte-identical propagation of the in-place stack
+(VERIFY-009/-010/-011 pattern): goal names re-derive under
+`Typed+Cast` with `-wp-split` fragment numbering, so identity is
+per-name within this TU across runs, not across TUs.
+
+The **12 `rte_function_pointer` goals all sit on inherited
+option/result combinators — zero on vec functions**, confirming
+prediction (f): vec is the first module whose own surface contains no
+OWN-003-class dispatch at all.
+
+### vec-own residuals (53)
+
+**Category (e) — allocation-model plumbing (2)**:
+`vec_int_alloc_call_vec_int_init_requires_2` and
+`vec_int_free_call_mem_free_requires` — the `\fresh`/`\freeable`
+feature gap (VERIFY-008's allocation category) surfacing at vec's
+heap constructor/destructor delegation, the precise analogs of
+memory.h's own mem_alloc/mem_free pair. Falsifies the round-0
+prediction of zero allocation-model residuals.
+
+**Category (d) — element-transfer ensures (5)**: the `ok`-behavior
+element equalities on `pop`, `insert`, `remove` (three fragments),
+and `append_array`. Root cause: `mem_copy`/`mem_move` carry
+**frame-only** byte-level contracts (VERIFY-008), so typed
+`\old(...) == ...` element postconditions across the transfer cannot
+be established — the same weak-spec shape as diag.h's
+`push_shift_semantics` (VERIFY-017). Runtime-verified by
+`test/data/vec_test.c`'s insert/remove/append content assertions and
+the cover TU's shift legs.
+
+**Category (g) — fill macro-body loop (24)**: `vec_int_fill`'s entire
+goal cluster (terminates ×2, rte_mem_access ×8, assigns ×4,
+live-ensures ×6, live-assigns ×4). Root cause: the `for` loop lives
+inside the `IMPL_VEC_FILL` macro body, and **ACSL loop annotations
+cannot survive macro definition** — the goals are unprovable by
+construction regardless of contract quality, a new residual class
+introduced by Shape-B modules whose bodies contain loops.
+**Forward-flag**: deque's shift loops are pre-classified into this
+class. This is the first class where MC/DC is the **primary**
+evidence rather than corroboration: all three fill legs (truncating,
+non-truncating, zero-count) are exercised in the cover TU (MCDC-010).
+
+**Category (h) — Typed+Cast int↔char bridging (22)**: assigns-framing
+and `mem_copy`/`mem_move` call-requires goals on `insert`, `remove`,
+`append_array`, `extend`, and `swap` — the `(char*)`↔`(int*)`
+byte-view bridging obligations the Typed+Cast model emits at vec's
+typed-buffer/`void*` boundary (the `Cast with incompatible pointers
+types (sint32*)↔(sint8*)` warnings in the WP log). Pinned after
+failing three consecutive runs; the recorded shrink levers (wp-cache
+replay, predicate-shape restatement) may be tried later without
+unpinning.
+
+### Findings for back-propagation
+
+- **F1 (open)**: the driver's `\separated(src, v->items)` requires on
+  `append_array`/`extend` makes self-append a contract violation, but
+  `IMPL_VEC_APPEND_ARRAY`'s shipped doc comment carries no overlap
+  prohibition — the shipped doc and the verified contract disagree.
+  Doc patch owed upstream (comment-only, no verification impact).
+- **F2 (open)**: `slice_init` on an `items==NULL` vec with `[0,0)`
+  computes `&(NULL)[0]` — pedantic UB. The guard fix is one token
+  (`!v->items` in the early return), semantics-preserving. Until it
+  lands, the driver carries an exclusion `requires` and the cover TU
+  deliberately does not exercise `slice_init(&e, 0, 0)` (MCDC-010's
+  known exclusion). The F2 PR should land guard + cover-TU call +
+  driver-exclusion removal together; expect the MCDC-010 denominator
+  and possibly one RTE goal to move.
+- **F3 (landed)**: the `DEFINE_VEC_STRUCTS` / `DEFINE_VEC_FUNCTIONS`
+  split plus the corrected one-instantiation-per-TU rule shipped in
+  `vec_defn.h` before the driver was drafted — the split-patch-first
+  ordering is now the standing checklist item for deque.
+
+### Prediction scorecard (honest record)
+
+Confirmed: (a) exactly 2 inherited handler goals, definition-presence
+only; (f) zero `rte_function_pointer` on vec functions; (d) the
+element-transfer class (predicted 4, actual 5); the
+`!checked_mul` dead-branch claim, discharged indirectly — `vec_int_alloc`
+and `vec_int_arena_alloc` carry no unproved branch goals, so the
+branch-dead facts proved within vec's own goals (the WP half of
+MCDC-010's U1/U2 infeasibility rows). Falsified: "no ptr.h goals"
+(11 enter through the arena → ptr_span edge both the scoping analysis
+and the review missed: families 1-partial and 6 above) and "no
+allocation-model residuals" (category (e) = 2). Newly discovered:
+categories (g) and (h) — neither predicted, both now recorded forward.
+
+### Enforcement and runtime
+
+The `frama-c-vec` CI step enforces **set equality** through four
+gates: (0) the pinned Proved line `5184 / 5380` (catches silent
+goal-surface drift — a function dropping out of the TU leaves the
+other gates satisfiable); (1) zero Failed verdicts ever (Failed means
+a falsified contract, unlike Timeout/Unknown); (2) exact count 196;
+(3) by-name roll-call of all 196 `CHECKS` names inline in the
+workflow (option/result house style — with gate 2's exact count and
+unique names, full presence equals set equality, so an invisible swap
+fails loudly). Any change in either direction is a red run resolved
+by the acknowledged ratchet — update the pin, `EXPECTED_UNPROVED`,
+and `CHECKS` together in one commit. A goal flipping to Proved on a
+fast prover day is a red run carrying good news: ratchet down, do not
+widen. The wrapper retains the CVC5-presence warning (Typed+Cast
+family) and runs under `timeout-minutes: 240`.
+
+**Runtime record**: steady state is ~2h50m, and it is
+timeout-dominated by construction — every proving goal completes in
+≤332 ms (run-3/4 prover stats), so the wall time is essentially
+193 × 120 s of scheduled timeout burn. `-wp-cache` was evaluated and
+rejected (timeouts are re-attempted every run; the cache can only
+replay the sub-second proving goals). Lowering `-wp-timeout` was
+evaluated and deferred: 120 s is the campaign-wide constant every
+baseline is measured at, and cross-module comparability was judged
+worth the wall time as further modules land.
+
+### Cross-references
+
+- Inherited families: VERIFY-002/-006/-007/-008/-009 (substrate),
+  VERIFY-014/-015 (combinators), VERIFY-006 cat 4 (handler pair).
+- Element-transfer weak-spec analogue: VERIFY-017
+  (`push_shift_semantics`).
+- MC/DC: MCDC-010 (155/158 ceiling; U1/U2 WP-corroborated infeasible,
+  U3 heap-environmental; third attribution variant).
+- Driver mechanism and split patch: `docs/vmacros.md` (F3).
+- Coverage methodology: MCDC-001 (`-DCANON_NO_REQUIRE`).
+- Per-goal CI artifact: `wp-proof-vec` (full WP output).
+- Wrapper: `.github/workflows/cmake-multi-platform.yml`, step
+  "WP: vmacros/vdrivers/vec_verify.h (VERIFY-018, enforced)".
+
+
+---
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
@@ -3817,6 +4042,158 @@ it joins this outcome's disposition, not a test gap.
   `.github/workflows/cmake-multi-platform.yml`.
 
 ---
+
+---
+
+## MCDC-010: Two Guard-Redundancy-Infeasible Overflow Checks (WP-Corroborated) and One Heap-Environmental Allocation Failure — Third Attribution Variant (vec)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-010 |
+| **Date**       | 2026-07-12 |
+| **Baseline commit** | 5bfde5b (Canon-C CI #1146, cover TU landed and ceiling measured); stable through the VERIFY-018 enforcement run (e663e2c, CI #1154); WP corroboration at 96dd41d (CI #1152) |
+| **Scope**      | data/vec/ via `vmacros/coverage/vec_cover.c` — 3 of 158 condition outcomes (2 infeasible + 1 environmental; all three written down before the first run) |
+| **Category**   | Coverage measurement methodology |
+
+**Description**: 3 of 158 condition outcomes measured on the vec cover
+TU are not exercisable by tests, giving a ceiling of **155/158 =
+98.10%**. All three were predicted, with dispositions, in the cover
+TU's header comment **before the first measurement run**, and the
+first run confirmed exactly those three at block level and nothing
+else:
+
+| # | Function             | Subcondition not covered | Disposition |
+|---|----------------------|--------------------------|-------------|
+| U1 | `vec_int_alloc`       | `!checked_mul(...)` true | Infeasible (guard redundancy); WP-corroborated |
+| U2 | `vec_int_arena_alloc` | `!checked_mul(...)` true | Infeasible (guard redundancy); WP-corroborated |
+| U3 | `vec_int_alloc`       | `!buf` true (heap OOM)   | Environmental (heap); permanent unless a failure-injection hook lands |
+
+vec is the **third Shape-B cover TU** (after option, MCDC-006, and
+result, MCDC-007) and lands as a **ceiling entry with a new
+disposition mix**: no panic branch survives into the measured set
+(vec's `require_msg`/`ensure_msg` surface vanishes under
+`-DCANON_NO_REQUIRE`, like result's), yet the audit is not clean —
+the three open outcomes are infeasibility and environment, not
+contract-violation unreachability. Per MCDC-009's forward
+classification, U1/U2 are the proof-closable shape and U3 the
+environmental shape; no test-closable gap exists.
+
+### U1/U2 — the redundant-guard infeasibility (WP-corroborated)
+
+In both constructors the `checked_mul(capacity, sizeof(type), &bytes)`
+call is preceded by the guard
+`capacity <= CANON_VEC_MAX_CAPACITY / sizeof(type)`, which already
+bounds `capacity * sizeof(type) <= CANON_VEC_MAX_CAPACITY` — the
+multiplication cannot overflow, so `!checked_mul`'s true outcome is
+infeasible on every path. The corroboration is cross-stream and
+unusually direct: in the VERIFY-018 baseline run, `vec_int_alloc` and
+`vec_int_arena_alloc` carry **zero unproved branch goals** (their only
+residuals are the category-(e) allocation-model pair), meaning WP
+discharged the branch-dead facts formally — the same branches gcov
+records as uncovered, the proof stream records as dead. These are
+justification rows with a proof behind them, the strongest form a
+justified-infeasible row can take. **Upstream option recorded**: if a
+future change drops one of the two redundant guards, U1/U2 convert
+from permanent justification rows to ordinary covered outcomes; until
+then they stand.
+
+### U3 — the heap-environmental allocation failure
+
+`vec_int_alloc`'s `!buf` true outcome requires `malloc` to fail, which
+is not deterministically forcible from a portable cover TU. The
+disposition is environmental (MCDC-009 outcome-2's family, heap-OOM
+flavored). The evidence that this is genuinely about heap
+non-determinism rather than condition shape is **in the same
+measurement**: the arena analogue is covered — the cover TU exhausts a
+64-byte arena with a 4096-element request, forcing
+`vec_int_arena_alloc`'s `!buf` TRUE deterministically (gcov shows that
+condition 2/2). U3 remains open unless memory.h grows a
+failure-injection hook; it is a permanent documented residual, not a
+deviation that later closes.
+
+### Third attribution variant (Shape-B mechanics)
+
+The Shape-B attribution check ran in the same coverage job:
+`vec_test.c` owns **all 640** of the module's test-measured condition
+outcomes (56.25% covered there — a non-gating number mixing generated
+and harness conditions), while `data/vec/vec_impl.h` shows the pure
+Shape-B fingerprint — 1 line, 4 functions, **zero conditions**. The
+conditions are genuinely lost to the `/test/` exclusion and the cover
+TU is the correct fix — Shape B **confirmed** for vec (third
+independent confirmation).
+
+The surviving attribution differs from both predecessors, completing
+the variant set: option's conditions attribute to `option_cover.c`
+(the TU instantiates `CANON_OPTION` directly), result's to the
+**driver header** `result_verify.h` (its TU `#include`s the driver and
+takes the instantiation from it), and vec's to **`vec_cover.c`
+itself** — the TU instantiates `DEFINE_VEC(static inline, int)`
+directly rather than including `vec_verify.h`, so the expansion site
+is the cover TU. The 158 outcomes split **152 generated (140
+`DEFINE_VEC` conditions + 12 `DEFINE_VEC_SLICE` facade-view conditions
+— `as_slice`/`as_slice_full`/`as_bytes`, measured here rather than
+lost to the test filter) + 6 cover-driver scaffolding conditions**
+(three fill-to-capacity/iterate `while` loops). The attribution
+fingerprint (`vec_impl.h`: functions but no conditions) is the
+standing tripwire for Shape-A drift: if vec_impl.h is ever
+restructured so conditions land on it directly, the fingerprint
+breaks and the cover TU no longer measures what it claims — the
+CI attribution step exists to make that visible.
+
+### Known exclusion (F2)
+
+`slice_init` on an `items==NULL` vec with `[0,0)` is pedantic UB
+(`NULL + 0`; VERIFY-018 finding F2) and is deliberately **not
+exercised** until the upstream one-token guard fix lands; the `!v` and
+range-check legs of slice_init's condition are covered through other
+inputs, so no outcome is currently missing on its account. When the
+F2 PR lands (guard + the excluded `slice_init(&e, 0, 0)` call + the
+driver's exclusion-requires removal, together), expect the 158
+denominator to move — that shift is the planned closure of this
+exclusion, not a regression.
+
+### Mitigation
+
+1. **U1/U2, infeasibility argument**: the preceding capacity guard
+   bounds the multiplication; WP corroborates by proving
+   `vec_int_alloc`/`vec_int_arena_alloc` branch-complete (VERIFY-018).
+2. **U3, environmental argument**: heap OOM non-forcible; the arena
+   sibling's covered `!buf` TRUE leg demonstrates the exclusion is
+   heap-specific, not structural.
+3. **Two regression detectors**: the coverage job's "Debug: per-line
+   MC/DC detail for vec (cover TU)" step prints the gcov dump with an
+   uncovered-outcome quick-filter every run, and the "Debug: Shape-B
+   attribution check for vec (vec_test)" step re-prints the
+   attribution fingerprint (the Shape-A-drift tripwire). The WP side
+   of U1/U2 is watched by the VERIFY-018 enforcement gates.
+4. **The achievable ceiling is 155/158 = 98.10%**, reached at CI
+   #1146 and byte-stable through CI #1154; the 3 missing outcomes are
+   documented here and not counted as a coverage regression.
+5. **The surrounding paths are exhaustively driven**: every other
+   condition in the measured set is exercised to both outcomes,
+   including all three `fill` legs (the MC/DC-primary evidence for
+   VERIFY-018 category (g), whose WP goals are unprovable by
+   construction), both `free` legs, the full NULL/empty/full guard
+   matrix, the iterator exhaustion path, and the facade views'
+   NULL/empty/live triples.
+
+### Cross-references
+
+- VERIFY-018 — vec's WP residual analysis; the alloc/arena_alloc
+  branch-complete proofs corroborating U1/U2; finding F2; category
+  (g), for which this entry's fill legs are the primary evidence.
+- MCDC-006/-007 — the prior Shape-B entries; this entry completes the
+  attribution-variant set (cover-TU / driver-header / cover-TU-direct)
+  and follows MCDC-007's forward note (panic-surface routing:
+  require_msg-only, hence no panic branch — but a ceiling nonetheless,
+  via dispositions MCDC-007's clean audit did not encounter).
+- MCDC-009 — the three-shape classification (test-closable /
+  proof-closable / environmental) this entry applies; U3 joins the
+  environmental family.
+- MCDC-001 — `-DCANON_NO_REQUIRE` coverage methodology (why vec's
+  require/ensure surface contributes no outcomes).
+- Per-line gcov dump and attribution check: CI steps in
+  `.github/workflows/cmake-multi-platform.yml` (coverage job).
 
 ---
 
