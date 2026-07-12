@@ -413,9 +413,10 @@ analogous defensive code (stringbuf.h is the next candidate, listed
 provisionally at 74.2% in MCDC-002's pattern note) will need its own
 per-header MCDC- entry; its unreachability shape and number are not
 transferable from the existing entries. Likewise, the remaining
-Shape-B macro modules (`result`, `vec`, `deque`, `fold`) will each get
-their own MCDC- entry paired with a driver, following option/MCDC-006's
-cover-TU pattern; their unreachability shapes are not transferable
+Shape-B macro modules (`deque`, `fold` — result and vec have since
+landed as MCDC-007 and MCDC-010) will each get their own MCDC- entry
+paired with a driver, following option/MCDC-006's cover-TU pattern;
+their unreachability shapes are not transferable
 either.
 
 ---
