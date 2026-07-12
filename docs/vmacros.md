@@ -245,16 +245,17 @@ determine whether its 26 generated outcomes are likewise attributed to
 
 ## Which modules get which artifact
 
-Shape is **confirmed** for `option`/`result` (B) and `map`/`hashmap` (A) by
-reading their `_impl.h`. For the rest it is **provisional** — inferred from
-presence/absence in the MC/DC table — and is confirmed per-module by the
-attribution debug run (see "Before building the cover TUs" below) before its
-cover TU is built. `option`'s and `result`'s attribution runs have both been
-performed and confirmed; the other three Shape-B modules (`vec`, `deque`,
-`fold`) still get their own confirming run.
+Shape is **confirmed** for `option`/`result`/`vec` (B) and `map`/`hashmap`
+(A) by reading their `_impl.h` and, for the B modules, by their attribution
+runs. For the rest it is **provisional** — inferred from presence/absence in
+the MC/DC table — and is confirmed per-module by the attribution debug run
+(see "Before building the cover TUs" below) before its cover TU is built.
+`option`'s, `result`'s, and `vec`'s attribution runs have all been performed
+and confirmed; the other two Shape-B modules (`deque`, `fold`) still get
+their own confirming run.
 
 **Cover TUs needed (Shape-B): five —** `option` (✅ landed), `result`
-(✅ landed), `vec`, `deque`, `fold`. The nine Shape-A modules already surface in the MC/DC table via
+(✅ landed), `vec` (✅ landed), `deque`, `fold`. The nine Shape-A modules already surface in the MC/DC table via
 their `_impl.h` bodies and get **no** cover TU. `fold` is the one algo module
 absent from the table (its siblings all appear), which is why it is the only
 Shape-B entry in the algo layer.
@@ -270,7 +271,7 @@ Shape-B entry in the algo layer.
 
 | Driver             | Verifies module  | Shape            | Cover TU (MC/DC)                 |
 |--------------------|------------------|------------------|---------------------------------|
-| `vec_verify.h`     | `data/vec/`      | B (provisional)  | `vmacros/coverage/vec_cover.c`   |
+| `vec_verify.h`     | `data/vec/`      | B (confirmed)    | ✅ `vmacros/coverage/vec_cover.c` (landed, 98.1%, 155/158, MCDC-010) |
 | `deque_verify.h`   | `data/deque/`    | B (provisional)  | `vmacros/coverage/deque_cover.c` |
 | `hashmap_verify.h` | `data/hashmap/`  | A (confirmed)    | — already covered via `hashmap_impl.h` |
 
@@ -292,7 +293,12 @@ The `data/vec/` and `data/hashmap/` modules carry optional 6th/7th-file
 extensions (`_range`, `_fmt`) that depend on other modules (range.h,
 stringbuf.h, vec.h). Whether those extension functions are verified within the
 same driver or deferred is decided per-module when that driver is built; the
-core decl/impl/defn surface is verified first regardless.
+core decl/impl/defn surface is verified first regardless. **vec's decision
+(VERIFY-018)**: the `_range`/`_fmt` extensions are deferred — the driver
+verifies the core surface only. The three `DEFINE_VEC_SLICE` facade views
+(`as_slice`/`as_slice_full`/`as_bytes`) are **measured** in the cover TU
+(12 of MCDC-010's 158 outcomes) but not yet WP-driven; the facade-widening
+pass is a recorded follow-up.
 
 ### Single-file macro families — separate disposition (not yet decided)
 
@@ -537,12 +543,52 @@ The 28 outcomes split **22 generated `result_int_VErr_*` conditions
 `observe_res`'s two `get_*`-result branches, attributed to
 `result_cover.c`)**, all covered.
 
-Two Shape-B modules now confirm the pattern independently. The
-per-module attribution check remains in the checklist for `vec`,
-`deque`, and `fold`, and MCDC-007's forward note governs their audit
+### Resolved (vec, CI #1146)
+
+vec's per-module attribution check ran as a report-only debug step in
+the coverage job, and **the confirmed pattern held for a third
+module**: `vec_test`'s `gcov-14 --conditions` output attributes all
+640 of the module's test-measured condition outcomes to
+**`vec_test.c`** (the instantiation TU), with `data/vec/vec_impl.h`
+showing the pure Shape-B fingerprint — lines and functions but **zero
+conditions** — so the conditions are genuinely lost to the `/test/`
+exclusion and the cover TU is the correct fix for vec too. The
+fingerprint doubles as the standing **Shape-A-drift tripwire**: if
+vec_impl.h is ever restructured so conditions land on it directly,
+the attribution step makes the shift visible while the cover TU and
+the aggregate table would not.
+
+`vmacros/coverage/vec_cover.c` measures **98.10% (155/158)** at CI
+#1146 — MCDC-010, a ceiling entry with a new disposition mix. Like
+result, vec's panic surface is `require_msg`/`ensure_msg`-only and
+vanishes under `-DCANON_NO_REQUIRE`, so no panic branch survives into
+the measured set — but the audit is not clean: two
+guard-redundancy-infeasible outcomes (the `!checked_mul` true legs in
+alloc/arena_alloc, WP-corroborated by branch-complete constructor
+proofs, VERIFY-018) and one heap-environmental outcome (alloc's
+`!buf`; the arena analogue IS covered via deterministic exhaustion).
+All three were written down with dispositions in the TU header before
+the first run and confirmed exactly. Attribution is the **third
+variant**: vec_cover instantiates `DEFINE_VEC(static inline, int)`
+directly (rather than including the WP driver, as result_cover does),
+so the 152 generated conditions (140 `DEFINE_VEC` + 12
+`DEFINE_VEC_SLICE` facade views) attribute to **`vec_cover.c`
+itself**, alongside 6 scaffolding-loop conditions. One known
+exclusion is in force: `slice_init` on an items==NULL vec with
+`[0,0)` (pedantic UB, VERIFY-018 finding F2) is not exercised pending
+the upstream guard fix — expect the 158 denominator to move when the
+F2 PR lands.
+
+Three Shape-B modules now confirm the pattern independently, across
+all three attribution variants (cover-TU direct, driver-header,
+cover-TU direct with facade views). The per-module attribution check
+remains in the checklist for `deque` and `fold`, and MCDC-007's
+forward note — as refined by MCDC-010 — governs their audit
 expectations: the module's panic-surface routing (require_msg-only vs
-handler-invoking) determines clean audit vs ceiling entry — do not
-assume either.
+handler-invoking) determines whether a *panic-branch* ceiling exists,
+but infeasible and environmental outcomes can still produce a ceiling
+on a require_msg-only module — do not assume a clean audit from
+routing alone.
 
 ## Status
 
@@ -550,7 +596,7 @@ assume either.
 |----------|--------------------|------------|--------------|-------------------------------------|--------------------------------|
 | option   | `option_verify.h`  | semantics/ | ✅ Verified 189/223 (VERIFY-014, enforced CI #1067; report-only #1065) | ✅ `option_cover.c` — landed, 96.7% (29/30), MCDC-006 (CI #1072) | First driver; pattern baseline confirmed; Shape B (confirmed) |
 | result   | `result_verify.h`  | semantics/ | ✅ Verified 185/215 (VERIFY-015, enforced CI #1090; report-only #1089) | ✅ `result_cover.c` — landed, 100% (28/28), MCDC-007 (CI #1089); attribution confirmed | Second driver; first union-typed module (union-model hypothesis, VERIFY-015); first clean Shape-B audit; Shape B (confirmed) |
-| vec      | `vec_verify.h`     | data/      | Not started  | `vec_cover.c` — not started (pattern confirmed on option; confirm own attribution)    | Shape B (provisional)          |
+| vec      | `vec_verify.h`     | data/      | ✅ Verified 5184/5380 (VERIFY-018, enforced CI #1154; baseline CI #1152; report-only #1150–#1151) | ✅ `vec_cover.c` — landed, 98.1% (155/158), MCDC-010 (CI #1146); attribution confirmed (third variant: direct instantiation, conditions on the cover TU) | Third driver; first data/-layer module; first Typed+Cast driver; STRUCTS/FUNCTIONS split (F3) landed first; new macro-body-loop residual class (g) forward-flagged for deque; Shape B (confirmed) |
 | deque    | `deque_verify.h`   | data/      | Not started  | `deque_cover.c` — not started (pattern confirmed on option; confirm own attribution)  | Shape B (provisional)          |
 | hashmap  | `hashmap_verify.h` | data/      | Not started  | — (Shape A; via `_impl.h`)          | Already in MC/DC table         |
 | map      | `map_verify.h`     | algo/      | Not started  | — (Shape A; via `_impl.h`)          | Distinct in/out types          |
@@ -563,8 +609,8 @@ assume either.
 | unique   | `unique_verify.h`  | algo/      | Not started  | — (Shape A; via `_impl.h`)          |                                |
 | reverse  | `reverse_verify.h` | algo/      | Not started  | — (Shape A; via `_impl.h`)          |                                |
 
-The `vmacros/` tree now holds two driver + cover-TU pairs (`option`,
-`result`). Update each remaining row's WP status as its driver is
+The `vmacros/` tree now holds three driver + cover-TU pairs (`option`,
+`result`, `vec`). Update each remaining row's WP status as its driver is
 written, and the Cover-TU column as each Shape-B cover TU lands (and as
 provisional Shape classifications are confirmed by the per-module
 attribution debug run); record each module's generated-vs-scaffolding
