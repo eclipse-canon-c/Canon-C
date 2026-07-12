@@ -2840,6 +2840,186 @@ unproved goals (VERIFY-017).
 
 ---
 
+## data/vec (driver)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals) — driver   |
+| **Baseline commit**    | 96dd41d (Canon-C CI #1152, run 3); report-only chronology 1eeb58c (CI #1150, run 1) → 8a3bb1e (CI #1151, run 2); enforced as of e663e2c (CI #1154) |
+| **Functions**          | 37 generated `vec_int_*` functions contracted and proved |
+| **Proof obligations**  | 5184 / 5380 discharged automatically (96.36%)   |
+| **Unproved**           | 196 (143 inherited + 53 own; all documented under VERIFY-018; 0 Failed) |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast` |
+| **CI enforcement**     | Yes — pinned `5184 / 5380` + zero-Failed + exact count 196 + by-name roll-call (set equality) |
+| **MC/DC coverage**     | 98.10% (155/158 condition outcomes — see MCDC-010) |
+| **CI artifact**        | `wp-proof-vec` (full per-goal breakdown)        |
+
+vec is the **third driver-verified Shape-B module** (after option and
+result) and the **first data/-layer module verified** — verification's
+entry into data/. WP runs over `vmacros/vdrivers/vec_verify.h`, which
+instantiates the real shipped macros at `int` via the
+`DEFINE_VEC_STRUCTS` / `DEFINE_VEC_FUNCTIONS` split (landed upstream
+as VERIFY-018 finding F3 before the driver was drafted — the
+split-patch-first ordering is now the standing checklist item for
+deque). It is the **first driver on the `Typed+Cast` model**: unlike
+option/result's by-value structs, vec crosses `void*` boundaries —
+`(int*)mem_alloc(bytes)`, and `int*` buffers through
+`mem_copy`/`mem_move`'s `void*` parameters — so its CI wrapper carries
+the CVC5-presence check of the Typed+Cast family. The TU is the
+largest verified to date: the facade pulls slice.h, ptr.h, arena.h →
+memory.h and the full substrate, plus the option and result
+instantiations the driver composes (5380 goals).
+
+The verified configuration is the default shipped build
+(`-DCANON_NO_REQUIRE -DNDEBUG`, `CANON_LIFETIME` off): vec's entire
+panic surface (3 `require_msg`, 10 `ensure_msg`, zero direct handler
+calls) compiles away, so the driver's `requires` clauses are
+load-bearing and contract.h contributes only the definition-presence
+handler pair.
+
+### Function inventory
+
+All 37 generated functions contracted and proved (residuals are
+call-site/feature-gap/model goals, not function failures):
+
+- **Constructors & teardown (5)**: `init`, `empty`, `alloc`,
+  `arena_alloc`, `free`
+- **Push family (3)**: `push`, `try_push`, `push_unchecked`
+- **Element access (8)**: `get`, `get_option`, `get_unchecked`, `at`,
+  `set`, `first`, `last`, `data`
+- **Pop family (2)**: `pop`, `pop_option`
+- **Queries (5)**: `len`, `capacity`, `remaining`, `is_empty`,
+  `is_full`
+- **Structural mutation (4)**: `clear`, `insert`, `remove`,
+  `remove_option`
+- **Bulk (3)**: `append_array`, `extend`, `fill`
+- **Misc (2)**: `swap`; iterator pair `iter_init`, `iter_next`
+- **Slices (2)**: `slice_init`, `slice_get`
+- **Lifetime plumbing (2)**: `lifetime_open_`, `lifetime_close_`
+  (no-ops under the verified `CANON_LIFETIME`-off configuration)
+
+The three `DEFINE_VEC_SLICE` facade views
+(`as_slice`/`as_slice_full`/`as_bytes`) are **measured** in the cover
+TU (MCDC-010) but not yet WP-driven — the facade-widening pass is a
+recorded follow-up. The optional `_range`/`_fmt` extension files are
+deferred per `docs/vmacros.md`; the core decl/impl/defn surface is
+what this entry verifies.
+
+### What is proved
+
+- **Complete + disjoint behavior splits across the NULL-safe API**:
+  every fallible function carries explicit
+  null/empty/full/out-of-range/ok behavior splits matching the
+  documented "NULL → error/no-op" contracts, proved complete and
+  disjoint.
+- **Capacity discipline**: push/insert/append preserve
+  `len <= capacity`; the too-big constructor legs
+  (`capacity > CANON_VEC_MAX_CAPACITY / sizeof(int)`) prove degenerate
+  results; `alloc`/`arena_alloc` prove **branch-complete** — the
+  `!checked_mul` overflow branches are formally dead under the
+  preceding capacity guard (the WP half of MCDC-010's U1/U2
+  infeasibility rows).
+- **Length/index semantics through the transfer calls**: insert/remove
+  length steps, index bounds, and the untouched-prefix framing prove
+  through `mem_move`'s byte-level contract; the element-content
+  equalities across the transfer are the documented category-(d)
+  residuals (frame-only memcopy/memmove specs — the VERIFY-017
+  `push_shift_semantics` shape).
+- **Composed option/result plumbing**: `get_option`, `pop_option`,
+  `remove_option`, and the `result__Bool_Error` returns prove against
+  the composed driver contracts (the run-1 → run-2 composition fix;
+  see VERIFY-018's method lesson R1). The `[wp:union]` warnings on the
+  `.val.err` postconditions are the expected VERIFY-015
+  union-model standing hypothesis, re-cited here.
+
+### Run chronology (report-only → enforced)
+
+Run 1 (1eeb58c, CI #1150, 5h21m): 4988/5350, 362 unproved — spec-less
+composed callees drowning provable goals (lesson R1). Run 2 (8a3bb1e,
+CI #1151): 5208/5413, 205 — driver composition landed; inherited
+surface stabilized at 143 names. Run 3, the baseline (96dd41d, CI
+#1152): 5184/5380, 196 (193 Timeout + 3 Unknown + 0 Failed) —
+delegate narrowing closed 9 own goals (62 → 53); the two
+retry-variance candidates failed a third consecutive run and were
+pinned. Enforcement went green on its first run (e663e2c, CI #1154)
+with the set name-identical for the third consecutive run, while
+prover attribution, source line numbers, and roll-call order all
+shifted beneath it — the empirical validation of name-only,
+order-independent matching.
+
+### Residual goals (196)
+
+All 196 are documented under VERIFY-018 — 143 inherited (arena.h 46,
+option combinators 32, result combinators 22, memory.h 20, slice.h
+libc 13, ptr.h 3, checked/align model-variance 5, contract.h handler
+pair 2; model-variant re-emissions under this TU's Typed+Cast, pinned
+name-stable across three runs) and 53 vec-own in four categories:
+**(e)** 2 allocation-model plumbing goals (`\fresh`/`\freeable`
+feature gap at alloc/free delegation), **(d)** 5 element-transfer
+ensures (frame-only memcopy/memmove specs), **(g)** 24 fill
+macro-body-loop goals (ACSL loop annotations cannot survive macro
+definition — unprovable by construction; MC/DC is the primary
+evidence, all three fill legs covered; deque's shift loops
+pre-classified here), and **(h)** 22 Typed+Cast int↔char bridging
+goals (assigns-framing and transfer call-requires at the typed/void*
+boundary). Zero `rte_function_pointer` goals on vec functions — the
+first module without the OWN-003 dispatch class of its own.
+
+### MCDC-010 cross-reference
+
+vec's cover TU measures 155/158 = 98.10%, its documented ceiling from
+the first run (CI #1146), byte-stable through enforcement. The three
+open outcomes carry two dispositions: U1/U2 (the `!checked_mul` true
+outcomes in alloc/arena_alloc) are **guard-redundancy-infeasible and
+WP-corroborated** — this entry's branch-complete constructor proofs
+are the proof-stream half — and U3 (heap `!buf`) is
+**environmental**, with the arena sibling's covered exhaustion leg
+demonstrating the exclusion is heap-specific. The Shape-B attribution
+check confirmed vec as the third variant: generated conditions
+attribute to `vec_cover.c` itself (direct `DEFINE_VEC`
+instantiation), with `vec_impl.h`'s functions-but-no-conditions
+fingerprint standing as the Shape-A-drift tripwire. See MCDC-010.
+
+### Preprocessing flags
+
+- **`-DCANON_NO_REQUIRE`**: compiles `require_msg`/`ensure_msg`
+  runtime checks away; the driver's ACSL `requires` clauses provide
+  the static guarantees.
+- **`-DNDEBUG`**: standard release-mode flag.
+- **`CANON_LIFETIME` off** (default): the lifetime plumbing pair are
+  no-ops in the verified configuration (OWN-001 §7 precedent).
+
+### Reproduction
+
+```bash
+frama-c \
+  -wp -wp-rte \
+  -wp-model Typed+Cast \
+  -wp-prover alt-ergo,z3,cvc5 \
+  -wp-timeout 120 \
+  -wp-split \
+  -cpp-extra-args=" \
+    -I core/primitives \
+    -I core \
+    -I semantics \
+    -I data \
+    -I . \
+    -DCANON_NO_REQUIRE \
+    -DNDEBUG" \
+  vmacros/vdrivers/vec_verify.h
+```
+
+Expected output: `Proved goals: 5184 / 5380` with the 196 documented
+unproved goals (VERIFY-018), 0 Failed. Wall time ~2h50m
+(timeout-dominated; see VERIFY-018's runtime record).
+
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -2949,11 +3129,24 @@ the fourth module (VERIFY-016, composability confirmation #6); option
 and result shipped as the first two driver-verified Shape-B modules
 (VERIFY-014/-015), confirming the driver + cover-TU template end to
 end, with result additionally establishing the first union-typed proof
-and the first clean Shape-B MC/DC audit (MCDC-007). The remaining
-Shape-B modules (vec, deque, fold — see `docs/vmacros.md`) follow the
-same driver + cover-TU template as verification moves into data/;
-MCDC-007's forward note governs their audit expectations.
+and the first clean Shape-B MC/DC audit (MCDC-007). vec has since
+shipped as the third driver-verified module and the first in data/
+(VERIFY-018 / MCDC-010 — see its section below); the remaining
+Shape-B modules (deque, fold — see `docs/vmacros.md`) follow the same
+driver + cover-TU template, with MCDC-007's forward note governing
+their audit expectations and VERIFY-018's method lessons (split patch
+first; composition before contract-weakening; three-run pinning
+discipline) recorded for deque.
 
-### data/ and algo/ (longer term)
+### data/ (in progress)
 
-Collections and algorithms — planned after semantics/ layer is verified.
+| Header       | Status           | Proved    | Notes                                                                  |
+|--------------|------------------|-----------|------------------------------------------------------------------------|
+| vec (driver) | ✅ Verified  | 5184/5380 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 143 inherited (largest TU to date) + 53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque; zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
+| deque        | Planned next     |           | Split patch lands before the driver is drafted (VERIFY-018 F3 checklist); shift loops pre-classified into class (g); CANON_RESULT fingerprint already spotted in deque_impl.h coverage data |
+| hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
+
+### algo/ (longer term)
+
+Algorithms — planned after data/; fold is the one Shape-B entry
+(cover TU required), the rest are Shape A via their `_impl.h` bodies.
