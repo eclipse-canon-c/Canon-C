@@ -109,6 +109,56 @@
  *       parameters — the first macro module without option's class (b).
  *       If any rte_function_pointer goal appears, something is wrong.
  *
+ * ── RUN 1 RESULTS (report-only, 4988/5350 proved, 350 T / 12 U / 0 F) ──────
+ * Prediction scorecard:
+ *   (a) CONFIRMED exactly: 2 goals (contract_default_handler loop_invariant
+ *       _established + terminates), the only handler goals in the run.
+ *   (f) CONFIRMED in substance: all 13 rte_function_pointer goals sit on
+ *       result__Bool_Error_* / option_int_* combinators (inherited);
+ *       ZERO on any vec_int_* function.
+ *   ptr.h prediction FALSIFIED: 11 ptr.h goals present. arena.h calls
+ *       ptr_span (and pulls slice.h -> str.h), so ptr.h enters through
+ *       arena, not the facade — the include-graph read missed arena's own
+ *       dependencies. Classification unchanged: inherited, proven in place.
+ *   (c) checked/align/arena re-emissions TIMED OUT despite proving in
+ *       their own runs — mega-TU context bloat; expect flip-back once the
+ *       spec-less-callee noise (below) is fixed.
+ *   [wp:union]: 18 warnings, expected, non-failures (VERIFY-015 precedent).
+ *
+ * Root causes fixed in driver v2 (this file):
+ *   R1. Spec-less callees assign-everything: the lifetime helpers and the
+ *       bare option/result instantiations had no contracts, so WP treated
+ *       every call as clobbering the world — every constructor, every
+ *       result-returning function drowned. Fixed by driver composition
+ *       (option_verify.h include; contracted result__Bool_Error _ok/_err/
+ *       _is_ok via the split macros + guard define) and tag-forward-decl
+ *       contracts on the lifetime helpers.
+ *   R2. free lacked a global assigns (kernel unioned behaviors — benign
+ *       but now explicit).
+ *
+ * NEW residual class (g) — macro-body loops (first instance in campaign):
+ *   fill()'s for-loop lives in IMPL_VEC_FILL's macro body; ACSL loop
+ *   annotations (loop invariant / assigns / variant) can only be attached
+ *   adjacent to the loop statement and cannot survive macro definition
+ *   (comments are stripped). fill's cluster — terminates ×2, rte_mem_access
+ *   ×8 (4 pairs), assigns ×4(+4 live), live ensures ×6 — is therefore
+ *   unprovable BY CONSTRUCTION under WP, independent of contract quality.
+ *   Permanent named residual; runtime confidence comes from MCDC-010
+ *   (fill's three legs measured) and the fuzz invariants. FORWARD-FLAG:
+ *   deque's shift loops will hit the same class.
+ *
+ * Class (e) concretized: the allocation-model residuals are
+ *   vec_int_alloc_call_vec_int_init_requires_2 (\fresh cannot establish
+ *   buffer validity — WP: "not yet implemented") and
+ *   vec_int_free_call_mem_free_requires (\freeable likewise) + free's
+ *   live ensures/assigns parts — the exact analogs of memory.h's own
+ *   mem_free residual pair, visible in this run's inherited list.
+ *
+ * WATCH-ITEM for run 2: insert/remove/append's call_mem_move/mem_copy
+ *   _requires goals (int-element \separated bridging to char-level
+ *   regions_overlap). May close once R1's noise is gone; if not, restate
+ *   the driver requires in memory.h's own predicate shape.
+ *
  * ── Findings already on record from the pre-run read (docs follow-ups) ─────
  *   F1. append_array/extend: shipped doc does not forbid src overlapping
  *       the vec's own buffer; mem_copy (memcpy semantics) makes self-append
@@ -146,12 +196,69 @@
  * attributed to the result module in the split). option_##type must exist
  * before the vec functions, so option is instantiated here too — its goals
  * are likewise inherited (proved under the option driver's own run). */
-#include "semantics/option/option.h"
+/* ── Driver composition: option ────────────────────────────────────────────
+ * option_verify.h instantiates option_int through the real split macros
+ * WITH contracts on every function. Run 1 proved that bare CANON_OPTION(int)
+ * poisons every vec caller of option_int_some/none: spec-less callees make
+ * WP assume they assign everything. Composing the drivers gives vec
+ * contracted callees and collapses the option-combinator noise to option's
+ * own documented residual set (VERIFY-014). */
+#include "vmacros/vdrivers/option_verify.h"
+
+/* ── Driver composition: result__Bool_Error ────────────────────────────────
+ * result_verify.h instantiates result_int_VErr, not the (bool, Error) pair
+ * vec uses, so it cannot be included; instead the same interposition is
+ * done here with the real split macros. Contracts cover the three functions
+ * vec bodies call (_ok / _err / _is_ok) — shapes copied verbatim from
+ * result_verify.h, retyped. The guard define below makes vec_impl.h skip
+ * its own file-scope emission (same guard convention, one instantiation).
+ * The remaining result functions (combinators) are emitted uncontracted;
+ * their fn-pointer/termination cluster re-emits with the same goal names
+ * as run 1 and stays classified INHERITED (result class (b) analog). */
+#include "semantics/error.h"
+#include "semantics/result/result_defn.h"
+
+DEFINE_RESULT_TYPEDEF(bool, Error)
+DEFINE_RESULT_STRUCT(bool, Error)
+
+/*@ assigns \nothing;
+    ensures \result.is_ok == \true;
+    ensures \result.val.ok == v;
+*/
+static inline result__Bool_Error result__Bool_Error_ok(bool v);
+
+/*@ assigns \nothing;
+    ensures \result.is_ok == \false;
+    ensures \result.val.err == err;
+*/
+static inline result__Bool_Error result__Bool_Error_err(Error err);
+
+/*@ assigns \nothing;
+    ensures \result <==> r.is_ok;
+*/
+static inline bool result__Bool_Error_is_ok(result__Bool_Error r);
+
+DEFINE_RESULT_FUNCTIONS(static inline, bool, Error)
+
+#define CANON_RESULT_BOOL_ERROR_DEFINED
 #include "data/vec/vec_defn.h"
 
-CANON_OPTION(int)
+/* ── Types + structs from the real macro (first half of DEFINE_VEC) ──────────
+ * The per-instantiation lifetime helpers are emitted by DEFINE_VEC_STRUCTS
+ * with no ACSL (annotations cannot live inside a macro body — comments are
+ * stripped before macro definition). Run 1: the spec-less helpers made WP
+ * assume every constructor/destructor call could assign anything, drowning
+ * init/empty/alloc/free goals (vec_int_empty_ensures went Unknown on a
+ * function that sets three fields). Tag-only forward declaration +
+ * contracted prototypes merge `assigns \nothing` onto the macro-generated
+ * definitions (empty bodies in the verified config, CANON_LIFETIME off). */
+struct vec_int_s;
 
-/* ── Types + structs from the real macro (first half of DEFINE_VEC) ────────── */
+/*@ assigns \nothing; */
+static inline void vec_int_lifetime_open_(struct vec_int_s* v);
+
+/*@ assigns \nothing; */
+static inline void vec_int_lifetime_close_(struct vec_int_s* v);
 
 DEFINE_VEC_STRUCTS(int)
 
@@ -256,6 +363,7 @@ static inline vec_int vec_int_arena_alloc(borrowed(Arena*) arena, usize capacity
 
 /*@ requires v == \null || vec_int_mut(v);
     requires (v != \null && v->items != \null) ==> \freeable(v->items);
+    assigns *v;
     behavior null:
       assumes v == \null;
       assigns \nothing;
