@@ -300,6 +300,35 @@ verifies the core surface only. The three `DEFINE_VEC_SLICE` facade views
 (12 of MCDC-010's 158 outcomes) but not yet WP-driven; the facade-widening
 pass is a recorded follow-up.
 
+### Instantiation-identity rule (from the VERIFY-018 reconciliation)
+
+Composing a Shape-B module and instantiating one are **different acts
+with different evidence obligations**:
+
+- A driver that **re-includes a substrate module's own verification
+  driver** (option in vec's TU) imports the verified instance. Its
+  residual set propagates byte-identically (modulo the memory-model
+  prefix if the models differ) — machine-diffed 34/34 for the vec
+  edge, `-wp-split` fragment indices included.
+- A driver that **instantiates the family at a new type pair**
+  (result(Bool, Error) in vec's TU — VERIFY-015's home unit verifies
+  (int, VErr)) creates a **new verification subject**. Expect the
+  family's residual *profile*, not its residual *set*: the vec edge
+  reproduced the combinator-dispatch profile 20/20 at
+  family/count/split granularity, dropped the 8 assigns goals the
+  driver's lighter contracts never emit, and added 2 union get_*
+  mem-access goals (attribution open — VERIFY-018 F4). Either attach
+  the family's **full home contract set** to the new instance (making
+  it comparable clause-for-clause) or record the reduced surface
+  explicitly at driver-review time.
+
+**Deque note**: deque's driver will need option/result at deque's own
+type parameters. Apply this rule when drafting it, and pre-register in
+the driver header which arms are expected to be inheritance
+(re-included verified instances) and which are fresh instantiations —
+the same write-down-before-the-run discipline the cover TUs already
+use for predicted-uncoverable conditions.
+
 ### Single-file macro families — separate disposition (not yet decided)
 
 The following are also macro-templated but live in a **single file** rather than
