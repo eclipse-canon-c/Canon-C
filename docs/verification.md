@@ -2850,7 +2850,7 @@ unproved goals (VERIFY-017).
 | **Baseline commit**    | 96dd41d (Canon-C CI #1152, run 3); report-only chronology 1eeb58c (CI #1150, run 1) → 8a3bb1e (CI #1151, run 2); enforced as of e663e2c (CI #1154) |
 | **Functions**          | 37 generated `vec_int_*` functions contracted and proved |
 | **Proof obligations**  | 5184 / 5380 discharged automatically (96.36%)   |
-| **Unproved**           | 196 (143 inherited + 53 own; all documented under VERIFY-018; 0 Failed) |
+| **Unproved**           | 196 (121 inherited + 75 subject-side: 53 own + 22 fresh result(Bool, Error) instantiation; VERIFY-018 incl. Correction note 2026-07-16; 0 Failed) |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast` |
@@ -2953,11 +2953,18 @@ order-independent matching.
 
 ### Residual goals (196)
 
-All 196 are documented under VERIFY-018 — 143 inherited (arena.h 46,
-option combinators 32, result combinators 22, memory.h 20, slice.h
-libc 13, ptr.h 3, checked/align model-variance 5, contract.h handler
-pair 2; model-variant re-emissions under this TU's Typed+Cast, pinned
-name-stable across three runs) and 53 vec-own in four categories:
+All 196 are documented under VERIFY-018 (incl. Correction note
+2026-07-16) — 121 inherited **byte-identically** (arena.h 46, option
+combinators 32, memory.h 20, slice.h libc 13, ptr.h 6, checked.h 2,
+contract.h handler pair 2; the core arm equal to arena.h's pinned list
+verbatim — fragment indices and Timeout/Unknown sub-verdicts
+reproduced — and the option arm equal modulo the typed_→typed_cast_
+prefix; pinned name-stable across three runs), 22 on the **fresh
+result(Bool, Error) instantiation** (a type pair not verified in
+VERIFY-015's home unit: 20 goals matching the family's home profile
+family/count/split-exactly, 8 home assigns goals never emitted under
+the driver's lighter contracts, 2 new union get_* mem-access goals —
+attribution open, VERIFY-018 F4), and 53 vec-own in four categories:
 **(e)** 2 allocation-model plumbing goals (`\fresh`/`\freeable`
 feature gap at alloc/free delegation), **(d)** 5 element-transfer
 ensures (frame-only memcopy/memmove specs), **(g)** 24 fill
@@ -3142,7 +3149,7 @@ discipline) recorded for deque.
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| vec (driver) | ✅ Verified  | 5184/5380 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 143 inherited (largest TU to date) + 53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque; zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
+| vec (driver) | ✅ Verified  | 5184/5380 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 121 inherited byte-identically (largest TU to date; 89 core = arena.h's set verbatim, 32 option mod prefix) + 75 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 22 fresh result(Bool, Error) instantiation — VERIFY-018 Correction note 2026-07-16); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
 | deque        | Planned next     |           | Split patch lands before the driver is drafted (VERIFY-018 F3 checklist); shift loops pre-classified into class (g); CANON_RESULT fingerprint already spotted in deque_impl.h coverage data |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 
