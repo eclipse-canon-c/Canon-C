@@ -627,9 +627,13 @@ mem_copy/mem_move), instantiated via the `DEFINE_VEC_STRUCTS` /
 `DEFINE_VEC_FUNCTIONS` split that landed upstream before the driver
 was drafted (finding F3); its 196-goal residual set — the largest to
 date, on the largest TU to date — was name-stable across three
-consecutive runs before enforcement and decomposes exactly into 143
-inherited re-emissions plus 53 vec-own across four categories,
-including the new macro-body-loop class forward-flagged for deque.
+consecutive runs before enforcement and decomposes exactly into 121
+inherited re-emissions (byte-identical to the substrate's pinned
+lists — core arm verbatim vs. arena.h, option arm modulo the
+typed_→typed_cast_ prefix) plus 75 subject-side goals: 53 vec-own
+across four categories, including the new macro-body-loop class
+forward-flagged for deque, and 22 on the fresh result(Bool, Error)
+instantiation (VERIFY-018 incl. Correction note 2026-07-16).
 
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
@@ -669,10 +673,14 @@ STRUCTS/FUNCTIONS split. Unlike option/result, vec's TU **does** pull
 in the substrate stack — the facade includes slice.h, ptr.h, and
 arena.h → memory.h, plus the option and result instantiations the
 driver composes — so its 5380 obligations are the largest full-run
-figure in the table and its 143 inherited goals are model-variant
-re-emissions of eight already-documented families (arena.h 46, option
-32, result 22, memory.h 20, slice.h-libc 13, ptr.h 3, checked/align 5,
-contract.h 2) under this TU's `Typed+Cast` model. See VERIFY-018.
+figure in the table. Its 121 inherited goals re-emerge
+**byte-identically** from seven already-documented families (arena.h
+46, option 32, memory.h 20, slice.h-libc 13, ptr.h 6, checked.h 2,
+contract.h 2) — the core arm equal to arena.h's pinned list verbatim,
+the option arm equal modulo the typed_→typed_cast_ prefix — and its
+remaining 22 non-own goals belong to the fresh result(Bool, Error)
+instantiation, a new verification subject (VERIFY-015 verifies
+(int, VErr)). See VERIFY-018 incl. Correction note 2026-07-16.
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
 `-wp-timeout 120`). Of the 688 unproved goals, the 428 in-place-header
@@ -689,10 +697,15 @@ for an arbitrary callee; `\valid_function` unimplemented in Frama-C
 29), the same class as region_end's opaque-hook dispatch (VERIFY-011
 cat 1), plus each driver's 2 inherited contract.h handler goals —
 documented in VERIFY-014 and VERIFY-015. vec's 196 driver-module
-goals (VERIFY-018) are 143 model-variant re-emissions of
-already-documented families (its mega-TU pulls the substrate stack
-*and* the option/result combinators, so their residuals re-derive
-under `Typed+Cast`) plus 53 vec-own across four categories — 2
+goals (VERIFY-018 incl. Correction note 2026-07-16) are 121
+byte-identical re-emissions of already-documented families (its
+mega-TU pulls the substrate stack *and* the verified option
+instantiation; the core arm matches arena.h's pinned list verbatim,
+the option arm modulo the typed_→typed_cast_ prefix), 22 goals on the
+fresh result(Bool, Error) instantiation (the family's home profile
+reproduced 20/20 at a new type pair; 8 assigns goals never emitted
+under the driver's lighter contracts; 2 new union get_* mem-access
+goals, attribution open — F4), plus 53 vec-own across four categories — 2
 allocation-model, 5 element-transfer (frame-only memcopy/memmove
 specs), 24 fill macro-body-loop goals (unprovable by construction —
 ACSL loop annotations cannot survive macro definition; the first
@@ -751,13 +764,16 @@ class (see VERIFY-017). vec's CI step processes the driver TU with the
 full substrate (slice.h, ptr.h, arena.h → memory.h and below) plus
 the composed option/result instantiations; the 5380 figure for vec
 reflects the full run as vec's row because the driver is the
-verification target. Its 143 inherited goals are model-variant
-re-emissions under `Typed+Cast` rather than the byte-identical
-propagation of the in-place stack: goal names re-derive with the
-`typed_cast_` prefix and `-wp-split` fragment numbering, so identity
-is per-name within the vec TU across runs (pinned name-stable across
-three consecutive runs), not across TUs (see VERIFY-018's
-model-variance note).
+verification target. Its 121 inherited goals propagate **byte-identically**, exactly as in
+the in-place stack: the 89-goal core arm is equal to arena.h's pinned
+residual list verbatim (no prefix map applies — both units run
+Typed+Cast; `-wp-split` fragment indices and the Timeout/Unknown
+sub-verdicts reproduced) and the 32-goal option arm is equal modulo
+the `typed_` → `typed_cast_` prefix, all fragment indices included.
+The 22 result(Bool, Error) goals are not inheritance but a fresh
+instantiation — a new verification subject whose residual profile
+matches the family's home profile at clause-family granularity (see
+VERIFY-018's byte-identity note and Correction note 2026-07-16).
 
 The slice.h baseline (367 / 390) carries a higher residual fraction
 (5.9%) than the previously verified primitives headers because slice.h
@@ -880,17 +896,24 @@ roll-call) as of CI #1067.
 The vec baseline (5184 / 5380) is the first **data/-layer**
 verification and the composable-verification thesis's first test on a
 **mega-TU**: the driver composes the full core/ substrate (through
-arena.h), the option and result instantiations, and vec's own 37
-generated functions in one translation unit — the largest verified to
-date. The 143:53 inherited:own decomposition held exactly and was
-name-stable across three consecutive runs before enforcement, but the
-inherited surface is a **model-variant subset** rather than the
-byte-identical propagation the in-place stack exhibits
-(VERIFY-009/-010/-011): re-derivation under `Typed+Cast` with
-`-wp-split` renames every goal (`typed_cast_` prefix, new fragment
-numbering), and a handful of checked/align goals that prove in their
-home TUs time out here (pinned as model variance, VERIFY-018 family
-7). The 53 vec-own residuals introduced one genuinely new class — the
+arena.h), the verified option instantiation (option_verify.h
+re-included), a fresh result(Bool, Error) instantiation, and vec's
+own 37 generated functions in one translation unit — the largest
+verified to date. The decomposition held exactly and was name-stable
+across three consecutive runs before enforcement, and the inherited
+surface propagates **byte-identically**, exactly as the in-place
+stack exhibits (VERIFY-009/-010/-011): the 89-goal core arm equals
+arena.h's pinned list verbatim (both units Typed+Cast — no prefix map
+applies; fragment indices and Timeout/Unknown sub-verdicts
+reproduced) and the 32-goal option arm equals its home list modulo
+the `typed_` → `typed_cast_` prefix. The checked/align goals are the
+pinned home residuals of checked.h and ptr.h re-emitted unchanged —
+no goal in the unit flips verdict relative to its home (this corrects
+the record's original "model-variant subset" reading; VERIFY-018
+Correction note 2026-07-16). The 22 result(Bool, Error) goals are a
+fresh instantiation — a new verification subject reproducing the
+family's home profile at clause-family granularity (inherited:own
+therefore reads 121:75; originally recorded 143:53). The 53 vec-own residuals introduced one genuinely new class — the
 24-goal fill macro-body-loop cluster, unprovable by construction
 because ACSL loop annotations cannot survive macro definition — for
 which the coverage stream carries the primary evidence (all three
@@ -1127,6 +1150,6 @@ unprovable by construction — cites the coverage stream as its
 | 2026-07-03 | b528515 | #1089  | v1.3.0  | 95.8%  | 99.5%     | 86.7%    | 86.4%  | result: second Shape-B module via the vmacros pattern (`result_verify.h` driver + `result_cover.c` cover TU; `CANON_RESULT(int, VErr)`, first union-typed module). WP driver enforced 185/215 (VERIFY-015, #1090 at 6516ae5; report-only first at #1089): 2 inherited (contract.h handler, definition-presence only — require_msg panic surface fully compiled out) + 28 own fn-pointer-dispatch (map/map_err 6 each, and_then/or_else 4 each, eq 8 with one rte_function_pointer goal per pointer); all union-member postconditions proved under the VERIFY-015 union-model standing hypothesis ([wp:union] warnings expected). MC/DC 100% (28/28) — first clean Shape-B audit (MCDC-007), no MCDC-006-style ceiling; generated conditions attributed to the driver header result_verify.h (22/22) with scaffolding in result_cover.c (6/6) — attribution finding recorded in MCDC-007 with option's wording flagged for re-audit. Per-module attribution check confirmed (result_test.c owns all 256 test-measured outcomes). Aggregate MC/DC 86.2% → 86.4% (1471/1702). |
 | 2026-07-05 | a76202d → 262a503 | #1106 → #1110 | v1.3.0  | 95.8%  | 99.5%     | 86.9%    | 86.6%  | borrow.h — MC/DC ceiling + WP verification (MCDC-008, VERIFY-016), both streams in one arc. **Measurement (a76202d/#1106)**: three CANON_NO_REQUIRE-gated `_get(NULL)` tests close the defensive-branch outcomes (35/40 → 38/40, 95.0%); the 2 remaining outcomes are `borrowed_bytes_eq`'s one-NULL guard (MCDC-008 measurement half; gcov dump confirms line 758 conds 0/1 true, guard body `#####`); per-line MC/DC debug step for borrow.h added to the coverage job as the measurement-stream regression detector; aggregate MC/DC 86.4% → 86.6% (1474/1702), branches 86.7% → 86.9% (1472/1694). **Proof (262a503/#1110)**: ACSL contracts + WP (VERIFY-016) — fourth semantics/ module, second verified in place; 24 non-macro functions in place, DEFINE_BORROWED_SLICE parked per docs/vmacros.md (the slice.h/DEFINE_SLICE structure, first in semantics/), Typed+Cast, verified config CANON_LIFETIME off (OWN-001 §7). WP 2433/2452, exactly 19 unproved: 17 inherited (slice.h's full 15 + checked.h's 2, byte-identical; composability confirmation #6, smallest inherited surface since memory.h) + 2 own memcmp danglingness at the header's only libc call — no new residual class (first since error.h). Round 1 report-only at 383bf9f/#1109 (27 unproved; 8 call-site chaining goals closed by aligning four contracts to slice.h's real clauses, zero executable change). `dead_by_invariant` named assert proved — MCDC-008 cross-stream closure complete (first named-assert closure; detectors in both streams). Enforced as of #1111. No coverage change from the proof half (ACSL comments touch no branches). |
 | 2026-07-08 | 1965b23 | #1135  | v1.3.0  | 96.1%  | 99.5%     | 87.7%    | 87.5%  | diag.h: MC/DC ceiling + ACSL contracts + WP enforced (VERIFY-017, MCDC-009) — fifth semantics/ module, third verified in place; **semantics/ layer complete**. Measurement stream (baselined at 197ef8e/#1122): render gap-closure arc #1118–#1120 grew the denominator 46 → 86 (diag_render/diag_render_frame were uncalled and invisible to gcov) and surfaced two pre-verification defects, both fixed (NULL-guard snprintf UB; -Werror=format-truncation on the documented truncation path); ceiling 84/86 (97.67%) pinned at #1120 (93fa22c); per-line diag.h debug step added as the measurement-stream detector; aggregate MC/DC 86.6% → 87.5% (1524/1742), branches 86.9% → 87.7% (1520/1734), lines 95.8% → 96.1% (2366/2461), functions 574/577. Proof stream: WP 3050/3060, exactly 10 unproved — 2 inherited (contract.h handler pair; smallest inherited surface of any residual-carrying header, composability confirmation #7) + 8 own libc byte-view goals at the memset/memmove sites — no new residual class. Typed+Cast originated by diag.h's own casts; first documented trusted stdio axioms (`-variadic-no-translation`; format-nonnull + conditional termination ensures sharing MCDC-009 outcome 2's hosted-libc assumption). Chronology: report-only d8566d5/#1132 (300s, 59), 1597a51/#1133 (120s, 59 name-stable — refuting time-starvation), pinning bb269f9/#1134 (actions run 28967245082: 49 closed by trusted-axiom alignment, zero executable change, toolchain byte-identical); residual set and both roll-calls predicted by name before the pinning run, confirmed 10/10 with 0 outside the set. `dead_by_invariant_clamp` named assert proved — MCDC-009 outcome-1 cross-stream closure (second named-assert closure; detectors in both streams). Enforced as of #1135. |
-| 2026-07-12 | 5bfde5b → e663e2c | #1146 → #1154 | v1.3.0  | 96.4%  | 99.5%     | 87.8%    | 88.4%  | vec — MC/DC cover TU + WP driver through enforcement (MCDC-010, VERIFY-018), both streams in one arc; third Shape-B module, **first data/-layer module verified**, first driver on Typed+Cast. **Measurement (5bfde5b/#1146)**: `vmacros/coverage/vec_cover.c` lands (direct `DEFINE_VEC(static inline, int)` instantiation — third attribution variant: generated conditions attribute to the cover TU itself; 152 generated incl. 12 DEFINE_VEC_SLICE facade-view conditions + 6 scaffolding); 155/158 (98.10%) from the first run, the documented ceiling — U1/U2 (`!checked_mul` true in alloc/arena_alloc) guard-redundancy-infeasible and U3 (heap `!buf`) environmental, all three written down with dispositions before the run and confirmed exactly at block level; the arena `!buf` TRUE leg covered via deterministic exhaustion (the heap-vs-arena contrast evidence); Shape-B attribution check confirms the pattern (vec_test.c owns all 640 test-measured outcomes; vec_impl.h functions-but-no-conditions fingerprint = the Shape-A-drift tripwire); per-line + attribution debug steps added. Aggregate MC/DC 87.5% → 88.4% (1679/1900), branches 87.7% → 87.8% (1542/1756), lines 96.1% → 96.4% (2515/2610), functions 621/624. **Proof (driver arc #1144–#1152, enforced e663e2c/#1154)**: WP over `vmacros/vdrivers/vec_verify.h` via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3, landed before the driver — the split-patch-first checklist item). Chronology: run 1 1eeb58c/#1150 (4988/5350, 362 — spec-less composed callees, lesson R1: composition, not weaker specs), run 2 8a3bb1e/#1151 (5208/5413, 205 — inherited stabilized at 143 names), run 3 baseline 96dd41d/#1152 (5184/5380, exactly 196: 193 Timeout + 3 Unknown + 0 Failed; delegate narrowing closed 9 own goals 62 → 53; two retry-variance candidates failed a third consecutive run and pinned). 196 = 143 inherited model-variant re-emissions (arena 46, option 32, result 22, memory 20, slice-libc 13, ptr 3, checked/align 5, contract 2) + 53 own: (e) 2 allocation-model, (d) 5 element-transfer (frame-only memcopy/memmove), (g) 24 fill macro-body-loop (unprovable by construction; MC/DC primary evidence; deque's shift loops pre-classified), (h) 22 Typed+Cast bridging; zero own fn-pointer goals (first module without OWN-003). U1/U2 WP-corroborated: alloc/arena_alloc prove branch-complete. Enforced (pinned `5184 / 5380` + zero-Failed + exact 196 + by-name roll-call = set equality) green first try at #1154 while prover attribution, +14 source lines, and roll-call order all shifted — name-only matching validated empirically; set name-identical three consecutive runs. Runtime ~2h50m, timeout-dominated (every proving goal ≤332 ms); -wp-cache evaluated and rejected; 120 s timeout retained campaign-wide; job `timeout-minutes: 240`. Findings: F3 landed; F1 (append_array overlap doc) and F2 (slice_init NULL+0 one-token guard; cover-TU exclusion in force) owed upstream. |
+| 2026-07-12 | 5bfde5b → e663e2c | #1146 → #1154 | v1.3.0  | 96.4%  | 99.5%     | 87.8%    | 88.4%  | vec — MC/DC cover TU + WP driver through enforcement (MCDC-010, VERIFY-018), both streams in one arc; third Shape-B module, **first data/-layer module verified**, first driver on Typed+Cast. **Measurement (5bfde5b/#1146)**: `vmacros/coverage/vec_cover.c` lands (direct `DEFINE_VEC(static inline, int)` instantiation — third attribution variant: generated conditions attribute to the cover TU itself; 152 generated incl. 12 DEFINE_VEC_SLICE facade-view conditions + 6 scaffolding); 155/158 (98.10%) from the first run, the documented ceiling — U1/U2 (`!checked_mul` true in alloc/arena_alloc) guard-redundancy-infeasible and U3 (heap `!buf`) environmental, all three written down with dispositions before the run and confirmed exactly at block level; the arena `!buf` TRUE leg covered via deterministic exhaustion (the heap-vs-arena contrast evidence); Shape-B attribution check confirms the pattern (vec_test.c owns all 640 test-measured outcomes; vec_impl.h functions-but-no-conditions fingerprint = the Shape-A-drift tripwire); per-line + attribution debug steps added. Aggregate MC/DC 87.5% → 88.4% (1679/1900), branches 87.7% → 87.8% (1542/1756), lines 96.1% → 96.4% (2515/2610), functions 621/624. **Proof (driver arc #1144–#1152, enforced e663e2c/#1154)**: WP over `vmacros/vdrivers/vec_verify.h` via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3, landed before the driver — the split-patch-first checklist item). Chronology: run 1 1eeb58c/#1150 (4988/5350, 362 — spec-less composed callees, lesson R1: composition, not weaker specs), run 2 8a3bb1e/#1151 (5208/5413, 205 — inherited stabilized at 143 names), run 3 baseline 96dd41d/#1152 (5184/5380, exactly 196: 193 Timeout + 3 Unknown + 0 Failed; delegate narrowing closed 9 own goals 62 → 53; two retry-variance candidates failed a third consecutive run and pinned). 196 = 143 inherited model-variant re-emissions (arena 46, option 32, result 22, memory 20, slice-libc 13, ptr 3, checked/align 5, contract 2) + 53 own: (e) 2 allocation-model, (d) 5 element-transfer (frame-only memcopy/memmove), (g) 24 fill macro-body-loop (unprovable by construction; MC/DC primary evidence; deque's shift loops pre-classified), (h) 22 Typed+Cast bridging; zero own fn-pointer goals (first module without OWN-003). U1/U2 WP-corroborated: alloc/arena_alloc prove branch-complete. Enforced (pinned `5184 / 5380` + zero-Failed + exact 196 + by-name roll-call = set equality) green first try at #1154 while prover attribution, +14 source lines, and roll-call order all shifted — name-only matching validated empirically; set name-identical three consecutive runs. Runtime ~2h50m, timeout-dominated (every proving goal ≤332 ms); -wp-cache evaluated and rejected; 120 s timeout retained campaign-wide; job `timeout-minutes: 240`. Findings: F3 landed; F1 (append_array overlap doc) and F2 (slice_init NULL+0 one-token guard; cover-TU exclusion in force) owed upstream. **Correction (2026-07-16, docs-only)**: byte-level diffs of the frozen #1154 artifacts (wp-proof-arena/-option/-result/-vec) falsified two interpretive claims in this entry as first written — (1) the "model-variant re-emissions" reading: the checked/align five are the pinned home residuals of checked.h/ptr.h, the 89-goal core arm is **byte-identical** to arena.h's list (fragment indices and Timeout/Unknown sub-verdicts reproduced), the option arm byte-identical mod the typed_→typed_cast_ prefix (34/34) — **no verdict flip anywhere in the unit**; (2) the 143:53 inherited:own split: result(Bool, Error) is a **fresh instantiation** (VERIFY-015 verifies (int, VErr)) — reclassified 121 inherited + 75 subject-side; the fresh instance reproduces the family's home profile 20/20 at clause-family granularity, drops 8 never-emitted assigns goals, adds 2 union get_* mem-access goals (attribution open, F4). Pinned 196-name baseline, gates, and counts unchanged; superseded text retained verbatim in VERIFY-018's Correction note; instantiation-identity rule added to docs/vmacros.md (deque drivers to pre-register inheritance vs. fresh arms). No re-run required — only the artifacts the enforcement discipline preserves. |
 
 ---
