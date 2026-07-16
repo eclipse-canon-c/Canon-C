@@ -566,7 +566,8 @@ jobs:
             exit 1
           fi
           # Gate 0 — pinned goal surface.
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 1753 / 1755" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "1753 / 1755" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 1753 / 1755)."
             echo "      The goal surface drifted — reclassify in VERIFY-002,"
             echo "      then ratchet this pin and the expected count together"
@@ -660,7 +661,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_bits_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 746 / 761" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "746 / 761" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 746 / 761)."
             echo "      The goal surface drifted — reclassify in VERIFY-003/4,"
             echo "      then ratchet this pin and the expected count together"
@@ -753,7 +755,8 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_compare_output.txt || true
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 208 / 208" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "208 / 208" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 208 / 208)."
             echo "      This indicates added or removed functions — reclassify"
             echo "      in VERIFY-005 and ratchet the pin in one commit."
@@ -776,11 +779,20 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/primitives/ptr.h"
         # ptr.h uses Typed+Cast memory model for the same reason as
-        # compare.h. Expected result: 1729 / 1739 proved, exactly 10
+        # compare.h. Expected result: 1943 / 1953 proved, exactly 10
         # unproved (VERIFY-006). Four categories: transitive checked.h
         # overflow (2), align formula ensures (3), ptr_align_* call-chain
         # (3), contract handler non-termination (2). Any deviation is a
         # regression and fails the job.
+        # PIN NOTE (2026-07-16): the pin is the FULL-RUN figure 1943/1953,
+        # per the documented dual accounting (VERIFY-006 "CI run note";
+        # verification.md ptr.h Baseline note; changelog 2026-04-27):
+        # ptr.h's OWN baseline is 1729/1739; the +214 are checked.h's 12
+        # div/mod functions (c3df659, CI #804), counted in checked.h's own
+        # row — zero of them residual in this TU, same 10 named goals
+        # before and after. The pre-retrofit wrapper carried the old pin
+        # as a documented WARN-and-PASS; the retrofit pins the full-run
+        # figure hard, which is what WP reports and what gate 0 compares.
         # (2026-07-16 retrofit): Failed gated at zero and EXCLUDED from the
         # pooled count (a Timeout->Failed flip previously passed count and
         # roll-call); Proved-line warning promoted to a hard pin.
@@ -822,8 +834,9 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_ptr_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 1729 / 1739" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 1729 / 1739)."
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "1943 / 1953" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 1943 / 1953)."
             echo "      The goal surface drifted — reclassify in VERIFY-006,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -941,7 +954,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_slice_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 375 / 390" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "375 / 390" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 375 / 390)."
             echo "      The goal surface drifted — reclassify in VERIFY-007,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -1090,7 +1104,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_memory_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 2819 / 2862" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "2819 / 2862" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 2819 / 2862)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -1251,7 +1266,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_arena_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 3383 / 3472" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "3383 / 3472" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3383 / 3472)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -1461,7 +1477,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_pool_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 3789 / 3902" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "3789 / 3902" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3789 / 3902)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -1718,7 +1735,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_region_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 3531 / 3643" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "3531 / 3643" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3531 / 3643)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -1965,7 +1983,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_error_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 65 / 65" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "65 / 65" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 65 / 65)."
             echo "      The goal surface drifted — a VERIFY-013 category is"
             echo "      required in docs/deviations.md before this pin moves."
@@ -2103,7 +2122,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_option_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 189 / 223" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "189 / 223" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 189 / 223)."
             echo "      The goal surface drifted — reclassify in VERIFY-014,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -2282,7 +2302,8 @@ jobs:
             grep -E "^\[wp\] \[Failed\]" wp_result_output.txt
             exit 1
           fi
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 185 / 215" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "185 / 215" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 185 / 215)."
             echo "      The goal surface drifted — reclassify in VERIFY-015,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
@@ -2482,7 +2503,8 @@ jobs:
           # Catches silent drift of the goal set itself (a function dropping
           # out of the TU, a deleted contract, an include-graph change)
           # that gates 1-3 could miss.
-          if [ "${PROVED_LINE}" != "[wp] Proved goals: 5184 / 5380" ]; then
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "5184 / 5380" ]; then
             echo "FAIL: proved-goal summary changed (baseline: 5184 / 5380)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
