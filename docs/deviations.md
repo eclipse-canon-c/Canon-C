@@ -2540,7 +2540,7 @@ point.
 | **ID**         | VERIFY-018 |
 | **Date**       | 2026-07-12 |
 | **Baseline commit** | 96dd41d (Canon-C CI #1152, run 3); report-only chronology 1eeb58c (CI #1150, run 1) → 8a3bb1e (CI #1151, run 2); enforced as of e663e2c (CI #1154) |
-| **Scope**      | data/vec/ via `vmacros/vdrivers/vec_verify.h` — 5380 obligations, 196 unproved (143 inherited across 8 source families + 53 vec-own across 4 categories) |
+| **Scope**      | data/vec/ via `vmacros/vdrivers/vec_verify.h` — 5380 obligations, 196 unproved (121 inherited across 7 source families + 75 subject-side: 53 vec-own across 4 categories + 22 on the fresh result(Bool, Error) instantiation; originally recorded 143 inherited + 53 own — see Correction note 2026-07-16) |
 | **Category**   | Formal verification completeness |
 | **Enforcement**| Enforced (pinned Proved line + zero-Failed + exact count + by-name roll-call) as of CI #1154 |
 
@@ -2566,10 +2566,14 @@ handler pair.
 
 vec's TU is the **largest verified to date** (5380 goals): the facade
 pulls slice.h, ptr.h, arena.h → memory.h and the full substrate, plus
-the option and result instantiations the driver composes. Its
-196-goal residual set is correspondingly the largest, but decomposes
-exactly and was name-stable across three consecutive runs before
-enforcement (runs 2, 3, and the enforced run 4).
+the option instantiation (option_verify.h re-included verbatim — the
+same verified instance as VERIFY-014) and a **fresh** result
+instantiation at (Bool, Error) — a type pair not verified in
+VERIFY-015's home unit (int, VErr); see the fresh-instantiation
+section and Correction note below. Its 196-goal residual set is
+correspondingly the largest, but decomposes exactly and was
+name-stable across three consecutive runs before enforcement (runs 2,
+3, and the enforced run 4).
 
 ### Run chronology and method lessons (recorded forward for deque/hashmap)
 
@@ -2605,38 +2609,49 @@ roll-call lines emitted in swapped order — all three variances are
 absorbed by name-only, order-independent matching and would have made
 line-, count-per-prover-, or order-sensitive pinning flaky.
 
-### Inherited residuals (143)
+### Inherited residuals (121)
 
-Re-emissions of already-documented residual classes under this TU's
-`Typed+Cast` model (names carry the `typed_cast_` prefix), by source
-family:
+Re-emissions of the substrate's pinned residual sets. The core arm
+(families 1, 3–7 below) is **byte-identical** to arena.h's frozen
+CI #1154 residual list — machine-diffed, zero differences, no prefix
+map needed (both units run `Typed+Cast`), every `-wp-split` fragment
+index reproduced (including the zero-padded `part03` quirk in the
+try_alloc family), and the three Unknown sub-verdicts fall on the same
+three memory goals in both units. The option arm (family 2) is
+byte-identical modulo the documented `typed_` → `typed_cast_` prefix,
+all 32 names including fragment indices, machine-diffed against
+option's frozen CI #1154 log. By source family:
 
 | # | Source family | Goals | Documented under |
 |---|---------------|-------|------------------|
 | 1 | arena.h own surface (ptr_span call-sites, fits/does_not_fit arithmetic chains, zero/try wrappers, free_bytes helpers) | 46 | VERIFY-009 |
-| 2 | option combinator function-pointer dispatch | 32 | VERIFY-014 |
-| 3 | result combinator function-pointer dispatch + union `get_*` mem-access pair | 22 | VERIFY-015 |
-| 4 | memory.h own surface (allocation-model, alignment, memcmp danglingness) | 20 | VERIFY-008 |
-| 5 | slice.h libc boundary (str_* / bytes_equal memcmp + strlen) | 13 | VERIFY-007 |
-| 6 | ptr.h align call-sites | 3 | VERIFY-006 |
-| 7 | checked.h / align model-variance re-emissions | 5 | VERIFY-002/-008 (see note) |
-| 8 | contract.h handler pair (definition-presence only) | 2 | VERIFY-006 cat 4 |
+| 2 | option combinator function-pointer dispatch (verified instance; driver re-included) | 32 | VERIFY-014 |
+| 3 | memory.h own surface (allocation-model, alignment, memcmp danglingness) | 20 | VERIFY-008 |
+| 4 | slice.h libc boundary (str_* / bytes_equal memcmp + strlen) | 13 | VERIFY-007 |
+| 5 | ptr.h own surface (align formula ensures ×3 + align call-chain ×3) | 6 | VERIFY-006 cats 2–3 |
+| 6 | checked.h manual-discharge overflow pair | 2 | VERIFY-002 |
+| 7 | contract.h handler pair (definition-presence only) | 2 | VERIFY-006 cat 4 |
 
-**Model-variance note (family 7)**: `checked_add`/`checked_add_u64`
-overflow-ensures and the three `align_*` ensures prove in their home
-TUs but time out under this mega-TU's Typed+Cast context. They failed
-three consecutive runs (including both retry-variance candidacies) and
-are pinned as model-variance re-emissions, not reclassifications of
-their home entries. Note the inherited surface is a **model-variant
-subset**, not the byte-identical propagation of the in-place stack
-(VERIFY-009/-010/-011 pattern): goal names re-derive under
-`Typed+Cast` with `-wp-split` fragment numbering, so identity is
-per-name within this TU across runs, not across TUs.
+(The original table's family 3 — result, 22 goals — is reclassified to
+the fresh-instantiation section below; its family 7 — "checked/align
+model-variance", 5 goals — dissolves into rows 5–6 above, where those
+goals were documented all along.)
 
-The **12 `rte_function_pointer` goals all sit on inherited
-option/result combinators — zero on vec functions**, confirming
-prediction (f): vec is the first module whose own surface contains no
-OWN-003-class dispatch at all.
+**Byte-identity note (supersedes the original model-variance note —
+see Correction note 2026-07-16)**: the inherited surface propagates
+byte-identically, exactly as in the in-place stack
+(VERIFY-009/-010/-011 pattern). The `checked_add`/`checked_add_u64`
+overflow-ensures pair and the three `align_*` ensures are the pinned
+**home residuals** of checked.h (VERIFY-002, manual-discharge) and
+ptr.h (VERIFY-006 cat 2, solver-theory) respectively — they do not
+prove in any home unit, and no goal in this TU flips verdict relative
+to its home. Their three-consecutive-run stability observed here
+stands; only the original interpretation was wrong.
+
+The **12 `rte_function_pointer` goals all sit on option (inherited)
+and result (fresh-instantiation) combinators — zero on vec
+functions**, confirming prediction (f): vec is the first module whose
+own surface contains no OWN-003-class dispatch at all.
 
 ### vec-own residuals (53)
 
@@ -2680,6 +2695,34 @@ failing three consecutive runs; the recorded shrink levers (wp-cache
 replay, predicate-shape restatement) may be tried later without
 unpinning.
 
+### Fresh-instantiation residuals (22) — result(Bool, Error)
+
+vec's fallible API returns result(Bool, Error); VERIFY-015 verifies
+the result family at (int, VErr). The driver therefore declares a new
+instantiation inside this TU, with a lighter contract set than
+result_verify.h attaches (no assigns clauses on any
+`result__Bool_Error_*` function — per this run's own
+`pedantic-assigns` warnings). Under the instance-level reading of
+"previously verified", these 22 goals are a **new verification
+subject**, not inheritance: this TU is their first verification.
+Reconciled against the family's home profile (result_verify.h,
+frozen CI #1154):
+
+- **20 goals match the home profile** family-for-family,
+  count-for-count, and split-for-split (map 4, map_err 4, and_then 3,
+  or_else 3, eq 6) — the VERIFY-015 combinator-dispatch class
+  reproducing at a new type pair under Typed+Cast.
+- **8 home goals are never emitted** — exactly the seven assigns
+  clause families (map/map_err assigns_exit + assigns_normal,
+  and_then, or_else, eq ×2); a specification-surface difference from
+  the driver's lighter contracts, not prover behavior.
+- **2 goals are new**: `get_ok`/`get_err` `assert_rte_mem_access` —
+  union-member accesses at the sites where WP emits its `wp:union`
+  soundness caution. Home get_* carries no residuals and every
+  union-member postcondition proved (VERIFY-015). Attribution is
+  confounded across three simultaneously-changed variables (type
+  pair × memory model × contract surface) — see finding F4.
+
 ### Findings for back-propagation
 
 - **F1 (open)**: the driver's `\separated(src, v->items)` requires on
@@ -2699,6 +2742,15 @@ unpinning.
   split plus the corrected one-instantiation-per-TU rule shipped in
   `vec_defn.h` before the driver was drafted — the split-patch-first
   ordering is now the standing checklist item for deque.
+- **F4 (open)**: attribute the fresh instantiation's
+  `get_ok`/`get_err` `rte_mem_access` pair. Separating experiment:
+  a standalone driver instantiating result(Bool, Error) with
+  result_verify.h's full contract set, run once under Typed and once
+  under Typed+Cast (two local WP invocations, no CI change). The
+  outcome classifies the pair as a model-emission effect vs. a
+  type/contract-surface effect — currently the only two goals in the
+  30,127-goal dataset whose cause is not pinned to a documented
+  class.
 
 ### Prediction scorecard (honest record)
 
@@ -2741,10 +2793,43 @@ evaluated and deferred: 120 s is the campaign-wide constant every
 baseline is measured at, and cross-module comparability was judged
 worth the wall time as further modules land.
 
+### Correction note (2026-07-16)
+
+Byte-level diffs of the frozen CI #1154 log artifacts (wp-proof-arena,
+wp-proof-option, wp-proof-result, wp-proof-vec) falsified two
+interpretive claims in this record as originally written. The pinned
+196-name baseline, all four gates, and all counts are unaffected.
+
+1. **The family-7 "model-variance" claim.** Superseded text, verbatim:
+   *"`checked_add`/`checked_add_u64` overflow-ensures and the three
+   `align_*` ensures prove in their home TUs but time out under this
+   mega-TU's Typed+Cast context"* and *"the inherited surface is a
+   model-variant subset, not the byte-identical propagation of the
+   in-place stack […] identity is per-name within this TU across runs,
+   not across TUs."* Both false: those five goals are the pinned home
+   residuals of checked.h (VERIFY-002) and ptr.h (VERIFY-006 cat 2) —
+   consistent with those records all along — and the full 89-goal core
+   arm is byte-identical to arena.h's list (zero diffs; fragment
+   indices and Timeout/Unknown sub-verdicts reproduced), with the
+   option arm byte-identical modulo the `typed_` → `typed_cast_`
+   prefix. No goal in the unit flips verdict relative to its home.
+2. **The 143/53 inherited/own split.** Superseded accounting counted
+   result(Bool, Error) as inheritance; VERIFY-015 verifies (int,
+   VErr), so the 22 goals are a fresh instantiation — corrected to
+   **121 inherited + 75 subject-side** (53 vec-own + 22
+   fresh-instantiation).
+
+These are the second and third instances (after VERIFY-012) of a
+classification narrative corrected by evidence the enforcement
+discipline itself preserved — the diffs required no re-run, only the
+frozen artifacts the gates force every run to keep.
+
 ### Cross-references
 
 - Inherited families: VERIFY-002/-006/-007/-008/-009 (substrate),
-  VERIFY-014/-015 (combinators), VERIFY-006 cat 4 (handler pair).
+  VERIFY-014 (option combinators; VERIFY-015 supplies the *profile*
+  for the fresh result instantiation), VERIFY-006 cat 4 (handler
+  pair).
 - Element-transfer weak-spec analogue: VERIFY-017
   (`push_shift_semantics`).
 - MC/DC: MCDC-010 (155/158 ceiling; U1/U2 WP-corroborated infeasible,
