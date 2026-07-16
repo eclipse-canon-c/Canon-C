@@ -1,11 +1,9 @@
 name: Canon-C CI
-
 on:
   push:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-
 # ---------------------------------------------------------------------------
 # Job overview
 #
@@ -20,17 +18,18 @@ on:
 #   fuzzing         — Linux only (libFuzzer runtime only reliable on Linux CI)
 #   frama-c-*       — Linux only, formal verification (WP proofs). One job
 #                     per verified header (frama-c-checked, -bits, -compare,
-#                     -ptr, -slice, -memory, -arena, -pool, -region, -error),
-#                     plus one per macro-module driver (frama-c-option,
-#                     frama-c-result), which run over a driver in
-#                     vmacros/vdrivers/ rather than a header directly
-#                     (Shape-B modules). All run in parallel and share the
-#                     composite setup action at .github/actions/framac-setup.
-#                     All twelve are ENFORCED (hard proved/unproved
-#                     baselines); region runs 120s/split
-#                     in its own isolated job (long run, ~1h40m, but enforced).
-#                     Additional headers are added as a new job each as they
-#                     are annotated; macro-module drivers likewise.
+#                     -ptr, -slice, -memory, -arena, -pool, -region, -error,
+#                     -borrow, -diag), plus one per macro-module driver
+#                     (frama-c-option, -result, -vec), which run over a
+#                     driver in vmacros/vdrivers/ rather than a header
+#                     directly (Shape-B modules). All run in parallel and
+#                     share the composite setup action at
+#                     .github/actions/framac-setup. All FIFTEEN are ENFORCED
+#                     (hard proved/unproved baselines); region and vec run
+#                     in their own isolated jobs (long runs, ~1h40m and
+#                     ~2h50m, but enforced like the rest). Additional
+#                     headers are added as a new job each as they are
+#                     annotated; macro-module drivers likewise.
 #   coverage        — Linux only, MC/DC coverage via GCC 14 -fcondition-coverage
 #                     Uses -DCANON_CHECKED_FORCE_FALLBACK and
 #                     -DCANON_BITS_FORCE_FALLBACK so the fallback paths
@@ -62,15 +61,12 @@ on:
 #   covered by the MSVC build with /W4 /WX and by Valgrind on Linux.
 #   Re-enable dr-memory when upstream ships a compatible release.
 # ---------------------------------------------------------------------------
-
 jobs:
-
   # -------------------------------------------------------------------------
   # 1. Build + test — all platforms, Release and Debug
   # -------------------------------------------------------------------------
   build:
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -95,16 +91,13 @@ jobs:
             c_compiler: cl
           - os: macos-latest
             c_compiler: gcc
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Set reusable strings
         id: strings
         shell: bash
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-
       - name: Configure CMake (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -118,7 +111,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DENABLE_SANITIZERS=${SANITIZERS} \
             -S "${{ github.workspace }}"
-
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -129,14 +121,11 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DENABLE_SANITIZERS="$sanitizers" `
             -S "${{ github.workspace }}"
-
       - name: Build
         run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
-
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
-
   # -------------------------------------------------------------------------
   # 1b. 32-bit build + test — Linux GCC -m32
   #
@@ -154,20 +143,16 @@ jobs:
   build-32bit:
     needs: build
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
         build_type: [Release, Debug]
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install 32-bit GCC toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-multilib
-
       - name: Configure CMake (-m32)
         run: |
           cmake -B build \
@@ -177,14 +162,11 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="-m32" \
             -DENABLE_SANITIZERS=OFF \
             -S "${{ github.workspace }}"
-
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }}
-
       - name: Test
         working-directory: build
         run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
-
   # -------------------------------------------------------------------------
   # 1c. MinGW build + test — Windows, MSYS2 UCRT64 (GCC-on-Windows)
   #
@@ -214,19 +196,15 @@ jobs:
   mingw:
     needs: build
     runs-on: windows-latest
-
     defaults:
       run:
         shell: msys2 {0}
-
     strategy:
       fail-fast: false
       matrix:
         build_type: [Release, Debug]
-
     steps:
       - uses: actions/checkout@v6
-
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -235,7 +213,6 @@ jobs:
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
-
       - name: Configure CMake
         run: |
           cmake -B build -G Ninja \
@@ -243,14 +220,11 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DENABLE_SANITIZERS=OFF \
             -S .
-
       - name: Build
         run: cmake --build build
-
       - name: Test
         working-directory: build
         run: ctest --output-on-failure
-
   # -------------------------------------------------------------------------
   # 2. Static analysis
   # -------------------------------------------------------------------------
@@ -261,18 +235,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install clang-tidy and Cppcheck (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get install -y clang-tidy cppcheck
-
       - name: Install Cppcheck (macOS)
         if: matrix.os == 'macos-latest'
         run: brew install cppcheck
-
       - name: Install Cppcheck (Windows)
         # Pinned direct download from the official GitHub release —
         # same pattern as the CVC5 install in framac-setup, for the
@@ -289,16 +259,13 @@ jobs:
           $Version  = "2.19.0"
           $Checksum = "AAC15F6DC2B404B3B2562015419F11D91F391E686279CABD20627A8435782128"
           $Url = "https://github.com/danmar/cppcheck/releases/download/$Version/cppcheck-$Version-x64-Setup.msi"
-
           Invoke-WebRequest -Uri $Url -OutFile cppcheck.msi
           $Actual = (Get-FileHash cppcheck.msi -Algorithm SHA256).Hash
           if ($Actual -ne $Checksum) {
             Write-Error "cppcheck MSI checksum mismatch. Expected $Checksum, got $Actual"
             exit 1
           }
-
           Start-Process msiexec.exe -ArgumentList '/i','cppcheck.msi','/qn','/norestart' -Wait
-
           $Exe = Get-ChildItem "C:\Program Files\Cppcheck" -Filter "cppcheck.exe" `
             -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $Exe) {
@@ -307,7 +274,6 @@ jobs:
           }
           Add-Content $env:GITHUB_PATH $Exe.DirectoryName
           & $Exe.FullName --version
-
       - name: Configure CMake for compile_commands.json (Linux only)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -315,7 +281,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -S "${{ github.workspace }}"
-
       - name: Run clang-tidy (Linux only)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
@@ -332,12 +297,10 @@ jobs:
             if [ "$SKIP_THIS" = "1" ]; then continue; fi
             FILES="$FILES $f"
           done
-
           if [ -z "$FILES" ]; then
             echo "No files to analyse — skipping clang-tidy"
             exit 0
           fi
-
           CHECKS="\
           bugprone-integer-division,\
           bugprone-macro-parentheses,\
@@ -358,7 +321,6 @@ jobs:
           misc-misplaced-const,\
           misc-redundant-expression,\
           misc-unused-parameters"
-
           clang-tidy \
             -p build \
             --checks="-*,$CHECKS" \
@@ -367,7 +329,6 @@ jobs:
             --extra-arg="-I${{ github.workspace }}/core" \
             --extra-arg="-I${{ github.workspace }}" \
             $FILES
-
       - name: Run Cppcheck (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -406,7 +367,6 @@ jobs:
             -I "${{ github.workspace }}/util" \
             -I "${{ github.workspace }}" \
             "${{ github.workspace }}/test"
-
       - name: Run Cppcheck (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -445,20 +405,16 @@ jobs:
             -I "${{ github.workspace }}/util" `
             -I "${{ github.workspace }}" `
             "${{ github.workspace }}/test"
-
   # -------------------------------------------------------------------------
   # 3. Valgrind — Linux only
   # -------------------------------------------------------------------------
   valgrind:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install Valgrind
         run: sudo apt-get install -y valgrind
-
       - name: Configure CMake (no sanitizers — conflicts with Valgrind)
         run: |
           cmake -B build \
@@ -466,10 +422,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DENABLE_SANITIZERS=OFF \
             -S "${{ github.workspace }}"
-
       - name: Build
         run: cmake --build build
-
       - name: Test under Valgrind
         working-directory: build
         run: |
@@ -479,26 +433,21 @@ jobs:
             --overwrite MemoryCheckCommand=$(which valgrind) \
             --overwrite MemoryCheckCommandOptions="--error-exitcode=1 --leak-check=full --track-origins=yes --show-leak-kinds=all" \
             -T memcheck
-
   # -------------------------------------------------------------------------
   # 4. Fuzzing — Linux only
   # -------------------------------------------------------------------------
   fuzzing:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install Clang with libFuzzer runtime
         run: sudo apt-get install -y clang
-
       - name: Set reusable strings
         id: strings
         shell: bash
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-
       - name: Configure CMake
         run: |
           cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
@@ -506,14 +455,11 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DENABLE_FUZZING=ON \
             -S "${{ github.workspace }}"
-
       - name: Build fuzz targets
         run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config Debug
-
       - name: Run fuzz targets
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config Debug --output-on-failure
-
   # =========================================================================
   # 5. Formal verification — Frama-C (Linux only)
   #
@@ -526,14 +472,30 @@ jobs:
   #
   #   Why per-header jobs instead of one serial job: steps within a job run
   #   serially, separate jobs run in parallel. The workflow now gates on the
-  #   slowest single header (~pool) instead of the sum of all of them, which
+  #   slowest single header (~vec) instead of the sum of all of them, which
   #   keeps every header comfortably under GitHub's 6h per-job ceiling.
   #   Enforcement is unchanged — each WP step proves the same translation unit
   #   against the same baseline regardless of which job hosts it.
   #
-  #   ENFORCED (hard proved/unproved baselines): checked, bits, compare, ptr,
-  #   slice, memory, arena, pool, region, error, option. Region runs 120s/split
-  #   in its own isolated job (long run, ~1h40m) but is enforced like the rest.
+  #   ENFORCED (hard proved/unproved baselines), all fifteen: checked, bits,
+  #   compare, ptr, slice, memory, arena, pool, region, error, option,
+  #   result, vec, borrow, diag. Region runs 120s/split in its own isolated
+  #   job (long run, ~1h40m); vec likewise (~2h50m, timeout-minutes: 240).
+  #
+  #   GATE POLICY (uniform as of 2026-07-16; previously vec-only for gates
+  #   0 and 1 — the retrofit is itself a ratchet commit):
+  #     Gate 0 — pinned Proved line (goal-surface drift is a hard failure)
+  #     Gate 1 — zero Failed verdicts, ever. Failed = a falsified contract,
+  #              categorically different from a residual; it is gated
+  #              explicitly and EXCLUDED from the pooled residual count
+  #              (residual = Timeout ∪ Unknown). Before this retrofit a
+  #              Timeout→Failed flip on a pinned goal could pass count and
+  #              roll-call in the pre-vec wrappers.
+  #     Gate 2 — exact residual count
+  #     Gate 3 — by-name roll-call; with gate 2 and unique names this is
+  #              set equality. Full roll-calls everywhere except bits
+  #              (6/15 sampled — completion pending a wp-proof-bits pull;
+  #              see the bits job comment).
   #
   #   Eva is intentionally NOT run on these headers: Eva needs an entry point
   #   to anchor abstract interpretation, and these are header-only modules of
@@ -547,14 +509,12 @@ jobs:
   #   remaining unproved goal is demonstrated triple-prover-resistant. See the
   #   composite action for the install + why3 registration procedure.
   # =========================================================================
-
   frama-c-checked:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/primitives/checked.h"
         # WP is expected to leave exactly 2 goals unproven:
         #   typed_checked_add_overflow_ensures
@@ -564,8 +524,9 @@ jobs:
         # cannot discharge in WP's integer memory model. They are
         # discharged manually by a modular-arithmetic argument recorded
         # in docs/verification.md under "Manually discharged goals".
-        # The wrapper below verifies WP fails on EXACTLY these two
-        # goals — any other failure is a regression and fails the job.
+        # (2026-07-16 retrofit): Unknown is now pooled with Timeout (the
+        # documented oscillation class), Failed is gated explicitly at
+        # zero, and the Proved line is a hard pin — house style.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -582,56 +543,69 @@ jobs:
             core/primitives/checked.h 2>&1 | tee wp_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_output.txt || true)
-          EXPECTED_TIMEOUTS=2
-          echo "  Timeouts observed: ${TIMEOUT_COUNT} (expected ${EXPECTED_TIMEOUTS})"
-
-          if [ "${TIMEOUT_COUNT}" -ne "${EXPECTED_TIMEOUTS}" ]; then
-            echo "FAIL: unexpected number of timeouts."
-            echo "      Expected exactly ${EXPECTED_TIMEOUTS} (the manually discharged goals)."
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          EXPECTED_UNPROVED=2
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          # Gate 1 — no Failed verdicts, ever (falsified contract).
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in checked.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_output.txt
+            exit 1
+          fi
+          # Gate 0 — pinned goal surface.
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 1753 / 1755" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 1753 / 1755)."
+            echo "      The goal surface drifted — reclassify in VERIFY-002,"
+            echo "      then ratchet this pin and the expected count together"
+            echo "      in one acknowledged commit."
+            exit 1
+          fi
+          # Gate 2 — exact count.
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} (the manually discharged goals)."
             echo "      See docs/verification.md for details."
             exit 1
           fi
-
+          # Gate 3 — by-name roll-call.
           EXPECTED_GOAL_1="typed_checked_add_overflow_ensures"
           EXPECTED_GOAL_2="typed_checked_add_u64_overflow_ensures"
-
-          if ! grep -q "${EXPECTED_GOAL_1}" wp_output.txt; then
-            echo "FAIL: expected timeout on ${EXPECTED_GOAL_1} not observed."
+          if ! grep -qE "\[(Timeout|Unknown)\].*${EXPECTED_GOAL_1}" wp_output.txt; then
+            echo "FAIL: expected residual ${EXPECTED_GOAL_1} not observed."
             exit 1
           fi
-          if ! grep -q "${EXPECTED_GOAL_2}" wp_output.txt; then
-            echo "FAIL: expected timeout on ${EXPECTED_GOAL_2} not observed."
+          if ! grep -qE "\[(Timeout|Unknown)\].*${EXPECTED_GOAL_2}" wp_output.txt; then
+            echo "FAIL: expected residual ${EXPECTED_GOAL_2} not observed."
             exit 1
           fi
-
           echo "PASS: WP discharged all goals automatically except the 2 manually"
           echo "      verified obligations documented in docs/verification.md."
           echo "==============================================="
-
       - name: Upload WP proof output (checked.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-checked
           path: wp_output.txt
-
   frama-c-bits:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/primitives/bits.h"
         # WP is expected to leave exactly 15 goals unproven (as Timeout
         # or Unknown — WP may classify the same goal differently across
@@ -644,8 +618,11 @@ jobs:
         #   - Minimality through bit-smearing: bits_next_power_of_two (4)
         #   - Byte swap signed overflow + spec: bits_bswap16/32/64 (3)
         # All 15 are documented in docs/verification.md and deviations.md.
-        # The wrapper below verifies WP fails on EXACTLY these 15 goals —
-        # any additional failure is a regression and fails the job.
+        # (2026-07-16 retrofit): Failed gated at zero; Proved line pinned
+        # hard. KNOWN GAP: the roll-call below is a 6-name SAMPLE, not the
+        # full 15 — count+sample is weaker than set equality. TODO: pull
+        # the full 15 names from a recent wp-proof-bits artifact and
+        # extend CHECKS to the complete set (see ci-fix-plan P2).
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -662,38 +639,40 @@ jobs:
             core/primitives/bits.h 2>&1 | tee wp_bits_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (bits.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_bits_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bits_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_bits_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_bits_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=15
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in bits.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_bits_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 746 / 761" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 746 / 761)."
+            echo "      The goal surface drifted — reclassify in VERIFY-003/4,"
+            echo "      then ratchet this pin and the expected count together"
+            echo "      in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo "FAIL: unexpected number of unproved goals."
             echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
             echo "      See docs/verification.md for details."
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "746 / 761" ]; then
-            echo "WARNING: proved count changed from expected 746 / 761."
-            echo "         This may indicate a new timeout or a newly proved goal."
-            echo "         Review the output and update the enforcement wrapper."
-          fi
-
           CHECKS=(
             "typed_bits_clear_ensures"
             "typed_bits_popcount_ensures"
@@ -702,37 +681,35 @@ jobs:
             "typed_bits_bswap16_assert_rte_signed_overflow"
             "typed_bits_bswap64_ensures"
           )
-
           for goal in "${CHECKS[@]}"; do
             if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_bits_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
           done
-
           echo "PASS: WP discharged all goals automatically except the 15"
           echo "      documented unproved goals. See docs/verification.md."
+          echo "      (roll-call: 6-name sample — full-set completion pending)"
           echo "==============================================="
-
       - name: Upload WP proof output (bits.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-bits
           path: wp_bits_output.txt
-
   frama-c-compare:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/primitives/compare.h"
         # compare.h achieved 208/208 (100%) with Typed+Cast model.
         # All 28 comparator functions are fully proved — functional
         # correctness, RTE absence, and assigns \nothing.
         # See docs/deviations.md, entry VERIFY-005.
+        # (2026-07-16 retrofit): Failed gated at zero explicitly (it was
+        # previously invisible to the T+U-only count); Proved line pinned.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -750,54 +727,53 @@ jobs:
             core/primitives/compare.h 2>&1 | tee wp_compare_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (compare.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_compare_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_compare_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_compare_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_compare_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected 0)"
-
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected 0)"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED —"
+            echo "      a contract in compare.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_compare_output.txt
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne 0 ]; then
             echo "FAIL: compare.h should have 0 unproved goals."
             echo "      Found ${UNPROVED_COUNT} unproved goals — this is a regression."
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_compare_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "208 / 208" ]; then
-            echo "WARNING: proved count changed from expected 208 / 208."
-            echo "         This may indicate added or removed functions."
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 208 / 208" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 208 / 208)."
+            echo "      This indicates added or removed functions — reclassify"
+            echo "      in VERIFY-005 and ratchet the pin in one commit."
+            exit 1
           fi
-
           echo "PASS: compare.h fully verified — 208/208 goals proved,"
-          echo "      0 timeouts. All 28 comparators proved correct."
+          echo "      0 residuals. All 28 comparators proved correct."
           echo "==============================================="
-
       - name: Upload WP proof output (compare.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-compare
           path: wp_compare_output.txt
-
   frama-c-ptr:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/primitives/ptr.h"
         # ptr.h uses Typed+Cast memory model for the same reason as
         # compare.h. Expected result: 1729 / 1739 proved, exactly 10
@@ -805,6 +781,9 @@ jobs:
         # overflow (2), align formula ensures (3), ptr_align_* call-chain
         # (3), contract handler non-termination (2). Any deviation is a
         # regression and fails the job.
+        # (2026-07-16 retrofit): Failed gated at zero and EXCLUDED from the
+        # pooled count (a Timeout->Failed flip previously passed count and
+        # roll-call); Proved-line warning promoted to a hard pin.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -822,25 +801,34 @@ jobs:
             core/primitives/ptr.h 2>&1 | tee wp_ptr_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (ptr.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_ptr_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_ptr_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_ptr_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_ptr_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=10
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in ptr.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_ptr_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 1729 / 1739" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 1729 / 1739)."
+            echo "      The goal surface drifted — reclassify in VERIFY-006,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo "FAIL: unexpected number of unproved goals."
             echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
@@ -851,16 +839,6 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_ptr_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "1729 / 1739" ]; then
-            echo "WARNING: proved count changed from expected 1729 / 1739."
-            echo "         This may indicate a new timeout or a newly proved goal."
-            echo "         Review the output and update VERIFY-006 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           CHECKS=(
             "typed_cast_checked_add_overflow_ensures"
             "typed_cast_checked_add_u64_overflow_ensures"
@@ -873,14 +851,12 @@ jobs:
             "typed_cast_contract_default_handler_loop_invariant_established"
             "typed_cast_contract_default_handler_terminates"
           )
-
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_ptr_output.txt; then
+            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_ptr_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
           done
-
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_ptr_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -888,25 +864,21 @@ jobs:
             echo "         The triple-prover setup may have degraded to"
             echo "         dual-prover. Check the prover configuration step."
           fi
-
           echo "PASS: WP discharged all goals automatically except the 10"
           echo "      documented unproved goals in VERIFY-006."
           echo "==============================================="
-
       - name: Upload WP proof output (ptr.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-ptr
           path: wp_ptr_output.txt
-
   frama-c-slice:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/slice.h"
         # slice.h — Typed+Cast. Expected: 375 / 390 proved, exactly 15
         # unproved (VERIFY-007): memcmp call-site valid/danglingness
@@ -916,6 +888,8 @@ jobs:
         # (VERIFY-012).
         # Also enforces the MCDC-002 closure (4/4 !ptr defensive branches
         # discharged unreachable). Any deviation is a regression.
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from
+        # the pooled count; Proved-line warning promoted to a hard pin.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -933,15 +907,12 @@ jobs:
             core/slice.h 2>&1 | tee wp_slice_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (slice.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_slice_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -955,17 +926,28 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_slice_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_slice_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_slice_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=15
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in slice.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_slice_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 375 / 390" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 375 / 390)."
+            echo "      The goal surface drifted — reclassify in VERIFY-007,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -977,17 +959,6 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_slice_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "375 / 390" ]; then
-            echo "WARNING: proved count changed from expected 375 / 390."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-007 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           MCDC002_GOALS=(
             "bytes_slice"
             "bytes_skip"
@@ -996,7 +967,7 @@ jobs:
           )
           MCDC002_RESIDUALS=0
           for fn in "${MCDC002_GOALS[@]}"; do
-            if grep -qE "\[(Timeout|Unknown|Failed)\].*${fn}" wp_slice_output.txt; then
+            if grep -qE "\[(Timeout|Unknown)\].*${fn}" wp_slice_output.txt; then
               MCDC002_RESIDUALS=$((MCDC002_RESIDUALS + 1))
             fi
           done
@@ -1013,7 +984,6 @@ jobs:
             echo "      str_invariant) — they may have been weakened."
             exit 1
           fi
-
           CHECKS=(
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_contract_default_handler_loop_invariant_established"
@@ -1031,14 +1001,12 @@ jobs:
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
           )
-
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_slice_output.txt; then
+            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_slice_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
           done
-
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_slice_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1046,31 +1014,31 @@ jobs:
             echo "         The triple-prover setup may have degraded to"
             echo "         dual-prover. Check the prover configuration step."
           fi
-
           echo "PASS: slice.h verified — 375/390 proved, 15 documented"
           echo "      residuals all observed (VERIFY-007), MCDC-002"
           echo "      closure intact (4/4 defensive branches discharged)."
           echo "==============================================="
-
       - name: Upload WP proof output (slice.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-slice
           path: wp_slice_output.txt
-
   frama-c-memory:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/memory.h"
         # memory.h — Typed+Cast. Expected: 2819 / 2862 proved, exactly 43
         # unproved (VERIFY-008): 23 inherited from substrate + 20 own
         # (\fresh/\freeable allocation 5, bitwise-alignment integer theory
         # 9, memcmp call-site inheritance 12). Any deviation is a regression.
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from the
+        # pooled count; Proved-line warning promoted to a hard pin;
+        # roll-call regex tightened to (Timeout|Unknown) with anchored
+        # names (vec house style).
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1088,15 +1056,12 @@ jobs:
             core/memory.h 2>&1 | tee wp_memory_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (memory.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_memory_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1110,17 +1075,28 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_memory_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_memory_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_memory_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=43
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in memory.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_memory_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 2819 / 2862" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 2819 / 2862)."
+            echo "      The goal surface drifted — reclassify in VERIFY-008,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -1132,17 +1108,6 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_memory_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "2819 / 2862" ]; then
-            echo "WARNING: proved count changed from expected 2819 / 2862."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-008 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           CHECKS=(
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_contract_default_handler_loop_invariant_established"
@@ -1188,14 +1153,19 @@ jobs:
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
           )
-
+          MISSING=0
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_memory_output.txt; then
-              echo "FAIL: expected unproved goal ${goal} not observed."
-              exit 1
+            if ! grep -qE "\[(Timeout|Unknown)\] ${goal}( |$)" wp_memory_output.txt; then
+              echo "MISSING from unproved set (newly proved or renamed): ${goal}"
+              MISSING=$((MISSING + 1))
             fi
           done
-
+          if [ "${MISSING}" -ne 0 ]; then
+            echo "FAIL: ${MISSING} CHECKS goal(s) not in this run's unproved"
+            echo "      set while the count still matched — a swap occurred."
+            echo "      Diff the roll-call against CHECKS and reclassify in VERIFY-008."
+            exit 1
+          fi
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_memory_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1203,28 +1173,24 @@ jobs:
             echo "         The triple-prover setup may have degraded to"
             echo "         dual-prover. Check the prover configuration step."
           fi
-
           echo "PASS: memory.h verified — 2819/2862 proved, 43 documented"
           echo "      residuals all observed (VERIFY-008): 23 inherited"
           echo "      from ptr.h/slice.h/checked.h substrate + 20"
           echo "      memory.h-own. Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
           echo "==============================================="
-
       - name: Upload WP proof output (memory.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-memory
           path: wp_memory_output.txt
-
   frama-c-arena:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/arena.h"
         # arena.h — Typed+Cast. Expected: 3383 / 3472 proved, exactly 89
         # unproved (VERIFY-009): 43 inherited (memory.h's full surface) +
@@ -1232,6 +1198,8 @@ jobs:
         # zero/try wrappers 10, free_bytes helpers 2). Any deviation is a
         # regression. (MCDC-003 has no closure check here — the affected
         # functions legitimately carry residuals; see the coverage job.)
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from the
+        # pooled count; Proved-line warning promoted to a hard pin.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1249,15 +1217,12 @@ jobs:
             core/arena.h 2>&1 | tee wp_arena_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (arena.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_arena_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1271,17 +1236,28 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_arena_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_arena_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_arena_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=89
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in arena.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_arena_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 3383 / 3472" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3383 / 3472)."
+            echo "      The goal surface drifted — reclassify in VERIFY-009,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -1293,17 +1269,6 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_arena_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "3383 / 3472" ]; then
-            echo "WARNING: proved count changed from expected 3383 / 3472."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-009 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           CHECKS=(
             "typed_cast_contract_default_handler_terminates"
             "typed_cast_contract_default_handler_loop_invariant_established"
@@ -1395,14 +1360,19 @@ jobs:
             "typed_cast_arena_free_bytes_call_bytes_from_requires"
             "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
           )
-
+          MISSING=0
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_arena_output.txt; then
-              echo "FAIL: expected unproved goal ${goal} not observed."
-              exit 1
+            if ! grep -qE "\[(Timeout|Unknown)\] ${goal}( |$)" wp_arena_output.txt; then
+              echo "MISSING from unproved set (newly proved or renamed): ${goal}"
+              MISSING=$((MISSING + 1))
             fi
           done
-
+          if [ "${MISSING}" -ne 0 ]; then
+            echo "FAIL: ${MISSING} CHECKS goal(s) not in this run's unproved"
+            echo "      set while the count still matched — a swap occurred."
+            echo "      Diff the roll-call against CHECKS and reclassify in VERIFY-009."
+            exit 1
+          fi
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_arena_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1410,32 +1380,36 @@ jobs:
             echo "         The triple-prover setup may have degraded to"
             echo "         dual-prover. Check the prover configuration step."
           fi
-
           echo "PASS: arena.h verified — 3383/3472 proved, 89 documented"
           echo "      residuals all observed (VERIFY-009): 43 inherited +"
           echo "      46 arena.h-own. Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
           echo "==============================================="
-
       - name: Upload WP proof output (arena.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-arena
           path: wp_arena_output.txt
-
   frama-c-pool:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/pool.h"
         # pool.h — Typed+Cast. Expected: 3789 / 3902 proved, exactly 113
         # unproved (VERIFY-010): 89 inherited (arena.h's full surface,
         # two-hop transitive) + 24 own across cats 2a/2b/2c/2d. Any
         # deviation is a regression.
+        # (2026-07-16 retrofit): roll-call COMPLETED from a 33-name sample
+        # to the full 113-name set — the inherited 89 is arena.h's pinned
+        # list verbatim (VERIFY-010: byte-identical). Count + full roll-call
+        # + unique names = set equality; the sampled form could pass a swap
+        # inside the unsampled inherited names. Also: Failed gated at zero
+        # and excluded from the pooled count; Proved-line pin hardened.
+        # NOTE: sanity-diff CHECKS against the latest wp-proof-pool artifact
+        # before first push of this upgrade (promote on evidence).
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1453,15 +1427,12 @@ jobs:
             core/pool.h 2>&1 | tee wp_pool_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (pool.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_pool_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1475,17 +1446,28 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_pool_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_pool_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_pool_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=113
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in pool.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_pool_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 3789 / 3902" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3789 / 3902)."
+            echo "      The goal surface drifted — reclassify in VERIFY-010,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -1497,27 +1479,96 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_pool_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "3789 / 3902" ]; then
-            echo "WARNING: proved count changed from expected 3789 / 3902."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-010 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           CHECKS=(
+            "typed_cast_contract_default_handler_loop_invariant_established"
             "typed_cast_contract_default_handler_terminates"
+            "typed_cast_checked_add_overflow_ensures"
             "typed_cast_checked_add_u64_overflow_ensures"
             "typed_cast_align_up_ensures"
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_ptr_align_up_call_align_up_requires_3"
+            "typed_cast_ptr_align_padding_call_align_padding_requires_3"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_alloc_assigns_normal_part2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_free_assigns_normal"
             "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
             "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_fits_ensures_part2"
+            "typed_cast_arena_alloc_fits_ensures_part3"
+            "typed_cast_arena_alloc_fits_ensures_part4"
             "typed_cast_arena_alloc_fits_ensures_part5"
+            "typed_cast_arena_alloc_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_assigns_normal_part3"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
+            "typed_cast_arena_try_alloc_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
             "typed_cast_arena_free_bytes_call_bytes_from_requires"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
             "typed_cast_pool_init_ensures_part4"
             "typed_cast_pool_init_ensures_2_part4"
             "typed_cast_pool_init_ensures_3_part4"
@@ -1543,14 +1594,19 @@ jobs:
             "typed_cast_pool_reset_secure_assigns_normal_part6"
             "typed_cast_pool_reset_secure_call_mem_secure_zero_requires"
           )
-
+          MISSING=0
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_pool_output.txt; then
-              echo "FAIL: expected unproved goal ${goal} not observed."
-              exit 1
+            if ! grep -qE "\[(Timeout|Unknown)\] ${goal}( |$)" wp_pool_output.txt; then
+              echo "MISSING from unproved set (newly proved or renamed): ${goal}"
+              MISSING=$((MISSING + 1))
             fi
           done
-
+          if [ "${MISSING}" -ne 0 ]; then
+            echo "FAIL: ${MISSING} CHECKS goal(s) not in this run's unproved"
+            echo "      set while the count still matched — a swap occurred."
+            echo "      Diff the roll-call against CHECKS and reclassify in VERIFY-010."
+            exit 1
+          fi
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_pool_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1558,20 +1614,19 @@ jobs:
             echo "         The triple-prover setup may have degraded to"
             echo "         dual-prover. Check the prover configuration step."
           fi
-
           echo "PASS: pool.h verified — 3789/3902 proved, 113 documented"
-          echo "      residuals all observed (VERIFY-010): 89 inherited +"
-          echo "      24 pool.h-own. Composable verification holds across a"
-          echo "      two-hop transitive include: zero new substrate residuals."
+          echo "      residuals all observed by name (VERIFY-010): 89"
+          echo "      inherited (arena.h's full surface, verbatim) + 24"
+          echo "      pool.h-own. Full set equality enforced. Composable"
+          echo "      verification holds across a two-hop transitive"
+          echo "      include: zero new substrate residuals."
           echo "==============================================="
-
       - name: Upload WP proof output (pool.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-pool
           path: wp_pool_output.txt
-
   # -------------------------------------------------------------------------
   # region.h — ENFORCED, 120s / -wp-split, in its own isolated job.
   #
@@ -1596,11 +1651,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: core/region.h"
         # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
         # Expected: 3531 / 3643 proved, exactly 112 unproved (VERIFY-011):
-        # 89 inherited (arena.h's full surface, three-hop transitive) + 23
+        # 89 inherited (arena.h's full surface, two-hop transitive) + 23
         # region.h-own (region_begin / region_end loop+terminates+assigns /
         # attach_arena / register / set_parent). Any deviation is a regression.
         #
@@ -1608,6 +1662,11 @@ jobs:
         # the residual set is name-stable across runs — the 14 initialization
         # goals that VERIFY-012 closed upstream simply left the inherited
         # surface (126 -> 112), the 23 region-own goals are unchanged.
+        # (2026-07-16 retrofit): roll-call COMPLETED from a 37-name sample
+        # to the full 112-name set (inherited 89 = arena.h's pinned list
+        # verbatim, VERIFY-011). Failed gated at zero and excluded from the
+        # pooled count; Proved-line pin hardened. NOTE: sanity-diff CHECKS
+        # against the latest wp-proof-region artifact before first push.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1625,15 +1684,12 @@ jobs:
             core/region.h 2>&1 | tee wp_region_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (region.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_region_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1647,17 +1703,28 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_region_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_region_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_region_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=112
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in region.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_region_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 3531 / 3643" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3531 / 3643)."
+            echo "      The goal surface drifted — reclassify in VERIFY-011,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -1669,32 +1736,96 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_region_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "3531 / 3643" ]; then
-            echo "WARNING: proved count changed from expected 3531 / 3643."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-011 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           CHECKS=(
+            "typed_cast_contract_default_handler_loop_invariant_established"
             "typed_cast_contract_default_handler_terminates"
+            "typed_cast_checked_add_overflow_ensures"
             "typed_cast_checked_add_u64_overflow_ensures"
             "typed_cast_align_up_ensures"
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_ptr_align_up_call_align_up_requires_3"
+            "typed_cast_ptr_align_padding_call_align_padding_requires_3"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
             "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_alloc_assigns_normal_part2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_free_assigns_normal"
             "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
             "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
             "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
             "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_fits_ensures_part2"
+            "typed_cast_arena_alloc_fits_ensures_part3"
+            "typed_cast_arena_alloc_fits_ensures_part4"
             "typed_cast_arena_alloc_fits_ensures_part5"
+            "typed_cast_arena_alloc_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_3"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part2"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_assigns_normal_part3"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
+            "typed_cast_arena_try_alloc_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
             "typed_cast_arena_free_bytes_call_bytes_from_requires"
+            "typed_cast_arena_free_bytes_call_bytes_from_requires_2"
             "typed_cast_region_begin_ensures_5"
             "typed_cast_region_end_terminates_part2"
             "typed_cast_region_end_terminates_part3"
@@ -1719,14 +1850,19 @@ jobs:
             "typed_cast_region_register_ensures_part2"
             "typed_cast_region_set_parent_ensures_2"
           )
-
+          MISSING=0
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_region_output.txt; then
-              echo "FAIL: expected unproved goal ${goal} not observed."
-              exit 1
+            if ! grep -qE "\[(Timeout|Unknown)\] ${goal}( |$)" wp_region_output.txt; then
+              echo "MISSING from unproved set (newly proved or renamed): ${goal}"
+              MISSING=$((MISSING + 1))
             fi
           done
-
+          if [ "${MISSING}" -ne 0 ]; then
+            echo "FAIL: ${MISSING} CHECKS goal(s) not in this run's unproved"
+            echo "      set while the count still matched — a swap occurred."
+            echo "      Diff the roll-call against CHECKS and reclassify in VERIFY-011."
+            exit 1
+          fi
           CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_region_output.txt || true)
           echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
           if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -1734,13 +1870,13 @@ jobs:
             echo "         The triple-prover setup may have degraded to"
             echo "         dual-prover. Check the prover configuration step."
           fi
-
           echo "PASS: region.h verified — 3531/3643 proved, 112 documented"
-          echo "      residuals all observed (VERIFY-011): 89 inherited +"
-          echo "      23 region.h-own. Composable verification holds across a"
-          echo "      three-hop transitive include: zero new substrate residuals."
+          echo "      residuals all observed by name (VERIFY-011): 89"
+          echo "      inherited (arena.h's full surface, verbatim) + 23"
+          echo "      region.h-own. Full set equality enforced. Composable"
+          echo "      verification holds across a two-hop transitive"
+          echo "      include: zero new substrate residuals."
           echo "==============================================="
-
       - name: Upload WP proof output (region.h)
         if: always()
         uses: actions/upload-artifact@v6
@@ -1770,13 +1906,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: semantics/error.h"
         # error.h is expected to prove 100% automatically — 0 unproved goals.
         # Any unproved goal is a regression and fails the job. If a future
         # edit strengthens error_message's spec to valid_read_string and that
         # introduces a residual, this wrapper must be updated AND a VERIFY-013
         # category added to docs/deviations.md before the count is changed.
+        # (2026-07-16 retrofit): Failed gated at zero explicitly; Proved
+        # line pinned hard (65 / 65).
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1794,15 +1931,12 @@ jobs:
             semantics/error.h 2>&1 | tee wp_error_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (error.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_error_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1816,17 +1950,27 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_error_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_error_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_error_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=0
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED —"
+            echo "      a contract in error.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_error_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 65 / 65" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 65 / 65)."
+            echo "      The goal surface drifted — a VERIFY-013 category is"
+            echo "      required in docs/deviations.md before this pin moves."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: error.h should have 0 unproved goals."
@@ -1839,18 +1983,15 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_error_output.txt || true
             exit 1
           fi
-
           echo "PASS: error.h fully verified — all goals proved automatically,"
           echo "      0 residuals. semantics/ layer baseline established."
           echo "==============================================="
-
       - name: Upload WP proof output (error.h)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: wp-proof-error
           path: wp_error_output.txt
-
   # -------------------------------------------------------------------------
   # semantics/option — ENFORCED. First Shape-B macro-module driver.
   #
@@ -1899,7 +2040,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: vmacros/vdrivers/option_verify.h"
         # option — first Shape-B macro-module driver, default Typed model
         # (by-value tagged struct, no void* casts — like error.h, so no
@@ -1910,6 +2050,8 @@ jobs:
         # unimplemented in FC29 + unknown-callee non-termination/assigns;
         # the region_end / OWN-003 limitation, first recurrence outside
         # region_end). Any deviation is a regression and fails the job.
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from
+        # the pooled count; Proved-line warning promoted to a hard pin.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -1927,15 +2069,12 @@ jobs:
             vmacros/vdrivers/option_verify.h 2>&1 | tee wp_option_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (option_verify.h) exit status: ${WP_EXIT}"
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_option_output.txt || true)
           echo "  ${PROVED_LINE}"
-
           if [ -z "${PROVED_LINE}" ]; then
             echo ""
             echo "FAIL: WP did not produce a verification summary."
@@ -1949,17 +2088,28 @@ jobs:
             echo "==============================================="
             exit 1
           fi
-
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_option_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_option_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_option_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=34
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in option_verify.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_option_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 189 / 223" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 189 / 223)."
+            echo "      The goal surface drifted — reclassify in VERIFY-014,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -1971,17 +2121,6 @@ jobs:
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_option_output.txt || true
             exit 1
           fi
-
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "189 / 223" ]; then
-            echo "WARNING: proved count changed from expected 189 / 223."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-014 in"
-            echo "         docs/deviations.md before updating this wrapper."
-          fi
-
           CHECKS=(
             # (a) inherited — contract.h handler non-termination (VERIFY-006 cat 4)
             "typed_contract_default_handler_terminates"
@@ -2020,21 +2159,18 @@ jobs:
             "typed_option_int_eq_assert_rte_function_pointer_part2"
             "typed_option_int_eq_assigns_part5"
           )
-
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_option_output.txt; then
+            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_option_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
           done
-
           echo "PASS: option verified — 189/223 proved, 34 documented"
           echo "      residuals all observed (VERIFY-014): 2 inherited"
           echo "      (contract.h handler) + 32 own (six combinators,"
           echo "      function-pointer dispatch). First Shape-B module;"
           echo "      every non-combinator function proved fully."
           echo "==============================================="
-
       - name: Upload WP proof output (option)
         if: always()
         uses: actions/upload-artifact@v6
@@ -2078,6 +2214,13 @@ jobs:
   # other headers. The by-name roll-call below pins all 30: if a future
   # Frama-C implements \valid_function, the count stays 30 but a name check
   # fails, which is the signal to revisit rather than silently absorb.
+  #
+  # NOTE (2026-07-16): this driver verifies the family at (int, VErr). The
+  # vec TU separately instantiates result(Bool, Error) — a FRESH
+  # instantiation, a new verification subject, NOT covered by this job's
+  # evidence (VERIFY-018 Correction note; instantiation-identity rule in
+  # docs/vmacros.md). This job's residual profile is the comparison
+  # baseline for that fresh instance's 22 goals.
   # -------------------------------------------------------------------------
   frama-c-result:
     needs: build
@@ -2086,6 +2229,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: vmacros/vdrivers/result_verify.h"
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from
+        # the pooled count; Proved-line warning promoted to a hard pin.
         run: |
           eval $(opam env --switch=frama-c)
           set +e
@@ -2125,12 +2270,25 @@ jobs:
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_result_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_result_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_result_output.txt || true)
-          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
           EXPECTED_UNPROVED=30
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
-          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in result_verify.h is falsified:"
+            grep -E "^\[wp\] \[Failed\]" wp_result_output.txt
+            exit 1
+          fi
+          if [ "${PROVED_LINE}" != "[wp] Proved goals: 185 / 215" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 185 / 215)."
+            echo "      The goal surface drifted — reclassify in VERIFY-015,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo ""
             echo "FAIL: unexpected number of unproved goals."
@@ -2141,15 +2299,6 @@ jobs:
             echo "Observed unproved goals:"
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_result_output.txt || true
             exit 1
-          fi
-          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          echo "  Proved: ${PROVED_COUNT}"
-          if [ "${PROVED_COUNT}" != "185 / 215" ]; then
-            echo "WARNING: proved count changed from expected 185 / 215."
-            echo "         This may indicate added or removed functions,"
-            echo "         a new timeout, or a newly-proved goal."
-            echo "         Review the output and update VERIFY-015 in"
-            echo "         docs/deviations.md before updating this wrapper."
           fi
           CHECKS=(
             # (a) inherited — contract.h handler non-termination (VERIFY-006 cat 4)
@@ -2194,7 +2343,7 @@ jobs:
             "typed_result_int_VErr_eq_assigns_part4"
           )
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_result_output.txt; then
+            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_result_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
@@ -2235,16 +2384,32 @@ jobs:
   # ENFORCED (promoted from report-only after 3 runs; option/result house
   # style, exact-match). Baseline: CI #1152 (96dd41d) — 5184/5380 proved,
   # 193 Timeout + 3 Unknown + 0 Failed = 196 unproved, classified in
-  # docs/verification.md VERIFY-018 and the driver header:
-  #   inherited 143 (option/result combinators, contract handler, checked/
-  #     align model-variance re-emissions, memcmp/strlen libc plumbing,
-  #     memory.h/arena.h surface incl. ptr.h via arena)
+  # docs/verification.md and docs/deviations.md VERIFY-018 (incl.
+  # Correction note 2026-07-16) and the driver header:
+  #   inherited 121 — byte-identical to the substrate's pinned lists: the
+  #     89-goal core arm equals arena.h's CHECKS verbatim (both units run
+  #     Typed+Cast — no prefix map applies; -wp-split fragment indices and
+  #     the three Unknown sub-verdicts reproduced on the same goals), and
+  #     the 32-goal option arm equals option's roll-call modulo the
+  #     typed_ -> typed_cast_ prefix, fragment indices included
+  #     (machine-diffed against the frozen #1154 artifacts)
+  #   fresh instantiation 22 — result(Bool, Error): a type pair NOT
+  #     verified in VERIFY-015's home unit (int, VErr), so a NEW
+  #     verification subject co-resident in this TU, not inheritance.
+  #     20 goals match the family's home profile family/count/split-
+  #     exactly; 8 home assigns goals are never emitted (this driver
+  #     attaches no assigns clauses to result functions — per this run's
+  #     pedantic-assigns warnings); 2 union get_ok/get_err rte_mem_access
+  #     goals are new (attribution open — VERIFY-018 F4)
   #   vec-own 53 = (e) 2 allocation-model (\fresh/\freeable unimplemented)
   #              + (g) 24 fill macro-body-loop cluster (unprovable by
   #                construction: ACSL loop annotations cannot survive macro
   #                definition — forward-flag for deque's shift loops)
   #              + (d) 5 element-transfer ensures (mem_copy/mem_move are
   #                frame-only) + (h) 22 Typed+Cast int<->char bridging
+  #   (The CI baseline label was originally recorded as 143 inherited +
+  #    53 own; the 2026-07-16 Correction note reclassified to 121 + 75
+  #    with the SAME 196 names — no gate or count changed.)
   # Gates: pinned Proved line, 0 Failed ever, exact count, by-name roll-call
   # (= set equality). ANY change to the residual set, either direction,
   # fails CI; the fix is the acknowledged ratchet — update the pinned
@@ -2579,7 +2744,6 @@ jobs:
         with:
           name: wp-proof-vec
           path: wp_vec_output.txt
-
   
   
   # -------------------------------------------------------------------------
@@ -2660,6 +2824,10 @@ jobs:
         # Promoted from report-only as of {TODO: promotion CI #}; see the
         # banner above for the #1109 -> #1110 chronology and VERIFY-016 in
         # docs/deviations.md for the full residual classification.
+        # (2026-07-16 retrofit): Failed now gated explicitly via note_fail
+        # and EXCLUDED from the pooled count; roll-call regexes tightened
+        # to (Timeout|Unknown); the MODE echo made conditional (it was
+        # hardcoded "report-only" while ENFORCE=1 — misleading in logs).
         run: |
           eval $(opam env --switch=frama-c)
           ENFORCE=1
@@ -2688,7 +2856,11 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (borrow.h) exit status: ${WP_EXIT}"
-          echo "  MODE: report-only (ENFORCE=${ENFORCE})"
+          if [ "${ENFORCE}" -eq 1 ]; then
+            echo "  MODE: ENFORCED"
+          else
+            echo "  MODE: report-only (ENFORCE=${ENFORCE})"
+          fi
           echo "==============================================="
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_borrow_output.txt || true)
           echo "  ${PROVED_LINE}"
@@ -2705,11 +2877,15 @@ jobs:
             TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_borrow_output.txt || true)
             UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_borrow_output.txt || true)
             FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_borrow_output.txt || true)
-            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
             echo "  Timeouts: ${TIMEOUT_COUNT}"
             echo "  Unknown:  ${UNKNOWN_COUNT}"
             echo "  Failed:   ${FAILED_COUNT}"
-            echo "  Total unproved: ${UNPROVED_COUNT}"
+            echo "  Total unproved (T+U): ${UNPROVED_COUNT}"
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in borrow.h is falsified:"
+              grep -E "^\[wp\] \[Failed\]" wp_borrow_output.txt || true
+            fi
             if [ -n "${EXPECTED_UNPROVED}" ] && \
                [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
               note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
@@ -2747,7 +2923,7 @@ jobs:
             )
             INHERITED_SEEN=0
             for goal in "${INHERITED[@]}"; do
-              if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_borrow_output.txt; then
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_borrow_output.txt; then
                 INHERITED_SEEN=$((INHERITED_SEEN + 1))
               else
                 echo "  MISSING inherited residual: ${goal}"
@@ -2765,7 +2941,7 @@ jobs:
             )
             OWN_SEEN=0
             for goal in "${OWN_CHECKS[@]}"; do
-              if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_borrow_output.txt; then
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_borrow_output.txt; then
                 OWN_SEEN=$((OWN_SEEN + 1))
               else
                 note_fail "FAIL: expected unproved goal ${goal} not observed."
@@ -2816,7 +2992,6 @@ jobs:
         with:
           name: wp-proof-borrow
           path: wp_borrow_output.txt
-
   # -------------------------------------------------------------------------
   # semantics/diag.h — ENFORCED. Fifth verified semantics/ module, third
   # verified in place (after error.h and borrow.h).
@@ -2873,29 +3048,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-
       - name: "WP: semantics/diag.h"
         # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation.
         # Expected: 3050 / 3060 proved, exactly 10 unproved (VERIFY-017):
         # 2 inherited + 8 own. Also enforces the MCDC-009 closure:
         # dead_by_invariant_clamp must remain in the proved set. Any
         # deviation is a regression and fails the job.
+        # (2026-07-16 retrofit): Failed now gated explicitly via note_fail
+        # and EXCLUDED from the pooled count; roll-call regexes tightened
+        # to (Timeout|Unknown).
         run: |
           eval $(opam env --switch=frama-c)
-
           # ---- ENFORCEMENT VALUES: pinned at CI #{TODO} ({TODO: sha}) ----
           ENFORCE=1
           EXPECTED_UNPROVED=10
           EXPECTED_PROVED="3050 / 3060"
           WP_MODEL="Typed+Cast"         # diag.h's own casts force it
           # ------------------------------------------------------------------
-
           FAILURES=0
           note_fail() {
             echo "$1"
             FAILURES=$((FAILURES + 1))
           }
-
           set +e
           frama-c \
             -variadic-no-translation \
@@ -2914,7 +3088,6 @@ jobs:
             semantics/diag.h 2>&1 | tee wp_diag_output.txt
           WP_EXIT=${PIPESTATUS[0]}
           set -e
-
           echo ""
           echo "==============================================="
           echo "  WP (diag.h) exit status: ${WP_EXIT}"
@@ -2924,7 +3097,6 @@ jobs:
             echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
           fi
           echo "==============================================="
-
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_diag_output.txt || true)
           echo "  ${PROVED_LINE}"
           if [ -z "${PROVED_LINE}" ]; then
@@ -2941,12 +3113,15 @@ jobs:
             TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_diag_output.txt || true)
             UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_diag_output.txt || true)
             FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_diag_output.txt || true)
-            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT + FAILED_COUNT))
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
             echo "  Timeouts: ${TIMEOUT_COUNT}"
             echo "  Unknown:  ${UNKNOWN_COUNT}   (0-1 — the diag_init memset goal oscillates Timeout/Unknown)"
             echo "  Failed:   ${FAILED_COUNT}"
-            echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
-
+            echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in diag.h is falsified:"
+              grep -E "^\[wp\] \[Failed\]" wp_diag_output.txt || true
+            fi
             if [ -n "${EXPECTED_UNPROVED}" ] && \
                [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
               note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
@@ -2963,12 +3138,10 @@ jobs:
               echo "      update VERIFY-017 in docs/deviations.md before updating"
               echo "      this wrapper."
             fi
-
             echo ""
             echo "  --- All unproved goals (name-stability record) ---"
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed)\]" wp_diag_output.txt || \
               echo "  (none)"
-
             echo ""
             echo "  --- Inherited roll-call: 2 expected re-emissions ---"
             # contract.h handler pair — VERIFY-006 cat 4, definition-presence
@@ -2980,7 +3153,7 @@ jobs:
             )
             INHERITED_SEEN=0
             for goal in "${INHERITED[@]}"; do
-              if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_diag_output.txt; then
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_diag_output.txt; then
                 INHERITED_SEEN=$((INHERITED_SEEN + 1))
               else
                 echo "  MISSING inherited residual: ${goal}"
@@ -2990,7 +3163,6 @@ jobs:
             if [ "${INHERITED_SEEN}" -ne 2 ]; then
               note_fail "FAIL: inherited set differs from the composability record."
             fi
-
             echo ""
             echo "  --- Own-residual roll-call: 8 expected (VERIFY-017 cat 1) ---"
             # libc byte-view through Typed+Cast — memset/memmove byte specs
@@ -3015,14 +3187,13 @@ jobs:
             )
             OWN_SEEN=0
             for goal in "${OWN_CHECKS[@]}"; do
-              if grep -qE "\[(Timeout|Unknown|Failed)\].*${goal}" wp_diag_output.txt; then
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_diag_output.txt; then
                 OWN_SEEN=$((OWN_SEEN + 1))
               else
                 note_fail "FAIL: expected unproved goal ${goal} not observed."
               fi
             done
             echo "  Own residuals observed: ${OWN_SEEN}/8 (expected 8)"
-
             OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
             echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
             if [ "${OTHER_UNPROVED}" -ne 0 ]; then
@@ -3031,7 +3202,6 @@ jobs:
               echo "      or r_terminated goals, the diag_render loop invariant"
               echo "      or the snprintf axiom's term ensures has been weakened."
             fi
-
             echo ""
             echo "  --- MCDC-009 cross-stream goal ---"
             # WP prints only UNPROVED goals by name; a proved goal never
@@ -3047,7 +3217,6 @@ jobs:
               echo "  dead_by_invariant_clamp: PROVED — clamp true-side formally"
               echo "  dead under diag_invariant. MCDC-009 closure intact."
             fi
-
             CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_diag_output.txt || true)
             echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
             if [ "${CVC5_INVOKED}" -eq 0 ]; then
@@ -3056,7 +3225,6 @@ jobs:
               echo "         dual-prover. Check the prover configuration step."
             fi
           fi
-
           echo ""
           echo "==============================================="
           if [ "${ENFORCE}" -eq 0 ]; then
@@ -3085,7 +3253,6 @@ jobs:
             exit 1
           fi
           echo "==============================================="
-
       - name: Upload WP proof output (diag.h)
         if: always()
         uses: actions/upload-artifact@v6
@@ -3107,15 +3274,12 @@ jobs:
   coverage:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install GCC 14 and lcov
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-14 lcov
-
       - name: Configure CMake with MC/DC coverage instrumentation
         # CANON_CHECKED_FORCE_FALLBACK: exercise the same fallback path WP
         #   verifies (otherwise GCC expands __builtin_*_overflow to single
@@ -3140,10 +3304,8 @@ jobs:
             -DENABLE_SANITIZERS=OFF \
             -DENABLE_COVERAGE_TUS=ON \
             -S "${{ github.workspace }}"
-
       - name: Build
         run: cmake --build build
-
       - name: Run tests
         working-directory: build
         # contract_test is excluded here: the coverage build defines
@@ -3157,7 +3319,6 @@ jobs:
         # coverage build measures: the fallback path of the Canon-C
         # library headers, not the assertion infrastructure itself.
         run: ctest --build-config Debug --output-on-failure --exclude-regex '^contract_test$'
-
       - name: Run MC/DC cover TUs (Shape-B modules)
         working-directory: build
         # Cover TUs are not ctests — run them directly so their .gcda is
@@ -3175,22 +3336,18 @@ jobs:
             --rc branch_coverage=1 \
             --ignore-errors unused \
             --gcov-tool gcov-14
-
           lcov --remove coverage_raw.info \
             '/usr/*' \
             '*/test/*' \
             --output-file coverage.info \
             --rc branch_coverage=1 \
             --ignore-errors unused
-
       - name: Collect MC/DC condition coverage (gcov-14 --conditions)
         run: |
           cd build
-
           for gcda in $(find . -name "*.gcda" | sort); do
             gcov-14 --conditions "$gcda" 2>/dev/null
           done > gcov_output.txt 2>&1
-
           awk '
             /^File / {
               current = $0
@@ -3209,10 +3366,8 @@ jobs:
             grep -v "/test/" | \
             sed "s|${{ github.workspace }}/||" | \
             tee mcdc_per_file.txt
-
           python3 << 'PYEOF'
           import re
-
           best = {}
           with open("mcdc_per_file.txt") as f:
               for line in f:
@@ -3232,14 +3387,11 @@ jobs:
                       cur_pct, cur_hit, cur_total = best[filename]
                       if total > cur_total or (total == cur_total and pct > cur_pct):
                           best[filename] = (pct, hit, total)
-
           results = [(v[0], v[1], v[2], v[2]-v[1], k) for k, v in best.items()]
           results.sort()
-
           total_hit = sum(r[1] for r in results)
           total_all = sum(r[2] for r in results)
           overall = 100.0 * total_hit / total_all if total_all else 0
-
           print()
           print("=" * 85)
           print("  Canon-C MC/DC Condition Coverage (GCC 14 -fcondition-coverage)")
@@ -3251,33 +3403,26 @@ jobs:
           print("-" * 85)
           print(f"  {'TOTAL':<50} {overall:>7.1f}% {total_hit:>5} {total_all:>6} {total_all-total_hit:>7}")
           print("=" * 85)
-
           with open("mcdc_summary.txt", "w") as out:
               out.write(f"{overall:.1f}\n")
               out.write(f"{total_hit}\n")
               out.write(f"{total_all}\n")
           PYEOF
-
       - name: "Debug: per-line MC/DC detail for checked.h"
         run: |
           cd build
-
           CHECKED_GCDA=$(find . -name "checked_test*.gcda" | head -1)
-
           if [ -z "$CHECKED_GCDA" ]; then
             echo "ERROR: could not locate checked_test gcda file"
             find . -name "*.gcda" | head -20
             exit 1
           fi
-
           echo "Running gcov on: $CHECKED_GCDA"
           gcov-14 --conditions --all-blocks "$CHECKED_GCDA" 2>&1 | \
             grep -A 200 "checked.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for checked.h ==="
           find . -name "checked.h.gcov" -exec echo "Found: {}" \;
-
           CHECKED_GCOV=$(find . -name "checked.h.gcov" | head -1)
           if [ -n "$CHECKED_GCOV" ]; then
             echo ""
@@ -3289,7 +3434,6 @@ jobs:
               ls "$d"/*checked* 2>/dev/null || true
             done
           fi
-
       - name: "Debug: per-line MC/DC detail for ptr.h"
         # Identifies which specific conditions in ptr.h are uncovered.
         # As of CI #788, ptr.h reached 100% MC/DC (42/42). This debug
@@ -3298,23 +3442,18 @@ jobs:
         # will show which conditions drop below 100%.
         run: |
           cd build
-
           PTR_GCDA=$(find . -name "ptr_test*.gcda" | head -1)
-
           if [ -z "$PTR_GCDA" ]; then
             echo "ERROR: could not locate ptr_test gcda file"
             find . -name "*.gcda" | head -20
             exit 1
           fi
-
           echo "Running gcov on: $PTR_GCDA"
           gcov-14 --conditions --all-blocks "$PTR_GCDA" 2>&1 | \
             grep -A 200 "ptr.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for ptr.h ==="
           find . -name "ptr.h.gcov" -exec echo "Found: {}" \;
-
           PTR_GCOV=$(find . -name "ptr.h.gcov" | head -1)
           if [ -n "$PTR_GCOV" ]; then
             echo ""
@@ -3326,7 +3465,6 @@ jobs:
               ls "$d"/*ptr* 2>/dev/null || true
             done
           fi
-
       - name: "Debug: per-line MC/DC detail for slice.h"
         # Identifies which specific conditions in slice.h are uncovered.
         # As of CI #816, slice.h reached its achievable MC/DC ceiling at
@@ -3349,23 +3487,18 @@ jobs:
         # each other rather than converge.
         run: |
           cd build
-
           SLICE_GCDA=$(find . -name "slice_test*.gcda" | head -1)
-
           if [ -z "$SLICE_GCDA" ]; then
             echo "ERROR: could not locate slice_test gcda file"
             find . -name "*.gcda" | head -20
             exit 1
           fi
-
           echo "Running gcov on: $SLICE_GCDA"
           gcov-14 --conditions --all-blocks "$SLICE_GCDA" 2>&1 | \
             grep -A 200 "slice.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for slice.h ==="
           find . -name "slice.h.gcov" -exec echo "Found: {}" \;
-
           SLICE_GCOV=$(find . -name "slice.h.gcov" | head -1)
           if [ -n "$SLICE_GCOV" ]; then
             echo ""
@@ -3377,7 +3510,6 @@ jobs:
               ls "$d"/*slice* 2>/dev/null || true
             done
           fi
-
       - name: "Debug: per-line MC/DC detail for memory.h"
         # Identifies which specific conditions in memory.h are uncovered.
         # As of CI #831, memory.h reached 88.3% MC/DC (113/128, 15 missed).
@@ -3413,23 +3545,18 @@ jobs:
         # which conditions drop below the documented baseline.
         run: |
           cd build
-
           MEMORY_GCDA=$(find . -name "memory_test*.gcda" | head -1)
-
           if [ -z "$MEMORY_GCDA" ]; then
             echo "ERROR: could not locate memory_test gcda file"
             find . -name "*.gcda" | head -20
             exit 1
           fi
-
           echo "Running gcov on: $MEMORY_GCDA"
           gcov-14 --conditions --all-blocks "$MEMORY_GCDA" 2>&1 | \
             grep -A 200 "memory.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for memory.h ==="
           find . -name "memory.h.gcov" -exec echo "Found: {}" \;
-
           MEMORY_GCOV=$(find . -name "memory.h.gcov" | head -1)
           if [ -n "$MEMORY_GCOV" ]; then
             echo ""
@@ -3441,7 +3568,6 @@ jobs:
               ls "$d"/*memory* 2>/dev/null || true
             done
           fi
-
       - name: "Debug: per-line MC/DC detail for arena.h"
         # Identifies which specific conditions in arena.h are uncovered.
         # As of the CI run that landed test_try_alloc_aligned_failure
@@ -3511,23 +3637,18 @@ jobs:
         # show which conditions drop below the documented baseline.
         run: |
           cd build
-
           ARENA_GCDA=$(find . -name "arena_test*.gcda" | head -1)
-
           if [ -z "$ARENA_GCDA" ]; then
             echo "ERROR: could not locate arena_test gcda file"
             find . -name "*.gcda" | head -20
             exit 1
           fi
-
           echo "Running gcov on: $ARENA_GCDA"
           gcov-14 --conditions --all-blocks "$ARENA_GCDA" 2>&1 | \
             grep -A 200 "arena.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for arena.h ==="
           find . -name "arena.h.gcov" -exec echo "Found: {}" \;
-
           ARENA_GCOV=$(find . -name "arena.h.gcov" | head -1)
           if [ -n "$ARENA_GCOV" ]; then
             echo ""
@@ -3539,7 +3660,6 @@ jobs:
               ls "$d"/*arena* 2>/dev/null || true
             done
           fi
-
       - name: "Debug: per-line MC/DC detail for pool.h"
         # Surfaces which specific conditions in pool.h are uncovered.
         # First measured baseline (this run's sibling coverage job):
@@ -3550,23 +3670,18 @@ jobs:
         # MCDC-NNN deviations entry. Report-only; never fails.
         run: |
           cd build
-
           POOL_GCDA=$(find . -name "pool_test*.gcda" | head -1)
-
           if [ -z "$POOL_GCDA" ]; then
             echo "ERROR: could not locate pool_test gcda file"
             find . -name "*.gcda" | head -20
             exit 1
           fi
-
           echo "Running gcov on: $POOL_GCDA"
           gcov-14 --conditions --all-blocks "$POOL_GCDA" 2>&1 | \
             grep -A 200 "pool.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for pool.h ==="
           find . -name "pool.h.gcov" -exec echo "Found: {}" \;
-
           POOL_GCOV=$(find . -name "pool.h.gcov" | head -1)
           if [ -n "$POOL_GCOV" ]; then
             echo ""
@@ -3578,7 +3693,6 @@ jobs:
               ls "$d"/*pool* 2>/dev/null || true
             done
           fi
-
       - name: Generate HTML coverage report
         run: |
           genhtml coverage.info \
@@ -3588,7 +3702,6 @@ jobs:
             --legend \
             --demangle-cpp \
             --ignore-errors unused
-
       - name: Upload coverage report
         uses: actions/upload-artifact@v6
         with:
@@ -3596,7 +3709,6 @@ jobs:
           path: |
             coverage_html/
             build/mcdc_per_file.txt
-
       - name: Print branch coverage summary
         run: |
           echo "==============================================="
@@ -3605,34 +3717,28 @@ jobs:
           lcov --summary coverage.info \
             --rc branch_coverage=1
           echo "==============================================="
-
       - name: Enforce coverage threshold
         run: |
           BRANCH_COV=$(lcov --summary coverage.info \
             --rc branch_coverage=1 2>&1 | \
             grep "branches" | grep -oP '[\d.]+%' | head -1 | tr -d '%')
-
           echo "Branch coverage: ${BRANCH_COV}%"
-
           if [ -f build/mcdc_summary.txt ]; then
             MCDC_COV=$(head -1 build/mcdc_summary.txt)
             echo "MC/DC coverage:  ${MCDC_COV}%"
           fi
-
           # Threshold progression plan:
           #   Phase 1 (complete): 70% — baseline established
           #   Phase 2 (current):  80% — post-bits.h and compare.h verification
           #   Phase 3:            90% — certification readiness (DO-178C Level C)
           #   Phase 4:            95%+ — certification readiness (DO-178C Level A/B)
           THRESHOLD=80
-
           if [ "$(echo "${BRANCH_COV} < ${THRESHOLD}" | bc -l)" -eq 1 ]; then
             echo "FAIL: Branch coverage ${BRANCH_COV}% is below threshold ${THRESHOLD}%"
             exit 1
           else
             echo "PASS: Branch coverage ${BRANCH_COV}% meets threshold ${THRESHOLD}%"
           fi
-
       - name: "Debug: per-line MC/DC detail for region.h"
         # First measured MC/DC baseline for region.h. Report-only: surfaces
         # which condition outcomes are uncovered so they can be classified
@@ -3654,23 +3760,18 @@ jobs:
         #     null/open subconditions should be reachable.
         run: |
           cd build
-
           REGION_GCDA=$(find . -name "region_test*.gcda" | head -1)
-
           if [ -z "$REGION_GCDA" ]; then
             echo "ERROR: could not locate region_test gcda file"
             find . -name "*.gcda" | head -20
             exit 0   # report-only — do not fail the coverage job
           fi
-
           echo "Running gcov on: $REGION_GCDA"
           gcov-14 --conditions --all-blocks "$REGION_GCDA" 2>&1 | \
             grep -A 200 "region.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for region.h ==="
           find . -name "region.h.gcov" -exec echo "Found: {}" \;
-
           REGION_GCOV=$(find . -name "region.h.gcov" | head -1)
           if [ -n "$REGION_GCOV" ]; then
             echo ""
@@ -3698,23 +3799,18 @@ jobs:
         # TU exists at all.
         run: |
           cd build
-
           OPTION_GCDA=$(find . -name "option_cover*.gcda" | head -1)
-
           if [ -z "$OPTION_GCDA" ]; then
             echo "ERROR: could not locate option_cover gcda file"
             find . -name "*.gcda" | head -20
             exit 0   # report-only — do not fail the coverage job
           fi
-
           echo "Running gcov on: $OPTION_GCDA"
           gcov-14 --conditions --all-blocks "$OPTION_GCDA" 2>&1 | \
             grep -A 400 "option_cover.c" | head -600
-
           echo ""
           echo "=== Looking for the generated .gcov file for option_cover.c ==="
           find . -name "option_cover.c.gcov" -exec echo "Found: {}" \;
-
           OPTION_GCOV=$(find . -name "option_cover.c.gcov" | head -1)
           if [ -n "$OPTION_GCOV" ]; then
             echo ""
@@ -3754,7 +3850,6 @@ jobs:
           gcov-14 --conditions "$RESULT_GCDA" 2>&1 | \
             awk '/^File /{f=$0} /Condition outcomes covered:/{print f "\t" $0}' | \
             grep -iE "result" || echo "(no result-owned condition rows found)"
-
       
       - name: "Debug: per-line MC/DC detail for result (cover TU)"
         # First measured MC/DC baseline for the result module. Report-only —
@@ -3844,23 +3939,18 @@ jobs:
         # review. Report-only; never fails.
         run: |
           cd build
-
           BORROW_GCDA=$(find . -name "borrow_test*.gcda" | head -1)
-
           if [ -z "$BORROW_GCDA" ]; then
             echo "ERROR: could not locate borrow_test gcda file"
             find . -name "*.gcda" | head -20
             exit 0   # report-only — do not fail the coverage job
           fi
-
           echo "Running gcov on: $BORROW_GCDA"
           gcov-14 --conditions --all-blocks "$BORROW_GCDA" 2>&1 | \
             grep -A 200 "borrow.h" | head -500
-
           echo ""
           echo "=== Looking for the generated .gcov file for borrow.h ==="
           find . -name "borrow.h.gcov" -exec echo "Found: {}" \;
-
           BORROW_GCOV=$(find . -name "borrow.h.gcov" | head -1)
           if [ -n "$BORROW_GCOV" ]; then
             echo ""
@@ -3877,7 +3967,6 @@ jobs:
             done
           fi
       
-
       - name: "Debug: per-line MC/DC detail for diag.h"
         # First measured MC/DC ceiling for diag.h: 97.67% (84/86) as of
         # CI #1120 (93fa22c), reached by the render/print gap-closure tests
@@ -4046,6 +4135,9 @@ jobs:
         # extending vec_cover.c's main(), not by a deviation entry.
         # (WP cross-check: VERIFY-018 predicts the U1/U2 branches are
         # proved DEAD — the two evidence streams should agree.)
+        # (2026-07-16 note: all three CONFIRMED at block level on the
+        # frozen #1154 artifacts — the coverage stream's completed
+        # pre-registration; see MCDC-010 and the paper's §8.)
         #
         # NOTE: vec is Shape B. The conditions live in IMPL_VEC_* macro
         # bodies and are stamped to the instantiation site — vec_cover.c
@@ -4082,7 +4174,6 @@ jobs:
               ls "$d"/*vec_cover* 2>/dev/null || true
             done
           fi
-
         
   # -------------------------------------------------------------------------
   # 7. MISRA C:2012 advisory analysis (Linux only)
@@ -4108,13 +4199,10 @@ jobs:
   misra:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Install Cppcheck
         run: sudo apt-get install -y cppcheck
-
       - name: Run MISRA C:2012 analysis on library headers
         shell: bash
         run: |
@@ -4125,14 +4213,11 @@ jobs:
             "${{ github.workspace }}/algo" \
             "${{ github.workspace }}/util" \
             -name "*.h" -type f 2>/dev/null | sort)
-
           if [ -z "$HEADERS" ]; then
             echo "No header files found — skipping MISRA analysis"
             exit 0
           fi
-
           echo "Found $(echo "$HEADERS" | wc -l) header files to analyze"
-
           cppcheck \
             --addon=misra \
             --std=c99 \
@@ -4149,12 +4234,10 @@ jobs:
             -I "${{ github.workspace }}" \
             $HEADERS \
             2>&1 | tee misra_report.txt
-
           echo ""
           echo "==============================================="
           echo "  MISRA C:2012 Summary"
           echo "==============================================="
-
           TOTAL=$(grep -c "\[misra-" misra_report.txt || true)
           echo "  Total violations: ${TOTAL}"
           echo ""
@@ -4165,20 +4248,17 @@ jobs:
           echo ""
           echo "  Deviations documented in: docs/deviations.md"
           echo "==============================================="
-
           # Advisory only — does not fail the build.
           # When MISRA compliance is mature, uncomment to enforce:
           # if [ "${TOTAL}" -gt 0 ]; then
           #   echo "FAIL: ${TOTAL} MISRA violations found"
           #   exit 1
           # fi
-
       - name: Upload MISRA report
         uses: actions/upload-artifact@v6
         with:
           name: misra-report
           path: misra_report.txt
-
   # -------------------------------------------------------------------------
   # 8. Lifetime-debug build — all platforms, Release + Debug
   #
@@ -4219,7 +4299,6 @@ jobs:
   lifetime-debug:
     needs: build
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -4244,16 +4323,13 @@ jobs:
             c_compiler: cl
           - os: macos-latest
             c_compiler: gcc
-
     steps:
       - uses: actions/checkout@v6
-
       - name: Set reusable strings
         id: strings
         shell: bash
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-
       - name: Configure CMake (Linux / macOS, CANON_LIFETIME=debug)
         if: runner.os != 'Windows'
         shell: bash
@@ -4268,7 +4344,6 @@ jobs:
             -DCANON_LIFETIME=debug \
             -DENABLE_SANITIZERS=${SANITIZERS} \
             -S "${{ github.workspace }}"
-
       - name: Configure CMake (Windows, CANON_LIFETIME=debug)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -4280,10 +4355,8 @@ jobs:
             -DCANON_LIFETIME=debug `
             -DENABLE_SANITIZERS="$sanitizers" `
             -S "${{ github.workspace }}"
-
       - name: Build
         run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
-
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
