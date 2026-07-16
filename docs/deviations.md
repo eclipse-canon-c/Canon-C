@@ -269,9 +269,13 @@ own row) and are not ptr.h's. The CI wrapper enforces 1943/1953 as
 the full-run figure but the substantive ptr.h baseline is 1729/1739.
 The 10 named residuals are the same ptr.h goals before and after
 c3df659 — none of the 214 inherited obligations entered the unproved
-list. The CI wrapper emits a `WARNING: proved count changed from
-expected 1729 / 1739` when the rebaseline first appeared and PASSes
-because all 10 expected named ptr.h goals are still present.
+list. The CI wrapper emitted a `WARNING: proved count changed from
+expected 1729 / 1739` when the rebaseline first appeared and PASSed
+because all 10 expected named ptr.h goals were still present. **Update
+(2026-07-16)**: the gate retrofit replaced the warning-only pin with a
+hard gate on the full-run figure (1943/1953); the own-baseline
+1729/1739 remains the substantive ptr.h number in this record and in
+the per-header table.
 
 **Forward-implication note on the empty `nonnull` behaviors**: ptr.h's
 `ptr_align_up`, `ptr_align_down`, `ptr_offset`, `ptr_offset_const`, and
