@@ -4221,14 +4221,31 @@ jobs:
   #    toolchain (severity filtering, addon resolution, packaging
   #    changes) a hard failure instead of a fake-green zero.
   #
-  #    Suppressions:
+  #    PROJECT-WIDE RULE DEVIATIONS — each maps 1:1 to a record in
+  #    docs/deviations.md (do not add a suppression without one):
+  #      15.5        MISRA-DEV-001  early-return guard-clause style
+  #      2.5         MISRA-DEV-002  standalone-TU unused-macro artifact
+  #      20.10       MISRA-DEV-003  ## is the type-instantiation mechanism
+  #      3.1         MISRA-DEV-004  // and /* inside doc comments (URLs)
+  #      5.6/5.8/5.9 MISRA-DEV-005  instantiation-header identifier artifact
+  #      11.5        MISRA-DEV-006  void* generic interface level
+  #      20.5        MISRA-DEV-007  #undef template-parameter cleanup
+  #      18.4        MISRA-DEV-008  bounded slice/string pointer arithmetic
+  #      17.1        MISRA-DEV-009  stdarg in fmt/log entry points (Tier 2)
+  #      11.6        MISRA-DEV-010  uintptr_t alignment round-trips
+  #                                 (same sites as VERIFY-006/-008)
+  #    CANARY INTERACTION: the canary relies on rules 21.6, 14.4/15.1,
+  #    and 10.1 — none of which may be added to the list above without
+  #    path-scoping the suppression, or the self-test goes blind.
+  #
+  #    Suppressions (tool limitations):
   #      - misra-config:*_impl.h — macro-templated implementation headers
   #        (hashmap_impl.h, deque_impl.h, etc.) emit [misra-config]
   #        errors because Cppcheck cannot resolve macro-instantiated
   #        type names (e.g. HASHMAP_SLOT_NAME) without an instantiation
-  #        context. This is a tool limitation, not a code defect.
-  #        Qualified MISRA checkers handle this correctly via full
-  #        preprocessor-aware analysis.
+  #        context. This is a tool limitation, not a code defect
+  #        (MISRA-CFG-001). Qualified MISRA checkers handle this
+  #        correctly via full preprocessor-aware analysis.
   # -------------------------------------------------------------------------
   misra:
     needs: build
@@ -4262,6 +4279,18 @@ jobs:
             --suppress=missingIncludeSystem \
             --suppress=toomanyconfigs \
             "--suppress=misra-config:*_impl.h" \
+            --suppress=misra-c2012-15.5 \
+            --suppress=misra-c2012-2.5 \
+            --suppress=misra-c2012-20.10 \
+            --suppress=misra-c2012-3.1 \
+            --suppress=misra-c2012-5.6 \
+            --suppress=misra-c2012-5.8 \
+            --suppress=misra-c2012-5.9 \
+            --suppress=misra-c2012-11.5 \
+            --suppress=misra-c2012-20.5 \
+            --suppress=misra-c2012-18.4 \
+            --suppress=misra-c2012-17.1 \
+            --suppress=misra-c2012-11.6 \
             -I "${{ github.workspace }}/core/primitives" \
             -I "${{ github.workspace }}/core" \
             -I "${{ github.workspace }}/semantics" \
@@ -4287,6 +4316,12 @@ jobs:
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo ""
+          echo "  Baseline (CI #1169, pre-deviation): 1672."
+          echo "  Project-wide deviations MISRA-DEV-001..010 suppress"
+          echo "  892 baseline findings; expected post-deviation"
+          echo "  real count: ~780 (tracked downward via fix commits"
+          echo "  and per-site deviations)."
+          echo ""
           echo "  Advisory only — real violations do not fail the build."
           echo ""
           echo "  NOTE: Rule category breakdown (Mandatory/Required/Advisory)"
@@ -4295,6 +4330,7 @@ jobs:
           echo "  (Polyspace, LDRA, PC-lint) that emits categorized output."
           echo ""
           echo "  Deviations documented in: docs/deviations.md"
+          echo "  (MISRA-DEV-001..010 project-wide; MISRA-CFG-001 tool)"
           echo "==============================================="
           # Real violations are advisory by design. When MISRA compliance
           # is mature, uncomment to enforce a zero-real-violations gate:
