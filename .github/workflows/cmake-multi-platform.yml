@@ -4205,9 +4205,21 @@ jobs:
   #    60-70% of MISRA C:2012 rules. For certification, replace with
   #    a qualified tool: Polyspace, LDRA, PC-lint, or Parasoft C/C++test.
   #
-  #    This job is advisory — it does not fail the build. Its purpose
-  #    is to track MISRA compliance progress and identify deviations
-  #    that must be documented in docs/deviations.md.
+  #    Findings are advisory — real violations do not fail the build.
+  #    Their purpose is to track MISRA compliance progress and identify
+  #    deviations that must be documented in docs/deviations.md
+  #    (inline via `cppcheck-suppress misra-c2012-X.Y` comments,
+  #    honored through --inline-suppr).
+  #
+  #    The INSTRUMENT, however, is enforced: canary/misra_canary.h
+  #    contains intentional violations, and the job FAILS if they are
+  #    not detected. Rationale: cppcheck emits MISRA addon findings at
+  #    "style" severity, which is silently discarded without
+  #    --enable=style — this job previously reported "0 violations"
+  #    for that exact reason while the addon's findings were being
+  #    filtered out. The canary makes any such silent breakage of the
+  #    toolchain (severity filtering, addon resolution, packaging
+  #    changes) a hard failure instead of a fake-green zero.
   #
   #    Suppressions:
   #      - misra-config:*_impl.h — macro-templated implementation headers
@@ -4234,6 +4246,7 @@ jobs:
             "${{ github.workspace }}/data" \
             "${{ github.workspace }}/algo" \
             "${{ github.workspace }}/util" \
+            "${{ github.workspace }}/canary" \
             -name "*.h" -type f 2>/dev/null | sort)
           if [ -z "$HEADERS" ]; then
             echo "No header files found — skipping MISRA analysis"
@@ -4242,6 +4255,8 @@ jobs:
           echo "Found $(echo "$HEADERS" | wc -l) header files to analyze"
           cppcheck \
             --addon=misra \
+            --enable=style \
+            --inline-suppr \
             --std=c99 \
             --language=c \
             --suppress=missingIncludeSystem \
@@ -4257,11 +4272,22 @@ jobs:
             $HEADERS \
             2>&1 | tee misra_report.txt
           echo ""
+          # ---- Instrument self-test: the canary MUST be flagged ----
+          CANARY=$(grep -c "misra_canary\.h.*\[misra-" misra_report.txt || true)
+          if [ "${CANARY}" -eq 0 ]; then
+            echo "FAIL: MISRA self-test — canary violations not detected."
+            echo "The addon is not producing output; any count is meaningless."
+            exit 1
+          fi
+          TOTAL=$(grep -c "\[misra-" misra_report.txt || true)
           echo "==============================================="
           echo "  MISRA C:2012 Summary"
           echo "==============================================="
-          TOTAL=$(grep -c "\[misra-" misra_report.txt || true)
-          echo "  Total violations: ${TOTAL}"
+          echo "  Canary findings (expected >0): ${CANARY}"
+          echo "  Total violations incl. canary: ${TOTAL}"
+          echo "  Real violations:               $((TOTAL - CANARY))"
+          echo ""
+          echo "  Advisory only — real violations do not fail the build."
           echo ""
           echo "  NOTE: Rule category breakdown (Mandatory/Required/Advisory)"
           echo "  requires a MISRA rule lookup table and is not produced by"
@@ -4270,10 +4296,10 @@ jobs:
           echo ""
           echo "  Deviations documented in: docs/deviations.md"
           echo "==============================================="
-          # Advisory only — does not fail the build.
-          # When MISRA compliance is mature, uncomment to enforce:
-          # if [ "${TOTAL}" -gt 0 ]; then
-          #   echo "FAIL: ${TOTAL} MISRA violations found"
+          # Real violations are advisory by design. When MISRA compliance
+          # is mature, uncomment to enforce a zero-real-violations gate:
+          # if [ "$((TOTAL - CANARY))" -gt 0 ]; then
+          #   echo "FAIL: $((TOTAL - CANARY)) MISRA violations found"
           #   exit 1
           # fi
       - name: Upload MISRA report
@@ -4281,6 +4307,7 @@ jobs:
         with:
           name: misra-report
           path: misra_report.txt
+          
   # -------------------------------------------------------------------------
   # 8. Lifetime-debug build — all platforms, Release + Debug
   #
