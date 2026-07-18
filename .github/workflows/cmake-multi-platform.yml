@@ -4249,7 +4249,20 @@ jobs:
   # -------------------------------------------------------------------------
   misra:
     needs: build
-    runs-on: ubuntu-latest
+    # PINNED RUNNER — not ubuntu-latest. The misra job's finding set is a
+    # function of the cppcheck/misra-addon version, which comes from the
+    # runner image's apt archive (24.04 -> cppcheck 2.13.0, newer images
+    # -> 2.17+ with expanded MISRA coverage: rules 19.2/8.7/5.7 and
+    # macro-body 15.6 descent). During the ubuntu-latest image migration
+    # the label is nondeterministic and the Real count flips 780 <-> 1004
+    # between pushes. Pin the image = pin the tool = stable baseline.
+    # Bump this pin DELIBERATELY (same policy as the Windows cppcheck
+    # $Version pin in static-analysis): re-baseline the counts, add/extend
+    # deviation records for newly covered rules (19.2 union-backed result,
+    # 5.7 instantiation-header tags -> MISRA-DEV-005, 15.6 grows to ~262,
+    # 12.3 comma declarators, 8.7 standalone-TU linkage artifact), then
+    # move the pin and the expected count in one acknowledged commit.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Cppcheck
@@ -4270,6 +4283,7 @@ jobs:
             exit 0
           fi
           echo "Found $(echo "$HEADERS" | wc -l) header files to analyze"
+          echo "Toolchain: $(cppcheck --version)" | tee misra_toolchain.txt
           cppcheck \
             --addon=misra \
             --enable=style \
@@ -4312,6 +4326,7 @@ jobs:
           echo "==============================================="
           echo "  MISRA C:2012 Summary"
           echo "==============================================="
+          echo "  Toolchain: $(cppcheck --version) (runner-pinned; see job comment)"
           echo "  Canary findings (expected >0): ${CANARY}"
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
@@ -4342,7 +4357,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: misra-report
-          path: misra_report.txt
+          path: |
+            misra_report.txt
+            misra_toolchain.txt
           
   # -------------------------------------------------------------------------
   # 8. Lifetime-debug build — all platforms, Release + Debug
