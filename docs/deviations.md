@@ -4286,22 +4286,290 @@ exclusion, not a regression.
 
 ---
 
-## MISRA-CFG-001: Cppcheck MISRA Configuration Limitation
+## MISRA-DEV-001: Multiple Points of Exit (Rule 15.5)
 
 | Field          | Value |
 |----------------|-------|
-| **ID**         | MISRA-CFG-001 |
-| **Date**       | 2026-04-07 |
-| **Scope**      | MISRA CI job — `*_impl.h` headers |
-| **Category**   | MISRA analysis tool limitation |
+| **ID**         | MISRA-DEV-001 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Project-wide — 325 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Advisory) |
 
-**Description**: Cppcheck's MISRA addon emits `[misra-config]` errors
-on macro-templated implementation headers because it cannot resolve
-macro-instantiated type names without an instantiation context.
+**Description**: Rule 15.5 (Advisory) recommends a single point of exit
+per function. Canon-C functions use early-return guard clauses
+throughout: `require_msg` precondition blocks at function entry, early
+`return` on `Result`/`Option` construction, and the `goto done` cleanup
+idiom for resource-holding functions.
 
-**Rationale**: This is a tool limitation, not a code defect. Qualified
-MISRA checkers handle this correctly.
+**Rationale**: Early return on precondition failure and error paths is
+the project's documented style (README, "Contracts" and "Cleanup"
+sections). It is what makes preconditions visible at function entry and
+keeps error paths flat. Rewriting to single-exit form would nest the
+happy path inside accumulated condition state and obscure the exact
+structure the library exists to make visible, with no behavioral
+benefit. The rule is Advisory; MISRA C:2012 permits documented
+project-wide deviation of advisory rules.
 
-**Mitigation**: The `--suppress=misra-config:*_impl.h` flag suppresses
-these false positives. The MISRA CI job is advisory — it does not fail
-the build.
+**Mitigation**: Control-flow correctness is covered by MC/DC condition
+coverage measurement (coverage job) and, for verified headers, by
+Frama-C WP proofs over all exit paths (frama-c-* jobs). Suppressed
+project-wide via `--suppress=misra-c2012-15.5` in the misra CI job.
+
+---
+
+## MISRA-DEV-002: Unused Macros Under Standalone-Header Analysis (Rule 2.5)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-002 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Project-wide — 161 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Advisory) |
+
+**Description**: Rule 2.5 (Advisory) recommends that a project contain
+no unused macros. The misra CI job analyzes each header as a standalone
+translation unit, so every public API macro is by definition "unused"
+within its own TU.
+
+**Rationale**: The flagged macros are the library's API surface —
+usage occurs in downstream user code and in the test suite, neither of
+which is part of the analyzed TU. This is an artifact of the
+standalone-header analysis configuration, not dead code.
+
+**Mitigation**: The test suite instantiates the public macro surface
+across the CI matrix; genuinely dead macros would surface in review.
+Suppressed project-wide via `--suppress=misra-c2012-2.5` in the misra
+CI job.
+
+---
+
+## MISRA-DEV-003: Token-Pasting as the Type-Instantiation Mechanism (Rule 20.10)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-003 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Project-wide (concentrated in `*_mangle.h` and `DEFINE_*` machinery) — 118 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Advisory) |
+
+**Description**: Rule 20.10 (Advisory) recommends avoiding the `#` and
+`##` preprocessor operators. Canon-C's name-mangling machinery
+(`*_mangle.h`) and `DEFINE_*` / `DECLARE_*` instantiation macros use
+`##` to stamp per-type function families, and `#` for stringized
+contract messages.
+
+**Rationale**: Token pasting is the library's type-instantiation
+mechanism — the documented architectural substitute for the templates
+C99 lacks (README, `algo/` and `data/` sections; docs/vmacros.md).
+Removing it removes the library's central design.
+
+**Mitigation**: The instantiation machinery follows a fixed 5-file
+architecture; every expansion is compiled under three compiler
+families and multiple flag configurations in CI, so mis-pastes fail
+loudly at build time. Instantiated modules are additionally verified
+through the Shape-B driver mechanism (docs/vmacros.md; VERIFY-014/-015/
+-018). Suppressed project-wide via `--suppress=misra-c2012-20.10` in
+the misra CI job.
+
+---
+
+## MISRA-DEV-004: Comment Markers Inside Documentation Comments (Rule 3.1)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-004 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Project-wide — 105 sites at baseline (CI #1169), all in documentation comment blocks |
+| **Category**   | MISRA rule deviation (Required) |
+
+**Description**: Rule 3.1 (Required) forbids the character sequences
+`/*` and `//` within a comment. The flagged sites are Doxygen-style
+documentation blocks containing URLs (`https://...` contains `//`) and
+inline code examples.
+
+**Rationale**: The rule targets accidentally nested comment markers
+that can silently swallow code. The flagged occurrences are inside
+deliberate documentation text; no executable code is adjacent or
+affected. Rewording URLs and code examples to avoid the sequences
+would degrade documentation accuracy for no safety benefit.
+
+**Mitigation**: None required — documentation-only. Suppressed
+project-wide via `--suppress=misra-c2012-3.1` in the misra CI job.
+Any future occurrence of a genuinely mis-nested comment is caught by
+`-Wcomment` under `-Wall` in the build matrix.
+
+---
+
+## MISRA-DEV-005: Identifier Uniqueness Under Standalone Analysis of Instantiation Headers (Rules 5.6, 5.8, 5.9)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-005 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Template-machinery headers (`algo/*_impl.h`, `data/hashmap/*`, `algo/fold/fold.h`, `algo/map/*`, `core/slice.h`, `util/log/log.h`) — 47 sites at baseline (CI #1169): 5.6 x10, 5.8 x30, 5.9 x7 |
+| **Category**   | MISRA rule deviation (5.6/5.8 Required, 5.9 Advisory) |
+
+**Description**: Rules 5.6/5.8/5.9 require uniqueness of typedef names
+and identifiers across the project. The flagged identifiers are in
+per-type instantiation headers (`*_impl.h` and companions), which the
+misra CI job analyzes standalone across multiple preprocessor
+configurations of the same file.
+
+**Rationale**: In real translation units, generated identifiers are
+mangled per instantiated type via the `*_mangle.h` machinery and are
+unique. The analyzer sees the un-instantiated template names
+"collide" across configurations of the same source — an artifact of
+standalone-header analysis without an instantiation context, the same
+tool-limitation family as MISRA-CFG-001.
+
+**Mitigation**: Multi-instantiation link tests in the test suite fail
+on genuine identifier collisions (duplicate-symbol link errors) across
+the CI matrix. Suppressed via `--suppress=misra-c2012-5.6`, `-5.8`,
+`-5.9` in the misra CI job.
+
+---
+
+## MISRA-DEV-006: void* Conversions in the Generic Interface Level (Rule 11.5)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-006 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Generic (`void*`) interfaces: `core/memory.h`, `core/arena.h`, `core/slice.h`, `core/primitives/{ptr,compare}.h`, `algo/` generic level, string/collection internals — 36 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Advisory) |
+
+**Description**: Rule 11.5 (Advisory) recommends against converting
+`void*` to object pointers. The flagged conversions are allocator
+returns (`mem_alloc`, `arena_alloc`), the generic Level-1 `void*` +
+function-pointer interfaces of `algo/`, and `{ptr, len}` byte-view
+plumbing.
+
+**Rationale**: Type-erased operation over arbitrary element types is
+one of three documented API levels; `void*` conversion at the
+boundary is inherent to generic C library design and to any allocator
+interface. The typed macro level and `DEFINE_ALGO_X` instantiation
+level are the documented alternatives for callers requiring full type
+visibility (README, `algo/` section) — the strict path exists and is
+the recommended one for verification-grade use.
+
+**Mitigation**: Element size and count are carried explicitly
+alongside every `void*`; slice bounds are contract-checked; the
+allocator conversions sit inside WP-verified functions (VERIFY-008/
+-009). Suppressed via `--suppress=misra-c2012-11.5` in the misra CI
+job.
+
+---
+
+## MISRA-DEV-007: #undef as Template-Parameter Cleanup (Rule 20.5)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-007 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Instantiation machinery (`algo/*` and `data/hashmap/*` template headers) and internal helper-macro cleanup (`bits.h`, `checked.h`, `util/time.h`) — 30 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Advisory) |
+
+**Description**: Rule 20.5 (Advisory) recommends against `#undef`. The
+flagged sites undefine template parameters (`HASHMAP_KEY_TYPE`, algo
+linkage/type parameters) after instantiation, and clean up
+file-internal helper macros before header exit.
+
+**Rationale**: Undefining template parameters after instantiation is
+what permits multiple instantiations per translation unit — it is the
+mechanism, not an accident. Internal helper-macro cleanup prevents
+namespace leakage from headers, which is a hygiene improvement in a
+header-only library, not a hazard.
+
+**Mitigation**: Undefs are confined to the parameter and helper names
+of the enclosing header; the guarded-emission pattern is compiled
+under every CI configuration. Suppressed via
+`--suppress=misra-c2012-20.5` in the misra CI job.
+
+---
+
+## MISRA-DEV-008: Pointer Arithmetic in Slice and String Processing (Rule 18.4)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-008 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | `{ptr, len}`-view processing: `core/slice.h`, `semantics/borrow.h`, `semantics/diag.h`, `data/stringbuf.h`, `data/convenience/dynstring.h`, `util/str/*`, `util/file.h` — 27 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Advisory) |
+
+**Description**: Rule 18.4 (Advisory) recommends against applying
+`+`, `-`, `+=`, `-=` to pointer operands. The flagged sites advance
+cursors and compute sub-views over `{ptr, len}` slices and string
+buffers.
+
+**Rationale**: Slice and string processing over pointer+length views
+is the purpose of these modules; the arithmetic is bounded by the
+carried `len` at every site, which is exactly the mitigation the rule
+exists to encourage. Replacing pointer arithmetic with index
+arithmetic re-derives the same addresses with additional operations
+and no additional checking.
+
+**Mitigation**: Every flagged operation is bounds-guarded by the
+slice's carried length; `slice.h` and `borrow.h` are WP-verified with
+RTE checking (VERIFY-007/-016), which discharges in-bounds pointer
+validity for the verified subset. Suppressed via
+`--suppress=misra-c2012-18.4` in the misra CI job.
+
+---
+
+## MISRA-DEV-009: stdarg in Formatting and Logging Entry Points (Rule 17.1)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-009 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | printf-style entry points: `util/log/log.h`, `data/stringbuf.h`, `data/convenience/dynstring.h` — 24 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Required) |
+
+**Description**: Rule 17.1 (Required) forbids the features of
+`<stdarg.h>`. The flagged sites are the `..._fmt` / logging entry
+points that forward variadic arguments to `vsnprintf`.
+
+**Rationale**: printf-style formatting is the accepted interface for
+logging and string building; per-type alternatives multiply the API
+surface without removing the underlying varargs inside `vsnprintf`
+itself. The sites are confined to rendering/formatting functions that
+are documented hosted-tier (Tier 2) functionality, excluded from the
+bare-metal subset (README, "Bare-metal and embedded use").
+
+**Mitigation**: Format strings are compile-time literals at library
+call sites; the GNU `format` attribute is applied where available so
+GCC/Clang type-check the argument lists under `-Wall -Werror` across
+the CI matrix. Suppressed via `--suppress=misra-c2012-17.1` in the
+misra CI job.
+
+---
+
+## MISRA-DEV-010: Pointer/Integer Round-Trips for Alignment Computation (Rule 11.6)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-DEV-010 |
+| **Date**       | 2026-07-18 |
+| **Scope**      | Alignment machinery: `core/primitives/ptr.h`, `core/memory.h`, `core/arena.h`, `core/pool.h`, and the collection headers that align backing storage (`bitset.h`, `priority_queue.h`, `stringbuf.h`, `deque/hashmap/vec` impls, convenience vectors) — 19 sites at baseline (CI #1169) |
+| **Category**   | MISRA rule deviation (Required) |
+
+**Description**: Rule 11.6 (Required) forbids casts between `void*`
+and arithmetic types. The flagged sites are `uintptr_t` round-trips
+used to compute and apply alignment (`align_up`/`align_down` over
+addresses) in the allocators and in collection headers that align
+their backing storage.
+
+**Rationale**: Alignment computation requires treating an address as
+an integer; C99 provides `uintptr_t` for exactly this conversion.
+This pattern is already a named verification residual category in
+this document — the `uintptr_t` round-trip goals of VERIFY-006 and
+the alignment-formula goals of VERIFY-008 — with manual arguments
+recorded there. The MISRA deviation covers the same sites for the
+same underlying reason: the pattern is deliberate, centralized, and
+characterized.
+
+**Mitigation**: The round-trip validity and alignment-formula
+correctness arguments are recorded in VERIFY-006/-008 and enforced by
+the frama-c-ptr / frama-c-memory pinned baselines; the computations
+are centralized in `ptr.h` rather than repeated ad hoc. Suppressed
+via `--suppress=misra-c2012-11.6` in the misra CI job.
