@@ -1,0 +1,35 @@
+# Canon-C clang-tidy configuration.
+#
+# This file is the single source of truth for the project's clang-tidy
+# check set. The CI static-analysis job consumes it (clang-tidy reads
+# .clang-tidy from the source tree root by default; drop the explicit
+# --checks/--warnings-as-errors flags from the workflow invocation when
+# landing this, so CI and IDEs cannot diverge).
+#
+# The set is deliberately narrow: correctness- and UB-adjacent checks
+# only, run as errors. Style checks are intentionally excluded — style
+# is owned by the project conventions, and MISRA analysis runs in its
+# own advisory CI job.
+Checks: >
+  -*,
+  bugprone-integer-division,
+  bugprone-macro-parentheses,
+  bugprone-misplaced-widening-cast,
+  bugprone-signed-char-misuse,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memset-usage,
+  bugprone-too-small-loop-variable,
+  bugprone-undefined-memory-manipulation,
+  clang-analyzer-core.CallAndMessage,
+  clang-analyzer-core.DivideZero,
+  clang-analyzer-core.NullDereference,
+  clang-analyzer-core.UndefinedBinaryOperatorResult,
+  clang-analyzer-core.uninitialized.Assign,
+  clang-analyzer-core.uninitialized.Branch,
+  clang-analyzer-deadcode.DeadStores,
+  clang-analyzer-security.insecureAPI.strcpy,
+  misc-misplaced-const,
+  misc-redundant-expression,
+  misc-unused-parameters
+WarningsAsErrors: '*'
+FormatStyle: none
