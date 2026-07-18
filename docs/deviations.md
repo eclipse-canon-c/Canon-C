@@ -4286,6 +4286,28 @@ exclusion, not a regression.
 
 ---
 
+## MISRA-CFG-001: Cppcheck MISRA Configuration Limitation
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MISRA-CFG-001 |
+| **Date**       | 2026-04-07 |
+| **Scope**      | MISRA CI job — `*_impl.h` headers |
+| **Category**   | MISRA analysis tool limitation |
+
+**Description**: Cppcheck's MISRA addon emits `[misra-config]` errors
+on macro-templated implementation headers because it cannot resolve
+macro-instantiated type names without an instantiation context.
+
+**Rationale**: This is a tool limitation, not a code defect. Qualified
+MISRA checkers handle this correctly.
+
+**Mitigation**: The `--suppress=misra-config:*_impl.h` flag suppresses
+these false positives. The MISRA CI job is advisory — it does not fail
+the build.
+
+---
+
 ## MISRA-DEV-001: Multiple Points of Exit (Rule 15.5)
 
 | Field          | Value |
