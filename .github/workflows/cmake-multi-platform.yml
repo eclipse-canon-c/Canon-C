@@ -4238,6 +4238,15 @@ jobs:
   #    and 10.1 — none of which may be added to the list above without
   #    path-scoping the suppression, or the self-test goes blind.
   #
+  #    PER-LINE MASKING (measured property of cppcheck's misra output):
+  #    at most one misra violation is reported per source line, so a
+  #    line violating several rules shows only one until that one is
+  #    suppressed or fixed — then the next surfaces. All counts in this
+  #    job and in the MISRA-DEV records are counts of VISIBLE findings
+  #    under the then-active suppression set, i.e. lower bounds. The
+  #    1672-finding baseline unmasked 224 shadowed findings when the
+  #    892 deviation-covered findings were suppressed (-> 1004).
+  #
   #    Suppressions (tool limitations):
   #      - misra-config:*_impl.h — macro-templated implementation headers
   #        (hashmap_impl.h, deque_impl.h, etc.) emit [misra-config]
@@ -4331,11 +4340,19 @@ jobs:
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo ""
-          echo "  Baseline (CI #1169, pre-deviation): 1672."
-          echo "  Project-wide deviations MISRA-DEV-001..010 suppress"
-          echo "  892 baseline findings; expected post-deviation"
-          echo "  real count: ~780 (tracked downward via fix commits"
-          echo "  and per-site deviations)."
+          echo "  Expected real count: 1004 (pinned; cppcheck 2.13.0,"
+          echo "  suppression set MISRA-DEV-001..010, CI #1172/#1173)."
+          echo ""
+          echo "  NOTE — per-line masking: cppcheck reports at most ONE"
+          echo "  misra violation per source line. Counts are therefore a"
+          echo "  LOWER BOUND on (line, rule) pairs: suppressing or fixing"
+          echo "  a rule can SURFACE previously shadowed violations on the"
+          echo "  same lines (measured: suppressing 892 baseline findings"
+          echo "  surfaced 224 shadowed ones, 1672 -> 1004, all 224"
+          echo "  machine-verified as same-line unmaskings). A count that"
+          echo "  RISES after cleanup work is surfacing, not regression —"
+          echo "  diff the report artifact against the previous run before"
+          echo "  concluding anything."
           echo ""
           echo "  Advisory only — real violations do not fail the build."
           echo ""
