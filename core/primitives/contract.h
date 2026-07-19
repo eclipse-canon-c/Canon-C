@@ -365,7 +365,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Reads canon_contract_handler directly — the same variable in all
  * translation units through standard extern linkage.
  */
-#define _CANON_INVOKE_HANDLER(expr_str, msg) \
+#define CANON_INVOKE_HANDLER_(expr_str, msg) \
     canon_contract_handler(__FILE__, __LINE__, __func__, expr_str, msg)
 
 /* ============================================================================
@@ -405,7 +405,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
     #define require(cond) \
         do { \
             if (!(cond)) { \
-                _CANON_INVOKE_HANDLER(#cond, NULL); \
+                CANON_INVOKE_HANDLER_(#cond, NULL); \
             } \
         } while (0)
 #endif
@@ -432,7 +432,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
     #define require_msg(cond, msg) \
         do { \
             if (!(cond)) { \
-                _CANON_INVOKE_HANDLER(#cond, msg); \
+                CANON_INVOKE_HANDLER_(#cond, msg); \
             } \
         } while (0)
 #endif
@@ -466,7 +466,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
     #define ensure(cond) \
         do { \
             if (!(cond)) { \
-                _CANON_INVOKE_HANDLER(#cond, NULL); \
+                CANON_INVOKE_HANDLER_(#cond, NULL); \
             } \
         } while (0)
 #elif defined(NDEBUG)
@@ -492,7 +492,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
     #define ensure_msg(cond, msg) \
         do { \
             if (!(cond)) { \
-                _CANON_INVOKE_HANDLER(#cond, msg); \
+                CANON_INVOKE_HANDLER_(#cond, msg); \
             } \
         } while (0)
 #elif defined(NDEBUG)
@@ -527,7 +527,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #if defined(CANON_STRICT)
     #define unreachable() \
         do { \
-            _CANON_INVOKE_HANDLER("unreachable code path", NULL); \
+            CANON_INVOKE_HANDLER_("unreachable code path", NULL); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #elif defined(NDEBUG)
@@ -535,7 +535,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #else
     #define unreachable() \
         do { \
-            _CANON_INVOKE_HANDLER("unreachable code path", NULL); \
+            CANON_INVOKE_HANDLER_("unreachable code path", NULL); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #endif
@@ -553,7 +553,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #if defined(CANON_STRICT)
     #define unreachable_msg(msg) \
         do { \
-            _CANON_INVOKE_HANDLER("unreachable code path", msg); \
+            CANON_INVOKE_HANDLER_("unreachable code path", msg); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #elif defined(NDEBUG)
@@ -561,7 +561,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
 #else
     #define unreachable_msg(msg) \
         do { \
-            _CANON_INVOKE_HANDLER("unreachable code path", msg); \
+            CANON_INVOKE_HANDLER_("unreachable code path", msg); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #endif
@@ -586,7 +586,7 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  */
 #define panic(msg) \
     do { \
-        _CANON_INVOKE_HANDLER("panic", msg); \
+        CANON_INVOKE_HANDLER_("panic", msg); \
     } while (0)
 
 /* ============================================================================

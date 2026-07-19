@@ -157,49 +157,49 @@ typedef struct {
  * result__Bool_Error because bool expands to _Bool before ## in C99.
  * ========================================================================= */
 
-extern usize _HM_BUFFER_SIZE(usize capacity);
+extern usize HM_BUFFER_SIZE_(usize capacity);
 
-extern result__Bool_Error _HM_INIT(
+extern result__Bool_Error HM_INIT_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     bytes_t                      buf,
     usize                        capacity,
     void*                        ctx
 );
 
-extern void _HM_CLEAR(borrowed(HASHMAP_TYPE_NAME*) map);
+extern void HM_CLEAR_(borrowed(HASHMAP_TYPE_NAME*) map);
 
-extern usize _HM_LEN(const HASHMAP_TYPE_NAME* map);
-extern usize _HM_CAPACITY(const HASHMAP_TYPE_NAME* map);
-extern bool  _HM_IS_EMPTY(const HASHMAP_TYPE_NAME* map);
-extern f64   _HM_LOAD_FACTOR(const HASHMAP_TYPE_NAME* map);
+extern usize HM_LEN_(const HASHMAP_TYPE_NAME* map);
+extern usize HM_CAPACITY_(const HASHMAP_TYPE_NAME* map);
+extern bool  HM_IS_EMPTY_(const HASHMAP_TYPE_NAME* map);
+extern f64   HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map);
 
-extern result__Bool_Error _HM_INSERT(
+extern result__Bool_Error HM_INSERT_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_decl_key_t*         key,
     const hm_decl_val_t*         val
 );
 
-extern option_hm_decl_val_t _HM_GET(
+extern option_hm_decl_val_t HM_GET_(
     const HASHMAP_TYPE_NAME* map,
     const hm_decl_key_t*     key
 );
 
-extern borrowed(hm_decl_val_t*) _HM_GET_OR_NULL(
+extern borrowed(hm_decl_val_t*) HM_GET_OR_NULL_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_decl_key_t*         key
 );
 
-extern bool _HM_CONTAINS_KEY(
+extern bool HM_CONTAINS_KEY_(
     const HASHMAP_TYPE_NAME* map,
     const hm_decl_key_t*     key
 );
 
-extern result_hm_decl_val_t_Error _HM_REMOVE(
+extern result_hm_decl_val_t_Error HM_REMOVE_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_decl_key_t*         key
 );
 
-extern bool _HM_ITER_NEXT(
+extern bool HM_ITER_NEXT_(
     const HASHMAP_TYPE_NAME*  map,
     usize*                    iter,
     const hm_decl_key_t**    key_out,
@@ -210,8 +210,8 @@ extern bool _HM_ITER_NEXT(
  * Their bodies are empty no-ops without CANON_LIFETIME_DEBUG, but the
  * names always exist (callers in hashmap_impl.h invoke them
  * unconditionally; consistent linkage across TUs is required). */
-extern void _HM_LIFETIME_OPEN(HASHMAP_TYPE_NAME* map);
-extern void _HM_LIFETIME_RESTAMP(HASHMAP_TYPE_NAME* map);
+extern void HM_LIFETIME_OPEN_(HASHMAP_TYPE_NAME* map);
+extern void HM_LIFETIME_RESTAMP_(HASHMAP_TYPE_NAME* map);
 
 #undef hm_decl_key_t
 #undef hm_decl_val_t

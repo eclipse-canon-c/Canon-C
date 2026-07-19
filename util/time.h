@@ -21,9 +21,12 @@
  * macro is defined. This must appear before any system header inclusion. */
 #ifndef _WIN32
     #ifndef _POSIX_C_SOURCE
+        /* cppcheck-suppress misra-c2012-21.1 ; MISRA-DEV-011 */
         #define _POSIX_C_SOURCE 199309L
     #elif _POSIX_C_SOURCE < 199309L
+        /* cppcheck-suppress misra-c2012-21.1 ; MISRA-DEV-011 */
         #undef  _POSIX_C_SOURCE
+        /* cppcheck-suppress misra-c2012-21.1 ; MISRA-DEV-011 */
         #define _POSIX_C_SOURCE 199309L
     #endif
 #endif

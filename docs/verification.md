@@ -1433,7 +1433,7 @@ MCDC-003 documents 6 of arena.h's 64 condition outcomes as
 unreachable: 4 overflow-guard subconditions in arena_alloc /
 arena_alloc_aligned at lines 346 and 401 (structurally unreachable
 under `arena_invariant` + `CANON_ARENA_MAX_SIZE = CANON_GB = 2^30`),
-plus 2 release-build macro no-op artifacts on `_arena_debug_update`
+plus 2 release-build macro no-op artifacts on `arena_debug_update_`
 calls at lines 356 and 411 (gcov-14 instrumentation artifact, not
 real conditions).
 
@@ -2214,7 +2214,7 @@ All 34 are documented under VERIFY-014. They split into 2 inherited and
 `typed_contract_default_handler_loop_invariant_established` — option is
 the first semantics/ module to inherit the contract.h handler
 non-termination pair (VERIFY-006 cat 4), reached through `expect`'s
-`_CANON_INVOKE_HANDLER` path. Note the goal-name prefix is
+`CANON_INVOKE_HANDLER_` path. Note the goal-name prefix is
 `typed_contract_default_handler_*` (the non-`_cast` form), because option
 runs under the default `Typed` model — the same two goals as VERIFY-006
 category 4, re-emitted in the option run under the Typed prefix.
@@ -2406,7 +2406,7 @@ All 30 are documented under VERIFY-015. They split into 2 inherited and
 `typed_contract_default_handler_loop_invariant_established` — the
 VERIFY-006 category 4 pair, re-emitted under the Typed prefix. Unlike
 option (which reaches the handler through `expect`'s
-`_CANON_INVOKE_HANDLER`), result's `require_msg`-only panic surface is
+`CANON_INVOKE_HANDLER_`), result's `require_msg`-only panic surface is
 fully compiled out under `-DCANON_NO_REQUIRE`, so these 2 goals arise
 purely from the handler's definition being present in the TU; no result
 function calls it.

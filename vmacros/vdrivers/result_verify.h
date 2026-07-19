@@ -81,7 +81,7 @@
  *       (unwrap / unwrap_err / expect / get_ok / get_err NULL-guard) routes
  *       EXCLUSIVELY through require_msg, which -DCANON_NO_REQUIRE compiles
  *       to ((void)0). Unlike option's expect (which invoked the handler
- *       via _CANON_INVOKE_HANDLER even under NO_REQUIRE), result's
+ *       via CANON_INVOKE_HANDLER_ even under NO_REQUIRE), result's
  *       generated bodies contain NO handler call at all in the verified
  *       configuration — the 2 goals are pure definition-presence
  *       inheritance, and result's own functions should show no

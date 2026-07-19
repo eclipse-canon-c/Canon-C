@@ -60,7 +60,7 @@
  *   replace(), and take(). Only use CANON_NO_REQUIRE when formal verification
  *   (Frama-C) has proved all call sites safe. See contract.h.
  * - expect() passes its message string directly to the contract handler via
- *   _CANON_INVOKE_HANDLER. This is the only macro that uses the internal
+ *   CANON_INVOKE_HANDLER_. This is the only macro that uses the internal
  *   helper directly, because require_msg() stringifies its message at
  *   compile time and cannot accept a runtime-variable string.
  *
@@ -68,7 +68,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later (compound literals, designated initializers)
  * - bool / true / false provided by types.h → <stdbool.h>
- * - Uses Canon-C contract.h for assertions (require_msg, _CANON_INVOKE_HANDLER)
+ * - Uses Canon-C contract.h for assertions (require_msg, CANON_INVOKE_HANDLER_)
  * - No platform-specific code
  *
  * Customization example:
@@ -238,16 +238,16 @@
  * Use for invariant violations that should never happen in correct code.
  *
  * Implementation note:
- *   This macro calls _CANON_INVOKE_HANDLER directly rather than
+ *   This macro calls CANON_INVOKE_HANDLER_ directly rather than
  *   require_msg(). require_msg() stringifies its message argument at
  *   compile time via the # operator, which discards any runtime variable
- *   passed as _msg. _CANON_INVOKE_HANDLER accepts the string value at
+ *   passed as _msg. CANON_INVOKE_HANDLER_ accepts the string value at
  *   runtime, which is the correct behavior for expect(). This is the
  *   only macro in this file that uses the internal helper; all other
  *   precondition checks use require_msg() as the public API.
  *
  *   When CANON_NO_REQUIRE is defined, require_msg() becomes a no-op but
- *   _CANON_INVOKE_HANDLER is not suppressed — expect() therefore always
+ *   CANON_INVOKE_HANDLER_ is not suppressed — expect() therefore always
  *   fires when the Option is None, regardless of CANON_NO_REQUIRE.
  *   This is intentional: a caller-supplied panic message signals a
  *   deliberate invariant assertion, not an optional precondition check.
@@ -262,7 +262,7 @@
 #define IMPL_OPTION_EXPECT(_t, _o, _msg) \
     { \
         if (!(_o).has_value) { \
-            _CANON_INVOKE_HANDLER("option_expect called on None", (_msg)); \
+            CANON_INVOKE_HANDLER_("option_expect called on None", (_msg)); \
         } \
         return (_o).value; \
     }

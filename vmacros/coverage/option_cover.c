@@ -68,7 +68,7 @@
  * not for distinct conditions.)
  * ============================================================================ */
 
-/* expect() routes through _CANON_INVOKE_HANDLER, which needs the handler
+/* expect() routes through CANON_INVOKE_HANDLER_, which needs the handler
  * symbol defined in exactly one TU of the link. This is a standalone binary,
  * so define it here — same as option_test.c does. */
 #define CANON_CONTRACT_IMPL

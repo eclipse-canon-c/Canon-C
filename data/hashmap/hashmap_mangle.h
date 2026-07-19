@@ -95,27 +95,27 @@
  * ========================================================================= */
 
 /* Constructor / lifecycle */
-#define _HM_INIT         HASHMAP_FN(init)
-#define _HM_CLEAR        HASHMAP_FN(clear)
+#define HM_INIT_         HASHMAP_FN(init)
+#define HM_CLEAR_        HASHMAP_FN(clear)
 
 /* Capacity / state */
-#define _HM_LEN          HASHMAP_FN(len)
-#define _HM_CAPACITY     HASHMAP_FN(capacity)
-#define _HM_IS_EMPTY     HASHMAP_FN(is_empty)
-#define _HM_LOAD_FACTOR  HASHMAP_FN(load_factor)
+#define HM_LEN_          HASHMAP_FN(len)
+#define HM_CAPACITY_     HASHMAP_FN(capacity)
+#define HM_IS_EMPTY_     HASHMAP_FN(is_empty)
+#define HM_LOAD_FACTOR_  HASHMAP_FN(load_factor)
 
 /* Core operations */
-#define _HM_INSERT       HASHMAP_FN(insert)
-#define _HM_GET          HASHMAP_FN(get)
-#define _HM_GET_OR_NULL  HASHMAP_FN(get_or_null)
-#define _HM_CONTAINS_KEY HASHMAP_FN(contains_key)
-#define _HM_REMOVE       HASHMAP_FN(remove)
+#define HM_INSERT_       HASHMAP_FN(insert)
+#define HM_GET_          HASHMAP_FN(get)
+#define HM_GET_OR_NULL_  HASHMAP_FN(get_or_null)
+#define HM_CONTAINS_KEY_ HASHMAP_FN(contains_key)
+#define HM_REMOVE_       HASHMAP_FN(remove)
 
 /* Iteration */
-#define _HM_ITER_NEXT    HASHMAP_FN(iter_next)
+#define HM_ITER_NEXT_    HASHMAP_FN(iter_next)
 
 /* Utilities */
-#define _HM_BUFFER_SIZE  HASHMAP_FN(buffer_size)
+#define HM_BUFFER_SIZE_  HASHMAP_FN(buffer_size)
 
 /* ============================================================================
  * Lifetime helper names (internal — used only when CANON_LIFETIME_DEBUG is set)
@@ -131,7 +131,7 @@
  * referenceable. Callers in hashmap_impl.h invoke them unconditionally.
  * ========================================================================= */
 
-#define _HM_LIFETIME_OPEN    HASHMAP_FN(lifetime_open_)
-#define _HM_LIFETIME_RESTAMP HASHMAP_FN(lifetime_restamp_)
+#define HM_LIFETIME_OPEN_    HASHMAP_FN(lifetime_open_)
+#define HM_LIFETIME_RESTAMP_ HASHMAP_FN(lifetime_restamp_)
 
 #endif /* CANON_DATA_HASHMAP_MANGLE_H */

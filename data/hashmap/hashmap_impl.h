@@ -232,17 +232,17 @@ typedef struct {
  * ========================================================================= */
 
 #ifdef CANON_LIFETIME_DEBUG
-    HASHMAP_LINKAGE void _HM_LIFETIME_OPEN(HASHMAP_TYPE_NAME* map) {
+    HASHMAP_LINKAGE void HM_LIFETIME_OPEN_(HASHMAP_TYPE_NAME* map) {
         map->lt.id   = _hm_lifetime_next_id_(map);
         map->lt.open = true;
     }
-    HASHMAP_LINKAGE void _HM_LIFETIME_RESTAMP(HASHMAP_TYPE_NAME* map) {
+    HASHMAP_LINKAGE void HM_LIFETIME_RESTAMP_(HASHMAP_TYPE_NAME* map) {
         map->lt.id = _hm_lifetime_next_id_(map);
         /* lt.open stays true — restamp is not destruction */
     }
 #else
-    HASHMAP_LINKAGE void _HM_LIFETIME_OPEN(HASHMAP_TYPE_NAME* map)    { (void)map; }
-    HASHMAP_LINKAGE void _HM_LIFETIME_RESTAMP(HASHMAP_TYPE_NAME* map) { (void)map; }
+    HASHMAP_LINKAGE void HM_LIFETIME_OPEN_(HASHMAP_TYPE_NAME* map)    { (void)map; }
+    HASHMAP_LINKAGE void HM_LIFETIME_RESTAMP_(HASHMAP_TYPE_NAME* map) { (void)map; }
 #endif
 
 /* ============================================================================
@@ -265,7 +265,7 @@ static inline u64 _hm_normalize_hash(u64 h) {
  * hashmap_buffer_size
  * ========================================================================= */
 
-HASHMAP_LINKAGE usize _HM_BUFFER_SIZE(usize capacity) {
+HASHMAP_LINKAGE usize HM_BUFFER_SIZE_(usize capacity) {
     usize total = 0;
     if (!checked_mul(capacity, sizeof(HASHMAP_SLOT_NAME), &total)) return 0;
     return total;
@@ -275,7 +275,7 @@ HASHMAP_LINKAGE usize _HM_BUFFER_SIZE(usize capacity) {
  * hashmap_init
  * ========================================================================= */
 
-HASHMAP_LINKAGE result__Bool_Error _HM_INIT(
+HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     bytes_t                      buf,
     usize                        capacity,
@@ -288,7 +288,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INIT(
     if (!bits_is_power_of_two((u64)capacity))
         return result__Bool_Error_err(ERR_INVALID_ARG);
 
-    usize required = _HM_BUFFER_SIZE(capacity);
+    usize required = HM_BUFFER_SIZE_(capacity);
     if (required == 0 || buf.len < required)
         return result__Bool_Error_err(ERR_BUFFER_TOO_SMALL);
 
@@ -299,7 +299,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INIT(
 
     memset(map->slots, 0, required);
 
-    _HM_LIFETIME_OPEN(map);
+    HM_LIFETIME_OPEN_(map);
 
     return result__Bool_Error_ok(true);
 }
@@ -308,34 +308,34 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INIT(
  * hashmap_clear
  * ========================================================================= */
 
-HASHMAP_LINKAGE void _HM_CLEAR(borrowed(HASHMAP_TYPE_NAME*) map) {
+HASHMAP_LINKAGE void HM_CLEAR_(borrowed(HASHMAP_TYPE_NAME*) map) {
     require_msg(map != NULL, "hashmap_clear: map cannot be NULL");
     require_msg(map->slots != NULL, "hashmap_clear: map is uninitialized");
     memset(map->slots, 0, map->capacity * sizeof(HASHMAP_SLOT_NAME));
     map->len = 0;
-    _HM_LIFETIME_RESTAMP(map);
+    HM_LIFETIME_RESTAMP_(map);
 }
 
 /* ============================================================================
  * State queries
  * ========================================================================= */
 
-HASHMAP_LINKAGE usize _HM_LEN(const HASHMAP_TYPE_NAME* map) {
+HASHMAP_LINKAGE usize HM_LEN_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_len: map cannot be NULL");
     return map->len;
 }
 
-HASHMAP_LINKAGE usize _HM_CAPACITY(const HASHMAP_TYPE_NAME* map) {
+HASHMAP_LINKAGE usize HM_CAPACITY_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_capacity: map cannot be NULL");
     return map->capacity;
 }
 
-HASHMAP_LINKAGE bool _HM_IS_EMPTY(const HASHMAP_TYPE_NAME* map) {
+HASHMAP_LINKAGE bool HM_IS_EMPTY_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_is_empty: map cannot be NULL");
     return map->len == 0;
 }
 
-HASHMAP_LINKAGE f64 _HM_LOAD_FACTOR(const HASHMAP_TYPE_NAME* map) {
+HASHMAP_LINKAGE f64 HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_load_factor: map cannot be NULL");
     if (map->capacity == 0) return 0.0;
     return (f64)map->len / (f64)map->capacity;
@@ -345,7 +345,7 @@ HASHMAP_LINKAGE f64 _HM_LOAD_FACTOR(const HASHMAP_TYPE_NAME* map) {
  * hashmap_insert — Robin Hood insertion
  * ========================================================================= */
 
-HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
+HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
     borrowed(HASHMAP_TYPE_NAME*)   map,
     const hm_key_t*                key,
     const hm_val_t*                val
@@ -380,7 +380,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
             /* Empty slot — place incoming here */
             *slot = incoming;
             if (is_new_key) map->len++;
-            _HM_LIFETIME_RESTAMP(map);
+            HM_LIFETIME_RESTAMP_(map);
             return result__Bool_Error_ok(is_new_key);
         }
 
@@ -389,7 +389,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
             HASHMAP_EQ_FN(&slot->key, &incoming.key, map->ctx))
         {
             slot->value = incoming.value;
-            _HM_LIFETIME_RESTAMP(map);
+            HM_LIFETIME_RESTAMP_(map);
             return result__Bool_Error_ok(false);
         }
 
@@ -428,7 +428,7 @@ HASHMAP_LINKAGE result__Bool_Error _HM_INSERT(
  * hashmap_get — lookup by key, returns Option<VAL>
  * ========================================================================= */
 
-HASHMAP_LINKAGE option_hm_val_t _HM_GET(
+HASHMAP_LINKAGE option_hm_val_t HM_GET_(
     const HASHMAP_TYPE_NAME* map,
     const hm_key_t*          key
 ) {
@@ -460,7 +460,7 @@ HASHMAP_LINKAGE option_hm_val_t _HM_GET(
  * hashmap_get_or_null
  * ========================================================================= */
 
-HASHMAP_LINKAGE borrowed(hm_val_t*) _HM_GET_OR_NULL(
+HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_key_t*              key
 ) {
@@ -492,20 +492,20 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) _HM_GET_OR_NULL(
  * hashmap_contains_key
  * ========================================================================= */
 
-HASHMAP_LINKAGE bool _HM_CONTAINS_KEY(
+HASHMAP_LINKAGE bool HM_CONTAINS_KEY_(
     const HASHMAP_TYPE_NAME* map,
     const hm_key_t*          key
 ) {
     require_msg(map != NULL, "hashmap_contains_key: map cannot be NULL");
     require_msg(key != NULL, "hashmap_contains_key: key cannot be NULL");
-    return option_hm_val_t_is_some(_HM_GET(map, key));
+    return option_hm_val_t_is_some(HM_GET_(map, key));
 }
 
 /* ============================================================================
  * hashmap_remove — remove by key, backward shift deletion
  * ========================================================================= */
 
-HASHMAP_LINKAGE result_hm_val_t_Error _HM_REMOVE(
+HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_key_t*              key
 ) {
@@ -558,7 +558,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error _HM_REMOVE(
     }
 
     map->len--;
-    _HM_LIFETIME_RESTAMP(map);
+    HM_LIFETIME_RESTAMP_(map);
     return result_hm_val_t_Error_ok(old_value);
 }
 
@@ -566,7 +566,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error _HM_REMOVE(
  * hashmap_iter_next
  * ========================================================================= */
 
-HASHMAP_LINKAGE bool _HM_ITER_NEXT(
+HASHMAP_LINKAGE bool HM_ITER_NEXT_(
     const HASHMAP_TYPE_NAME* map,
     usize*                   iter,
     const hm_key_t**         key_out,

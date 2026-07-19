@@ -158,7 +158,7 @@ covered line 485. The 6 remaining missed outcomes
 on arena.h are documented in MCDC-003: 4 overflow-guard subconditions
 that are structurally unreachable under `arena_invariant +
 CANON_ARENA_MAX_SIZE = CANON_GB`, plus 2 release-build macro no-op
-artifacts on `_arena_debug_update` calls (the same gcov-14
+artifacts on `arena_debug_update_` calls (the same gcov-14
 instrumentation behavior documented in MCDC-001's `contract.h 0/2`
 pattern).
 
@@ -385,7 +385,7 @@ by methodology):
   missed outcomes split into two categories: 4 structurally
   unreachable overflow-guard subconditions in `arena_alloc` (line
   346) and `arena_alloc_aligned` (line 401), and 2 release-build
-  macro no-op artifacts on `_arena_debug_update` calls (lines 356
+  macro no-op artifacts on `arena_debug_update_` calls (lines 356
   and 411). The overflow-guard cond 0 (`offset > CANON_USIZE_MAX -
   pad`) is unreachable because `arena_invariant` bounds `capacity`
   by `CANON_ARENA_MAX_SIZE = CANON_GB = 2^30` (from limits.h) and

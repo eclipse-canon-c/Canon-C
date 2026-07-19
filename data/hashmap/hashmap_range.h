@@ -121,10 +121,10 @@
  * ========================================================================= */
 
 /** @brief Expands to the vec type for a given element type */
-#define _HM_RANGE_VEC(type)  vec_##type
+#define HM_RANGE_VEC_(type)  vec_##type
 
 /** @brief Calls the vec push function for a given element type */
-#define _HM_RANGE_PUSH(type, vec_ptr, elem_ptr) \
+#define HM_RANGE_PUSH_(type, vec_ptr, elem_ptr) \
     vec_##type##_push((vec_ptr), (elem_ptr))
 
 /* ============================================================================
@@ -152,7 +152,7 @@
  */
 static inline result__Bool_Error HASHMAP_FN(collect_keys)(
     const HASHMAP_TYPE_NAME*                   map,
-    borrowed(_HM_RANGE_VEC(HASHMAP_KEY_TYPE)*) out
+    borrowed(HM_RANGE_VEC_(HASHMAP_KEY_TYPE)*) out
 ) {
     if (!map) return result__Bool_Error_err(ERR_INVALID_ARG);
     if (!out) return result__Bool_Error_err(ERR_INVALID_ARG);
@@ -164,7 +164,7 @@ static inline result__Bool_Error HASHMAP_FN(collect_keys)(
 
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
         (void)v; /* only collecting keys */
-        result__Bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_KEY_TYPE, out, k);
+        result__Bool_Error push_res = HM_RANGE_PUSH_(HASHMAP_KEY_TYPE, out, k);
         if (result__Bool_Error_is_err(push_res))
             return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     }
@@ -196,7 +196,7 @@ static inline result__Bool_Error HASHMAP_FN(collect_keys)(
  */
 static inline result__Bool_Error HASHMAP_FN(collect_values)(
     const HASHMAP_TYPE_NAME*                   map,
-    borrowed(_HM_RANGE_VEC(HASHMAP_VAL_TYPE)*) out
+    borrowed(HM_RANGE_VEC_(HASHMAP_VAL_TYPE)*) out
 ) {
     if (!map) return result__Bool_Error_err(ERR_INVALID_ARG);
     if (!out) return result__Bool_Error_err(ERR_INVALID_ARG);
@@ -208,7 +208,7 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
 
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
         (void)k; /* only collecting values */
-        result__Bool_Error push_res = _HM_RANGE_PUSH(HASHMAP_VAL_TYPE, out, v);
+        result__Bool_Error push_res = HM_RANGE_PUSH_(HASHMAP_VAL_TYPE, out, v);
         if (result__Bool_Error_is_err(push_res))
             return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     }
@@ -239,14 +239,14 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
  * @note Uses __LINE__ to generate unique iterator variable names,
  *       allowing nested HASHMAP_FOR_EACH loops without name collisions
  */
-#define _HM_ITER_VAR_(line)  _hm_iter_##line
-#define _HM_ITER_VAR(line)   _HM_ITER_VAR_(line)
+#define HM_ITER_VAR2_(line)  hm_iter_##line
+#define HM_ITER_VAR_(line)   HM_ITER_VAR2_(line)
 
 #define HASHMAP_FOR_EACH(map_ptr, key_var, val_var)           \
-    for (usize _HM_ITER_VAR(__LINE__) = 0;                    \
+    for (usize HM_ITER_VAR_(__LINE__) = 0;                    \
          HASHMAP_FN(iter_next)(                                \
              (map_ptr),                                        \
-             &_HM_ITER_VAR(__LINE__),                         \
+             &HM_ITER_VAR_(__LINE__),                         \
              (const HASHMAP_KEY_TYPE**)&(key_var),            \
              (const HASHMAP_VAL_TYPE**)&(val_var)             \
          ); )
@@ -254,7 +254,7 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
 /* ============================================================================
  * Clean up internal macros
  * ========================================================================= */
-#undef _HM_RANGE_VEC
-#undef _HM_RANGE_PUSH
+#undef HM_RANGE_VEC_
+#undef HM_RANGE_PUSH_
 
 #endif /* CANON_DATA_HASHMAP_RANGE_H */

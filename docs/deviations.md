@@ -1857,7 +1857,7 @@ function-pointer-dispatch residuals.
 
 option is the first **semantics/** header to inherit the contract.h
 handler non-termination pair (it reaches contract.h through `expect`'s
-`_CANON_INVOKE_HANDLER` path). These are the same two goals documented
+`CANON_INVOKE_HANDLER_` path). These are the same two goals documented
 in VERIFY-006 category 4 — the deliberate ACSL idiom for a non-returning
 panic handler, unprovable by construction.
 
@@ -1986,7 +1986,7 @@ entry's third section precisely because it carries no goal count.
 
 The same contract.h handler non-termination pair as VERIFY-006 category
 4 and VERIFY-014 — with one difference from option worth recording.
-option reaches the handler through `expect`'s `_CANON_INVOKE_HANDLER`
+option reaches the handler through `expect`'s `CANON_INVOKE_HANDLER_`
 path, which survives `-DCANON_NO_REQUIRE`; result's entire panic surface
 (`unwrap`, `unwrap_err`, `expect`, and the `get_ok`/`get_err` NULL
 out-pointer guards) routes exclusively through `require_msg`, which the
@@ -2126,7 +2126,7 @@ instantiation the proof uses.
 
 - Inherited residuals: VERIFY-006 (contract.h handler non-termination);
   VERIFY-014 (option's inherited pair — note the
-  `_CANON_INVOKE_HANDLER` vs `require_msg` reachability difference
+  `CANON_INVOKE_HANDLER_` vs `require_msg` reachability difference
   recorded above).
 - Architectural analogue: VERIFY-014 (option's 32 combinator
   residuals); OWN-003 / VERIFY-011 category 1 (region_end opaque-hook
@@ -3099,8 +3099,8 @@ distinct dispositions:
 | 2 | `arena_alloc`         | 346  | cond 1 true (`offset + pad > CANON_USIZE_MAX - size`)       | Mathematically impossible in MC/DC isolation |
 | 3 | `arena_alloc_aligned` | 401  | cond 0 true (`offset > CANON_USIZE_MAX - pad`)              | Unreachable under arena_invariant |
 | 4 | `arena_alloc_aligned` | 401  | cond 1 true (`offset + pad > CANON_USIZE_MAX - size`)       | Mathematically impossible in MC/DC isolation |
-| 5 | `arena_alloc`         | 356  | cond 0 false (`_arena_debug_update(arena)`)                 | Release-build macro no-op artifact |
-| 6 | `arena_alloc_aligned` | 411  | cond 0 false (`_arena_debug_update(arena)`)                 | Release-build macro no-op artifact |
+| 5 | `arena_alloc`         | 356  | cond 0 false (`arena_debug_update_(arena)`)                 | Release-build macro no-op artifact |
+| 6 | `arena_alloc_aligned` | 411  | cond 0 false (`arena_debug_update_(arena)`)                 | Release-build macro no-op artifact |
 
 arena.h's gcov-measured MC/DC is 58/64 = 90.6%. The closure of the
 previously-missing `arena_try_alloc_aligned` line 510 outcome
@@ -3151,11 +3151,11 @@ mathematical unreachability — independent of any project constant.
 ### Category 2: Release-build macro no-op artifacts (2 outcomes)
 
 Lines 356 and 411 each show `condition 0 not covered (false)` on
-calls to `_arena_debug_update(arena)`. The macro is defined on line
+calls to `arena_debug_update_(arena)`. The macro is defined on line
 176:
 
 ```c
-#define _arena_debug_update(a) ((void)0)
+#define arena_debug_update_(a) ((void)0)
 ```
 
 Under release builds (no `CANON_ARENA_DEBUG`, as in the coverage
@@ -3765,7 +3765,7 @@ result's entire panic surface (`unwrap` on Err, `unwrap_err` on Ok,
 `expect` on Err, the `get_ok`/`get_err` NULL out-pointer guards) routes
 through plain `require_msg`, which the coverage build's
 `-DCANON_NO_REQUIRE` compiles to `((void)0)`. Unlike option's `expect`
-— whose `_CANON_INVOKE_HANDLER` invocation survives the flag and is
+— whose `CANON_INVOKE_HANDLER_` invocation survives the flag and is
 MCDC-006's single uncovered outcome — result's generated bodies under
 the coverage flags contain **no panic branch at all**: `unwrap`,
 `unwrap_err`, and `expect` are straight-line functions with zero
@@ -4595,3 +4595,15 @@ correctness arguments are recorded in VERIFY-006/-008 and enforced by
 the frama-c-ptr / frama-c-memory pinned baselines; the computations
 are centralized in `ptr.h` rather than repeated ad hoc. Suppressed
 via `--suppress=misra-c2012-11.6` in the misra CI job.
+## MISRA-DEV-011: Rule 21.1 — _POSIX_C_SOURCE feature-test macro protocol (util/time.h)
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-011 | 2026-07-19 | util/time.h lines 23-29 (3 directives) | Per-site deviation (inline suppressions) |
+
+**Description**: Rule 21.1 forbids `#define` or `#undef` of reserved identifiers. util/time.h defines (and, when a caller has already set a lower value, `#undef`s and redefines) `_POSIX_C_SOURCE 199309L` before any system-header inclusion.
+
+**Rationale**: This is the protocol POSIX itself mandates for the identifier: `_POSIX_C_SOURCE` is a feature-test macro whose entire documented interface is that *application code* defines it before including system headers (POSIX.1-2017 §2.2.1). Under strict `-std=c99`, glibc hides `clock_gettime` and `CLOCK_MONOTONIC` unless the macro is set to at least 199309L; without it, util/time.h's monotonic clock cannot be declared at all on POSIX hosts. The `#undef`/redefine arm exists only to raise a caller's insufficient value and preserves any caller value ≥ 199309L. Renaming is impossible by definition — the identifier's reservedness is precisely what makes it the libc control knob. The 2026-07-19 sweep removed every *project-owned* reserved-identifier macro (rule 21.1 count → 0 outside this file); these three directives are the sole principled remainder.
+
+**Mitigation**: The block is `#ifndef _WIN32`-guarded and confined to a Tier 2 utility header outside the verified core. Each of the three directives carries an individual inline `cppcheck-suppress` citing this record, so any *new* 21.1 finding anywhere in the tree surfaces in CI rather than being absorbed by a rule-wide suppression. util/time.h's behavior is exercised by the test suite on Linux, macOS (both POSIX arm) and MSVC/MinGW (the `_WIN32` arm) across the CI matrix.
+

@@ -73,7 +73,7 @@
  *       `exits \false` goals re-emit — same as VERIFY-006 cat 4 and the
  *       option driver's class (a). NOTE the mechanism differs from option:
  *       under CANON_NO_REQUIRE + NDEBUG *no vec function ever reaches the
- *       handler* (vec has zero direct _CANON_INVOKE_HANDLER calls — the
+ *       handler* (vec has zero direct CANON_INVOKE_HANDLER_ calls — the
  *       clean-audit shape, like result). The goals appear only because the
  *       handler is DEFINED in the TU.
  *

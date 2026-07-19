@@ -74,7 +74,7 @@ is the single fact that governs everything below.
 lines in the `_impl.h` file. The *name* may be mangled and the *types* may be
 macro parameters, but the body is written out. Examples: `map_impl.h`'s
 `algo_map` (`ALGO_MAP_LINKAGE void algo_map(...) { ... for (...) ... }`),
-`hashmap_impl.h`'s `_HM_INSERT` (full body with its `&&`/`||`/loop conditions on
+`hashmap_impl.h`'s `HM_INSERT_` (full body with its `&&`/`||`/loop conditions on
 real lines).
 
 **Shape B — expression-macro bodies.** The body exists only as a macro that

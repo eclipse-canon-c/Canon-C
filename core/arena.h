@@ -180,16 +180,16 @@ static inline ArenaStats arena_stats(const Arena* arena) {
    ============================================================================ */
 
 #ifdef CANON_ARENA_DEBUG
-    #define _arena_debug_update(a) \
+    #define arena_debug_update_(a) \
         do { \
             (a)->alloc_count += 1; \
             if ((a)->offset > (a)->peak) (a)->peak = (a)->offset; \
         } while (0)
-    #define _arena_debug_reset(a) \
+    #define arena_debug_reset_(a) \
         do { (a)->alloc_count = 0; (a)->peak = 0; } while (0)
 #else
-    #define _arena_debug_update(a) ((void)0)
-    #define _arena_debug_reset(a)  ((void)0)
+    #define arena_debug_update_(a) ((void)0)
+    #define arena_debug_reset_(a)  ((void)0)
 #endif
 
 /* ============================================================================
@@ -262,7 +262,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
     arena->capacity      = capacity;
     arena->offset        = 0;
     arena->padding_accum = 0;
-    _arena_debug_reset(arena);
+    arena_debug_reset_(arena);
     arena_lifetime_open_(arena);
 }
 
@@ -286,7 +286,7 @@ static inline void arena_reset(Arena* arena) {
     if (!arena) return;
     arena->offset        = 0;
     arena->padding_accum = 0;
-    _arena_debug_reset(arena);
+    arena_debug_reset_(arena);
     arena_lifetime_restamp_(arena);
 }
 
@@ -312,7 +312,7 @@ static inline void arena_reset_secure(Arena* arena) {
     mem_secure_zero(arena->buffer, arena->offset);
     arena->offset        = 0;
     arena->padding_accum = 0;
-    _arena_debug_reset(arena);
+    arena_debug_reset_(arena);
     arena_lifetime_restamp_(arena);
 }
 
@@ -368,7 +368,7 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     arena->padding_accum += pad;
     result                = ptr_offset(arena->buffer, arena->offset);
     arena->offset        += size;
-    _arena_debug_update(arena);
+    arena_debug_update_(arena);
     return result;
 }
 
@@ -423,7 +423,7 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
     arena->padding_accum += pad;
     result                = ptr_offset(arena->buffer, arena->offset);
     arena->offset        += size;
-    _arena_debug_update(arena);
+    arena_debug_update_(arena);
     return result;
 }
 

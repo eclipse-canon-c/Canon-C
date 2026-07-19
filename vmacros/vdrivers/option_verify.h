@@ -156,7 +156,7 @@ static inline int option_int_unwrap_or(option_int o, int fallback);
 static inline int option_int_unwrap(option_int o);
 
 /* expect() calls the contract handler on None even under CANON_NO_REQUIRE
- * (_CANON_INVOKE_HANDLER is not suppressed). Under `requires o.has_value` the
+ * (CANON_INVOKE_HANDLER_ is not suppressed). Under `requires o.has_value` the
  * None path is dead, so the handler CALL discharges; the handler's OWN
  * non-termination goals are the inherited residual (a), counted separately. */
 /*@ requires o.has_value;

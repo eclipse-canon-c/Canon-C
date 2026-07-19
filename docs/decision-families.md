@@ -391,7 +391,7 @@ per-header gap but the project-wide flags (`CANON_NO_REQUIRE`,
 `CANON_CHECKED_FORCE_FALLBACK`, `CANON_BITS_FORCE_FALLBACK`) that
 change the code under measurement to align coverage with the verified
 path. The recurring `contract.h 0/2` artifact and the
-`_arena_debug_update` no-op outcomes (MCDC-003 category 2) are
+`arena_debug_update_` no-op outcomes (MCDC-003 category 2) are
 instances of gcov-14 instrumentation behavior on disabled-macro
 expansion, traceable back to MCDC-001's methodology. MCDC-006's single
 miss is downstream of the same methodology — `CANON_NO_REQUIRE` is what

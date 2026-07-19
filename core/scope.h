@@ -346,9 +346,9 @@
    which is sufficient because C forbids two macro invocations on the
    same physical line from being the same DEFER declaration anyway.
    ════════════════════════════════════════════════════════════════════════════ */
-#define _CANON_SCOPE_CAT2(a, b)  a##b
-#define _CANON_SCOPE_CAT(a, b)   _CANON_SCOPE_CAT2(a, b)
-#define _CANON_SCOPE_VAR(base)   _CANON_SCOPE_CAT(base, __LINE__)
+#define CANON_SCOPE_CAT2_(a, b)  a##b
+#define CANON_SCOPE_CAT_(a, b)   CANON_SCOPE_CAT2_(a, b)
+#define CANON_SCOPE_VAR_(base)   CANON_SCOPE_CAT_(base, __LINE__)
 
 /**
  * @def DEFER(cleanup_expr)
@@ -378,8 +378,8 @@
  * ```
  */
 #define DEFER(cleanup_expr) \
-    for (int _CANON_SCOPE_VAR(_canon_defer_) = 0; \
-             !_CANON_SCOPE_VAR(_canon_defer_); \
-             _CANON_SCOPE_VAR(_canon_defer_) = 1, (cleanup_expr))
+    for (int CANON_SCOPE_VAR_(_canon_defer_) = 0; \
+             !CANON_SCOPE_VAR_(_canon_defer_); \
+             CANON_SCOPE_VAR_(_canon_defer_) = 1, (cleanup_expr))
 
 #endif /* CANON_CORE_SCOPE_H */
