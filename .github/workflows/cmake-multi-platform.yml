@@ -4318,8 +4318,10 @@ jobs:
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo ""
-          echo "  Expected real count: 1004 (pinned; cppcheck 2.13.0,"
-          echo "  suppression set MISRA-DEV-001..010, CI #1172/#1173)."
+          echo "  Expected real count: 985 (pinned; cppcheck 2.13.0,"
+          echo "  suppression set MISRA-DEV-001..011; 1004 - 19 rule-21.1"
+          echo "  sites eliminated by the reserved-identifier rename sweep,"
+          echo "  zero unmaskings, pre-verified by report diff)."
           echo ""
           echo "  NOTE — per-line masking: cppcheck reports at most ONE"
           echo "  misra violation per source line. Counts are therefore a"
@@ -4340,7 +4342,8 @@ jobs:
           echo "  (Polyspace, LDRA, PC-lint) that emits categorized output."
           echo ""
           echo "  Deviations documented in: docs/deviations.md"
-          echo "  (MISRA-DEV-001..010 project-wide; MISRA-CFG-001 tool)"
+          echo "  (MISRA-DEV-001..010 project-wide; MISRA-DEV-011 inline"
+          echo "  at util/time.h; MISRA-CFG-001 tool)"
           echo "==============================================="
           # Real violations are advisory by design. When MISRA compliance
           # is mature, uncomment to enforce a zero-real-violations gate:
