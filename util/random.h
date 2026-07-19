@@ -156,7 +156,7 @@ static inline u32 random_u32(borrowed(Random*) r) {
 static inline void random_seed(borrowed(Random*) r, u64 seed, u64 seq) {
     require_msg(r != NULL, "random_seed: r is NULL");
     r->state = 0;
-    r->inc   = (seq << 1) | 1;  /* ensure inc is always odd */
+    r->inc   = (seq << 1u) | 1u;  /* ensure inc is always odd */
     r->state += seed;
     random_u32(r);              /* warm-up step 1 */
     random_u32(r);              /* warm-up step 2 */
@@ -178,7 +178,7 @@ static inline void random_seed(borrowed(Random*) r, u64 seed, u64 seq) {
  */
 static inline u32 random_range(borrowed(Random*) r, u32 bound) {
     require_msg(r != NULL, "random_range: r is NULL");
-    if (bound == 0) return 0;
+    if (bound == 0u) return 0u;
 
     /* Rejection threshold eliminates bias from modulo wrap */
     u32 threshold = (u32)(-(u32)bound % bound);
@@ -213,7 +213,7 @@ static inline f64 random_f64(borrowed(Random*) r) {
  * @param r Valid Random pointer (must not be NULL — contract)
  */
 static inline bool random_bool(borrowed(Random*) r) {
-    return (random_u32(r) & 1) != 0;
+    return (random_u32(r) & 1u) != 0u;
 }
 
 /**

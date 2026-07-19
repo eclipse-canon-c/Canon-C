@@ -250,15 +250,15 @@ typedef struct {
  * ========================================================================= */
 
 static inline usize _hm_home(u64 hash, usize capacity) {
-    return (usize)(hash & (u64)(capacity - 1));
+    return (usize)(hash & (u64)(capacity - 1u));
 }
 
 static inline usize _hm_wrap(usize index, usize capacity) {
-    return index & (capacity - 1);
+    return index & (capacity - 1u);
 }
 
 static inline u64 _hm_normalize_hash(u64 h) {
-    return h == 0 ? 1 : h;
+    return h == 0u ? 1u : h;
 }
 
 /* ============================================================================
@@ -283,13 +283,13 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
 ) {
     if (!map)           return result__Bool_Error_err(ERR_INVALID_ARG);
     if (!buf.ptr)       return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (capacity == 0)  return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (capacity == 0u)  return result__Bool_Error_err(ERR_INVALID_ARG);
 
     if (!bits_is_power_of_two((u64)capacity))
         return result__Bool_Error_err(ERR_INVALID_ARG);
 
     usize required = HM_BUFFER_SIZE_(capacity);
-    if (required == 0 || buf.len < required)
+    if (required == 0u || buf.len < required)
         return result__Bool_Error_err(ERR_BUFFER_TOO_SMALL);
 
     map->slots    = (HASHMAP_SLOT_NAME*)buf.ptr;
@@ -332,12 +332,12 @@ HASHMAP_LINKAGE usize HM_CAPACITY_(const HASHMAP_TYPE_NAME* map) {
 
 HASHMAP_LINKAGE bool HM_IS_EMPTY_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_is_empty: map cannot be NULL");
-    return map->len == 0;
+    return map->len == 0u;
 }
 
 HASHMAP_LINKAGE f64 HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_load_factor: map cannot be NULL");
-    if (map->capacity == 0) return 0.0;
+    if (map->capacity == 0u) return 0.0;
     return (f64)map->len / (f64)map->capacity;
 }
 
@@ -356,7 +356,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
     require_msg(map->slots != NULL, "hashmap_insert: map is uninitialized");
 
     /* Enforce 75% load cap */
-    if (map->len >= map->capacity - (map->capacity / 4))
+    if (map->len >= map->capacity - (map->capacity / 4u))
         return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
 
     u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
@@ -417,7 +417,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
 
         psl++;
         incoming.psl = psl;
-        probe_idx = _hm_wrap(probe_idx + 1, map->capacity);
+        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     /* Should never reach here if load factor is respected */
@@ -450,7 +450,7 @@ HASHMAP_LINKAGE option_hm_val_t HM_GET_(
             return option_hm_val_t_some(slot->value);
 
         psl++;
-        probe_idx = _hm_wrap(probe_idx + 1, map->capacity);
+        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     return option_hm_val_t_none();
@@ -482,7 +482,7 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
             return &slot->value;
 
         psl++;
-        probe_idx = _hm_wrap(probe_idx + 1, map->capacity);
+        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     return NULL;
@@ -531,7 +531,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
         }
 
         psl++;
-        probe_idx = _hm_wrap(probe_idx + 1, map->capacity);
+        probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
     }
 
     if (found_idx == map->capacity)
@@ -541,11 +541,11 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
 
     /* Phase 2: backward shift deletion */
     usize curr = found_idx;
-    for (usize i = 0; i < map->capacity - 1; i++) {
-        usize next = _hm_wrap(curr + 1, map->capacity);
+    for (usize i = 0u; i < map->capacity - 1u; i++) {
+        usize next = _hm_wrap(curr + 1u, map->capacity);
         HASHMAP_SLOT_NAME* next_slot = &map->slots[next];
 
-        if (!next_slot->occupied || next_slot->psl == 0) {
+        if (!next_slot->occupied || next_slot->psl == 0u) {
             map->slots[curr].occupied = false;
             map->slots[curr].hash     = 0;
             map->slots[curr].psl      = 0;
@@ -553,7 +553,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
         }
 
         map->slots[curr]      = *next_slot;
-        map->slots[curr].psl -= 1;
+        map->slots[curr].psl -= 1u;
         curr = next;
     }
 

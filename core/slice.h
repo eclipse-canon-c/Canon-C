@@ -247,7 +247,7 @@ typedef struct { const char* ptr; usize len; } str_t;
     ensures  bytes_invariant(\result);
  */
 static inline bytes_t bytes_from(void* ptr, usize len) {
-    require_msg(ptr != NULL || len == 0, "bytes_from: NULL ptr with non-zero len");
+    require_msg(ptr != NULL || len == 0u, "bytes_from: NULL ptr with non-zero len");
     return (bytes_t){ .ptr = (u8*)ptr, .len = len };
 }
 
@@ -292,7 +292,7 @@ static inline bytes_t bytes_empty(void) {
     ensures  cbytes_invariant(\result);
  */
 static inline cbytes_t cbytes_from(const void* ptr, usize len) {
-    require_msg(ptr != NULL || len == 0, "cbytes_from: NULL ptr with non-zero len");
+    require_msg(ptr != NULL || len == 0u, "cbytes_from: NULL ptr with non-zero len");
     return (cbytes_t){ .ptr = (const u8*)ptr, .len = len };
 }
 
@@ -352,7 +352,7 @@ static inline cbytes_t bytes_as_const(bytes_t b) {
     ensures \result <==> b.len == 0;
  */
 static inline bool bytes_is_empty(bytes_t b) {
-    return b.len == 0;
+    return b.len == 0u;
 }
 
 /**
@@ -544,7 +544,7 @@ static inline bytes_t bytes_skip(bytes_t b, usize n) {
     ensures  str_invariant(\result);
  */
 static inline str_t str_from(const char* ptr, usize len) {
-    require_msg(ptr != NULL || len == 0, "str_from: NULL ptr with non-zero len");
+    require_msg(ptr != NULL || len == 0u, "str_from: NULL ptr with non-zero len");
     return (str_t){ .ptr = ptr, .len = len };
 }
 
@@ -607,7 +607,7 @@ static inline str_t str_empty(void) {
     ensures \result <==> s.len == 0;
  */
 static inline bool str_is_empty(str_t s) {
-    return s.len == 0;
+    return s.len == 0u;
 }
 
 /**
@@ -661,7 +661,7 @@ static inline bool str_equal(str_t a, str_t b) {
  */
 static inline bool str_starts_with(str_t s, str_t prefix) {
     if (prefix.len > s.len) return false;
-    if (!prefix.ptr || prefix.len == 0) return true;
+    if (!prefix.ptr || prefix.len == 0u) return true;
     return memcmp(s.ptr, prefix.ptr, prefix.len) == 0;
 }
 
@@ -689,7 +689,7 @@ static inline bool str_starts_with(str_t s, str_t prefix) {
  */
 static inline bool str_ends_with(str_t s, str_t suffix) {
     if (suffix.len > s.len) return false;
-    if (!suffix.ptr || suffix.len == 0) return true;
+    if (!suffix.ptr || suffix.len == 0u) return true;
     return memcmp(s.ptr + (s.len - suffix.len), suffix.ptr, suffix.len) == 0;
 }
 

@@ -123,9 +123,9 @@ static inline usize algo_lower_bound_impl(
     usize high = len;
 
     while (low < high) {
-        usize mid = low + (high - low) / 2;
+        usize mid = low + (high - low) / 2u;
         if (cmp(ptr_elem_const(array, mid, elem_size), key, ctx) < 0) {
-            low = mid + 1;
+            low = mid + 1u;
         } else {
             high = mid;
         }
@@ -176,9 +176,9 @@ ALGO_SEARCH_LINKAGE usize algo_lower_bound(
     require_msg(array     != NULL, "algo_lower_bound: array cannot be NULL");
     require_msg(key       != NULL, "algo_lower_bound: key cannot be NULL");
     require_msg(cmp       != NULL, "algo_lower_bound: cmp cannot be NULL");
-    require_msg(elem_size >  0,    "algo_lower_bound: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "algo_lower_bound: elem_size must be > 0");
 
-    if (len == 0) return 0;
+    if (len == 0u) return 0u;
     return algo_lower_bound_impl(array, len, elem_size, key, cmp, ctx);
 }
 
@@ -225,17 +225,17 @@ ALGO_SEARCH_LINKAGE usize algo_upper_bound(
     require_msg(array     != NULL, "algo_upper_bound: array cannot be NULL");
     require_msg(key       != NULL, "algo_upper_bound: key cannot be NULL");
     require_msg(cmp       != NULL, "algo_upper_bound: cmp cannot be NULL");
-    require_msg(elem_size >  0,    "algo_upper_bound: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "algo_upper_bound: elem_size must be > 0");
 
-    if (len == 0) return 0;
+    if (len == 0u) return 0u;
 
     usize low  = 0;
     usize high = len;
 
     while (low < high) {
-        usize mid = low + (high - low) / 2;
+        usize mid = low + (high - low) / 2u;
         if (cmp(ptr_elem_const(array, mid, elem_size), key, ctx) <= 0) {
-            low = mid + 1;  /* elem <= key: search right */
+            low = mid + 1u;  /* elem <= key: search right */
         } else {
             high = mid;     /* elem >  key: search left  */
         }
@@ -286,9 +286,9 @@ ALGO_SEARCH_LINKAGE usize algo_find_sorted(
     require_msg(array     != NULL, "algo_find_sorted: array cannot be NULL");
     require_msg(key       != NULL, "algo_find_sorted: key cannot be NULL");
     require_msg(cmp       != NULL, "algo_find_sorted: cmp cannot be NULL");
-    require_msg(elem_size >  0,    "algo_find_sorted: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "algo_find_sorted: elem_size must be > 0");
 
-    if (len == 0) return CANON_USIZE_MAX;
+    if (len == 0u) return CANON_USIZE_MAX;
 
     usize pos = algo_lower_bound_impl(array, len, elem_size, key, cmp, ctx);
 
@@ -384,10 +384,10 @@ ALGO_SEARCH_LINKAGE void algo_equal_range(
     require_msg(array     != NULL, "algo_equal_range: array cannot be NULL");
     require_msg(key       != NULL, "algo_equal_range: key cannot be NULL");
     require_msg(cmp       != NULL, "algo_equal_range: cmp cannot be NULL");
-    require_msg(elem_size >  0,    "algo_equal_range: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "algo_equal_range: elem_size must be > 0");
     require_msg(out_range != NULL, "algo_equal_range: out_range cannot be NULL");
 
-    if (len == 0) {
+    if (len == 0u) {
         out_range[0] = 0;
         out_range[1] = 0;
         return;

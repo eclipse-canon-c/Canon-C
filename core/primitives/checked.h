@@ -252,7 +252,7 @@ static inline bool checked_add_u8(u8 a, u8 b, u8* result) {
 #else
     u16 sum = (u16)a + (u16)b;
     *result = (u8)sum;
-    return sum <= 0xFF;
+    return sum <= 0xFFu;
 #endif
 }
 
@@ -276,7 +276,7 @@ static inline bool checked_add_u16(u16 a, u16 b, u16* result) {
 #else
     u32 sum = (u32)a + (u32)b;
     *result = (u16)sum;
-    return sum <= 0xFFFF;
+    return sum <= 0xFFFFu;
 #endif
 }
 
@@ -525,7 +525,7 @@ static inline bool checked_mul(usize a, usize b, usize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
-    if (a == 0 || b == 0) {
+    if (a == 0u || b == 0u) {
         *result = 0;
         return true;
     }
@@ -554,7 +554,7 @@ static inline bool checked_mul_u8(u8 a, u8 b, u8* result) {
 #else
     u16 prod = (u16)a * (u16)b;
     *result = (u8)prod;
-    return prod <= 0xFF;
+    return prod <= 0xFFu;
 #endif
 }
 
@@ -578,7 +578,7 @@ static inline bool checked_mul_u16(u16 a, u16 b, u16* result) {
 #else
     u32 prod = (u32)a * (u32)b;
     *result = (u16)prod;
-    return prod <= 0xFFFF;
+    return prod <= 0xFFFFu;
 #endif
 }
 
@@ -630,7 +630,7 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
-    if (a == 0 || b == 0) {
+    if (a == 0u || b == 0u) {
         *result = 0;
         return true;
     }
@@ -912,7 +912,7 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
  */
 static inline bool checked_div(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = a / b;
     return true;
 }
@@ -932,7 +932,7 @@ static inline bool checked_div(usize a, usize b, usize* result) {
  */
 static inline bool checked_div_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = (u8)(a / b);
     return true;
 }
@@ -952,7 +952,7 @@ static inline bool checked_div_u8(u8 a, u8 b, u8* result) {
  */
 static inline bool checked_div_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = (u16)(a / b);
     return true;
 }
@@ -972,7 +972,7 @@ static inline bool checked_div_u16(u16 a, u16 b, u16* result) {
  */
 static inline bool checked_div_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = a / b;
     return true;
 }
@@ -992,7 +992,7 @@ static inline bool checked_div_u32(u32 a, u32 b, u32* result) {
  */
 static inline bool checked_div_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = a / b;
     return true;
 }
@@ -1078,7 +1078,7 @@ static inline bool checked_div_isize(isize a, isize b, isize* result) {
  */
 static inline bool checked_mod(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = a % b;
     return true;
 }
@@ -1098,7 +1098,7 @@ static inline bool checked_mod(usize a, usize b, usize* result) {
  */
 static inline bool checked_mod_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = (u8)(a % b);
     return true;
 }
@@ -1118,7 +1118,7 @@ static inline bool checked_mod_u8(u8 a, u8 b, u8* result) {
  */
 static inline bool checked_mod_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = (u16)(a % b);
     return true;
 }
@@ -1138,7 +1138,7 @@ static inline bool checked_mod_u16(u16 a, u16 b, u16* result) {
  */
 static inline bool checked_mod_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = a % b;
     return true;
 }
@@ -1158,7 +1158,7 @@ static inline bool checked_mod_u32(u32 a, u32 b, u32* result) {
  */
 static inline bool checked_mod_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0u) return false;
     *result = a % b;
     return true;
 }

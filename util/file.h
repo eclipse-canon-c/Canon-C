@@ -103,13 +103,13 @@ static inline option_charp file_read_stream_(
     require_msg(arena != NULL, "file_read_stream_: arena is NULL");
 
     usize available = arena_remaining(arena);
-    if (available < 2) return option_charp_none();
+    if (available < 2u) return option_charp_none();
 
     ArenaMark mark = arena_mark(arena);
     char* base = (char*)arena_alloc(arena, available);
     if (!base) return option_charp_none();
 
-    usize usable = available - 1;
+    usize usable = available - 1u;
     usize total  = 0;
 
     while (total < usable) {
@@ -131,7 +131,7 @@ static inline option_charp file_read_stream_(
     base[total] = '\0';
 
     arena_reset_to(arena, mark);
-    char* result = (char*)arena_alloc(arena, total + 1);
+    char* result = (char*)arena_alloc(arena, total + 1u);
     if (!result) return option_charp_none();
 
     result[total] = '\0';
@@ -168,10 +168,10 @@ static inline option_charp file_read_all_arena(
         long len = ftell(f);
 
         if (len >= 0) {
-            if ((usize)len + 1 < (usize)len) goto done;
+            if ((usize)len + 1u < (usize)len) goto done;
             if (fseek(f, 0, SEEK_SET) != 0) goto done;
 
-            usize size = (usize)len + 1;
+            usize size = (usize)len + 1u;
             char* buf  = (char*)arena_alloc(arena, size);
             if (!buf) goto done;
 
@@ -281,7 +281,7 @@ static inline result_usize_Error file_write_all_atomic(
     char tmp[FILE_MAX_PATH];
     usize path_len = str_len(path);
 
-    if (path_len + 5 > FILE_MAX_PATH) return result_usize_Error_err(ERR_BUFFER_TOO_SMALL);
+    if (path_len + 5u > FILE_MAX_PATH) return result_usize_Error_err(ERR_BUFFER_TOO_SMALL);
 
     mem_copy(tmp, path, path_len);
     mem_copy(tmp + path_len, ".tmp", 5);

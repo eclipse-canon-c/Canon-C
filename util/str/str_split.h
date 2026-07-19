@@ -115,7 +115,7 @@ static inline usize str_split(
     require_msg(s         != NULL, "str_split: s is NULL");
     require_msg(parts_out != NULL, "str_split: parts_out is NULL");
 
-    if (max_parts == 0) return 0;
+    if (max_parts == 0u) return 0u;
 
     count = 0;
     p     = s;
@@ -166,7 +166,7 @@ static inline usize str_split_keep_empty(
     require_msg(s         != NULL, "str_split_keep_empty: s is NULL");
     require_msg(parts_out != NULL, "str_split_keep_empty: parts_out is NULL");
 
-    if (max_parts == 0) return 0;
+    if (max_parts == 0u) return 0u;
 
     /* Empty string produces zero fields */
     if (!*s) return 0;
@@ -223,7 +223,7 @@ static inline char* str_trim_char_inplace(char* s, char trim_ch) {
 
     /* Move content left if needed */
     if (start > s) {
-        mem_move(s, start, str_len(start) + 1);
+        mem_move(s, start, str_len(start) + 1u);
     }
 
     /* Trim trailing */
@@ -263,7 +263,7 @@ static inline char* str_trim_whitespace_inplace(char* s) {
 
     /* Move content left if needed */
     if (start > s) {
-        mem_move(s, start, str_len(start) + 1);
+        mem_move(s, start, str_len(start) + 1u);
     }
 
     /* Trim trailing whitespace */

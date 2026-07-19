@@ -269,7 +269,7 @@ static_require(CANON_USIZE_MAX == SIZE_MAX,
     ensures \result <==> (n > 0 && (n & (n - 1)) == 0);
  */
 static inline bool is_power_of_two(usize n) {
-    return n > 0 && (n & (n - 1)) == 0;
+    return n > 0u && (n & (n - 1u)) == 0u;
 }
 
 /**
@@ -301,7 +301,7 @@ static inline bool is_power_of_two(usize n) {
  */
 static inline bool is_aligned(usize n, usize align) {
     require_msg(is_power_of_two(align), "is_aligned: align must be a nonzero power of two");
-    return (n & (align - 1)) == 0;
+    return (n & (align - 1u)) == 0u;
 }
 
 /**
@@ -343,7 +343,7 @@ static inline bool is_aligned(usize n, usize align) {
  */
 static inline usize align_up(usize n, usize align) {
     require_msg(is_power_of_two(align), "align_up: align must be a nonzero power of two");
-    return (n + align - 1) & ~(align - 1);
+    return (n + align - 1u) & ~(align - 1u);
 }
 
 /**
@@ -381,7 +381,7 @@ static inline usize align_up(usize n, usize align) {
  */
 static inline usize align_down(usize n, usize align) {
     require_msg(is_power_of_two(align), "align_down: align must be a nonzero power of two");
-    return n & ~(align - 1);
+    return n & ~(align - 1u);
 }
 
 /**
@@ -963,7 +963,7 @@ static inline bool ptr_range_in_range(const void*  p,
  */
 static inline void* ptr_elem(void* base, usize index, usize elem_size) {
     require_msg(base      != NULL, "ptr_elem: base cannot be NULL");
-    require_msg(elem_size >  0,    "ptr_elem: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "ptr_elem: elem_size must be > 0");
     ensure_msg(index <= CANON_USIZE_MAX / elem_size,
                "ptr_elem: index * elem_size overflows usize");
     return ptr_offset(base, index * elem_size);
@@ -1000,7 +1000,7 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
  */
 static inline const void* ptr_elem_const(const void* base, usize index, usize elem_size) {
     require_msg(base      != NULL, "ptr_elem_const: base cannot be NULL");
-    require_msg(elem_size >  0,    "ptr_elem_const: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "ptr_elem_const: elem_size must be > 0");
     ensure_msg(index <= CANON_USIZE_MAX / elem_size,
                "ptr_elem_const: index * elem_size overflows usize");
     return ptr_offset_const(base, index * elem_size);

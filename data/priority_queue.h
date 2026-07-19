@@ -255,13 +255,13 @@ typedef struct {
 
 /** @brief Returns index of parent node — @pre i > 0 */
 static inline usize pq_parent(usize i) {
-    require_msg(i > 0, "pq_parent: i must be > 0 (root has no parent)");
-    return (i - 1) / 2;
+    require_msg(i > 0u, "pq_parent: i must be > 0 (root has no parent)");
+    return (i - 1u) / 2u;
 }
 /** @brief Returns index of left child */
-static inline usize pq_left_child(usize i)  { return 2 * i + 1; }
+static inline usize pq_left_child(usize i)  { return 2u * i + 1u; }
 /** @brief Returns index of right child */
-static inline usize pq_right_child(usize i) { return 2 * i + 2; }
+static inline usize pq_right_child(usize i) { return 2u * i + 2u; }
 
 /**
  * @brief Swaps two elements in the heap
@@ -300,7 +300,7 @@ static inline void pq_swap(borrowed(PriorityQueue*) pq, usize a, usize b) {
  */
 static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
     require_msg(pq != NULL, "pq_sift_up: pq cannot be NULL");
-    while (i > 0) {
+    while (i > 0u) {
         usize p  = pq_parent(i);
         void* pe = ptr_elem(pq->data, p, pq->elem_size);
         void* ie = ptr_elem(pq->data, i, pq->elem_size);
@@ -380,8 +380,8 @@ static inline void pq_init(
 {
     require_msg(pq        != NULL, "pq_init: pq cannot be NULL");
     require_msg(buffer    != NULL, "pq_init: buffer cannot be NULL");
-    require_msg(capacity   > 0,    "pq_init: capacity must be > 0");
-    require_msg(elem_size  > 0,    "pq_init: elem_size must be > 0");
+    require_msg(capacity   > 0u,    "pq_init: capacity must be > 0");
+    require_msg(elem_size  > 0u,    "pq_init: elem_size must be > 0");
     require_msg(cmp       != NULL, "pq_init: cmp cannot be NULL");
 
     pq->data      = buffer;
@@ -418,12 +418,12 @@ static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
     if (!pq) return;
     require_msg(pq->data    != NULL, "pq_heapify: pq not initialized (data is NULL)");
     require_msg(pq->cmp     != NULL, "pq_heapify: pq not initialized (cmp is NULL)");
-    require_msg(pq->capacity > 0,    "pq_heapify: pq not initialized (capacity is 0)");
-    if (len == 0) { pq->len = 0; pq_lifetime_restamp_(pq); return; }
+    require_msg(pq->capacity > 0u,    "pq_heapify: pq not initialized (capacity is 0)");
+    if (len == 0u) { pq->len = 0u; pq_lifetime_restamp_(pq); return; }
     if (len > pq->capacity) len = pq->capacity;
     pq->len = len;
-    if (len >= 2) {
-        usize i = pq_parent(len - 1) + 1;
+    if (len >= 2u) {
+        usize i = pq_parent(len - 1u) + 1u;
         while (i-- > 0) {
             pq_sift_down(pq, i);
         }
@@ -459,7 +459,7 @@ static inline result__Bool_Error pq_push_result(
     if (pq->len >= pq->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
     mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
-    pq_sift_up(pq, pq->len - 1);
+    pq_sift_up(pq, pq->len - 1u);
     pq_lifetime_restamp_(pq);
     return result__Bool_Error_ok(true);
 }
@@ -483,10 +483,10 @@ static inline result__Bool_Error pq_push_result(
  * Performance: O(log n)
  */
 static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
-    if (!pq || pq->len == 0) return false;
+    if (!pq || pq->len == 0u) return false;
     if (out) mem_copy(out, ptr_elem(pq->data, 0, pq->elem_size), pq->elem_size);
     pq->len--;
-    if (pq->len > 0) {
+    if (pq->len > 0u) {
         mem_copy(ptr_elem(pq->data, 0,       pq->elem_size),
                  ptr_elem(pq->data, pq->len, pq->elem_size),
                  pq->elem_size);
@@ -512,7 +512,7 @@ static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
  * Performance: O(1)
  */
 static inline const void* pq_peek_raw(borrowed(const PriorityQueue*) pq) {
-    if (!pq || pq->len == 0) return NULL;
+    if (!pq || pq->len == 0u) return NULL;
     return ptr_elem_const(pq->data, 0, pq->elem_size);
 }
 
@@ -591,22 +591,22 @@ static inline bool pq_remove_at(borrowed(PriorityQueue*) pq, usize i) {
 
 /** @brief Returns current element count. NULL pq returns 0. */
 static inline usize pq_len(borrowed(const PriorityQueue*) pq) {
-    return pq ? pq->len : 0;
+    return pq ? pq->len : 0u;
 }
 
 /** @brief Returns maximum element capacity. NULL pq returns 0. */
 static inline usize pq_capacity(borrowed(const PriorityQueue*) pq) {
-    return pq ? pq->capacity : 0;
+    return pq ? pq->capacity : 0u;
 }
 
 /** @brief Returns number of remaining free slots. NULL pq returns 0. */
 static inline usize pq_remaining(borrowed(const PriorityQueue*) pq) {
-    return pq ? (pq->capacity - pq->len) : 0;
+    return pq ? (pq->capacity - pq->len) : 0u;
 }
 
 /** @brief Returns true if the queue has no elements. NULL pq returns true. */
 static inline bool pq_is_empty(borrowed(const PriorityQueue*) pq) {
-    return !pq || pq->len == 0;
+    return !pq || pq->len == 0u;
 }
 
 /** @brief Returns true if the queue is at capacity. NULL pq returns false. */
@@ -623,7 +623,7 @@ static inline bool pq_is_full(borrowed(const PriorityQueue*) pq) {
  * Performance: O(1)
  */
 static inline bytes_t pq_as_bytes(borrowed(const PriorityQueue*) pq) {
-    if (!pq || !pq->data || pq->len == 0) return bytes_empty();
+    if (!pq || !pq->data || pq->len == 0u) return bytes_empty();
     return bytes_from(pq->data, pq->len * pq->elem_size);
 }
 

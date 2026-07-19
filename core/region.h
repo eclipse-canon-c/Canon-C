@@ -491,8 +491,8 @@ static inline void region_end(Region* r) {
       loop assigns  i, r->cleanups[0 .. REGION_MAX_CLEANUP - 1];
       loop variant  i;
     */
-    for (i = r->num_hooks; i > 0; i--) {
-        h = &r->cleanups[i - 1];
+    for (i = r->num_hooks; i > 0u; i--) {
+        h = &r->cleanups[i - 1u];
         if (h->fn) {
             /* h->fn is an opaque caller-supplied pointer with no `calls`
              * clause. WP assumes it could call region_end itself, so it
@@ -745,7 +745,7 @@ static inline bool region_has_parent(const Region* r) {
   disjoint behaviors;
 */
 static inline usize region_hook_count(const Region* r) {
-    return r ? r->num_hooks : 0;
+    return r ? r->num_hooks : 0u;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

@@ -125,16 +125,16 @@ ALGO_REVERSE_LINKAGE void algo_reverse(
 {
     require_msg(array     != NULL,
         "algo_reverse: array cannot be NULL");
-    require_msg(elem_size > 0,
+    require_msg(elem_size > 0u,
         "algo_reverse: elem_size must be > 0");
     require_msg(elem_size <= ALGO_REVERSE_SWAP_BUF_SIZE,
         "algo_reverse: elem_size exceeds ALGO_REVERSE_SWAP_BUF_SIZE");
 
-    if (len < 2) return;
+    if (len < 2u) return;
 
     u8  temp[ALGO_REVERSE_SWAP_BUF_SIZE];
     u8* left  = (u8*)array;
-    u8* right = (u8*)array + (len - 1) * elem_size;
+    u8* right = (u8*)array + (len - 1u) * elem_size;
 
     while (left < right) {
         mem_copy(temp,  left,  elem_size);
@@ -185,13 +185,13 @@ ALGO_REVERSE_LINKAGE bool algo_is_palindrome(
     borrowed(void*)         ctx)
 {
     require_msg(array     != NULL, "algo_is_palindrome: array cannot be NULL");
-    require_msg(elem_size > 0,     "algo_is_palindrome: elem_size must be > 0");
+    require_msg(elem_size > 0u,     "algo_is_palindrome: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_is_palindrome: cmp cannot be NULL");
 
-    if (len < 2) return true;
+    if (len < 2u) return true;
 
     usize left_idx  = 0;
-    usize right_idx = len - 1;
+    usize right_idx = len - 1u;
 
     while (left_idx < right_idx) {
         if (cmp(ptr_elem_const(array, left_idx,  elem_size),

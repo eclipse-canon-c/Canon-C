@@ -324,7 +324,7 @@ static inline bool stringbuf_init_arena(
 {
     require_msg(sb != NULL,      "stringbuf_init_arena: sb cannot be NULL");
     require_msg(arena != NULL,   "stringbuf_init_arena: arena cannot be NULL");
-    require_msg(initial_cap > 1, "stringbuf_init_arena: initial_cap must be > 1");
+    require_msg(initial_cap > 1u, "stringbuf_init_arena: initial_cap must be > 1");
 
     char* buf = (char*)arena_alloc(arena, initial_cap);
     if (!buf) return false;
@@ -363,7 +363,7 @@ static inline void stringbuf_init_buffer(
 {
     require_msg(sb != NULL,     "stringbuf_init_buffer: sb cannot be NULL");
     require_msg(buffer != NULL, "stringbuf_init_buffer: buffer cannot be NULL");
-    require_msg(cap > 1,        "stringbuf_init_buffer: cap must be > 1");
+    require_msg(cap > 1u,        "stringbuf_init_buffer: cap must be > 1");
 
     buffer[0] = '\0';
     sb->arena    = NULL;
@@ -490,7 +490,7 @@ static inline bool stringbuf_append_str(
         str_t                s)
 {
     if (!sb || !sb->data)     return false;
-    if (!s.ptr || s.len == 0) return true;
+    if (!s.ptr || s.len == 0u) return true;
     return _stringbuf_append_bytes(sb, s.ptr, s.len);
 }
 
@@ -668,13 +668,13 @@ static inline bool stringbuf_append_n(
     usize actual_len;
 
     if (!sb || !sb->data) return false;
-    if (!s || n == 0)     return true;
+    if (!s || n == 0u)     return true;
 
     /* Determine how many bytes to actually copy: stop at null or n */
     actual_len = 0;
     while (actual_len < n && s[actual_len] != '\0') actual_len++;
 
-    if (actual_len == 0) return true;
+    if (actual_len == 0u) return true;
     return _stringbuf_append_bytes(sb, s, actual_len);
 }
 
@@ -847,12 +847,12 @@ static inline borrowed_bytes stringbuf_buffer_as_borrowed_bytes(borrowed(const S
 
 /** @brief Returns current string length (excluding '\0'). NULL-safe. O(1) */
 static inline usize stringbuf_len(borrowed(const StringBuf*) sb) {
-    return sb ? sb->len : 0;
+    return sb ? sb->len : 0u;
 }
 
 /** @brief Returns total buffer capacity (including '\0' byte). NULL-safe. O(1) */
 static inline usize stringbuf_capacity(borrowed(const StringBuf*) sb) {
-    return sb ? sb->capacity : 0;
+    return sb ? sb->capacity : 0u;
 }
 
 /**
@@ -864,7 +864,7 @@ static inline usize stringbuf_capacity(borrowed(const StringBuf*) sb) {
  */
 static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
     usize usable;
-    if (!sb || sb->capacity == 0) return 0;
+    if (!sb || sb->capacity == 0u) return 0u;
     /* capacity - (len + 1): the -1 reserves the null terminator slot.
      * checked_sub returns false (→ 0) when len + 1 >= capacity, i.e. full. */
     if (!checked_sub(sb->capacity, sb->len + 1u, &usable)) return 0;
@@ -873,7 +873,7 @@ static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
 
 /** @brief Returns true if string is empty (len == 0). NULL-safe. O(1) */
 static inline bool stringbuf_is_empty(borrowed(const StringBuf*) sb) {
-    return !sb || sb->len == 0;
+    return !sb || sb->len == 0u;
 }
 
 /**

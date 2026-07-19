@@ -987,7 +987,7 @@ static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
     if (a.bytes.len != b.bytes.len) {
         return false;
     }
-    if (a.bytes.len == 0) {
+    if (a.bytes.len == 0u) {
         return true; /* vacuously equal — no bytes to compare */
     }
     if (a.bytes.ptr == b.bytes.ptr) {

@@ -291,8 +291,8 @@ static inline bool pool_init(
 
     require_msg(pool        != NULL, "pool_init: pool cannot be NULL");
     require_msg(arena       != NULL, "pool_init: arena cannot be NULL");
-    require_msg(object_size  > 0,    "pool_init: object_size must be > 0");
-    require_msg(max_objects  > 0,    "pool_init: max_objects must be > 0");
+    require_msg(object_size  > 0u,    "pool_init: object_size must be > 0");
+    require_msg(max_objects  > 0u,    "pool_init: max_objects must be > 0");
 
     aligned_size = mem_align(object_size);
     if (aligned_size == CANON_USIZE_MAX) {
@@ -497,20 +497,20 @@ static inline const void* pool_get_const(const Pool* pool, usize i) {
     behavior null: assumes pool == \null; ensures \result == 0;
     behavior nn:   assumes \valid(pool);   ensures \result == pool->used;
     complete behaviors; disjoint behaviors; */
-static inline usize pool_used(const Pool* pool)            { return pool ? pool->used     : 0; }
+static inline usize pool_used(const Pool* pool)            { return pool ? pool->used     : 0u; }
 
 /*@ requires pool == \null || \valid(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
     behavior nn:   assumes \valid(pool);   ensures \result == pool->capacity;
     complete behaviors; disjoint behaviors; */
-static inline usize pool_capacity(const Pool* pool)        { return pool ? pool->capacity : 0; }
+static inline usize pool_capacity(const Pool* pool)        { return pool ? pool->capacity : 0u; }
 
 /*@ requires pool == \null || pool_invariant(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
     behavior nn:   assumes \valid(pool) && pool->used <= pool->capacity;
                    ensures \result == pool->capacity - pool->used;
     complete behaviors; disjoint behaviors; */
-static inline usize pool_remaining(const Pool* pool)       { return pool ? pool->capacity - pool->used : 0; }
+static inline usize pool_remaining(const Pool* pool)       { return pool ? pool->capacity - pool->used : 0u; }
 
 /*@ requires pool == \null || \valid(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == \true;
@@ -522,19 +522,19 @@ static inline bool  pool_is_full(const Pool* pool)         { return !pool || poo
     behavior null: assumes pool == \null; ensures \result == \true;
     behavior nn:   assumes \valid(pool);   ensures \result == (pool->used == 0);
     complete behaviors; disjoint behaviors; */
-static inline bool  pool_is_empty(const Pool* pool)        { return !pool || pool->used == 0; }
+static inline bool  pool_is_empty(const Pool* pool)        { return !pool || pool->used == 0u; }
 
 /*@ requires pool == \null || \valid(pool); assigns \nothing;
     behavior null: assumes pool == \null; ensures \result == 0;
     behavior nn:   assumes \valid(pool);   ensures \result == pool->object_size;
     complete behaviors; disjoint behaviors; */
-static inline usize pool_object_size(const Pool* pool)     { return pool ? pool->object_size : 0; }
+static inline usize pool_object_size(const Pool* pool)     { return pool ? pool->object_size : 0u; }
 
 /*@ requires pool == \null || pool_invariant(pool); assigns \nothing; */
-static inline usize pool_memory_used(const Pool* pool)     { return pool ? pool->object_size * pool->used     : 0; }
+static inline usize pool_memory_used(const Pool* pool)     { return pool ? pool->object_size * pool->used     : 0u; }
 
 /*@ requires pool == \null || pool_invariant(pool); assigns \nothing; */
-static inline usize pool_memory_reserved(const Pool* pool) { return pool ? pool->object_size * pool->capacity : 0; }
+static inline usize pool_memory_reserved(const Pool* pool) { return pool ? pool->object_size * pool->capacity : 0u; }
 
 /* ════════════════════════════════════════════════════════════════════════════
    Byte views — slice.h integration
@@ -553,7 +553,7 @@ static inline usize pool_memory_reserved(const Pool* pool) { return pool ? pool-
 */
 static inline bytes_t pool_as_bytes(const Pool* pool) {
     void* base;
-    if (!pool || !pool->arena || pool->used == 0) return bytes_empty();
+    if (!pool || !pool->arena || pool->used == 0u) return bytes_empty();
     base = ptr_offset(pool->arena->buffer, pool->base_mark);
     return bytes_from(base, pool->object_size * pool->used);
 }
@@ -656,7 +656,7 @@ static inline void pool_reset(Pool* pool) {
 static inline void pool_reset_secure(Pool* pool) {
     void* base;
 
-    if (!pool || !pool->arena || pool->used == 0) {
+    if (!pool || !pool->arena || pool->used == 0u) {
         pool_reset(pool);
         return;
     }

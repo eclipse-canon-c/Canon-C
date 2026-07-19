@@ -150,9 +150,9 @@ static inline void algo_insertion_sort_range(
     algo_cmp_fn cmp,
     void*       ctx)
 {
-    for (usize i = left + 1; i < right; i++) {
+    for (usize i = left + 1u; i < right; i++) {
         for (usize j = i; j > left; j--) {
-            void* a = ptr_elem(base, j - 1, elem_size);
+            void* a = ptr_elem(base, j - 1u, elem_size);
             void* b = ptr_elem(base, j,     elem_size);
             if (cmp(a, b, ctx) <= 0) break;
             algo_sort_swap(a, b, elem_size);
@@ -241,12 +241,12 @@ static inline void algo_merge_sort_range(
     void*       ctx,
     void*       temp)
 {
-    if (right - left <= 1) return;
-    if (right - left < 16) {
+    if (right - left <= 1u) return;
+    if (right - left < 16u) {
         algo_insertion_sort_range(base, left, right, elem_size, cmp, ctx);
         return;
     }
-    usize mid = left + (right - left) / 2;
+    usize mid = left + (right - left) / 2u;
     algo_merge_sort_range(base, left, mid,   elem_size, cmp, ctx, temp);
     algo_merge_sort_range(base, mid,  right, elem_size, cmp, ctx, temp);
     algo_merge(base, left, mid, right, elem_size, cmp, ctx, temp);
@@ -299,12 +299,12 @@ ALGO_SORT_LINKAGE void algo_sort(
     borrowed(void*)         temp_buffer)
 {
     require_msg(base      != NULL, "algo_sort: base cannot be NULL");
-    require_msg(elem_size > 0,     "algo_sort: elem_size must be > 0");
+    require_msg(elem_size > 0u,     "algo_sort: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_sort: cmp cannot be NULL");
 
-    if (len < 2) return;
+    if (len < 2u) return;
 
-    if (len < 16 || !temp_buffer) {
+    if (len < 16u || !temp_buffer) {
         algo_insertion_sort_range(base, 0, len, elem_size, cmp, ctx);
     } else {
         algo_merge_sort_range(base, 0, len, elem_size, cmp, ctx, temp_buffer);
@@ -347,13 +347,13 @@ ALGO_SORT_LINKAGE bool algo_is_sorted(
     borrowed(void*)         ctx)
 {
     require_msg(base      != NULL, "algo_is_sorted: base cannot be NULL");
-    require_msg(elem_size > 0,     "algo_is_sorted: elem_size must be > 0");
+    require_msg(elem_size > 0u,     "algo_is_sorted: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_is_sorted: cmp cannot be NULL");
 
-    if (len < 2) return true;
+    if (len < 2u) return true;
 
     for (usize i = 1; i < len; i++) {
-        if (cmp(ptr_elem_const(base, i - 1, elem_size),
+        if (cmp(ptr_elem_const(base, i - 1u, elem_size),
                 ptr_elem_const(base, i,     elem_size),
                 ctx) > 0) {
             return false;

@@ -170,7 +170,7 @@
  * Example: BITSET_WORD_COUNT(64) == 1, BITSET_WORD_COUNT(65) == 2
  */
 #define BITSET_WORD_COUNT(n) \
-    (((usize)(n) + BITSET_BITS_PER_WORD - 1) / BITSET_BITS_PER_WORD)
+    (((usize)(n) + BITSET_BITS_PER_WORD - 1u) / BITSET_BITS_PER_WORD)
 
 /** @brief Sentinel returned by bitset_find_first / bitset_find_next / bitset_find_last when no bit is set */
 #define BITSET_NPOS CANON_USIZE_MAX
@@ -295,8 +295,8 @@ static inline u64 bitset_mask_of(usize i) { return (u64)1 << (i % BITSET_BITS_PE
 static inline void bitset_clear_padding(borrowed(Bitset*) bs) {
     require_msg(bs != NULL, "bitset_clear_padding: bs cannot be NULL");
     usize rem = bs->capacity % BITSET_BITS_PER_WORD;
-    if (rem != 0) {
-        bs->words[bs->word_count - 1] &= ((u64)1 << rem) - 1;
+    if (rem != 0u) {
+        bs->words[bs->word_count - 1u] &= ((u64)1u << rem) - 1u;
     }
 }
 
@@ -327,7 +327,7 @@ static inline void bitset_clear_padding(borrowed(Bitset*) bs) {
 static inline void bitset_init(borrowed(Bitset*) bs, borrowed(u64*) words, usize capacity) {
     require_msg(bs       != NULL, "bitset_init: bs cannot be NULL");
     require_msg(words    != NULL, "bitset_init: words cannot be NULL");
-    require_msg(capacity  > 0,    "bitset_init: capacity must be > 0");
+    require_msg(capacity  > 0u,    "bitset_init: capacity must be > 0");
 
     bs->words      = words;
     bs->capacity   = capacity;
@@ -432,7 +432,7 @@ static inline void bitset_toggle(borrowed(Bitset*) bs, usize i) {
 static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
     if (!bs) return false;
     require_msg(i < bs->capacity, "bitset_test: index out of range");
-    return (bs->words[bitset_word_of(i)] & bitset_mask_of(i)) != 0;
+    return (bs->words[bitset_word_of(i)] & bitset_mask_of(i)) != 0u;
 }
 
 /**
@@ -589,7 +589,7 @@ static inline usize bitset_count(borrowed(const Bitset*) bs) {
 static inline bool bitset_is_empty(borrowed(const Bitset*) bs) {
     if (!bs || !bs->words) return true;
     for (usize w = 0; w < bs->word_count; w++) {
-        if (bs->words[w] != 0) return false;
+        if (bs->words[w] != 0u) return false;
     }
     return true;
 }
@@ -628,7 +628,7 @@ static inline bool bitset_is_disjoint(borrowed(const Bitset*) bs,
  * Performance: O(1)
  */
 static inline usize bitset_capacity(borrowed(const Bitset*) bs) {
-    return bs ? bs->capacity : 0;
+    return bs ? bs->capacity : 0u;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -649,7 +649,7 @@ static inline usize bitset_capacity(borrowed(const Bitset*) bs) {
 static inline usize bitset_find_first(borrowed(const Bitset*) bs) {
     if (!bs || !bs->words) return BITSET_NPOS;
     for (usize w = 0; w < bs->word_count; w++) {
-        if (bs->words[w] != 0) {
+        if (bs->words[w] != 0u) {
             usize bit = w * BITSET_BITS_PER_WORD + (usize)bits_ctz(bs->words[w]);
             return bit < bs->capacity ? bit : BITSET_NPOS;
         }
@@ -677,7 +677,7 @@ static inline usize bitset_find_first(borrowed(const Bitset*) bs) {
 static inline usize bitset_find_next(borrowed(const Bitset*) bs, usize prev) {
     if (!bs || !bs->words || prev >= bs->capacity) return BITSET_NPOS;
 
-    usize start = prev + 1;
+    usize start = prev + 1u;
     if (start >= bs->capacity) return BITSET_NPOS;
 
     usize w   = bitset_word_of(start);
@@ -685,13 +685,13 @@ static inline usize bitset_find_next(borrowed(const Bitset*) bs, usize prev) {
 
     /* mask off bits before 'start' in the first word */
     u64 word = bs->words[w] >> bit;
-    if (word != 0) {
+    if (word != 0u) {
         usize found = w * BITSET_BITS_PER_WORD + bit + (usize)bits_ctz(word);
         return found < bs->capacity ? found : BITSET_NPOS;
     }
 
     for (w++; w < bs->word_count; w++) {
-        if (bs->words[w] != 0) {
+        if (bs->words[w] != 0u) {
             usize found = w * BITSET_BITS_PER_WORD + (usize)bits_ctz(bs->words[w]);
             return found < bs->capacity ? found : BITSET_NPOS;
         }
@@ -713,9 +713,9 @@ static inline usize bitset_find_last(borrowed(const Bitset*) bs) {
     if (!bs || !bs->words) return BITSET_NPOS;
     usize w = bs->word_count;
     while (w-- > 0) {
-        if (bs->words[w] != 0) {
+        if (bs->words[w] != 0u) {
             usize bit = w * BITSET_BITS_PER_WORD +
-                        (BITSET_BITS_PER_WORD - 1 - (usize)bits_clz(bs->words[w]));
+                        (BITSET_BITS_PER_WORD - 1u - (usize)bits_clz(bs->words[w]));
             return bit < bs->capacity ? bit : BITSET_NPOS;
         }
     }

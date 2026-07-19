@@ -131,10 +131,10 @@ static inline int str_ncompare(
     borrowed(const char*) b,
     usize                 n)
 {
-    if (n == 0) return 0;
+    if (n == 0u) return 0u;
     require_msg(a != NULL, "str_ncompare: a is NULL");
     require_msg(b != NULL, "str_ncompare: b is NULL");
-    while (n > 1 && *a && *a == *b) { a++; b++; n--; }
+    while (n > 1u && *a && *a == *b) { a++; b++; n--; }
     return (int)(unsigned char)*a - (int)(unsigned char)*b;
 }
 
@@ -157,9 +157,9 @@ static inline int str_ncompare(
 static inline option_charp str_alloc_copy(borrowed(const char*) s) {
     if (!s) return option_charp_none();
     const usize len = str_len(s);
-    char* copy = (char*)mem_alloc(len + 1);
+    char* copy = (char*)mem_alloc(len + 1u);
     if (!copy) return option_charp_none();
-    mem_copy(copy, s, len + 1);
+    mem_copy(copy, s, len + 1u);
     return option_charp_some(copy);
 }
 
@@ -181,10 +181,10 @@ static inline option_charp str_alloc_concat(
     require_msg(b != NULL, "str_alloc_concat: b is NULL");
     const usize len_a = str_len(a);
     const usize len_b = str_len(b);
-    char* result = (char*)mem_alloc(len_a + len_b + 1);
+    char* result = (char*)mem_alloc(len_a + len_b + 1u);
     if (!result) return option_charp_none();
     mem_copy(result, a, len_a);
-    mem_copy(result + len_a, b, len_b + 1);
+    mem_copy(result + len_a, b, len_b + 1u);
     return option_charp_some(result);
 }
 
@@ -208,7 +208,7 @@ static inline option_charp str_alloc_sub(
     const usize s_len = str_len(s);
     if (start >= s_len) return option_charp_none();
     if (start + len > s_len) len = s_len - start;
-    char* result = (char*)mem_alloc(len + 1);
+    char* result = (char*)mem_alloc(len + 1u);
     if (!result) return option_charp_none();
     mem_copy(result, s + start, len);
     result[len] = '\0';
@@ -245,10 +245,10 @@ static inline bool str_copy_into(
 {
     require_msg(dest != NULL, "str_copy_into: dest is NULL");
     require_msg(src  != NULL, "str_copy_into: src is NULL");
-    if (dest_size == 0) return false;
+    if (dest_size == 0u) return false;
     const usize src_len = str_len(src);
-    if (src_len + 1 > dest_size) return false;
-    mem_copy(dest, src, src_len + 1);
+    if (src_len + 1u > dest_size) return false;
+    mem_copy(dest, src, src_len + 1u);
     return true;
 }
 
@@ -272,12 +272,12 @@ static inline bool str_concat_into(
     require_msg(dest != NULL, "str_concat_into: dest is NULL");
     require_msg(a    != NULL, "str_concat_into: a is NULL");
     require_msg(b    != NULL, "str_concat_into: b is NULL");
-    if (dest_size == 0) return false;
+    if (dest_size == 0u) return false;
     const usize len_a = str_len(a);
     const usize len_b = str_len(b);
-    if (len_a + len_b + 1 > dest_size) return false;
+    if (len_a + len_b + 1u > dest_size) return false;
     mem_copy(dest, a, len_a);
-    mem_copy(dest + len_a, b, len_b + 1);
+    mem_copy(dest + len_a, b, len_b + 1u);
     return true;
 }
 
@@ -318,7 +318,7 @@ static inline bool cstr_starts_with(
     require_msg(s      != NULL, "cstr_starts_with: s is NULL");
     require_msg(prefix != NULL, "cstr_starts_with: prefix is NULL");
     const usize prefix_len = str_len(prefix);
-    if (prefix_len == 0) return true;
+    if (prefix_len == 0u) return true;
     return str_ncompare(s, prefix, prefix_len) == 0;
 }
 

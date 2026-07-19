@@ -487,7 +487,7 @@ static inline void range_reset(range* r, isize new_start) {
  * - Space: O(1)
  */
 static inline void range_skip(range* r, usize n) {
-    if (!r || n == 0 || range_is_empty(r)) return;
+    if (!r || n == 0u || range_is_empty(r)) return;
 
     isize jump;
     if (!checked_mul_isize((isize)n, r->step, &jump)) {

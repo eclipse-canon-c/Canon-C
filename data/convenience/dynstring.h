@@ -320,7 +320,7 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
     if (!s) return false;
     if (s->cap >= min_cap) return true;
 
-    usize new_cap = (s->cap == 0)
+    usize new_cap = (s->cap == 0u)
         ? DYNSTRING_INITIAL_CAPACITY
         : s->cap * DYNSTRING_GROWTH_FACTOR;
 
@@ -390,7 +390,7 @@ static inline DynString dynstring_init(void) {
  */
 static inline DynString dynstring_with_capacity(usize capacity) {
     DynString s = dynstring_init();
-    if (capacity == 0) return s;
+    if (capacity == 0u) return s;
 
     s.data = (char*)malloc(capacity);
     if (s.data) {
@@ -422,11 +422,11 @@ static inline DynString dynstring_from(const char* str) {
     if (!str) return s;
 
     usize len = strlen(str);
-    usize cap = len + 1;
+    usize cap = len + 1u;
 
     s.data = (char*)malloc(cap);
     if (s.data) {
-        mem_copy(s.data, str, len + 1);  /* includes null terminator */
+        mem_copy(s.data, str, len + 1u);  /* includes null terminator */
         s.len = len;
         s.cap = cap;
     }
@@ -448,7 +448,7 @@ static inline DynString dynstring_from(const char* str) {
  * - Space: O(1)
  */
 static inline usize dynstring_len(const DynString* s) {
-    return s ? s->len : 0;
+    return s ? s->len : 0u;
 }
 
 /**
@@ -462,7 +462,7 @@ static inline usize dynstring_len(const DynString* s) {
  * - Space: O(1)
  */
 static inline usize dynstring_capacity(const DynString* s) {
-    return s ? s->cap : 0;
+    return s ? s->cap : 0u;
 }
 
 /**
@@ -476,7 +476,7 @@ static inline usize dynstring_capacity(const DynString* s) {
  * - Space: O(1)
  */
 static inline bool dynstring_is_empty(const DynString* s) {
-    return !s || s->len == 0;
+    return !s || s->len == 0u;
 }
 
 /**
@@ -527,9 +527,9 @@ static inline bool dynstring_append(DynString* s, const char* str) {
     if (!str) return true;  /* NULL is a no-op */
 
     usize add_len = strlen(str);
-    if (add_len == 0) return true;
+    if (add_len == 0u) return true;
 
-    usize required_cap = s->len + add_len + 1;
+    usize required_cap = s->len + add_len + 1u;
     if (DYNSTRING_UNLIKELY(!dynstring_ensure_capacity(s, required_cap))) {
         return false;
     }
@@ -561,7 +561,7 @@ static inline bool dynstring_append(DynString* s, const char* str) {
 static inline bool dynstring_append_char(DynString* s, char c) {
     if (!s) return false;
 
-    usize required_cap = s->len + 2;  /* char + '\0' */
+    usize required_cap = s->len + 2u;  /* char + '\0' */
     if (DYNSTRING_UNLIKELY(!dynstring_ensure_capacity(s, required_cap))) {
         return false;
     }
@@ -603,7 +603,7 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
 
     if (needed < 0) return false;
 
-    usize required_cap = s->len + (usize)needed + 1;
+    usize required_cap = s->len + (usize)needed + 1u;
     if (!dynstring_ensure_capacity(s, required_cap)) return false;
 
     va_start(args, fmt);
@@ -637,14 +637,14 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
  */
 static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
     if (!s) return false;
-    if (!str || n == 0) return true;
+    if (!str || n == 0u) return true;
 
     usize actual_len = 0;
     while (actual_len < n && str[actual_len] != '\0') actual_len++;
 
-    if (actual_len == 0) return true;
+    if (actual_len == 0u) return true;
 
-    usize required_cap = s->len + actual_len + 1;
+    usize required_cap = s->len + actual_len + 1u;
     if (!dynstring_ensure_capacity(s, required_cap)) return false;
 
     mem_copy(s->data + s->len, str, actual_len);
@@ -764,7 +764,7 @@ static inline bool dynstring_reserve(DynString* s, usize min_cap) {
 static inline bool dynstring_shrink_to_fit(DynString* s) {
     if (!s || !s->data) return true;
 
-    if (s->len == 0) {
+    if (s->len == 0u) {
         free(s->data);
         s->data = NULL;
         s->cap = 0;
@@ -772,9 +772,9 @@ static inline bool dynstring_shrink_to_fit(DynString* s) {
         return true;
     }
 
-    if (s->cap == s->len + 1) return true;  /* already minimal */
+    if (s->cap == s->len + 1u) return true;  /* already minimal */
 
-    usize new_cap = s->len + 1;
+    usize new_cap = s->len + 1u;
     char* old_data = s->data;
     char* new_data = (char*)realloc(s->data, new_cap);
     if (!new_data) return false;
@@ -845,11 +845,11 @@ static inline void dynstring_free(DynString* s) {
  */
 static inline char* dynstring_to_cstr(const DynString* s) {
     const char* src = (s && s->data) ? s->data : "";
-    usize len       = (s && s->data) ? s->len  : 0;
+    usize len       = (s && s->data) ? s->len  : 0u;
 
-    char* copy = (char*)malloc(len + 1);
+    char* copy = (char*)malloc(len + 1u);
     if (!copy) return NULL;  /* OOM — caller must check */
-    mem_copy(copy, src, len + 1);
+    mem_copy(copy, src, len + 1u);
     return copy;
 }
 

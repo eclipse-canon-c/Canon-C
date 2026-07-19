@@ -106,9 +106,9 @@ static inline bool str_join(
     usize sep_len;
 
     require_msg(dest      != NULL, "str_join: dest is NULL");
-    require_msg(dest_size  > 0,    "str_join: dest_size is 0");
+    require_msg(dest_size  > 0u,    "str_join: dest_size is 0");
 
-    if (count == 0) {
+    if (count == 0u) {
         dest[0] = '\0';
         return true;
     }
@@ -129,8 +129,8 @@ static inline bool str_join(
         }
 
         part_len = str_len(parts[i]);
-        needed = part_len + 1;
-        if (i + 1 < count && sep_len > 0) needed += sep_len;
+        needed = part_len + 1u;
+        if (i + 1u < count && sep_len > 0u) needed += sep_len;
 
         if (pos + needed > dest_size) {
             dest[0] = '\0';
@@ -140,7 +140,7 @@ static inline bool str_join(
         mem_copy(dest + pos, parts[i], part_len);
         pos += part_len;
 
-        if (i + 1 < count && sep_len > 0) {
+        if (i + 1u < count && sep_len > 0u) {
             mem_copy(dest + pos, sep, sep_len);
             pos += sep_len;
         }
@@ -175,7 +175,7 @@ static inline option_charp str_alloc_join(
     usize sep_len;
     char* buffer;
 
-    if (count == 0) return str_alloc_copy("");
+    if (count == 0u) return str_alloc_copy("");
 
     require_msg(parts != NULL, "str_alloc_join: parts is NULL");
 
@@ -186,7 +186,7 @@ static inline option_charp str_alloc_join(
     for (i = 0; i < count; ++i) {
         if (!parts[i]) return option_charp_none();
         total_len += str_len(parts[i]);
-        if (i + 1 < count && sep_len > 0) total_len += sep_len;
+        if (i + 1u < count && sep_len > 0u) total_len += sep_len;
     }
 
     buffer = (char*)mem_alloc(total_len);
@@ -238,7 +238,7 @@ static inline usize str_split_to_parts(
     require_msg(out_parts   != NULL, "str_split_to_parts: out_parts is NULL");
     require_msg(scratch_buf != NULL, "str_split_to_parts: scratch_buf is NULL");
 
-    if (max_parts == 0 || scratch_size == 0) return 0;
+    if (max_parts == 0u || scratch_size == 0u) return 0u;
 
     count       = 0;
     scratch_pos = 0;
@@ -255,13 +255,13 @@ static inline usize str_split_to_parts(
         while (*p && *p != delim) ++p;
         part_len = (usize)(p - start);
 
-        if (scratch_pos + part_len + 1 > scratch_size) return 0;
+        if (scratch_pos + part_len + 1u > scratch_size) return 0u;
         if (count >= max_parts) return 0;
 
         mem_copy(scratch_buf + scratch_pos, start, part_len);
         scratch_buf[scratch_pos + part_len] = '\0';
         out_parts[count] = scratch_buf + scratch_pos;
-        scratch_pos += part_len + 1;
+        scratch_pos += part_len + 1u;
         count++;
     }
 
@@ -299,13 +299,13 @@ static inline bool str_rejoin(
     require_msg(parts_buf   != NULL, "str_rejoin: parts_buf is NULL");
     require_msg(scratch_buf != NULL, "str_rejoin: scratch_buf is NULL");
     require_msg(dest        != NULL, "str_rejoin: dest is NULL");
-    require_msg(dest_size    > 0,    "str_rejoin: dest_size is 0");
+    require_msg(dest_size    > 0u,    "str_rejoin: dest_size is 0");
 
     count = str_split_to_parts(
         s, delim, parts_buf, max_parts, scratch_buf, scratch_size
     );
 
-    if (count == 0) {
+    if (count == 0u) {
         dest[0] = '\0';
         return false;
     }

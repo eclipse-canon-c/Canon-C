@@ -112,7 +112,7 @@ static inline usize str_view_len(str_view_t v) {
 
 /** @brief Returns true if the view has zero length */
 static inline bool str_view_is_empty(str_view_t v) {
-    return v.len == 0;
+    return v.len == 0u;
 }
 
 /** @brief Returns true if the view pointer is NULL */
@@ -122,7 +122,7 @@ static inline bool str_view_is_null(str_view_t v) {
 
 /** @brief Returns true if the view has a valid pointer and non-zero length */
 static inline bool str_view_has_data(str_view_t v) {
-    return v.ptr != NULL && v.len > 0;
+    return v.ptr != NULL && v.len > 0u;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -132,14 +132,14 @@ static inline bool str_view_has_data(str_view_t v) {
 /** @brief Returns true if two views have identical content */
 static inline bool str_view_equals(str_view_t a, str_view_t b) {
     if (a.len != b.len) return false;
-    if (a.len == 0) return true;
+    if (a.len == 0u) return true;
     return mem_compare(a.ptr, b.ptr, a.len) == 0;
 }
 
 /** @brief Lexicographic comparison of two views */
 static inline int str_view_compare(str_view_t a, str_view_t b) {
     usize min_len = a.len < b.len ? a.len : b.len;
-    if (min_len > 0) {
+    if (min_len > 0u) {
         int cmp = mem_compare(a.ptr, b.ptr, min_len);
         if (cmp != 0) return cmp;
     }
@@ -153,14 +153,14 @@ static inline int str_view_compare(str_view_t a, str_view_t b) {
 /** @brief Returns true if the view starts with the given prefix */
 static inline bool str_view_starts_with(str_view_t v, str_view_t prefix) {
     if (prefix.len > v.len) return false;
-    if (prefix.len == 0) return true;
+    if (prefix.len == 0u) return true;
     return mem_compare(v.ptr, prefix.ptr, prefix.len) == 0;
 }
 
 /** @brief Returns true if the view ends with the given suffix */
 static inline bool str_view_ends_with(str_view_t v, str_view_t suffix) {
     if (suffix.len > v.len) return false;
-    if (suffix.len == 0) return true;
+    if (suffix.len == 0u) return true;
     return mem_compare(v.ptr + v.len - suffix.len, suffix.ptr, suffix.len) == 0;
 }
 
@@ -239,7 +239,7 @@ static inline bool str_view_ends_with_cstr(str_view_t v, borrowed(const char*) s
 static inline bool str_view_to_cstr(str_view_t v, char* buf, usize buf_size) {
     require_msg(buf != NULL, "str_view_to_cstr: buf is NULL");
     if (buf_size <= v.len) return false;
-    if (v.len > 0) mem_copy(buf, v.ptr, v.len);
+    if (v.len > 0u) mem_copy(buf, v.ptr, v.len);
     buf[v.len] = '\0';
     return true;
 }

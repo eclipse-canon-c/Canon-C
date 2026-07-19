@@ -149,8 +149,8 @@ ALGO_MAP_LINKAGE void algo_map(
     require_msg(out           != NULL, "algo_map: out cannot be NULL");
     require_msg(in            != NULL, "algo_map: in cannot be NULL");
     require_msg(fn            != NULL, "algo_map: fn cannot be NULL");
-    require_msg(out_elem_size >  0,    "algo_map: out_elem_size must be > 0");
-    require_msg(in_elem_size  >  0,    "algo_map: in_elem_size must be > 0");
+    require_msg(out_elem_size >  0u,    "algo_map: out_elem_size must be > 0");
+    require_msg(in_elem_size  >  0u,    "algo_map: in_elem_size must be > 0");
 
     for (usize i = 0; i < len; i++) {
         fn(ptr_elem(out, i, out_elem_size),
@@ -199,7 +199,7 @@ ALGO_MAP_LINKAGE void algo_map_inplace(
 {
     require_msg(base      != NULL, "algo_map_inplace: base cannot be NULL");
     require_msg(fn        != NULL, "algo_map_inplace: fn cannot be NULL");
-    require_msg(elem_size >  0,    "algo_map_inplace: elem_size must be > 0");
+    require_msg(elem_size >  0u,    "algo_map_inplace: elem_size must be > 0");
 
     for (usize i = 0; i < len; i++) {
         fn(ptr_elem(base, i, elem_size));

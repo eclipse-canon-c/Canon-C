@@ -98,7 +98,7 @@ static inline u64 intern_hash_(borrowed(const char*) s, usize len) {
         h ^= (u64)(unsigned char)s[i];
         h *= 1099511628211ULL;
     }
-    return h ? h : 1;
+    return h ? h : 1u;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ static inline str_view_t intern_string(
 
             if (pool->count >= pool->capacity) return str_view_null();
 
-            copy = (char*)arena_alloc(pool->arena, len + 1);
+            copy = (char*)arena_alloc(pool->arena, len + 1u);
             if (!copy) return str_view_null();
 
             mem_copy(copy, s, len);
@@ -165,7 +165,7 @@ static inline str_view_t intern_string(
             return *entry;
         }
 
-        index = (index + 1) % pool->capacity;
+        index = (index + 1u) % pool->capacity;
         probes++;
     }
 
@@ -200,7 +200,7 @@ static inline bool intern_pool_init(
 
     require_msg(pool     != NULL, "intern_pool_init: pool is NULL");
     require_msg(arena    != NULL, "intern_pool_init: arena is NULL");
-    require_msg(capacity  > 0,    "intern_pool_init: capacity is 0");
+    require_msg(capacity  > 0u,    "intern_pool_init: capacity is 0");
 
     entries = (str_view_t*)arena_alloc(arena, capacity * sizeof(str_view_t));
     if (!entries) return false;
@@ -252,7 +252,7 @@ static inline usize intern_count(borrowed(const InternPool*) pool) {
  */
 static inline f64 intern_load_factor(borrowed(const InternPool*) pool) {
     require_msg(pool != NULL, "intern_load_factor: pool is NULL");
-    if (pool->capacity == 0) return 0.0;
+    if (pool->capacity == 0u) return 0.0;
     return (f64)pool->count / (f64)pool->capacity;
 }
 

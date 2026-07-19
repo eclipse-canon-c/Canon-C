@@ -130,15 +130,15 @@ ALGO_UNIQUE_LINKAGE usize algo_unique(
     borrowed(void*)         ctx)
 {
     require_msg(array     != NULL, "algo_unique: array cannot be NULL");
-    require_msg(elem_size > 0,     "algo_unique: elem_size must be > 0");
+    require_msg(elem_size > 0u,     "algo_unique: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_unique: cmp cannot be NULL");
 
-    if (len <= 1) return len;
+    if (len <= 1u) return len;
 
     usize write = 1;
 
     for (usize read = 1; read < len; ++read) {
-        const void* prev = ptr_elem_const(array, write - 1, elem_size);
+        const void* prev = ptr_elem_const(array, write - 1u, elem_size);
         const void* curr = ptr_elem_const(array, read,      elem_size);
 
         if (cmp(prev, curr, ctx) != 0) {

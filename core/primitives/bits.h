@@ -163,7 +163,7 @@
     ensures  \result <==> (((value >> bit) & 1) == 1);
  */
 static inline bool bits_test(u64 value, u32 bit) {
-    return (value >> bit) & 1;
+    return (value >> bit) & 1u;
 }
 
 /**
@@ -294,9 +294,9 @@ static inline u64 bits_toggle(u64 value, u32 bit) {
     disjoint behaviors;
  */
 static inline u64 bits_extract(u64 value, u32 start, u32 count) {
-    if (count == 0) return 0;
-    if (count >= 64) return value >> start;
-    u64 mask = (1ULL << count) - 1;
+    if (count == 0u) return 0u;
+    if (count >= 64u) return value >> start;
+    u64 mask = (1ULL << count) - 1u;
     return (value >> start) & mask;
 }
 
@@ -343,13 +343,13 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
     disjoint behaviors;
  */
 static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
-    if (count == 0) return dst;
-    if (count >= 64) {
+    if (count == 0u) return dst;
+    if (count >= 64u) {
         /* All 64 bits are replaced; shift src into position.
          * dst is fully overwritten — no bits of dst are preserved. */
         return src << start;
     }
-    u64 mask = ((1ULL << count) - 1) << start;
+    u64 mask = ((1ULL << count) - 1u) << start;
     return (dst & ~mask) | ((src << start) & mask);
 }
 
@@ -446,23 +446,23 @@ static inline u32 bits_popcount(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_clz(u64 value) {
-    if (value == 0) return 64;
+    if (value == 0u) return 64u;
 #if CANON_BITS_GNUC
     return (u32)__builtin_clzll(value);
 #elif CANON_BITS_MSVC
     unsigned long index;
     _BitScanReverse64(&index, value);
-    return 63 - (u32)index;
+    return 63u - (u32)index;
 #else
     /* Binary search for highest set bit.
      * Each step halves the remaining search range. */
     u32 count = 0;
-    if ((value & 0xFFFFFFFF00000000ULL) == 0) { count += 32; value <<= 32; }
-    if ((value & 0xFFFF000000000000ULL) == 0) { count += 16; value <<= 16; }
-    if ((value & 0xFF00000000000000ULL) == 0) { count +=  8; value <<=  8; }
-    if ((value & 0xF000000000000000ULL) == 0) { count +=  4; value <<=  4; }
-    if ((value & 0xC000000000000000ULL) == 0) { count +=  2; value <<=  2; }
-    if ((value & 0x8000000000000000ULL) == 0) { count +=  1; }
+    if ((value & 0xFFFFFFFF00000000ULL) == 0u) { count += 32u; value <<= 32u; }
+    if ((value & 0xFFFF000000000000ULL) == 0u) { count += 16u; value <<= 16u; }
+    if ((value & 0xFF00000000000000ULL) == 0u) { count +=  8u; value <<=  8u; }
+    if ((value & 0xF000000000000000ULL) == 0u) { count +=  4u; value <<=  4u; }
+    if ((value & 0xC000000000000000ULL) == 0u) { count +=  2u; value <<=  2u; }
+    if ((value & 0x8000000000000000ULL) == 0u) { count +=  1u; }
     return count;
 #endif
 }
@@ -506,7 +506,7 @@ static inline u32 bits_clz(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_ctz(u64 value) {
-    if (value == 0) return 64;
+    if (value == 0u) return 64u;
 #if CANON_BITS_GNUC
     return (u32)__builtin_ctzll(value);
 #elif CANON_BITS_MSVC
@@ -516,12 +516,12 @@ static inline u32 bits_ctz(u64 value) {
 #else
     /* Binary search for lowest set bit. */
     u32 count = 0;
-    if ((value & 0x00000000FFFFFFFFULL) == 0) { count += 32; value >>= 32; }
-    if ((value & 0x000000000000FFFFULL) == 0) { count += 16; value >>= 16; }
-    if ((value & 0x00000000000000FFULL) == 0) { count +=  8; value >>=  8; }
-    if ((value & 0x000000000000000FULL) == 0) { count +=  4; value >>=  4; }
-    if ((value & 0x0000000000000003ULL) == 0) { count +=  2; value >>=  2; }
-    if ((value & 0x0000000000000001ULL) == 0) { count +=  1; }
+    if ((value & 0x00000000FFFFFFFFULL) == 0u) { count += 32u; value >>= 32u; }
+    if ((value & 0x000000000000FFFFULL) == 0u) { count += 16u; value >>= 16u; }
+    if ((value & 0x00000000000000FFULL) == 0u) { count +=  8u; value >>=  8u; }
+    if ((value & 0x000000000000000FULL) == 0u) { count +=  4u; value >>=  4u; }
+    if ((value & 0x0000000000000003ULL) == 0u) { count +=  2u; value >>=  2u; }
+    if ((value & 0x0000000000000001ULL) == 0u) { count +=  1u; }
     return count;
 #endif
 }
@@ -556,8 +556,8 @@ static inline u32 bits_ctz(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_ffs(u64 value) {
-    if (value == 0) return 0;
-    return bits_ctz(value) + 1;
+    if (value == 0u) return 0u;
+    return bits_ctz(value) + 1u;
 }
 
 /**
@@ -590,8 +590,8 @@ static inline u32 bits_ffs(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_fls(u64 value) {
-    if (value == 0) return 0;
-    return 64 - bits_clz(value);
+    if (value == 0u) return 0u;
+    return 64u - bits_clz(value);
 }
 
 /* ============================================================================
@@ -646,8 +646,8 @@ static inline u32 bits_fls(u64 value) {
  */
 static inline u64 bits_rotl(u64 value, u32 shift) {
     shift &= 63;
-    if (shift == 0) return value;
-    return (value << shift) | (value >> (64 - shift));
+    if (shift == 0u) return value;
+    return (value << shift) | (value >> (64u - shift));
 }
 
 /**
@@ -696,8 +696,8 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
  */
 static inline u64 bits_rotr(u64 value, u32 shift) {
     shift &= 63;
-    if (shift == 0) return value;
-    return (value >> shift) | (value << (64 - shift));
+    if (shift == 0u) return value;
+    return (value >> shift) | (value << (64u - shift));
 }
 
 /* ============================================================================
@@ -730,7 +730,7 @@ static inline u64 bits_rotr(u64 value, u32 shift) {
     ensures \result <==> (value != 0 && (value & (value - 1)) == 0);
  */
 static inline bool bits_is_power_of_two(u64 value) {
-    return value != 0 && (value & (value - 1)) == 0;
+    return value != 0u && (value & (value - 1u)) == 0u;
 }
 
 /**
@@ -774,7 +774,7 @@ static inline bool bits_is_power_of_two(u64 value) {
     disjoint behaviors;
  */
 static inline u64 bits_next_power_of_two(u64 value) {
-    if (value == 0) return 0;
+    if (value == 0u) return 0u;
     if (value > (1ULL << 63)) return 0;  /* Would overflow */
 
     value--;
@@ -784,7 +784,7 @@ static inline u64 bits_next_power_of_two(u64 value) {
     value |= value >> 8;
     value |= value >> 16;
     value |= value >> 32;
-    return value + 1;
+    return value + 1u;
 }
 
 /* ============================================================================
