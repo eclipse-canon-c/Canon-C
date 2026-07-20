@@ -208,7 +208,7 @@ static inline void ALGO_SORT_SLICE_FN(type)( \
         "algo_sort_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_sort_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len < 2) return; \
+    if (sv.len < 2) { return; } \
     void* tmp = (temp && temp_cap >= sv.len) ? (void*)temp : NULL; \
     algo_sort(sv.ptr, sv.len, sizeof(type), cmp, ctx, tmp); \
 } \
@@ -222,7 +222,7 @@ static inline bool ALGO_IS_SORTED_SLICE_FN(type)( \
         "algo_is_sorted_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_is_sorted_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len < 2) return true; \
+    if (sv.len < 2) { return true; } \
     return algo_is_sorted(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
 

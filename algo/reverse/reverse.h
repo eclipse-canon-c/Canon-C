@@ -252,7 +252,7 @@ static inline void ALGO_REVERSE_SLICE_FN(type)( \
 { \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_reverse_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len < 2) return; \
+    if (sv.len < 2) { return; } \
     algo_reverse(sv.ptr, sv.len, sizeof(type)); \
 } \
 \
@@ -265,7 +265,7 @@ static inline bool ALGO_IS_PALINDROME_SLICE_FN(type)( \
         "algo_is_palindrome_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_is_palindrome_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len < 2) return true; \
+    if (sv.len < 2) { return true; } \
     return algo_is_palindrome(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
 

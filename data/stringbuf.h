@@ -270,7 +270,7 @@ typedef struct {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(sbp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 #endif
@@ -327,7 +327,7 @@ static inline bool stringbuf_init_arena(
     require_msg(initial_cap > 1u, "stringbuf_init_arena: initial_cap must be > 1");
 
     char* buf = (char*)arena_alloc(arena, initial_cap);
-    if (!buf) return false;
+    if (!buf) { return false; }
 
     buf[0] = '\0';
     sb->arena    = arena;
@@ -398,7 +398,7 @@ static inline void stringbuf_init_buffer(
  * Performance: O(1)
  */
 static inline void stringbuf_close(borrowed(StringBuf*) sb) {
-    if (!sb) return;
+    if (!sb) { return; }
     stringbuf_lifetime_close_(sb);
 }
 
@@ -430,9 +430,9 @@ static inline bool _stringbuf_append_bytes(
     usize end;
     usize with_nul;
 
-    if (!checked_add(sb->len, add_len, &end))   return false;
-    if (!checked_add(end, 1u, &with_nul))        return false;
-    if (with_nul > sb->capacity)                 return false;
+    if (!checked_add(sb->len, add_len, &end))   { return false; }
+    if (!checked_add(end, 1u, &with_nul))        { return false; }
+    if (with_nul > sb->capacity)                 { return false; }
 
     mem_copy((u8*)sb->data + sb->len, src, add_len);
     sb->len = end;
@@ -465,8 +465,8 @@ static inline bool stringbuf_append(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) s)
 {
-    if (!sb || !sb->data) return false;
-    if (!s) return true;
+    if (!sb || !sb->data) { return false; }
+    if (!s) { return true; }
     return _stringbuf_append_bytes(sb, s, (usize)strlen(s));
 }
 
@@ -489,7 +489,7 @@ static inline bool stringbuf_append_str(
         borrowed(StringBuf*) sb,
         str_t                s)
 {
-    if (!sb || !sb->data)     return false;
+    if (!sb || !sb->data)     { return false; }
     if (!s.ptr || s.len == 0u) return true;
     return _stringbuf_append_bytes(sb, s.ptr, s.len);
 }
@@ -512,11 +512,11 @@ static inline bool stringbuf_append_char(
 {
     usize with_nul;
 
-    if (!sb || !sb->data) return false;
+    if (!sb || !sb->data) { return false; }
     /* Need room for c plus the null terminator: len + 2 <= capacity.
      * checked_add guards against len already being at USIZE_MAX. */
-    if (!checked_add(sb->len, 2u, &with_nul)) return false;
-    if (with_nul > sb->capacity)              return false;
+    if (!checked_add(sb->len, 2u, &with_nul)) { return false; }
+    if (with_nul > sb->capacity)              { return false; }
 
     sb->data[sb->len++] = c;
     sb->data[sb->len]   = '\0';
@@ -554,19 +554,19 @@ static inline bool stringbuf_append_fmt(
     usize   with_nul;
     int     written;
 
-    if (!sb || !fmt || !sb->data) return false;
+    if (!sb || !fmt || !sb->data) { return false; }
 
     /* Pass 1: measure */
     va_start(args, fmt);
     needed_i = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
 
-    if (needed_i < 0) return false;
+    if (needed_i < 0) { return false; }
     needed = (usize)needed_i;
 
-    if (!checked_add(sb->len, needed, &end))  return false;
-    if (!checked_add(end, 1u, &with_nul))      return false;
-    if (with_nul > sb->capacity)               return false;
+    if (!checked_add(sb->len, needed, &end))  { return false; }
+    if (!checked_add(end, 1u, &with_nul))      { return false; }
+    if (with_nul > sb->capacity)               { return false; }
 
     /* Pass 2: write — fresh va_start required; prior va_end consumed args */
     va_start(args, fmt);
@@ -617,19 +617,19 @@ static inline bool stringbuf_append_fmt_va(
     usize   with_nul;
     int     written;
 
-    if (!sb || !fmt || !sb->data) return false;
+    if (!sb || !fmt || !sb->data) { return false; }
 
     /* Pass 1: measure — independent copy so original args is not consumed */
     va_copy(measure_args, args);
     needed_i = vsnprintf(NULL, 0, fmt, measure_args);
     va_end(measure_args);
 
-    if (needed_i < 0) return false;
+    if (needed_i < 0) { return false; }
     needed = (usize)needed_i;
 
-    if (!checked_add(sb->len, needed, &end))  return false;
-    if (!checked_add(end, 1u, &with_nul))      return false;
-    if (with_nul > sb->capacity)               return false;
+    if (!checked_add(sb->len, needed, &end))  { return false; }
+    if (!checked_add(end, 1u, &with_nul))      { return false; }
+    if (with_nul > sb->capacity)               { return false; }
 
     /* Pass 2: write — second independent copy, original args still intact */
     va_copy(write_args, args);
@@ -667,14 +667,14 @@ static inline bool stringbuf_append_n(
 {
     usize actual_len;
 
-    if (!sb || !sb->data) return false;
+    if (!sb || !sb->data) { return false; }
     if (!s || n == 0u)     return true;
 
     /* Determine how many bytes to actually copy: stop at null or n */
     actual_len = 0;
     while (actual_len < n && s[actual_len] != '\0') actual_len++;
 
-    if (actual_len == 0u) return true;
+    if (actual_len == 0u) { return true; }
     return _stringbuf_append_bytes(sb, s, actual_len);
 }
 
@@ -712,7 +712,7 @@ static inline borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb)
  * Performance: O(1)
  */
 static inline str_t stringbuf_as_str(borrowed(const StringBuf*) sb) {
-    if (!sb || !sb->data) return str_empty();
+    if (!sb || !sb->data) { return str_empty(); }
     return str_from(sb->data, sb->len);
 }
 
@@ -731,7 +731,7 @@ static inline str_t stringbuf_as_str(borrowed(const StringBuf*) sb) {
  * Performance: O(1)
  */
 static inline bytes_t stringbuf_as_bytes(borrowed(const StringBuf*) sb) {
-    if (!sb || !sb->data) return bytes_empty();
+    if (!sb || !sb->data) { return bytes_empty(); }
     return bytes_from(sb->data, sb->len);
 }
 
@@ -747,7 +747,7 @@ static inline bytes_t stringbuf_as_bytes(borrowed(const StringBuf*) sb) {
  * Performance: O(1)
  */
 static inline bytes_t stringbuf_buffer_bytes(borrowed(const StringBuf*) sb) {
-    if (!sb || !sb->data) return bytes_empty();
+    if (!sb || !sb->data) { return bytes_empty(); }
     return bytes_from(sb->data, sb->capacity);
 }
 
@@ -776,7 +776,7 @@ static inline bytes_t stringbuf_buffer_bytes(borrowed(const StringBuf*) sb) {
  * Performance: O(1)
  */
 static inline borrowed_str stringbuf_as_borrowed_str(borrowed(const StringBuf*) sb) {
-    if (!sb || !sb->data) return borrowed_str_empty();
+    if (!sb || !sb->data) { return borrowed_str_empty(); }
     return borrowed_str_from_lifetime(
         str_from(sb->data, sb->len),
 #ifdef CANON_LIFETIME_DEBUG
@@ -802,7 +802,7 @@ static inline borrowed_str stringbuf_as_borrowed_str(borrowed(const StringBuf*) 
  * Performance: O(1)
  */
 static inline borrowed_bytes stringbuf_as_borrowed_bytes(borrowed(const StringBuf*) sb) {
-    if (!sb || !sb->data) return borrowed_bytes_empty();
+    if (!sb || !sb->data) { return borrowed_bytes_empty(); }
     return borrowed_bytes_from_lifetime(
         sb->data,
         sb->len,
@@ -829,7 +829,7 @@ static inline borrowed_bytes stringbuf_as_borrowed_bytes(borrowed(const StringBu
  * Performance: O(1)
  */
 static inline borrowed_bytes stringbuf_buffer_as_borrowed_bytes(borrowed(const StringBuf*) sb) {
-    if (!sb || !sb->data) return borrowed_bytes_empty();
+    if (!sb || !sb->data) { return borrowed_bytes_empty(); }
     return borrowed_bytes_from_lifetime(
         sb->data,
         sb->capacity,
@@ -867,7 +867,7 @@ static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
     if (!sb || sb->capacity == 0u) return 0u;
     /* capacity - (len + 1): the -1 reserves the null terminator slot.
      * checked_sub returns false (→ 0) when len + 1 >= capacity, i.e. full. */
-    if (!checked_sub(sb->capacity, sb->len + 1u, &usable)) return 0;
+    if (!checked_sub(sb->capacity, sb->len + 1u, &usable)) { return 0; }
     return usable;
 }
 

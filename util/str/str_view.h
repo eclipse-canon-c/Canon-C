@@ -84,7 +84,7 @@ static inline str_view_t str_view_empty(void) {
 
 /** @brief Creates a view from a null-terminated string (NULL → null view) */
 static inline str_view_t str_view_from(borrowed(const char*) s) {
-    if (!s) return str_view_null();
+    if (!s) { return str_view_null(); }
     {
         str_view_t v;
         v.ptr = s;
@@ -131,8 +131,8 @@ static inline bool str_view_has_data(str_view_t v) {
 
 /** @brief Returns true if two views have identical content */
 static inline bool str_view_equals(str_view_t a, str_view_t b) {
-    if (a.len != b.len) return false;
-    if (a.len == 0u) return true;
+    if (a.len != b.len) { return false; }
+    if (a.len == 0u) { return true; }
     return mem_compare(a.ptr, b.ptr, a.len) == 0;
 }
 
@@ -141,7 +141,7 @@ static inline int str_view_compare(str_view_t a, str_view_t b) {
     usize min_len = a.len < b.len ? a.len : b.len;
     if (min_len > 0u) {
         int cmp = mem_compare(a.ptr, b.ptr, min_len);
-        if (cmp != 0) return cmp;
+        if (cmp != 0) { return cmp; }
     }
     return (a.len < b.len) ? -1 : (a.len > b.len) ? 1 : 0;
 }
@@ -152,15 +152,15 @@ static inline int str_view_compare(str_view_t a, str_view_t b) {
 
 /** @brief Returns true if the view starts with the given prefix */
 static inline bool str_view_starts_with(str_view_t v, str_view_t prefix) {
-    if (prefix.len > v.len) return false;
-    if (prefix.len == 0u) return true;
+    if (prefix.len > v.len) { return false; }
+    if (prefix.len == 0u) { return true; }
     return mem_compare(v.ptr, prefix.ptr, prefix.len) == 0;
 }
 
 /** @brief Returns true if the view ends with the given suffix */
 static inline bool str_view_ends_with(str_view_t v, str_view_t suffix) {
-    if (suffix.len > v.len) return false;
-    if (suffix.len == 0u) return true;
+    if (suffix.len > v.len) { return false; }
+    if (suffix.len == 0u) { return true; }
     return mem_compare(v.ptr + v.len - suffix.len, suffix.ptr, suffix.len) == 0;
 }
 
@@ -171,7 +171,7 @@ static inline bool str_view_ends_with(str_view_t v, str_view_t suffix) {
 /** @brief Returns a subview starting at start with at most len characters */
 static inline str_view_t str_view_sub(str_view_t v, usize start, usize len) {
     usize avail;
-    if (start >= v.len) return str_view_empty();
+    if (start >= v.len) { return str_view_empty(); }
     avail = v.len - start;
     return str_view_from_len(v.ptr + start, len < avail ? len : avail);
 }
@@ -183,7 +183,7 @@ static inline str_view_t str_view_prefix(str_view_t v, usize n) {
 
 /** @brief Returns the last n characters as a view */
 static inline str_view_t str_view_suffix(str_view_t v, usize n) {
-    if (n >= v.len) return v;
+    if (n >= v.len) { return v; }
     return str_view_from_len(v.ptr + v.len - n, n);
 }
 
@@ -195,7 +195,7 @@ static inline str_view_t str_view_suffix(str_view_t v, usize n) {
 static inline usize str_view_find_char(str_view_t v, char c) {
     usize i;
     for (i = 0; i < v.len; i++) {
-        if (v.ptr[i] == c) return i;
+        if (v.ptr[i] == c) { return i; }
     }
     return v.len;
 }
@@ -238,8 +238,8 @@ static inline bool str_view_ends_with_cstr(str_view_t v, borrowed(const char*) s
  */
 static inline bool str_view_to_cstr(str_view_t v, char* buf, usize buf_size) {
     require_msg(buf != NULL, "str_view_to_cstr: buf is NULL");
-    if (buf_size <= v.len) return false;
-    if (v.len > 0u) mem_copy(buf, v.ptr, v.len);
+    if (buf_size <= v.len) { return false; }
+    if (v.len > 0u) { mem_copy(buf, v.ptr, v.len); }
     buf[v.len] = '\0';
     return true;
 }

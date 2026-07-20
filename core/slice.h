@@ -422,9 +422,9 @@ static inline u8* bytes_at(bytes_t b, usize i) {
     ensures  (a.ptr == b.ptr && a.len == b.len) ==> \result == \true;
  */
 static inline bool bytes_equal(bytes_t a, bytes_t b) {
-    if (a.len != b.len) return false;
-    if (a.ptr == b.ptr) return true;  /* same pointer — covers two bytes_empty() */
-    if (!a.ptr || !b.ptr) return false;
+    if (a.len != b.len) { return false; }
+    if (a.ptr == b.ptr) { return true; }  /* same pointer — covers two bytes_empty() */
+    if (!a.ptr || !b.ptr) { return false; }
     return memcmp(a.ptr, b.ptr, a.len) == 0;
 }
 
@@ -468,7 +468,7 @@ static inline bool bytes_equal(bytes_t a, bytes_t b) {
 static inline bytes_t bytes_slice(bytes_t b, usize start, usize end) {
     if (!b.ptr || start >= b.len) return bytes_empty();
     if (end > b.len) end = b.len;
-    if (start >= end) return bytes_empty();
+    if (start >= end) { return bytes_empty(); }
     return (bytes_t){ .ptr = b.ptr + start, .len = end - start };
 }
 
@@ -576,7 +576,7 @@ static inline str_t str_from(const char* ptr, usize len) {
     disjoint behaviors;
  */
 static inline str_t str_from_cstr(const char* cstr) {
-    if (!cstr) return (str_t){ .ptr = NULL, .len = 0 };
+    if (!cstr) { return (str_t){ .ptr = NULL, .len = 0 }; }
     return (str_t){ .ptr = cstr, .len = (usize)strlen(cstr) };
 }
 
@@ -633,9 +633,9 @@ static inline bool str_is_empty(str_t s) {
     ensures  (a.ptr == b.ptr && a.len == b.len) ==> \result == \true;
  */
 static inline bool str_equal(str_t a, str_t b) {
-    if (a.len != b.len) return false;
-    if (a.ptr == b.ptr) return true;
-    if (!a.ptr || !b.ptr) return false;
+    if (a.len != b.len) { return false; }
+    if (a.ptr == b.ptr) { return true; }
+    if (!a.ptr || !b.ptr) { return false; }
     return memcmp(a.ptr, b.ptr, a.len) == 0;
 }
 
@@ -660,7 +660,7 @@ static inline bool str_equal(str_t a, str_t b) {
     ensures  prefix.len == 0    ==> \result == \true;
  */
 static inline bool str_starts_with(str_t s, str_t prefix) {
-    if (prefix.len > s.len) return false;
+    if (prefix.len > s.len) { return false; }
     if (!prefix.ptr || prefix.len == 0u) return true;
     return memcmp(s.ptr, prefix.ptr, prefix.len) == 0;
 }
@@ -688,7 +688,7 @@ static inline bool str_starts_with(str_t s, str_t prefix) {
     ensures  suffix.len == 0    ==> \result == \true;
  */
 static inline bool str_ends_with(str_t s, str_t suffix) {
-    if (suffix.len > s.len) return false;
+    if (suffix.len > s.len) { return false; }
     if (!suffix.ptr || suffix.len == 0u) return true;
     return memcmp(s.ptr + (s.len - suffix.len), suffix.ptr, suffix.len) == 0;
 }
@@ -719,7 +719,7 @@ static inline bool str_ends_with(str_t s, str_t suffix) {
 static inline str_t str_slice(str_t s, usize start, usize end) {
     if (!s.ptr || start >= s.len) return str_empty();
     if (end > s.len) end = s.len;
-    if (start >= end) return str_empty();
+    if (start >= end) { return str_empty(); }
     return (str_t){ .ptr = s.ptr + start, .len = end - start };
 }
 

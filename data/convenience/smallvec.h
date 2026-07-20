@@ -235,7 +235,7 @@
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(vp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 
@@ -416,16 +416,16 @@ static inline bool smallvec_##type##_spill( \
     smallvec_##type* v, usize min_cap) { \
     ensure_msg(v != NULL, "smallvec_" #type "_spill: v cannot be NULL"); \
     ensure_msg(v->using_inline, "smallvec_" #type "_spill: not using inline buffer"); \
-    if (!v || !v->using_inline) return false; \
+    if (!v || !v->using_inline) { return false; } \
     \
     usize new_cap = v->cap * 2; \
-    if (new_cap < min_cap) new_cap = min_cap; \
+    if (new_cap < min_cap) { new_cap = min_cap; } \
     \
     type* new_buf = v->arena \
         ? (type*)arena_alloc_array(v->arena, type, new_cap) \
         : (type*)malloc(new_cap * sizeof(type)); \
     \
-    if (!new_buf) return false; \
+    if (!new_buf) { return false; } \
     \
     mem_copy(new_buf, v->inline_buf, v->len * sizeof(type)); \
     v->data = new_buf; \
@@ -493,7 +493,7 @@ static inline bool smallvec_##type##_using_inline(const smallvec_##type* v) { \
  */ \
 static inline bool smallvec_##type##_get( \
     const smallvec_##type* v, usize i, type* out) { \
-    if (!v || !out || i >= v->len) return false; \
+    if (!v || !out || i >= v->len) { return false; } \
     *out = v->data[i]; \
     return true; \
 } \
@@ -569,7 +569,7 @@ static inline type* smallvec_##type##_last(const smallvec_##type* v) { \
  */ \
 static inline bool smallvec_##type##_push( \
     smallvec_##type* v, type value) { \
-    if (!v) return false; \
+    if (!v) { return false; } \
     \
     if (SMALLVEC_LIKELY(v->len < v->cap)) { \
         v->data[v->len++] = value; \
@@ -580,7 +580,7 @@ static inline bool smallvec_##type##_push( \
         return false; \
     } \
     \
-    if (v->len >= v->cap) return false; /* post-spill still full */ \
+    if (v->len >= v->cap) { return false; } /* post-spill still full */ \
     v->data[v->len++] = value; \
     return true; \
 } \
@@ -594,7 +594,7 @@ static inline bool smallvec_##type##_push( \
  */ \
 static inline bool smallvec_##type##_pop( \
     smallvec_##type* v, type* out) { \
-    if (!v || !out || v->len == 0) return false; \
+    if (!v || !out || v->len == 0) { return false; } \
     *out = v->data[--v->len]; \
     return true; \
 } \
@@ -618,7 +618,7 @@ static inline bool smallvec_##type##_pop( \
  */ \
 static inline bool smallvec_##type##_insert( \
     smallvec_##type* v, usize i, type value) { \
-    if (!v || i > v->len) return false; \
+    if (!v || i > v->len) { return false; } \
     \
     if (v->len == v->cap) { \
         if (!v->using_inline || !smallvec_##type##_spill(v, v->len + 1)) { \
@@ -645,7 +645,7 @@ static inline bool smallvec_##type##_insert( \
  */ \
 static inline bool smallvec_##type##_remove( \
     smallvec_##type* v, usize i, type* out) { \
-    if (!v || !out || i >= v->len) return false; \
+    if (!v || !out || i >= v->len) { return false; } \
     *out = v->data[i]; \
     if (i < v->len - 1) { \
         mem_move(&v->data[i], &v->data[i + 1], \
@@ -674,8 +674,8 @@ static inline bool smallvec_##type##_remove( \
  */ \
 static inline bool smallvec_##type##_extend( \
     smallvec_##type* v, const type* src, usize count) { \
-    if (!v || !src) return false; \
-    if (count == 0) return true; \
+    if (!v || !src) { return false; } \
+    if (count == 0) { return true; } \
     \
     if (v->len + count > v->cap) { \
         if (!v->using_inline || !smallvec_##type##_spill(v, v->len + count)) { \
@@ -706,7 +706,7 @@ static inline bool smallvec_##type##_extend( \
  * element — same honesty as dynvec/dynstring. \
  */ \
 static inline void smallvec_##type##_clear(smallvec_##type* v) { \
-    if (v) v->len = 0; \
+    if (v) { v->len = 0; } \
 } \
 \
 /** \
@@ -727,7 +727,7 @@ static inline void smallvec_##type##_clear(smallvec_##type* v) { \
  * lifetime check on the next read. \
  */ \
 static inline void smallvec_##type##_free(smallvec_##type* v) { \
-    if (!v) return; \
+    if (!v) { return; } \
     if (!v->using_inline && !v->arena) { \
         free(v->data); \
     } \

@@ -257,7 +257,7 @@ typedef struct {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(bsp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 #endif
@@ -360,7 +360,7 @@ static inline void bitset_init(borrowed(Bitset*) bs, borrowed(u64*) words, usize
  * Performance: O(1)
  */
 static inline void bitset_close(borrowed(Bitset*) bs) {
-    if (!bs) return;
+    if (!bs) { return; }
     bitset_lifetime_close_(bs);
 }
 
@@ -381,7 +381,7 @@ static inline void bitset_close(borrowed(Bitset*) bs) {
  * Performance: O(1)
  */
 static inline void bitset_set(borrowed(Bitset*) bs, usize i) {
-    if (!bs) return;
+    if (!bs) { return; }
     require_msg(i < bs->capacity, "bitset_set: index out of range");
     bs->words[bitset_word_of(i)] |= bitset_mask_of(i);
 }
@@ -398,7 +398,7 @@ static inline void bitset_set(borrowed(Bitset*) bs, usize i) {
  * Performance: O(1)
  */
 static inline void bitset_clear(borrowed(Bitset*) bs, usize i) {
-    if (!bs) return;
+    if (!bs) { return; }
     require_msg(i < bs->capacity, "bitset_clear: index out of range");
     bs->words[bitset_word_of(i)] &= ~bitset_mask_of(i);
 }
@@ -415,7 +415,7 @@ static inline void bitset_clear(borrowed(Bitset*) bs, usize i) {
  * Performance: O(1)
  */
 static inline void bitset_toggle(borrowed(Bitset*) bs, usize i) {
-    if (!bs) return;
+    if (!bs) { return; }
     require_msg(i < bs->capacity, "bitset_toggle: index out of range");
     bs->words[bitset_word_of(i)] ^= bitset_mask_of(i);
 }
@@ -430,7 +430,7 @@ static inline void bitset_toggle(borrowed(Bitset*) bs, usize i) {
  * Performance: O(1)
  */
 static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
-    if (!bs) return false;
+    if (!bs) { return false; }
     require_msg(i < bs->capacity, "bitset_test: index out of range");
     return (bs->words[bitset_word_of(i)] & bitset_mask_of(i)) != 0u;
 }
@@ -447,8 +447,8 @@ static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
  * Performance: O(1)
  */
 static inline void bitset_assign(borrowed(Bitset*) bs, usize i, bool value) {
-    if (value) bitset_set(bs, i);
-    else       bitset_clear(bs, i);
+    if (value) { bitset_set(bs, i); }
+    else       { bitset_clear(bs, i); }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -465,7 +465,7 @@ static inline void bitset_assign(borrowed(Bitset*) bs, usize i, bool value) {
  * Performance: O(n/64)
  */
 static inline void bitset_clear_all(borrowed(Bitset*) bs) {
-    if (!bs || !bs->words) return;
+    if (!bs || !bs->words) { return; }
     mem_zero(bs->words, bs->word_count * sizeof(u64));
 }
 
@@ -479,7 +479,7 @@ static inline void bitset_clear_all(borrowed(Bitset*) bs) {
  * Performance: O(n/64)
  */
 static inline void bitset_set_all(borrowed(Bitset*) bs) {
-    if (!bs || !bs->words) return;
+    if (!bs || !bs->words) { return; }
     mem_set(bs->words, 0xFF, bs->word_count * sizeof(u64));
     bitset_clear_padding(bs);
 }
@@ -494,7 +494,7 @@ static inline void bitset_set_all(borrowed(Bitset*) bs) {
  * Performance: O(n/64)
  */
 static inline void bitset_not(borrowed(Bitset*) bs) {
-    if (!bs || !bs->words) return;
+    if (!bs || !bs->words) { return; }
     for (usize w = 0; w < bs->word_count; w++) {
         bs->words[w] = ~bs->words[w];
     }
@@ -512,7 +512,7 @@ static inline void bitset_not(borrowed(Bitset*) bs) {
  * Performance: O(n/64)
  */
 static inline void bitset_and(borrowed(Bitset*) bs, borrowed(const Bitset*) other) {
-    if (!bs || !other) return;
+    if (!bs || !other) { return; }
     usize n = bs->word_count < other->word_count ? bs->word_count : other->word_count;
     for (usize w = 0; w < n; w++) {
         bs->words[w] &= other->words[w];
@@ -534,7 +534,7 @@ static inline void bitset_and(borrowed(Bitset*) bs, borrowed(const Bitset*) othe
  * Performance: O(n/64)
  */
 static inline void bitset_or(borrowed(Bitset*) bs, borrowed(const Bitset*) other) {
-    if (!bs || !other) return;
+    if (!bs || !other) { return; }
     usize n = bs->word_count < other->word_count ? bs->word_count : other->word_count;
     for (usize w = 0; w < n; w++) {
         bs->words[w] |= other->words[w];
@@ -552,7 +552,7 @@ static inline void bitset_or(borrowed(Bitset*) bs, borrowed(const Bitset*) other
  * Performance: O(n/64)
  */
 static inline void bitset_xor(borrowed(Bitset*) bs, borrowed(const Bitset*) other) {
-    if (!bs || !other) return;
+    if (!bs || !other) { return; }
     usize n = bs->word_count < other->word_count ? bs->word_count : other->word_count;
     for (usize w = 0; w < n; w++) {
         bs->words[w] ^= other->words[w];
@@ -572,7 +572,7 @@ static inline void bitset_xor(borrowed(Bitset*) bs, borrowed(const Bitset*) othe
  * Performance: O(n/64)
  */
 static inline usize bitset_count(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return 0;
+    if (!bs || !bs->words) { return 0; }
     usize total = 0;
     for (usize w = 0; w < bs->word_count; w++) {
         total += (usize)bits_popcount(bs->words[w]);
@@ -587,9 +587,9 @@ static inline usize bitset_count(borrowed(const Bitset*) bs) {
  * Performance: O(n/64)
  */
 static inline bool bitset_is_empty(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return true;
+    if (!bs || !bs->words) { return true; }
     for (usize w = 0; w < bs->word_count; w++) {
-        if (bs->words[w] != 0u) return false;
+        if (bs->words[w] != 0u) { return false; }
     }
     return true;
 }
@@ -601,7 +601,7 @@ static inline bool bitset_is_empty(borrowed(const Bitset*) bs) {
  * Performance: O(n/64)
  */
 static inline bool bitset_is_full(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return false;
+    if (!bs || !bs->words) { return false; }
     return bitset_count(bs) == bs->capacity;
 }
 
@@ -613,7 +613,7 @@ static inline bool bitset_is_full(borrowed(const Bitset*) bs) {
  */
 static inline bool bitset_is_disjoint(borrowed(const Bitset*) bs,
                                       borrowed(const Bitset*) other) {
-    if (!bs || !other) return true;
+    if (!bs || !other) { return true; }
     usize n = bs->word_count < other->word_count ? bs->word_count : other->word_count;
     for (usize w = 0; w < n; w++) {
         if (bs->words[w] & other->words[w]) return false;
@@ -647,7 +647,7 @@ static inline usize bitset_capacity(borrowed(const Bitset*) bs) {
  * Performance: O(n/64) worst case
  */
 static inline usize bitset_find_first(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return BITSET_NPOS;
+    if (!bs || !bs->words) { return BITSET_NPOS; }
     for (usize w = 0; w < bs->word_count; w++) {
         if (bs->words[w] != 0u) {
             usize bit = w * BITSET_BITS_PER_WORD + (usize)bits_ctz(bs->words[w]);
@@ -678,7 +678,7 @@ static inline usize bitset_find_next(borrowed(const Bitset*) bs, usize prev) {
     if (!bs || !bs->words || prev >= bs->capacity) return BITSET_NPOS;
 
     usize start = prev + 1u;
-    if (start >= bs->capacity) return BITSET_NPOS;
+    if (start >= bs->capacity) { return BITSET_NPOS; }
 
     usize w   = bitset_word_of(start);
     usize bit = start % BITSET_BITS_PER_WORD;
@@ -710,7 +710,7 @@ static inline usize bitset_find_next(borrowed(const Bitset*) bs, usize prev) {
  * Performance: O(n/64) worst case
  */
 static inline usize bitset_find_last(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return BITSET_NPOS;
+    if (!bs || !bs->words) { return BITSET_NPOS; }
     usize w = bs->word_count;
     while (w-- > 0) {
         if (bs->words[w] != 0u) {
@@ -738,7 +738,7 @@ static inline usize bitset_find_last(borrowed(const Bitset*) bs) {
  */
 static inline option_usize bitset_find_first_option(borrowed(const Bitset*) bs) {
     usize raw = bitset_find_first(bs);
-    if (raw == BITSET_NPOS) return option_usize_none();
+    if (raw == BITSET_NPOS) { return option_usize_none(); }
     return option_usize_some(raw);
 }
 
@@ -763,7 +763,7 @@ static inline option_usize bitset_find_first_option(borrowed(const Bitset*) bs) 
  */
 static inline option_usize bitset_find_next_option(borrowed(const Bitset*) bs, usize prev) {
     usize raw = bitset_find_next(bs, prev);
-    if (raw == BITSET_NPOS) return option_usize_none();
+    if (raw == BITSET_NPOS) { return option_usize_none(); }
     return option_usize_some(raw);
 }
 
@@ -778,7 +778,7 @@ static inline option_usize bitset_find_next_option(borrowed(const Bitset*) bs, u
  */
 static inline option_usize bitset_find_last_option(borrowed(const Bitset*) bs) {
     usize raw = bitset_find_last(bs);
-    if (raw == BITSET_NPOS) return option_usize_none();
+    if (raw == BITSET_NPOS) { return option_usize_none(); }
     return option_usize_some(raw);
 }
 
@@ -800,7 +800,7 @@ static inline option_usize bitset_find_last_option(borrowed(const Bitset*) bs) {
  * Performance: O(1)
  */
 static inline bytes_t bitset_as_bytes(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return bytes_empty();
+    if (!bs || !bs->words) { return bytes_empty(); }
     return bytes_from(bs->words, bs->word_count * sizeof(u64));
 }
 
@@ -824,7 +824,7 @@ static inline bytes_t bitset_as_bytes(borrowed(const Bitset*) bs) {
  * Performance: O(1)
  */
 static inline borrowed_bytes bitset_as_borrowed_bytes(borrowed(const Bitset*) bs) {
-    if (!bs || !bs->words) return borrowed_bytes_empty();
+    if (!bs || !bs->words) { return borrowed_bytes_empty(); }
     return borrowed_bytes_from_lifetime(
         bs->words,
         bs->word_count * sizeof(u64),

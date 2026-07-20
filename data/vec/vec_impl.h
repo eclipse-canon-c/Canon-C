@@ -166,7 +166,7 @@
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(vp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 
@@ -416,8 +416,8 @@ linkage VecType fn_alloc(usize capacity) { \
  */
 #define IMPL_VEC_FREE(linkage, VecType, fn, fn_lt_close) \
 linkage void fn(dropped(VecType*) v) { \
-    if (!v) return; \
-    if (v->items) mem_free(v->items); \
+    if (!v) { return; } \
+    if (v->items) { mem_free(v->items); } \
     v->items    = NULL; \
     v->len      = 0; \
     v->capacity = 0; \
@@ -590,7 +590,7 @@ linkage bool fn(borrowed(const VecType*) v) { \
  */
 #define IMPL_VEC_GET(linkage, VecType, fn, type) \
 linkage bool fn(borrowed(const VecType*) v, usize i, borrowed(type*) out) { \
-    if (!v || !out || i >= v->len) return false; \
+    if (!v || !out || i >= v->len) { return false; } \
     *out = v->items[i]; \
     return true; \
 }
@@ -611,7 +611,7 @@ linkage bool fn(borrowed(const VecType*) v, usize i, borrowed(type*) out) { \
  */
 #define IMPL_VEC_GET_OPTION(linkage, VecType, fn, OptionType, fn_some, fn_none, type) \
 linkage OptionType fn(borrowed(const VecType*) v, usize i) { \
-    if (!v || i >= v->len) return fn_none(); \
+    if (!v || i >= v->len) { return fn_none(); } \
     return fn_some(v->items[i]); \
 }
 
@@ -897,7 +897,7 @@ linkage OptionType fn(borrowed(VecType*) v) { \
  */
 #define IMPL_VEC_CLEAR(linkage, VecType, fn) \
 linkage void fn(borrowed(VecType*) v) { \
-    if (v) v->len = 0; \
+    if (v) { v->len = 0; } \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1150,8 +1150,8 @@ linkage IterType fn(borrowed(VecType*) v) { \
  */
 #define IMPL_VEC_ITER_NEXT(linkage, IterType, fn, type) \
 linkage bool fn(borrowed(IterType*) it, borrowed(type*) out) { \
-    if (!it || !it->vec || !out) return false; \
-    if (it->index >= it->vec->len) return false; \
+    if (!it || !it->vec || !out) { return false; } \
+    if (it->index >= it->vec->len) { return false; } \
     *out = it->vec->items[it->index++]; \
     return true; \
 }
@@ -1182,7 +1182,7 @@ linkage bool fn(borrowed(IterType*) it, borrowed(type*) out) { \
 #define IMPL_VEC_SLICE_INIT(linkage, SliceType, fn, VecType, type) \
 linkage SliceType fn(borrowed(VecType*) v, usize start, usize end) { \
     SliceType s = {0}; \
-    if (!v || start > end || end > v->len) return s; \
+    if (!v || start > end || end > v->len) { return s; } \
     s.items = &v->items[start]; \
     s.len   = end - start; \
     return s; \

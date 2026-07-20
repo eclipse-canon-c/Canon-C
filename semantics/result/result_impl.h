@@ -594,10 +594,10 @@
     { \
         bool const _r1_ok_ = (_r1).is_ok; \
         bool const _r2_ok_ = (_r2).is_ok; \
-        if (_r1_ok_ != _r2_ok_) return false; \
-        if (_r1_ok_) return (_eq_ok)( \
+        if (_r1_ok_ != _r2_ok_) { return false; } \
+        if (_r1_ok_) { return (_eq_ok)( \
             IMPL_RESULT_OK_FIELD_(_r1), \
-            IMPL_RESULT_OK_FIELD_(_r2)); \
+            IMPL_RESULT_OK_FIELD_(_r2)); } \
         return (_eq_err)( \
             IMPL_RESULT_ERR_FIELD_(_r1), \
             IMPL_RESULT_ERR_FIELD_(_r2)); \

@@ -238,7 +238,7 @@ static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \
         "algo_lower_bound_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_lower_bound_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len == 0) return 0; \
+    if (sv.len == 0) { return 0; } \
     return algo_lower_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -254,7 +254,7 @@ static inline usize ALGO_UPPER_BOUND_SLICE_FN(type)( \
         "algo_upper_bound_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_upper_bound_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len == 0) return 0; \
+    if (sv.len == 0) { return 0; } \
     return algo_upper_bound(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -270,7 +270,7 @@ static inline usize ALGO_FIND_SORTED_SLICE_FN(type)( \
         "algo_find_sorted_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_find_sorted_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len == 0) return CANON_USIZE_MAX; \
+    if (sv.len == 0) { return CANON_USIZE_MAX; } \
     return algo_find_sorted(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \
@@ -286,7 +286,7 @@ static inline bool ALGO_BINARY_SEARCH_SLICE_FN(type)( \
         "algo_binary_search_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_binary_search_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len == 0) return false; \
+    if (sv.len == 0) { return false; } \
     return algo_binary_search(sv.ptr, sv.len, sizeof(type), key, cmp, ctx); \
 } \
 \

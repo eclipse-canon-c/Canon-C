@@ -93,7 +93,7 @@ CANON_OPTION(charp)
  * @return Number of characters before null terminator
  */
 static inline usize str_len(borrowed(const char*) s) {
-    if (!s) return 0;
+    if (!s) { return 0; }
     usize len = 0;
     while (s[len]) len++;
     return len;
@@ -131,7 +131,7 @@ static inline int str_ncompare(
     borrowed(const char*) b,
     usize                 n)
 {
-    if (n == 0u) return 0u;
+    if (n == 0u) { return 0u; }
     require_msg(a != NULL, "str_ncompare: a is NULL");
     require_msg(b != NULL, "str_ncompare: b is NULL");
     while (n > 1u && *a && *a == *b) { a++; b++; n--; }
@@ -155,10 +155,10 @@ static inline int str_ncompare(
  * @remark Caller MUST free with str_free()
  */
 static inline option_charp str_alloc_copy(borrowed(const char*) s) {
-    if (!s) return option_charp_none();
+    if (!s) { return option_charp_none(); }
     const usize len = str_len(s);
     char* copy = (char*)mem_alloc(len + 1u);
-    if (!copy) return option_charp_none();
+    if (!copy) { return option_charp_none(); }
     mem_copy(copy, s, len + 1u);
     return option_charp_some(copy);
 }
@@ -182,7 +182,7 @@ static inline option_charp str_alloc_concat(
     const usize len_a = str_len(a);
     const usize len_b = str_len(b);
     char* result = (char*)mem_alloc(len_a + len_b + 1u);
-    if (!result) return option_charp_none();
+    if (!result) { return option_charp_none(); }
     mem_copy(result, a, len_a);
     mem_copy(result + len_a, b, len_b + 1u);
     return option_charp_some(result);
@@ -206,10 +206,10 @@ static inline option_charp str_alloc_sub(
 {
     require_msg(s != NULL, "str_alloc_sub: s is NULL");
     const usize s_len = str_len(s);
-    if (start >= s_len) return option_charp_none();
+    if (start >= s_len) { return option_charp_none(); }
     if (start + len > s_len) len = s_len - start;
     char* result = (char*)mem_alloc(len + 1u);
-    if (!result) return option_charp_none();
+    if (!result) { return option_charp_none(); }
     mem_copy(result, s + start, len);
     result[len] = '\0';
     return option_charp_some(result);
@@ -245,7 +245,7 @@ static inline bool str_copy_into(
 {
     require_msg(dest != NULL, "str_copy_into: dest is NULL");
     require_msg(src  != NULL, "str_copy_into: src is NULL");
-    if (dest_size == 0u) return false;
+    if (dest_size == 0u) { return false; }
     const usize src_len = str_len(src);
     if (src_len + 1u > dest_size) return false;
     mem_copy(dest, src, src_len + 1u);
@@ -272,7 +272,7 @@ static inline bool str_concat_into(
     require_msg(dest != NULL, "str_concat_into: dest is NULL");
     require_msg(a    != NULL, "str_concat_into: a is NULL");
     require_msg(b    != NULL, "str_concat_into: b is NULL");
-    if (dest_size == 0u) return false;
+    if (dest_size == 0u) { return false; }
     const usize len_a = str_len(a);
     const usize len_b = str_len(b);
     if (len_a + len_b + 1u > dest_size) return false;
@@ -296,8 +296,8 @@ static inline bool str_equals(
     borrowed(const char*) a,
     borrowed(const char*) b)
 {
-    if (a == b) return true;
-    if (!a || !b) return false;
+    if (a == b) { return true; }
+    if (!a || !b) { return false; }
     return str_compare(a, b) == 0;
 }
 
@@ -318,7 +318,7 @@ static inline bool cstr_starts_with(
     require_msg(s      != NULL, "cstr_starts_with: s is NULL");
     require_msg(prefix != NULL, "cstr_starts_with: prefix is NULL");
     const usize prefix_len = str_len(prefix);
-    if (prefix_len == 0u) return true;
+    if (prefix_len == 0u) { return true; }
     return str_ncompare(s, prefix, prefix_len) == 0;
 }
 
@@ -340,7 +340,7 @@ static inline bool cstr_ends_with(
     require_msg(suffix != NULL, "cstr_ends_with: suffix is NULL");
     const usize s_len = str_len(s);
     const usize suffix_len = str_len(suffix);
-    if (suffix_len > s_len) return false;
+    if (suffix_len > s_len) { return false; }
     return str_compare(s + s_len - suffix_len, suffix) == 0;
 }
 

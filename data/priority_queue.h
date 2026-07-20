@@ -198,7 +198,7 @@
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(pqp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 #else
@@ -275,7 +275,7 @@ static inline usize pq_right_child(usize i) { return 2u * i + 2u; }
  */
 static inline void pq_swap(borrowed(PriorityQueue*) pq, usize a, usize b) {
     require_msg(pq != NULL, "pq_swap: pq cannot be NULL");
-    if (a == b) return;
+    if (a == b) { return; }
     usize es = pq->elem_size;
     void* pa = ptr_elem(pq->data, a, es);
     void* pb = ptr_elem(pq->data, b, es);
@@ -304,7 +304,7 @@ static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
         usize p  = pq_parent(i);
         void* pe = ptr_elem(pq->data, p, pq->elem_size);
         void* ie = ptr_elem(pq->data, i, pq->elem_size);
-        if (pq->cmp(pe, ie, pq->ctx) <= 0) break;
+        if (pq->cmp(pe, ie, pq->ctx) <= 0) { break; }
         pq_swap(pq, p, i);
         i = p;
     }
@@ -326,14 +326,14 @@ static inline void pq_sift_down(borrowed(PriorityQueue*) pq, usize i) {
         if (left < pq->len) {
             void* sl = ptr_elem(pq->data, smallest, pq->elem_size);
             void* le = ptr_elem(pq->data, left,     pq->elem_size);
-            if (pq->cmp(le, sl, pq->ctx) < 0) smallest = left;
+            if (pq->cmp(le, sl, pq->ctx) < 0) { smallest = left; }
         }
         if (right < pq->len) {
             void* sl = ptr_elem(pq->data, smallest, pq->elem_size);
             void* re = ptr_elem(pq->data, right,    pq->elem_size);
-            if (pq->cmp(re, sl, pq->ctx) < 0) smallest = right;
+            if (pq->cmp(re, sl, pq->ctx) < 0) { smallest = right; }
         }
-        if (smallest == i) break;
+        if (smallest == i) { break; }
         pq_swap(pq, i, smallest);
         i = smallest;
     }
@@ -415,12 +415,12 @@ static inline void pq_init(
  * Performance: O(n) — Floyd's algorithm
  */
 static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
-    if (!pq) return;
+    if (!pq) { return; }
     require_msg(pq->data    != NULL, "pq_heapify: pq not initialized (data is NULL)");
     require_msg(pq->cmp     != NULL, "pq_heapify: pq not initialized (cmp is NULL)");
     require_msg(pq->capacity > 0u,    "pq_heapify: pq not initialized (capacity is 0)");
     if (len == 0u) { pq->len = 0u; pq_lifetime_restamp_(pq); return; }
-    if (len > pq->capacity) len = pq->capacity;
+    if (len > pq->capacity) { len = pq->capacity; }
     pq->len = len;
     if (len >= 2u) {
         usize i = pq_parent(len - 1u) + 1u;
@@ -455,8 +455,8 @@ static inline result__Bool_Error pq_push_result(
     borrowed(PriorityQueue*)  pq,
     borrowed(const void*)     elem)
 {
-    if (!pq || !elem) return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (pq->len >= pq->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
+    if (!pq || !elem) { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (pq->len >= pq->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); }
     mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
     pq_sift_up(pq, pq->len - 1u);
@@ -537,8 +537,8 @@ static inline result__Bool_Error pq_remove_at_result(
     borrowed(PriorityQueue*) pq,
     usize                    i)
 {
-    if (!pq)          return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (i >= pq->len) return result__Bool_Error_err(ERR_OUT_OF_RANGE);
+    if (!pq)          { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (i >= pq->len) { return result__Bool_Error_err(ERR_OUT_OF_RANGE); }
     pq->len--;
     if (i == pq->len) {
         /* removed last element — no rearrangement, but the heap composition
@@ -575,7 +575,7 @@ static inline bool pq_pop(borrowed(PriorityQueue*) pq, void* out) {
 /** @brief Copies the top element into out without removing it. Prefer pq_peek_raw(). */
 static inline bool pq_peek(borrowed(const PriorityQueue*) pq, void* out) {
     const void* top = pq_peek_raw(pq);
-    if (!top || !out) return false;
+    if (!top || !out) { return false; }
     mem_copy(out, top, pq->elem_size);
     return true;
 }
@@ -697,14 +697,14 @@ static inline result__Bool_Error pq_##type##_push_result(                       
 /** Removes and returns the top element as option_##type */                                   \
 static inline option_##type pq_##type##_pop_option(borrowed(pq_##type*) h) {                \
     type val = {0}; /* zero-init so val is never uninitialized on any path */               \
-    if (!pq_pop_raw(&h->_pq, &val)) return option_##type##_none();                          \
+    if (!pq_pop_raw(&h->_pq, &val)) { return option_##type##_none(); }                      \
     return option_##type##_some(val);                                                        \
 }                                                                                            \
                                                                                              \
 /** Returns the top element as option_##type without removing it */                           \
 static inline option_##type pq_##type##_peek_option(borrowed(const pq_##type*) h) {         \
     const void* raw = pq_peek_raw(&h->_pq);                                                  \
-    if (!raw) return option_##type##_none();                                                 \
+    if (!raw) { return option_##type##_none(); }                                             \
     type val;                                                                                \
     mem_copy(&val, raw, sizeof(type));                                                       \
     return option_##type##_some(val);                                                        \

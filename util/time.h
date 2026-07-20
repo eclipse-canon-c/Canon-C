@@ -178,7 +178,7 @@ static inline void stopwatch_start(borrowed(Stopwatch*) sw) {
  */
 static inline u64 stopwatch_elapsed_ns(borrowed(const Stopwatch*) sw) {
     require_msg(sw != NULL, "stopwatch_elapsed_ns: sw is NULL");
-    if (sw->start == 0u) return 0u;
+    if (sw->start == 0u) { return 0u; }
     return stopwatch_now_ns_() - sw->start;
 }
 

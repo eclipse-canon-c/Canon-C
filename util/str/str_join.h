@@ -175,7 +175,7 @@ static inline option_charp str_alloc_join(
     usize sep_len;
     char* buffer;
 
-    if (count == 0u) return str_alloc_copy("");
+    if (count == 0u) { return str_alloc_copy(""); }
 
     require_msg(parts != NULL, "str_alloc_join: parts is NULL");
 
@@ -184,13 +184,13 @@ static inline option_charp str_alloc_join(
 
     total_len = 1; /* null terminator */
     for (i = 0; i < count; ++i) {
-        if (!parts[i]) return option_charp_none();
+        if (!parts[i]) { return option_charp_none(); }
         total_len += str_len(parts[i]);
         if (i + 1u < count && sep_len > 0u) total_len += sep_len;
     }
 
     buffer = (char*)mem_alloc(total_len);
-    if (!buffer) return option_charp_none();
+    if (!buffer) { return option_charp_none(); }
 
     if (str_join(buffer, total_len, parts, count, sep)) {
         return option_charp_some(buffer);
@@ -248,15 +248,15 @@ static inline usize str_split_to_parts(
         const char* start;
         usize part_len;
 
-        while (*p == delim) ++p;
-        if (!*p) break;
+        while (*p == delim) { ++p; }
+        if (!*p) { break; }
 
         start = p;
         while (*p && *p != delim) ++p;
         part_len = (usize)(p - start);
 
         if (scratch_pos + part_len + 1u > scratch_size) return 0u;
-        if (count >= max_parts) return 0;
+        if (count >= max_parts) { return 0; }
 
         mem_copy(scratch_buf + scratch_pos, start, part_len);
         scratch_buf[scratch_pos + part_len] = '\0';

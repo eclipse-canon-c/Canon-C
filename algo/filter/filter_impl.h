@@ -154,7 +154,7 @@ ALGO_FILTER_LINKAGE usize algo_filter(
         if (pred(elem, ctx)) {
             mem_copy(ptr_elem(out, written, elem_size), elem, elem_size);
             written++;
-            if (written >= out_cap) break; /* output full — stop */
+            if (written >= out_cap) { break; } /* output full — stop */
         }
     }
     return written;

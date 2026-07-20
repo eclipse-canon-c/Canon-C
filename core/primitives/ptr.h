@@ -471,7 +471,7 @@ static inline usize align_padding(usize n, usize align) {
  */
 static inline void* ptr_align_up(void* p, usize align) {
     require_msg(is_power_of_two(align), "ptr_align_up: align must be a nonzero power of two");
-    if (!p) return NULL;
+    if (!p) { return NULL; }
     return (void*)(uintptr_t)align_up((usize)(uintptr_t)p, align);
 }
 
@@ -513,7 +513,7 @@ static inline void* ptr_align_up(void* p, usize align) {
  */
 static inline void* ptr_align_down(void* p, usize align) {
     require_msg(is_power_of_two(align), "ptr_align_down: align must be a nonzero power of two");
-    if (!p) return NULL;
+    if (!p) { return NULL; }
     return (void*)(uintptr_t)align_down((usize)(uintptr_t)p, align);
 }
 
@@ -555,7 +555,7 @@ static inline void* ptr_align_down(void* p, usize align) {
  */
 static inline bool ptr_is_aligned(const void* p, usize align) {
     require_msg(is_power_of_two(align), "ptr_is_aligned: align must be a nonzero power of two");
-    if (!p) return false;
+    if (!p) { return false; }
     return is_aligned((usize)(uintptr_t)p, align);
 }
 
@@ -595,7 +595,7 @@ static inline bool ptr_is_aligned(const void* p, usize align) {
     disjoint behaviors;
  */
 static inline usize ptr_align_padding(const void* p, usize align) {
-    if (!p) return 0;
+    if (!p) { return 0; }
     return align_padding((usize)(uintptr_t)p, align);
 }
 
@@ -647,7 +647,7 @@ static inline usize ptr_align_padding(const void* p, usize align) {
     disjoint behaviors;
  */
 static inline void* ptr_offset(void* p, usize n) {
-    if (!p) return NULL;
+    if (!p) { return NULL; }
     ensure_msg((usize)(uintptr_t)p <= CANON_USIZE_MAX - n,
                "ptr_offset: offset would overflow address space");
     return (void*)((u8*)p + n);
@@ -686,7 +686,7 @@ static inline void* ptr_offset(void* p, usize n) {
     disjoint behaviors;
  */
 static inline const void* ptr_offset_const(const void* p, usize n) {
-    if (!p) return NULL;
+    if (!p) { return NULL; }
     ensure_msg((usize)(uintptr_t)p <= CANON_USIZE_MAX - n,
                "ptr_offset_const: offset would overflow address space");
     return (const void*)((const u8*)p + n);
@@ -729,7 +729,7 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
     disjoint behaviors;
  */
 static inline void* ptr_retreat(void* p, usize n) {
-    if (!p) return NULL;
+    if (!p) { return NULL; }
     ensure_msg((usize)(uintptr_t)p >= n,
                "ptr_retreat: retreat would underflow address space");
     return (void*)((u8*)p - n);
@@ -861,7 +861,7 @@ static inline usize ptr_span(const void* to, const void* from) {
 static inline bool ptr_in_range(const void*  p,
                                  const void*  region_start,
                                  const void*  region_end) {
-    if (!p || !region_start || !region_end) return false;
+    if (!p || !region_start || !region_end) { return false; }
     return (const u8*)p >= (const u8*)region_start &&
            (const u8*)p <  (const u8*)region_end;
 }
@@ -908,11 +908,11 @@ static inline bool ptr_range_in_range(const void*  p,
                                        usize        len,
                                        const void*  region_start,
                                        const void*  region_end) {
-    if (!p || !region_start || !region_end) return false;
+    if (!p || !region_start || !region_end) { return false; }
     const u8* pb = (const u8*)p;
     const u8* rs = (const u8*)region_start;
     const u8* re = (const u8*)region_end;
-    if (pb < rs)               return false;  /* starts before region */
+    if (pb < rs)               { return false; }  /* starts before region */
     if (len > (usize)(re - pb)) return false;  /* overflow-safe: no pb+len */
     return true;
 }

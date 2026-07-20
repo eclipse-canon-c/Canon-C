@@ -211,7 +211,7 @@ typedef result__Bool_Error result_bool_Error;
         const usize _fr_len = (usize)(len); \
         for (usize _fr_i = 0; _fr_i < _fr_len; ++_fr_i) { \
             _fr = (fold_fn)((acc_ptr), &(array)[_fr_i], (ctx)); \
-            if (result_bool_Error_is_err(_fr)) break; \
+            if (result_bool_Error_is_err(_fr)) { break; } \
         } \
         _fr; \
     })
@@ -227,7 +227,7 @@ typedef result__Bool_Error result_bool_Error;
         const usize _fr99_len = (usize)(len); \
         for (usize _fr99_i = 0; _fr99_i < _fr99_len; ++_fr99_i) { \
             (out_result) = (fold_fn)((acc_ptr), &(array)[_fr99_i], (ctx)); \
-            if (result_bool_Error_is_err(out_result)) break; \
+            if (result_bool_Error_is_err(out_result)) { break; } \
         } \
     } while (0)
 
@@ -311,7 +311,7 @@ static inline result_bool_Error ALGO_FOLD_RESULT_SLICE_FN(type)( \
         "algo_fold_result_slice_" #type ": non-empty slice has NULL ptr"); \
     for (usize _i = 0; _i < sv.len; ++_i) { \
         result_bool_Error _r = fn(acc_ptr, &sv.ptr[_i], ctx); \
-        if (result_bool_Error_is_err(_r)) return _r; \
+        if (result_bool_Error_is_err(_r)) { return _r; } \
     } \
     return result_bool_Error_ok(true); \
 }

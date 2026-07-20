@@ -339,7 +339,7 @@
 #define TRY_SOME(type, opt_expr, err_code) \
     ({ \
         option_##type _opt_try_ = (opt_expr); \
-        if (option_##type##_is_none(_opt_try_)) return (err_code); \
+        if (option_##type##_is_none(_opt_try_)) { return (err_code); } \
         option_##type##_unwrap(_opt_try_); \
     })
 

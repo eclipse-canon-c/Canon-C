@@ -172,7 +172,7 @@ typedef struct {
 static inline range range_make(isize start, isize end, isize step) {
     require_msg(step != CANON_ISIZE_MIN,
                 "range_make: step cannot be ISIZE_MIN (would overflow on negation)");
-    if (step == 0) step = 1;
+    if (step == 0) { step = 1; }
     return (range){ .current = start, .end = end, .step = step };
 }
 
@@ -262,9 +262,9 @@ static inline range range_downto(isize start, isize end) {
  * - Space: O(1)
  */
 static inline bool range_is_empty(const range* r) {
-    if (!r) return true;
-    if (r->step > 0) return r->current >= r->end;
-    if (r->step < 0) return r->current <= r->end;
+    if (!r) { return true; }
+    if (r->step > 0) { return r->current >= r->end; }
+    if (r->step < 0) { return r->current <= r->end; }
     return true; /* step == 0 should not occur after normalization */
 }
 
@@ -329,14 +329,14 @@ static inline bool range_is_valid(const range* r) {
  * - Space: O(1)
  */
 static inline usize range_len(const range* r) {
-    if (!r || range_is_empty(r)) return 0;
+    if (!r || range_is_empty(r)) { return 0; }
 
     /* Safe: range_make() rejects step == ISIZE_MIN, so -step is representable */
     isize abs_step = r->step > 0 ? r->step : -r->step;
     isize diff     = r->step > 0 ? (r->end - r->current)
                                  : (r->current - r->end);
 
-    if (diff <= 0) return 0;
+    if (diff <= 0) { return 0; }
 
     /* diff is a positive isize; abs_step >= 1; result fits in usize. */
     isize adjusted_diff;
@@ -375,7 +375,7 @@ static inline usize range_remaining(const range* r) {
  * - Space: O(1)
  */
 static inline bool range_peek(const range* r, isize* out) {
-    if (!r || !out || range_is_empty(r)) return false;
+    if (!r || !out || range_is_empty(r)) { return false; }
     *out = r->current;
     return true;
 }
@@ -394,7 +394,7 @@ static inline bool range_peek(const range* r, isize* out) {
  */
 static inline option_isize range_peek_option(const range* r) {
     isize val;
-    if (range_peek(r, &val)) return option_isize_some(val);
+    if (range_peek(r, &val)) { return option_isize_some(val); }
     return option_isize_none();
 }
 

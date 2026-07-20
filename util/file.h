@@ -103,18 +103,18 @@ static inline option_charp file_read_stream_(
     require_msg(arena != NULL, "file_read_stream_: arena is NULL");
 
     usize available = arena_remaining(arena);
-    if (available < 2u) return option_charp_none();
+    if (available < 2u) { return option_charp_none(); }
 
     ArenaMark mark = arena_mark(arena);
     char* base = (char*)arena_alloc(arena, available);
-    if (!base) return option_charp_none();
+    if (!base) { return option_charp_none(); }
 
     usize usable = available - 1u;
     usize total  = 0;
 
     while (total < usable) {
         usize chunk = usable - total;
-        if (chunk > FILE_READ_CHUNK_SIZE) chunk = FILE_READ_CHUNK_SIZE;
+        if (chunk > FILE_READ_CHUNK_SIZE) { chunk = FILE_READ_CHUNK_SIZE; }
 
         usize n = fread(base + total, 1, chunk, f);
         total += n;
@@ -132,7 +132,7 @@ static inline option_charp file_read_stream_(
 
     arena_reset_to(arena, mark);
     char* result = (char*)arena_alloc(arena, total + 1u);
-    if (!result) return option_charp_none();
+    if (!result) { return option_charp_none(); }
 
     result[total] = '\0';
     return option_charp_some(result);
@@ -162,7 +162,7 @@ static inline option_charp file_read_all_arena(
     option_charp result = option_charp_none();
 
     FILE* f = fopen(path, "rb");
-    if (!f) return result;
+    if (!f) { return result; }
 
     if (fseek(f, 0, SEEK_END) == 0) {
         long len = ftell(f);
@@ -213,7 +213,7 @@ static inline option_charp file_read_all(
     require_msg(scratch != NULL, "file_read_all: scratch is NULL");
 
     option_charp tmp = file_read_all_arena(path, scratch);
-    if (option_charp_is_none(tmp)) return option_charp_none();
+    if (option_charp_is_none(tmp)) { return option_charp_none(); }
 
     return str_alloc_copy(option_charp_unwrap(tmp));
 }
@@ -238,7 +238,7 @@ static inline result_usize_Error file_write_all(
     require_msg(content != NULL, "file_write_all: content is NULL");
 
     FILE* f = fopen(path, "wb");
-    if (!f) return result_usize_Error_err(ERR_IO_FAILED);
+    if (!f) { return result_usize_Error_err(ERR_IO_FAILED); }
 
     usize len = str_len(content);
     result_usize_Error r;
@@ -315,7 +315,7 @@ static inline result_usize_Error file_write_all_atomic(
 static inline bool file_exists(borrowed(const char*) path) {
     require_msg(path != NULL, "file_exists: path is NULL");
     FILE* f = fopen(path, "rb");
-    if (!f) return false;
+    if (!f) { return false; }
     fclose(f);
     return true;
 }

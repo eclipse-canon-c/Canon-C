@@ -195,8 +195,8 @@ static inline bool parse_is_ws_(char c) {
  * @return Pointer to first non-whitespace character, or to '\0' at end
  */
 static inline const char* parse_skip_ws(borrowed(const char*) s) {
-    if (!s) return s;
-    while (*s && parse_is_ws_(*s)) ++s;
+    if (!s) { return s; }
+    while (*s && parse_is_ws_(*s)) { ++s; }
     return s;
 }
 

@@ -133,7 +133,7 @@ ALGO_UNIQUE_LINKAGE usize algo_unique(
     require_msg(elem_size > 0u,     "algo_unique: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_unique: cmp cannot be NULL");
 
-    if (len <= 1u) return len;
+    if (len <= 1u) { return len; }
 
     usize write = 1;
 

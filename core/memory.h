@@ -215,7 +215,7 @@ static inline bool mem_regions_overlap(const void* a, const void* b, usize size)
   disjoint behaviors;
 */
 static inline void* mem_alloc(usize size) {
-    if (size == 0u) return NULL;
+    if (size == 0u) { return NULL; }
     return malloc(size);
 }
 
@@ -302,7 +302,7 @@ static inline void mem_free(void* ptr) {
 static inline void* mem_alloc_array_checked(usize element_size, usize count) {
     usize total;
     if (element_size == 0u || count == 0u) return NULL;
-    if (!checked_mul(element_size, count, &total)) return NULL;
+    if (!checked_mul(element_size, count, &total)) { return NULL; }
     return mem_alloc(total);
 }
 
@@ -337,7 +337,7 @@ static inline void* mem_alloc_array_checked(usize element_size, usize count) {
 */
 static inline usize mem_align(usize size) {
     const usize natural = CANON_DEFAULT_ALIGN;
-    if (size == 0u) return 0u;
+    if (size == 0u) { return 0u; }
     if (size > CANON_USIZE_MAX - (natural - 1u)) return CANON_USIZE_MAX;
     return align_up(size, natural);
 }
@@ -375,7 +375,7 @@ static inline usize mem_align(usize size) {
 static inline usize mem_align_to(usize size, usize alignment) {
     require_msg(alignment > 0u,              "mem_align_to: alignment must be > 0");
     require_msg(is_power_of_two(alignment), "mem_align_to: alignment must be a power of 2");
-    if (size == 0u) return 0u;
+    if (size == 0u) { return 0u; }
     if (size > CANON_USIZE_MAX - (alignment - 1u)) return CANON_USIZE_MAX;
     return align_up(size, alignment);
 }
@@ -442,7 +442,7 @@ static inline bool mem_is_aligned(const void* ptr, usize alignment) {
 */
 static inline usize mem_get_alignment(const void* ptr) {
     uintptr_t addr;
-    if (!ptr) return 0;
+    if (!ptr) { return 0; }
     addr = (uintptr_t)ptr;
     /* lowest set bit == largest power-of-2 that divides addr */
     return (usize)(addr & (uintptr_t)(-(intptr_t)addr));
@@ -583,7 +583,7 @@ static inline void mem_secure_zero(void* ptr, usize size) {
       loop assigns i, p[0 .. size - 1];
       loop variant size - i;
     */
-    for (i = 0; i < size; i++) p[i] = 0;
+    for (i = 0; i < size; i++) { p[i] = 0; }
 #endif
 }
 
@@ -654,9 +654,9 @@ static inline void mem_set(void* ptr, int value, usize size) {
   disjoint behaviors;
 */
 static inline int mem_compare(const void* a, const void* b, usize size) {
-    if (a == b)    return 0;                    /* covers both-NULL and same-pointer */
-    if (!a || !b)  return (!a) ? -1 : 1;        /* NULL sorts before non-NULL */
-    if (size == 0u) return 0u;
+    if (a == b)    { return 0; }                    /* covers both-NULL and same-pointer */
+    if (!a || !b)  { return (!a) ? -1 : 1; }        /* NULL sorts before non-NULL */
+    if (size == 0u) { return 0u; }
     return memcmp(a, b, size);
 }
 
@@ -696,9 +696,9 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
   disjoint behaviors;
 */
 static inline bool mem_equal(const void* a, const void* b, usize size) {
-    if (a == b)    return true;                 /* covers both-NULL and same-pointer */
-    if (!a || !b)  return false;
-    if (size == 0u) return true;
+    if (a == b)    { return true; }                 /* covers both-NULL and same-pointer */
+    if (!a || !b)  { return false; }
+    if (size == 0u) { return true; }
     return memcmp(a, b, size) == 0;
 }
 
@@ -736,7 +736,7 @@ static inline bool mem_is_all(const void* ptr, int value, usize size) {
       loop variant size - i;
     */
     for (i = 0; i < size; i++) {
-        if (p[i] != v) return false;
+        if (p[i] != v) { return false; }
     }
     return true;
 }
@@ -886,7 +886,7 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
 static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || src.len == 0u) return 0u;
     require_msg(dest.len >= src.len, "mem_copy_bytes: dest smaller than src");
-    if (dest.len < src.len) return 0;
+    if (dest.len < src.len) { return 0; }
     require_msg(!mem_regions_overlap(dest.ptr, src.ptr, src.len),
                 "mem_copy_bytes: regions overlap — use mem_move_bytes");
     memcpy(dest.ptr, src.ptr, src.len);
@@ -923,7 +923,7 @@ static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
 static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || src.len == 0u) return 0u;
     require_msg(dest.len >= src.len, "mem_move_bytes: dest smaller than src");
-    if (dest.len < src.len) return 0;
+    if (dest.len < src.len) { return 0; }
     memmove(dest.ptr, src.ptr, src.len);
     return src.len;
 }
@@ -1018,10 +1018,10 @@ static inline void mem_set_bytes(bytes_t b, int value) {
   disjoint behaviors;
 */
 static inline bool mem_equal_bytes(cbytes_t a, cbytes_t b) {
-    if (a.len != b.len) return false;
-    if (a.ptr == b.ptr) return true;            /* covers both-NULL with equal len */
-    if (!a.ptr || !b.ptr) return false;
-    if (a.len == 0u) return true;
+    if (a.len != b.len) { return false; }
+    if (a.ptr == b.ptr) { return true; }            /* covers both-NULL with equal len */
+    if (!a.ptr || !b.ptr) { return false; }
+    if (a.len == 0u) { return true; }
     return memcmp(a.ptr, b.ptr, a.len) == 0;
 }
 

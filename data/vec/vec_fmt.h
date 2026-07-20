@@ -132,7 +132,7 @@ linkage void fn(                                                                
         borrowed(const char*)    fmt)                                               \
 {                                                                                   \
     usize i;                                                                        \
-    if (!v || !sb || !fmt) return;                                                  \
+    if (!v || !sb || !fmt) { return; }                                              \
     for (i = 0; i < v->len; i++) {                                                  \
         stringbuf_printf(sb, fmt, v->items[i]);                                     \
     }                                                                               \
@@ -177,7 +177,7 @@ linkage void fn(                                                                
         void (*cb)(borrowed(StringBuf*), type))                                     \
 {                                                                                   \
     usize i;                                                                        \
-    if (!v || !sb || !cb) return;                                                   \
+    if (!v || !sb || !cb) { return; }                                               \
     for (i = 0; i < v->len; i++) {                                                  \
         cb(sb, v->items[i]);                                                        \
     }                                                                               \

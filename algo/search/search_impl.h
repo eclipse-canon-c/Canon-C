@@ -178,7 +178,7 @@ ALGO_SEARCH_LINKAGE usize algo_lower_bound(
     require_msg(cmp       != NULL, "algo_lower_bound: cmp cannot be NULL");
     require_msg(elem_size >  0u,    "algo_lower_bound: elem_size must be > 0");
 
-    if (len == 0u) return 0u;
+    if (len == 0u) { return 0u; }
     return algo_lower_bound_impl(array, len, elem_size, key, cmp, ctx);
 }
 
@@ -227,7 +227,7 @@ ALGO_SEARCH_LINKAGE usize algo_upper_bound(
     require_msg(cmp       != NULL, "algo_upper_bound: cmp cannot be NULL");
     require_msg(elem_size >  0u,    "algo_upper_bound: elem_size must be > 0");
 
-    if (len == 0u) return 0u;
+    if (len == 0u) { return 0u; }
 
     usize low  = 0;
     usize high = len;
@@ -288,7 +288,7 @@ ALGO_SEARCH_LINKAGE usize algo_find_sorted(
     require_msg(cmp       != NULL, "algo_find_sorted: cmp cannot be NULL");
     require_msg(elem_size >  0u,    "algo_find_sorted: elem_size must be > 0");
 
-    if (len == 0u) return CANON_USIZE_MAX;
+    if (len == 0u) { return CANON_USIZE_MAX; }
 
     usize pos = algo_lower_bound_impl(array, len, elem_size, key, cmp, ctx);
 

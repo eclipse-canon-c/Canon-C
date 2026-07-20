@@ -130,8 +130,8 @@ static inline result_bool_Error log_vfmt_to(
     borrowed(const char*) fmt,
     va_list               args)
 {
-    if (!stream) return result_bool_Error_err(ERR_INVALID_ARG);
-    if (!fmt)    return result_bool_Error_err(ERR_INVALID_ARG);
+    if (!stream) { return result_bool_Error_err(ERR_INVALID_ARG); }
+    if (!fmt)    { return result_bool_Error_err(ERR_INVALID_ARG); }
 
     const char* prefix;
     switch (level) {
@@ -141,17 +141,21 @@ static inline result_bool_Error log_vfmt_to(
         default:        prefix = "[????] ";  break;
     }
 
-    if (fputs(prefix, stream) == EOF)
+    if (fputs(prefix, stream) == EOF) {
         return result_bool_Error_err(ERR_IO_FAILED);
+    }
 
-    if (vfprintf(stream, fmt, args) < 0)
+    if (vfprintf(stream, fmt, args) < 0) {
         return result_bool_Error_err(ERR_IO_FAILED);
+    }
 
-    if (fputc('\n', stream) == EOF)
+    if (fputc('\n', stream) == EOF) {
         return result_bool_Error_err(ERR_IO_FAILED);
+    }
 
-    if (fflush(stream) == EOF)
+    if (fflush(stream) == EOF) {
         return result_bool_Error_err(ERR_IO_FAILED);
+    }
 
     return result_bool_Error_ok(true);
 }
@@ -184,8 +188,8 @@ static inline result_bool_Error log_to(
     log_level             level,
     borrowed(const char*) msg)
 {
-    if (!msg)    return result_bool_Error_err(ERR_INVALID_ARG);
-    if (!stream) return result_bool_Error_err(ERR_INVALID_ARG);
+    if (!msg)    { return result_bool_Error_err(ERR_INVALID_ARG); }
+    if (!stream) { return result_bool_Error_err(ERR_INVALID_ARG); }
     return log_fmt_to(stream, level, "%s", msg);
 }
 

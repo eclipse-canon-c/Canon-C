@@ -196,7 +196,7 @@ static inline usize ALGO_UNIQUE_SLICE_FN(type)( \
         "algo_unique_slice_" #type ": cmp cannot be NULL"); \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_unique_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len <= 1) return sv.len; \
+    if (sv.len <= 1) { return sv.len; } \
     return algo_unique(sv.ptr, sv.len, sizeof(type), cmp, ctx); \
 }
 

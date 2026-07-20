@@ -231,7 +231,7 @@
  */ \
 static inline slice_##type vec_##type##_as_slice( \
     borrowed(const MANGLE_VEC_TYPE(type)*) v) { \
-    if (!v || !v->items) return slice_##type##_empty(); \
+    if (!v || !v->items) { return slice_##type##_empty(); } \
     return slice_##type##_from(v->items, v->len); \
 } \
 \
@@ -248,7 +248,7 @@ static inline slice_##type vec_##type##_as_slice( \
  */ \
 static inline slice_##type vec_##type##_as_slice_full( \
     borrowed(const MANGLE_VEC_TYPE(type)*) v) { \
-    if (!v || !v->items) return slice_##type##_empty(); \
+    if (!v || !v->items) { return slice_##type##_empty(); } \
     return slice_##type##_from(v->items, v->capacity); \
 } \
 \
@@ -266,7 +266,7 @@ static inline slice_##type vec_##type##_as_slice_full( \
  */ \
 static inline bytes_t vec_##type##_as_bytes( \
     borrowed(const MANGLE_VEC_TYPE(type)*) v) { \
-    if (!v || !v->items) return bytes_empty(); \
+    if (!v || !v->items) { return bytes_empty(); } \
     return bytes_from(v->items, v->len * sizeof(type)); \
 }
 

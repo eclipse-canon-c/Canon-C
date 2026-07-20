@@ -154,7 +154,7 @@ static inline void algo_insertion_sort_range(
         for (usize j = i; j > left; j--) {
             void* a = ptr_elem(base, j - 1u, elem_size);
             void* b = ptr_elem(base, j,     elem_size);
-            if (cmp(a, b, ctx) <= 0) break;
+            if (cmp(a, b, ctx) <= 0) { break; }
             algo_sort_swap(a, b, elem_size);
         }
     }
@@ -302,7 +302,7 @@ ALGO_SORT_LINKAGE void algo_sort(
     require_msg(elem_size > 0u,     "algo_sort: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_sort: cmp cannot be NULL");
 
-    if (len < 2u) return;
+    if (len < 2u) { return; }
 
     if (len < 16u || !temp_buffer) {
         algo_insertion_sort_range(base, 0, len, elem_size, cmp, ctx);
@@ -350,7 +350,7 @@ ALGO_SORT_LINKAGE bool algo_is_sorted(
     require_msg(elem_size > 0u,     "algo_is_sorted: elem_size must be > 0");
     require_msg(cmp       != NULL, "algo_is_sorted: cmp cannot be NULL");
 
-    if (len < 2u) return true;
+    if (len < 2u) { return true; }
 
     for (usize i = 1; i < len; i++) {
         if (cmp(ptr_elem_const(base, i - 1u, elem_size),

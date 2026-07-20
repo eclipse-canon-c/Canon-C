@@ -912,7 +912,7 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
  */
 static inline bool checked_div(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = a / b;
     return true;
 }
@@ -932,7 +932,7 @@ static inline bool checked_div(usize a, usize b, usize* result) {
  */
 static inline bool checked_div_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = (u8)(a / b);
     return true;
 }
@@ -952,7 +952,7 @@ static inline bool checked_div_u8(u8 a, u8 b, u8* result) {
  */
 static inline bool checked_div_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = (u16)(a / b);
     return true;
 }
@@ -972,7 +972,7 @@ static inline bool checked_div_u16(u16 a, u16 b, u16* result) {
  */
 static inline bool checked_div_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = a / b;
     return true;
 }
@@ -992,7 +992,7 @@ static inline bool checked_div_u32(u32 a, u32 b, u32* result) {
  */
 static inline bool checked_div_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = a / b;
     return true;
 }
@@ -1044,7 +1044,7 @@ static inline bool checked_div_u64(u64 a, u64 b, u64* result) {
  */
 static inline bool checked_div_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0) { return false; }
     if (a == CANON_ISIZE_MIN && b == -1) return false;
     *result = a / b;
     return true;
@@ -1078,7 +1078,7 @@ static inline bool checked_div_isize(isize a, isize b, isize* result) {
  */
 static inline bool checked_mod(usize a, usize b, usize* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = a % b;
     return true;
 }
@@ -1098,7 +1098,7 @@ static inline bool checked_mod(usize a, usize b, usize* result) {
  */
 static inline bool checked_mod_u8(u8 a, u8 b, u8* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = (u8)(a % b);
     return true;
 }
@@ -1118,7 +1118,7 @@ static inline bool checked_mod_u8(u8 a, u8 b, u8* result) {
  */
 static inline bool checked_mod_u16(u16 a, u16 b, u16* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = (u16)(a % b);
     return true;
 }
@@ -1138,7 +1138,7 @@ static inline bool checked_mod_u16(u16 a, u16 b, u16* result) {
  */
 static inline bool checked_mod_u32(u32 a, u32 b, u32* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = a % b;
     return true;
 }
@@ -1158,7 +1158,7 @@ static inline bool checked_mod_u32(u32 a, u32 b, u32* result) {
  */
 static inline bool checked_mod_u64(u64 a, u64 b, u64* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0u) return false;
+    if (b == 0u) { return false; }
     *result = a % b;
     return true;
 }
@@ -1208,7 +1208,7 @@ static inline bool checked_mod_u64(u64 a, u64 b, u64* result) {
  */
 static inline bool checked_mod_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
-    if (b == 0) return false;
+    if (b == 0) { return false; }
     if (a == CANON_ISIZE_MIN && b == -1) return false;
     *result = a % b;
     return true;

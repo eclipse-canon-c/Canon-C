@@ -173,7 +173,7 @@
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(dp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 
@@ -735,7 +735,7 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
 linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
     require_msg(d   != NULL, #fn ": d cannot be NULL"); \
     require_msg(out != NULL, #fn ": out cannot be NULL"); \
-    if (d->size == 0) return false; \
+    if (d->size == 0) { return false; } \
     *out = d->buffer[d->head]; \
     return true; \
 }
@@ -763,7 +763,7 @@ linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
 linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
     require_msg(d   != NULL, #fn ": d cannot be NULL"); \
     require_msg(out != NULL, #fn ": out cannot be NULL"); \
-    if (d->size == 0) return false; \
+    if (d->size == 0) { return false; } \
     usize back_idx = (d->tail == 0) ? d->capacity - 1 : d->tail - 1; \
     *out = d->buffer[back_idx]; \
     return true; \
@@ -789,8 +789,9 @@ linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
 #define IMPL_DEQUE_PEEK_FRONT_OPTION(linkage, DequeType, fn, fn_peek_front, OptionType, fn_some, fn_none, type) \
 linkage OptionType fn(borrowed(const DequeType*) d) { \
     type out = {0}; \
-    if (fn_peek_front(d, &out)) \
+    if (fn_peek_front(d, &out)) { \
         return fn_some(out); \
+    } \
     return fn_none(); \
 }
 
@@ -814,8 +815,9 @@ linkage OptionType fn(borrowed(const DequeType*) d) { \
 #define IMPL_DEQUE_PEEK_BACK_OPTION(linkage, DequeType, fn, fn_peek_back, OptionType, fn_some, fn_none, type) \
 linkage OptionType fn(borrowed(const DequeType*) d) { \
     type out = {0}; \
-    if (fn_peek_back(d, &out)) \
+    if (fn_peek_back(d, &out)) { \
         return fn_some(out); \
+    } \
     return fn_none(); \
 }
 
@@ -847,7 +849,7 @@ linkage OptionType fn(borrowed(const DequeType*) d) { \
  */
 #define IMPL_DEQUE_CLEAR(linkage, DequeType, fn) \
 linkage void fn(borrowed(DequeType*) d) { \
-    if (!d) return; \
+    if (!d) { return; } \
     d->size = 0; \
     d->head = 0; \
     d->tail = 0; \

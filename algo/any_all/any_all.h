@@ -286,7 +286,7 @@ static inline bool ALGO_ANY_SLICE_FN(type)( \
 { \
     require_msg(pred != NULL, "algo_any_slice_" #type ": pred cannot be NULL"); \
     for (usize _i = 0; _i < sv.len; _i++) { \
-        if (pred(&sv.ptr[_i], ctx)) return true; \
+        if (pred(&sv.ptr[_i], ctx)) { return true; } \
     } \
     return false; \
 } \
@@ -309,7 +309,7 @@ static inline bool ALGO_ALL_SLICE_FN(type)( \
 { \
     require_msg(pred != NULL, "algo_all_slice_" #type ": pred cannot be NULL"); \
     for (usize _i = 0; _i < sv.len; _i++) { \
-        if (!pred(&sv.ptr[_i], ctx)) return false; \
+        if (!pred(&sv.ptr[_i], ctx)) { return false; } \
     } \
     return true; /* vacuous truth when sv.len == 0 */ \
 }

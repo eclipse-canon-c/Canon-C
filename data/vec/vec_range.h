@@ -123,13 +123,15 @@
  */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
-    if (!v || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     usize count = range_len(&r); \
     usize total; \
-    if (!checked_add(v->len, count, &total)) \
+    if (!checked_add(v->len, count, &total)) { \
         return result__Bool_Error_err(ERR_OVERFLOW); \
-    if (total > v->capacity) \
+    } \
+    if (total > v->capacity) { \
         return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    } \
     for (usize i = 0; range_has_next(&r); i++) { \
         v->items[v->len + i] = (type)range_next(&r); \
     } \

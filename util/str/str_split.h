@@ -115,15 +115,15 @@ static inline usize str_split(
     require_msg(s         != NULL, "str_split: s is NULL");
     require_msg(parts_out != NULL, "str_split: parts_out is NULL");
 
-    if (max_parts == 0u) return 0u;
+    if (max_parts == 0u) { return 0u; }
 
     count = 0;
     p     = s;
 
     while (*p) {
         /* Skip consecutive delimiters */
-        while (*p == delim) ++p;
-        if (!*p) break;
+        while (*p == delim) { ++p; }
+        if (!*p) { break; }
 
         /* Store start of token if space available */
         if (count < max_parts) {
@@ -166,10 +166,10 @@ static inline usize str_split_keep_empty(
     require_msg(s         != NULL, "str_split_keep_empty: s is NULL");
     require_msg(parts_out != NULL, "str_split_keep_empty: parts_out is NULL");
 
-    if (max_parts == 0u) return 0u;
+    if (max_parts == 0u) { return 0u; }
 
     /* Empty string produces zero fields */
-    if (!*s) return 0;
+    if (!*s) { return 0; }
 
     count = 0;
     start = s;
@@ -182,7 +182,7 @@ static inline usize str_split_keep_empty(
                 break;
             }
             start = p + 1;
-            if (*p == '\0') break;
+            if (*p == '\0') { break; }
         }
     }
 
@@ -209,11 +209,11 @@ static inline char* str_trim_char_inplace(char* s, char trim_ch) {
 
     require_msg(s != NULL, "str_trim_char_inplace: s is NULL");
 
-    if (!*s) return s;
+    if (!*s) { return s; }
 
     /* Trim leading */
     start = s;
-    while (*start == trim_ch) ++start;
+    while (*start == trim_ch) { ++start; }
 
     /* All trimmed → empty string */
     if (!*start) {
@@ -249,11 +249,11 @@ static inline char* str_trim_whitespace_inplace(char* s) {
 
     require_msg(s != NULL, "str_trim_whitespace_inplace: s is NULL");
 
-    if (!*s) return s;
+    if (!*s) { return s; }
 
     /* Trim leading whitespace */
     start = s;
-    while (*start && split_is_ws_(*start)) ++start;
+    while (*start && split_is_ws_(*start)) { ++start; }
 
     /* All whitespace → empty string */
     if (!*start) {

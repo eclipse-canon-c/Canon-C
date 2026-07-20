@@ -217,7 +217,7 @@ typedef struct {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(mp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 #endif
@@ -267,7 +267,7 @@ static inline u64 _hm_normalize_hash(u64 h) {
 
 HASHMAP_LINKAGE usize HM_BUFFER_SIZE_(usize capacity) {
     usize total = 0;
-    if (!checked_mul(capacity, sizeof(HASHMAP_SLOT_NAME), &total)) return 0;
+    if (!checked_mul(capacity, sizeof(HASHMAP_SLOT_NAME), &total)) { return 0; }
     return total;
 }
 
@@ -281,12 +281,13 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     usize                        capacity,
     void*                        ctx
 ) {
-    if (!map)           return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (!buf.ptr)       return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (capacity == 0u)  return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (!map)           { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (!buf.ptr)       { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (capacity == 0u)  { return result__Bool_Error_err(ERR_INVALID_ARG); }
 
-    if (!bits_is_power_of_two((u64)capacity))
+    if (!bits_is_power_of_two((u64)capacity)) {
         return result__Bool_Error_err(ERR_INVALID_ARG);
+    }
 
     usize required = HM_BUFFER_SIZE_(capacity);
     if (required == 0u || buf.len < required)
@@ -337,7 +338,7 @@ HASHMAP_LINKAGE bool HM_IS_EMPTY_(const HASHMAP_TYPE_NAME* map) {
 
 HASHMAP_LINKAGE f64 HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_load_factor: map cannot be NULL");
-    if (map->capacity == 0u) return 0.0;
+    if (map->capacity == 0u) { return 0.0; }
     return (f64)map->len / (f64)map->capacity;
 }
 
@@ -350,9 +351,9 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
     const hm_key_t*                key,
     const hm_val_t*                val
 ) {
-    if (!map)  return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (!key)  return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (!val)  return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (!map)  { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (!key)  { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (!val)  { return result__Bool_Error_err(ERR_INVALID_ARG); }
     require_msg(map->slots != NULL, "hashmap_insert: map is uninitialized");
 
     /* Enforce 75% load cap */
@@ -379,7 +380,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
         if (!slot->occupied) {
             /* Empty slot — place incoming here */
             *slot = incoming;
-            if (is_new_key) map->len++;
+            if (is_new_key) { map->len++; }
             HM_LIFETIME_RESTAMP_(map);
             return result__Bool_Error_ok(is_new_key);
         }
@@ -443,11 +444,12 @@ HASHMAP_LINKAGE option_hm_val_t HM_GET_(
     for (usize i = 0; i < map->capacity; i++) {
         const HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
-        if (!slot->occupied) return option_hm_val_t_none();
-        if (slot->psl < psl) return option_hm_val_t_none();
+        if (!slot->occupied) { return option_hm_val_t_none(); }
+        if (slot->psl < psl) { return option_hm_val_t_none(); }
 
-        if (slot->hash == h && HASHMAP_EQ_FN(&slot->key, key, map->ctx))
+        if (slot->hash == h && HASHMAP_EQ_FN(&slot->key, key, map->ctx)) {
             return option_hm_val_t_some(slot->value);
+        }
 
         psl++;
         probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
@@ -475,11 +477,12 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
     for (usize i = 0; i < map->capacity; i++) {
         HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
-        if (!slot->occupied)      return NULL;
-        if (slot->psl < psl)      return NULL;
+        if (!slot->occupied)      { return NULL; }
+        if (slot->psl < psl)      { return NULL; }
 
-        if (slot->hash == h && HASHMAP_EQ_FN(&slot->key, key, map->ctx))
+        if (slot->hash == h && HASHMAP_EQ_FN(&slot->key, key, map->ctx)) {
             return &slot->value;
+        }
 
         psl++;
         probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
@@ -509,8 +512,8 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_key_t*              key
 ) {
-    if (!map) return result_hm_val_t_Error_err(ERR_INVALID_ARG);
-    if (!key) return result_hm_val_t_Error_err(ERR_INVALID_ARG);
+    if (!map) { return result_hm_val_t_Error_err(ERR_INVALID_ARG); }
+    if (!key) { return result_hm_val_t_Error_err(ERR_INVALID_ARG); }
     require_msg(map->slots != NULL, "hashmap_remove: map is uninitialized");
 
     u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
@@ -522,8 +525,8 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
     for (usize i = 0; i < map->capacity; i++) {
         HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
-        if (!slot->occupied)  break;
-        if (slot->psl < psl)  break;
+        if (!slot->occupied)  { break; }
+        if (slot->psl < psl)  { break; }
 
         if (slot->hash == h && HASHMAP_EQ_FN(&slot->key, key, map->ctx)) {
             found_idx = probe_idx;
@@ -534,8 +537,9 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
         probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
     }
 
-    if (found_idx == map->capacity)
+    if (found_idx == map->capacity) {
         return result_hm_val_t_Error_err(ERR_NOT_FOUND);
+    }
 
     hm_val_t old_value = map->slots[found_idx].value;
 
@@ -581,8 +585,8 @@ HASHMAP_LINKAGE bool HM_ITER_NEXT_(
         (*iter)++;
 
         if (slot->occupied) {
-            if (key_out) *key_out = &slot->key;
-            if (val_out) *val_out = &slot->value;
+            if (key_out) { *key_out = &slot->key; }
+            if (val_out) { *val_out = &slot->value; }
             return true;
         }
     }

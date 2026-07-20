@@ -257,7 +257,7 @@ typedef struct {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(sp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 #endif
@@ -317,18 +317,18 @@ static inline void dynstring_lifetime_close_(DynString* s) {
  */
 static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
     ensure_msg(s != NULL, "dynstring_ensure_capacity: s cannot be NULL");
-    if (!s) return false;
-    if (s->cap >= min_cap) return true;
+    if (!s) { return false; }
+    if (s->cap >= min_cap) { return true; }
 
     usize new_cap = (s->cap == 0u)
         ? DYNSTRING_INITIAL_CAPACITY
         : s->cap * DYNSTRING_GROWTH_FACTOR;
 
-    if (new_cap < min_cap) new_cap = min_cap;
+    if (new_cap < min_cap) { new_cap = min_cap; }
 
     char* old_data = s->data;
     char* new_data = (char*)realloc(s->data, new_cap);
-    if (!new_data) return false;
+    if (!new_data) { return false; }
 
     s->data = new_data;
     s->cap = new_cap;
@@ -390,7 +390,7 @@ static inline DynString dynstring_init(void) {
  */
 static inline DynString dynstring_with_capacity(usize capacity) {
     DynString s = dynstring_init();
-    if (capacity == 0u) return s;
+    if (capacity == 0u) { return s; }
 
     s.data = (char*)malloc(capacity);
     if (s.data) {
@@ -419,7 +419,7 @@ static inline DynString dynstring_with_capacity(usize capacity) {
  */
 static inline DynString dynstring_from(const char* str) {
     DynString s = dynstring_init();
-    if (!str) return s;
+    if (!str) { return s; }
 
     usize len = strlen(str);
     usize cap = len + 1u;
@@ -523,11 +523,11 @@ static inline const char* dynstring_str(const DynString* s) {
  * - Space: May allocate up to 2× current capacity
  */
 static inline bool dynstring_append(DynString* s, const char* str) {
-    if (!s) return false;
-    if (!str) return true;  /* NULL is a no-op */
+    if (!s) { return false; }
+    if (!str) { return true; }  /* NULL is a no-op */
 
     usize add_len = strlen(str);
-    if (add_len == 0u) return true;
+    if (add_len == 0u) { return true; }
 
     usize required_cap = s->len + add_len + 1u;
     if (DYNSTRING_UNLIKELY(!dynstring_ensure_capacity(s, required_cap))) {
@@ -559,7 +559,7 @@ static inline bool dynstring_append(DynString* s, const char* str) {
  * - Space: May allocate up to 2× current capacity
  */
 static inline bool dynstring_append_char(DynString* s, char c) {
-    if (!s) return false;
+    if (!s) { return false; }
 
     usize required_cap = s->len + 2u;  /* char + '\0' */
     if (DYNSTRING_UNLIKELY(!dynstring_ensure_capacity(s, required_cap))) {
@@ -594,17 +594,17 @@ static inline bool dynstring_append_char(DynString* s, char c) {
  * - Space: May allocate up to 2× current capacity
  */
 static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
-    if (!s || !fmt) return false;
+    if (!s || !fmt) { return false; }
 
     va_list args;
     va_start(args, fmt);
     int needed = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
 
-    if (needed < 0) return false;
+    if (needed < 0) { return false; }
 
     usize required_cap = s->len + (usize)needed + 1u;
-    if (!dynstring_ensure_capacity(s, required_cap)) return false;
+    if (!dynstring_ensure_capacity(s, required_cap)) { return false; }
 
     va_start(args, fmt);
     int written = vsnprintf(s->data + s->len, s->cap - s->len, fmt, args);
@@ -636,16 +636,16 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
  * - Space: May allocate up to 2× current capacity
  */
 static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
-    if (!s) return false;
+    if (!s) { return false; }
     if (!str || n == 0u) return true;
 
     usize actual_len = 0;
     while (actual_len < n && str[actual_len] != '\0') actual_len++;
 
-    if (actual_len == 0u) return true;
+    if (actual_len == 0u) { return true; }
 
     usize required_cap = s->len + actual_len + 1u;
-    if (!dynstring_ensure_capacity(s, required_cap)) return false;
+    if (!dynstring_ensure_capacity(s, required_cap)) { return false; }
 
     mem_copy(s->data + s->len, str, actual_len);
     s->len += actual_len;
@@ -736,7 +736,7 @@ static inline void dynstring_truncate(DynString* s, usize new_len) {
  * - Space: May allocate
  */
 static inline bool dynstring_reserve(DynString* s, usize min_cap) {
-    if (!s) return false;
+    if (!s) { return false; }
     return dynstring_ensure_capacity(s, min_cap);
 }
 
@@ -762,7 +762,7 @@ static inline bool dynstring_reserve(DynString* s, usize min_cap) {
  * - Space: Frees (cap - len - 1) bytes
  */
 static inline bool dynstring_shrink_to_fit(DynString* s) {
-    if (!s || !s->data) return true;
+    if (!s || !s->data) { return true; }
 
     if (s->len == 0u) {
         free(s->data);
@@ -777,7 +777,7 @@ static inline bool dynstring_shrink_to_fit(DynString* s) {
     usize new_cap = s->len + 1u;
     char* old_data = s->data;
     char* new_data = (char*)realloc(s->data, new_cap);
-    if (!new_data) return false;
+    if (!new_data) { return false; }
 
     s->data = new_data;
     s->cap = new_cap;
@@ -848,7 +848,7 @@ static inline char* dynstring_to_cstr(const DynString* s) {
     usize len       = (s && s->data) ? s->len  : 0u;
 
     char* copy = (char*)malloc(len + 1u);
-    if (!copy) return NULL;  /* OOM — caller must check */
+    if (!copy) { return NULL; }  /* OOM — caller must check */
     mem_copy(copy, src, len + 1u);
     return copy;
 }

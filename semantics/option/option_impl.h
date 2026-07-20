@@ -473,8 +473,8 @@
  */
 #define IMPL_OPTION_EQ(_t, _o1, _o2, _eq) \
     { \
-        if (!(_o1).has_value && !(_o2).has_value) return true; \
-        if ((_o1).has_value != (_o2).has_value)   return false; \
+        if (!(_o1).has_value && !(_o2).has_value) { return true; } \
+        if ((_o1).has_value != (_o2).has_value)   { return false; } \
         return (_eq)((_o1).value, (_o2).value); \
     }
 

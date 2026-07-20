@@ -261,12 +261,12 @@ static inline usize ALGO_FILTER_SLICE_FN(type)( \
     require_msg(out  != NULL, "algo_filter_slice_" #type ": out cannot be NULL");  \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_filter_slice_" #type ": non-empty slice has NULL ptr"); \
-    if (sv.len == 0 || out_cap == 0) return 0; \
+    if (sv.len == 0 || out_cap == 0) { return 0; } \
     usize _written = 0; \
     for (usize _i = 0; _i < sv.len; _i++) { \
         if (pred(&sv.ptr[_i], ctx)) { \
             out[_written++] = sv.ptr[_i]; \
-            if (_written >= out_cap) break; \
+            if (_written >= out_cap) { break; } \
         } \
     } \
     return _written; \

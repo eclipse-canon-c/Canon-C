@@ -293,7 +293,7 @@ static inline usize ALGO_FIND_INDEX_SLICE_FN(type)( \
     require_msg(sv.len == 0 || sv.ptr != NULL, \
         "algo_find_index_slice_" #type ": non-empty slice has NULL ptr"); \
     for (usize _i = 0; _i < sv.len; _i++) { \
-        if (pred(&sv.ptr[_i], ctx)) return _i; \
+        if (pred(&sv.ptr[_i], ctx)) { return _i; } \
     } \
     return CANON_USIZE_MAX; \
 }

@@ -402,9 +402,9 @@ linkage bool stack_##type##_peek( \
 { \
     require_msg(s   != NULL, "stack_" #type "_peek: s cannot be NULL"); \
     require_msg(out != NULL, "stack_" #type "_peek: out cannot be NULL"); \
-    if (MANGLE_VEC_IS_EMPTY(type)(s)) return false; \
+    if (MANGLE_VEC_IS_EMPTY(type)(s)) { return false; } \
     type* last = MANGLE_VEC_LAST(type)(s); \
-    if (!last) return false; \
+    if (!last) { return false; } \
     *out = *last; \
     return true; \
 } \
@@ -431,8 +431,9 @@ linkage option_##type stack_##type##_peek_option( \
     borrowed(const stack_##type*) s) \
 { \
     type val = {0}; /* zero-init so val is never uninitialized on any path */ \
-    if (stack_##type##_peek(s, &val)) \
+    if (stack_##type##_peek(s, &val)) { \
         return option_##type##_some(val); \
+    } \
     return option_##type##_none(); \
 } \
 \

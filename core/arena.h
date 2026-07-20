@@ -183,7 +183,7 @@ static inline ArenaStats arena_stats(const Arena* arena) {
     #define arena_debug_update_(a) \
         do { \
             (a)->alloc_count += 1u; \
-            if ((a)->offset > (a)->peak) (a)->peak = (a)->offset; \
+            if ((a)->offset > (a)->peak) { (a)->peak = (a)->offset; } \
         } while (0)
     #define arena_debug_reset_(a) \
         do { (a)->alloc_count = 0; (a)->peak = 0; } while (0)
@@ -214,7 +214,7 @@ static inline ArenaStats arena_stats(const Arena* arena) {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(ap);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 
@@ -283,7 +283,7 @@ static inline void arena_init(Arena* arena, void* buffer, usize capacity) {
   disjoint behaviors;
 */
 static inline void arena_reset(Arena* arena) {
-    if (!arena) return;
+    if (!arena) { return; }
     arena->offset        = 0;
     arena->padding_accum = 0;
     arena_debug_reset_(arena);
@@ -352,7 +352,7 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     usize pad;
 
     require_msg(arena != NULL, "arena_alloc: arena cannot be NULL");
-    if (size == 0u) return NULL;
+    if (size == 0u) { return NULL; }
 
     current     = ptr_offset(arena->buffer, arena->offset);
     aligned_ptr = ptr_align_up(current, CANON_DEFAULT_ALIGN);
@@ -407,7 +407,7 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
     require_msg(arena != NULL, "arena_alloc_aligned: arena cannot be NULL");
     require_msg(is_power_of_two(alignment),
                 "arena_alloc_aligned: alignment must be a power of 2");
-    if (size == 0u) return NULL;
+    if (size == 0u) { return NULL; }
 
     current     = ptr_offset(arena->buffer, arena->offset);
     aligned_ptr = ptr_align_up(current, alignment);
@@ -647,7 +647,7 @@ static inline ArenaMark arena_mark(const Arena* arena) {
   disjoint behaviors;
 */
 static inline void arena_reset_to(Arena* arena, ArenaMark mark) {
-    if (!arena) return;
+    if (!arena) { return; }
     require_msg(mark <= arena->offset,
                 "arena_reset_to: mark is ahead of current offset");
     arena->offset = mark;
@@ -689,7 +689,7 @@ static inline bytes_t arena_buffer_bytes(const Arena* arena) {
 */
 static inline bytes_t arena_free_bytes(const Arena* arena) {
     require_msg(arena != NULL, "arena_free_bytes: arena cannot be NULL");
-    if (arena->offset >= arena->capacity) return bytes_empty();
+    if (arena->offset >= arena->capacity) { return bytes_empty(); }
     return bytes_from(ptr_offset(arena->buffer, arena->offset),
                       arena->capacity - arena->offset);
 }

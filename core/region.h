@@ -316,7 +316,7 @@ static inline void lifetime_assert_valid(
     region_id_t borrow_id,
     const char* site)
 {
-    if (borrow_id == REGION_ID_STATIC) return;
+    if (borrow_id == REGION_ID_STATIC) { return; }
     require_msg(source_open, site);
     require_msg(source_id == borrow_id, site);
     /* Suppress unused-parameter warnings when require_msg compiles away

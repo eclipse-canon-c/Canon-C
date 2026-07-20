@@ -116,7 +116,7 @@ ALGO_FIND_LINKAGE bool algo_find(
     require_msg(pred      != NULL, "algo_find: pred cannot be NULL");
     require_msg(elem_size >  0u,    "algo_find: elem_size must be > 0");
 
-    if (len == 0u) return false;
+    if (len == 0u) { return false; }
 
     for (usize i = 0; i < len; i++) {
         const void* elem = ptr_elem_const(base, i, elem_size);

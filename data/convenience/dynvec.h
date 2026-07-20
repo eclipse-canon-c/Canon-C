@@ -268,7 +268,7 @@
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(vp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 
@@ -382,14 +382,14 @@ static inline void dynvec_##type##_lifetime_close_(dynvec_##type* v) { \
  */ \
 static inline bool dynvec_##type##_grow(dynvec_##type* v, usize min_cap) { \
     ensure_msg(v != NULL, "dynvec_" #type "_grow: v cannot be NULL"); \
-    if (!v) return false; \
+    if (!v) { return false; } \
     usize new_cap = (v->cap == 0) \
         ? DYNVEC_INITIAL_CAPACITY \
         : v->cap * DYNVEC_GROWTH_FACTOR; \
-    if (new_cap < min_cap) new_cap = min_cap; \
+    if (new_cap < min_cap) { new_cap = min_cap; } \
     type* old_data = v->data; \
     type* new_data = (type*)realloc(v->data, new_cap * sizeof(type)); \
-    if (!new_data) return false; \
+    if (!new_data) { return false; } \
     v->data = new_data; \
     v->cap = new_cap; \
     if (new_data != old_data) { \
@@ -450,9 +450,9 @@ static inline dynvec_##type dynvec_##type##_init(void) { \
  */ \
 static inline dynvec_##type dynvec_##type##_with_capacity(usize capacity) { \
     dynvec_##type v = dynvec_##type##_init(); \
-    if (capacity == 0) return v; \
+    if (capacity == 0) { return v; } \
     v.data = (type*)malloc(capacity * sizeof(type)); \
-    if (v.data) v.cap = capacity; \
+    if (v.data) { v.cap = capacity; } \
     return v; \
 } \
 \
@@ -520,7 +520,7 @@ static inline bool dynvec_##type##_is_empty(const dynvec_##type* v) { \
  */ \
 static inline bool dynvec_##type##_get( \
     const dynvec_##type* v, usize i, type* out) { \
-    if (!v || !out || i >= v->len) return false; \
+    if (!v || !out || i >= v->len) { return false; } \
     *out = v->data[i]; \
     return true; \
 } \
@@ -563,7 +563,7 @@ static inline type dynvec_##type##_get_unchecked( \
  */ \
 static inline bool dynvec_##type##_set( \
     dynvec_##type* v, usize i, type value) { \
-    if (!v || i >= v->len) return false; \
+    if (!v || i >= v->len) { return false; } \
     v->data[i] = value; \
     return true; \
 } \
@@ -636,9 +636,9 @@ static inline type* dynvec_##type##_last(const dynvec_##type* v) { \
  */ \
 static DYNVEC_NOINLINE bool dynvec_##type##_push( \
     dynvec_##type* v, type value) { \
-    if (!v) return false; \
+    if (!v) { return false; } \
     if (DYNVEC_UNLIKELY(v->len >= v->cap)) { \
-        if (!dynvec_##type##_grow(v, v->len + 1)) return false; \
+        if (!dynvec_##type##_grow(v, v->len + 1)) { return false; } \
     } \
     v->data[v->len++] = value; \
     return true; \
@@ -657,7 +657,7 @@ static DYNVEC_NOINLINE bool dynvec_##type##_push( \
  */ \
 static inline bool dynvec_##type##_pop( \
     dynvec_##type* v, type* out) { \
-    if (!v || !out || v->len == 0) return false; \
+    if (!v || !out || v->len == 0) { return false; } \
     *out = v->data[--v->len]; \
     return true; \
 } \
@@ -683,9 +683,9 @@ static inline bool dynvec_##type##_pop( \
  */ \
 static DYNVEC_NOINLINE bool dynvec_##type##_insert( \
     dynvec_##type* v, usize i, type value) { \
-    if (!v || i > v->len) return false; \
+    if (!v || i > v->len) { return false; } \
     if (DYNVEC_UNLIKELY(v->len >= v->cap)) { \
-        if (!dynvec_##type##_grow(v, v->len + 1)) return false; \
+        if (!dynvec_##type##_grow(v, v->len + 1)) { return false; } \
     } \
     if (i < v->len) { \
         mem_move(&v->data[i + 1], &v->data[i], \
@@ -710,7 +710,7 @@ static DYNVEC_NOINLINE bool dynvec_##type##_insert( \
  */ \
 static inline bool dynvec_##type##_remove( \
     dynvec_##type* v, usize i, type* out) { \
-    if (!v || !out || i >= v->len) return false; \
+    if (!v || !out || i >= v->len) { return false; } \
     *out = v->data[i]; \
     if (i < v->len - 1) { \
         mem_move(&v->data[i], &v->data[i + 1], \
@@ -739,7 +739,7 @@ static inline bool dynvec_##type##_remove( \
  * - Space: O(1) \
  */ \
 static inline void dynvec_##type##_clear(dynvec_##type* v) { \
-    if (v) v->len = 0; \
+    if (v) { v->len = 0; } \
 } \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
@@ -767,10 +767,10 @@ static inline void dynvec_##type##_clear(dynvec_##type* v) { \
  */ \
 static DYNVEC_NOINLINE bool dynvec_##type##_extend( \
     dynvec_##type* v, const type* src, usize count) { \
-    if (!v || !src) return false; \
-    if (count == 0) return true; \
+    if (!v || !src) { return false; } \
+    if (count == 0) { return true; } \
     if (v->len + count > v->cap) { \
-        if (!dynvec_##type##_grow(v, v->len + count)) return false; \
+        if (!dynvec_##type##_grow(v, v->len + count)) { return false; } \
     } \
     mem_copy(&v->data[v->len], src, count * sizeof(type)); \
     v->len += count; \
@@ -802,8 +802,8 @@ static DYNVEC_NOINLINE bool dynvec_##type##_extend( \
  */ \
 static inline bool dynvec_##type##_reserve( \
     dynvec_##type* v, usize min_cap) { \
-    if (!v) return false; \
-    if (v->cap >= min_cap) return true; \
+    if (!v) { return false; } \
+    if (v->cap >= min_cap) { return true; } \
     return dynvec_##type##_grow(v, min_cap); \
 } \
 \
@@ -828,7 +828,7 @@ static inline bool dynvec_##type##_reserve( \
  * - Space: Frees (cap - len) * sizeof(type) bytes \
  */ \
 static inline bool dynvec_##type##_shrink_to_fit(dynvec_##type* v) { \
-    if (!v || v->len == v->cap) return true; \
+    if (!v || v->len == v->cap) { return true; } \
     if (v->len == 0) { \
         free(v->data); \
         v->data = NULL; \
@@ -838,7 +838,7 @@ static inline bool dynvec_##type##_shrink_to_fit(dynvec_##type* v) { \
     } \
     type* old_data = v->data; \
     type* new_data = (type*)realloc(v->data, v->len * sizeof(type)); \
-    if (!new_data) return false; \
+    if (!new_data) { return false; } \
     v->data = new_data; \
     v->cap = v->len; \
     if (new_data != old_data) { \
@@ -871,7 +871,7 @@ static inline bool dynvec_##type##_shrink_to_fit(dynvec_##type* v) { \
  * - Space: Frees cap * sizeof(type) bytes \
  */ \
 static inline void dynvec_##type##_free(dynvec_##type* v) { \
-    if (!v) return; \
+    if (!v) { return; } \
     free(v->data); \
     v->data = NULL; \
     v->len = 0; \

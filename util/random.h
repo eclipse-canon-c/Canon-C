@@ -178,7 +178,7 @@ static inline void random_seed(borrowed(Random*) r, u64 seed, u64 seq) {
  */
 static inline u32 random_range(borrowed(Random*) r, u32 bound) {
     require_msg(r != NULL, "random_range: r is NULL");
-    if (bound == 0u) return 0u;
+    if (bound == 0u) { return 0u; }
 
     /* Rejection threshold eliminates bias from modulo wrap */
     u32 threshold = (u32)(-(u32)bound % bound);
@@ -226,7 +226,7 @@ static inline bool random_bool(borrowed(Random*) r) {
  */
 static inline i32 random_i32_range(borrowed(Random*) r, i32 min, i32 max) {
     require_msg(r != NULL, "random_i32_range: r is NULL");
-    if (min >= max) return min;
+    if (min >= max) { return min; }
     u32 range = (u32)((i64)max - (i64)min + 1);
     return min + (i32)random_range(r, range);
 }

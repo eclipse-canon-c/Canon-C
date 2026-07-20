@@ -222,7 +222,7 @@ typedef struct {
         static region_id_t counter_ = 1;
         region_id_t id = (region_id_t)(counter_++)
                        ^ (region_id_t)(uintptr_t)(pp);
-        if (id == REGION_ID_STATIC) id = (region_id_t)1;
+        if (id == REGION_ID_STATIC) { id = (region_id_t)1; }
         return id;
     }
 
@@ -321,7 +321,7 @@ static inline bool pool_init(
      * before the call. This keeps base_mark, the per-slot ptr_elem
      * calculation in pool_alloc, and end_mark mutually consistent. */
     region = arena_alloc(arena, needed);
-    if (!region) return false;
+    if (!region) { return false; }
 
     pool->base_mark = (ArenaMark)((u8*)region - arena->buffer);
     pool->end_mark  = arena_mark(arena);
@@ -368,7 +368,7 @@ static inline void* pool_alloc(Pool* pool) {
     void* slot;
 
     require_msg(pool != NULL, "pool_alloc: pool cannot be NULL");
-    if (pool->used >= pool->capacity) return NULL;
+    if (pool->used >= pool->capacity) { return NULL; }
 
     base = ptr_offset(pool->arena->buffer, pool->base_mark);
     slot = ptr_elem(base, pool->used, pool->object_size);
@@ -569,7 +569,7 @@ static inline bytes_t pool_as_bytes(const Pool* pool) {
 */
 static inline bytes_t pool_reserved_bytes(const Pool* pool) {
     void* base;
-    if (!pool || !pool->arena) return bytes_empty();
+    if (!pool || !pool->arena) { return bytes_empty(); }
     base = ptr_offset(pool->arena->buffer, pool->base_mark);
     return bytes_from(base, pool->object_size * pool->capacity);
 }
@@ -609,7 +609,7 @@ static inline void pool_reset(Pool* pool) {
     void* region;
     usize needed;
 
-    if (!pool || !pool->arena) return;
+    if (!pool || !pool->arena) { return; }
     arena_reset_to(pool->arena, pool->base_mark);
     pool->used = 0;
 

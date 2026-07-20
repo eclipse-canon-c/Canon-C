@@ -676,8 +676,8 @@ static inline int algo_cmp_isize_desc(const void* a, const void* b, void* ctx) {
 static inline int algo_cmp_f32(const void* a, const void* b, void* ctx) {
     (void)ctx;
     f32 x = *(const f32*)a, y = *(const f32*)b;
-    if (x != x) return (y != y) ? 0 : 1;  /* x is NaN */
-    if (y != y) return -1;                 /* y is NaN, x is not */
+    if (x != x) { return (y != y) ? 0 : 1; }  /* x is NaN */
+    if (y != y) { return -1; }                 /* y is NaN, x is not */
     return (x > y) - (x < y);
 }
 
@@ -744,8 +744,8 @@ static inline int algo_cmp_f32_desc(const void* a, const void* b, void* ctx) {
 static inline int algo_cmp_f64(const void* a, const void* b, void* ctx) {
     (void)ctx;
     f64 x = *(const f64*)a, y = *(const f64*)b;
-    if (x != x) return (y != y) ? 0 : 1;  /* x is NaN */
-    if (y != y) return -1;                 /* y is NaN, x is not */
+    if (x != x) { return (y != y) ? 0 : 1; }  /* x is NaN */
+    if (y != y) { return -1; }                 /* y is NaN, x is not */
     return (x > y) - (x < y);
 }
 

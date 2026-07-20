@@ -294,8 +294,8 @@ static inline u64 bits_toggle(u64 value, u32 bit) {
     disjoint behaviors;
  */
 static inline u64 bits_extract(u64 value, u32 start, u32 count) {
-    if (count == 0u) return 0u;
-    if (count >= 64u) return value >> start;
+    if (count == 0u) { return 0u; }
+    if (count >= 64u) { return value >> start; }
     u64 mask = (1ULL << count) - 1u;
     return (value >> start) & mask;
 }
@@ -343,7 +343,7 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
     disjoint behaviors;
  */
 static inline u64 bits_insert(u64 dst, u64 src, u32 start, u32 count) {
-    if (count == 0u) return dst;
+    if (count == 0u) { return dst; }
     if (count >= 64u) {
         /* All 64 bits are replaced; shift src into position.
          * dst is fully overwritten — no bits of dst are preserved. */
@@ -446,7 +446,7 @@ static inline u32 bits_popcount(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_clz(u64 value) {
-    if (value == 0u) return 64u;
+    if (value == 0u) { return 64u; }
 #if CANON_BITS_GNUC
     return (u32)__builtin_clzll(value);
 #elif CANON_BITS_MSVC
@@ -506,7 +506,7 @@ static inline u32 bits_clz(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_ctz(u64 value) {
-    if (value == 0u) return 64u;
+    if (value == 0u) { return 64u; }
 #if CANON_BITS_GNUC
     return (u32)__builtin_ctzll(value);
 #elif CANON_BITS_MSVC
@@ -556,7 +556,7 @@ static inline u32 bits_ctz(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_ffs(u64 value) {
-    if (value == 0u) return 0u;
+    if (value == 0u) { return 0u; }
     return bits_ctz(value) + 1u;
 }
 
@@ -590,7 +590,7 @@ static inline u32 bits_ffs(u64 value) {
     disjoint behaviors;
  */
 static inline u32 bits_fls(u64 value) {
-    if (value == 0u) return 0u;
+    if (value == 0u) { return 0u; }
     return 64u - bits_clz(value);
 }
 
@@ -646,7 +646,7 @@ static inline u32 bits_fls(u64 value) {
  */
 static inline u64 bits_rotl(u64 value, u32 shift) {
     shift &= 63;
-    if (shift == 0u) return value;
+    if (shift == 0u) { return value; }
     return (value << shift) | (value >> (64u - shift));
 }
 
@@ -696,7 +696,7 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
  */
 static inline u64 bits_rotr(u64 value, u32 shift) {
     shift &= 63;
-    if (shift == 0u) return value;
+    if (shift == 0u) { return value; }
     return (value >> shift) | (value << (64u - shift));
 }
 
@@ -774,8 +774,8 @@ static inline bool bits_is_power_of_two(u64 value) {
     disjoint behaviors;
  */
 static inline u64 bits_next_power_of_two(u64 value) {
-    if (value == 0u) return 0u;
-    if (value > (1ULL << 63)) return 0;  /* Would overflow */
+    if (value == 0u) { return 0u; }
+    if (value > (1ULL << 63)) { return 0; }  /* Would overflow */
 
     value--;
     value |= value >> 1;

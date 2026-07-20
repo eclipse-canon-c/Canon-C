@@ -114,7 +114,7 @@ ALGO_ANY_ALL_LINKAGE bool algo_any(
     require_msg(elem_size >  0u,    "algo_any: elem_size must be > 0");
 
     for (usize i = 0; i < len; i++) {
-        if (pred(ptr_elem_const(base, i, elem_size), ctx)) return true;
+        if (pred(ptr_elem_const(base, i, elem_size), ctx)) { return true; }
     }
     return false;
 }
@@ -166,7 +166,7 @@ ALGO_ANY_ALL_LINKAGE bool algo_all(
     require_msg(elem_size >  0u,    "algo_all: elem_size must be > 0");
 
     for (usize i = 0; i < len; i++) {
-        if (!pred(ptr_elem_const(base, i, elem_size), ctx)) return false;
+        if (!pred(ptr_elem_const(base, i, elem_size), ctx)) { return false; }
     }
     return true; /* vacuous truth when len == 0 */
 }
