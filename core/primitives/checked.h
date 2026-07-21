@@ -525,12 +525,12 @@ static inline bool checked_mul(usize a, usize b, usize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
-    if (a == 0u || b == 0u) {
+    if ((a == 0u) || (b == 0u)) {
         *result = 0;
         return true;
     }
     *result = a * b;
-    return *result / a == b;  /* unsigned — well-defined; overflow iff division doesn't recover b */
+    return (*result / a) == b;  /* unsigned — well-defined; overflow iff division doesn't recover b */
 #endif
 }
 
@@ -630,12 +630,12 @@ static inline bool checked_mul_u64(u64 a, u64 b, u64* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
-    if (a == 0u || b == 0u) {
+    if ((a == 0u) || (b == 0u)) {
         *result = 0;
         return true;
     }
     *result = a * b;
-    return *result / a == b;  /* unsigned — well-defined */
+    return (*result / a) == b;  /* unsigned — well-defined */
 #endif
 }
 
@@ -693,8 +693,8 @@ static inline bool checked_add_isize(isize a, isize b, isize* result) {
      *   (-, -): underflow if b < ISIZE_MIN - a  (both negative, sum too small)
      * Mixed signs can never overflow.
      */
-    if (a > 0 && b > 0 && b > (CANON_ISIZE_MAX - a)) return false;
-    if (a < 0 && b < 0 && b < (CANON_ISIZE_MIN - a)) return false;
+    if ((a > 0) && (b > 0) && (b > (CANON_ISIZE_MAX - a))) { return false; }
+    if ((a < 0) && (b < 0) && (b < (CANON_ISIZE_MIN - a))) { return false; }
     *result = a + b;
     return true;
 #endif
@@ -741,8 +741,8 @@ static inline bool checked_sub_isize(isize a, isize b, isize* result) {
      *   subtracting positive from near-ISIZE_MIN: underflow if a < ISIZE_MIN + b
      *   subtracting negative from near-ISIZE_MAX: overflow  if a > ISIZE_MAX + b
      */
-    if (b > 0 && a < (CANON_ISIZE_MIN + b)) return false;
-    if (b < 0 && a > (CANON_ISIZE_MAX + b)) return false;
+    if ((b > 0) && (a < (CANON_ISIZE_MIN + b))) { return false; }
+    if ((b < 0) && (a > (CANON_ISIZE_MAX + b))) { return false; }
     *result = a - b;
     return true;
 #endif
@@ -803,7 +803,7 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
 #if CANON_HAS_BUILTIN_OVERFLOW
     return !__builtin_mul_overflow(a, b, result);
 #else
-    if (a == 0 || b == 0) {
+    if ((a == 0) || (b == 0)) {
         *result = 0;
         return true;
     }
@@ -823,7 +823,7 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
      * non-zero, non-identity multiplications involving ISIZE_MIN
      * all overflow (e.g. ISIZE_MIN * 2, ISIZE_MIN * -1, etc.).
      */
-    if (a == CANON_ISIZE_MIN || b == CANON_ISIZE_MIN) {
+    if ((a == CANON_ISIZE_MIN) || (b == CANON_ISIZE_MIN)) {
         return false;
     }
     /*
@@ -832,10 +832,10 @@ static inline bool checked_mul_isize(isize a, isize b, isize* result) {
      * Division is safe here: both a != 0 and b != 0 are guaranteed above,
      * and ISIZE_MIN has been eliminated, so -a and -b are always representable.
      */
-    if (a > 0 && b > 0 && a > (CANON_ISIZE_MAX / b)) return false;   /* (+,+) */
-    if (a < 0 && b < 0 && a < (CANON_ISIZE_MAX / b)) return false;   /* (-,-) */
-    if (a > 0 && b < 0 && b < (CANON_ISIZE_MIN / a)) return false;   /* (+,-) */
-    if (a < 0 && b > 0 && a < (CANON_ISIZE_MIN / b)) return false;   /* (-,+) */
+    if ((a > 0) && (b > 0) && (a > (CANON_ISIZE_MAX / b))) { return false; }   /* (+,+) */
+    if ((a < 0) && (b < 0) && (a < (CANON_ISIZE_MAX / b))) { return false; }   /* (-,-) */
+    if ((a > 0) && (b < 0) && (b < (CANON_ISIZE_MIN / a))) { return false; }   /* (+,-) */
+    if ((a < 0) && (b > 0) && (a < (CANON_ISIZE_MIN / b))) { return false; }   /* (-,+) */
     *result = a * b;
     return true;
 #endif
@@ -1045,7 +1045,7 @@ static inline bool checked_div_u64(u64 a, u64 b, u64* result) {
 static inline bool checked_div_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
     if (b == 0) { return false; }
-    if (a == CANON_ISIZE_MIN && b == -1) return false;
+    if ((a == CANON_ISIZE_MIN) && (b == -1)) { return false; }
     *result = a / b;
     return true;
 }
@@ -1209,7 +1209,7 @@ static inline bool checked_mod_u64(u64 a, u64 b, u64* result) {
 static inline bool checked_mod_isize(isize a, isize b, isize* result) {
     CHECKED_ASSERT_RESULT(result);
     if (b == 0) { return false; }
-    if (a == CANON_ISIZE_MIN && b == -1) return false;
+    if ((a == CANON_ISIZE_MIN) && (b == -1)) { return false; }
     *result = a % b;
     return true;
 }

@@ -308,7 +308,7 @@ static inline void arena_reset(Arena* arena) {
   disjoint behaviors;
 */
 static inline void arena_reset_secure(Arena* arena) {
-    if (!arena || arena->offset == 0u) return;
+    if (!arena || (arena->offset == 0u)) { return; }
     mem_secure_zero(arena->buffer, arena->offset);
     arena->offset        = 0;
     arena->padding_accum = 0;
@@ -358,9 +358,9 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     aligned_ptr = ptr_align_up(current, CANON_DEFAULT_ALIGN);
     pad         = ptr_span(aligned_ptr, current);
 
-    if (arena->offset > CANON_USIZE_MAX - pad ||
-        arena->offset + pad > CANON_USIZE_MAX - size ||
-        arena->offset + pad + size > arena->capacity) {
+    if ((arena->offset > (CANON_USIZE_MAX - pad)) ||
+        ((arena->offset + pad) > (CANON_USIZE_MAX - size)) ||
+        ((arena->offset + pad + size) > arena->capacity)) {
         return NULL;
     }
 
@@ -413,9 +413,9 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
     aligned_ptr = ptr_align_up(current, alignment);
     pad         = ptr_span(aligned_ptr, current);
 
-    if (arena->offset > CANON_USIZE_MAX - pad ||
-        arena->offset + pad > CANON_USIZE_MAX - size ||
-        arena->offset + pad + size > arena->capacity) {
+    if ((arena->offset > (CANON_USIZE_MAX - pad)) ||
+        ((arena->offset + pad) > (CANON_USIZE_MAX - size)) ||
+        ((arena->offset + pad + size) > arena->capacity)) {
         return NULL;
     }
 
@@ -497,7 +497,7 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
     if (out) *out = p;
-    return out != NULL && p != NULL;
+    return (out != NULL) && (p != NULL);
 }
 
 /*@
@@ -522,7 +522,7 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
 static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
     if (out) *out = p;
-    return out != NULL && p != NULL;
+    return (out != NULL) && (p != NULL);
 }
 
 /* ============================================================================
@@ -591,7 +591,7 @@ static inline usize arena_used(const Arena* arena) {
   disjoint behaviors;
 */
 static inline bool arena_is_empty(const Arena* arena) {
-    return !arena || arena->offset == 0u;
+    return !arena || (arena->offset == 0u);
 }
 
 /*@
@@ -607,7 +607,7 @@ static inline bool arena_is_empty(const Arena* arena) {
   disjoint behaviors;
 */
 static inline bool arena_is_full(const Arena* arena) {
-    return !arena || arena->offset >= arena->capacity;
+    return !arena || (arena->offset >= arena->capacity);
 }
 
 /* ============================================================================

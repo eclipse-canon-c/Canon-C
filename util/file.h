@@ -168,7 +168,7 @@ static inline option_charp file_read_all_arena(
         long len = ftell(f);
 
         if (len >= 0) {
-            if ((usize)len + 1u < (usize)len) goto done;
+            if (((usize)len + 1u) < (usize)len) goto done;
             if (fseek(f, 0, SEEK_SET) != 0) goto done;
 
             usize size = (usize)len + 1u;
@@ -281,7 +281,7 @@ static inline result_usize_Error file_write_all_atomic(
     char tmp[FILE_MAX_PATH];
     usize path_len = str_len(path);
 
-    if (path_len + 5u > FILE_MAX_PATH) return result_usize_Error_err(ERR_BUFFER_TOO_SMALL);
+    if ((path_len + 5u) > FILE_MAX_PATH) { return result_usize_Error_err(ERR_BUFFER_TOO_SMALL); }
 
     mem_copy(tmp, path, path_len);
     mem_copy(tmp + path_len, ".tmp", 5);

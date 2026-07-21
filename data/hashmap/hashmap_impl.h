@@ -258,7 +258,7 @@ static inline usize _hm_wrap(usize index, usize capacity) {
 }
 
 static inline u64 _hm_normalize_hash(u64 h) {
-    return h == 0u ? 1u : h;
+    return (h == 0u) ? 1u : h;
 }
 
 /* ============================================================================
@@ -290,8 +290,9 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     }
 
     usize required = HM_BUFFER_SIZE_(capacity);
-    if (required == 0u || buf.len < required)
+    if ((required == 0u) || (buf.len < required)) {
         return result__Bool_Error_err(ERR_BUFFER_TOO_SMALL);
+    }
 
     map->slots    = (HASHMAP_SLOT_NAME*)buf.ptr;
     map->capacity = capacity;
@@ -357,8 +358,9 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
     require_msg(map->slots != NULL, "hashmap_insert: map is uninitialized");
 
     /* Enforce 75% load cap */
-    if (map->len >= map->capacity - (map->capacity / 4u))
+    if (map->len >= (map->capacity - (map->capacity / 4u))) {
         return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
+    }
 
     u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
     usize home      = _hm_home(h, map->capacity);
@@ -545,11 +547,11 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
 
     /* Phase 2: backward shift deletion */
     usize curr = found_idx;
-    for (usize i = 0u; i < map->capacity - 1u; i++) {
+    for (usize i = 0u; i < (map->capacity - 1u); i++) {
         usize next = _hm_wrap(curr + 1u, map->capacity);
         HASHMAP_SLOT_NAME* next_slot = &map->slots[next];
 
-        if (!next_slot->occupied || next_slot->psl == 0u) {
+        if (!next_slot->occupied || (next_slot->psl == 0u)) {
             map->slots[curr].occupied = false;
             map->slots[curr].hash     = 0;
             map->slots[curr].psl      = 0;

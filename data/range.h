@@ -332,8 +332,8 @@ static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) { return 0; }
 
     /* Safe: range_make() rejects step == ISIZE_MIN, so -step is representable */
-    isize abs_step = r->step > 0 ? r->step : -r->step;
-    isize diff     = r->step > 0 ? (r->end - r->current)
+    isize abs_step = (r->step > 0) ? r->step : -r->step;
+    isize diff     = (r->step > 0) ? (r->end - r->current)
                                  : (r->current - r->end);
 
     if (diff <= 0) { return 0; }
@@ -434,9 +434,9 @@ static inline isize range_next(range* r) {
     if (checked_add_isize(r->current, r->step, &next_value)) {
         r->current = next_value;
 
-        if (r->step > 0 && r->current >= r->end) {
+        if ((r->step > 0) && (r->current >= r->end)) {
             r->current = r->end;
-        } else if (r->step < 0 && r->current <= r->end) {
+        } else if ((r->step < 0) && (r->current <= r->end)) {
             r->current = r->end;
         }
     } else {
@@ -487,7 +487,7 @@ static inline void range_reset(range* r, isize new_start) {
  * - Space: O(1)
  */
 static inline void range_skip(range* r, usize n) {
-    if (!r || n == 0u || range_is_empty(r)) return;
+    if (!r || (n == 0u) || range_is_empty(r)) { return; }
 
     isize jump;
     if (!checked_mul_isize((isize)n, r->step, &jump)) {
@@ -504,9 +504,9 @@ static inline void range_skip(range* r, usize n) {
     }
 
     /* Clamp to end if boundary crossed */
-    if (r->step > 0 && new_current >= r->end) {
+    if ((r->step > 0) && (new_current >= r->end)) {
         r->current = r->end;
-    } else if (r->step < 0 && new_current <= r->end) {
+    } else if ((r->step < 0) && (new_current <= r->end)) {
         r->current = r->end;
     } else {
         r->current = new_current;

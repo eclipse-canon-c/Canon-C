@@ -247,7 +247,7 @@ typedef struct { const char* ptr; usize len; } str_t;
     ensures  bytes_invariant(\result);
  */
 static inline bytes_t bytes_from(void* ptr, usize len) {
-    require_msg(ptr != NULL || len == 0u, "bytes_from: NULL ptr with non-zero len");
+    require_msg((ptr != NULL) || (len == 0u), "bytes_from: NULL ptr with non-zero len");
     return (bytes_t){ .ptr = (u8*)ptr, .len = len };
 }
 
@@ -292,7 +292,7 @@ static inline bytes_t bytes_empty(void) {
     ensures  cbytes_invariant(\result);
  */
 static inline cbytes_t cbytes_from(const void* ptr, usize len) {
-    require_msg(ptr != NULL || len == 0u, "cbytes_from: NULL ptr with non-zero len");
+    require_msg((ptr != NULL) || (len == 0u), "cbytes_from: NULL ptr with non-zero len");
     return (cbytes_t){ .ptr = (const u8*)ptr, .len = len };
 }
 
@@ -385,7 +385,7 @@ static inline bool bytes_is_empty(bytes_t b) {
     disjoint behaviors;
  */
 static inline u8* bytes_at(bytes_t b, usize i) {
-    if (!b.ptr || i >= b.len) return NULL;
+    if (!b.ptr || (i >= b.len)) { return NULL; }
     return b.ptr + i;
 }
 
@@ -466,7 +466,7 @@ static inline bool bytes_equal(bytes_t a, bytes_t b) {
     disjoint behaviors;
  */
 static inline bytes_t bytes_slice(bytes_t b, usize start, usize end) {
-    if (!b.ptr || start >= b.len) return bytes_empty();
+    if (!b.ptr || (start >= b.len)) { return bytes_empty(); }
     if (end > b.len) end = b.len;
     if (start >= end) { return bytes_empty(); }
     return (bytes_t){ .ptr = b.ptr + start, .len = end - start };
@@ -516,7 +516,7 @@ static inline bytes_t bytes_take(bytes_t b, usize n) {
     disjoint behaviors;
  */
 static inline bytes_t bytes_skip(bytes_t b, usize n) {
-    if (!b.ptr || n >= b.len) return bytes_empty();
+    if (!b.ptr || (n >= b.len)) { return bytes_empty(); }
     return (bytes_t){ .ptr = b.ptr + n, .len = b.len - n };
 }
 
@@ -544,7 +544,7 @@ static inline bytes_t bytes_skip(bytes_t b, usize n) {
     ensures  str_invariant(\result);
  */
 static inline str_t str_from(const char* ptr, usize len) {
-    require_msg(ptr != NULL || len == 0u, "str_from: NULL ptr with non-zero len");
+    require_msg((ptr != NULL) || (len == 0u), "str_from: NULL ptr with non-zero len");
     return (str_t){ .ptr = ptr, .len = len };
 }
 
@@ -661,7 +661,7 @@ static inline bool str_equal(str_t a, str_t b) {
  */
 static inline bool str_starts_with(str_t s, str_t prefix) {
     if (prefix.len > s.len) { return false; }
-    if (!prefix.ptr || prefix.len == 0u) return true;
+    if (!prefix.ptr || (prefix.len == 0u)) { return true; }
     return memcmp(s.ptr, prefix.ptr, prefix.len) == 0;
 }
 
@@ -689,7 +689,7 @@ static inline bool str_starts_with(str_t s, str_t prefix) {
  */
 static inline bool str_ends_with(str_t s, str_t suffix) {
     if (suffix.len > s.len) { return false; }
-    if (!suffix.ptr || suffix.len == 0u) return true;
+    if (!suffix.ptr || (suffix.len == 0u)) { return true; }
     return memcmp(s.ptr + (s.len - suffix.len), suffix.ptr, suffix.len) == 0;
 }
 
@@ -717,7 +717,7 @@ static inline bool str_ends_with(str_t s, str_t suffix) {
     disjoint behaviors;
  */
 static inline str_t str_slice(str_t s, usize start, usize end) {
-    if (!s.ptr || start >= s.len) return str_empty();
+    if (!s.ptr || (start >= s.len)) { return str_empty(); }
     if (end > s.len) end = s.len;
     if (start >= end) { return str_empty(); }
     return (str_t){ .ptr = s.ptr + start, .len = end - start };
@@ -757,7 +757,7 @@ static inline str_t str_take(str_t s, usize n) {
     disjoint behaviors;
  */
 static inline str_t str_skip(str_t s, usize n) {
-    if (!s.ptr || n >= s.len) return str_empty();
+    if (!s.ptr || (n >= s.len)) { return str_empty(); }
     return (str_t){ .ptr = s.ptr + n, .len = s.len - n };
 }
 

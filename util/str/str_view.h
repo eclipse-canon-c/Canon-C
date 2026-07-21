@@ -122,7 +122,7 @@ static inline bool str_view_is_null(str_view_t v) {
 
 /** @brief Returns true if the view has a valid pointer and non-zero length */
 static inline bool str_view_has_data(str_view_t v) {
-    return v.ptr != NULL && v.len > 0u;
+    return (v.ptr != NULL) && (v.len > 0u);
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ static inline bool str_view_equals(str_view_t a, str_view_t b) {
 
 /** @brief Lexicographic comparison of two views */
 static inline int str_view_compare(str_view_t a, str_view_t b) {
-    usize min_len = a.len < b.len ? a.len : b.len;
+    usize min_len = (a.len < b.len) ? a.len : b.len;
     if (min_len > 0u) {
         int cmp = mem_compare(a.ptr, b.ptr, min_len);
         if (cmp != 0) { return cmp; }
@@ -173,7 +173,7 @@ static inline str_view_t str_view_sub(str_view_t v, usize start, usize len) {
     usize avail;
     if (start >= v.len) { return str_view_empty(); }
     avail = v.len - start;
-    return str_view_from_len(v.ptr + start, len < avail ? len : avail);
+    return str_view_from_len(v.ptr + start, (len < avail) ? len : avail);
 }
 
 /** @brief Returns the first n characters as a view */

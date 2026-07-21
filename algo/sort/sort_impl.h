@@ -189,7 +189,7 @@ static inline void algo_merge(
 {
     usize i = left, j = mid, k = 0;
 
-    while (i < mid && j < right) {
+    while ((i < mid) && (j < right)) {
         const void* le = ptr_elem_const(base, i, elem_size);
         const void* re = ptr_elem_const(base, j, elem_size);
         /* <= for stability: equal elements from left half come first */
@@ -241,8 +241,8 @@ static inline void algo_merge_sort_range(
     void*       ctx,
     void*       temp)
 {
-    if (right - left <= 1u) return;
-    if (right - left < 16u) {
+    if ((right - left) <= 1u) { return; }
+    if ((right - left) < 16u) {
         algo_insertion_sort_range(base, left, right, elem_size, cmp, ctx);
         return;
     }
@@ -304,7 +304,7 @@ ALGO_SORT_LINKAGE void algo_sort(
 
     if (len < 2u) { return; }
 
-    if (len < 16u || !temp_buffer) {
+    if ((len < 16u) || !temp_buffer) {
         algo_insertion_sort_range(base, 0, len, elem_size, cmp, ctx);
     } else {
         algo_merge_sort_range(base, 0, len, elem_size, cmp, ctx, temp_buffer);

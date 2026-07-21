@@ -292,7 +292,7 @@ ALGO_SEARCH_LINKAGE usize algo_find_sorted(
 
     usize pos = algo_lower_bound_impl(array, len, elem_size, key, cmp, ctx);
 
-    if (pos < len && cmp(ptr_elem_const(array, pos, elem_size), key, ctx) == 0) {
+    if ((pos < len) && (cmp(ptr_elem_const(array, pos, elem_size), key, ctx) == 0)) {
         return pos;
     }
     return CANON_USIZE_MAX;

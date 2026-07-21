@@ -322,7 +322,7 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
 
     usize new_cap = (s->cap == 0u)
         ? DYNSTRING_INITIAL_CAPACITY
-        : s->cap * DYNSTRING_GROWTH_FACTOR;
+        : (s->cap * DYNSTRING_GROWTH_FACTOR);
 
     if (new_cap < min_cap) { new_cap = min_cap; }
 
@@ -476,7 +476,7 @@ static inline usize dynstring_capacity(const DynString* s) {
  * - Space: O(1)
  */
 static inline bool dynstring_is_empty(const DynString* s) {
-    return !s || s->len == 0u;
+    return !s || (s->len == 0u);
 }
 
 /**
@@ -610,7 +610,7 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
     int written = vsnprintf(s->data + s->len, s->cap - s->len, fmt, args);
     va_end(args);
 
-    if (written < 0 || written != needed) return false;
+    if ((written < 0) || (written != needed)) { return false; }
 
     s->len += (usize)written;
     return true;
@@ -637,10 +637,10 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
  */
 static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
     if (!s) { return false; }
-    if (!str || n == 0u) return true;
+    if (!str || (n == 0u)) { return true; }
 
     usize actual_len = 0;
-    while (actual_len < n && str[actual_len] != '\0') actual_len++;
+    while ((actual_len < n) && (str[actual_len] != '\0')) { actual_len++; }
 
     if (actual_len == 0u) { return true; }
 
@@ -705,7 +705,7 @@ static inline void dynstring_clear(DynString* s) {
  * - Space: O(1)
  */
 static inline void dynstring_truncate(DynString* s, usize new_len) {
-    if (s && s->data && new_len < s->len) {
+    if (s && s->data && (new_len < s->len)) {
         s->len = new_len;
         s->data[s->len] = '\0';
     }
@@ -772,7 +772,7 @@ static inline bool dynstring_shrink_to_fit(DynString* s) {
         return true;
     }
 
-    if (s->cap == s->len + 1u) return true;  /* already minimal */
+    if (s->cap == (s->len + 1u)) { return true; }  /* already minimal */
 
     usize new_cap = s->len + 1u;
     char* old_data = s->data;

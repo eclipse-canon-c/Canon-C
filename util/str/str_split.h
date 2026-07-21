@@ -133,7 +133,7 @@ static inline usize str_split(
         }
 
         /* Skip to next delimiter or end */
-        while (*p && *p != delim) ++p;
+        while (*p && (*p != delim)) { ++p; }
     }
 
     return count;
@@ -175,7 +175,7 @@ static inline usize str_split_keep_empty(
     start = s;
 
     for (p = s; ; ++p) {
-        if (*p == delim || *p == '\0') {
+        if ((*p == delim) || (*p == '\0')) {
             if (count < max_parts) {
                 parts_out[count++] = start;
             } else {
@@ -228,7 +228,7 @@ static inline char* str_trim_char_inplace(char* s, char trim_ch) {
 
     /* Trim trailing */
     end = s + str_len(s);
-    while (end > s && *(end - 1) == trim_ch) --end;
+    while ((end > s) && (*(end - 1) == trim_ch)) { --end; }
     *end = '\0';
 
     return s;
@@ -268,7 +268,7 @@ static inline char* str_trim_whitespace_inplace(char* s) {
 
     /* Trim trailing whitespace */
     end = s + str_len(s);
-    while (end > s && split_is_ws_(*(end - 1))) --end;
+    while ((end > s) && split_is_ws_(*(end - 1))) { --end; }
     *end = '\0';
 
     return s;

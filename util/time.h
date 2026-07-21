@@ -144,7 +144,7 @@ static inline u64 stopwatch_now_ns_(void) {
 #else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (u64)ts.tv_sec * 1000000000ULL + (u64)ts.tv_nsec;
+    return ((u64)ts.tv_sec * 1000000000ULL) + (u64)ts.tv_nsec;
 #endif
 }
 

@@ -993,7 +993,7 @@ static inline bool borrowed_bytes_eq(borrowed_bytes a, borrowed_bytes b)
     if (a.bytes.ptr == b.bytes.ptr) {
         return true; /* same pointer, same length — identical by definition */
     }
-    if (a.bytes.ptr == NULL || b.bytes.ptr == NULL) {
+    if ((a.bytes.ptr == NULL) || (b.bytes.ptr == NULL)) {
         /* One NULL, one non-NULL, same length > 0 — impossible by
            construction (cbytes_invariant forbids {NULL, len>0}) but
            guarded for safety. The assert below asks WP to prove this

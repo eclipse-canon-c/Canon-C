@@ -161,7 +161,7 @@ static inline str_view_t intern_string(
         }
 
         /* Occupied slot — check for match */
-        if (entry->len == len && mem_compare(entry->ptr, s, len) == 0) {
+        if ((entry->len == len) && (mem_compare(entry->ptr, s, len) == 0)) {
             return *entry;
         }
 

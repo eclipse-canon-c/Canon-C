@@ -259,9 +259,9 @@ static inline usize pq_parent(usize i) {
     return (i - 1u) / 2u;
 }
 /** @brief Returns index of left child */
-static inline usize pq_left_child(usize i)  { return 2u * i + 1u; }
+static inline usize pq_left_child(usize i)  { return (2u * i) + 1u; }
 /** @brief Returns index of right child */
-static inline usize pq_right_child(usize i) { return 2u * i + 2u; }
+static inline usize pq_right_child(usize i) { return (2u * i) + 2u; }
 
 /**
  * @brief Swaps two elements in the heap
@@ -483,7 +483,7 @@ static inline result__Bool_Error pq_push_result(
  * Performance: O(log n)
  */
 static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
-    if (!pq || pq->len == 0u) return false;
+    if (!pq || (pq->len == 0u)) { return false; }
     if (out) mem_copy(out, ptr_elem(pq->data, 0, pq->elem_size), pq->elem_size);
     pq->len--;
     if (pq->len > 0u) {
@@ -512,7 +512,7 @@ static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
  * Performance: O(1)
  */
 static inline const void* pq_peek_raw(borrowed(const PriorityQueue*) pq) {
-    if (!pq || pq->len == 0u) return NULL;
+    if (!pq || (pq->len == 0u)) { return NULL; }
     return ptr_elem_const(pq->data, 0, pq->elem_size);
 }
 
@@ -606,12 +606,12 @@ static inline usize pq_remaining(borrowed(const PriorityQueue*) pq) {
 
 /** @brief Returns true if the queue has no elements. NULL pq returns true. */
 static inline bool pq_is_empty(borrowed(const PriorityQueue*) pq) {
-    return !pq || pq->len == 0u;
+    return !pq || (pq->len == 0u);
 }
 
 /** @brief Returns true if the queue is at capacity. NULL pq returns false. */
 static inline bool pq_is_full(borrowed(const PriorityQueue*) pq) {
-    return pq && pq->len >= pq->capacity;
+    return pq && (pq->len >= pq->capacity);
 }
 
 /**
@@ -623,7 +623,7 @@ static inline bool pq_is_full(borrowed(const PriorityQueue*) pq) {
  * Performance: O(1)
  */
 static inline bytes_t pq_as_bytes(borrowed(const PriorityQueue*) pq) {
-    if (!pq || !pq->data || pq->len == 0u) return bytes_empty();
+    if (!pq || !pq->data || (pq->len == 0u)) { return bytes_empty(); }
     return bytes_from(pq->data, pq->len * pq->elem_size);
 }
 

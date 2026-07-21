@@ -3579,10 +3579,11 @@ jobs:
         #   1. Overflow guard structural unreachability (4 outcomes) —
         #      the compound `||` in arena_alloc (line 346) and
         #      arena_alloc_aligned (line 401):
-        #          if (arena->offset > CANON_USIZE_MAX - pad ||      // cond 0
-        #              arena->offset + pad > CANON_USIZE_MAX - size ||// cond 1
-        #              arena->offset + pad + size > arena->capacity) // cond 2
+        #          if ((arena->offset > (CANON_USIZE_MAX - pad)) ||        // cond 0
+        #              ((arena->offset + pad) > (CANON_USIZE_MAX - size)) || // cond 1
+        #              ((arena->offset + pad + size) > arena->capacity)) {   // cond 2
         #              return NULL;
+        #          }
         #      gcov reports cond 0 and cond 1 as "not covered (true)" in
         #      both functions. Both subconditions are structurally
         #      unreachable under the arena_invariant predicate:
@@ -4318,15 +4319,17 @@ jobs:
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo ""
-          echo "  Expected real count: 537 (pinned; cppcheck 2.13.0,"
-          echo "  suppression set MISRA-DEV-001..011; 841 - 321 rule-15.6"
-          echo "  sites eliminated by the brace sweep (372 constructs braced"
-          echo "  incl. shadowed ones inside the 33 flagged macro bodies)"
-          echo "  + 17 same-line unmaskings surfaced from beneath them"
-          echo "  (20.7 x11 on cleared #define lines, 17.8 x4, 17.3 x2 -"
-          echo "  all machine-verified; the 321 sites were taken from the"
-          echo "  CI #1180 artifact so no phantom deduction applies;"
-          echo "  zero edit-induced findings; pre-verified by report diff)."
+          echo "  Expected real count: 386 (pinned; cppcheck 2.13.0,"
+          echo "  suppression set MISRA-DEV-001..011; 537 - 157 rule-12.1"
+          echo "  sites eliminated by the precedence-parenthesization sweep."
+          echo "  Clearing 12.1 unmasked 67 shadowed rule-15.6 constructs"
+          echo "  on the same lines; all 67 were braced within the same"
+          echo "  commit to hold the 15.6=0 invariant. Net endpoint"
+          echo "  surfacings: +6 (17.8 x3, 17.3, 15.1, 14.2 - machine-"
+          echo "  verified same-line unmaskings, zero edit-induced;"
+          echo "  sites taken from the CI #1181 artifact, no phantom"
+          echo "  deduction; pre-verified by report diff + full-suite"
+          echo "  assembly-equivalence proof)."
           echo ""
           echo "  NOTE — per-line masking: cppcheck reports at most ONE"
           echo "  misra violation per source line. Counts are therefore a"

@@ -693,7 +693,7 @@ static inline region_id_t region_id(const Region* r) {
   ensures  \result <==> (r != \null && r->open);
 */
 static inline bool region_is_open(const Region* r) {
-    return r != NULL && r->open;
+    return (r != NULL) && r->open;
 }
 
 /**
@@ -721,7 +721,7 @@ static inline bool region_has_parent(const Region* r) {
     (void)r;
     return false;
 #else
-    return r != NULL && r->parent != NULL;
+    return (r != NULL) && (r->parent != NULL);
 #endif
 }
 

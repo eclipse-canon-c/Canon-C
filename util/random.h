@@ -129,7 +129,7 @@ static inline u32 random_u32(borrowed(Random*) r) {
     require_msg(r != NULL, "random_u32: r is NULL");
 
     u64 oldstate  = r->state;
-    r->state      = oldstate * 6364136223846793005ULL + r->inc;
+    r->state      = (oldstate * 6364136223846793005ULL) + r->inc;
 
     u32 xorshifted = (u32)(((oldstate >> 18u) ^ oldstate) >> 27u);
     u32 rot        = (u32)(oldstate >> 59u);

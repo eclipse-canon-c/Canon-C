@@ -730,7 +730,7 @@ static inline u64 bits_rotr(u64 value, u32 shift) {
     ensures \result <==> (value != 0 && (value & (value - 1)) == 0);
  */
 static inline bool bits_is_power_of_two(u64 value) {
-    return value != 0u && (value & (value - 1u)) == 0u;
+    return (value != 0u) && ((value & (value - 1u)) == 0u);
 }
 
 /**

@@ -490,7 +490,7 @@ static inline bool stringbuf_append_str(
         str_t                s)
 {
     if (!sb || !sb->data)     { return false; }
-    if (!s.ptr || s.len == 0u) return true;
+    if (!s.ptr || (s.len == 0u)) { return true; }
     return _stringbuf_append_bytes(sb, s.ptr, s.len);
 }
 
@@ -576,7 +576,7 @@ static inline bool stringbuf_append_fmt(
         fmt, args);
     va_end(args);
 
-    if (written < 0 || (usize)written != needed) return false;
+    if ((written < 0) || ((usize)written != needed)) { return false; }
     sb->len = end;
     return true;
 }
@@ -639,7 +639,7 @@ static inline bool stringbuf_append_fmt_va(
         fmt, write_args);
     va_end(write_args);
 
-    if (written < 0 || (usize)written != needed) return false;
+    if ((written < 0) || ((usize)written != needed)) { return false; }
     sb->len = end;
     return true;
 }
@@ -668,11 +668,11 @@ static inline bool stringbuf_append_n(
     usize actual_len;
 
     if (!sb || !sb->data) { return false; }
-    if (!s || n == 0u)     return true;
+    if (!s || (n == 0u))     { return true; }
 
     /* Determine how many bytes to actually copy: stop at null or n */
     actual_len = 0;
-    while (actual_len < n && s[actual_len] != '\0') actual_len++;
+    while ((actual_len < n) && (s[actual_len] != '\0')) { actual_len++; }
 
     if (actual_len == 0u) { return true; }
     return _stringbuf_append_bytes(sb, s, actual_len);
@@ -864,7 +864,7 @@ static inline usize stringbuf_capacity(borrowed(const StringBuf*) sb) {
  */
 static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
     usize usable;
-    if (!sb || sb->capacity == 0u) return 0u;
+    if (!sb || (sb->capacity == 0u)) { return 0u; }
     /* capacity - (len + 1): the -1 reserves the null terminator slot.
      * checked_sub returns false (→ 0) when len + 1 >= capacity, i.e. full. */
     if (!checked_sub(sb->capacity, sb->len + 1u, &usable)) { return 0; }
@@ -873,7 +873,7 @@ static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
 
 /** @brief Returns true if string is empty (len == 0). NULL-safe. O(1) */
 static inline bool stringbuf_is_empty(borrowed(const StringBuf*) sb) {
-    return !sb || sb->len == 0u;
+    return !sb || (sb->len == 0u);
 }
 
 /**
@@ -883,12 +883,12 @@ static inline bool stringbuf_is_empty(borrowed(const StringBuf*) sb) {
  * Equivalent to stringbuf_remaining() == 0.
  */
 static inline bool stringbuf_is_full(borrowed(const StringBuf*) sb) {
-    return !sb || (sb->len + 1u >= sb->capacity);
+    return !sb || ((sb->len + 1u) >= sb->capacity);
 }
 
 /** @brief Returns true if buffer was allocated from an arena. NULL-safe. O(1) */
 static inline bool stringbuf_is_arena_backed(borrowed(const StringBuf*) sb) {
-    return sb && sb->arena != NULL;
+    return sb && (sb->arena != NULL);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -926,7 +926,7 @@ static inline void stringbuf_clear(borrowed(StringBuf*) sb) {
  * Performance: O(1)
  */
 static inline void stringbuf_truncate(borrowed(StringBuf*) sb, usize new_len) {
-    if (sb && sb->data && new_len < sb->len) {
+    if (sb && sb->data && (new_len < sb->len)) {
         sb->len           = new_len;
         sb->data[sb->len] = '\0';
     }

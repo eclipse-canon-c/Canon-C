@@ -233,7 +233,7 @@ static inline result_i64_Error parse_i64(
     errno = 0;  /* reset before strto* — overflow detected via errno */
     i64 val = (i64)strtoll(s, &eptr, 0);
 
-    if (eptr == s || errno == ERANGE) {
+    if ((eptr == s) || (errno == ERANGE)) {
         if (endptr) *endptr = s;
         return result_i64_Error_err(ERR_PARSE_FAILED);
     }
@@ -280,7 +280,7 @@ static inline result_u64_Error parse_u64(
     errno = 0;  /* reset before strto* — overflow detected via errno */
     u64 val = (u64)strtoull(s, &eptr, 0);
 
-    if (eptr == s || errno == ERANGE) {
+    if ((eptr == s) || (errno == ERANGE)) {
         if (endptr) *endptr = s;
         return result_u64_Error_err(ERR_PARSE_FAILED);
     }

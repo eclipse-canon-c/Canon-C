@@ -475,7 +475,7 @@ static inline bool diag_push(Diag       *d,
           loop assigns len;
           loop variant DIAG_MAX_MSG_LEN - 1 - len;
         */
-        while (len < (DIAG_MAX_MSG_LEN - 1u) && msg[len] != '\0') {
+        while ((len < (DIAG_MAX_MSG_LEN - 1u)) && (msg[len] != '\0')) {
             len++;
         }
         memcpy(f->message, msg, len);
@@ -599,7 +599,7 @@ static inline bool diag_has_error(const Diag *d)
 */
 static inline const DiagFrame *diag_frame_at(const Diag *d, usize i)
 {
-    if (d == NULL || i >= d->depth) {
+    if ((d == NULL) || (i >= d->depth)) {
         return NULL;
     }
     return &d->frames[i];
@@ -645,7 +645,7 @@ static inline const DiagFrame *diag_root(const Diag *d)
 */
 static inline const DiagFrame *diag_latest(const Diag *d)
 {
-    if (d == NULL || d->depth == 0u) {
+    if ((d == NULL) || (d->depth == 0u)) {
         return NULL;
     }
     return &d->frames[d->depth - 1u];
@@ -745,7 +745,7 @@ static inline void diag_print(const Diag *d, FILE *stream)
 {
     usize i;
 
-    if (d == NULL || stream == NULL || d->depth == 0u) {
+    if ((d == NULL) || (stream == NULL) || (d->depth == 0u)) {
         return;
     }
 
@@ -823,11 +823,11 @@ static inline usize diag_render_frame(const DiagFrame *f,
 {
     int n;
 
-    if (buf != NULL && buf_size > 0u) {
+    if ((buf != NULL) && (buf_size > 0u)) {
         buf[0] = '\0';
     }
 
-    if (f == NULL || buf == NULL || buf_size == 0u) {
+    if ((f == NULL) || (buf == NULL) || (buf_size == 0u)) {
         return 0u;
     }
 
@@ -929,7 +929,7 @@ static inline usize diag_render(const Diag *d,
     usize total = 0u;
     usize i;
 
-    if (buf != NULL && buf_size > 0u) {
+    if ((buf != NULL) && (buf_size > 0u)) {
         buf[0] = '\0';
     }
 
@@ -938,7 +938,7 @@ static inline usize diag_render(const Diag *d,
      * buf_size, which requires a valid pointer. Rejecting NULL/0 enforces
      * the documented "NULL-safe: returns 0" / "0-safe: returns 0" contract
      * and matches diag_render_frame's guard shape. */
-    if (d == NULL || buf == NULL || buf_size == 0u || d->depth == 0u) {
+    if ((d == NULL) || (buf == NULL) || (buf_size == 0u) || (d->depth == 0u)) {
         return 0u;
     }
 
