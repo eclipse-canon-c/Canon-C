@@ -120,7 +120,7 @@ static inline usize str_split(
     count = 0;
     p     = s;
 
-    while (*p) {
+    while (*p != '\0') {
         /* Skip consecutive delimiters */
         while (*p == delim) { ++p; }
         if (!*p) { break; }

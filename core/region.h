@@ -493,7 +493,7 @@ static inline void region_end(Region* r) {
     */
     for (i = r->num_hooks; i > 0u; i--) {
         h = &r->cleanups[i - 1u];
-        if (h->fn) {
+        if (h->fn != NULL) {
             /* h->fn is an opaque caller-supplied pointer with no `calls`
              * clause. WP assumes it could call region_end itself, so it
              * models region_end as potentially recursive (hence the
@@ -514,7 +514,7 @@ static inline void region_end(Region* r) {
     r->num_hooks = 0;
 
     /* Reset attached arena (after hooks — hooks may still allocate from it) */
-    if (saved_arena) {
+    if (saved_arena != NULL) {
         arena_reset(saved_arena);
     }
     r->arena = NULL;

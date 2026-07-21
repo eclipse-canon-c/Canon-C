@@ -460,7 +460,7 @@ static inline isize range_next(range* r) {
  * - Space: O(1)
  */
 static inline void range_reset(range* r, isize new_start) {
-    if (r) r->current = new_start;
+    if (r != NULL) { r->current = new_start; }
 }
 
 /**

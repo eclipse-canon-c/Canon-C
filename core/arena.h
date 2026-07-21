@@ -441,7 +441,7 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
 */
 static inline void* arena_alloc_zero(Arena* arena, usize size) {
     void* p = arena_alloc(arena, size);
-    if (p) mem_zero(p, size);
+    if (p != NULL) { mem_zero(p, size); }
     return p;
 }
 
@@ -456,7 +456,7 @@ static inline void* arena_alloc_zero(Arena* arena, usize size) {
 */
 static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize alignment) {
     void* p = arena_alloc_aligned(arena, size, alignment);
-    if (p) mem_zero(p, size);
+    if (p != NULL) { mem_zero(p, size); }
     return p;
 }
 
@@ -496,7 +496,7 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
 */
 static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
     void* p = arena_alloc(arena, size);
-    if (out) *out = p;
+    if (out != NULL) { *out = p; }
     return (out != NULL) && (p != NULL);
 }
 
@@ -521,7 +521,7 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
 */
 static inline bool arena_try_alloc_aligned(Arena* arena, usize size, usize alignment, void** out) {
     void* p = arena_alloc_aligned(arena, size, alignment);
-    if (out) *out = p;
+    if (out != NULL) { *out = p; }
     return (out != NULL) && (p != NULL);
 }
 

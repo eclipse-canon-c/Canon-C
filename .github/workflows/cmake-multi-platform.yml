@@ -3754,7 +3754,7 @@ jobs:
         #     set_parent use require_msg, compiled out under the coverage
         #     build's -DCANON_NO_REQUIRE — same pattern as other headers.
         #   - genuinely reachable: region_register table-full branch
-        #     (num_hooks >= MAX) and region_end's `if (h->fn)` hook guard;
+        #     (num_hooks >= MAX) and region_end's `if (h->fn != NULL)` hook guard;
         #     confirm region_test.c exercises both sides of each.
         #   - CANON_NO_REGION_PARENT is NOT defined in the coverage build,
         #     so region_has_parent / region_set_parent compile in; their
@@ -4319,17 +4319,19 @@ jobs:
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo ""
-          echo "  Expected real count: 386 (pinned; cppcheck 2.13.0,"
-          echo "  suppression set MISRA-DEV-001..011; 537 - 157 rule-12.1"
-          echo "  sites eliminated by the precedence-parenthesization sweep."
-          echo "  Clearing 12.1 unmasked 67 shadowed rule-15.6 constructs"
-          echo "  on the same lines; all 67 were braced within the same"
-          echo "  commit to hold the 15.6=0 invariant. Net endpoint"
-          echo "  surfacings: +6 (17.8 x3, 17.3, 15.1, 14.2 - machine-"
-          echo "  verified same-line unmaskings, zero edit-induced;"
-          echo "  sites taken from the CI #1181 artifact, no phantom"
+          echo "  Expected real count: 355 (pinned; cppcheck 2.13.0,"
+          echo "  suppression set MISRA-DEV-001..011; 386 - 32 rule-14.4"
+          echo "  sites eliminated by the boolean-controlling-expression"
+          echo "  sweep (the 33rd 14.4 is the canary's, untouched by"
+          echo "  design). 23 of the 32 lines carried unbraced bodies"
+          echo "  that 14.4 was masking; all braced within the same"
+          echo "  commit, single-line, to hold the 15.6=0 invariant"
+          echo "  (zero line shifts, zero shift twins). Net endpoint"
+          echo "  surfacings: +1 (15.4 at str_split.h:123 - machine-"
+          echo "  verified same-line unmasking, zero edit-induced;"
+          echo "  sites taken from the CI #1182 artifact, no phantom"
           echo "  deduction; pre-verified by report diff + full-suite"
-          echo "  assembly-equivalence proof)."
+          echo "  assembly-equivalence proof, 51/51 TUs byte-identical)."
           echo ""
           echo "  NOTE — per-line masking: cppcheck reports at most ONE"
           echo "  misra violation per source line. Counts are therefore a"

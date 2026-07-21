@@ -225,7 +225,7 @@ static inline result_i64_Error parse_i64(
     require_msg(s != NULL, "parse_i64: input string is NULL");
 
     if (!*s || parse_is_ws_(*s)) {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_i64_Error_err(ERR_PARSE_FAILED);
     }
 
@@ -234,11 +234,11 @@ static inline result_i64_Error parse_i64(
     i64 val = (i64)strtoll(s, &eptr, 0);
 
     if ((eptr == s) || (errno == ERANGE)) {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_i64_Error_err(ERR_PARSE_FAILED);
     }
 
-    if (endptr) *endptr = eptr;
+    if (endptr != NULL) { *endptr = eptr; }
     return result_i64_Error_ok(val);
 }
 
@@ -267,12 +267,12 @@ static inline result_u64_Error parse_u64(
     require_msg(s != NULL, "parse_u64: input string is NULL");
 
     if (!*s || parse_is_ws_(*s)) {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_u64_Error_err(ERR_PARSE_FAILED);
     }
 
     if (*s == '-') {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_u64_Error_err(ERR_PARSE_FAILED);
     }
 
@@ -281,11 +281,11 @@ static inline result_u64_Error parse_u64(
     u64 val = (u64)strtoull(s, &eptr, 0);
 
     if ((eptr == s) || (errno == ERANGE)) {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_u64_Error_err(ERR_PARSE_FAILED);
     }
 
-    if (endptr) *endptr = eptr;
+    if (endptr != NULL) { *endptr = eptr; }
     return result_u64_Error_ok(val);
 }
 
@@ -314,7 +314,7 @@ static inline result_f64_Error parse_f64(
     require_msg(s != NULL, "parse_f64: input string is NULL");
 
     if (!*s || parse_is_ws_(*s)) {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_f64_Error_err(ERR_PARSE_FAILED);
     }
 
@@ -322,11 +322,11 @@ static inline result_f64_Error parse_f64(
     f64 val = (f64)strtod(s, &eptr);
 
     if (eptr == s) {
-        if (endptr) *endptr = s;
+        if (endptr != NULL) { *endptr = s; }
         return result_f64_Error_err(ERR_PARSE_FAILED);
     }
 
-    if (endptr) *endptr = eptr;
+    if (endptr != NULL) { *endptr = eptr; }
     return result_f64_Error_ok(val);
 }
 

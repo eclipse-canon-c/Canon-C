@@ -1693,7 +1693,7 @@ and fails the build.
 
 region.h achieves 100% line coverage (45/45) and 95.5% MC/DC (21/22) —
 the achievable ceiling under MCDC-005 (the single uncovered outcome is
-the `if (h->fn)` FALSE branch, API-unreachable; see MCDC-005). Region
+the `if (h->fn != NULL)` FALSE branch, API-unreachable; see MCDC-005). Region
 behavior is tested by the unit suite in `test/core/region_test.c`
 covering begin/end, arena attachment and auto-reset, LIFO hook
 dispatch, the hook-table-full path, parent tracking, ID/open/hook-count
@@ -1714,7 +1714,7 @@ boundary. The WP boundary landed exactly where the design predicted it.
   VERIFY-007 (slice.h), VERIFY-008 (memory.h), VERIFY-009 (arena.h).
 - Architectural decision for the region_end boundary: OWN-003.
 - MC/DC coverage: MCDC-005 (region.h MC/DC ceiling 95.5%, the
-  `if (h->fn)` FALSE branch unreachable).
+  `if (h->fn != NULL)` FALSE branch unreachable).
 - Coverage methodology: MCDC-001 (CANON_NO_REQUIRE flag).
 - Substrate runtime tracking: OWN-001, OWN-002.
 - Composable verification thesis: see README, "Composable
@@ -3523,7 +3523,7 @@ transferable from pool.h's 6-of-68.
 | **Category**   | Coverage measurement methodology |
 
 **Description**: 1 of 22 condition outcomes in `core/region.h` is not
-exercisable by tests. It is the FALSE side of the `if (h->fn)` hook
+exercisable by tests. It is the FALSE side of the `if (h->fn != NULL)` hook
 guard inside region_end's LIFO cleanup loop:
 
 | # | Function     | Line | Subcondition not covered          |
@@ -3535,7 +3535,7 @@ ceiling — the single uncovered outcome is unreachable by construction.
 
 ### Rationale
 
-The `if (h->fn)` guard checks each cleanup slot before dispatching it.
+The `if (h->fn != NULL)` guard checks each cleanup slot before dispatching it.
 The FALSE branch (a registered slot with a NULL `fn`) is unreachable
 through the public API: `region_register` enforces `fn != NULL` as a
 precondition (`require_msg(fn != NULL, ...)`) and only increments

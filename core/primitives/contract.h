@@ -247,7 +247,7 @@ static inline void contract_default_handler(
     fprintf(stderr, "Location:   %s:%d\n", file, line);
     fprintf(stderr, "Function:   %s\n",    func);
     fprintf(stderr, "Condition:  %s\n",    expr);
-    if (msg) {
+    if (msg != NULL) {
         fprintf(stderr, "Message:    %s\n", msg);
     }
     fprintf(stderr, "════════════════════════════════════════════════════════════════\n");

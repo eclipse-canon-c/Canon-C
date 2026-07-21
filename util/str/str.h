@@ -95,7 +95,7 @@ CANON_OPTION(charp)
 static inline usize str_len(borrowed(const char*) s) {
     if (!s) { return 0; }
     usize len = 0;
-    while (s[len]) len++;
+    while (s[len] != '\0') { len++; }
     return len;
 }
 

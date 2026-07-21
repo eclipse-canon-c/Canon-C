@@ -244,7 +244,7 @@ static inline usize str_split_to_parts(
     scratch_pos = 0;
     p           = s;
 
-    while (*p) {
+    while (*p != '\0') {
         const char* start;
         usize part_len;
 

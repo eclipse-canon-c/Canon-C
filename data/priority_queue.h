@@ -484,7 +484,7 @@ static inline result__Bool_Error pq_push_result(
  */
 static inline bool pq_pop_raw(borrowed(PriorityQueue*) pq, void* out) {
     if (!pq || (pq->len == 0u)) { return false; }
-    if (out) mem_copy(out, ptr_elem(pq->data, 0, pq->elem_size), pq->elem_size);
+    if (out != NULL) { mem_copy(out, ptr_elem(pq->data, 0, pq->elem_size), pq->elem_size); }
     pq->len--;
     if (pq->len > 0u) {
         mem_copy(ptr_elem(pq->data, 0,       pq->elem_size),

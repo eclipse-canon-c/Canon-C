@@ -384,7 +384,7 @@ static inline void* pool_alloc(Pool* pool) {
 static inline void* pool_alloc_zero(Pool* pool) {
     void* p;
     p = pool_alloc(pool);
-    if (p) mem_zero(p, pool->object_size);
+    if (p != NULL) { mem_zero(p, pool->object_size); }
     return p;
 }
 
@@ -398,7 +398,7 @@ static inline bool pool_try_alloc(Pool* pool, void** out) {
     void* p;
     require_msg(pool != NULL, "pool_try_alloc: pool cannot be NULL");
     p = pool_alloc(pool);
-    if (out) *out = p;
+    if (out != NULL) { *out = p; }
     return p != NULL;
 }
 
@@ -412,7 +412,7 @@ static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
     void* p;
     require_msg(pool != NULL, "pool_try_alloc_zero: pool cannot be NULL");
     p = pool_alloc_zero(pool);
-    if (out) *out = p;
+    if (out != NULL) { *out = p; }
     return p != NULL;
 }
 

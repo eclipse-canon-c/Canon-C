@@ -1932,7 +1932,7 @@ architectural decision behind category 1 is OWN-003.
 
 ### MCDC-005 cross-reference
 
-region.h's single uncovered condition outcome is the `if (h->fn)` FALSE
+region.h's single uncovered condition outcome is the `if (h->fn != NULL)` FALSE
 branch in region_end (line 496), API-unreachable because
 region_register enforces `fn != NULL` and the dispatch loop visits only
 filled slots. 95.5% (21/22) is the achievable ceiling. See MCDC-005.

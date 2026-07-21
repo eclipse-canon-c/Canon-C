@@ -120,7 +120,7 @@ static inline option_charp file_read_stream_(
         total += n;
 
         if (n < chunk) {
-            if (ferror(f)) {
+            if (ferror(f) != 0) {
                 arena_reset_to(arena, mark);
                 return option_charp_none();
             }

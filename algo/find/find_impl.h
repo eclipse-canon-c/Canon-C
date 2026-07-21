@@ -121,8 +121,8 @@ ALGO_FIND_LINKAGE bool algo_find(
     for (usize i = 0; i < len; i++) {
         const void* elem = ptr_elem_const(base, i, elem_size);
         if (pred(elem, ctx)) {
-            if (out_index) *out_index = i;
-            if (out_elem)  *out_elem  = elem;
+            if (out_index != NULL) { *out_index = i; }
+            if (out_elem != NULL) { *out_elem  = elem; }
             return true;
         }
     }

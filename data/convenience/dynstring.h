@@ -393,7 +393,7 @@ static inline DynString dynstring_with_capacity(usize capacity) {
     if (capacity == 0u) { return s; }
 
     s.data = (char*)malloc(capacity);
-    if (s.data) {
+    if (s.data != NULL) {
         s.data[0] = '\0';
         s.cap = capacity;
     }
@@ -425,7 +425,7 @@ static inline DynString dynstring_from(const char* str) {
     usize cap = len + 1u;
 
     s.data = (char*)malloc(cap);
-    if (s.data) {
+    if (s.data != NULL) {
         mem_copy(s.data, str, len + 1u);  /* includes null terminator */
         s.len = len;
         s.cap = cap;
@@ -817,7 +817,7 @@ static inline void dynstring_free(DynString* s) {
         s->len = 0;
         s->cap = 0;
         dynstring_lifetime_close_(s);
-    } else if (s) {
+    } else if (s != NULL) {
         /* No buffer to free, but still close the lifetime so the
          * contract holds regardless of whether anything was appended. */
         dynstring_lifetime_close_(s);

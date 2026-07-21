@@ -616,7 +616,7 @@ static inline bool bitset_is_disjoint(borrowed(const Bitset*) bs,
     if (!bs || !other) { return true; }
     usize n = (bs->word_count < other->word_count) ? bs->word_count : other->word_count;
     for (usize w = 0; w < n; w++) {
-        if (bs->words[w] & other->words[w]) return false;
+        if ((bs->words[w] & other->words[w]) != 0u) { return false; }
     }
     return true;
 }
