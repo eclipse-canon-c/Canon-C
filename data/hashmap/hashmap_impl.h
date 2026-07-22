@@ -299,7 +299,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     map->len      = 0;
     map->ctx      = ctx;
 
-    memset(map->slots, 0, required);
+    (void)memset(map->slots, 0, required);
 
     HM_LIFETIME_OPEN_(map);
 
@@ -313,7 +313,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
 HASHMAP_LINKAGE void HM_CLEAR_(borrowed(HASHMAP_TYPE_NAME*) map) {
     require_msg(map != NULL, "hashmap_clear: map cannot be NULL");
     require_msg(map->slots != NULL, "hashmap_clear: map is uninitialized");
-    memset(map->slots, 0, map->capacity * sizeof(HASHMAP_SLOT_NAME));
+    (void)memset(map->slots, 0, map->capacity * sizeof(HASHMAP_SLOT_NAME));
     map->len = 0;
     HM_LIFETIME_RESTAMP_(map);
 }

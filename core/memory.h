@@ -493,7 +493,7 @@ static inline void mem_copy(void* restrict dest, const void* restrict src, usize
     if (!dest || !src || (size == 0u)) { return; }
     require_msg(!mem_regions_overlap(dest, src, size),
                 "mem_copy: regions overlap — use mem_move");
-    memcpy(dest, src, size);
+    (void)memcpy(dest, src, size);
 }
 
 /**
@@ -520,7 +520,7 @@ static inline void mem_copy(void* restrict dest, const void* restrict src, usize
 */
 static inline void mem_move(void* dest, const void* src, usize size) {
     if (!dest || !src || (size == 0u)) { return; }
-    memmove(dest, src, size);
+    (void)memmove(dest, src, size);
 }
 
 /**
@@ -545,7 +545,7 @@ static inline void mem_move(void* dest, const void* src, usize size) {
 */
 static inline void mem_zero(void* ptr, usize size) {
     if (!ptr || (size == 0u)) { return; }
-    memset(ptr, 0, size);
+    (void)memset(ptr, 0, size);
 }
 
 /**
@@ -609,7 +609,7 @@ static inline void mem_secure_zero(void* ptr, usize size) {
 */
 static inline void mem_set(void* ptr, int value, usize size) {
     if (!ptr || (size == 0u)) { return; }
-    memset(ptr, value, size);
+    (void)memset(ptr, value, size);
 }
 
 /**
@@ -790,9 +790,9 @@ static inline void mem_swap(void* a, void* b, usize size) {
                 "mem_swap: size exceeds CANON_MEM_SWAP_MAX — use mem_swap_buf");
     require_msg(!mem_regions_overlap(a, b, size),
                 "mem_swap: regions overlap");
-    memcpy(tmp, a,   size);
-    memcpy(a,   b,   size);
-    memcpy(b,   tmp, size);
+    (void)memcpy(tmp, a,   size);
+    (void)memcpy(a,   b,   size);
+    (void)memcpy(b,   tmp, size);
 }
 
 /**
@@ -843,9 +843,9 @@ static inline void mem_swap_buf(void* a, void* b, usize size,
     require_msg(!mem_regions_overlap(a, b,       size), "mem_swap_buf: a and b overlap");
     require_msg(!mem_regions_overlap(a, scratch, size), "mem_swap_buf: a and scratch overlap");
     require_msg(!mem_regions_overlap(b, scratch, size), "mem_swap_buf: b and scratch overlap");
-    memcpy(scratch, a,       size);
-    memcpy(a,       b,       size);
-    memcpy(b,       scratch, size);
+    (void)memcpy(scratch, a,       size);
+    (void)memcpy(a,       b,       size);
+    (void)memcpy(b,       scratch, size);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -889,7 +889,7 @@ static inline usize mem_copy_bytes(bytes_t dest, cbytes_t src) {
     if (dest.len < src.len) { return 0; }
     require_msg(!mem_regions_overlap(dest.ptr, src.ptr, src.len),
                 "mem_copy_bytes: regions overlap — use mem_move_bytes");
-    memcpy(dest.ptr, src.ptr, src.len);
+    (void)memcpy(dest.ptr, src.ptr, src.len);
     return src.len;
 }
 
@@ -924,7 +924,7 @@ static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
     if (!dest.ptr || !src.ptr || (src.len == 0u)) { return 0u; }
     require_msg(dest.len >= src.len, "mem_move_bytes: dest smaller than src");
     if (dest.len < src.len) { return 0; }
-    memmove(dest.ptr, src.ptr, src.len);
+    (void)memmove(dest.ptr, src.ptr, src.len);
     return src.len;
 }
 
@@ -948,7 +948,7 @@ static inline usize mem_move_bytes(bytes_t dest, cbytes_t src) {
 */
 static inline void mem_zero_bytes(bytes_t b) {
     if (!b.ptr || (b.len == 0u)) { return; }
-    memset(b.ptr, 0, b.len);
+    (void)memset(b.ptr, 0, b.len);
 }
 
 /**
@@ -971,7 +971,7 @@ static inline void mem_zero_bytes(bytes_t b) {
 */
 static inline void mem_set_bytes(bytes_t b, int value) {
     if (!b.ptr || (b.len == 0u)) { return; }
-    memset(b.ptr, value, b.len);
+    (void)memset(b.ptr, value, b.len);
 }
 
 /**

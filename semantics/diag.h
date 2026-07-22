@@ -297,7 +297,7 @@ typedef struct {
 static inline Diag diag_init(void)
 {
     Diag d;
-    memset(&d, 0, sizeof(d));
+    (void)memset(&d, 0, sizeof(d));
     /* Redundant with the memset, but restates depth == 0 as a typed
      * store: WP derives the postcondition directly instead of through
      * byte-level reinterpretation of the memset, which the Typed memory
@@ -434,7 +434,7 @@ static inline bool diag_push(Diag       *d,
 
     if (d->depth == DIAG_MAX_FRAMES) {
         /* Chain full: discard oldest frame, shift remaining frames down. */
-        memmove(&d->frames[0],
+        (void)memmove(&d->frames[0],
                 &d->frames[1],
                 (DIAG_MAX_FRAMES - 1u) * sizeof(DiagFrame));
         d->depth--;
@@ -478,7 +478,7 @@ static inline bool diag_push(Diag       *d,
         while ((len < (DIAG_MAX_MSG_LEN - 1u)) && (msg[len] != '\0')) {
             len++;
         }
-        memcpy(f->message, msg, len);
+        (void)memcpy(f->message, msg, len);
         f->message[len] = '\0';
     } else {
         f->message[0] = '\0';
@@ -756,7 +756,7 @@ static inline void diag_print(const Diag *d, FILE *stream)
     */
     for (i = 0u; i < d->depth; i++) {
         const DiagFrame *f = &d->frames[i];
-        fprintf(stream,
+        (void)fprintf(stream,
                 "[%zu] %s:%zu in %s() -- error %d: \"%s\"\n",
                 i,
                 (f->file != NULL) ? f->file : "?",

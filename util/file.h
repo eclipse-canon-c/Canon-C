@@ -187,7 +187,7 @@ static inline option_charp file_read_all_arena(
     result = file_read_stream_(f, arena);
 
 done:
-    fclose(f);
+    (void)fclose(f);
     return result;
 }
 
@@ -249,7 +249,7 @@ static inline result_usize_Error file_write_all(
         r = result_usize_Error_ok(len);
     }
 
-    fclose(f);
+    (void)fclose(f);
     return r;
 }
 
@@ -288,12 +288,12 @@ static inline result_usize_Error file_write_all_atomic(
 
     result_usize_Error r = file_write_all(tmp, content);
     if (result_usize_Error_is_err(r)) {
-        remove(tmp);
+        (void)remove(tmp);
         return r;
     }
 
     if (rename(tmp, path) != 0) {
-        remove(tmp);
+        (void)remove(tmp);
         return result_usize_Error_err(ERR_IO_FAILED);
     }
 
@@ -316,7 +316,7 @@ static inline bool file_exists(borrowed(const char*) path) {
     require_msg(path != NULL, "file_exists: path is NULL");
     FILE* f = fopen(path, "rb");
     if (!f) { return false; }
-    fclose(f);
+    (void)fclose(f);
     return true;
 }
 

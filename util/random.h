@@ -158,8 +158,8 @@ static inline void random_seed(borrowed(Random*) r, u64 seed, u64 seq) {
     r->state = 0;
     r->inc   = (seq << 1u) | 1u;  /* ensure inc is always odd */
     r->state += seed;
-    random_u32(r);              /* warm-up step 1 */
-    random_u32(r);              /* warm-up step 2 */
+    (void)random_u32(r);              /* warm-up step 1 */
+    (void)random_u32(r);              /* warm-up step 2 */
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

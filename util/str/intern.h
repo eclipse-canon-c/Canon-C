@@ -213,7 +213,7 @@ static inline bool intern_pool_init(
     pool->count    = 0;
 
     /* Pre-intern empty string — intern_string is defined above */
-    intern_string(pool, "");
+    (void)intern_string(pool, "");
 
     return true;
 }

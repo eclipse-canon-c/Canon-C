@@ -240,19 +240,19 @@ static inline void contract_default_handler(
     const char* msg
 ) {
 #ifndef __FRAMAC__
-    fprintf(stderr, "\n");
-    fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
-    fprintf(stderr, "CONTRACT VIOLATION\n");
-    fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
-    fprintf(stderr, "Location:   %s:%d\n", file, line);
-    fprintf(stderr, "Function:   %s\n",    func);
-    fprintf(stderr, "Condition:  %s\n",    expr);
+    (void)fprintf(stderr, "\n");
+    (void)fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
+    (void)fprintf(stderr, "CONTRACT VIOLATION\n");
+    (void)fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
+    (void)fprintf(stderr, "Location:   %s:%d\n", file, line);
+    (void)fprintf(stderr, "Function:   %s\n",    func);
+    (void)fprintf(stderr, "Condition:  %s\n",    expr);
     if (msg != NULL) {
-        fprintf(stderr, "Message:    %s\n", msg);
+        (void)fprintf(stderr, "Message:    %s\n", msg);
     }
-    fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
-    fprintf(stderr, "\n");
-    fflush(stderr);
+    (void)fprintf(stderr, "════════════════════════════════════════════════════════════════\n");
+    (void)fprintf(stderr, "\n");
+    (void)fflush(stderr);
     abort();
 #else
     /* Under Frama-C, replace the stdio body with a non-terminating loop.
