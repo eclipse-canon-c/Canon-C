@@ -448,7 +448,7 @@ sits alongside formal proof for the non-macro headers once they land.
   goals + 17 inherited) and MCDC-008 (the `borrowed_bytes_eq` one-NULL
   guard, proved dead via the named `dead_by_invariant` assertion).
 - **`docs/traceability.md`** — MC/DC coverage record. borrow.h sits at
-  its documented 38/40 = 95.0% ceiling (MCDC-008); the three
+  its documented 36/38 = 94.7% ceiling (MCDC-008); the three
   `_get(NULL)` defensive outcomes are closed by
   `CANON_NO_REQUIRE`-gated tests in `borrow_test.c`.
 - **CHANGELOG**, v1.3.0 — `{TODO: CHANGELOG v1.3.0 anchor}`.

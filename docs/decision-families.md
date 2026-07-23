@@ -45,7 +45,7 @@ the OWN-001 cross-references, is `core/slice.h`:
   non-termination); the 8 initialization goals it formerly recorded were
   closed by explicit `\initialized` preconditions (see VERIFY-012).
 - **MCDC-002** records four `!ptr` defensive branches measured as
-  uncovered at 93.1% MC/DC, with WP discharging them as
+  uncovered at 92.6% MC/DC (50/54 post-Commit-9 surface), with WP discharging them as
   type-invariant-unreachable. The two evidence streams complement
   each other rather than converging.
 - **OWN-001 §3** (Contract table) doesn't directly entry on `slice.h`

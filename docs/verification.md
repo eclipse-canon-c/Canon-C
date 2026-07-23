@@ -658,8 +658,8 @@ checked.h's div/mod goals — see Baseline note above.)
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 375/390 with 15 named goals expected      |
-| **MC/DC coverage**     | 93.1% (54/58 condition outcomes — see MCDC-002) |
+| **CI enforcement**     | Yes — 379/394 with 15 named goals expected      |
+| **MC/DC coverage**     | 92.6% (50/54 condition outcomes — see MCDC-002) |
 | **CI artifact**        | `wp-proof-slice` (full per-goal breakdown)      |
 
 ### Function inventory
@@ -686,7 +686,7 @@ functions (`slice_T_from`, `slice_T_at`, `slice_T_first`, etc.) are not
 WP-verified in this baseline. Contract specifications are retained in
 the macro body as human-readable comments. These functions are
 validated by unit testing (90 tests in `test/core/slice_test.c`),
-fuzzing, and 93.1% MC/DC coverage on the i32 instantiation. Full
+fuzzing, and 92.6% MC/DC coverage on the i32 instantiation. Full
 WP verification of the macro family will require a separate
 `slice_verify.h` driver instantiating `DEFINE_SLICE(i32)` outside
 the macro context — planned for a future commit if the certification
@@ -823,7 +823,8 @@ of the four functions appears in the unproved goal list. The slice.h
 CI wrapper explicitly verifies this with the diagnostic line `MCDC-002
 functions with WP residuals: 0/4`. See the MCDC-002 status update in
 `docs/deviations.md` for the formal closure record. gcov measurement
-remains at 54/58 (93.1%) because gcov instruments the source rather
+reads 50/54 (92.6%) on the post-Commit-9 surface (see the 2026-07-24
+MCDC-002 note in docs/deviations.md) because gcov instruments the source rather
 than the proof; the two evidence streams complement rather than
 converge.
 
@@ -916,7 +917,7 @@ Expected output: `Proved goals: 375 / 390` with 15 timeouts.
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 2819/2862 with 43 named goals expected    |
+| **CI enforcement**     | Yes — 2823/2866 with 43 named goals expected    |
 | **MC/DC coverage**     | 88.3% (113/128 condition outcomes)              |
 | **CI artifact**        | `wp-proof-memory` (full per-goal breakdown)     |
 
@@ -1245,7 +1246,7 @@ Expected output: `Proved goals: 2819 / 2862` with 43 unproved goals
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 3383/3472 with 89 named goals expected    |
+| **CI enforcement**     | Yes — 3387/3476 with 89 named goals expected    |
 | **MC/DC coverage**     | 90.6% (58/64 condition outcomes — see MCDC-003) |
 | **Line coverage**      | 100% (97/97)                                    |
 | **CI artifact**        | `wp-proof-arena` (full per-goal breakdown)      |
@@ -1559,7 +1560,7 @@ residuals table); the 46 own goals split across cats 2a (8) / 2b (26)
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 3789/3902 with 113 named goals expected   |
+| **CI enforcement**     | Yes — 3793/3906 with 113 named goals expected   |
 | **MC/DC coverage**     | 91.2% (62/68 condition outcomes — see MCDC-004) |
 | **Line coverage**      | 100% (74/74)                                    |
 | **CI artifact**        | `wp-proof-pool` (full per-goal breakdown)       |
@@ -1832,7 +1833,7 @@ inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
-| **CI enforcement**     | Yes — 3531/3643 with 112 named goals expected   |
+| **CI enforcement**     | Yes — 3535/3647 with 112 named goals expected   |
 | **MC/DC coverage**     | 95.5% (21/22 condition outcomes — see MCDC-005) |
 | **Line coverage**      | 100% (45/45)                                    |
 | **CI artifact**        | `wp-proof-region` (full per-goal breakdown)     |
@@ -1840,7 +1841,7 @@ inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 ### Enforcement status
 
 region.h's WP run is **enforced** (as of CI #1022): the `frama-c-region`
-CI step fails the build on any deviation from 3531/3643 proved or 112
+CI step fails the build on any deviation from 3535/3647 proved or 112
 unproved, and additionally roll-calls all 23 own goals plus a
 representative inherited sample by name. It was promoted from report-only
 once the residual set proved name-stable across the VERIFY-012
@@ -2497,8 +2498,8 @@ hypothesis — not failures).
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast` |
-| **CI enforcement**     | Yes — 2433/2452 with 19 named goals expected    |
-| **MC/DC coverage**     | 95.0% (38/40 condition outcomes — see MCDC-008) |
+| **CI enforcement**     | Yes — 2439/2458 with 19 named goals expected    |
+| **MC/DC coverage**     | 94.7% (36/38 condition outcomes — see MCDC-008) |
 | **CI artifact**        | `wp-proof-borrow` (full per-goal breakdown)     |
 
 borrow.h is the fourth semantics/ module verified and the second
@@ -2608,7 +2609,7 @@ hooks, no function-pointer dispatch).
 
 ### MCDC-008 cross-reference
 
-borrow.h's gcov-measured MC/DC is 38/40 = 95.0%, its documented
+borrow.h's gcov-measured MC/DC is 36/38 = 94.7%, its documented
 ceiling. The three `_get(NULL)` defensive outcomes were closed at
 CI #1106 by `CANON_NO_REQUIRE`-gated tests (reachable by design in
 the coverage build); the two remaining outcomes are the one-NULL
@@ -3084,7 +3085,7 @@ the complete installation and registration procedure.
 | Header       | Status           | Proved    | Notes                              |
 |--------------|------------------|-----------|------------------------------------|
 | checked.h    | ✅ Verified       | 1753/1755 | 2 manual discharges                |
-| bits.h       | ✅ Verified       | 746/761   | 15 documented timeouts             |
+| bits.h       | ✅ Verified       | 742/757   | 15 documented timeouts             |
 | compare.h    | ✅ Fully verified | 208/208   | 100% automatic, 0 timeouts         |
 | ptr.h        | ✅ Verified       | 1729/1739 | 10 documented timeouts (VERIFY-006); CI run reports 1943/1953 due to checked.h #include |
 | types.h      | N/A              |           | Type definitions only              |
@@ -3096,11 +3097,11 @@ the complete installation and registration procedure.
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| slice.h      | ✅ Verified       | 375/390   | 15 documented timeouts (VERIFY-007/-012); MCDC-002 closed              |
-| memory.h     | ✅ Verified       | 2819/2862 | 43 documented timeouts (VERIFY-008/-012); 23 inherited + 20 own        |
-| arena.h      | ✅ Verified       | 3383/3472 | 89 documented timeouts (VERIFY-009/-012); 43 inherited + 46 own; MCDC-003 |
-| pool.h       | ✅ Verified       | 3789/3902 | 113 documented timeouts (VERIFY-010/-012); 89 inherited + 24 own; MCDC-004 |
-| region.h     | ✅ Verified       | 3531/3643 | 112 documented timeouts (VERIFY-011/-012); 89 inherited + 23 own; MCDC-005 |
+| slice.h      | ✅ Verified       | 379/394   | 15 documented timeouts (VERIFY-007/-012); MCDC-002 closed              |
+| memory.h     | ✅ Verified       | 2823/2866 | 43 documented timeouts (VERIFY-008/-012); 23 inherited + 20 own        |
+| arena.h      | ✅ Verified       | 3387/3476 | 89 documented timeouts (VERIFY-009/-012); 43 inherited + 46 own; MCDC-003 |
+| pool.h       | ✅ Verified       | 3793/3906 | 113 documented timeouts (VERIFY-010/-012); 89 inherited + 24 own; MCDC-004 |
+| region.h     | ✅ Verified       | 3535/3647 | 112 documented timeouts (VERIFY-011/-012); 89 inherited + 23 own; MCDC-005 |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
@@ -3111,7 +3112,7 @@ the complete installation and registration procedure.
 | error.h          | ✅ Verified  | 65/65   | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
 | option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
 | result (driver)  | ✅ Verified  | 185/215 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 2 inherited + 28 own function-pointer-dispatch residuals; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
-| borrow.h         | ✅ Verified  | 2433/2452 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 17 inherited + 2 own memcmp-danglingness residuals — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (38/40 ceiling, first named-assert closure) |
+| borrow.h         | ✅ Verified  | 2439/2458 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 17 inherited + 2 own memcmp-danglingness residuals — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (36/38 ceiling post-Commit-9 surface, first named-assert closure) |
 | diag.h           | ✅ Verified  | 3050/3060 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 2 inherited (contract.h handler pair — smallest inherited surface of any residual-carrying header) + 8 own libc byte-view residuals — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
 
 **The semantics/ layer is complete.** diag.h shipped as the fifth and
@@ -3149,7 +3150,7 @@ discipline) recorded for deque.
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| vec (driver) | ✅ Verified  | 5184/5380 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 121 inherited byte-identically (largest TU to date; 89 core = arena.h's set verbatim, 32 option mod prefix) + 75 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 22 fresh result(Bool, Error) instantiation — VERIFY-018 Correction note 2026-07-16); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
+| vec (driver) | ✅ Verified  | 5188/5384 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 121 inherited byte-identically (largest TU to date; 89 core = arena.h's set verbatim, 32 option mod prefix) + 75 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 22 fresh result(Bool, Error) instantiation — VERIFY-018 Correction note 2026-07-16); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
 | deque        | Planned next     |           | Split patch lands before the driver is drafted (VERIFY-018 F3 checklist); shift loops pre-classified into class (g); CANON_RESULT fingerprint already spotted in deque_impl.h coverage data |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 

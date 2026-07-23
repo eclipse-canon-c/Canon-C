@@ -404,8 +404,9 @@ function which is the same residual as category 2.
 
 **Mitigation**: CI enforces exactly 15 unproved goals with the named
 goal pattern. Any additional unproved goal or missing expected goal
-is a regression and fails the build. slice.h achieves 93.1% MC/DC
-coverage (54/58 condition outcomes) — the achievable ceiling under
+is a regression and fails the build. slice.h achieves 92.6% MC/DC
+coverage (50/54 condition outcomes; surface per the 2026-07-24
+MCDC-002 note) — the achievable ceiling under
 the public-API constraint documented in MCDC-002. Equality functions
 are validated by 90 unit tests in `test/core/slice_test.c` covering
 identical content, distinct content, length mismatch, same-pointer
@@ -2326,7 +2327,8 @@ across #1109/#1110 (the 19 are the identical named subset of #1109's
 27, the 8 delta being the contract-alignment closures described
 above).
 
-borrow.h's gcov-measured MC/DC is 38/40 = 95.0%, its documented
+borrow.h's gcov-measured MC/DC is 36/38 = 94.7% (surface per the
+2026-07-24 MCDC-008 note), its documented
 ceiling — see MCDC-008. Functional behavior, including the
 lifetime-debug configuration this entry does not verify, is tested by
 `test/semantics/borrow_test.c` (all 16 configs; ASan + UBSan on
@@ -2959,6 +2961,24 @@ from the coverage build but runs in all other CI jobs.
 
 ---
 
+**Instrumentation-surface addendum (2026-07-24, Commit 9c):** GCC's
+gimplifier converts ternaries of min/max shape — `(a > b) ? b : a`
+and congeners — to branchless `MIN_EXPR`/`MAX_EXPR` at every
+optimization level, including the -O0 coverage build. Such
+expressions emit no branch and no condition records, so a
+source-level refactor from `if`-clamp to min-shaped ternary silently
+removes fully-covered outcomes from the MC/DC denominator (a
+constant-arm ternary, by contrast, stays a COND_EXPR and remains
+instrumented — the shape, not the operator, decides). Commit 9's
+17.8 sweep decounted exactly three such sites (slice.h ×2, borrow.h
+×1, priority_queue.h ×1 = −8 outcomes, −8 branches), each verified
+fully covered pre-fold with missed-sets byte-identical across the
+change. Standing rule: any future fold of this shape is a
+measurement-surface change, not a coverage change; verify with a
+pre/post per-line condition diff (gcov --conditions --json-format)
+that only covered conditions left and the missed-set is stable, then
+update the aggregate with a dated note.
+
 ## MCDC-002: API-Unreachable Defensive Branches (slice.h)
 
 | Field          | Value |
@@ -3105,7 +3125,8 @@ diagnostic line.
 
 **Evidence stream alignment**:
 
-- gcov MC/DC measurement remains 54/58 (93.1%). gcov instruments
+- gcov MC/DC measurement now reads 50/54 (92.6%) on the post-Commit-9
+  surface (see the 2026-07-24 note below). gcov instruments
   the source, not the proof — it counts the four branches as
   uncovered because no test reaches them. This does not change.
 
@@ -3158,6 +3179,18 @@ invariants produce.
 - WP-discharged unreachable: 4/4 (since 2026-05-02)
 
 ---
+
+**Measurement-surface reclassification (2026-07-24, Commit 9c):**
+slice.h's condition total moved 58 → 54 (93.1% → 92.6%): the
+Commit-9 clamp folds in bytes_slice (L470) and str_slice (L721) are
+min-shaped and left instrumentation as branchless MIN_EXPR (see the
+MCDC-001 addendum). Both removed conditions were fully covered (2/2).
+The four documented outcomes of this record are byte-identical
+pre/post (L469/519/720/760, each 3-of-4, per-line JSON diff): this
+record's residual analysis stands as written, with the ceiling
+arithmetic transposing to (54 − 4) / 54 ≈ 92.6% — all four
+API-unreachable outcomes and their dispositions carry over unchanged
+to the 50/54 surface.
 
 ## MCDC-003: Structurally Unreachable Overflow Guards and Macro Artifacts (arena.h)
 
@@ -3962,7 +3995,8 @@ guard to line 996 with the named assert at 1005. The coverage debug
 step identifies the guard by function and condition, not by line, so
 the drift is cosmetic.)
 
-borrow.h's gcov-measured MC/DC is 38/40 = 95.0%. This is the
+borrow.h's gcov-measured MC/DC is 36/38 = 94.7% on the post-Commit-9
+surface (see the 2026-07-24 note below). This is the
 achievable ceiling — the two uncovered outcomes are unreachable by
 construction. The ceiling was reached at CI #1106, when three
 `#ifdef CANON_NO_REQUIRE`-gated tests closed the three `_get(NULL)`
@@ -4044,6 +4078,17 @@ single named goal the CI wrapper checks by name on every run.
   `.github/workflows/cmake-multi-platform.yml`.
 
 ---
+
+**Measurement-surface reclassification (2026-07-24, Commit 9c):**
+borrow.h's condition total moved 40 → 38 (95.0% → 94.7%): the
+Commit-9 clamp fold at L1059 is min-shaped and left instrumentation
+as branchless MIN_EXPR (see the MCDC-001 addendum). The removed
+condition was fully covered (2/2). The two documented outcomes of
+this record (borrowed_bytes_eq's one-NULL guard) are unchanged: this
+record's residual analysis and the dead_by_invariant cross-stream
+closure stand as written, with the ceiling arithmetic transposing to
+(38 − 2) / 38 ≈ 94.7% — both documented outcomes and their
+dispositions carry over unchanged to the 36/38 surface.
 
 ## MCDC-009: Invariant-Dead Overflow Clamp and Libc-Environmental Encoding-Error Skip — Two Dispositions in One Header, Second Named-Assert Closure (diag.h)
 

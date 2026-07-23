@@ -136,14 +136,30 @@
 > functions are all executed, so the function percentage holds at
 > 99.5%.
 
+> **2026-07-24 (Commit 9c, post-CI #1187/#1188).** The Commit-9
+> rule-17.8 sweep replaced six `if`-clamps with ternary initializers;
+> the three of min/max shape — bytes_slice (slice.h L470), str_slice
+> (L721), the borrow.h L1059 clamp, and pq_heapify's capacity clamp —
+> are gimplified by GCC to branchless `MIN_EXPR` at every optimization
+> level and therefore leave both the branch and the condition
+> instrumentation surfaces. Net: −8 condition outcomes (1900 → 1892)
+> and −8 branches (1756 → 1748), every removed outcome fully covered
+> (2/2) before the fold; the aggregate percentage moves 88.4% → 88.3%
+> by denominator arithmetic alone. Zero coverage was lost and every
+> missed-set is byte-identical (MCDC-002's four, MCDC-008's two,
+> priority_queue's fifteen). Mechanism identified by four-snapshot
+> local replication with gcov-14 per-line condition JSON diffs;
+> methodology hazard recorded in MCDC-001. Lines 2515/2610 →
+> 2524/2619 reflect the sweep's net instrumented-line delta.
+
 ### Results
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 96.4%      | 2515       | 2610       |
+| Lines      | 96.4%      | 2524       | 2619       |
 | Functions  | 99.5%      | 621        | 624        |
-| Branches   | 87.8%      | 1542       | 1756       |
-| MC/DC      | 88.4%      | 1679       | 1900       |
+| Branches   | 87.8%      | 1534       | 1748       |
+| MC/DC      | 88.3%      | 1671       | 1892       |
 
 arena.h's MC/DC contribution at 90.6% (58/64) is the achievable
 ceiling under the documented MCDC-003 unreachability — see the
@@ -244,6 +260,9 @@ function percentage holds.
 borrow.h's MC/DC contribution reached 38/40 (95.0%) at this baseline,
 its achievable ceiling under MCDC-008. The three-outcome improvement
 from 35/40 comes from the `CANON_NO_REQUIRE`-gated `_get(NULL)` tests
+(post-Commit-9 surface: 36/38 = 94.7%, the covered clamp condition
+having left instrumentation — see the 2026-07-24 note above; the
+missed pair is unchanged)
 (the defensive branches are the shipped release-mode contract and are
 reachable only where `require_msg` compiles away — exactly the
 coverage build, keeping the measured set aligned with the `null_b`
@@ -357,7 +376,7 @@ exercised by the dedicated `checked_div_*_op`, `checked_mod_*_op`,
 Headers at their documented MC/DC ceiling (below 100% by design or
 by methodology):
 
-- **slice.h: 93.1% (54/58)** — the achievable ceiling under the
+- **slice.h: 92.6% (50/54)** — the achievable ceiling under the
   public-API constraint documented in MCDC-002. The 4 remaining
   outcomes are the `!ptr` left-side of `||` in `bytes_slice` (line
   117), `bytes_skip` (line 130), `str_slice` (line 194), and
@@ -365,7 +384,8 @@ by methodology):
   through the public API and are formally proved unreachable by
   Frama-C WP under the `bytes_invariant` / `str_invariant` type
   predicates (see VERIFY-007 and the MCDC-002 status update). The
-  gcov measurement remains 54/58 because gcov instruments the source
+  gcov measurement reads 50/54 on the post-Commit-9 surface (see the
+  2026-07-24 note above) because gcov instruments the source
   rather than the proof — the two evidence streams complement each
   other rather than converge.
 
@@ -442,7 +462,7 @@ by methodology):
   guard branch. The 1 missed outcome is the documented ceiling and not
   counted as a coverage regression.
 
-- **borrow.h: 95.0% (38/40)** — the ceiling under MCDC-008. The 2
+- **borrow.h: 94.7% (36/38)** — the ceiling under MCDC-008. The 2
   missed outcomes are the NULL-true sides of the one-NULL guard in
   `borrowed_bytes_eq` (`a.bytes.ptr == NULL || b.bytes.ptr == NULL`),
   each requiring a `{NULL, len>0}` cbytes_t — the exact malformed
@@ -933,7 +953,7 @@ the previous baseline.
 
 ### Cross-stream evidence: MCDC-002 through MCDC-008 closures
 
-slice.h's MC/DC ceiling at 93.1% (54/58) and slice.h's WP discharge
+slice.h's MC/DC ceiling at 92.6% (50/54) and slice.h's WP discharge
 of the four MCDC-002 functions form complementary certification
 evidence. gcov reports the four `!ptr` defensive branches as uncovered
 because no test reaches them through the public API. WP proves the
