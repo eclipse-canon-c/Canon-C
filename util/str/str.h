@@ -112,8 +112,10 @@ static inline int str_compare(
 {
     require_msg(a != NULL, "str_compare: a is NULL");
     require_msg(b != NULL, "str_compare: b is NULL");
-    while (*a && (*a == *b)) { a++; b++; }
-    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+    const char* pa = a;
+    const char* pb = b;
+    while (*pa && (*pa == *pb)) { pa++; pb++; }
+    return (int)(unsigned char)*pa - (int)(unsigned char)*pb;
 }
 
 /**
@@ -134,8 +136,11 @@ static inline int str_ncompare(
     if (n == 0u) { return 0u; }
     require_msg(a != NULL, "str_ncompare: a is NULL");
     require_msg(b != NULL, "str_ncompare: b is NULL");
-    while ((n > 1u) && *a && (*a == *b)) { a++; b++; n--; }
-    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+    const char* pa = a;
+    const char* pb = b;
+    usize m = n;
+    while ((m > 1u) && *pa && (*pa == *pb)) { pa++; pb++; m--; }
+    return (int)(unsigned char)*pa - (int)(unsigned char)*pb;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -207,11 +212,11 @@ static inline option_charp str_alloc_sub(
     require_msg(s != NULL, "str_alloc_sub: s is NULL");
     const usize s_len = str_len(s);
     if (start >= s_len) { return option_charp_none(); }
-    if ((start + len) > s_len) len = s_len - start;
-    char* result = (char*)mem_alloc(len + 1u);
+    const usize l = ((start + len) > s_len) ? (s_len - start) : len;
+    char* result = (char*)mem_alloc(l + 1u);
     if (!result) { return option_charp_none(); }
-    mem_copy(result, s + start, len);
-    result[len] = '\0';
+    mem_copy(result, s + start, l);
+    result[l] = '\0';
     return option_charp_some(result);
 }
 

@@ -396,10 +396,10 @@ static inline u32 bits_popcount(u64 value) {
     return (u32)__popcnt64(value);
 #else
     /* Parallel bit counting (SWAR algorithm) */
-    value = value - ((value >> 1) & 0x5555555555555555ULL);
-    value = (value & 0x3333333333333333ULL) + ((value >> 2) & 0x3333333333333333ULL);
-    value = (value + (value >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
-    return (u32)((value * 0x0101010101010101ULL) >> 56);
+    u64 v = value - ((value >> 1) & 0x5555555555555555ULL);
+    v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
+    v = (v + (v >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return (u32)((v * 0x0101010101010101ULL) >> 56);
 #endif
 }
 
@@ -457,12 +457,13 @@ static inline u32 bits_clz(u64 value) {
     /* Binary search for highest set bit.
      * Each step halves the remaining search range. */
     u32 count = 0;
-    if ((value & 0xFFFFFFFF00000000ULL) == 0u) { count += 32u; value <<= 32u; }
-    if ((value & 0xFFFF000000000000ULL) == 0u) { count += 16u; value <<= 16u; }
-    if ((value & 0xFF00000000000000ULL) == 0u) { count +=  8u; value <<=  8u; }
-    if ((value & 0xF000000000000000ULL) == 0u) { count +=  4u; value <<=  4u; }
-    if ((value & 0xC000000000000000ULL) == 0u) { count +=  2u; value <<=  2u; }
-    if ((value & 0x8000000000000000ULL) == 0u) { count +=  1u; }
+    u64 v = value;
+    if ((v & 0xFFFFFFFF00000000ULL) == 0u) { count += 32u; v <<= 32u; }
+    if ((v & 0xFFFF000000000000ULL) == 0u) { count += 16u; v <<= 16u; }
+    if ((v & 0xFF00000000000000ULL) == 0u) { count +=  8u; v <<=  8u; }
+    if ((v & 0xF000000000000000ULL) == 0u) { count +=  4u; v <<=  4u; }
+    if ((v & 0xC000000000000000ULL) == 0u) { count +=  2u; v <<=  2u; }
+    if ((v & 0x8000000000000000ULL) == 0u) { count +=  1u; }
     return count;
 #endif
 }
@@ -516,12 +517,13 @@ static inline u32 bits_ctz(u64 value) {
 #else
     /* Binary search for lowest set bit. */
     u32 count = 0;
-    if ((value & 0x00000000FFFFFFFFULL) == 0u) { count += 32u; value >>= 32u; }
-    if ((value & 0x000000000000FFFFULL) == 0u) { count += 16u; value >>= 16u; }
-    if ((value & 0x00000000000000FFULL) == 0u) { count +=  8u; value >>=  8u; }
-    if ((value & 0x000000000000000FULL) == 0u) { count +=  4u; value >>=  4u; }
-    if ((value & 0x0000000000000003ULL) == 0u) { count +=  2u; value >>=  2u; }
-    if ((value & 0x0000000000000001ULL) == 0u) { count +=  1u; }
+    u64 v = value;
+    if ((v & 0x00000000FFFFFFFFULL) == 0u) { count += 32u; v >>= 32u; }
+    if ((v & 0x000000000000FFFFULL) == 0u) { count += 16u; v >>= 16u; }
+    if ((v & 0x00000000000000FFULL) == 0u) { count +=  8u; v >>=  8u; }
+    if ((v & 0x000000000000000FULL) == 0u) { count +=  4u; v >>=  4u; }
+    if ((v & 0x0000000000000003ULL) == 0u) { count +=  2u; v >>=  2u; }
+    if ((v & 0x0000000000000001ULL) == 0u) { count +=  1u; }
     return count;
 #endif
 }
@@ -645,9 +647,9 @@ static inline u32 bits_fls(u64 value) {
     disjoint behaviors;
  */
 static inline u64 bits_rotl(u64 value, u32 shift) {
-    shift &= 63;
-    if (shift == 0u) { return value; }
-    return (value << shift) | (value >> (64u - shift));
+    const u64 sh = (u64)shift & 63u;
+    if (sh == 0u) { return value; }
+    return (value << sh) | (value >> (64u - sh));
 }
 
 /**
@@ -695,9 +697,9 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
     disjoint behaviors;
  */
 static inline u64 bits_rotr(u64 value, u32 shift) {
-    shift &= 63;
-    if (shift == 0u) { return value; }
-    return (value >> shift) | (value << (64u - shift));
+    const u64 sh = (u64)shift & 63u;
+    if (sh == 0u) { return value; }
+    return (value >> sh) | (value << (64u - sh));
 }
 
 /* ============================================================================
@@ -777,14 +779,14 @@ static inline u64 bits_next_power_of_two(u64 value) {
     if (value == 0u) { return 0u; }
     if (value > (1ULL << 63)) { return 0; }  /* Would overflow */
 
-    value--;
-    value |= value >> 1;
-    value |= value >> 2;
-    value |= value >> 4;
-    value |= value >> 8;
-    value |= value >> 16;
-    value |= value >> 32;
-    return value + 1u;
+    u64 v = value - 1u;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v |= v >> 32;
+    return v + 1u;
 }
 
 /* ============================================================================

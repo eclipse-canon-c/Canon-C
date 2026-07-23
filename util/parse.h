@@ -196,8 +196,9 @@ static inline bool parse_is_ws_(char c) {
  */
 static inline const char* parse_skip_ws(borrowed(const char*) s) {
     if (!s) { return s; }
-    while (*s && parse_is_ws_(*s)) { ++s; }
-    return s;
+    const char* p = s;
+    while (*p && parse_is_ws_(*p)) { ++p; }
+    return p;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────

@@ -300,13 +300,14 @@ static inline void pq_swap(borrowed(PriorityQueue*) pq, usize a, usize b) {
  */
 static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
     require_msg(pq != NULL, "pq_sift_up: pq cannot be NULL");
-    while (i > 0u) {
-        usize p  = pq_parent(i);
+    usize idx = i;
+    while (idx > 0u) {
+        usize p  = pq_parent(idx);
         void* pe = ptr_elem(pq->data, p, pq->elem_size);
-        void* ie = ptr_elem(pq->data, i, pq->elem_size);
+        void* ie = ptr_elem(pq->data, idx, pq->elem_size);
         if (pq->cmp(pe, ie, pq->ctx) <= 0) { break; }
-        pq_swap(pq, p, i);
-        i = p;
+        pq_swap(pq, p, idx);
+        idx = p;
     }
 }
 
@@ -319,10 +320,11 @@ static inline void pq_sift_up(borrowed(PriorityQueue*) pq, usize i) {
  */
 static inline void pq_sift_down(borrowed(PriorityQueue*) pq, usize i) {
     require_msg(pq != NULL, "pq_sift_down: pq cannot be NULL");
+    usize idx = i;
     while (true) {
-        usize smallest = i;
-        usize left     = pq_left_child(i);
-        usize right    = pq_right_child(i);
+        usize smallest = idx;
+        usize left     = pq_left_child(idx);
+        usize right    = pq_right_child(idx);
         if (left < pq->len) {
             void* sl = ptr_elem(pq->data, smallest, pq->elem_size);
             void* le = ptr_elem(pq->data, left,     pq->elem_size);
@@ -333,9 +335,9 @@ static inline void pq_sift_down(borrowed(PriorityQueue*) pq, usize i) {
             void* re = ptr_elem(pq->data, right,    pq->elem_size);
             if (pq->cmp(re, sl, pq->ctx) < 0) { smallest = right; }
         }
-        if (smallest == i) { break; }
-        pq_swap(pq, i, smallest);
-        i = smallest;
+        if (smallest == idx) { break; }
+        pq_swap(pq, idx, smallest);
+        idx = smallest;
     }
 }
 
@@ -420,10 +422,10 @@ static inline void pq_heapify(borrowed(PriorityQueue*) pq, usize len) {
     require_msg(pq->cmp     != NULL, "pq_heapify: pq not initialized (cmp is NULL)");
     require_msg(pq->capacity > 0u,    "pq_heapify: pq not initialized (capacity is 0)");
     if (len == 0u) { pq->len = 0u; pq_lifetime_restamp_(pq); return; }
-    if (len > pq->capacity) { len = pq->capacity; }
-    pq->len = len;
-    if (len >= 2u) {
-        usize i = pq_parent(len - 1u) + 1u;
+    const usize n = (len > pq->capacity) ? pq->capacity : len;
+    pq->len = n;
+    if (n >= 2u) {
+        usize i = pq_parent(n - 1u) + 1u;
         while (i-- > 0) {
             pq_sift_down(pq, i);
         }

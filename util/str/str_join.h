@@ -115,8 +115,8 @@ static inline bool str_join(
 
     require_msg(parts != NULL, "str_join: parts is NULL");
 
-    sep = sep ? sep : "";
-    sep_len = str_len(sep);
+    const char* sp = (sep == NULL) ? "" : sep;
+    sep_len = str_len(sp);
     pos = 0;
 
     for (i = 0; i < count; ++i) {
@@ -141,7 +141,7 @@ static inline bool str_join(
         pos += part_len;
 
         if (((i + 1u) < count) && (sep_len > 0u)) {
-            mem_copy(dest + pos, sep, sep_len);
+            mem_copy(dest + pos, sp, sep_len);
             pos += sep_len;
         }
     }
@@ -179,8 +179,8 @@ static inline option_charp str_alloc_join(
 
     require_msg(parts != NULL, "str_alloc_join: parts is NULL");
 
-    sep = sep ? sep : "";
-    sep_len = str_len(sep);
+    const char* sp = (sep == NULL) ? "" : sep;
+    sep_len = str_len(sp);
 
     total_len = 1; /* null terminator */
     for (i = 0; i < count; ++i) {
@@ -192,7 +192,7 @@ static inline option_charp str_alloc_join(
     buffer = (char*)mem_alloc(total_len);
     if (!buffer) { return option_charp_none(); }
 
-    if (str_join(buffer, total_len, parts, count, sep)) {
+    if (str_join(buffer, total_len, parts, count, sp)) {
         return option_charp_some(buffer);
     }
 

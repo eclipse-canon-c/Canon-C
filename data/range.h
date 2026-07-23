@@ -172,8 +172,8 @@ typedef struct {
 static inline range range_make(isize start, isize end, isize step) {
     require_msg(step != CANON_ISIZE_MIN,
                 "range_make: step cannot be ISIZE_MIN (would overflow on negation)");
-    if (step == 0) { step = 1; }
-    return (range){ .current = start, .end = end, .step = step };
+    const isize st = (step == 0) ? 1 : step;
+    return (range){ .current = start, .end = end, .step = st };
 }
 
 /**

@@ -1055,15 +1055,13 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
     if ((base == NULL) || (start >= len)) {
         return borrowed_bytes_empty();
     }
-    if (end > len) {
-        end = len;
-    }
-    if (start >= end) {
+    const usize e = (end > len) ? len : end;
+    if (start >= e) {
         return borrowed_bytes_empty();
     }
 
     r.bytes.ptr = base + start;   /* arithmetic on u8 *, not void * */
-    r.bytes.len = end - start;
+    r.bytes.len = e - start;
     r.source    = b.source;
     BORROW_LT_INHERIT_(r, b);
     return r;

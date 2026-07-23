@@ -132,10 +132,10 @@ static inline str_view_t intern_string(
     require_msg(pool->arena   != NULL, "intern_string: pool->arena is NULL");
     require_msg(pool->entries != NULL, "intern_string: pool->entries is NULL");
 
-    if (!s) { s = ""; }
+    const char* str = (s == NULL) ? "" : s;
 
-    len    = str_len(s);
-    hash   = intern_hash_(s, len);
+    len    = str_len(str);
+    hash   = intern_hash_(str, len);
     index  = (usize)(hash % pool->capacity);
     probes = 0;
 
@@ -151,7 +151,7 @@ static inline str_view_t intern_string(
             copy = (char*)arena_alloc(pool->arena, len + 1u);
             if (!copy) { return str_view_null(); }
 
-            mem_copy(copy, s, len);
+            mem_copy(copy, str, len);
             copy[len] = '\0';
 
             entry->ptr = copy;
@@ -161,7 +161,7 @@ static inline str_view_t intern_string(
         }
 
         /* Occupied slot — check for match */
-        if ((entry->len == len) && (mem_compare(entry->ptr, s, len) == 0)) {
+        if ((entry->len == len) && (mem_compare(entry->ptr, str, len) == 0)) {
             return *entry;
         }
 

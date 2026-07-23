@@ -467,9 +467,9 @@ static inline bool bytes_equal(bytes_t a, bytes_t b) {
  */
 static inline bytes_t bytes_slice(bytes_t b, usize start, usize end) {
     if (!b.ptr || (start >= b.len)) { return bytes_empty(); }
-    if (end > b.len) { end = b.len; }
-    if (start >= end) { return bytes_empty(); }
-    return (bytes_t){ .ptr = b.ptr + start, .len = end - start };
+    const usize e = (end > b.len) ? b.len : end;
+    if (start >= e) { return bytes_empty(); }
+    return (bytes_t){ .ptr = b.ptr + start, .len = e - start };
 }
 
 /**
@@ -718,9 +718,9 @@ static inline bool str_ends_with(str_t s, str_t suffix) {
  */
 static inline str_t str_slice(str_t s, usize start, usize end) {
     if (!s.ptr || (start >= s.len)) { return str_empty(); }
-    if (end > s.len) { end = s.len; }
-    if (start >= end) { return str_empty(); }
-    return (str_t){ .ptr = s.ptr + start, .len = end - start };
+    const usize e = (end > s.len) ? s.len : end;
+    if (start >= e) { return str_empty(); }
+    return (str_t){ .ptr = s.ptr + start, .len = e - start };
 }
 
 /**
