@@ -448,8 +448,8 @@ linkage bool fn(borrowed(const DequeType*) d) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_FRONT(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
-    if (!d || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size >= d->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    if (!d || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (d->size >= d->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
     d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
     d->buffer[d->head] = item; \
     d->size++; \
@@ -477,8 +477,8 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_BACK(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
-    if (!d || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size >= d->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    if (!d || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (d->size >= d->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
     d->buffer[d->tail] = item; \
     d->tail = (d->tail + 1) % d->capacity; \
     d->size++; \
@@ -509,7 +509,7 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_TRY_PUSH_FRONT(linkage, DequeType, fn, type) \
 linkage bool fn(borrowed(DequeType*) d, type item) { \
-    if (!d || !d->buffer || d->size >= d->capacity) return false; \
+    if (!d || !d->buffer || d->size >= d->capacity) { return false; } \
     d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
     d->buffer[d->head] = item; \
     d->size++; \
@@ -536,7 +536,7 @@ linkage bool fn(borrowed(DequeType*) d, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_TRY_PUSH_BACK(linkage, DequeType, fn, type) \
 linkage bool fn(borrowed(DequeType*) d, type item) { \
-    if (!d || !d->buffer || d->size >= d->capacity) return false; \
+    if (!d || !d->buffer || d->size >= d->capacity) { return false; } \
     d->buffer[d->tail] = item; \
     d->tail = (d->tail + 1) % d->capacity; \
     d->size++; \
@@ -636,8 +636,8 @@ linkage void fn(borrowed(DequeType*) d, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_FRONT(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
-    if (!d || !out || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size == 0) return result__Bool_Error_err(ERR_INVALID_STATE); \
+    if (!d || !out || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (d->size == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); } \
     *out = d->buffer[d->head]; \
     d->head = (d->head + 1) % d->capacity; \
     d->size--; \
@@ -665,8 +665,8 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_BACK(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
-    if (!d || !out || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (d->size == 0) return result__Bool_Error_err(ERR_INVALID_STATE); \
+    if (!d || !out || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (d->size == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); } \
     d->tail = (d->tail == 0) ? d->capacity - 1 : d->tail - 1; \
     *out = d->buffer[d->tail]; \
     d->size--; \
@@ -691,8 +691,8 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
 #define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(DequeType*) d) { \
     type out = {0}; \
-    if ((fn_result_is_ok)((fn_pop_front)(d, &out))) \
-        return (fn_some)(out); \
+    if ((fn_result_is_ok)((fn_pop_front)(d, &out))) { \
+        return (fn_some)(out); } \
     return (fn_none)(); \
 }
 
@@ -714,8 +714,8 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
 #define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(DequeType*) d) { \
     type out = {0}; \
-    if ((fn_result_is_ok)((fn_pop_back)(d, &out))) \
-        return (fn_some)(out); \
+    if ((fn_result_is_ok)((fn_pop_back)(d, &out))) { \
+        return (fn_some)(out); } \
     return (fn_none)(); \
 }
 

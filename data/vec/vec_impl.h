@@ -373,7 +373,7 @@ linkage VecType fn(void) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 linkage VecType fn_alloc(usize capacity) { \
-    if (capacity == 0) return (fn_empty)(); \
+    if (capacity == 0) { return (fn_empty)(); } \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
         return (fn_empty)(); \
     } \
@@ -382,7 +382,7 @@ linkage VecType fn_alloc(usize capacity) { \
         return (fn_empty)(); \
     } \
     type* buf = (type*)mem_alloc(total_bytes); \
-    if (!buf) return (fn_empty)(); \
+    if (!buf) { return (fn_empty)(); } \
     return (fn_init)(buf, capacity); \
 }
 
@@ -460,7 +460,7 @@ linkage void fn(dropped(VecType*) v) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
-    if (!arena || capacity == 0) return (fn_empty)(); \
+    if (!arena || capacity == 0) { return (fn_empty)(); } \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
         return (fn_empty)(); \
     } \
@@ -469,7 +469,7 @@ linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
         return (fn_empty)(); \
     } \
     type* buf = (type*)arena_alloc(arena, total_bytes); \
-    if (!buf) return (fn_empty)(); \
+    if (!buf) { return (fn_empty)(); } \
     return (fn_init)(buf, capacity); \
 }
 
@@ -687,7 +687,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_SET(linkage, VecType, fn, type) \
 linkage bool fn(borrowed(VecType*) v, usize i, type val) { \
-    if (!v || i >= v->len) return false; \
+    if (!v || i >= v->len) { return false; } \
     v->items[i] = val; \
     return true; \
 }
@@ -778,8 +778,8 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
-    if (!v || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (v->len >= v->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (v->len >= v->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
     v->items[v->len++] = item; \
     return result__Bool_Error_ok(true); \
 }
@@ -801,7 +801,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_TRY_PUSH(linkage, VecType, fn, type) \
 linkage bool fn(borrowed(VecType*) v, type item) { \
-    if (!v || !v->items || v->len >= v->capacity) return false; \
+    if (!v || !v->items || v->len >= v->capacity) { return false; } \
     v->items[v->len++] = item; \
     return true; \
 }
@@ -859,8 +859,8 @@ linkage void fn(borrowed(VecType*) v, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
-    if (!v || !out || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (v->len == 0) return result__Bool_Error_err(ERR_INVALID_STATE); \
+    if (!v || !out || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (v->len == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); } \
     *out = v->items[--v->len]; \
     return result__Bool_Error_ok(true); \
 }
@@ -883,8 +883,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
 #define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(VecType*) v) { \
     type out = {0}; \
-    if ((fn_result_is_ok)((fn_pop)(v, &out))) \
-        return (fn_some)(out); \
+    if ((fn_result_is_ok)((fn_pop)(v, &out))) { \
+        return (fn_some)(out); } \
     return (fn_none)(); \
 }
 
@@ -939,9 +939,9 @@ linkage void fn(borrowed(VecType*) v) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_INSERT(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
-    if (!v || !v->items)       return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (i > v->len)            return result__Bool_Error_err(ERR_OUT_OF_RANGE); \
-    if (v->len >= v->capacity) return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); }   \
+    if (i > v->len) { return result__Bool_Error_err(ERR_OUT_OF_RANGE); }        \
+    if (v->len >= v->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
     if (i < v->len) { \
         mem_move(&v->items[i + 1], &v->items[i], (v->len - i) * sizeof(type)); \
     } \
@@ -972,9 +972,9 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out) { \
-    if (!v || !v->items || !out) return result__Bool_Error_err(ERR_INVALID_ARG); \
-    if (v->len == 0)             return result__Bool_Error_err(ERR_INVALID_STATE); \
-    if (i >= v->len)             return result__Bool_Error_err(ERR_OUT_OF_RANGE); \
+    if (!v || !v->items || !out) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
+    if (v->len == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); }         \
+    if (i >= v->len) { return result__Bool_Error_err(ERR_OUT_OF_RANGE); }         \
     *out = v->items[i]; \
     if (i < v->len - 1) { \
         mem_move(&v->items[i], &v->items[i + 1], (v->len - i - 1) * sizeof(type)); \
@@ -1001,8 +1001,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out
 #define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(VecType*) v, usize i) { \
     type out = {0}; \
-    if ((fn_result_is_ok)((fn_remove)(v, i, &out))) \
-        return (fn_some)(out); \
+    if ((fn_result_is_ok)((fn_remove)(v, i, &out))) { \
+        return (fn_some)(out); } \
     return (fn_none)(); \
 }
 
@@ -1030,12 +1030,12 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
-    if (!v || !v->items || !src) return result__Bool_Error_err(ERR_INVALID_ARG); \
+    if (!v || !v->items || !src) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     usize total; \
-    if (!checked_add(v->len, count, &total)) \
-        return result__Bool_Error_err(ERR_OVERFLOW); \
-    if (total > v->capacity) \
-        return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
+    if (!checked_add(v->len, count, &total)) { \
+        return result__Bool_Error_err(ERR_OVERFLOW); } \
+    if (total > v->capacity) { \
+        return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
     mem_copy(&v->items[v->len], src, count * sizeof(type)); \
     v->len = total; \
     return result__Bool_Error_ok(true); \
@@ -1080,7 +1080,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_FILL(linkage, VecType, fn, type) \
 linkage void fn(borrowed(VecType*) v, type value, usize count) { \
-    if (!v || !v->items) return; \
+    if (!v || !v->items) { return; } \
     usize remaining = v->capacity - v->len; \
     usize to_fill   = (count < remaining) ? count : remaining; \
     for (usize i = 0; i < to_fill; i++) { \

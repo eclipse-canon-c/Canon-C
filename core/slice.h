@@ -467,7 +467,7 @@ static inline bool bytes_equal(bytes_t a, bytes_t b) {
  */
 static inline bytes_t bytes_slice(bytes_t b, usize start, usize end) {
     if (!b.ptr || (start >= b.len)) { return bytes_empty(); }
-    if (end > b.len) end = b.len;
+    if (end > b.len) { end = b.len; }
     if (start >= end) { return bytes_empty(); }
     return (bytes_t){ .ptr = b.ptr + start, .len = end - start };
 }
@@ -718,7 +718,7 @@ static inline bool str_ends_with(str_t s, str_t suffix) {
  */
 static inline str_t str_slice(str_t s, usize start, usize end) {
     if (!s.ptr || (start >= s.len)) { return str_empty(); }
-    if (end > s.len) end = s.len;
+    if (end > s.len) { end = s.len; }
     if (start >= end) { return str_empty(); }
     return (str_t){ .ptr = s.ptr + start, .len = end - start };
 }
@@ -885,7 +885,7 @@ static inline bool slice_##type##_is_empty(slice_##type s) {                    
  *   ensures (s.ptr == \null || out == \null || i >= s.len) ==> \result == \false;  \
  */                                                                                 \
 static inline bool slice_##type##_get(slice_##type s, usize i, type* out) {        \
-    if (!s.ptr || !out || i >= s.len) return false;                                 \
+    if (!s.ptr || !out || i >= s.len) { return false; }                             \
     *out = s.ptr[i]; return true;                                                   \
 }                                                                                   \
                                                                                     \
@@ -908,7 +908,7 @@ static inline type slice_##type##_get_unchecked(slice_##type s, usize i) {      
  *       ensures returns s.ptr + i or \null; assigns \nothing;                      \
  */                                                                                 \
 static inline type* slice_##type##_at(slice_##type s, usize i) {                   \
-    if (!s.ptr || i >= s.len) return NULL;                                          \
+    if (!s.ptr || i >= s.len) { return NULL; }                                      \
     return &s.ptr[i];                                                               \
 }                                                                                   \
                                                                                     \
@@ -936,9 +936,9 @@ static inline type* slice_##type##_last(slice_##type s) {                       
  */                                                                                 \
 static inline slice_##type slice_##type##_slice(                                    \
         slice_##type s, usize start, usize end) {                                   \
-    if (!s.ptr || start >= s.len) return slice_##type##_empty();                    \
-    if (end > s.len) end = s.len;                                                   \
-    if (start >= end) return slice_##type##_empty();                                \
+    if (!s.ptr || start >= s.len) { return slice_##type##_empty(); }                \
+    if (end > s.len) { end = s.len; }                                               \
+    if (start >= end) { return slice_##type##_empty(); }                            \
     return (slice_##type){ .ptr = s.ptr + start, .len = end - start };              \
 }                                                                                   \
                                                                                     \
@@ -955,7 +955,7 @@ static inline slice_##type slice_##type##_take(slice_##type s, usize n) {       
  * Spec mirrors bytes_skip — see VERIFY-007.                                        \
  */                                                                                 \
 static inline slice_##type slice_##type##_skip(slice_##type s, usize n) {          \
-    if (!s.ptr || n >= s.len) return slice_##type##_empty();                        \
+    if (!s.ptr || n >= s.len) { return slice_##type##_empty(); }                    \
     return (slice_##type){ .ptr = s.ptr + n, .len = s.len - n };                    \
 }                                                                                   \
                                                                                     \
@@ -967,7 +967,7 @@ static inline slice_##type slice_##type##_skip(slice_##type s, usize n) {       
  *       assigns  \nothing; — see VERIFY-007.                                       \
  */                                                                                 \
 static inline bytes_t slice_##type##_as_bytes(slice_##type s) {                    \
-    if (!s.ptr) return bytes_empty();                                               \
+    if (!s.ptr) { return bytes_empty(); }                                           \
     return (bytes_t){ .ptr = (u8*)s.ptr, .len = s.len * sizeof(type) };            \
 }                                                                                   \
                                                                                     \
@@ -976,7 +976,7 @@ static inline bytes_t slice_##type##_as_bytes(slice_##type s) {                 
  * Spec mirrors slice_T_as_bytes — see VERIFY-007.                                  \
  */                                                                                 \
 static inline cbytes_t slice_##type##_as_cbytes(slice_##type s) {                  \
-    if (!s.ptr) return (cbytes_t){ .ptr = NULL, .len = 0 };                        \
+    if (!s.ptr) { return (cbytes_t){ .ptr = NULL, .len = 0 }; }                    \
     return (cbytes_t){ .ptr = (const u8*)s.ptr, .len = s.len * sizeof(type) };     \
 }
 
