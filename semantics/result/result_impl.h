@@ -327,6 +327,7 @@
  * @param _r        The Result to extract from
  * @param _fallback Value to return if Err
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_UNWRAP_OR(_t, _e, _r, _fallback) \
     { \
         _t const _res_val_ = (_r).is_ok \
@@ -429,11 +430,12 @@
  * @param _f     Transformation function: T → T
  * @param _ok_fn Constructor function for Ok (from mangle.h)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_MAP(_t, _e, _tres, _r, _f, _ok_fn) \
     { \
         _tres const _res_ = (_r); \
         return _res_.is_ok \
-            ? _ok_fn((_f)(IMPL_RESULT_OK_FIELD_(_res_))) \
+            ? (_ok_fn)((_f)(IMPL_RESULT_OK_FIELD_(_res_))) \
             : _res_; \
     }
 
@@ -456,12 +458,13 @@
  * @param _f      Error transformation function: E → E
  * @param _err_fn Constructor function for Err (from mangle.h)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_MAP_ERR(_t, _e, _tres, _r, _f, _err_fn) \
     { \
         _tres const _res_ = (_r); \
         return _res_.is_ok \
             ? _res_ \
-            : _err_fn((_f)(IMPL_RESULT_ERR_FIELD_(_res_))); \
+            : (_err_fn)((_f)(IMPL_RESULT_ERR_FIELD_(_res_))); \
     }
 
 /**
@@ -481,6 +484,7 @@
  * @param _r    The Result to chain from
  * @param _f    Function returning Result: T → Result<T, E>
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_AND_THEN(_t, _e, _tres, _r, _f) \
     { \
         _tres const _res_ = (_r); \
@@ -505,6 +509,7 @@
  * @param _r    The Result to check
  * @param _f    Recovery function: E → Result<T, E>
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_OR_ELSE(_t, _e, _tres, _r, _f) \
     { \
         _tres const _res_ = (_r); \
@@ -532,6 +537,7 @@
  * @param _r     The first Result
  * @param _other The second Result (always evaluated)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_AND(_t, _e, _tres, _r, _other) \
     { \
         _tres const _res_ = (_r); \
@@ -557,6 +563,7 @@
  * @param _r     The first Result
  * @param _other The fallback Result (always evaluated)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_RESULT_OR(_t, _e, _tres, _r, _other) \
     { \
         _tres const _res_ = (_r); \

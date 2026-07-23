@@ -144,6 +144,7 @@
  * @param _linkage Linkage specifier (e.g., static inline, extern, or empty)
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_SOME(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_SOME(_t)(_t v);
 
@@ -158,6 +159,7 @@
  * @param _linkage Linkage specifier (e.g., static inline, extern, or empty)
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_NONE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_NONE(_t)(void);
 
@@ -175,6 +177,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_IS_SOME(_linkage, _t) \
     _linkage bool MANGLE_OPTION_IS_SOME(_t)(MANGLE_OPTION_TYPE(_t) o);
 
@@ -188,6 +191,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_IS_NONE(_linkage, _t) \
     _linkage bool MANGLE_OPTION_IS_NONE(_t)(MANGLE_OPTION_TYPE(_t) o);
 
@@ -210,6 +214,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_GET(_linkage, _t) \
     _linkage bool MANGLE_OPTION_GET(_t)(MANGLE_OPTION_TYPE(_t) o, _t* out);
 
@@ -224,6 +229,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_UNWRAP_OR(_linkage, _t) \
     _linkage _t MANGLE_OPTION_UNWRAP_OR(_t)(MANGLE_OPTION_TYPE(_t) o, _t fallback);
 
@@ -246,6 +252,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_UNWRAP(_linkage, _t) \
     _linkage _t MANGLE_OPTION_UNWRAP(_t)(MANGLE_OPTION_TYPE(_t) o);
 
@@ -264,6 +271,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_EXPECT(_linkage, _t) \
     _linkage _t MANGLE_OPTION_EXPECT(_t)(MANGLE_OPTION_TYPE(_t) o, const char* msg);
 
@@ -282,6 +290,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_MAP(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_MAP(_t)( \
         MANGLE_OPTION_TYPE(_t) o, _t (*f)(_t));
@@ -298,6 +307,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_AND_THEN(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_AND_THEN(_t)( \
         MANGLE_OPTION_TYPE(_t) o, MANGLE_OPTION_TYPE(_t) (*f)(_t));
@@ -313,6 +323,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_OR_ELSE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_OR_ELSE(_t)( \
         MANGLE_OPTION_TYPE(_t) o, MANGLE_OPTION_TYPE(_t) (*fallback)(void));
@@ -328,6 +339,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_FILTER(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_FILTER(_t)( \
         MANGLE_OPTION_TYPE(_t) o, bool (*pred)(_t));
@@ -347,6 +359,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_COMBINE_WITH(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_COMBINE_WITH(_t)( \
         MANGLE_OPTION_TYPE(_t) o1, MANGLE_OPTION_TYPE(_t) o2, \
@@ -368,6 +381,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_REPLACE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_REPLACE(_t)( \
         MANGLE_OPTION_TYPE(_t)* o, _t new_value);
@@ -385,6 +399,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_TAKE(_linkage, _t) \
     _linkage MANGLE_OPTION_TYPE(_t) MANGLE_OPTION_TAKE(_t)( \
         MANGLE_OPTION_TYPE(_t)* o);
@@ -406,6 +421,7 @@
  * @param _linkage Linkage specifier
  * @param _t       The value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_OPTION_EQ(_linkage, _t) \
     _linkage bool MANGLE_OPTION_EQ(_t)( \
         MANGLE_OPTION_TYPE(_t) o1, MANGLE_OPTION_TYPE(_t) o2, \

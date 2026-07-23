@@ -235,6 +235,7 @@
  * usize m = algo_filter_slice_int(out, 6, empty, is_even, NULL); // 0
  * ```
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_FILTER(type) \
 \
 /** \

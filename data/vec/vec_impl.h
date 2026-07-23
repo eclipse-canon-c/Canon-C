@@ -225,6 +225,7 @@
  *          sizeof(IterType) = sizeof(VecType*) + sizeof(usize)
  *          sizeof(SliceType) = sizeof(type*) + sizeof(usize)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_STRUCTS(VecType, VecTag, IterType, IterTag, SliceType, SliceTag, fn_lt_open, fn_lt_close, type) \
 \
 typedef struct VecTag { \
@@ -247,8 +248,8 @@ typedef struct SliceTag { \
 /* ════════════════════════════════════════════════════════════════════════════ \
    Internal: lifetime helpers (per-instantiation, compiled away in release) \
    ════════════════════════════════════════════════════════════════════════════ \
-   - fn_lt_open:  sets id (from &v) and marks open. Used by init / empty. \
-   - fn_lt_close: marks closed. Used by free. \
+   - (fn_lt_open):  sets id (from &v) and marks open. Used by init / empty. \
+   - (fn_lt_close): marks closed. Used by free. \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
 static inline void fn_lt_open(VecType* v) { \
@@ -369,19 +370,20 @@ linkage VecType fn(void) { \
  * - Time:  O(1) amortized (single mem_alloc)
  * - Space: O(capacity * sizeof(type))
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 linkage VecType fn_alloc(usize capacity) { \
-    if (capacity == 0) return fn_empty(); \
+    if (capacity == 0) return (fn_empty)(); \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
-        return fn_empty(); \
+        return (fn_empty)(); \
     } \
     usize total_bytes; \
     if (!checked_mul(capacity, (usize)sizeof(type), &total_bytes)) { \
-        return fn_empty(); \
+        return (fn_empty)(); \
     } \
     type* buf = (type*)mem_alloc(total_bytes); \
-    if (!buf) return fn_empty(); \
-    return fn_init(buf, capacity); \
+    if (!buf) return (fn_empty)(); \
+    return (fn_init)(buf, capacity); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -455,19 +457,20 @@ linkage void fn(dropped(VecType*) v) { \
  * - Time:  O(1)
  * - Space: O(capacity * sizeof(type)) consumed from arena
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
 linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
-    if (!arena || capacity == 0) return fn_empty(); \
+    if (!arena || capacity == 0) return (fn_empty)(); \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
-        return fn_empty(); \
+        return (fn_empty)(); \
     } \
     usize total_bytes; \
     if (!checked_mul(capacity, (usize)sizeof(type), &total_bytes)) { \
-        return fn_empty(); \
+        return (fn_empty)(); \
     } \
     type* buf = (type*)arena_alloc(arena, total_bytes); \
-    if (!buf) return fn_empty(); \
-    return fn_init(buf, capacity); \
+    if (!buf) return (fn_empty)(); \
+    return (fn_init)(buf, capacity); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -659,6 +662,7 @@ linkage type fn(borrowed(const VecType*) v, usize i) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_AT(linkage, VecType, fn, type) \
 linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
     ensure_msg(v != NULL,  #fn ": v cannot be NULL"); \
@@ -680,6 +684,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_SET(linkage, VecType, fn, type) \
 linkage bool fn(borrowed(VecType*) v, usize i, type val) { \
     if (!v || i >= v->len) return false; \
@@ -701,6 +706,7 @@ linkage bool fn(borrowed(VecType*) v, usize i, type val) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_FIRST(linkage, VecType, fn, type) \
 linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return (v && v->len > 0) ? &v->items[0] : NULL; \
@@ -720,6 +726,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_LAST(linkage, VecType, fn, type) \
 linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return (v && v->len > 0) ? &v->items[v->len - 1] : NULL; \
@@ -739,6 +746,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_DATA(linkage, VecType, fn, type) \
 linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return v ? v->items : NULL; \
@@ -767,6 +775,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  * - Time:  O(1)
  * - Space: O(1) — no allocation
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
     if (!v || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -789,6 +798,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_TRY_PUSH(linkage, VecType, fn, type) \
 linkage bool fn(borrowed(VecType*) v, type item) { \
     if (!v || !v->items || v->len >= v->capacity) return false; \
@@ -815,6 +825,7 @@ linkage bool fn(borrowed(VecType*) v, type item) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH_UNCHECKED(linkage, VecType, fn, type) \
 linkage void fn(borrowed(VecType*) v, type item) { \
     ensure_msg(v != NULL,            #fn ": v cannot be NULL"); \
@@ -845,6 +856,7 @@ linkage void fn(borrowed(VecType*) v, type item) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
     if (!v || !out || !v->items) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -867,12 +879,13 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(VecType*) v) { \
     type out = {0}; \
-    if (fn_result_is_ok(fn_pop(v, &out))) \
-        return fn_some(out); \
-    return fn_none(); \
+    if ((fn_result_is_ok)((fn_pop)(v, &out))) \
+        return (fn_some)(out); \
+    return (fn_none)(); \
 }
 
 /**
@@ -923,6 +936,7 @@ linkage void fn(borrowed(VecType*) v) { \
  * - Time:  O(n) — shifts up to n elements right
  * - Space: O(1) — no allocation
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_INSERT(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
     if (!v || !v->items)       return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -955,6 +969,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  * - Time:  O(n) — shifts up to n elements left
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out) { \
     if (!v || !v->items || !out) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -982,12 +997,13 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out
  * - Time:  O(n)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(VecType*) v, usize i) { \
     type out = {0}; \
-    if (fn_result_is_ok(fn_remove(v, i, &out))) \
-        return fn_some(out); \
-    return fn_none(); \
+    if ((fn_result_is_ok)((fn_remove)(v, i, &out))) \
+        return (fn_some)(out); \
+    return (fn_none)(); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1011,6 +1027,7 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  * - Time:  O(count)
  * - Space: O(1) — no allocation, copies into existing buffer
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
     if (!v || !v->items || !src) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -1038,9 +1055,10 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  * - Time:  O(count)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND(linkage, VecType, fn, fn_append_array, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
-    return fn_append_array(v, src, count); \
+    return (fn_append_array)(v, src, count); \
 }
 
 /**
@@ -1059,6 +1077,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  * - Time:  O(min(count, remaining))
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_FILL(linkage, VecType, fn, type) \
 linkage void fn(borrowed(VecType*) v, type value, usize count) { \
     if (!v || !v->items) return; \
@@ -1205,6 +1224,7 @@ linkage SliceType fn(borrowed(VecType*) v, usize start, usize end) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_SLICE_GET(linkage, SliceType, fn, type) \
 linkage borrowed(type*) fn(borrowed(const SliceType*) s, usize i) { \
     ensure_msg(s != NULL,  #fn ": s cannot be NULL"); \

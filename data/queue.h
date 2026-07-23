@@ -239,6 +239,7 @@
  *       functions remain usable. DEFINE_QUEUE only adds FIFO-named wrappers
  *       for clarity.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_QUEUE(linkage, type) \
 \
 /** \
@@ -364,7 +365,7 @@ linkage result__Bool_Error queue_##type##_dequeue( \
 } \
 \
 /** \
- * @brief Removes and returns the front item as Option<type> \
+ * @brief Removes and returns the front item as Option<(type)> \
  * \
  * @param q borrowed(queue_##type*) — initialized queue instance \
  * @return option_##type — Some(item) on success, None if empty or invalid \
@@ -405,7 +406,7 @@ linkage bool queue_##type##_peek( \
 } \
 \
 /** \
- * @brief Returns the front item as Option<type> without removing it \
+ * @brief Returns the front item as Option<(type)> without removing it \
  * \
  * Preferred over peek() when the caller has not already confirmed the \
  * queue is non-empty. Returns None cleanly instead of requiring a \
@@ -560,6 +561,7 @@ linkage void queue_##type##_clear(borrowed(queue_##type*) q) { \
  * DEFINE_QUEUE(, Task)
  * ```
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_QUEUE(type) \
 \
 typedef MANGLE_DEQUE_TYPE(type) queue_##type; \

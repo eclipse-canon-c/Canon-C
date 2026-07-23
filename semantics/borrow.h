@@ -1105,6 +1105,7 @@ static inline borrowed_bytes borrowed_bytes_slice(borrowed_bytes b,
  *       borrowed_slice_int_from(slice_int_from(arr, 4u), arr);
  *   const int *third = borrowed_slice_int_at(&view, 2u);
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_BORROWED_SLICE(type)                                            \
                                                                                \
 typedef struct {                                                               \

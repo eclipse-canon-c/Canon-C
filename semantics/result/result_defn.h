@@ -165,6 +165,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OK(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_OK(_t, _e)(_t v) \
@@ -180,6 +181,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_ERR(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_ERR(_t, _e)(_e err) \
@@ -199,6 +201,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_IS_OK(_linkage, _t, _e) \
     _linkage bool \
     MANGLE_RESULT_IS_OK(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
@@ -214,6 +217,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_IS_ERR(_linkage, _t, _e) \
     _linkage bool \
     MANGLE_RESULT_IS_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
@@ -236,6 +240,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_GET_OK(_linkage, _t, _e) \
     _linkage bool \
     MANGLE_RESULT_GET_OK(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t* out) \
@@ -254,6 +259,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_GET_ERR(_linkage, _t, _e) \
     _linkage bool \
     MANGLE_RESULT_GET_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _e* out) \
@@ -271,6 +277,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_UNWRAP_OR(_linkage, _t, _e) \
     _linkage _t \
     MANGLE_RESULT_UNWRAP_OR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t fallback) \
@@ -294,6 +301,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_UNWRAP(_linkage, _t, _e) \
     _linkage _t \
     MANGLE_RESULT_UNWRAP(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
@@ -311,6 +319,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_UNWRAP_ERR(_linkage, _t, _e) \
     _linkage _e \
     MANGLE_RESULT_UNWRAP_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
@@ -328,6 +337,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_EXPECT(_linkage, _t, _e) \
     _linkage _t \
     MANGLE_RESULT_EXPECT(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, const char* msg) \
@@ -353,6 +363,7 @@
  * @param _t       The value type (both input and output of f)
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_MAP(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_MAP(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t (*f)(_t)) \
@@ -371,6 +382,7 @@
  * @param _t       The value type
  * @param _e       The error type (both input and output of f)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_MAP_ERR(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_MAP_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _e (*f)(_e)) \
@@ -390,6 +402,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_AND_THEN(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_AND_THEN(_t, _e)( \
@@ -409,6 +422,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OR_ELSE(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_OR_ELSE(_t, _e)( \
@@ -431,6 +445,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_AND(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_AND(_t, _e)( \
@@ -453,6 +468,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OR(_linkage, _t, _e) \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_OR(_t, _e)( \
@@ -479,6 +495,7 @@
  * @param _t       The value type
  * @param _e       The error type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_EQ(_linkage, _t, _e) \
     _linkage bool \
     MANGLE_RESULT_EQ(_t, _e)( \

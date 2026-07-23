@@ -272,8 +272,8 @@
  */
 #define CANON_DROP(ptr, free_fn)                                              \
     do {                                                                       \
-        require_msg((ptr)     != NULL, "CANON_DROP: ptr cannot be NULL");     \
-        require_msg((free_fn) != NULL, "CANON_DROP: free_fn cannot be NULL"); \
+        require_msg((ptr)     != NULL, "CANON_DROP: (ptr) cannot be NULL");   \
+        require_msg((free_fn) != NULL, "CANON_DROP: (free_fn) cannot be NULL"); \
         (free_fn)(ptr);                                                        \
         (ptr) = NULL;                                                          \
     } while (0)
@@ -290,7 +290,7 @@
  */
 #define CANON_DROP_IF(ptr, free_fn)                                               \
     do {                                                                           \
-        require_msg((free_fn) != NULL, "CANON_DROP_IF: free_fn cannot be NULL");  \
+        require_msg((free_fn) != NULL, "CANON_DROP_IF: (free_fn) cannot be NULL"); \
         if ((ptr) != NULL) {                                                       \
             (free_fn)(ptr);                                                        \
             (ptr) = NULL;                                                          \
@@ -324,13 +324,14 @@
  * @note owned_T_unwrap asserts the wrapper has not already been consumed.
  *       Calling it twice on the same wrapper is a contract violation.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OWNED(type)                                                          \
                                                                                     \
 typedef struct {                                                                    \
     type* ptr; /**< Owned pointer — must be dropped before going out of scope */   \
 } owned_##type;                                                                     \
                                                                                     \
-static inline owned_##type owned_##type##_wrap(type* ptr) {                        \
+static inline owned_##type owned_##type##_wrap(type* ptr) {                      \
     return (owned_##type){ .ptr = ptr };                                            \
 }                                                                                   \
                                                                                     \
@@ -353,7 +354,7 @@ static inline bool owned_##type##_is_valid(const owned_##type* o) {             
 }                                                                                   \
                                                                                     \
 static inline void owned_##type##_drop(                                             \
-        owned_##type* o, void (*free_fn)(type*)) {                                  \
+        owned_##type* o, void (*free_fn)(type*)) {                                \
     require_msg(o != NULL,       "owned_" #type "_drop: o cannot be NULL");         \
     require_msg(free_fn != NULL, "owned_" #type "_drop: free_fn cannot be NULL");   \
     if (o->ptr != NULL) {                                                           \
@@ -374,6 +375,7 @@ static inline void owned_##type##_drop(                                         
  *   borrowed_T_get(b)      -- read the raw pointer
  *   borrowed_T_is_valid(b) -- returns true if wrapper holds a non-NULL pointer
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_BORROWED(type)                                                            \
                                                                                          \
 typedef struct {                                                                         \

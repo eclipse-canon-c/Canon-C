@@ -241,6 +241,7 @@
  *       functions remain usable. DEFINE_STACK only adds LIFO-named wrappers
  *       for clarity.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_STACK(linkage, type) \
 \
 /** \
@@ -363,7 +364,7 @@ linkage result__Bool_Error stack_##type##_pop( \
 } \
 \
 /** \
- * @brief Removes and returns the top item as Option<type> \
+ * @brief Removes and returns the top item as Option<(type)> \
  * \
  * @param s borrowed(stack_##type*) — initialized stack instance \
  * @return option_##type — Some(item) on success, None if empty or invalid \
@@ -410,7 +411,7 @@ linkage bool stack_##type##_peek( \
 } \
 \
 /** \
- * @brief Returns the top item as Option<type> without removing it \
+ * @brief Returns the top item as Option<(type)> without removing it \
  * \
  * Preferred over peek() when the caller has not already confirmed the \
  * stack is non-empty. Returns None cleanly instead of requiring a \
@@ -553,6 +554,7 @@ linkage void stack_##type##_clear(borrowed(stack_##type*) s) { \
  * @pre DECLARE_VEC(type) has already been called for the same type
  * @pre option_##type is available (from CANON_OPTION(type))
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_STACK(type) \
 \
 typedef MANGLE_VEC_TYPE(type) stack_##type; \

@@ -279,6 +279,7 @@
  *
  * Generated functions: (see quick start for examples)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_SMALLVEC(type, INLINE_CAP) \
 \
 /** \
@@ -343,7 +344,7 @@ static inline void smallvec_##type##_lifetime_close_(smallvec_##type* v) { \
  * \
  * @return Initialized smallvec_##type pointing data at inline_buf \
  * \
- * @post v.data == v.inline_buf, v.len == 0, v.cap == INLINE_CAP \
+ * @post v.data == v.inline_buf, v.len == 0, v.cap == (INLINE_CAP) \
  * @post v.using_inline == true, v.arena == NULL \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID \
@@ -355,7 +356,7 @@ static inline void smallvec_##type##_lifetime_close_(smallvec_##type* v) { \
 static inline smallvec_##type smallvec_##type##_init(void) { \
     smallvec_##type v; \
     v.len = 0; \
-    v.cap = INLINE_CAP; \
+    v.cap = (INLINE_CAP); \
     v.arena = NULL; \
     v.using_inline = true; \
     v.data = v.inline_buf; \

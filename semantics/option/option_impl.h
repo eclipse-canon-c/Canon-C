@@ -101,6 +101,7 @@
  *
  * @param _t The contained value type
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_OPTION_STRUCT(_t) \
     { bool has_value; _t value; }
 
@@ -297,8 +298,8 @@
 #define IMPL_OPTION_MAP(_t, _topt, _o, _f, _some_fn, _none_fn) \
     { \
         return (_o).has_value \
-            ? _some_fn((_f)((_o).value)) \
-            : _none_fn(); \
+            ? (_some_fn)((_f)((_o).value)) \
+            : (_none_fn)(); \
     }
 
 /**
@@ -318,7 +319,7 @@
  * @param _none_fn Function to construct None (from option_mangle.h)
  */
 #define IMPL_OPTION_AND_THEN(_t, _topt, _o, _f, _none_fn) \
-    { return (_o).has_value ? (_f)((_o).value) : _none_fn(); }
+    { return (_o).has_value ? (_f)((_o).value) : (_none_fn)(); }
 
 /**
  * @brief Provides alternative if None
@@ -357,7 +358,7 @@
     { \
         return ((_o).has_value && (_pred)((_o).value)) \
             ? (_o) \
-            : _none_fn(); \
+            : (_none_fn)(); \
     }
 
 /**
@@ -417,11 +418,12 @@
  * @param _new_value New value to set
  * @param _some_fn  Function to construct Some (from option_mangle.h)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_OPTION_REPLACE(_t, _topt, _o, _new_value, _some_fn) \
     { \
         require_msg((_o) != NULL, "option_replace: o parameter cannot be NULL"); \
         _topt old = *(_o); \
-        *(_o) = _some_fn(_new_value); \
+        *(_o) = (_some_fn)(_new_value); \
         return old; \
     }
 
@@ -443,11 +445,12 @@
  * @param _o      Pointer to Option to take from (must not be NULL)
  * @param _none_fn Function to construct None (from option_mangle.h)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_OPTION_TAKE(_t, _topt, _o, _none_fn) \
     { \
         require_msg((_o) != NULL, "option_take: o parameter cannot be NULL"); \
         _topt old = *(_o); \
-        *(_o) = _none_fn(); \
+        *(_o) = (_none_fn)(); \
         return old; \
     }
 

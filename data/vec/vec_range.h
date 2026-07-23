@@ -121,6 +121,7 @@
  * - Time:  O(count) where count = range_len(&r)
  * - Space: O(1) — no allocation, fills into existing buffer
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
     if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \

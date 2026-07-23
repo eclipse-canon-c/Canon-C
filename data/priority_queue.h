@@ -667,6 +667,7 @@ static inline bytes_t pq_as_bytes(borrowed(const PriorityQueue*) pq) {
  * token-pastes to result__Bool_Error in C99 because bool expands to _Bool
  * before ## sees it.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_PRIORITY_QUEUE(type)                                                          \
                                                                                              \
 typedef struct { PriorityQueue _pq; } pq_##type;                                            \
@@ -674,7 +675,7 @@ typedef struct { PriorityQueue _pq; } pq_##type;                                
 /** Initializes a typed priority queue over a caller-owned buffer */                         \
 static inline void pq_##type##_init(                                                         \
     borrowed(pq_##type*) h,                                                                  \
-    borrowed(type*)      buf,                                                                \
+    borrowed(type*)      buf,                                                              \
     usize                cap,                                                                \
     algo_cmp_fn          cmp,                                                                \
     void*                ctx)                                                                \
@@ -721,10 +722,10 @@ static inline result__Bool_Error pq_##type##_remove_at_result(                  
 static inline bool pq_##type##_push(borrowed(pq_##type*) h, type val) {                     \
     return pq_push(&h->_pq, &val);                                                           \
 }                                                                                            \
-static inline bool pq_##type##_pop(borrowed(pq_##type*) h, type* out) {                     \
+static inline bool pq_##type##_pop(borrowed(pq_##type*) h, type* out) {                   \
     return pq_pop_raw(&h->_pq, out);                                                         \
 }                                                                                            \
-static inline bool pq_##type##_peek(borrowed(const pq_##type*) h, type* out) {              \
+static inline bool pq_##type##_peek(borrowed(const pq_##type*) h, type* out) {            \
     return pq_peek(&h->_pq, out);                                                            \
 }                                                                                            \
 static inline bool pq_##type##_remove_at(borrowed(pq_##type*) h, usize i) {                 \

@@ -221,6 +221,7 @@
  *                              [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG]
  *          Total memory: sizeof(DequeType) + capacity*sizeof(type)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_STRUCT(DequeType, DequeTag, fn_lt_open, type) \
 typedef struct DequeTag { \
     type* buffer;   /**< Caller-owned element buffer (must remain valid for lifetime) */ \
@@ -234,7 +235,7 @@ typedef struct DequeTag { \
 /* ════════════════════════════════════════════════════════════════════════════ \
    Internal: lifetime helper (per-instantiation, compiled away in release) \
    ════════════════════════════════════════════════════════════════════════════ \
-   - fn_lt_open: sets id (via TU-local counter) and marks open. \
+   - (fn_lt_open): sets id (via TU-local counter) and marks open. \
                  Used by init and empty. No close helper — deque has no \
                  destructor. \
    ════════════════════════════════════════════════════════════════════════════ */ \
@@ -444,6 +445,7 @@ linkage bool fn(borrowed(const DequeType*) d) { \
  * - Time:  O(1)
  * - Space: O(1) — no allocation
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_FRONT(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -472,6 +474,7 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
  * - Time:  O(1)
  * - Space: O(1) — no allocation
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_BACK(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -503,6 +506,7 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
  * @sa IMPL_DEQUE_PUSH_FRONT — Result variant with specific error codes
  * @sa IMPL_DEQUE_PUSH_FRONT_UNCHECKED — unchecked variant for maximum throughput
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_TRY_PUSH_FRONT(linkage, DequeType, fn, type) \
 linkage bool fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer || d->size >= d->capacity) return false; \
@@ -529,6 +533,7 @@ linkage bool fn(borrowed(DequeType*) d, type item) { \
  * @sa IMPL_DEQUE_PUSH_BACK — Result variant with specific error codes
  * @sa IMPL_DEQUE_PUSH_BACK_UNCHECKED — unchecked variant for maximum throughput
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_TRY_PUSH_BACK(linkage, DequeType, fn, type) \
 linkage bool fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer || d->size >= d->capacity) return false; \
@@ -563,6 +568,7 @@ linkage bool fn(borrowed(DequeType*) d, type item) { \
  * @sa IMPL_DEQUE_PUSH_FRONT — Result variant with full diagnostics
  * @sa IMPL_DEQUE_TRY_PUSH_FRONT — bool variant with runtime checks
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_FRONT_UNCHECKED(linkage, DequeType, fn, type) \
 linkage void fn(borrowed(DequeType*) d, type item) { \
     ensure_msg(d != NULL,              #fn ": d cannot be NULL"); \
@@ -594,6 +600,7 @@ linkage void fn(borrowed(DequeType*) d, type item) { \
  * @sa IMPL_DEQUE_PUSH_BACK — Result variant with full diagnostics
  * @sa IMPL_DEQUE_TRY_PUSH_BACK — bool variant with runtime checks
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_BACK_UNCHECKED(linkage, DequeType, fn, type) \
 linkage void fn(borrowed(DequeType*) d, type item) { \
     ensure_msg(d != NULL,              #fn ": d cannot be NULL"); \
@@ -626,6 +633,7 @@ linkage void fn(borrowed(DequeType*) d, type item) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_FRONT(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
     if (!d || !out || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -654,6 +662,7 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_BACK(linkage, DequeType, fn, type) \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
     if (!d || !out || !d->buffer) return result__Bool_Error_err(ERR_INVALID_ARG); \
@@ -678,12 +687,13 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(DequeType*) d) { \
     type out = {0}; \
-    if (fn_result_is_ok(fn_pop_front(d, &out))) \
-        return fn_some(out); \
-    return fn_none(); \
+    if ((fn_result_is_ok)((fn_pop_front)(d, &out))) \
+        return (fn_some)(out); \
+    return (fn_none)(); \
 }
 
 /**
@@ -700,12 +710,13 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
  * - Time:  O(1)
  * - Space: O(1)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
 linkage OptionType fn(borrowed(DequeType*) d) { \
     type out = {0}; \
-    if (fn_result_is_ok(fn_pop_back(d, &out))) \
-        return fn_some(out); \
-    return fn_none(); \
+    if ((fn_result_is_ok)((fn_pop_back)(d, &out))) \
+        return (fn_some)(out); \
+    return (fn_none)(); \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

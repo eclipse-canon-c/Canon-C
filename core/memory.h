@@ -1090,6 +1090,7 @@ static inline void mem_secure_zero_bytes(bytes_t b) {
  * Caller must free with mem_free().
  * Returns NULL on allocation failure.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define mem_alloc_type(Type)            ((Type*)mem_alloc(sizeof(Type)))
 
 /**
@@ -1117,6 +1118,7 @@ static inline void mem_secure_zero_bytes(bytes_t b) {
  *   - malloc fails                          → NULL
  *   - otherwise                             → typed pointer to sizeof(Type)*count bytes
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define mem_alloc_array(Type, count) \
     ((Type*)mem_alloc_array_checked(sizeof(Type), (count)))
 

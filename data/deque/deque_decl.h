@@ -90,6 +90,7 @@
  *   — bool expands to _Bool before ## sees it. These extern signatures must
  *   match the definitions emitted by DEFINE_DEQUE exactly.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_DEQUE(type) \
 \
 IMPL_DEQUE_STRUCT( \
@@ -100,7 +101,7 @@ IMPL_DEQUE_STRUCT( \
 ) \
 \
 /* Constructor */ \
-extern void                    MANGLE_DEQUE_INIT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) buffer, usize capacity); \
+extern void                    MANGLE_DEQUE_INIT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) buffer, usize capacity); \
 extern MANGLE_DEQUE_TYPE(type) MANGLE_DEQUE_EMPTY(type)(void); \
 \
 /* Queries */ \
@@ -123,16 +124,16 @@ extern void MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type)(borrowed(MANGLE_DEQUE_TYPE(t
 extern void MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
 \
 /* Pop — Result variants */ \
-extern result__Bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
-extern result__Bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern result__Bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
+extern result__Bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
 \
 /* Pop — Option variants */ \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_FRONT_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_BACK_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
 \
 /* Peek — bool variants */ \
-extern bool MANGLE_DEQUE_PEEK_FRONT(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
-extern bool MANGLE_DEQUE_PEEK_BACK(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern bool MANGLE_DEQUE_PEEK_FRONT(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
+extern bool MANGLE_DEQUE_PEEK_BACK(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
 \
 /* Peek — Option variants */ \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \

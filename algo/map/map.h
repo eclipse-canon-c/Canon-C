@@ -188,6 +188,7 @@
  * Use DEFINE_ALGO_MAP_CROSS when you have already called DEFINE_ALGO_MAP
  * for the same in_type and need an additional cross-type mapping.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_MAP_CROSS(in_type, out_type) \
 \
 typedef void (*algo_map_fn_##in_type##_##out_type)(out_type*, const in_type*); \
@@ -218,6 +219,7 @@ static inline void ALGO_MAP_SLICE_FN(in_type, out_type)( \
  * Use DEFINE_ALGO_MAP_INPLACE_ONLY when you need fine-grained control
  * over which macros generate which functions.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_MAP_INPLACE_ONLY(in_type) \
 \
 typedef void (*algo_map_inplace_fn_##in_type)(in_type*); \

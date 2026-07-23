@@ -187,9 +187,9 @@ typedef result__Bool_Error result_bool_Error;
 
 #define ALGO_FOLD(acc_ptr, array, len, Type, fold_fn, ctx) \
     do { \
-        require_msg((acc_ptr) != NULL, "ALGO_FOLD: acc_ptr cannot be NULL"); \
-        require_msg((array)   != NULL, "ALGO_FOLD: array cannot be NULL");   \
-        require_msg((fold_fn) != NULL, "ALGO_FOLD: fold_fn cannot be NULL"); \
+        require_msg((acc_ptr) != NULL, "ALGO_FOLD: (acc_ptr) cannot be NULL"); \
+        require_msg((array)   != NULL, "ALGO_FOLD: (array) cannot be NULL"); \
+        require_msg((fold_fn) != NULL, "ALGO_FOLD: (fold_fn) cannot be NULL"); \
         const usize _fold_len = (usize)(len); \
         for (usize _fold_i = 0; _fold_i < _fold_len; ++_fold_i) { \
             (fold_fn)((acc_ptr), &(array)[_fold_i], (ctx)); \
@@ -204,9 +204,9 @@ typedef result__Bool_Error result_bool_Error;
 
 #define ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx) \
     ({ \
-        require_msg((acc_ptr) != NULL, "ALGO_FOLD_RESULT: acc_ptr cannot be NULL"); \
-        require_msg((array)   != NULL, "ALGO_FOLD_RESULT: array cannot be NULL");   \
-        require_msg((fold_fn) != NULL, "ALGO_FOLD_RESULT: fold_fn cannot be NULL"); \
+        require_msg((acc_ptr) != NULL, "ALGO_FOLD_RESULT: (acc_ptr) cannot be NULL"); \
+        require_msg((array)   != NULL, "ALGO_FOLD_RESULT: (array) cannot be NULL"); \
+        require_msg((fold_fn) != NULL, "ALGO_FOLD_RESULT: (fold_fn) cannot be NULL"); \
         result_bool_Error _fr = result_bool_Error_ok(true); \
         const usize _fr_len = (usize)(len); \
         for (usize _fr_i = 0; _fr_i < _fr_len; ++_fr_i) { \
@@ -220,9 +220,9 @@ typedef result__Bool_Error result_bool_Error;
 
 #define ALGO_FOLD_RESULT(acc_ptr, array, len, Type, fold_fn, ctx, out_result) \
     do { \
-        require_msg((acc_ptr) != NULL, "ALGO_FOLD_RESULT: acc_ptr cannot be NULL"); \
-        require_msg((array)   != NULL, "ALGO_FOLD_RESULT: array cannot be NULL");   \
-        require_msg((fold_fn) != NULL, "ALGO_FOLD_RESULT: fold_fn cannot be NULL"); \
+        require_msg((acc_ptr) != NULL, "ALGO_FOLD_RESULT: (acc_ptr) cannot be NULL"); \
+        require_msg((array)   != NULL, "ALGO_FOLD_RESULT: (array) cannot be NULL"); \
+        require_msg((fold_fn) != NULL, "ALGO_FOLD_RESULT: (fold_fn) cannot be NULL"); \
         (out_result) = result_bool_Error_ok(true); \
         const usize _fr99_len = (usize)(len); \
         for (usize _fr99_i = 0; _fr99_i < _fr99_len; ++_fr99_i) { \
@@ -275,6 +275,7 @@ typedef result__Bool_Error result_bool_Error;
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_FOLD(type) \
 \
 typedef void (*algo_fold_fn_##type)(void*, const type*, void*); \

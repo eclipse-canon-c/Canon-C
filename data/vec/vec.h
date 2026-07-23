@@ -142,7 +142,7 @@
      * Silently disabled in C99 mode.
      */
     #define VEC_ASSERT_TYPE(type) \
-        _Static_assert(sizeof(type) > 0, "vec: element type must have non-zero size")
+        _Static_assert(sizeof(type) > 0, "vec: element (type) must have non-zero size")
 #else
     #define VEC_ASSERT_TYPE(type) /* C99: no static assert */
 #endif

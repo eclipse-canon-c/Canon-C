@@ -830,6 +830,7 @@ static inline cbytes_t str_as_bytes(str_t s) {
  * any bug in the macro body would be detectable by comparing observable
  * behavior against the verified bytes_t baseline.
  * ========================================================================= */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_SLICE(type)                                                          \
                                                                                     \
 typedef struct { type* ptr; usize len; } slice_##type;                             \

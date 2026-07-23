@@ -4607,3 +4607,17 @@ via `--suppress=misra-c2012-11.6` in the misra CI job.
 
 **Mitigation**: The block is `#ifndef _WIN32`-guarded and confined to a Tier 2 utility header outside the verified core. Each of the three directives carries an individual inline `cppcheck-suppress` citing this record, so any *new* 21.1 finding anywhere in the tree surfaces in CI rather than being absorbed by a rule-wide suppression. util/time.h's behavior is exercised by the test suite on Linux, macOS (both POSIX arm) and MSVC/MinGW (the `_WIN32` arm) across the CI matrix.
 
+## MISRA-DEV-012: Rule 20.7 — macro parameters in type-name, declarator, and token-composition positions (template machinery)
+
+| ID | Date | Scope | Category |
+|----|------|-------|----------|
+| MISRA-DEV-012 | 2026-07-22 | 117 macro definitions across 26 headers (each carries an inline suppression) | Per-site deviation (inline suppressions) |
+
+**Description**: Rule 20.7 requires macro-parameter expansions to be parenthesized. Canon-C's type-instantiation machinery (`DEFINE_*` / `DECLARE_*` / `IMPL_*` / `MANGLE_*` families and the container `*_defn.h` / `*_decl.h` / `*_impl.h` headers) necessarily uses parameters as type names (`_t v`, `type* ptr`, `typedef struct DequeTag`), as declaration specifiers (`_linkage`), and as operands of `##` token composition — positions where C grammar forbids parenthesization outright (`(_t) v` is a cast or a syntax error, never a declaration).
+
+**Rationale**: The parameter-as-type/identifier usage *is* the library's template mechanism, the same design identity already recorded for the `##` operator itself (MISRA-DEV-003) and for instantiation-header identifier artifacts (MISRA-DEV-005). Additionally, the reference checker (cppcheck 2.13.0 `misra.py`) implements 20.7 as neighbor-character text analysis that (a) cannot distinguish type positions from expression positions and (b) reaches into string literals, flagging parameter names appearing in `require_msg` diagnostic text (probe-verified against the shipped addon). A rule-wide suppression would therefore silence a check whose expression-position findings ARE actionable; the per-site form keeps exactly those live.
+
+**Prerequisite sweep (2026-07-22, same commit)**: before any suppression was added, every parenthesizable occurrence in the 126 then-flagged macros was fixed — 73 occurrences: 60 expression/callee positions (`(_f)((_o).value)`-style, each validated by full-suite compilation and byte-level assembly equivalence) and 13 parameter names inside `require_msg` string literals (parenthesized in-string, which the checker honors; diagnostic text change only). 9 macros thereby cleared entirely (ALGO_FOLD family, CANON_DROP/_IF, VEC_ASSERT_TYPE, IMPL_OPTION_MAP/AND_THEN/FILTER) and carry no suppression. The 117 suppressed macros each retain only occurrences in unparenthesizable positions.
+
+**Mitigation**: Each of the 117 definitions carries an individual inline `cppcheck-suppress` citing this record — rule 20.7 stays live for every other macro in the tree and for all future code, so a new expression-position 20.7 finding surfaces in CI rather than being absorbed. The macro-generated code paths are exercised by the instantiation test suite (51 test TUs) and, for the option/result/vec families, verified by the WP driver TUs under pinned proved-goal baselines; a qualified MISRA checker (Polyspace/LDRA/PC-lint, per the project's certification note) performs real type-aware 20.7 analysis and remains the certification path.
+

@@ -161,6 +161,7 @@
    Typed macros — recommended for direct array use
    ════════════════════════════════════════════════════════════════════════════ */
 
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define ALGO_SORT_TYPED(base, len, Type, cmp, ctx) \
     do { \
         usize _asl_len = (usize)(len); \
@@ -195,6 +196,7 @@
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_SORT(type) \
 \
 static inline void ALGO_SORT_SLICE_FN(type)( \

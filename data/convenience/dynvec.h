@@ -311,6 +311,7 @@
  *
  * Generated functions: (see quick start for examples)
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_DYNVEC(type) \
 \
 /** \

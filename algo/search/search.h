@@ -224,6 +224,7 @@
  *
  * @param type Element type — must match a prior DEFINE_SLICE(type) call
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_ALGO_SEARCH(type) \
 \
 static inline usize ALGO_LOWER_BOUND_SLICE_FN(type)( \

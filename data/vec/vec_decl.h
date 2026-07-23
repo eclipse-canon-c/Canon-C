@@ -86,6 +86,7 @@
  *   result__Bool_Error in C99 — bool expands to _Bool before ## sees it.
  *   These extern signatures must match the definitions emitted by DEFINE_VEC exactly.
  */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_VEC(type) \
 \
 IMPL_VEC_STRUCTS( \
@@ -115,24 +116,24 @@ extern bool  MANGLE_VEC_IS_EMPTY(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v)
 extern bool  MANGLE_VEC_IS_FULL(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
 \
 /* Element access */ \
-extern bool                         MANGLE_VEC_GET(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i, borrowed(type*) out); \
+extern bool                         MANGLE_VEC_GET(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i, borrowed((type)*) out); \
 extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_GET_OPTION(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
 extern type                         MANGLE_VEC_GET_UNCHECKED(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
-extern borrowed(type*)              MANGLE_VEC_AT(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
+extern borrowed((type)*)              MANGLE_VEC_AT(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v, usize i); \
 extern bool                         MANGLE_VEC_SET(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, type val); \
-extern borrowed(type*)              MANGLE_VEC_FIRST(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
-extern borrowed(type*)              MANGLE_VEC_LAST(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
-extern borrowed(type*)              MANGLE_VEC_DATA(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern borrowed((type)*)              MANGLE_VEC_FIRST(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern borrowed((type)*)              MANGLE_VEC_LAST(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
+extern borrowed((type)*)              MANGLE_VEC_DATA(type)(borrowed(const MANGLE_VEC_TYPE(type)*) v); \
 \
 /* Modification */ \
 extern result__Bool_Error           MANGLE_VEC_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
 extern bool                         MANGLE_VEC_TRY_PUSH(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
 extern void                         MANGLE_VEC_PUSH_UNCHECKED(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, type item); \
-extern result__Bool_Error           MANGLE_VEC_POP(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed(type*) out); \
+extern result__Bool_Error           MANGLE_VEC_POP(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, borrowed((type)*) out); \
 extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_POP_OPTION(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
 extern void                         MANGLE_VEC_CLEAR(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
 extern result__Bool_Error           MANGLE_VEC_INSERT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, type item); \
-extern result__Bool_Error           MANGLE_VEC_REMOVE(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, borrowed(type*) out); \
+extern result__Bool_Error           MANGLE_VEC_REMOVE(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i, borrowed((type)*) out); \
 extern MANGLE_VEC_OPTION_TYPE(type) MANGLE_VEC_REMOVE_OPTION(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize i); \
 \
 /* Bulk operations */ \
@@ -143,10 +144,10 @@ extern void               MANGLE_VEC_SWAP(type)(borrowed(MANGLE_VEC_TYPE(type)*)
 \
 /* Iterator */ \
 extern MANGLE_VEC_ITER_TYPE(type) MANGLE_VEC_ITER_INIT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v); \
-extern bool                       MANGLE_VEC_ITER_NEXT(type)(borrowed(MANGLE_VEC_ITER_TYPE(type)*) it, borrowed(type*) out); \
+extern bool                       MANGLE_VEC_ITER_NEXT(type)(borrowed(MANGLE_VEC_ITER_TYPE(type)*) it, borrowed((type)*) out); \
 \
 /* Slice */ \
 extern MANGLE_VEC_SLICE_TYPE(type)  MANGLE_VEC_SLICE_INIT(type)(borrowed(MANGLE_VEC_TYPE(type)*) v, usize start, usize end); \
-extern borrowed(type*)              MANGLE_VEC_SLICE_GET(type)(borrowed(const MANGLE_VEC_SLICE_TYPE(type)*) s, usize i);
+extern borrowed((type)*)              MANGLE_VEC_SLICE_GET(type)(borrowed(const MANGLE_VEC_SLICE_TYPE(type)*) s, usize i);
 
 #endif /* CANON_DATA_VEC_DECL_H */
