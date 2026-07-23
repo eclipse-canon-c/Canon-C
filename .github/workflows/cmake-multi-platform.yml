@@ -640,8 +640,8 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "746 / 761" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 746 / 761)."
+          if [ "${PROVED_COUNT}" != "742 / 757" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 742 / 757)."
             echo "      The goal surface drifted — reclassify in VERIFY-003/4,"
             echo "      then ratchet this pin and the expected count together"
             echo "      in one acknowledged commit."
@@ -933,8 +933,8 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "375 / 390" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 375 / 390)."
+          if [ "${PROVED_COUNT}" != "379 / 394" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 379 / 394)."
             echo "      The goal surface drifted — reclassify in VERIFY-007,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1083,8 +1083,8 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "2819 / 2862" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 2819 / 2862)."
+          if [ "${PROVED_COUNT}" != "2823 / 2866" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 2823 / 2866)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1245,8 +1245,8 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "3383 / 3472" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3383 / 3472)."
+          if [ "${PROVED_COUNT}" != "3387 / 3476" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3387 / 3476)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1456,8 +1456,8 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "3789 / 3902" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3789 / 3902)."
+          if [ "${PROVED_COUNT}" != "3793 / 3906" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3793 / 3906)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1714,8 +1714,8 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "3531 / 3643" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3531 / 3643)."
+          if [ "${PROVED_COUNT}" != "3535 / 3647" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3535 / 3647)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2381,7 +2381,7 @@ jobs:
   # requires clauses are load-bearing.
   #
   # ENFORCED (promoted from report-only after 3 runs; option/result house
-  # style, exact-match). Baseline: CI #1152 (96dd41d) — 5184/5380 proved,
+  # style, exact-match). Baseline: CI #1187 (Commit 9/9b ratchet; orig. CI #1152) — 5188/5384 proved,
   # 193 Timeout + 3 Unknown + 0 Failed = 196 unproved, classified in
   # docs/verification.md and docs/deviations.md VERIFY-018 (incl.
   # Correction note 2026-07-16) and the driver header:
@@ -2447,7 +2447,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: CI #1152 (96dd41d): 5184/5380, 196 unproved"
+          echo "  baseline: CI #1187 (9b ratchet; orig. #1152): 5188/5384, 196 unproved"
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
           echo "  config=-DCANON_NO_REQUIRE -DNDEBUG (CANON_LIFETIME off)"
           echo "==============================================="
@@ -2482,8 +2482,8 @@ jobs:
           # out of the TU, a deleted contract, an include-graph change)
           # that gates 1-3 could miss.
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "5184 / 5380" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5184 / 5380)."
+          if [ "${PROVED_COUNT}" != "5188 / 5384" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5188 / 5384)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2832,7 +2832,7 @@ jobs:
           eval $(opam env --switch=frama-c)
           ENFORCE=1
           EXPECTED_UNPROVED=19
-          EXPECTED_PROVED="2433 / 2452"
+          EXPECTED_PROVED="2439 / 2458"
           FAILURES=0
           note_fail() {
             echo "$1"

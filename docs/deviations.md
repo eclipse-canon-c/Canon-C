@@ -132,6 +132,15 @@ outcomes) and pass fuzzing.
 
 ---
 
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 742/757 (was 746/761; -4 goals). Cause: the Commit-9 rule-17.8 reshape replaced the two `shift &= 63;` parameter compound-assignments in bits_rotl/bits_rotr with hoisted `const u64 sh` locals, removing two obligations per rotation function (the compound-assignment RTE/typing pair). The
+unproved set is UNCHANGED — same count, same goal names (CI #1187
+transcript is the name-stability record); no residual entered or left
+the categories above, so the classification tables in this record
+remain valid as written. Ratcheted with the acknowledged commit the
+enforcement gate prescribes.
+
 ## VERIFY-004: Weakened Specs (bits.h — CLZ, CTZ, popcount)
 
 | Field          | Value |
@@ -415,6 +424,15 @@ when the caller satisfies `bytes_invariant` / `str_invariant`. See
 the MCDC-002 status update below for the formal closure.
 
 ---
+
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 379/394 (was 375/390; +4 goals, all proved). Cause: the Commit-9 clamp folds in bytes_slice/str_slice (`const usize e = (end > len) ? len : end;`) introduce a guarded-initializer obligation pair per function that Qed/Alt-Ergo discharge. The
+unproved set is UNCHANGED — same count, same goal names (CI #1187
+transcript is the name-stability record); no residual entered or left
+the categories above, so the classification tables in this record
+remain valid as written. Ratcheted with the acknowledged commit the
+enforcement gate prescribes.
 
 ## VERIFY-008: WP Limitations on Allocation, Alignment, and libc Boundary (memory.h)
 
@@ -771,6 +789,15 @@ one more composition layer.
   step "WP: core/memory.h".
 
 ---
+
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 2823/2866 (was 2819/2862; +4 goals, all proved). Cause: inherited verbatim from slice.h's bytes_slice/str_slice clamp folds (VERIFY-007 note of the same date); memory.h has no own-goal change. The
+unproved set is UNCHANGED — same count, same goal names (CI #1187
+transcript is the name-stability record); no residual entered or left
+the categories above, so the classification tables in this record
+remain valid as written. Ratcheted with the acknowledged commit the
+enforcement gate prescribes.
 
 ## VERIFY-009: WP Limitations Inherited from Substrate Plus ptr_span/Arithmetic-Chain Residuals (arena.h)
 
@@ -1155,6 +1182,15 @@ core/ stack reaches.
 
 ---
 
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 3387/3476 (was 3383/3472; +4 goals, all proved). Cause: inherited verbatim from slice.h via the substrate chain (VERIFY-007 note of the same date); arena.h has no own-goal change. The
+unproved set is UNCHANGED — same count, same goal names (CI #1187
+transcript is the name-stability record); no residual entered or left
+the categories above, so the classification tables in this record
+remain valid as written. Ratcheted with the acknowledged commit the
+enforcement gate prescribes.
+
 ## VERIFY-010: WP Limitations Inherited from Substrate Plus pool_invariant Arithmetic and ptr_elem Cascade Residuals (pool.h)
 
 | Field          | Value |
@@ -1499,6 +1535,15 @@ adding the thinnest own surface (no per-allocation alignment arithmetic).
 
 
 
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 3793/3906 (was 3789/3902; +4 goals, all proved). Cause: inherited verbatim from slice.h via the substrate chain (VERIFY-007 note of the same date); pool.h has no own-goal change. The
+unproved set is UNCHANGED — same count, same goal names (CI #1187
+transcript is the name-stability record); no residual entered or left
+the categories above, so the classification tables in this record
+remain valid as written. Ratcheted with the acknowledged commit the
+enforcement gate prescribes.
+
 ## VERIFY-011: WP Limitations Inherited from Substrate Plus region_end Opaque-Hook-Dispatch Residuals (region.h)
 
 | Field          | Value |
@@ -1724,6 +1769,15 @@ boundary. The WP boundary landed exactly where the design predicted it.
   "WP: core/region.h".
 
 ---
+
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 3535/3647 (was 3531/3643; +4 goals, all proved). Cause: inherited verbatim from slice.h via the substrate chain (VERIFY-007 note of the same date); region.h has no own-goal change. The
+unproved set is UNCHANGED — same count, same goal names (CI #1187
+transcript is the name-stability record); no residual entered or left
+the categories above, so the classification tables in this record
+remain valid as written. Ratcheted with the acknowledged commit the
+enforcement gate prescribes.
 
 ## VERIFY-012: Contract-Strengthening Closure of Initialization Preconditions (slice.h, memory.h, and downstream)
 
@@ -2303,6 +2357,19 @@ point (`borrowed_bytes_slice` clamping and the
 
 ---
 
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 2439/2458 (was 2433/2452;
++6 goals, all proved). Cause: +4 inherited verbatim from slice.h's
+bytes_slice/str_slice clamp folds (VERIFY-007 note of the same date)
+plus +2 from borrow.h's own borrowed_bytes_slice clamp fold — the same
+guarded-initializer obligation pair, discharged by Qed/Alt-Ergo. The
+unproved set is UNCHANGED: CI #1187's enforcement transcript records
+the inherited roll-call at 17/17, the own-residual (borrowed_bytes_eq
+memcmp danglingness) roll-call at 2/2, ZERO unproved outside the
+documented set, and MCDC-008's dead_by_invariant cross-stream goal
+still PROVED. Ratcheted with the acknowledged commit the enforcement
+gate prescribes.
+
 ## VERIFY-017: libc Byte-View and Inherited Residuals, Plus Trusted Stdio Axioms (diag.h, fifth semantics/ module, verified in place)
 
 | Field          | Value |
@@ -2846,6 +2913,19 @@ frozen artifacts the gates force every run to keep.
 
 
 ---
+
+**Goal-surface reclassification (2026-07-23, CI #1187, Commit 9/9b):**
+pinned proved-goal summary ratcheted to 5188/5384 (was 5184/5380;
++4 goals, all proved). Cause: inherited verbatim from slice.h's
+bytes_slice/str_slice clamp folds via the memory-chain substrate
+(VERIFY-007 note of the same date); vec's own goal surface is
+unchanged — the Commit-9 sweep touched no vec/option/result source,
+and the Commit-8b IMPL_VEC braces were already absorbed in the prior
+baseline. The unproved set is UNCHANGED: 196 goals, same names (CI
+#1187 transcript is the name-stability record; 193 Timeout + 3
+Unknown, MODE: ENFORCED exact-match transcript). Pin provenance
+updated from CI #1152 to CI #1187 in the workflow comments. Ratcheted
+with the acknowledged commit the enforcement gate prescribes.
 
 ## MCDC-001: Coverage Flags Methodology
 
