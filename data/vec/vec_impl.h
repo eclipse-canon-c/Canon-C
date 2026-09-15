@@ -252,11 +252,13 @@ typedef struct SliceTag { \
    - (fn_lt_close): marks closed. Used by free. \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
+/*@ assigns \nothing; */                                                         \
 static inline void fn_lt_open(VecType* v) { \
     VEC_LIFETIME_OPEN_BODY_(v) \
     (void)v; \
 } \
 \
+/*@ assigns \nothing; */                                                         \
 static inline void fn_lt_close(VecType* v) { \
     VEC_LIFETIME_CLOSE_BODY_(v) \
     (void)v; \
@@ -291,6 +293,20 @@ static inline void fn_lt_close(VecType* v) { \
  * - Space: O(1) — no allocation, wraps caller-provided buffer
  */
 #define IMPL_VEC_INIT(linkage, VecType, fn, fn_lt_open, type) \
+/*@ requires buffer == \null ==> capacity == 0;                                  \
+    requires (capacity > 0 && capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*buffer)) \
+    ==> \valid(buffer + (0 .. capacity - 1));                                    \
+    assigns \nothing;                                                            \
+    behavior too_big:                                                            \
+    assumes capacity > CANON_VEC_MAX_CAPACITY / sizeof(*buffer);                 \
+    ensures \result.items == \null && \result.len == 0 && \result.capacity == 0; \
+    behavior ok:                                                                 \
+    assumes capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*buffer);                \
+    ensures \result.items == buffer;                                             \
+    ensures \result.len == 0;                                                    \
+    ensures \result.capacity == capacity;                                        \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
     require_msg(buffer != NULL || capacity == 0, \
         #fn ": buffer cannot be NULL when capacity > 0"); \
@@ -331,6 +347,8 @@ linkage VecType fn(borrowed(type*) buffer, usize capacity) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_EMPTY(linkage, VecType, fn, fn_lt_open) \
+/*@ assigns \nothing;                                                            \
+    ensures \result.items == \null && \result.len == 0 && \result.capacity == 0; */ \
 linkage VecType fn(void) { \
     VecType v; \
     v.items    = NULL; \
@@ -372,6 +390,14 @@ linkage VecType fn(void) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
+/*@ assigns \nothing;                                                            \
+    ensures \result.len == 0;                                                    \
+    ensures capacity == 0 ==> \result.items == \null;                            \
+    ensures capacity > CANON_VEC_MAX_CAPACITY / sizeof(*\result.items) ==> \result.items == \null; \
+    ensures \result.items == \null ==> \result.capacity == 0;                    \
+    ensures \result.items != \null ==>                                           \
+    \result.capacity == capacity                                                 \
+    && \valid(\result.items + (0 .. capacity - 1)); */                           \
 linkage VecType fn_alloc(usize capacity) { \
     if (capacity == 0) { return (fn_empty)(); } \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
@@ -417,6 +443,18 @@ linkage VecType fn_alloc(usize capacity) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_FREE(linkage, VecType, fn, fn_lt_close) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    requires (v != \null && v->items != \null) ==> \freeable(v->items);          \
+    assigns *v;                                                                  \
+    behavior null:                                                               \
+    assumes v == \null;                                                          \
+    assigns \nothing;                                                            \
+    behavior live:                                                               \
+    assumes v != \null;                                                          \
+    assigns *v;                                                                  \
+    ensures v->items == \null && v->len == 0 && v->capacity == 0;                \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage void fn(dropped(VecType*) v) { \
     if (!v) { return; } \
     if (v->items) { mem_free(v->items); } \
@@ -459,6 +497,16 @@ linkage void fn(dropped(VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ARENA_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
+/*@ requires arena == \null || arena_invariant(arena);                           \
+    assigns *arena;                                                              \
+    ensures \result.len == 0;                                                    \
+    ensures arena == \null ==> \result.items == \null;                           \
+    ensures capacity == 0 ==> \result.items == \null;                            \
+    ensures capacity > CANON_VEC_MAX_CAPACITY / sizeof(*\result.items) ==> \result.items == \null; \
+    ensures \result.items == \null ==> \result.capacity == 0;                    \
+    ensures \result.items != \null ==>                                           \
+    \result.capacity == capacity                                                 \
+    && \valid(\result.items + (0 .. capacity - 1)); */                           \
 linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
     if (!arena || capacity == 0) { return (fn_empty)(); } \
     if (capacity > CANON_VEC_MAX_CAPACITY / sizeof(type)) { \
@@ -492,6 +540,9 @@ linkage VecType fn_alloc(borrowed(Arena*) arena, usize capacity) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_LEN(linkage, VecType, fn) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures \result == (v == \null ? 0 : v->len); */                             \
 linkage usize fn(borrowed(const VecType*) v) { \
     return v ? v->len : 0; \
 }
@@ -511,6 +562,9 @@ linkage usize fn(borrowed(const VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_CAPACITY(linkage, VecType, fn) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures \result == (v == \null ? 0 : v->capacity); */                        \
 linkage usize fn(borrowed(const VecType*) v) { \
     return v ? v->capacity : 0; \
 }
@@ -530,6 +584,10 @@ linkage usize fn(borrowed(const VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_REMAINING(linkage, VecType, fn) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures v == \null ==> \result == 0;                                         \
+    ensures v != \null ==> \result == v->capacity - v->len; */                   \
 linkage usize fn(borrowed(const VecType*) v) { \
     return v ? (v->capacity - v->len) : 0; \
 }
@@ -549,6 +607,9 @@ linkage usize fn(borrowed(const VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_IS_EMPTY(linkage, VecType, fn) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures \result <==> (v == \null || v->len == 0); */                         \
 linkage bool fn(borrowed(const VecType*) v) { \
     return !v || v->len == 0; \
 }
@@ -568,6 +629,9 @@ linkage bool fn(borrowed(const VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_IS_FULL(linkage, VecType, fn) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures \result <==> (v == \null || v->len >= v->capacity); */               \
 linkage bool fn(borrowed(const VecType*) v) { \
     return !v || v->len >= v->capacity; \
 }
@@ -592,6 +656,20 @@ linkage bool fn(borrowed(const VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_GET(linkage, VecType, fn, type) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    requires out == \null || \valid(out);                                        \
+    assigns *out;                                                                \
+    behavior hit:                                                                \
+    assumes v != \null && out != \null && i < v->len;                            \
+    assigns *out;                                                                \
+    ensures \result == \true;                                                    \
+    ensures *out == v->items[i];                                                 \
+    behavior miss:                                                               \
+    assumes v == \null || out == \null || (v != \null && i >= v->len);           \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(const VecType*) v, usize i, borrowed(type*) out) { \
     if (!v || !out || i >= v->len) { return false; } \
     *out = v->items[i]; \
@@ -613,6 +691,17 @@ linkage bool fn(borrowed(const VecType*) v, usize i, borrowed(type*) out) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_GET_OPTION(linkage, VecType, fn, OptionType, fn_some, fn_none, type) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    behavior hit:                                                                \
+    assumes v != \null && i < v->len;                                            \
+    ensures \result.has_value == \true;                                          \
+    ensures \result.value == v->items[i];                                        \
+    behavior miss:                                                               \
+    assumes v == \null || (v != \null && i >= v->len);                           \
+    ensures \result.has_value == \false;                                         \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(const VecType*) v, usize i) { \
     if (!v || i >= v->len) { return fn_none(); } \
     return fn_some(v->items[i]); \
@@ -638,6 +727,10 @@ linkage OptionType fn(borrowed(const VecType*) v, usize i) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_GET_UNCHECKED(linkage, VecType, fn, type) \
+/*@ requires (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    requires i < v->len;                                                         \
+    assigns \nothing;                                                            \
+    ensures \result == v->items[i]; */                                           \
 linkage type fn(borrowed(const VecType*) v, usize i) { \
     ensure_msg(v != NULL,        #fn ": v cannot be NULL"); \
     ensure_msg(v->items != NULL, #fn ": v->items cannot be NULL"); \
@@ -664,6 +757,10 @@ linkage type fn(borrowed(const VecType*) v, usize i) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_AT(linkage, VecType, fn, type) \
+/*@ requires (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    requires i < v->len;                                                         \
+    assigns \nothing;                                                            \
+    ensures \result == v->items + i; */                                          \
 linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
     ensure_msg(v != NULL,  #fn ": v cannot be NULL"); \
     ensure_msg(i < v->len, #fn ": index out of bounds"); \
@@ -686,6 +783,21 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_SET(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->items[0 .. v->capacity - 1];                                      \
+    behavior hit:                                                                \
+    assumes v != \null && i < v->len;                                            \
+    assigns v->items[i];                                                         \
+    ensures \result == \true;                                                    \
+    ensures v->items[i] == val;                                                  \
+    ensures \forall integer k; 0 <= k < v->len && k != i                         \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    behavior miss:                                                               \
+    assumes v == \null || (v != \null && i >= v->len);                           \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(VecType*) v, usize i, type val) { \
     if (!v || i >= v->len) { return false; } \
     v->items[i] = val; \
@@ -708,6 +820,10 @@ linkage bool fn(borrowed(VecType*) v, usize i, type val) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_FIRST(linkage, VecType, fn, type) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures (v != \null && v->len > 0) ==> \result == v->items;                  \
+    ensures (v == \null || v->len == 0) ==> \result == \null; */                 \
 linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return (v && v->len > 0) ? &v->items[0] : NULL; \
 }
@@ -728,6 +844,10 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_LAST(linkage, VecType, fn, type) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures (v != \null && v->len > 0) ==> \result == v->items + (v->len - 1);   \
+    ensures (v == \null || v->len == 0) ==> \result == \null; */                 \
 linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return (v && v->len > 0) ? &v->items[v->len - 1] : NULL; \
 }
@@ -748,6 +868,10 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_DATA(linkage, VecType, fn, type) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    assigns \nothing;                                                            \
+    ensures v == \null ==> \result == \null;                                     \
+    ensures v != \null ==> \result == v->items; */                               \
 linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
     return v ? v->items : NULL; \
 }
@@ -777,6 +901,26 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior invalid:                                                            \
+    assumes v == \null || (v != \null && v->items == \null);                     \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;       \
+    behavior full:                                                               \
+    assumes v != \null && v->items != \null && v->len >= v->capacity;            \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED; \
+    behavior ok:                                                                 \
+    assumes v != \null && v->items != \null && v->len < v->capacity;             \
+    assigns v->len, v->items[v->len];                                            \
+    ensures \result.is_ok == \true;                                              \
+    ensures v->len == \old(v->len) + 1;                                          \
+    ensures v->items[\old(v->len)] == item;                                      \
+    ensures \forall integer k; 0 <= k < \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
     if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (v->len >= v->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
@@ -800,6 +944,22 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_TRY_PUSH(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior refuse:                                                             \
+    assumes v == \null || (v != \null && (v->items == \null || v->len >= v->capacity)); \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+    behavior ok:                                                                 \
+    assumes v != \null && v->items != \null && v->len < v->capacity;             \
+    assigns v->len, v->items[v->len];                                            \
+    ensures \result == \true;                                                    \
+    ensures v->len == \old(v->len) + 1;                                          \
+    ensures v->items[\old(v->len)] == item;                                      \
+    ensures \forall integer k; 0 <= k < \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(VecType*) v, type item) { \
     if (!v || !v->items || v->len >= v->capacity) { return false; } \
     v->items[v->len++] = item; \
@@ -827,6 +987,14 @@ linkage bool fn(borrowed(VecType*) v, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH_UNCHECKED(linkage, VecType, fn, type) \
+/*@ requires ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    requires v->items != \null;                                                  \
+    requires v->len < v->capacity;                                               \
+    assigns v->len, v->items[v->len];                                            \
+    ensures v->len == \old(v->len) + 1;                                          \
+    ensures v->items[\old(v->len)] == item;                                      \
+    ensures \forall integer k; 0 <= k < \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k]); */                                     \
 linkage void fn(borrowed(VecType*) v, type item) { \
     ensure_msg(v != NULL,            #fn ": v cannot be NULL"); \
     ensure_msg(v->items != NULL,     #fn ": v->items cannot be NULL"); \
@@ -858,6 +1026,27 @@ linkage void fn(borrowed(VecType*) v, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    requires out == \null || \valid(out);                                        \
+    assigns v->len, *out;                                                        \
+    behavior invalid:                                                            \
+    assumes v == \null || out == \null || (v != \null && v->items == \null);     \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;       \
+    behavior empty:                                                              \
+    assumes v != \null && out != \null && v->items != \null && v->len == 0;      \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_STATE;     \
+    behavior ok:                                                                 \
+    assumes v != \null && out != \null && v->items != \null && v->len > 0;       \
+    assigns v->len, *out;                                                        \
+    ensures \result.is_ok == \true;                                              \
+    ensures v->len == \old(v->len) - 1;                                          \
+    ensures *out == \old(v->items[v->len - 1]);                                  \
+    ensures \forall integer k; 0 <= k < v->len                                   \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
     if (!v || !out || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (v->len == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); } \
@@ -881,6 +1070,19 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len;                                                              \
+    behavior some:                                                               \
+    assumes v != \null && v->items != \null && v->len > 0;                       \
+    assigns v->len;                                                              \
+    ensures \result.has_value == \true;                                          \
+    ensures \result.value == \old(v->items[v->len - 1]);                         \
+    ensures v->len == \old(v->len) - 1;                                          \
+    behavior none:                                                               \
+    assumes v == \null || (v != \null && (v->items == \null || v->len == 0));    \
+    ensures \result.has_value == \false;                                         \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(VecType*) v) { \
     type out = {0}; \
     if ((fn_result_is_ok)((fn_pop)(v, &out))) { \
@@ -909,6 +1111,17 @@ linkage OptionType fn(borrowed(VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_CLEAR(linkage, VecType, fn) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len;                                                              \
+    behavior null:                                                               \
+    assumes v == \null;                                                          \
+    assigns \nothing;                                                            \
+    behavior live:                                                               \
+    assumes v != \null;                                                          \
+    assigns v->len;                                                              \
+    ensures v->len == 0;                                                         \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage void fn(borrowed(VecType*) v) { \
     if (v) { v->len = 0; } \
 }
@@ -938,6 +1151,32 @@ linkage void fn(borrowed(VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_INSERT(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior invalid:                                                            \
+    assumes v == \null || (v != \null && v->items == \null);                     \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;       \
+    behavior out_of_range:                                                       \
+    assumes v != \null && v->items != \null && i > v->len;                       \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_OUT_OF_RANGE;      \
+    behavior full:                                                               \
+    assumes v != \null && v->items != \null && i <= v->len && v->len >= v->capacity; \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED; \
+    behavior ok:                                                                 \
+    assumes v != \null && v->items != \null && i <= v->len && v->len < v->capacity; \
+    assigns v->len, v->items[i .. v->len];                                       \
+    ensures \result.is_ok == \true;                                              \
+    ensures v->len == \old(v->len) + 1;                                          \
+    ensures v->items[i] == item;                                                 \
+    ensures \forall integer k; 0 <= k < i                                        \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    ensures \forall integer k; i < k <= \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k - 1]);                                    \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
     if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); }   \
     if (i > v->len) { return result__Bool_Error_err(ERR_OUT_OF_RANGE); }        \
@@ -971,6 +1210,34 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    requires out == \null || \valid(out);                                        \
+    assigns v->len, *out, v->items[0 .. v->capacity - 1];                        \
+    behavior invalid:                                                            \
+    assumes v == \null || out == \null || (v != \null && v->items == \null);     \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;       \
+    behavior empty:                                                              \
+    assumes v != \null && out != \null && v->items != \null && v->len == 0;      \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_STATE;     \
+    behavior out_of_range:                                                       \
+    assumes v != \null && out != \null && v->items != \null                      \
+    && v->len > 0 && i >= v->len;                                                \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_OUT_OF_RANGE;      \
+    behavior ok:                                                                 \
+    assumes v != \null && out != \null && v->items != \null && i < v->len;       \
+    assigns v->len, *out, v->items[i .. v->len - 1];                             \
+    ensures \result.is_ok == \true;                                              \
+    ensures *out == \old(v->items[i]);                                           \
+    ensures v->len == \old(v->len) - 1;                                          \
+    ensures \forall integer k; 0 <= k < i                                        \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    ensures \forall integer k; i <= k < v->len                                   \
+    ==> v->items[k] == \old(v->items[k + 1]);                                    \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out) { \
     if (!v || !v->items || !out) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (v->len == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); }         \
@@ -999,6 +1266,19 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior some:                                                               \
+    assumes v != \null && v->items != \null && i < v->len;                       \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    ensures \result.has_value == \true;                                          \
+    ensures \result.value == \old(v->items[i]);                                  \
+    ensures v->len == \old(v->len) - 1;                                          \
+    behavior none:                                                               \
+    assumes v == \null || (v != \null && (v->items == \null || i >= v->len));    \
+    ensures \result.has_value == \false;                                         \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(VecType*) v, usize i) { \
     type out = {0}; \
     if ((fn_result_is_ok)((fn_remove)(v, i, &out))) { \
@@ -1029,6 +1309,42 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    requires (v != \null && v->items != \null && src != \null                    \
+    && v->len + count <= v->capacity) ==>                                        \
+    \valid_read(src + (0 .. count - 1));                                         \
+    requires (v != \null && v->items != \null && src != \null                    \
+    && v->len + count <= v->capacity) ==>                                        \
+    \separated(src + (0 .. count - 1),                                           \
+    v->items + (0 .. v->capacity - 1));                                          \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior invalid:                                                            \
+    assumes v == \null || src == \null || (v != \null && v->items == \null);     \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;       \
+    behavior overflow:                                                           \
+    assumes v != \null && v->items != \null && src != \null                      \
+    && v->len + count > CANON_USIZE_MAX;                                         \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_OVERFLOW;          \
+    behavior too_big:                                                            \
+    assumes v != \null && v->items != \null && src != \null                      \
+    && v->len + count <= CANON_USIZE_MAX                                         \
+    && v->len + count > v->capacity;                                             \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED; \
+    behavior ok:                                                                 \
+    assumes v != \null && v->items != \null && src != \null                      \
+    && v->len + count <= v->capacity;                                            \
+    assigns v->len, v->items[v->len .. v->len + count - 1];                      \
+    ensures \result.is_ok == \true;                                              \
+    ensures v->len == \old(v->len) + count;                                      \
+    ensures \forall integer k; 0 <= k < \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    ensures \forall integer k; 0 <= k < count                                    \
+    ==> v->items[\old(v->len) + k] == src[k];                                    \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
     if (!v || !v->items || !src) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     usize total; \
@@ -1057,6 +1373,37 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND(linkage, VecType, fn, fn_append_array, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    requires (v != \null && v->items != \null && src != \null                    \
+    && v->len + count <= v->capacity) ==>                                        \
+    \valid_read(src + (0 .. count - 1));                                         \
+    requires (v != \null && v->items != \null && src != \null                    \
+    && v->len + count <= v->capacity) ==>                                        \
+    \separated(src + (0 .. count - 1),                                           \
+    v->items + (0 .. v->capacity - 1));                                          \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior invalid:                                                            \
+    assumes v == \null || src == \null || (v != \null && v->items == \null);     \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;       \
+    behavior overflow:                                                           \
+    assumes v != \null && v->items != \null && src != \null                      \
+    && v->len + count > CANON_USIZE_MAX;                                         \
+    ensures \result.is_ok == \false && \result.val.err == ERR_OVERFLOW;          \
+    behavior too_big:                                                            \
+    assumes v != \null && v->items != \null && src != \null                      \
+    && v->len + count <= CANON_USIZE_MAX                                         \
+    && v->len + count > v->capacity;                                             \
+    ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED; \
+    behavior ok:                                                                 \
+    assumes v != \null && v->items != \null && src != \null                      \
+    && v->len + count <= v->capacity;                                            \
+    assigns v->len, v->items[v->len .. v->len + count - 1];                      \
+    ensures \result.is_ok == \true;                                              \
+    ensures v->len == \old(v->len) + count;                                      \
+    ensures \forall integer k; 0 <= k < count                                    \
+    ==> v->items[\old(v->len) + k] == src[k];                                    \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
     return (fn_append_array)(v, src, count); \
 }
@@ -1079,6 +1426,22 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_FILL(linkage, VecType, fn, type) \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+    assigns v->len, v->items[0 .. v->capacity - 1];                              \
+    behavior skip:                                                               \
+    assumes v == \null || (v != \null && v->items == \null);                     \
+    assigns \nothing;                                                            \
+    behavior live:                                                               \
+    assumes v != \null && v->items != \null;                                     \
+    assigns v->len, v->items[v->len .. v->capacity - 1];                         \
+    ensures v->len == \old(v->len)                                               \
+    + \min(count, (usize)(\old(v->capacity) - \old(v->len)));                    \
+    ensures \forall integer k; \old(v->len) <= k < v->len                        \
+    ==> v->items[k] == value;                                                    \
+    ensures \forall integer k; 0 <= k < \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage void fn(borrowed(VecType*) v, type value, usize count) { \
     if (!v || !v->items) { return; } \
     usize remaining = v->capacity - v->len; \
@@ -1112,6 +1475,13 @@ linkage void fn(borrowed(VecType*) v, type value, usize count) { \
  * - Space: O(1) — struct copy on stack
  */
 #define IMPL_VEC_SWAP(linkage, VecType, fn) \
+/*@ requires \valid(a);                                                          \
+    requires \valid(b);                                                          \
+    assigns *a, *b;                                                              \
+    ensures a->items == \old(b->items) && a->len == \old(b->len)                 \
+    && a->capacity == \old(b->capacity);                                         \
+    ensures b->items == \old(a->items) && b->len == \old(a->len)                 \
+    && b->capacity == \old(a->capacity); */                                      \
 linkage void fn(borrowed(VecType*) a, borrowed(VecType*) b) { \
     require_msg(a != NULL, #fn ": a cannot be NULL"); \
     require_msg(b != NULL, #fn ": b cannot be NULL"); \
@@ -1139,6 +1509,8 @@ linkage void fn(borrowed(VecType*) a, borrowed(VecType*) b) { \
  * - Space: O(1) — iterator is stack-allocated
  */
 #define IMPL_VEC_ITER_INIT(linkage, IterType, fn, VecType) \
+/*@ assigns \nothing;                                                            \
+    ensures \result.vec == v && \result.index == 0; */                           \
 linkage IterType fn(borrowed(VecType*) v) { \
     return (IterType){ .vec = v, .index = 0 }; \
 }
@@ -1168,6 +1540,25 @@ linkage IterType fn(borrowed(VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_ITER_NEXT(linkage, IterType, fn, type) \
+/*@ requires it == \null || \valid(it);                                          \
+    requires (it != \null && it->vec != \null) ==> (\valid_read(it->vec) && it->vec->len <= it->vec->capacity && it->vec->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*it->vec->items) && (it->vec->items == \null ==> it->vec->capacity == 0) && (it->vec->capacity > 0 ==> \valid_read(it->vec->items + (0 .. it->vec->capacity - 1)))); \
+    requires out == \null || \valid(out);                                        \
+    assigns it->index, *out;                                                     \
+    behavior exhausted_or_invalid:                                               \
+    assumes it == \null || out == \null                                          \
+    || (it != \null && it->vec == \null)                                         \
+    || (it != \null && it->vec != \null && it->index >= it->vec->len);           \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+    behavior yield:                                                              \
+    assumes it != \null && out != \null && it->vec != \null                      \
+    && it->index < it->vec->len;                                                 \
+    assigns it->index, *out;                                                     \
+    ensures \result == \true;                                                    \
+    ensures it->index == \old(it->index) + 1;                                    \
+    ensures *out == it->vec->items[\old(it->index)];                             \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(IterType*) it, borrowed(type*) out) { \
     if (!it || !it->vec || !out) { return false; } \
     if (it->index >= it->vec->len) { return false; } \
@@ -1199,6 +1590,18 @@ linkage bool fn(borrowed(IterType*) it, borrowed(type*) out) { \
  * - Space: O(1) — no allocation, pointer into existing buffer
  */
 #define IMPL_VEC_SLICE_INIT(linkage, SliceType, fn, VecType, type) \
+/*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
+    requires (v != \null && v->items == \null) ==> !(start == 0 && end == 0);    \
+    assigns \nothing;                                                            \
+    behavior invalid:                                                            \
+    assumes v == \null || start > end || (v != \null && end > v->len);           \
+    ensures \result.items == \null && \result.len == 0;                          \
+    behavior ok:                                                                 \
+    assumes v != \null && start <= end && end <= v->len;                         \
+    ensures \result.items == v->items + start;                                   \
+    ensures \result.len == end - start;                                          \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage SliceType fn(borrowed(VecType*) v, usize start, usize end) { \
     SliceType s = {0}; \
     if (!v || start > end || end > v->len) { return s; } \
@@ -1226,6 +1629,10 @@ linkage SliceType fn(borrowed(VecType*) v, usize start, usize end) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_SLICE_GET(linkage, SliceType, fn, type) \
+/*@ requires (\valid_read(s) && (s->len > 0 ==> \valid_read(s->items + (0 .. s->len - 1)))); \
+    requires i < s->len;                                                         \
+    assigns \nothing;                                                            \
+    ensures \result == s->items + i; */                                          \
 linkage borrowed(type*) fn(borrowed(const SliceType*) s, usize i) { \
     ensure_msg(s != NULL,  #fn ": s cannot be NULL"); \
     ensure_msg(i < s->len, #fn ": index out of bounds"); \
