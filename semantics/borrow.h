@@ -1112,6 +1112,10 @@ typedef struct {                                                               \
     BORROW_LT_FIELDS_                                                          \
 } borrowed_slice_##type;                                                       \
                                                                                \
+/*@ requires s.ptr != \null || s.len == 0;                                     \
+    assigns  \nothing;                                                         \
+    ensures  \result.slice.ptr == s.ptr && \result.slice.len == s.len;         \
+    ensures  \result.source == source; */                                      \
 static inline borrowed_slice_##type                                            \
 borrowed_slice_##type##_from(slice_##type s, const void *source)               \
 {                                                                              \
@@ -1122,6 +1126,10 @@ borrowed_slice_##type##_from(slice_##type s, const void *source)               \
     return b;                                                                  \
 }                                                                              \
                                                                                \
+/*@ requires s.ptr != \null || s.len == 0;                                     \
+    assigns  \nothing;                                                         \
+    ensures  \result.slice.ptr == s.ptr && \result.slice.len == s.len;         \
+    ensures  \result.source == source; */                                      \
 static inline borrowed_slice_##type                                            \
 borrowed_slice_##type##_from_lifetime(                                         \
     slice_##type s,                                                            \
@@ -1138,6 +1146,9 @@ borrowed_slice_##type##_from_lifetime(                                         \
     return b;                                                                  \
 }                                                                              \
                                                                                \
+/*@ assigns \nothing;                                                          \
+    ensures \result.slice.ptr == \null && \result.slice.len == 0;              \
+    ensures \result.source == \null; */                                        \
 static inline borrowed_slice_##type                                            \
 borrowed_slice_##type##_empty(void)                                            \
 {                                                                              \
@@ -1148,6 +1159,16 @@ borrowed_slice_##type##_empty(void)                                            \
     return b;                                                                  \
 }                                                                              \
                                                                                \
+/*@ requires b != \null ==> \valid_read(b);                                    \
+    assigns \nothing;                                                          \
+    behavior null_b:                                                           \
+      assumes b == \null;                                                      \
+      ensures \result.ptr == \null && \result.len == 0;                        \
+    behavior non_null:                                                         \
+      assumes b != \null;                                                      \
+      ensures \result.ptr == b->slice.ptr && \result.len == b->slice.len;      \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
 static inline slice_##type                                                     \
 borrowed_slice_##type##_get(const borrowed_slice_##type *b)                    \
 {                                                                              \
@@ -1158,18 +1179,50 @@ borrowed_slice_##type##_get(const borrowed_slice_##type *b)                    \
     return b->slice;                                                           \
 }                                                                              \
                                                                                \
+/*@ requires b != \null ==> \valid_read(b);                                    \
+    assigns \nothing;                                                          \
+    behavior null_b:                                                           \
+      assumes b == \null;                                                      \
+      ensures \result == 0;                                                    \
+    behavior non_null:                                                         \
+      assumes b != \null;                                                      \
+      ensures \result == b->slice.len;                                         \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
 static inline usize                                                            \
 borrowed_slice_##type##_len(const borrowed_slice_##type *b)                    \
 {                                                                              \
     return (b != NULL) ? b->slice.len : (usize)0;                              \
 }                                                                              \
                                                                                \
+/*@ requires b != \null ==> \valid_read(b);                                    \
+    assigns \nothing;                                                          \
+    behavior null_b:                                                           \
+      assumes b == \null;                                                      \
+      ensures \result == \false;                                               \
+    behavior non_null:                                                         \
+      assumes b != \null;                                                      \
+      ensures \result <==> b->slice.ptr != \null;                              \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
 static inline bool                                                             \
 borrowed_slice_##type##_is_valid(const borrowed_slice_##type *b)               \
 {                                                                              \
     return (b != NULL) && (b->slice.ptr != NULL);                              \
 }                                                                              \
                                                                                \
+/*@ requires b != \null ==> \valid_read(b);                                    \
+    requires (b != \null && b->slice.ptr != \null && b->slice.len > 0) ==>     \
+             \valid_read(b->slice.ptr + (0 .. b->slice.len - 1));              \
+    assigns \nothing;                                                          \
+    behavior out_of_bounds:                                                    \
+      assumes b == \null || b->slice.ptr == \null || i >= b->slice.len;        \
+      ensures \result == \null;                                                \
+    behavior in_bounds:                                                        \
+      assumes b != \null && b->slice.ptr != \null && i < b->slice.len;         \
+      ensures \result == b->slice.ptr + i;                                     \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
 static inline const type *                                                     \
 borrowed_slice_##type##_at(const borrowed_slice_##type *b, usize i)            \
 {                                                                              \
@@ -1179,6 +1232,22 @@ borrowed_slice_##type##_at(const borrowed_slice_##type *b, usize i)            \
     return &b->slice.ptr[i];                                                   \
 }                                                                              \
                                                                                \
+/*@ requires b.slice.ptr != \null || b.slice.len == 0;                         \
+    requires b.slice.len > 0 ==> \valid(b.slice.ptr + (0 .. b.slice.len - 1)); \
+    assigns  \nothing;                                                         \
+    ensures  \result.source == b.source;                                       \
+    ensures  \result.slice.ptr != \null || \result.slice.len == 0;             \
+    ensures  \result.slice.len <= b.slice.len;                                 \
+    behavior in_range:                                                         \
+      assumes b.slice.ptr != \null && start < b.slice.len && start < end;      \
+      ensures \result.slice.ptr == b.slice.ptr + start;                        \
+      ensures \result.slice.len ==                                             \
+              (end <= b.slice.len ? end - start : b.slice.len - start);        \
+    behavior out_of_range:                                                     \
+      assumes b.slice.ptr == \null || start >= b.slice.len || start >= end;    \
+      ensures \result.slice.ptr == \null && \result.slice.len == 0;            \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
 static inline borrowed_slice_##type                                            \
 borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
                                usize start, usize end)                         \
@@ -1190,6 +1259,19 @@ borrowed_slice_##type##_slice(borrowed_slice_##type b,                         \
     return r;                                                                  \
 }                                                                              \
                                                                                \
+/*@ requires b != \null ==> \valid_read(b);                                    \
+    assigns \nothing;                                                          \
+    behavior empty:                                                            \
+      assumes b == \null || b->slice.ptr == \null || (integer)b->slice.len * (integer)sizeof(*b->slice.ptr) > SIZE_MAX;\
+      ensures \result.bytes.ptr == \null && \result.bytes.len == 0;            \
+      ensures \result.source == \null;                                         \
+    behavior view:                                                             \
+      assumes b != \null && b->slice.ptr != \null && (integer)b->slice.len * (integer)sizeof(*b->slice.ptr) <= SIZE_MAX;\
+      ensures \result.bytes.ptr == (const u8 *)b->slice.ptr;                   \
+      ensures \result.bytes.len == b->slice.len * sizeof(*b->slice.ptr);       \
+      ensures \result.source == b->source;                                     \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
 static inline borrowed_bytes                                                   \
 borrowed_slice_##type##_as_bytes(const borrowed_slice_##type *b)               \
 {                                                                              \
