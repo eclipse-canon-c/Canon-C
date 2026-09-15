@@ -835,14 +835,10 @@ static inline cbytes_t str_as_bytes(str_t s) {
                                                                                     \
 typedef struct { type* ptr; usize len; } slice_##type;                             \
                                                                                     \
-/** Creates slice_##type from ptr and len. @pre ptr!=NULL||len==0                   \
- *                                                                                  \
- * Spec (VERIFY-007 — documentation only, not WP-verified):                         \
- *   requires ptr != \null || len == 0;                                             \
- *   requires len > 0 ==> \valid(ptr + (0 .. len - 1));                             \
- *   ensures  \result.ptr == ptr && \result.len == len;                             \
- *   assigns  \nothing;                                                             \
- */                                                                                 \
+/*@ requires ptr != \null || len == 0;                                             \
+    requires len > 0 ==> \valid(ptr + (0 .. len - 1));                             \
+    ensures  \result.ptr == ptr && \result.len == len;                             \
+    assigns  \nothing; */                                                          \
 static inline slice_##type slice_##type##_from(type* ptr, usize len) {             \
     require_msg(ptr != NULL || len == 0,                                            \
         "slice_" #type "_from: NULL ptr with non-zero len");                        \
@@ -857,10 +853,8 @@ static inline slice_##type slice_##type##_empty(void) {                         
     return (slice_##type){ .ptr = NULL, .len = 0 };                                 \
 }                                                                                   \
                                                                                     \
-/** Returns element count.                                                          \
- *                                                                                  \
- * Spec: ensures \result == s.len; assigns \nothing;                                \
- */                                                                                 \
+/*@ ensures \result == s.len;                                       \
+    assigns \nothing; */                                            \
 static inline usize slice_##type##_len(slice_##type s) {                           \
     return s.len;                                                                   \
 }                                                                                   \
