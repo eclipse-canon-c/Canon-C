@@ -845,10 +845,8 @@ static inline slice_##type slice_##type##_from(type* ptr, usize len) {          
     return (slice_##type){ .ptr = ptr, .len = len };                                \
 }                                                                                   \
                                                                                     \
-/** Returns empty slice_##type (ptr==NULL, len==0).                                 \
- *                                                                                  \
- * Spec: ensures \result.ptr == \null && \result.len == 0; assigns \nothing;        \
- */                                                                                 \
+/*@ ensures \result.ptr == \null && \result.len == 0;                              \
+    assigns \nothing; */                                                           \
 static inline slice_##type slice_##type##_empty(void) {                            \
     return (slice_##type){ .ptr = NULL, .len = 0 };                                 \
 }                                                                                   \
@@ -859,75 +857,95 @@ static inline usize slice_##type##_len(slice_##type s) {                        
     return s.len;                                                                   \
 }                                                                                   \
                                                                                     \
-/** Returns true if len == 0.                                                       \
- *                                                                                  \
- * Spec: ensures \result <==> s.len == 0; assigns \nothing;                         \
- */                                                                                 \
+/*@ ensures \result <==> s.len == 0;                                               \
+    assigns \nothing; */                                                           \
 static inline bool slice_##type##_is_empty(slice_##type s) {                       \
     return s.len == 0;                                                              \
 }                                                                                   \
                                                                                     \
-/** Copies element at i into *out. Returns false if out==NULL or i>=len.            \
- *                                                                                  \
- * Spec:                                                                            \
- *   requires s.ptr != \null || s.len == 0;                                         \
- *   requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
- *   requires out == \null || \valid(out);                                          \
- *   assigns  *out;                                                                 \
- *   ensures (s.ptr != \null && out != \null && i < s.len) ==>                      \
- *           (\result == \true && *out == s.ptr[i]);                                \
- *   ensures (s.ptr == \null || out == \null || i >= s.len) ==> \result == \false;  \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    requires out == \null || \valid(out);                                          \
+    assigns  *out;                                                                 \
+    ensures  (s.ptr != \null && out != \null && i < s.len) ==>                     \
+             (\result == \true && *out == s.ptr[i]);                               \
+    ensures  (s.ptr == \null || out == \null || i >= s.len) ==> \result == \false; */\
 static inline bool slice_##type##_get(slice_##type s, usize i, type* out) {        \
     if (!s.ptr || !out || i >= s.len) { return false; }                             \
     *out = s.ptr[i]; return true;                                                   \
 }                                                                                   \
                                                                                     \
-/** Returns element at i. Debug-only bounds check — UB in release on bad input.     \
- *                                                                                  \
- * Spec:                                                                            \
- *   requires s.ptr != \null && i < s.len;                                          \
- *   requires \valid(s.ptr + (0 .. s.len - 1));                                     \
- *   ensures  \result == s.ptr[i]; assigns \nothing;                                \
- */                                                                                 \
+/*@ requires s.ptr != \null && i < s.len;                                          \
+    requires \valid(s.ptr + (0 .. s.len - 1));                                     \
+    assigns  \nothing;                                                             \
+    ensures  \result == s.ptr[i]; */                                               \
 static inline type slice_##type##_get_unchecked(slice_##type s, usize i) {         \
     ensure_msg(s.ptr != NULL, "slice_" #type "_get_unchecked: NULL ptr");           \
     ensure_msg(i < s.len,     "slice_" #type "_get_unchecked: index out of bounds");\
     return s.ptr[i];                                                                \
 }                                                                                   \
                                                                                     \
-/** Returns pointer to element at i, or NULL if out of bounds.                      \
- *                                                                                  \
- * Spec: behavior in_bounds, behavior out_of_bounds; complete; disjoint;            \
- *       ensures returns s.ptr + i or \null; assigns \nothing;                      \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    assigns  \nothing;                                                             \
+    behavior in_bounds:                                                            \
+        assumes s.ptr != \null && i < s.len;                                       \
+        ensures \result == s.ptr + i;                                              \
+    behavior out_of_bounds:                                                        \
+        assumes s.ptr == \null || i >= s.len;                                      \
+        ensures \result == \null;                                                  \
+    complete behaviors;                                                            \
+    disjoint behaviors; */                                                         \
 static inline type* slice_##type##_at(slice_##type s, usize i) {                   \
     if (!s.ptr || i >= s.len) { return NULL; }                                      \
     return &s.ptr[i];                                                               \
 }                                                                                   \
                                                                                     \
-/** Returns pointer to first element, or NULL if empty.                             \
- *                                                                                  \
- * Spec: behavior non_empty: ensures \result == s.ptr;                              \
- *       behavior empty:     ensures \result == \null; complete; disjoint;          \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    assigns  \nothing;                                                             \
+    behavior non_empty:                                                            \
+        assumes s.ptr != \null && s.len > 0;                                       \
+        ensures \result == s.ptr;                                                  \
+    behavior empty:                                                                \
+        assumes s.ptr == \null || s.len == 0;                                      \
+        ensures \result == \null;                                                  \
+    complete behaviors;                                                            \
+    disjoint behaviors; */                                                         \
 static inline type* slice_##type##_first(slice_##type s) {                         \
     return (s.ptr && s.len > 0) ? &s.ptr[0] : NULL;                                \
 }                                                                                   \
                                                                                     \
-/** Returns pointer to last element, or NULL if empty.                              \
- *                                                                                  \
- * Spec: behavior non_empty: ensures \result == s.ptr + s.len - 1;                  \
- *       behavior empty:     ensures \result == \null; complete; disjoint;          \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    assigns  \nothing;                                                             \
+    behavior non_empty:                                                            \
+        assumes s.ptr != \null && s.len > 0;                                       \
+        ensures \result == s.ptr + s.len - 1;                                      \
+    behavior empty:                                                                \
+        assumes s.ptr == \null || s.len == 0;                                      \
+        ensures \result == \null;                                                  \
+    complete behaviors;                                                            \
+    disjoint behaviors; */                                                         \
 static inline type* slice_##type##_last(slice_##type s) {                          \
     return (s.ptr && s.len > 0) ? &s.ptr[s.len - 1] : NULL;                        \
 }                                                                                   \
                                                                                     \
-/** Returns sub-view [start, end). end clamped to s.len. O(1).                      \
- *                                                                                  \
- * Spec mirrors bytes_slice — see VERIFY-007.                                       \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    assigns  \nothing;                                                             \
+    ensures  \result.ptr != \null || \result.len == 0;                             \
+    ensures  \result.len <= s.len;                                                 \
+    behavior in_range:                                                             \
+        assumes s.ptr != \null && start < s.len && start < end;                    \
+        ensures \result.ptr == s.ptr + start;                                      \
+        ensures \result.len == (end <= s.len ? end - start : s.len - start);       \
+    behavior out_of_range:                                                         \
+        assumes s.ptr == \null || start >= s.len || start >= end;                  \
+        ensures \result.ptr == \null;                                              \
+        ensures \result.len == 0;                                                  \
+    complete behaviors;                                                            \
+    disjoint behaviors; */                                                         \
 static inline slice_##type slice_##type##_slice(                                    \
         slice_##type s, usize start, usize end) {                                   \
     if (!s.ptr || start >= s.len) { return slice_##type##_empty(); }                \
@@ -936,39 +954,51 @@ static inline slice_##type slice_##type##_slice(                                
     return (slice_##type){ .ptr = s.ptr + start, .len = end - start };              \
 }                                                                                   \
                                                                                     \
-/** Returns first n elements. n clamped to s.len. O(1).                             \
- *                                                                                  \
- * Spec mirrors bytes_take — see VERIFY-007.                                        \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    assigns  \nothing;                                                             \
+    ensures  \result.ptr != \null || \result.len == 0;                             \
+    ensures  \result.len <= s.len;                                                 \
+    ensures  \result.len <= n; */                                                  \
 static inline slice_##type slice_##type##_take(slice_##type s, usize n) {          \
     return slice_##type##_slice(s, 0, n);                                           \
 }                                                                                   \
                                                                                     \
-/** Returns elements after skipping first n. O(1).                                  \
- *                                                                                  \
- * Spec mirrors bytes_skip — see VERIFY-007.                                        \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires s.len > 0 ==> \valid(s.ptr + (0 .. s.len - 1));                       \
+    assigns  \nothing;                                                             \
+    ensures  \result.ptr != \null || \result.len == 0;                             \
+    ensures  \result.len <= s.len;                                                 \
+    behavior in_range:                                                             \
+        assumes s.ptr != \null && n < s.len;                                       \
+        ensures \result.ptr == s.ptr + n;                                          \
+        ensures \result.len == s.len - n;                                          \
+    behavior out_of_range:                                                         \
+        assumes s.ptr == \null || n >= s.len;                                      \
+        ensures \result.ptr == \null;                                              \
+        ensures \result.len == 0;                                                  \
+    complete behaviors;                                                            \
+    disjoint behaviors; */                                                         \
 static inline slice_##type slice_##type##_skip(slice_##type s, usize n) {          \
     if (!s.ptr || n >= s.len) { return slice_##type##_empty(); }                    \
     return (slice_##type){ .ptr = s.ptr + n, .len = s.len - n };                    \
 }                                                                                   \
                                                                                     \
-/** Mutable raw byte view over backing memory. len = s.len * sizeof(type).          \
- *                                                                                  \
- * Spec: requires s.ptr != \null || s.len == 0;                                     \
- *       requires (integer)s.len * (integer)sizeof(type) <= CANON_USIZE_MAX;        \
- *       ensures  \result.len == s.len * sizeof(type);                              \
- *       assigns  \nothing; — see VERIFY-007.                                       \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires (integer)s.len * (integer)sizeof(*s.ptr) <= SIZE_MAX;                 \
+    assigns  \nothing;                                                             \
+    ensures  \result.ptr != \null || \result.len == 0;                             \
+    ensures  \result.len == s.len * sizeof(*s.ptr); */                             \
 static inline bytes_t slice_##type##_as_bytes(slice_##type s) {                    \
     if (!s.ptr) { return bytes_empty(); }                                           \
     return (bytes_t){ .ptr = (u8*)s.ptr, .len = s.len * sizeof(type) };            \
 }                                                                                   \
                                                                                     \
-/** Read-only raw byte view over backing memory. len = s.len * sizeof(type).        \
- *                                                                                  \
- * Spec mirrors slice_T_as_bytes — see VERIFY-007.                                  \
- */                                                                                 \
+/*@ requires s.ptr != \null || s.len == 0;                                         \
+    requires (integer)s.len * (integer)sizeof(*s.ptr) <= SIZE_MAX;                 \
+    assigns  \nothing;                                                             \
+    ensures  \result.ptr != \null || \result.len == 0;                             \
+    ensures  \result.len == s.len * sizeof(*s.ptr); */                             \
 static inline cbytes_t slice_##type##_as_cbytes(slice_##type s) {                  \
     if (!s.ptr) { return (cbytes_t){ .ptr = NULL, .len = 0 }; }                    \
     return (cbytes_t){ .ptr = (const u8*)s.ptr, .len = s.len * sizeof(type) };     \
