@@ -167,6 +167,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OK(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result.is_ok == \true;                                    \
+        ensures \result.val.ok == v; */                                    \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_OK(_t, _e)(_t v) \
         IMPL_RESULT_OK(_t, _e, MANGLE_RESULT_TYPE(_t, _e), v)
@@ -183,6 +186,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_ERR(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result.is_ok == \false;                                   \
+        ensures \result.val.err == err; */                                 \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_ERR(_t, _e)(_e err) \
         IMPL_RESULT_ERR(_t, _e, MANGLE_RESULT_TYPE(_t, _e), err)
@@ -203,6 +209,8 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_IS_OK(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result <==> r.is_ok; */                                   \
     _linkage bool \
     MANGLE_RESULT_IS_OK(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
         IMPL_RESULT_IS_OK(_t, _e, r)
@@ -219,6 +227,8 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_IS_ERR(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result <==> !r.is_ok; */                                  \
     _linkage bool \
     MANGLE_RESULT_IS_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
         IMPL_RESULT_IS_ERR(_t, _e, r)
@@ -242,6 +252,20 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_GET_OK(_linkage, _t, _e) \
+    /*@ requires \valid(out);                                              \
+        assigns *out;                                                      \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          assigns *out;                                                    \
+          ensures \result == \true;                                        \
+          ensures *out == r.val.ok;                                        \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          assigns \nothing;                                                \
+          ensures \result == \false;                                       \
+          ensures *out == \old(*out);                                      \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage bool \
     MANGLE_RESULT_GET_OK(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t* out) \
         IMPL_RESULT_GET_OK(_t, _e, r, out)
@@ -261,6 +285,20 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_GET_ERR(_linkage, _t, _e) \
+    /*@ requires \valid(out);                                              \
+        assigns *out;                                                      \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          assigns *out;                                                    \
+          ensures \result == \true;                                        \
+          ensures *out == r.val.err;                                       \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          assigns \nothing;                                                \
+          ensures \result == \false;                                       \
+          ensures *out == \old(*out);                                      \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage bool \
     MANGLE_RESULT_GET_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _e* out) \
         IMPL_RESULT_GET_ERR(_t, _e, r, out)
@@ -279,6 +317,8 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_UNWRAP_OR(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result == (r.is_ok ? r.val.ok : fallback); */             \
     _linkage _t \
     MANGLE_RESULT_UNWRAP_OR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t fallback) \
         IMPL_RESULT_UNWRAP_OR(_t, _e, r, fallback)
@@ -303,6 +343,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_UNWRAP(_linkage, _t, _e) \
+    /*@ requires r.is_ok;                                                  \
+        assigns \nothing;                                                  \
+        ensures \result == r.val.ok; */                                    \
     _linkage _t \
     MANGLE_RESULT_UNWRAP(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
         IMPL_RESULT_UNWRAP(_t, _e, r)
@@ -321,6 +364,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_UNWRAP_ERR(_linkage, _t, _e) \
+    /*@ requires !r.is_ok;                                                 \
+        assigns \nothing;                                                  \
+        ensures \result == r.val.err; */                                   \
     _linkage _e \
     MANGLE_RESULT_UNWRAP_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r) \
         IMPL_RESULT_UNWRAP_ERR(_t, _e, r)
@@ -339,6 +385,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_EXPECT(_linkage, _t, _e) \
+    /*@ requires r.is_ok;                                                  \
+        assigns \nothing;                                                  \
+        ensures \result == r.val.ok; */                                    \
     _linkage _t \
     MANGLE_RESULT_EXPECT(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, const char* msg) \
         IMPL_RESULT_EXPECT(_t, _e, r, msg)
@@ -365,6 +414,16 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_MAP(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          ensures \result.is_ok == \false;                                 \
+          ensures \result.val.err == r.val.err;                            \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          ensures \result.is_ok == \true;                                  \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_MAP(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _t (*f)(_t)) \
         IMPL_RESULT_MAP(_t, _e, MANGLE_RESULT_TYPE(_t, _e), r, f, \
@@ -384,6 +443,16 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_MAP_ERR(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          ensures \result.is_ok == \true;                                  \
+          ensures \result.val.ok == r.val.ok;                              \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          ensures \result.is_ok == \false;                                 \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_MAP_ERR(_t, _e)(MANGLE_RESULT_TYPE(_t, _e) r, _e (*f)(_e)) \
         IMPL_RESULT_MAP_ERR(_t, _e, MANGLE_RESULT_TYPE(_t, _e), r, f, \
@@ -404,6 +473,15 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_AND_THEN(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          ensures \result.is_ok == \false;                                 \
+          ensures \result.val.err == r.val.err;                            \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_AND_THEN(_t, _e)( \
         MANGLE_RESULT_TYPE(_t, _e) r, \
@@ -424,6 +502,15 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OR_ELSE(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          ensures \result.is_ok == \true;                                  \
+          ensures \result.val.ok == r.val.ok;                              \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_OR_ELSE(_t, _e)( \
         MANGLE_RESULT_TYPE(_t, _e) r, \
@@ -447,6 +534,18 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_AND(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          ensures \result.is_ok == other.is_ok;                            \
+          ensures other.is_ok  ==> \result.val.ok  == other.val.ok;        \
+          ensures !other.is_ok ==> \result.val.err == other.val.err;       \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          ensures \result.is_ok == \false;                                 \
+          ensures \result.val.err == r.val.err;                            \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_AND(_t, _e)( \
         MANGLE_RESULT_TYPE(_t, _e) r, \
@@ -470,6 +569,18 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OR(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior ok:                                                       \
+          assumes r.is_ok;                                                 \
+          ensures \result.is_ok == \true;                                  \
+          ensures \result.val.ok == r.val.ok;                              \
+        behavior err:                                                      \
+          assumes !r.is_ok;                                                \
+          ensures \result.is_ok == other.is_ok;                            \
+          ensures other.is_ok  ==> \result.val.ok  == other.val.ok;        \
+          ensures !other.is_ok ==> \result.val.err == other.val.err;       \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_RESULT_TYPE(_t, _e) \
     MANGLE_RESULT_OR(_t, _e)( \
         MANGLE_RESULT_TYPE(_t, _e) r, \
@@ -497,6 +608,16 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_EQ(_linkage, _t, _e) \
+    /*@ assigns \nothing;                                                  \
+        behavior mismatch:                                                 \
+          assumes r1.is_ok != r2.is_ok;                                    \
+          ensures \result == \false;                                       \
+        behavior both_ok:                                                  \
+          assumes r1.is_ok && r2.is_ok;                                    \
+        behavior both_err:                                                 \
+          assumes !r1.is_ok && !r2.is_ok;                                  \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage bool \
     MANGLE_RESULT_EQ(_t, _e)( \
         MANGLE_RESULT_TYPE(_t, _e) r1, \
