@@ -128,6 +128,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_SOME(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result.has_value == \true;                                \
+        ensures \result.value == v; */                                     \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_SOME(_t)(_t v) \
         IMPL_OPTION_SOME(_t, MANGLE_OPTION_TYPE(_t), v)
@@ -147,6 +150,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_NONE(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result.has_value == \false;                               \
+        ensures \result.value == 0; */                                     \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_NONE(_t)(void) \
         IMPL_OPTION_NONE(_t, MANGLE_OPTION_TYPE(_t))
@@ -168,6 +174,8 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_IS_SOME(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result <==> o.has_value; */                               \
     _linkage bool \
     MANGLE_OPTION_IS_SOME(_t)(MANGLE_OPTION_TYPE(_t) o) \
         IMPL_OPTION_IS_SOME(_t, o)
@@ -185,6 +193,8 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_IS_NONE(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result <==> !o.has_value; */                              \
     _linkage bool \
     MANGLE_OPTION_IS_NONE(_t)(MANGLE_OPTION_TYPE(_t) o) \
         IMPL_OPTION_IS_NONE(_t, o)
@@ -211,6 +221,20 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_GET(_linkage, _t) \
+    /*@ requires \valid(out);                                              \
+        assigns *out;                                                      \
+        behavior some:                                                     \
+          assumes o.has_value;                                             \
+          assigns *out;                                                    \
+          ensures \result == \true;                                        \
+          ensures *out == o.value;                                         \
+        behavior none:                                                     \
+          assumes !o.has_value;                                            \
+          assigns \nothing;                                                \
+          ensures \result == \false;                                       \
+          ensures *out == \old(*out);                                      \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage bool \
     MANGLE_OPTION_GET(_t)(MANGLE_OPTION_TYPE(_t) o, _t* out) \
         IMPL_OPTION_GET(_t, o, out)
@@ -229,6 +253,8 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_UNWRAP_OR(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result == (o.has_value ? o.value : fallback); */          \
     _linkage _t \
     MANGLE_OPTION_UNWRAP_OR(_t)(MANGLE_OPTION_TYPE(_t) o, _t fallback) \
         IMPL_OPTION_UNWRAP_OR(_t, o, fallback)
@@ -252,6 +278,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_UNWRAP(_linkage, _t) \
+    /*@ requires o.has_value;                                              \
+        assigns \nothing;                                                  \
+        ensures \result == o.value; */                                     \
     _linkage _t \
     MANGLE_OPTION_UNWRAP(_t)(MANGLE_OPTION_TYPE(_t) o) \
         IMPL_OPTION_UNWRAP(_t, o)
@@ -271,6 +300,9 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_EXPECT(_linkage, _t) \
+    /*@ requires o.has_value;                                              \
+        assigns \nothing;                                                  \
+        ensures \result == o.value; */                                     \
     _linkage _t \
     MANGLE_OPTION_EXPECT(_t)(MANGLE_OPTION_TYPE(_t) o, const char* msg) \
         IMPL_OPTION_EXPECT(_t, o, msg)
@@ -298,6 +330,15 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_MAP(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        behavior none:                                                     \
+          assumes !o.has_value;                                            \
+          ensures !\result.has_value;                                      \
+        behavior some:                                                     \
+          assumes o.has_value;                                             \
+          ensures \result.has_value;                                       \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_MAP(_t)(MANGLE_OPTION_TYPE(_t) o, _t (*f)(_t)) \
         IMPL_OPTION_MAP(_t, MANGLE_OPTION_TYPE(_t), o, f, \
@@ -319,6 +360,14 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_AND_THEN(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        behavior none:                                                     \
+          assumes !o.has_value;                                            \
+          ensures !\result.has_value;                                      \
+        behavior some:                                                     \
+          assumes o.has_value;                                             \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_AND_THEN(_t)( \
         MANGLE_OPTION_TYPE(_t) o, \
@@ -341,6 +390,15 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_OR_ELSE(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        behavior some:                                                     \
+          assumes o.has_value;                                             \
+          ensures \result.has_value == o.has_value;                        \
+          ensures \result.value == o.value;                                \
+        behavior none:                                                     \
+          assumes !o.has_value;                                            \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_OR_ELSE(_t)( \
         MANGLE_OPTION_TYPE(_t) o, \
@@ -362,6 +420,14 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_FILTER(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        behavior none:                                                     \
+          assumes !o.has_value;                                            \
+          ensures !\result.has_value;                                      \
+        behavior some:                                                     \
+          assumes o.has_value;                                             \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_FILTER(_t)( \
         MANGLE_OPTION_TYPE(_t) o, bool (*pred)(_t)) \
@@ -397,6 +463,15 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_COMBINE_WITH(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        behavior any_none:                                                 \
+          assumes !o1.has_value || !o2.has_value;                          \
+          ensures !\result.has_value;                                      \
+        behavior both_some:                                                \
+          assumes o1.has_value && o2.has_value;                            \
+          ensures \result.has_value;                                       \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_COMBINE_WITH(_t)( \
         MANGLE_OPTION_TYPE(_t) o1, \
@@ -424,6 +499,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_REPLACE(_linkage, _t) \
+    /*@ requires \valid(o);                                                \
+        assigns *o;                                                        \
+        ensures \result.has_value == \old(o->has_value);                   \
+        ensures \result.value == \old(o->value);                           \
+        ensures o->has_value == \true;                                     \
+        ensures o->value == new_value; */                                  \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_REPLACE(_t)(MANGLE_OPTION_TYPE(_t)* o, _t new_value) \
         IMPL_OPTION_REPLACE(_t, MANGLE_OPTION_TYPE(_t), o, new_value, \
@@ -445,6 +526,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_TAKE(_linkage, _t) \
+    /*@ requires \valid(o);                                                \
+        assigns *o;                                                        \
+        ensures \result.has_value == \old(o->has_value);                   \
+        ensures \result.value == \old(o->value);                           \
+        ensures o->has_value == \false;                                    \
+        ensures o->value == 0; */                                          \
     _linkage MANGLE_OPTION_TYPE(_t) \
     MANGLE_OPTION_TAKE(_t)(MANGLE_OPTION_TYPE(_t)* o) \
         IMPL_OPTION_TAKE(_t, MANGLE_OPTION_TYPE(_t), o, \
@@ -470,6 +557,17 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_EQ(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        behavior both_none:                                                \
+          assumes !o1.has_value && !o2.has_value;                          \
+          ensures \result == \true;                                        \
+        behavior mismatch:                                                 \
+          assumes o1.has_value != o2.has_value;                            \
+          ensures \result == \false;                                       \
+        behavior both_some:                                                \
+          assumes o1.has_value && o2.has_value;                            \
+        complete behaviors;                                                \
+        disjoint behaviors; */                                             \
     _linkage bool \
     MANGLE_OPTION_EQ(_t)( \
         MANGLE_OPTION_TYPE(_t) o1, \
