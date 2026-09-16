@@ -231,8 +231,9 @@ should aim for:
   written out; speculative alternatives explicitly removed rather
   than carried as filler.
 - **Verification posture** distinguishing what's runtime-checked
-  forever (macro-templated bodies) from what's on the verification
-  roadmap (non-macro substrate headers).
+  from what's WP-verified. (Until VERIFY-025 this split ran along the
+  macro / non-macro line; macro bodies can now carry contracts, so the
+  line is per family, not per mechanism.)
 - **Cross-references** to README anchors, `CMakeLists.txt` blocks,
   the three verification docs, and forward-referenced OWN-NNN
   entries.

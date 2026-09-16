@@ -4220,6 +4220,177 @@ before it ships.
 - VERIFY-021 — the "verified configuration" shape that was chosen.
 - VERIFY-024 (candidate) — `regions_overlap` restated with `\separated`.
 
+## VERIFY-025: Contracts Move Into the Macro Bodies — a Two-Letter Preprocessor Flag Removes a Premise That Three Documents Called a Property of the Language (slice, result, option, borrow, vec, deque)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-025 |
+| **Date**       | 2026-09-16 |
+| **Baseline commit** | Branch `exp/cc-slice`, seven commits `eeb387f`..`b01211a` on top of `e973e13`. Local runs only at the time of writing; no CI pin yet (see *Enforcement*). |
+| **Scope**      | Every macro-generated function in six families: `DEFINE_SLICE` (14), `DEFINE_RESULT_*` (17), `DEFINE_OPTION_*` (16), `DEFINE_BORROWED_SLICE` (9), `IMPL_VEC_*` + lifetime helpers (37), `IMPL_DEQUE_*` + lifetime helper (24). 117 functions. |
+| **Category**   | Verification mechanism; design-decision correction; contract relocation (driver prototypes → macro bodies) |
+| **Enforcement**| **Not yet.** Reproduced locally on Frama-C 29.0 / Alt-Ergo 2.6.3 / Why3 1.7.2 only. The existing driver-based CI jobs are unaffected (they run under `-C`, where macro-body annotations are invisible, so the prototype contracts in `vmacros/vdrivers/*_verify.h` still apply alone). A `-CC` job per family over the bare `*_cc_experiment.h` drivers is the follow-up. |
+
+**Description.** Three documents stated that ACSL annotations cannot live
+inside a `#define`: `design-decisions.md` §7 ("the C99 preprocessor strips
+ACSL annotations inside `#define` before expansion ... would need either a
+code generator or a switch to a different annotation toolchain"),
+`vmacros.md` ("phase 3, before it expands macros in phase 4 ... a property
+of the C standard's translation order, not a Frama-C limitation"), and
+`verification.md`'s DEFINE_SLICE note ("contract specifications are
+retained in the macro body as human-readable comments"). Every driver in
+`vmacros/vdrivers/` was built on that premise: contracts written on
+prototypes of the to-be-generated functions, then the macro instantiated
+beneath them.
+
+The premise is true of `cpp -C` — Frama-C's default first-pass
+preprocessor command — and false of `cpp -CC`, which GCC documents as
+preserving comments *including during macro expansion*. Demonstrated
+before anything else was touched:
+
+```
+$ gcc -E -C  m.c | grep -A1 'vec_int {'   # contract gone
+static inline int pop_int(struct vec_int *v) { ... }
+$ gcc -E -CC m.c | grep -A1 'vec_int {'   # contract present, collapsed to one line
+/*@ requires \valid(v); requires v->len > 0; ... */ static inline int pop_int(...)
+```
+
+Frama-C's `-cpp-extra-args` applies to that first pass, so
+`-cpp-extra-args="-CC ..."` is the whole toolchain change. Frama-C 29
+parses the collapsed comment, attaches it to the instantiated function,
+and WP proves it. The rest of this entry is what happened when that was
+done to every family that already had contracts somewhere.
+
+### What moved
+
+Method for families with a driver: run the existing driver unchanged
+(local baseline), move the prototype contracts into the corresponding
+`DEFINE_*`/`IMPL_*` macro, instantiate through a *bare* driver — struct +
+functions, no prototypes, no contracts — under `-CC`, and diff the
+residual sets by goal name. For `slice` (prose `Spec:` comments) and
+`borrow` (nothing), the contracts were written; there is no baseline.
+
+All runs: Frama-C 29.0, Alt-Ergo 2.6.3 only, `-wp-rte -wp-model
+Typed+Cast`, `-DCANON_NO_REQUIRE -DNDEBUG`.
+
+| Family | Fns | Flags | Baseline (driver, `-C`) | Migrated (bare, `-CC`) | Residual diff by name |
+|--------|-----|-------|------------------------|------------------------|-----------------------|
+| slice  | 14 | `-wp-timeout 30 -wp-fct <14>` | — (prose) | **115/115** — Qed 70, AE 25, term 10, unreach 10 | zero residuals |
+| result | 17 | `-wp-timeout 20 -wp-split` | 185/215 — Qed 138, AE 15, TO 6, Unk 24 | **185/215**, identical breakdown | ∅ / ∅ |
+| option | 16 | `-wp-timeout 20 -wp-split` | 189/223 — Qed 147, AE 20, TO 2, Unk 32 | **189/223**, identical breakdown | ∅ / ∅ |
+| borrow | 9  | `-wp-timeout 30 -wp-split -wp-fct <9>` | — (none) | **145/145** — Qed 120, AE 15, term 5, unreach 5 | zero residuals |
+| vec    | 37 | `-wp-timeout 3 -wp-split -wp-par 4` | 5269/5473, TO 204 | **5326/5538**, TO 212 | only-in-baseline ∅; only-in-migrated: 8 (see below) |
+| deque  | 24 | `-wp-timeout 3 -wp-split -wp-par 4` | 1589/1668, TO 79 | **1592/1668**, TO 76 | only-in-migrated ∅; only-in-baseline: 3 (see below) |
+
+**vec's 8.** All `result__Bool_Error_{map,map_err,and_then,or_else,eq}_assigns_*`
+— the VERIFY-015 function-pointer class. The old driver contracted only 5 of
+the 17 `result__Bool_Error` prototypes, so those five functions generated no
+`assigns` goals in the baseline. The macro carries all 17, so the goals now
+travel with the instantiation. No `vec_int_*` goal changed; the goal set
+grew by 65 and the proved set by 57.
+
+**deque's 3.** `push_back_ok_ensures_7_part4`, `push_back_unchecked_ensures_5`,
+`try_push_back_ok_ensures_5_part4` timed out under the driver and discharge
+under the macro — by Qed (1239 → 1242), not by the prover. With the
+`deque_int_view`/`mut` predicates inlined (see F3), the simplifier sees the
+conjuncts directly instead of behind a predicate name. Same goal set (1668),
+same flags; the improvement is the contract's shape, not the timeout.
+
+The local 3 s / single-prover baselines sit slightly above the CI pins
+(vec 204 vs 196 at 120 s with three provers); the difference is the
+`checked_mul_isize` and `arena_alloc` parts Z3/CVC5 pick up. Both sides of
+each comparison used the same local flags, so the diffs are like-for-like.
+
+### Findings
+
+**F1 — a prose spec referenced a symbol its header cannot see.** The
+retained `Spec:` for `slice_T_as_bytes` bounded `s.len * sizeof(type)` by
+`CANON_USIZE_MAX`, defined in `core/primitives/limits.h`, which `slice.h`
+does not include (`arena.h` does). Frama-C: *unbound logic variable
+CANON_USIZE_MAX*. Unfindable while the spec was a comment; found the moment
+it became a contract. Replaced by `SIZE_MAX` (in scope via `types.h` →
+`<stdint.h>`). First concrete return on the conversion beyond the proof
+itself.
+
+**F2 — `//` inside an ACSL block is fatal under `-CC`.** The drivers annotate
+residuals inline (`// ... fn-pointer residual`). Collapsed to one line, a
+`//` comments out the remainder of the contract. All such notes were dropped
+from the migrated contracts; the residuals are still residuals, just not
+annotated at the clause.
+
+**F3 — no token pasting, no macro-parameter substitution, inside a comment.**
+This is the real constraint, and it is a style constraint, not a blocker.
+Consequences, each hit at least once:
+- Per-type predicates (`vec_int_view`, `vec_int_mut`, `vec_int_slice_view`,
+  `deque_int_view`, `_mut`, `_ring`; `bytes_invariant` for slice) cannot be
+  named as `vec_##type##_view` inside the comment. Inlined at every use site
+  (35 in vec, all in deque). Verbose; provably equivalent; and, per deque's
+  3, sometimes better for Qed.
+- `sizeof(type)` does not substitute. `sizeof(*v->items)`, `sizeof(*s.ptr)`,
+  `sizeof(*buffer)`, `sizeof(*d->buffer)` — a typed expression — does.
+- Struct fields must be reached through a typed parameter (`v->len`,
+  `s.ptr`), never through the generated type name.
+
+**F4 — a pre-state bound with no typed lvalue.** `vec_T_alloc(usize
+capacity)` has nothing typed in its pre-state, so the driver's
+`assumes capacity > CANON_VEC_MAX_CAPACITY / sizeof(int)` cannot be written
+in the macro. `sizeof(*\result.items)` is a compile-time constant regardless
+of `\result`'s value, so the bound moves to the post-state as a flat
+`ensures ... ==> \result.items == \null`. Same precision, no behaviours.
+`arena_alloc` likewise.
+
+**F5 — old drivers and new contracts must not meet under `-CC`.** A driver
+with prototype contracts, instantiated under `-CC`, gives every function a
+contract on its declaration *and* its definition. The bare
+`*_cc_experiment.h` drivers exist so the migrated contracts are the only
+ones present. Under `-C` the existing drivers are unaffected, which is why
+the existing CI jobs did not move.
+
+**F6 — composition through callee contracts holds across the macro
+boundary.** `borrowed_slice_T_as_bytes` composes over `checked_mul`
+(`core/primitives/checked.h`) and `borrowed_bytes_empty`; its `empty`/`view`
+behaviour split discharged on the first run with nothing added to either
+callee. This is the first macro-body contract proved through the substrate's
+contracts rather than alongside them.
+
+### What this changes in the record
+
+`design-decisions.md` §7's "runtime-only by construction" paragraph is
+corrected in place (dated note beneath it, original retained);
+`vmacros.md`'s phase-3/phase-4 paragraph likewise; `decision-families.md`'s
+verification-posture bullet no longer splits macro bodies from the roadmap;
+`verification.md`'s DEFINE_SLICE note points here. The driver pattern is not
+retired: it remains the right tool for per-instantiation proofs with richer
+contracts and for the MC/DC pairing `vmacros.md` describes. What it no
+longer is, is the *only* way to verify a macro family.
+
+### What this does not claim
+
+- No CI enforcement yet. The numbers above are local, single-prover, short
+  timeout. The follow-up is one `-CC` job per family over the bare drivers,
+  pinned at the CI flags (three provers, 120 s), and only then does the
+  master table move.
+- Nothing about the remaining macro families (`stack`, `queue`, the `hashmap`
+  and `priority_queue` typed wrappers, `stringbuf`, `dynvec`, `smallvec`).
+  They have no driver and no prose specs; each is a fresh contract-writing
+  arc with its own entry.
+- Nothing about functional composition for clients beyond what the
+  contracts already state. The contracts that moved are the same contracts;
+  they now travel with every `DEFINE_X(T)` instead of one `T` in one driver.
+  That is the compositional gain, and it is exactly as large as the
+  contracts are.
+
+### Follow-ups
+
+- CI: `-CC` jobs for `slice`, `result`, `option`, `borrow`, `vec`, `deque`
+  over `vmacros/vdrivers/*_cc_experiment.h` (rename to `*_macro_verify.h`
+  when promoted). Pin, then ratchet.
+- Retire the prototype contracts from `vec_verify.h`, `deque_verify.h`,
+  `option_verify.h`, `result_verify.h` once the `-CC` jobs are enforced, or
+  keep them as the MC/DC cover TUs with contracts removed.
+- Decide whether `-CC` becomes the project-wide default in the WP command
+  (it is a superset of `-C`; the only cost is F2).
+
 ## VERIFY-023: Four Address Helpers State Their Result, and Twenty-Four Residuals in Five Modules Turn Out to Have Been Misattributed (ptr.h)
 
 | Field          | Value |

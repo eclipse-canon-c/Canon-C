@@ -49,7 +49,7 @@ formally-verified primitive layer described in the README's
 | Last green     | CI #938 across all 16 configs (8 default × `build` + 8 lifetime-debug × `lifetime-debug`, ubuntu/windows/macos × Release/Debug × default/lifetime-debug) at v1.3.0 ship. Subsequent extensions tracked under their own entries (see OWN-002 for the post-v1.3.0 Arena/Pool migration). |
 | Scope          | All owning container types in `core/` and `data/`                 |
 | Build knob     | `CANON_LIFETIME=off` (default) or `CANON_LIFETIME=debug` — see `CMakeLists.txt` |
-| Verification   | Runtime-validated via `test/semantics/borrow_test.c` across all 16 configs. The non-macro substrate is now WP-verified end to end: `arena.h` (VERIFY-009), `pool.h` (VERIFY-010), `region.h` including `lifetime_assert_valid` (VERIFY-011), `lifetime.h` (VERIFY-021 — **at ladder level 4 only**; the "typedefs only" reading here predated the token generator landing in this header at CI #1243–#1245 and was already stale before VERIFY-021), and the non-macro surface of `semantics/borrow.h` (VERIFY-016, verified under the default `CANON_LIFETIME`-off configuration — the exact shipped ABI bodies). Macro-templated bodies remain runtime-only by construction (see §7). |
+| Verification   | Runtime-validated via `test/semantics/borrow_test.c` across all 16 configs. The non-macro substrate is now WP-verified end to end: `arena.h` (VERIFY-009), `pool.h` (VERIFY-010), `region.h` including `lifetime_assert_valid` (VERIFY-011), `lifetime.h` (VERIFY-021 — **at ladder level 4 only**; the "typedefs only" reading here predated the token generator landing in this header at CI #1243–#1245 and was already stale before VERIFY-021), and the non-macro surface of `semantics/borrow.h` (VERIFY-016, verified under the default `CANON_LIFETIME`-off configuration — the exact shipped ABI bodies). Macro-templated bodies were recorded as runtime-only by construction (see §7); that reading is corrected by VERIFY-025 — contracts now live inside the macro bodies for six families. |
 | Cross-refs     | README sections *"Borrow lifetime — know when a borrowed value is still valid"*, *"What about compile-time ownership enforcement?"*, *"From shared vocabulary to compositional verification"*; `CMakeLists.txt` `CANON_LIFETIME` block; `docs/verification.md`, `docs/deviations.md`, `docs/traceability.md` (substrate VERIFY-NNN entries land here as headers get annotated); `RELEASES.md` plus the CI run history, which together serve as this project's change record in place of a CHANGELOG; OWN-002 (Arena/Pool restamp migration, shipped post-v1.3.0). |
 
 ### Phase chronology
@@ -386,6 +386,20 @@ which is outside the C99 preprocessor's reach and would need either a
 code generator or a switch to a different annotation toolchain.
 Neither is in scope for v1.3.0; if it ever becomes a priority, it
 will get its own entry.
+
+> **Correction (2026-09-16, VERIFY-025).** The paragraph above is retained as
+> written; its premise is too strong. The preprocessor strips comments
+> inside `#define` under `-C`, which is Frama-C's default. Under GCC's `-CC`
+> it preserves them through macro expansion, and Frama-C accepts
+> `-cpp-extra-args="-CC"`. With that one flag, `/*@ ... */` contracts written
+> inside `DEFINE_*`/`IMPL_*` bodies are emitted at every instantiation,
+> attach to the generated functions, and prove — no code generator, no
+> toolchain switch. Demonstrated across six families (117 functions) with
+> lossless or better results against the driver baselines. The constraint
+> that survives is stylistic: nothing inside the comment is token-pasted or
+> parameter-substituted, so per-type predicates are inlined and element
+> sizes are written as `sizeof(*expr)`. See VERIFY-025 in
+> `docs/deviations.md`.
 
 **Non-macro substrate — WP-verified (roadmap complete).**
 `core/primitives/lifetime.h`, `core/region.h`'s `lifetime_assert_valid`,

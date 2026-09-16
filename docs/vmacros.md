@@ -427,6 +427,16 @@ This creates a hard problem for formal verification:
    in `verification.md`) records macro bodies as "documented but not directly
    WP-verified."
 
+   > **Correction (2026-09-16, VERIFY-025).** True for `cpp -C`, Frama-C's
+   > default. GCC's `-CC` keeps comments through macro expansion, and
+   > `-cpp-extra-args="-CC"` is enough for Frama-C 29 to parse and WP to
+   > prove contracts written inside `IMPL_*`/`DEFINE_*` bodies. The driver
+   > pattern below still stands — it is the right tool for per-instantiation
+   > proofs and for the MC/DC cover TU — but it is no longer the only way to
+   > verify a macro family. Six families have moved their contracts into the
+   > macros; the bare `*_cc_experiment.h` drivers instantiate them with no
+   > prototypes. Under `-C` nothing here changes.
+
 The verification driver resolves both problems without modifying a single line
 of shipped code. The *same* "no analyzable lines until instantiation" property
 is what blinds MC/DC for Shape-B modules — which is why the cover TU exists.

@@ -764,8 +764,10 @@ carry partial functional specs — see "What is proved" below.)
 documentation only:** The C preprocessor strips ACSL annotations inside
 `#define` bodies before macro expansion, so the macro-generated
 functions (`slice_T_from`, `slice_T_at`, `slice_T_first`, etc.) are not
-WP-verified in this baseline. Contract specifications are retained in
-the macro body as human-readable comments. These functions are
+WP-verified in this baseline. Contract specifications were retained in
+the macro body as human-readable comments — superseded by VERIFY-025,
+which turns them into live ACSL contracts under `-CC` (115/115 proved,
+zero residuals, and one latent defect found: F1). These functions are
 validated by unit testing (90 tests in `test/core/slice_test.c`),
 fuzzing, and 92.6% MC/DC coverage on the i32 instantiation. Full
 WP verification of the macro family will require a separate
