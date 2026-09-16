@@ -240,6 +240,7 @@ typedef struct DequeTag { \
                  destructor. \
    ════════════════════════════════════════════════════════════════════════════ */ \
 \
+/*@ assigns \nothing; */                                                         \
 static inline void fn_lt_open(DequeType* d) { \
     DEQUE_LIFETIME_OPEN_BODY_(d) \
     (void)d; \
@@ -278,6 +279,19 @@ static inline void fn_lt_open(DequeType* d) { \
  * - Space: O(1) — no allocation, wraps caller-provided buffer
  */
 #define IMPL_DEQUE_INIT(linkage, DequeType, fn, fn_lt_open, type) \
+/*@ requires \valid(d);                                                          \
+    requires buffer != \null;                                                    \
+    requires capacity > 0;                                                       \
+    requires capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*buffer);             \
+    requires \valid(buffer + (0 .. capacity - 1));                               \
+    assigns *d;                                                                  \
+    ensures d->buffer == buffer;                                                 \
+    ensures d->capacity == capacity;                                             \
+    ensures d->head == 0;                                                        \
+    ensures d->tail == 0;                                                        \
+    ensures d->size == 0;                                                        \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); */ \
 linkage void fn(borrowed(DequeType*) d, borrowed(type*) buffer, usize capacity) { \
     require_msg(d != NULL,      #fn ": d cannot be NULL"); \
     require_msg(buffer != NULL, #fn ": buffer cannot be NULL"); \
@@ -312,6 +326,12 @@ linkage void fn(borrowed(DequeType*) d, borrowed(type*) buffer, usize capacity) 
  * - Space: O(1)
  */
 #define IMPL_DEQUE_EMPTY(linkage, DequeType, fn, fn_lt_open) \
+/*@ assigns \nothing;                                                            \
+    ensures \result.buffer == \null;                                             \
+    ensures \result.capacity == 0;                                               \
+    ensures \result.head == 0;                                                   \
+    ensures \result.tail == 0;                                                   \
+    ensures \result.size == 0; */                                                \
 linkage DequeType fn(void) { \
     DequeType d; \
     d.buffer   = NULL; \
@@ -342,6 +362,10 @@ linkage DequeType fn(void) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_LEN(linkage, DequeType, fn) \
+/*@ requires d == \null || (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    assigns \nothing;                                                            \
+    ensures d == \null ==> \result == 0;                                         \
+    ensures d != \null ==> \result == d->size; */                                \
 linkage usize fn(borrowed(const DequeType*) d) { \
     return d ? d->size : 0; \
 }
@@ -361,6 +385,10 @@ linkage usize fn(borrowed(const DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_CAPACITY(linkage, DequeType, fn) \
+/*@ requires d == \null || (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    assigns \nothing;                                                            \
+    ensures d == \null ==> \result == 0;                                         \
+    ensures d != \null ==> \result == d->capacity; */                            \
 linkage usize fn(borrowed(const DequeType*) d) { \
     return d ? d->capacity : 0; \
 }
@@ -380,6 +408,11 @@ linkage usize fn(borrowed(const DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_REMAINING(linkage, DequeType, fn) \
+/*@ requires d == \null || (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    assigns \nothing;                                                            \
+    ensures d == \null ==> \result == 0;                                         \
+    ensures d != \null ==> \result == d->capacity - d->size;                     \
+    ensures \result <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer); */         \
 linkage usize fn(borrowed(const DequeType*) d) { \
     return d ? (d->capacity - d->size) : 0; \
 }
@@ -399,6 +432,9 @@ linkage usize fn(borrowed(const DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_IS_EMPTY(linkage, DequeType, fn) \
+/*@ requires d == \null || (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    assigns \nothing;                                                            \
+    ensures \result <==> (d == \null || d->size == 0); */                        \
 linkage bool fn(borrowed(const DequeType*) d) { \
     return !d || d->size == 0; \
 }
@@ -418,6 +454,9 @@ linkage bool fn(borrowed(const DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_IS_FULL(linkage, DequeType, fn) \
+/*@ requires d == \null || (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    assigns \nothing;                                                            \
+    ensures \result <==> (d == \null || d->size >= d->capacity); */              \
 linkage bool fn(borrowed(const DequeType*) d) { \
     return !d || d->size >= d->capacity; \
 }
@@ -447,6 +486,35 @@ linkage bool fn(borrowed(const DequeType*) d) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_FRONT(linkage, DequeType, fn, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+                                                                                 \
+    behavior unusable:                                                           \
+    assumes d == \null || d->buffer == \null;                                    \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_INVALID_ARG;                                  \
+                                                                                 \
+    behavior full:                                                               \
+    assumes d != \null && d->buffer != \null && d->size >= d->capacity;          \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_CAPACITY_EXCEEDED;                            \
+                                                                                 \
+    behavior ok:                                                                 \
+    assumes d != \null && d->buffer != \null && d->size < d->capacity;           \
+    assigns d->head, d->size, d->buffer[0 .. d->capacity - 1];                   \
+    ensures \result.is_ok == \true;                                              \
+    ensures d->head == (\old(d->head) == 0 ? d->capacity - 1                     \
+    : \old(d->head) - 1);                                                        \
+    ensures d->buffer[d->head] == item;                                          \
+    ensures d->size == \old(d->size) + 1;                                        \
+    ensures d->tail == \old(d->tail);                                            \
+    ensures d->capacity == \old(d->capacity);                                    \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (d->size >= d->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
@@ -476,6 +544,34 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_BACK(linkage, DequeType, fn, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+                                                                                 \
+    behavior unusable:                                                           \
+    assumes d == \null || d->buffer == \null;                                    \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_INVALID_ARG;                                  \
+                                                                                 \
+    behavior full:                                                               \
+    assumes d != \null && d->buffer != \null && d->size >= d->capacity;          \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_CAPACITY_EXCEEDED;                            \
+                                                                                 \
+    behavior ok:                                                                 \
+    assumes d != \null && d->buffer != \null && d->size < d->capacity;           \
+    assigns d->tail, d->size, d->buffer[0 .. d->capacity - 1];                   \
+    ensures \result.is_ok == \true;                                              \
+    ensures d->buffer[\old(d->tail)] == item;                                    \
+    ensures d->tail == (\old(d->tail) + 1) % d->capacity;                        \
+    ensures d->size == \old(d->size) + 1;                                        \
+    ensures d->head == \old(d->head);                                            \
+    ensures d->capacity == \old(d->capacity);                                    \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (d->size >= d->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); } \
@@ -508,6 +604,26 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_TRY_PUSH_FRONT(linkage, DequeType, fn, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+                                                                                 \
+    behavior rejected:                                                           \
+    assumes d == \null || d->buffer == \null || d->size >= d->capacity;          \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+                                                                                 \
+    behavior ok:                                                                 \
+    assumes d != \null && d->buffer != \null && d->size < d->capacity;           \
+    assigns d->head, d->size, d->buffer[0 .. d->capacity - 1];                   \
+    ensures \result == \true;                                                    \
+    ensures d->head == (\old(d->head) == 0 ? d->capacity - 1                     \
+    : \old(d->head) - 1);                                                        \
+    ensures d->buffer[d->head] == item;                                          \
+    ensures d->size == \old(d->size) + 1;                                        \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer || d->size >= d->capacity) { return false; } \
     d->head = (d->head == 0) ? d->capacity - 1 : d->head - 1; \
@@ -535,6 +651,25 @@ linkage bool fn(borrowed(DequeType*) d, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_TRY_PUSH_BACK(linkage, DequeType, fn, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+                                                                                 \
+    behavior rejected:                                                           \
+    assumes d == \null || d->buffer == \null || d->size >= d->capacity;          \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+                                                                                 \
+    behavior ok:                                                                 \
+    assumes d != \null && d->buffer != \null && d->size < d->capacity;           \
+    assigns d->tail, d->size, d->buffer[0 .. d->capacity - 1];                   \
+    ensures \result == \true;                                                    \
+    ensures d->buffer[\old(d->tail)] == item;                                    \
+    ensures d->tail == (\old(d->tail) + 1) % d->capacity;                        \
+    ensures d->size == \old(d->size) + 1;                                        \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(DequeType*) d, type item) { \
     if (!d || !d->buffer || d->size >= d->capacity) { return false; } \
     d->buffer[d->tail] = item; \
@@ -570,6 +705,18 @@ linkage bool fn(borrowed(DequeType*) d, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_FRONT_UNCHECKED(linkage, DequeType, fn, type) \
+/*@ requires ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    requires (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); \
+    requires d->buffer != \null;                                                 \
+    requires d->size < d->capacity;                                              \
+    assigns d->head, d->size, d->buffer[0 .. d->capacity - 1];                   \
+    ensures d->head == (\old(d->head) == 0 ? d->capacity - 1                     \
+    : \old(d->head) - 1);                                                        \
+    ensures d->buffer[d->head] == item;                                          \
+    ensures d->size == \old(d->size) + 1;                                        \
+    ensures d->tail == \old(d->tail);                                            \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); */ \
 linkage void fn(borrowed(DequeType*) d, type item) { \
     ensure_msg(d != NULL,              #fn ": d cannot be NULL"); \
     ensure_msg(d->buffer != NULL,      #fn ": d->buffer cannot be NULL"); \
@@ -602,6 +749,17 @@ linkage void fn(borrowed(DequeType*) d, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_PUSH_BACK_UNCHECKED(linkage, DequeType, fn, type) \
+/*@ requires ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    requires (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); \
+    requires d->buffer != \null;                                                 \
+    requires d->size < d->capacity;                                              \
+    assigns d->tail, d->size, d->buffer[0 .. d->capacity - 1];                   \
+    ensures d->buffer[\old(d->tail)] == item;                                    \
+    ensures d->tail == (\old(d->tail) + 1) % d->capacity;                        \
+    ensures d->size == \old(d->size) + 1;                                        \
+    ensures d->head == \old(d->head);                                            \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); */ \
 linkage void fn(borrowed(DequeType*) d, type item) { \
     ensure_msg(d != NULL,              #fn ": d cannot be NULL"); \
     ensure_msg(d->buffer != NULL,      #fn ": d->buffer cannot be NULL"); \
@@ -635,6 +793,38 @@ linkage void fn(borrowed(DequeType*) d, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_FRONT(linkage, DequeType, fn, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+    requires out == \null || \valid(out);                                        \
+    requires d == \null || out == \null || \separated(d, out);                   \
+    assigns *out, d->head, d->size;                                              \
+                                                                                 \
+    behavior unusable:                                                           \
+    assumes d == \null || out == \null || d->buffer == \null;                    \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_INVALID_ARG;                                  \
+                                                                                 \
+    behavior empty:                                                              \
+    assumes d != \null && out != \null && d->buffer != \null                     \
+    && d->size == 0;                                                             \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_INVALID_STATE;                                \
+                                                                                 \
+    behavior ok:                                                                 \
+    assumes d != \null && out != \null && d->buffer != \null                     \
+    && d->size > 0;                                                              \
+    assigns *out, d->head, d->size;                                              \
+    ensures \result.is_ok == \true;                                              \
+    ensures *out == \old(d->buffer[d->head]);                                    \
+    ensures d->head == (\old(d->head) + 1) % d->capacity;                        \
+    ensures d->size == \old(d->size) - 1;                                        \
+    ensures d->tail == \old(d->tail);                                            \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
     if (!d || !out || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (d->size == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); } \
@@ -664,6 +854,39 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_BACK(linkage, DequeType, fn, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+    requires out == \null || \valid(out);                                        \
+    requires d == \null || out == \null || \separated(d, out);                   \
+    assigns *out, d->tail, d->size;                                              \
+                                                                                 \
+    behavior unusable:                                                           \
+    assumes d == \null || out == \null || d->buffer == \null;                    \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_INVALID_ARG;                                  \
+                                                                                 \
+    behavior empty:                                                              \
+    assumes d != \null && out != \null && d->buffer != \null                     \
+    && d->size == 0;                                                             \
+    assigns \nothing;                                                            \
+    ensures \result.is_ok == \false;                                             \
+    ensures \result.val.err == ERR_INVALID_STATE;                                \
+                                                                                 \
+    behavior ok:                                                                 \
+    assumes d != \null && out != \null && d->buffer != \null                     \
+    && d->size > 0;                                                              \
+    assigns *out, d->tail, d->size;                                              \
+    ensures \result.is_ok == \true;                                              \
+    ensures d->tail == (\old(d->tail) == 0 ? d->capacity - 1                     \
+    : \old(d->tail) - 1);                                                        \
+    ensures *out == d->buffer[d->tail];                                          \
+    ensures d->size == \old(d->size) - 1;                                        \
+    ensures d->head == \old(d->head);                                            \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
     if (!d || !out || !d->buffer) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
     if (d->size == 0) { return result__Bool_Error_err(ERR_INVALID_STATE); } \
@@ -689,6 +912,25 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_FRONT_OPTION(linkage, DequeType, fn, fn_pop_front, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+                                                                                 \
+    assigns d->head, d->size;                                                    \
+                                                                                 \
+    behavior none:                                                               \
+    assumes d == \null || d->buffer == \null || d->size == 0;                    \
+    ensures \result.has_value == \false;                                         \
+                                                                                 \
+    behavior some:                                                               \
+    assumes d != \null && d->buffer != \null && d->size > 0;                     \
+    assigns d->head, d->size;                                                    \
+    ensures \result.has_value == \true;                                          \
+    ensures \result.value == \old(d->buffer[d->head]);                           \
+    ensures d->size == \old(d->size) - 1;                                        \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(DequeType*) d) { \
     type out = {0}; \
     if ((fn_result_is_ok)((fn_pop_front)(d, &out))) { \
@@ -712,6 +954,24 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_DEQUE_POP_BACK_OPTION(linkage, DequeType, fn, fn_pop_back, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
+/*@ requires d == \null || (((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))) && (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity)); \
+                                                                                 \
+    assigns d->tail, d->size;                                                    \
+                                                                                 \
+    behavior none:                                                               \
+    assumes d == \null || d->buffer == \null || d->size == 0;                    \
+    ensures \result.has_value == \false;                                         \
+                                                                                 \
+    behavior some:                                                               \
+    assumes d != \null && d->buffer != \null && d->size > 0;                     \
+    assigns d->tail, d->size;                                                    \
+    ensures \result.has_value == \true;                                          \
+    ensures d->size == \old(d->size) - 1;                                        \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(DequeType*) d) { \
     type out = {0}; \
     if ((fn_result_is_ok)((fn_pop_back)(d, &out))) { \
@@ -743,6 +1003,25 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_FRONT(linkage, DequeType, fn, type) \
+/*@ requires (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    requires (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); \
+    requires \valid(out);                                                        \
+    requires \separated(d, out);                                                 \
+    assigns *out;                                                                \
+                                                                                 \
+    behavior empty:                                                              \
+    assumes d->size == 0;                                                        \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+                                                                                 \
+    behavior nonempty:                                                           \
+    assumes d->size > 0;                                                         \
+    assigns *out;                                                                \
+    ensures \result == \true;                                                    \
+    ensures *out == d->buffer[d->head];                                          \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
     require_msg(d   != NULL, #fn ": d cannot be NULL"); \
     require_msg(out != NULL, #fn ": out cannot be NULL"); \
@@ -771,6 +1050,26 @@ linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_BACK(linkage, DequeType, fn, type) \
+/*@ requires (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    requires (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); \
+    requires \valid(out);                                                        \
+    requires \separated(d, out);                                                 \
+    assigns *out;                                                                \
+                                                                                 \
+    behavior empty:                                                              \
+    assumes d->size == 0;                                                        \
+    assigns \nothing;                                                            \
+    ensures \result == \false;                                                   \
+                                                                                 \
+    behavior nonempty:                                                           \
+    assumes d->size > 0;                                                         \
+    assigns *out;                                                                \
+    ensures \result == \true;                                                    \
+    ensures *out == d->buffer[d->tail == 0 ? d->capacity - 1                     \
+    : d->tail - 1];                                                              \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
     require_msg(d   != NULL, #fn ": d cannot be NULL"); \
     require_msg(out != NULL, #fn ": out cannot be NULL"); \
@@ -798,6 +1097,18 @@ linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_FRONT_OPTION(linkage, DequeType, fn, fn_peek_front, OptionType, fn_some, fn_none, type) \
+/*@ requires (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    requires (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); \
+    assigns \nothing;                                                            \
+    behavior none:                                                               \
+    assumes d->size == 0;                                                        \
+    ensures \result.has_value == \false;                                         \
+    behavior some:                                                               \
+    assumes d->size > 0;                                                         \
+    ensures \result.has_value == \true;                                          \
+    ensures \result.value == d->buffer[d->head];                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(const DequeType*) d) { \
     type out = {0}; \
     if (fn_peek_front(d, &out)) { \
@@ -824,6 +1135,19 @@ linkage OptionType fn(borrowed(const DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_PEEK_BACK_OPTION(linkage, DequeType, fn, fn_peek_back, OptionType, fn_some, fn_none, type) \
+/*@ requires (\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)); \
+    requires (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity); \
+    assigns \nothing;                                                            \
+    behavior none:                                                               \
+    assumes d->size == 0;                                                        \
+    ensures \result.has_value == \false;                                         \
+    behavior some:                                                               \
+    assumes d->size > 0;                                                         \
+    ensures \result.has_value == \true;                                          \
+    ensures \result.value == d->buffer[d->tail == 0 ? d->capacity - 1            \
+    : d->tail - 1];                                                              \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage OptionType fn(borrowed(const DequeType*) d) { \
     type out = {0}; \
     if (fn_peek_back(d, &out)) { \
@@ -859,6 +1183,25 @@ linkage OptionType fn(borrowed(const DequeType*) d) { \
  * - Space: O(1)
  */
 #define IMPL_DEQUE_CLEAR(linkage, DequeType, fn) \
+/*@ requires d == \null || ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+                                                                                 \
+    behavior null:                                                               \
+    assumes d == \null;                                                          \
+    assigns \nothing;                                                            \
+                                                                                 \
+    behavior live:                                                               \
+    assumes d != \null;                                                          \
+    assigns d->size, d->head, d->tail;                                           \
+    ensures d->size == 0;                                                        \
+    ensures d->head == 0;                                                        \
+    ensures d->tail == 0;                                                        \
+    ensures d->buffer == \old(d->buffer);                                        \
+    ensures d->capacity == \old(d->capacity);                                    \
+    ensures ((\valid_read(d) && d->size <= d->capacity && d->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*d->buffer) && (d->buffer == \null ==> d->capacity == 0) && (d->capacity > 0 ==> \valid_read(d->buffer + (0 .. d->capacity - 1))) && (d->capacity > 0 ==> d->head < d->capacity && d->tail < d->capacity)) && \valid(d) && (d->capacity > 0 ==> \valid(d->buffer + (0 .. d->capacity - 1)))); \
+    ensures (d->capacity > 0 ==> d->tail == (d->head + d->size) % d->capacity);  \
+                                                                                 \
+    complete behaviors;                                                          \
+    disjoint behaviors; */                                                       \
 linkage void fn(borrowed(DequeType*) d) { \
     if (!d) { return; } \
     d->size = 0; \
@@ -889,6 +1232,20 @@ linkage void fn(borrowed(DequeType*) d) { \
  * - Space: O(1) — struct copy on stack
  */
 #define IMPL_DEQUE_SWAP(linkage, DequeType, fn) \
+/*@ requires \valid(a) && \valid(b);                                             \
+    requires \separated(a, b);                                                   \
+    requires ((\valid_read(a) && a->size <= a->capacity && a->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*a->buffer) && (a->buffer == \null ==> a->capacity == 0) && (a->capacity > 0 ==> \valid_read(a->buffer + (0 .. a->capacity - 1))) && (a->capacity > 0 ==> a->head < a->capacity && a->tail < a->capacity)) && \valid(a) && (a->capacity > 0 ==> \valid(a->buffer + (0 .. a->capacity - 1)))) && ((\valid_read(b) && b->size <= b->capacity && b->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*b->buffer) && (b->buffer == \null ==> b->capacity == 0) && (b->capacity > 0 ==> \valid_read(b->buffer + (0 .. b->capacity - 1))) && (b->capacity > 0 ==> b->head < b->capacity && b->tail < b->capacity)) && \valid(b) && (b->capacity > 0 ==> \valid(b->buffer + (0 .. b->capacity - 1)))); \
+    assigns *a, *b;                                                              \
+    ensures a->buffer   == \old(b->buffer);                                      \
+    ensures a->capacity == \old(b->capacity);                                    \
+    ensures a->head     == \old(b->head);                                        \
+    ensures a->tail     == \old(b->tail);                                        \
+    ensures a->size     == \old(b->size);                                        \
+    ensures b->buffer   == \old(a->buffer);                                      \
+    ensures b->capacity == \old(a->capacity);                                    \
+    ensures b->head     == \old(a->head);                                        \
+    ensures b->tail     == \old(a->tail);                                        \
+    ensures b->size     == \old(a->size); */                                     \
 linkage void fn(borrowed(DequeType*) a, borrowed(DequeType*) b) { \
     require_msg(a != NULL, #fn ": a cannot be NULL"); \
     require_msg(b != NULL, #fn ": b cannot be NULL"); \
