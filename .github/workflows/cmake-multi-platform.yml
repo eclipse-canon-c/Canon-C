@@ -2,8 +2,32 @@ name: Canon-C CI
 on:
   push:
     branches: [ "master" ]
+    # Documentation-only pushes do not change anything a gate measures:
+    # no header, driver, test, build file or workflow is touched, so the
+    # proof, coverage and MISRA pins cannot move. Skip the matrix for them.
+    # NOTE for the records: "enforced on every push to master" therefore
+    # means every push that touches the measured surface. A change to any
+    # path outside this list still runs everything.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
   pull_request:
     branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+
+# Two pushes to master minutes apart should not run two full matrices.
+# The newer push supersedes the older one; on pull requests the same applies
+# per branch. Enforced pins are properties of HEAD, not of every intermediate
+# commit, so cancelling a superseded run loses nothing the records rely on.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 # ---------------------------------------------------------------------------
 # Job overview
 #
