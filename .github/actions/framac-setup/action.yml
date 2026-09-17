@@ -130,7 +130,13 @@ runs:
       run: |
         CVC5_URL="https://github.com/cvc5/cvc5/releases/download/cvc5-${CVC5_VERSION}/cvc5-Linux-x86_64-static.zip"
         echo "Downloading cvc5 ${CVC5_VERSION} from ${CVC5_URL}"
-        wget -q "${CVC5_URL}" -O /tmp/cvc5.zip
+        # The release CDN occasionally drops a connection (CI #1297: one of
+        # nineteen WP jobs failed here with wget exit 4, the other eighteen
+        # passed the same step). Retry, then fail loudly rather than let the
+        # job proceed to a cvc5 registration that cannot succeed.
+        wget -q --tries=5 --waitretry=10 --retry-connrefused \
+             "${CVC5_URL}" -O /tmp/cvc5.zip \
+          || { echo "ERROR: cvc5 ${CVC5_VERSION} download failed after 5 attempts (${CVC5_URL})"; exit 1; }
         unzip -q /tmp/cvc5.zip -d /tmp/cvc5-release
         # The zip extracts to a directory like cvc5-Linux-x86_64-static/bin/cvc5
         CVC5_EXTRACTED=$(find /tmp/cvc5-release -name cvc5 -type f | head -1)
