@@ -4504,6 +4504,89 @@ inherited by every job in the workflow. No prediction is made about whether
 any of them close; it is a lead of the shape that just paid 24 goals, and it
 costs one read of each contract to check.
 
+## VERIFY-026: Pre-registration — Which of the Eight Pedantic-Assigns Functions Close Downstream Goals When Their Result Is Stated
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-026 |
+| **Date**       | 2026-09-18 |
+| **Status**     | PRE-REGISTERED — no contract touched; predictions committed before any change |
+| **Baseline**   | CI #1298 (986d5ad) — pins identical to #1290 |
+| **Scope**      | ptr.h, slice.h, memory.h, arena.h, pool.h, borrow.h |
+| **Category**   | Prospective test of the VERIFY-023 mechanism (§5.7 of the paper: "a lead, not a prediction") |
+
+**Why this record exists.** VERIFY-023 closed 24 pinned residuals by stating the
+return value of four `ptr.h` address helpers, and found afterwards that all 24
+had been misattributed for months. Its closing note listed eight more functions
+on WP's `pedantic-assigns` list as "the same shape" and made no prediction. This
+record makes the prediction, per function, before any contract is edited. The
+commit hash of this record is the evidence that the predictions predate the
+changes. The scoring record (VERIFY-027) compares, goal by goal.
+
+**Method (read the contract, then the goal names — VERIFY-022's method note).**
+For each function: (1) what its contract currently says about `\result`;
+(2) which verified translation units call it; (3) which pinned residual names
+at #1298 could depend on its result; (4) the mechanism by which an `ensures`
+on the result would or would not discharge them. The prediction column is the
+author's, signed by the commit.
+
+### Evidence
+
+| # | function | contract says about `\result` | called from verified TUs | pinned goals that could depend on its result | mechanism |
+|---|----------|-------------------------------|--------------------------|----------------------------------------------|-----------|
+| 1 | `ptr_align_up` | `null` behavior: `== \null`. `nonnull` behavior: **nothing** — the VERIFY-023 shape exactly | `arena.h` (`arena_alloc_aligned`) | `arena_alloc_aligned_fits_ensures{,_2,_3}_part{2,3,4}` (9) — the `\valid((u8*)\result + (0..size-1))` and offset ensures of the aligned allocator, whose result is the aligned address ptr_align_up returned | With `ensures \result == (void*)align_up((uintptr_t)p, align)` in the nonnull behavior, WP can relate the returned pointer to the arena base. Same mechanism as ptr_elem. |
+| 2 | `ptr_align_down` | as above, nonnull behavior empty | **none** — no call site in any verified TU | none | Adding an ensures changes ptr_align_down's own goal count (+1 or +2 with split) and nothing downstream, because nothing downstream exists. |
+| 3 | `ptr_retreat` | as above, nonnull behavior empty | **none** | none | Same as 2. |
+| 4 | `bytes_at` | **already stated**: `in_bounds: \result == b.ptr + i`; `out_of_bounds: \result == \null` | (data layer via drivers) | none named at #1298 | Nothing to add on the result. It is on the pedantic list only because it lacks `assigns \result \from ...`, which is a frame clause, not a postcondition. Not the VERIFY-023 shape. |
+| 5 | `mem_alloc` | `nonzero_size: \result == \null \|\| \fresh(\result, size)` | `vec_impl.h` | `mem_alloc_nonzero_size_ensures_part2`, `mem_alloc_assigns_normal_part2`, `mem_alloc_array_checked_nonoverflow_ensures_part3` (3) | These are class-(b) `\fresh` residuals (VERIFY-008 cat 1). `malloc`'s result has no statable address. No ensures on the address is possible; the three goals are a verifier feature gap, not an opaque return value. Not the VERIFY-023 shape. |
+| 6 | `arena_alloc`, `arena_alloc_aligned`, `arena_alloc_zero`, `arena_alloc_aligned_zero` | `fits: \result != \null; \valid((u8*)\result + (0..size-1)); offset relations` — non-null and valid, but **not the address** | `pool.h` (`pool_init`, `pool_reset`), `region.h`, `vec` | own: `arena_alloc{,_aligned}_fits_ensures{,_2,_3}_part{2,3,4}` (18), `*_does_not_fit_ensures*_part5` (4), `*_zero_ensures_3_part1` (2), `*_zero_assigns_normal_part3` (2); downstream: `pool_init_call_arena_alloc_requires`, `pool_reset_call_arena_alloc_requires` (2) | An `ensures \result == (void*)(arena->base + \old(aligned_offset))` names the address. The own `fits_ensures_part*` goals are about `\valid` of that address and the offset arithmetic; whether they close depends on whether the difficulty was the opaque address or the `arena_can_fit` let-binding chain (VERIFY-009 block 5 — the block VERIFY-023 already showed was partly misattributed). The two pool call-site goals are `requires` at the call, i.e. `arena_can_fit` at pool's call site — those depend on pool's invariant, not on arena_alloc's result, and are **not** expected to move. |
+| 7 | `pool_get` | `in_bounds: \result != \null` — non-null, **not the address** | **none** in verified TUs (API only; tests) | none at #1298 — pool_get has no pinned residual | Adding `ensures \result == pool_slot_address(pool, i)` adds own goals; nothing downstream to close. If the new ensures does not prove, it becomes a *new* residual — the one outcome in this table that would move a pin upward. |
+| 8 | `borrowed_ptr_get` | **already stated**: `stored_result: \result == b->ptr` | none | none | Same as 4: pedantic list only. Nothing to add. |
+
+### What the evidence already says, before any prediction
+
+- Two of the eight (`bytes_at`, `borrowed_ptr_get`) are not the VERIFY-023
+  shape at all: their result is stated. The pedantic-assigns list is a list of
+  missing `\from` clauses, and VERIFY-023's closing note over-read it as a list
+  of unstated results. That over-reading is itself a small instance of §5.7's
+  mechanism (a symptom — the warning — taken for the cause).
+- One (`mem_alloc`) is a class-(b) feature gap whose result *cannot* be stated.
+- Three (`ptr_align_down`, `ptr_retreat`, `pool_get`) have no downstream
+  dependents in any verified unit. Stating their result can add goals and
+  cannot close any.
+- Two (`ptr_align_up`, `arena_alloc*`) are the only candidates, with 9 and
+  26 own goals respectively in range, plus the 2 pool call-site goals that
+  the mechanism predicts will *not* move.
+
+So the prediction this record can make is mostly "no", and that is what makes
+it a test: a lead that VERIFY-023 called "the same shape that just paid 24
+goals" resolves, on reading, to at most two functions and at most 35 goals,
+with a mechanism-level reason each of the other six will not pay.
+
+### Predictions (author — fill before committing)
+
+| function | prediction | goals expected to close (by name or family) | goals expected to be added | confidence |
+|----------|------------|---------------------------------------------|----------------------------|------------|
+| `ptr_align_up` | close | the 8 `arena_alloc{,_aligned}_call_ptr_span_requires{,_2,_3,_4}` (VERIFY-009 block 4, class e) — the direct dependents; the 18 `fits_ensures*_part{2,3,4}` and 4 `does_not_fit_*_part5` predicted NOT to close (fits chain + cast bridging, VERIFY-009 block 5, class a) | +1 own (nonnull ensures; +2 if split), same +1/+2 in every including TU | M — if the 8 close, S-block 4 covers nothing and retires |
+| `ptr_align_down` | no downstream change | — | +1 own | H |
+| `ptr_retreat` | no downstream change | — | +1 own | H |
+| `bytes_at` | not applicable — result already stated | — | 0 (no edit) | H |
+| `mem_alloc` | not applicable — feature gap | — | 0 (no edit) | H |
+| `arena_alloc*` | no downstream change; own: new ensures prove | none of the 26 existing own goals — they are the fits chain, not the address; `pool_init/pool_reset_call_arena_alloc_requires` are `arena_can_fit` at pool's call site and do not depend on the result | +4 own (one per variant), each predicted to prove *only if* row 1 lands first, since the address is `buffer + old offset + pad` and pad needs ptr_align_up stated | M |
+| `pool_get` | no downstream change; own ensures proves | — | +1 own, predicted to prove: the address is `ptr_elem(base, i, object_size)` and ptr_elem's result has been stated since VERIFY-023 | M |
+| `borrowed_ptr_get` | not applicable — result already stated | — | 0 (no edit) | H |
+
+**Committed order of edits.** `ptr_align_up` first (one header, one commit,
+cross-checked against the 9 arena goals over two hops); `arena_alloc*` second
+(one commit, four variants); `pool_get`, `ptr_align_down`, `ptr_retreat` third
+(one commit, expected to add goals and close none — the negative control).
+`bytes_at`, `mem_alloc`, `borrowed_ptr_get` are not edited.
+
+**Scoring.** VERIFY-027 reports, per row: predicted vs observed, by goal name,
+with the CI run number; and states whether the "at most two functions" reading
+of the lead held. Any goal that closes and is *not* in this table is a
+misattribution by this record and is reported as one.
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
