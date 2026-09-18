@@ -467,6 +467,9 @@ static inline usize align_padding(usize n, usize align) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
+        ensures  same_base: \base_addr((char*)\result) == \base_addr((char*)p);
+        ensures  not_below: (char*)\result >= (char*)p;
+        ensures  bounded:   (char*)\result - (char*)p <= (align - 1);
     complete behaviors;
     disjoint behaviors;
  */
