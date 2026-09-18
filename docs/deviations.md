@@ -4576,6 +4576,20 @@ with a mechanism-level reason each of the other six will not pay.
 | `pool_get` | no downstream change; own ensures proves | — | +1 own, predicted to prove: the address is `ptr_elem(base, i, object_size)` and ptr_elem's result has been stated since VERIFY-023 | M |
 | `borrowed_ptr_get` | not applicable — result already stated | — | 0 (no edit) | H |
 
+**Addendum, 2026-09-18, before any contract change (commit follows ac854e9).**
+Reading ptr_span's contract refines row 1. Its four requires, in WP's goal
+order, are \valid_read(to), \valid_read(from), same \base_addr, to >= from.
+Stating ptr_align_up's result can discharge the third and fourth; it cannot
+discharge the first, because when arena->offset == capacity the aligned
+pointer is at or past one-past-the-end and \valid_read of it is genuinely
+false — ptr_span only subtracts and its requires is stronger than its body
+needs (a ptr_span contract question, out of scope here). Refined prediction:
+of the 8 `*_call_ptr_span_requires*` goals, the four `_3`/`_4` close and the
+four `_requires`/`_requires_2` do not. The 22 fits/does_not_fit goals:
+unchanged prediction (do not close). The new ensures on ptr_align_up itself
+may be residual under the cast model (int→pointer round-trip), which would be
+a class-(c) trade: own goals opened to close call-site goals.
+
 **Committed order of edits.** `ptr_align_up` first (one header, one commit,
 cross-checked against the 9 arena goals over two hops); `arena_alloc*` second
 (one commit, four variants); `pool_get`, `ptr_align_down`, `ptr_retreat` third
