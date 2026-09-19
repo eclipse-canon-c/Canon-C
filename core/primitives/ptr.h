@@ -512,6 +512,9 @@ static inline void* ptr_align_up(void* p, usize align) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
+        ensures  same_base: \base_addr((char*)\result) == \base_addr((char*)p);
+        ensures  not_above: (char*)\result <= (char*)p;
+        ensures  bounded:   (char*)p - (char*)\result <= (align - 1);
     complete behaviors;
     disjoint behaviors;
  */
@@ -757,6 +760,7 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
+        ensures  address: (char*)\result == (char*)p - n;
     complete behaviors;
     disjoint behaviors;
  */

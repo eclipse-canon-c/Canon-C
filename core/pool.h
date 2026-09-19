@@ -442,6 +442,8 @@ static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
   behavior in_bounds:
     assumes pool != \null && pool->arena != \null && i < pool->used;
     ensures \result != \null;
+    ensures address: (u8*)\result ==
+        pool->arena->buffer + pool->base_mark + i * pool->object_size;
   complete behaviors;
   disjoint behaviors;
 */
