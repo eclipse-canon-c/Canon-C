@@ -4807,6 +4807,103 @@ the honest prediction for its own goals is "may be residual on any part that
 touches the cast model", not "prove". That refinement is committed here,
 before the edit.
 
+### Row 3 — ptr_align_down, ptr_retreat, pool_get: the negative control (scored 2026-09-19)
+
+| Field | Value |
+|-------|-------|
+| **Change** | b28cab4: three `ensures` in `ptr_align_down`'s `nonnull` behavior (mirror of row 1), one `address:` ensures on `ptr_retreat`, one `address:` ensures in `pool_get`'s `in_bounds` behavior. Contract only. |
+| **Baseline** | the run after 5ab66ba (row 2 ratchet), ptr.h 13 / arena 76 / pool 88 |
+| **Predicted** | VERIFY-026: no dependents in any verified unit, so 0 close anywhere; own goals added. Refined in the row-2 section: any part touching the cast model may be residual. |
+
+**Observed.**
+
+| function | goals added | proved | residual |
+|---|---|---|---|
+| `ptr_align_down` | 6 (3 ensures × 2 parts) | 3 (`part1`) | 3 (`part2`): `same_base`, `not_above`, `bounded` — the exact mirror of row 1 |
+| `ptr_retreat` | 2 | 2 | 0 — the body is pointer arithmetic; same shape as ptr_elem in VERIFY-023 |
+| `pool_get` | 4 | 4 | 0 — the address `buffer + base_mark + i·object_size` is derived through `ptr_offset` and `ptr_elem`, both of which have stated their result since VERIFY-023 |
+
+**0 closed anywhere.** The three `ptr_align_down` residuals propagated +3 to
+every TU whose closure contains ptr.h — ptr 13→16, memory 46→49, arena
+76→79, arena-32 76→79 (set-identical), pool 88→91, region 99→102, vec
+181→184, bitset 166→169, priority_queue 74→77. Pool's own residue stayed at
+12 while its own four new goals all proved.
+
+| prediction | verdict |
+|---|---|
+| no downstream closure (negative control) | **CONFIRMED**, nine of nine units |
+| own goals: cast-model parts may be residual | **CONFIRMED** for align_down (3 of 6), and the proving half is the same `part1` half as align_up |
+| pool_get's ensures proves via ptr_elem's stated result | **CONFIRMED** — a two-hop chain of stated results discharged with no lemma |
+| ptr_retreat proves | confirmed |
+
+The negative control is what makes rows 1 and 2 readable: the same kind of
+edit, on functions with no dependents, moved nothing downstream. Row 1's 13
+closures were therefore caused by the dependency, not by the edit.
+
+**A prover-noise instance, logged.** The vec job's summary listed no CVC5
+discharges in this run (Alt-Ergo 549, Z3 68, CVC5 absent) and the advisory
+check printed "CVC5 does not appear in WP output". vec's residual set moved
+by exactly the +3 every other unit moved by; which solver reached each proved
+goal first is scheduling. This is P5 of the paper, observed on the largest
+unit, and the reason open item 20 keeps that check advisory.
+
+**Δ*A* = 0.** The three `ptr_align_down` residuals are covered by the same
+argument as row 1's three (memory.h category 2, bitwise alignment through
+casts, VERIFY-008). Coverage recorded here.
+
+---
+
+### VERIFY-026 closed: what the eight-function pre-registration measured
+
+Three contract commits (fb3dc58, the row-2 commit, b28cab4), three scoring
+sections, all predictions on record before the corresponding edit.
+
+| row | functions | closed | opened | own predicted right? | downstream predicted right? |
+|---|---|---|---|---|---|
+| 1 | ptr_align_up | 13 (4 predicted, 9 not) | 3 | no — 9 `fits_ensures` misattributed to the chain | partly — the 4 `ptr_span` and the 4 `\valid_read` exactly as the addendum said |
+| 2 | arena_alloc ×4 | 0 | 3 | no — "prove" predicted, 3 residual | yes — 0 |
+| 3 | ptr_align_down, ptr_retreat, pool_get | 0 | 3 | yes | yes — 0 |
+| — | bytes_at, mem_alloc, borrowed_ptr_get | not edited | — | (evidence table: not the VERIFY-023 shape) | — |
+
+**Net across the campaign's residue:** 13 closed, 9 opened, all 9 opened
+under existing arguments; Δ*A* = 0 over three ratchets.
+
+**What the lead was worth.** VERIFY-023's closing note named eight functions
+as "the same shape that just paid 24 goals". Reading them before editing
+resolved that to two candidates and one of those paid. The pedantic-assigns
+list, which the note took as a list of unstated results, is a list of missing
+`\from` clauses; the warning still prints for every function whose result is
+now stated. A lead is not a prediction, and this record's evidence table is
+what turning one into the other looks like: six of eight rows predicted "no"
+with a mechanism each, and all six held.
+
+**What the record got wrong, in its own words.** Row 1 under-predicted (9
+goals closed that it said would not — a misattribution of those goals to the
+`arena_can_fit` chain). Row 2 over-predicted its own side (the address
+ensures were said to prove; three parts did not, for the same chain). The
+two errors are the same error from opposite directions: the boundary of
+VERIFY-009 block 5 — which goals are the chain and which are the opaque
+pointer — was drawn wrong in both predictions, and the runs redrew it. Block
+5 now covers exactly: the nine `fits_ensures*_part4`, the three
+aligned-variant `part3`, and the three `address` parts of row 2 — fifteen
+goals, all `part3`/`part4`, none of them about a callee's result.
+
+**Retirement check, requested by VERIFY-027 §5.5 and answered here.**
+S-block 4 (ptr_span cascade, VERIFY-009 cat 2a, originally 8 goals) now
+covers 4: `arena_alloc{,_aligned}_call_ptr_span_requires{,_2}`, the
+`\valid_read` pair on each variant. It is not empty and is not retired; the
+remaining four are a ptr_span contract question (its requires is stronger
+than its body needs), which is out of scope for this record and belongs in
+VERIFY-006.
+
+**Three CI facts, for §7.** pq's inherited baseline moved by itself all
+three times, because it is derived from memory's array at run time. arena-32's
+duplicate was hand-edited all three times. And every one of the three runs
+was red on exactly the units the include DAG says it should be, and green on
+the rest — the DAG was checked nine times by accident.
+
+**Numbers are now at the run that ratchets row 3.** The paper re-bases there.
+
 ### Next
 
 Row 2, `arena_alloc*`: state the address `(u8*)\result == (u8*)arena->buffer + \old(arena->offset) + pad` — expressible now that ptr_align_up's result bounds `pad`. Prediction stands as written in VERIFY-026 (no downstream change; the two pool call-site goals do not move; the four new ensures prove or become own residuals). One commit, one run, one scoring section appended here.
