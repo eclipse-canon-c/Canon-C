@@ -4748,6 +4748,65 @@ audit can check it.
   covers 12, not the 21 it was written for. Neither retires yet.
 - Numbers are at #1300 until row 2 lands.
 
+### Row 2 — arena_alloc* state their result (scored 2026-09-19)
+
+| Field | Value |
+|-------|-------|
+| **Change** | one `address:` ensures in the `fits` behavior of `arena_alloc` and `arena_alloc_aligned`; a guarded form on `arena_alloc_zero` and `arena_alloc_aligned_zero`. Post-state phrasing: `(u8*)\result == (u8*)arena->buffer + (arena->offset - size)`, which needs no `pad` term. Contract only. |
+| **Measured at** | the run after 2d308ae (VERIFY-027 commit); ratcheted at the run after |
+| **Baseline** | CI #1300, arena 73 |
+
+**Observed.** arena.h 3533 → 3547 goals (+14: the two allocator ensures split
+four ways each, the two wrapper ensures three ways each). Residuals 73 → 76:
+**0 closed, 3 new** — `arena_alloc_fits_ensures_address_part4`,
+`arena_alloc_aligned_fits_ensures_address_part3`,
+`arena_alloc_aligned_fits_ensures_address_part4`. The other eleven parts
+proved, including all six on the zero wrappers.
+
+| prediction (VERIFY-026 row 2) | observed | verdict |
+|---|---|---|
+| no downstream change | pool, region, vec: 0 closed; pool's own 12 unchanged; `pool_init/pool_reset_call_arena_alloc_requires` still residual | **CONFIRMED** |
+| +4 own, "each predicted to prove *only if* row 1 lands first" | +14 goals; 11 prove; 3 residual on the allocators' `address` clause; row 1 had landed | **REFUTED on own** |
+| wrappers inherit via delegation | 6/6 prove | confirmed |
+| width invariance | arena-32 set-identical at 76 | confirmed |
+
+**Propagation.** +3 in every TU whose closure contains arena.h (pool 85→88,
+region 96→99, vec 178→181); no change in any TU that does not. Unit gain,
+addition only.
+
+**What the split says, again.** The three residual parts are `part4` on both
+variants and `part3` on the user-alignment variant — the identical fingerprint
+VERIFY-027 read off the `fits_ensures` family after row 1. The address clause
+is therefore blocked by the same obstacle as the existing `fits` postconditions,
+the `arena_can_fit` chain (VERIFY-009 block 5, class a), and is covered by that
+block. Δ*A* = 0. No new argument; coverage recorded here.
+
+**Why nothing closed, stated so the next lead is read correctly.** VERIFY-023
+closed 24 and row 1 closed 13 because a callee's *unstated result* was feeding
+a *caller's call-site precondition* — the caller could not establish
+`requires` it needed at the call. arena_alloc's callers (pool_init,
+pool_reset, vec_int_arena_alloc) have no residual of that shape: their
+residuals are `arena_can_fit` at the call site, which depends on the caller's
+invariant, not on where the result points. VERIFY-026's own evidence table
+said exactly this, and then predicted the new ensures would prove anyway,
+which was a prediction about the *own* side that the evidence did not
+support. Stating a result pays only where a dependent call site is waiting
+for it; row 2 had none, and the record should have predicted zero on both
+sides.
+
+**Net for the pre-registration so far.** Two rows scored: row 1 closed 13 for
+3 opened with one misattribution against the record; row 2 closed 0 for 3
+opened with one direction wrong. Both predicted "no downstream change" on
+pool's call-site goals correctly. The ptr_span `\valid_read` pair and the
+`fits` chain are now the two named residual mechanisms in arena, and neither
+is an unstated result.
+
+**Next.** Row 3 (`pool_get`, `ptr_align_down`, `ptr_retreat`) is the negative
+control: no dependents, predicted to add goals and close none. Given row 2,
+the honest prediction for its own goals is "may be residual on any part that
+touches the cast model", not "prove". That refinement is committed here,
+before the edit.
+
 ### Next
 
 Row 2, `arena_alloc*`: state the address `(u8*)\result == (u8*)arena->buffer + \old(arena->offset) + pad` — expressible now that ptr_align_up's result bounds `pad`. Prediction stands as written in VERIFY-026 (no downstream change; the two pool call-site goals do not move; the four new ensures prove or become own residuals). One commit, one run, one scoring section appended here.
