@@ -4601,6 +4601,157 @@ with the CI run number; and states whether the "at most two functions" reading
 of the lead held. Any goal that closes and is *not* in this table is a
 misattribution by this record and is reported as one.
 
+## VERIFY-027: Scoring VERIFY-026 Row 1 — ptr_align_up States Its Result, Thirteen Arena Goals Close, and the Pre-registration Misattributed Nine of Them
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-027 |
+| **Date**       | 2026-09-19 |
+| **Status**     | SCORED — pins ratcheted at CI #1300 (4ef4270), green |
+| **Prediction** | VERIFY-026, commit ac854e9 (2026-09-18 11:33) and addendum e90ee71 (11:35) |
+| **Change**     | fb3dc58 (11:36): three `ensures` in `ptr_align_up`'s `nonnull` behavior; contract only, token stream unchanged |
+| **Measured at**| CI #1299 (fb3dc58); ratcheted and re-confirmed at CI #1300 |
+| **Scope**      | Row 1 of eight. Rows 2–3 (arena_alloc*, pool_get) pending; rows for ptr_align_down, ptr_retreat pending as negative controls; bytes_at, mem_alloc, borrowed_ptr_get not edited |
+
+**Why this record matters more than its 13 goals.** It is the campaign's
+first *prospective* misattribution measurement. VERIFY-023 found 24
+misattributed obligations after the fact; VERIFY-026 committed a prediction
+by goal name before a contract was touched, and this record scores it. The
+prediction was right about the mechanism it named and wrong about the one
+it ruled out. Both halves are reported.
+
+### The change, exactly
+
+```
+    behavior nonnull:
+        assumes p != \null;
+        ensures  same_base: \base_addr((char*)\result) == \base_addr((char*)p);
+        ensures  not_below: (char*)\result >= (char*)p;
+        ensures  bounded:   (char*)\result - (char*)p <= (align - 1);
+```
+
+Pointer-level, phrased as what `ptr_span` needs at the call site rather than
+as the integer alignment formula, whose bitwise form is memory.h's class-(a)
+shape and would prove nothing downstream.
+
+### Scoring, clause by clause
+
+| # | prediction (VERIFY-026 + addendum) | observed at #1299 | verdict |
+|---|------------------------------------|-------------------|---------|
+| 1 | `arena_alloc{,_aligned}_call_ptr_span_requires_{3,4}` close (same base, ordering) | all four closed | **CONFIRMED** |
+| 2 | `_requires`, `_requires_2` (the two `\valid_read`s) do not close — genuinely false at capacity | all four still residual | **CONFIRMED** |
+| 3 | the 18 `fits_ensures*_part{2,3,4}` do not close — "fits chain + cast bridging, VERIFY-009 block 5, class (a)" | **9 of 18 closed**: all six `part2` (both variants × three ensures) and `arena_alloc`'s three `part3`. The nine `part4` and `arena_alloc_aligned`'s three `part3` remain | **REFUTED, partially** |
+| 4 | the 4 `does_not_fit_*_part5` do not close | all four residual | CONFIRMED |
+| 5 | +1 own goal on ptr_align_up (+2 if split), per including TU | +6 goals per TU (3 ensures × 2 parts); the three `part1` prove, the three `part2` are residual | CONFIRMED, count under-estimated |
+| 6 | the new ensures may themselves be residual under the cast model (addendum) | they are: `same_base_part2`, `not_below_part2`, `bounded_part2` time out in every TU | CONFIRMED |
+| 7 | pool's `pool_init/pool_reset_call_arena_alloc_requires` do not move (they are `arena_can_fit` at pool's call site) | both still residual; pool's own 12 unchanged | CONFIRMED |
+| 8 | (implicit, §3 of the paper) closures and additions propagate at unit gain over the include DAG | see propagation table | CONFIRMED |
+
+Net: **13 closed for 3 opened**, one hop deeper than the change.
+
+### The misattribution — by this record's predecessor
+
+VERIFY-026 wrote, of the 18 `fits_ensures` goals: "predicted NOT to close
+(fits chain + cast bridging, VERIFY-009 block 5, class a)". Nine of them
+closed the moment `ptr_align_up`'s result was stated. Those nine were
+therefore never about the `arena_can_fit` let-binding chain; they were the
+opaque aligned pointer feeding `pad`, i.e. the same VERIFY-023 shape the
+record had correctly identified for the `ptr_span` goals and then explicitly
+excluded for these. In §3's terms: nine obligations were covered by an
+argument (block 5, arithmetic) that did not apply to them; the applicable
+argument was block 4 (cascade from an unstated result).
+
+This is the third misattribution finding in the campaign and the first
+made prospectively: the prediction is in `ac854e9`, the refutation in
+CI #1299, and nothing in between could have been adjusted. It also refines
+VERIFY-023's lesson. The cause there was "inferred from a symptom, not traced
+to the goal". Here the cause *was* traced — to the body of `arena_alloc`,
+where `aligned_ptr` is visibly not the result — and the trace still stopped
+one step short: `pad` is computed *from* `aligned_ptr`, and `offset += pad`
+is what the `fits` postconditions constrain. A trace that stops at the first
+plausible cause is the same error as no trace, with better paperwork.
+
+What the split says. The `part2` halves closed on **both** variants and the
+`part3` halves only on plain `arena_alloc`: the default-alignment case is
+now determined end to end, the user-supplied `alignment` case is not, and
+`part4` on both is the chain proper. So VERIFY-009 block 5 covers, after
+this record, exactly the twelve goals that survive — nine `part4` and three
+aligned `part3` — and the block's own text should say so. [Do this edit in
+VERIFY-009, not here; this record reports, it does not re-argue.]
+
+### Propagation — the eleventh edge measurement, and the third at unit gain
+
+| unit | includes arena.h | goals | residuals | closed | new | own moved |
+|------|------------------|-------|-----------|--------|-----|-----------|
+| ptr.h | — | 1959 → 1965 | 10 → 13 | 0 | 3 (own) | — |
+| memory.h | no | 2872 → 2878 | 43 → 46 | 0 | 3 | 0 |
+| arena.h | own | 3527 → 3533 | 83 → 73 | 13 (own) | 3 | −13 |
+| arena.h @ 32-bit | own | 3527 → 3533 | 83 → 73 | 13 | 3 | set-identical to 64-bit |
+| pool.h | yes | 4009 → 4015 | 95 → 85 | 13 | 3 | 0 (12 unchanged) |
+| region.h | yes | 3698 → 3704 | 106 → 96 | 13 | 3 | 0 (23 unchanged) |
+| vec | yes | 5473 → 5479 | 188 → 178 | 13 | 3 | 0 (53 own, 20 fresh unchanged) |
+| bitset | no | 5008 → 5014 | 163 → 166 | 0 | 3 | 0 |
+| priority_queue.h | no | 4584 → 4590 | 71 → 74 | 0 | 3 | 0 |
+
+Every unit whose closure contains `ptr.h` gained exactly the three new
+names; every unit whose closure contains `arena.h` lost exactly arena's
+thirteen; six units that include neither (slice, borrow, deque, diag,
+option, result, compare, error, checked, bits, lifetime) did not run red.
+The six goals added to each TU are the three ensures split in two. Width
+invariance held: the 32-bit set is byte-identical to the 64-bit set after
+the change, as before it.
+
+Two gate observations for §7 of the paper. priority_queue's inherited
+baseline is derived from memory's `CHECKS` at run time, so the ratchet
+touched only memory's array and pq's parse-count guard (43 → 46); the
+job moved by itself. arena-32's embedded duplicate had to be edited by hand
+(−13, +3), which is the gap §7 already reports and this ratchet exercised
+again.
+
+### A finding about the lead itself
+
+WP still prints `[wp:pedantic-assigns] No 'assigns \result \from ...'
+specification for function 'ptr_align_up'` after the three `ensures` were
+added. Stating the result does not silence the warning, because the warning
+is about a `\from` frame clause, not about a postcondition. VERIFY-023's
+closing note read the pedantic list as "eight functions whose result is
+unstated"; two of the eight (`bytes_at`, `borrowed_ptr_get`) already stated
+their result, and this run confirms the two things are independent. The
+list was a lead for a different property than the one it was taken for.
+It still led to 13 goals; the mechanism that closed them was reading the
+contract and the body, which is VERIFY-022's method note, again.
+
+### The trade, stated
+
+Three own goals opened on `ptr_align_up` (class (c): a specification whose
+truth WP cannot establish through the int→pointer round-trip under
+Typed+Cast) to close thirteen call-site and postcondition goals in arena and
+its dependents. The three are true — `align_up` returns the smallest
+multiple of `align` at or above its argument, and the pointer round-trip
+preserves the object — and are argued under the existing class-(a)/(c)
+arithmetic argument in VERIFY-009, not a new one. Δ*A* = 0 for this change.
+
+**Manual proof argument** for the three: none new. They are instances of
+memory.h category 2 (bitwise alignment through casts, VERIFY-008) at a new
+site; that block's argument covers them. Coverage recorded here so the next
+audit can check it.
+
+### What this does to the paper
+
+- §5.7 gains its first prospective row: 9 of 18 predicted-not-to-close
+  closed; predicted-to-close closed 4/4; predicted-not-to-close on the
+  `\valid_read` pair confirmed 4/4.
+- Table 3 gains P10: "Upstream addition + closure, pre-registered — +3 in
+  every TU including ptr.h, −13 in every TU including arena.h, unit gain,
+  up to four hops, width-invariant."
+- The S-block 4 (ptr_span cascade) now covers 4 obligations, not 8; block 5
+  covers 12, not the 21 it was written for. Neither retires yet.
+- Numbers are at #1300 until row 2 lands.
+
+### Next
+
+Row 2, `arena_alloc*`: state the address `(u8*)\result == (u8*)arena->buffer + \old(arena->offset) + pad` — expressible now that ptr_align_up's result bounds `pad`. Prediction stands as written in VERIFY-026 (no downstream change; the two pool call-site goals do not move; the four new ensures prove or become own residuals). One commit, one run, one scoring section appended here.
+
 ## MCDC-001: Coverage Flags Methodology
 
 | Field          | Value |
