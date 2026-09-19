@@ -331,6 +331,7 @@ static inline void arena_reset_secure(Arena* arena) {
     assumes size > 0;
     assumes arena_can_fit(arena, size, CANON_DEFAULT_ALIGN);
     ensures \result != \null;
+    ensures address: (u8*)\result == (u8*)arena->buffer + (arena->offset - size);
     ensures \valid((u8*)\result + (0 .. size - 1));
     ensures arena->offset >= \old(arena->offset) + size;
     ensures arena->offset <= arena->capacity;
@@ -384,6 +385,7 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     assumes size > 0;
     assumes arena_can_fit(arena, size, alignment);
     ensures \result != \null;
+    ensures address: (u8*)\result == (u8*)arena->buffer + (arena->offset - size);
     ensures \valid((u8*)\result + (0 .. size - 1));
     ensures arena->offset >= \old(arena->offset) + size;
     ensures arena->offset <= arena->capacity;
@@ -437,6 +439,8 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
   ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
   ensures \result != \null ==>
       \forall integer i; 0 <= i < size ==> ((u8*)\result)[i] == 0;
+  ensures \result != \null ==>
+      (u8*)\result == (u8*)arena->buffer + (arena->offset - size);
 */
 static inline void* arena_alloc_zero(Arena* arena, usize size) {
     void* p = arena_alloc(arena, size);
@@ -452,6 +456,8 @@ static inline void* arena_alloc_zero(Arena* arena, usize size) {
   ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
   ensures \result != \null ==>
       \forall integer i; 0 <= i < size ==> ((u8*)\result)[i] == 0;
+  ensures \result != \null ==>
+      (u8*)\result == (u8*)arena->buffer + (arena->offset - size);
 */
 static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize alignment) {
     void* p = arena_alloc_aligned(arena, size, alignment);
