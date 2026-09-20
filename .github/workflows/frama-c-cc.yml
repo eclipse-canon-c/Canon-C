@@ -129,9 +129,14 @@ jobs:
           grep -E '^\[wp\] \[(Timeout|Unknown)\] ' "${OUT}" | awk '{print $3}' | sort -u > /tmp/cc_resid.txt
           echo "  Total unproved (T+U): $(wc -l < /tmp/cc_resid.txt)"
 
-          # baseline: the driver job's CHECKS array, first one after the job header
+          # baseline: every roll-call array in the driver job. Most jobs keep one
+          # CHECKS=( ... ); borrow keeps INHERITED=( 17 ) and OWN_CHECKS=( 2 ).
+          # Union them all, bounded to the job's own section of the workflow.
           START=$(grep -n "^  ${JOB}:" "${WF}" | head -1 | cut -d: -f1)
-          awk -v s="${START}" 'NR>=s && /CHECKS=\(/ {f=1} f {print} f && /^ *\)/ {exit}' "${WF}" \
+          END=$(awk -v s="${START}" 'NR>s && /^  [a-z0-9-]+:$/ {print NR; exit}' "${WF}")
+          [ -z "${END}" ] && END=$(wc -l < "${WF}")
+          sed -n "${START},${END}p" "${WF}" \
+            | awk '/(CHECKS|INHERITED)=\(/ {f=1} f {print} f && /^ *\)/ {f=0}' \
             | grep -o '"typed[a-z_]*_[^"]*"' | tr -d '"' | sort -u > /tmp/drv_checks.txt
           PIN_N=$(wc -l < /tmp/drv_checks.txt)
           EXPECTED=$(awk -v s="${START}" 'NR>=s && /EXPECTED_UNPROVED=/ {print; exit}' "${WF}" | grep -o '[0-9]*')
