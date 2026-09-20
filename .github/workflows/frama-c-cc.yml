@@ -1,0 +1,170 @@
+name: Canon-C CC (VERIFY-025)
+
+# ---------------------------------------------------------------------------
+# What this workflow is
+#
+# VERIFY-025 showed that ACSL inside macro bodies survives preprocessing under
+# `cpp -CC` (GCC keeps comments through macro expansion) and that Frama-C 29
+# attaches the collapsed contract to the instantiated function. The contracts
+# for six macro families now live in the DEFINE_*/IMPL_* macros themselves.
+#
+# The main workflow's driver jobs (frama-c-{slice,result,option,borrow,vec,
+# deque}) still run under the default `-C`, where macro-body annotations are
+# invisible, so they verify the OLD prototype contracts in *_verify.h. This
+# workflow verifies the NEW macro-body contracts through the bare
+# *_cc_experiment.h drivers (struct + functions, no prototypes, no contracts)
+# under `-CC`, and diffs the residual set by name against the enforced
+# driver pin.
+#
+# MODE: REPORT-ONLY. Nothing here fails the build. The promotion protocol
+# (docs/verification.md) applies: name-stability across repeated runs, then
+# an acknowledged commit that pins count + proved line + roll-call and flips
+# ENFORCE to 1. The baseline this job diffs against is read from the main
+# workflow's CHECKS arrays at run time, never copied.
+#
+# Flags per family are the driver job's flags plus `-CC`; the memory model is
+# the family's home model (Typed for result/option/deque, Typed+Cast for
+# slice/borrow/vec). Any difference in the residual set is therefore
+# attributable to the contract surface — the prototype set vs the macro-body
+# set — and nothing else.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'core/**'
+      - 'semantics/**'
+      - 'data/**'
+      - 'vmacros/vdrivers/*_cc_experiment.h'
+      - '.github/workflows/frama-c-cc.yml'
+      - '.github/actions/framac-setup/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frama-c-cc:
+    name: frama-c-cc-${{ matrix.family }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.budget }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { family: slice,  model: "Typed+Cast", budget: 120, driver_job: frama-c-slice  }
+          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result }
+          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option }
+          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow }
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec    }
+          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque  }
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/framac-setup
+
+      - name: "Positive control: does -CC actually reach the macro bodies?"
+        shell: bash
+        run: |
+          # If -CC is not taking effect, the bare driver has no contracts at
+          # all and WP would verify nothing but RTE guards. Check that the
+          # preprocessed TU contains at least one ACSL block that is NOT in a
+          # prototype (i.e. survives expansion inside a function definition).
+          DRV="vmacros/vdrivers/${{ matrix.family }}_cc_experiment.h"
+          N=$(gcc -E -CC -I core/primitives -I core -I semantics -I data -I . \
+                -DCANON_NO_REQUIRE -DNDEBUG -x c "${DRV}" 2>/dev/null \
+              | grep -c '/\*@' || true)
+          echo "ACSL blocks visible after -CC preprocessing: ${N}"
+          if [ "${N}" -lt 1 ]; then
+            echo "FAIL: -CC produced no ACSL blocks in the preprocessed TU."
+            echo "      The instrument is not measuring what it claims to; stop."
+            exit 1
+          fi
+          echo "CONTROL ESTABLISHED — the comparison below is meaningful."
+
+      - name: "WP under -CC: ${{ matrix.family }} (macro-body contracts, bare driver)"
+        shell: bash
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model "${{ matrix.model }}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            "vmacros/vdrivers/${{ matrix.family }}_cc_experiment.h" \
+            2>&1 | tee "wp_cc_${{ matrix.family }}_output.txt"
+          echo "WP_EXIT=${PIPESTATUS[0]}" >> "$GITHUB_ENV"
+          set -e
+
+      - name: "Report: residual diff against the enforced driver pin (read at run time)"
+        shell: bash
+        run: |
+          OUT="wp_cc_${{ matrix.family }}_output.txt"
+          WF=".github/workflows/cmake-multi-platform.yml"
+          FAM="${{ matrix.family }}"
+          JOB="${{ matrix.driver_job }}"
+
+          echo "==============================================================="
+          echo "  -CC (${FAM}) — VERIFY-025 — REPORT-ONLY"
+          echo "  frama-c exit: ${WP_EXIT}   model: ${{ matrix.model }}"
+          echo "==============================================================="
+          PROVED=$(grep -E '^\[wp\] Proved goals:' "${OUT}" | tail -1)
+          echo "  ${PROVED}"
+          FAILED=$(grep -cE '^\[wp\] \[(Failed|Invalid|Stepout)\]' "${OUT}" || true)
+          echo "  Failed/Invalid/Stepout: ${FAILED}   <-- any nonzero here is a REAL finding"
+
+          # observed residuals
+          grep -E '^\[wp\] \[(Timeout|Unknown)\] ' "${OUT}" | awk '{print $3}' | sort -u > /tmp/cc_resid.txt
+          echo "  Total unproved (T+U): $(wc -l < /tmp/cc_resid.txt)"
+
+          # baseline: the driver job's CHECKS array, first one after the job header
+          START=$(grep -n "^  ${JOB}:" "${WF}" | head -1 | cut -d: -f1)
+          awk -v s="${START}" 'NR>=s && /CHECKS=\(/ {f=1} f {print} f && /^ *\)/ {exit}' "${WF}" \
+            | grep -o '"typed[a-z_]*_[^"]*"' | tr -d '"' | sort -u > /tmp/drv_checks.txt
+          PIN_N=$(wc -l < /tmp/drv_checks.txt)
+          EXPECTED=$(awk -v s="${START}" 'NR>=s && /EXPECTED_UNPROVED=/ {print; exit}' "${WF}" | grep -o '[0-9]*')
+          echo "  driver pin (${JOB}): ${PIN_N} names, EXPECTED_UNPROVED=${EXPECTED}"
+          if [ -z "${EXPECTED}" ] || [ "${PIN_N}" -ne "${EXPECTED}" ]; then
+            echo "  WARNING: parsed ${PIN_N} names but the driver job pins ${EXPECTED};"
+            echo "           the run-time extraction disagrees with the count — treat"
+            echo "           the diff below as advisory until this is resolved."
+          fi
+
+          echo
+          echo "  --- Pinned under the driver (-C), NOT residual under -CC (closed) ---"
+          comm -23 /tmp/drv_checks.txt /tmp/cc_resid.txt | sed 's/^/    /'
+          echo "  count: $(comm -23 /tmp/drv_checks.txt /tmp/cc_resid.txt | wc -l)"
+          echo
+          echo "  --- Residual under -CC, NOT pinned under the driver (new) ---"
+          comm -13 /tmp/drv_checks.txt /tmp/cc_resid.txt | sed 's/^/    /'
+          echo "  count: $(comm -13 /tmp/drv_checks.txt /tmp/cc_resid.txt | wc -l)"
+          echo
+          echo "  --- Present in both ---"
+          echo "  count: $(comm -12 /tmp/drv_checks.txt /tmp/cc_resid.txt | wc -l)"
+          echo
+          echo "  Full -CC residual list (name-stability record):"
+          sed 's/^/    /' /tmp/cc_resid.txt
+          echo "==============================================================="
+          echo "  REPORT-ONLY: no gate. Promotion requires name-stability across"
+          echo "  repeated runs, then an acknowledged commit pinning count, proved"
+          echo "  line and roll-call, and a diff record in docs/deviations.md."
+          echo "==============================================================="
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: wp-cc-${{ matrix.family }}
+          path: wp_cc_${{ matrix.family }}_output.txt
+          retention-days: 90
