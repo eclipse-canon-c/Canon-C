@@ -879,18 +879,21 @@ boundary functions whose `nonnull` behavior carries no `ensures` clause
 arithmetic-chain residual at arena_alloc / arena_alloc_aligned. Cat 2c
 inherits from cat 2b through wrapper delegation.
 
-#### Category 2a: ptr_span call-site preconditions in arena_alloc / arena_alloc_aligned (8)
+#### Category 2a: ptr_span call-site preconditions in arena_alloc / arena_alloc_aligned (4 — was 8)
 
 | # | Goal                                                      |
 |---|------------------------------------------------------------|
-| 1 | `typed_cast_arena_alloc_call_ptr_span_requires`            |
-| 2 | `typed_cast_arena_alloc_call_ptr_span_requires_2`          |
-| 3 | `typed_cast_arena_alloc_call_ptr_span_requires_3`          |
-| 4 | `typed_cast_arena_alloc_call_ptr_span_requires_4`          |
-| 5 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires`    |
-| 6 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_2`  |
-| 7 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_3`  |
-| 8 | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_4`  |
+| 1  | `typed_cast_arena_alloc_call_ptr_span_requires`            |
+| 2  | `typed_cast_arena_alloc_call_ptr_span_requires_2`          |
+| 3  | `typed_cast_arena_alloc_aligned_call_ptr_span_requires`    |
+| 4  | `typed_cast_arena_alloc_aligned_call_ptr_span_requires_2`  |
+**Coverage update (2026-09-21, VERIFY-026 row 1 / VERIFY-027).** The four
+`_requires_3` / `_requires_4` goals (same `\base_addr`, `to >= from`) closed
+at CI #1299 when `ptr_align_up` stated its result. The four that remain are the
+two `\valid_read` requires per variant, which are genuinely false when
+`arena->offset == capacity` (the aligned pointer is one-past-the-end and
+`ptr_span` only subtracts): a `ptr_span` contract question, tracked in
+VERIFY-006. This block covers 4 goals; the argument below is unchanged.
 
 **Functions affected**: `arena_alloc`, `arena_alloc_aligned`.
 
@@ -933,36 +936,42 @@ The C semantics match ptr_span's preconditions exactly; the proof
 obstacle is WP's inability to track this through the uintptr_t casts
 in ptr_align_up's body. Same root cause as VERIFY-006 cat 3.
 
-#### Category 2b: arena_alloc / arena_alloc_aligned fits / does_not_fit ensures (26)
+#### Category 2b: arena_alloc / arena_alloc_aligned fits / does_not_fit ensures (16 — was 26)
 
 | #  | Goal                                                                     |
 |----|--------------------------------------------------------------------------|
-| 1  | `typed_cast_arena_alloc_fits_ensures_part2`                              |
-| 2  | `typed_cast_arena_alloc_fits_ensures_part3`                              |
-| 3  | `typed_cast_arena_alloc_fits_ensures_part4`                              |
-| 4  | `typed_cast_arena_alloc_fits_ensures_part5`                              |
-| 5  | `typed_cast_arena_alloc_fits_ensures_2_part2`                            |
-| 6  | `typed_cast_arena_alloc_fits_ensures_2_part3`                            |
-| 7  | `typed_cast_arena_alloc_fits_ensures_2_part4`                            |
-| 8  | `typed_cast_arena_alloc_fits_ensures_2_part5`                            |
-| 9  | `typed_cast_arena_alloc_fits_ensures_3_part2`                            |
-| 10 | `typed_cast_arena_alloc_fits_ensures_3_part3`                            |
-| 11 | `typed_cast_arena_alloc_fits_ensures_3_part4`                            |
-| 12 | `typed_cast_arena_alloc_does_not_fit_ensures_part5`                      |
-| 13 | `typed_cast_arena_alloc_does_not_fit_ensures_2_part5`                    |
-| 14 | `typed_cast_arena_alloc_aligned_fits_ensures_part2`                      |
-| 15 | `typed_cast_arena_alloc_aligned_fits_ensures_part3`                      |
-| 16 | `typed_cast_arena_alloc_aligned_fits_ensures_part4`                      |
-| 17 | `typed_cast_arena_alloc_aligned_fits_ensures_part5`                      |
-| 18 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part2`                    |
-| 19 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part3`                    |
-| 20 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part4`                    |
-| 21 | `typed_cast_arena_alloc_aligned_fits_ensures_2_part5`                    |
-| 22 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part2`                    |
-| 23 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part3`                    |
-| 24 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part4`                    |
-| 25 | `typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5`              |
-| 26 | `typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5`            |
+| 1  | `typed_cast_arena_alloc_fits_ensures_part4`                              |
+| 2  | `typed_cast_arena_alloc_fits_ensures_2_part4`                            |
+| 3  | `typed_cast_arena_alloc_fits_ensures_3_part4`                            |
+| 4  | `typed_cast_arena_alloc_does_not_fit_ensures_part5`                      |
+| 5  | `typed_cast_arena_alloc_does_not_fit_ensures_2_part5`                    |
+| 6  | `typed_cast_arena_alloc_aligned_fits_ensures_part3`                      |
+| 7  | `typed_cast_arena_alloc_aligned_fits_ensures_part4`                      |
+| 8  | `typed_cast_arena_alloc_aligned_fits_ensures_2_part3`                    |
+| 9  | `typed_cast_arena_alloc_aligned_fits_ensures_2_part4`                    |
+| 10 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part3`                    |
+| 11 | `typed_cast_arena_alloc_aligned_fits_ensures_3_part4`                    |
+| 12 | `typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5`              |
+| 13 | `typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5`            |
+| 14 | `typed_cast_arena_alloc_fits_ensures_address_part4`                      |
+| 15 | `typed_cast_arena_alloc_aligned_fits_ensures_address_part3`              |
+| 16 | `typed_cast_arena_alloc_aligned_fits_ensures_address_part4`              |
+
+**Coverage update (2026-09-21).** Twenty-six became sixteen in three steps.
+VERIFY-023 (#1285) closed the four `fits_ensures*_part5` when `ptr_offset`
+stated its result — those four were never this category, and VERIFY-023
+records them as misattributed. VERIFY-026 row 1 (#1299) closed nine more —
+every `part2`, and `arena_alloc`'s three `part3` — when `ptr_align_up` stated
+its result; VERIFY-027 records those nine as misattributed to this chain as
+well. VERIFY-026 row 2 added the three `address` parts, which fail on exactly
+this chain. What survives is sixteen goals: the `part4` of every `fits` ensures on both
+variants (6), the aligned variant's `part3` (3, user-supplied `alignment`),
+the `address` parts (3), and the four `does_not_fit` `part5` — the goals whose
+difficulty is the readable `arena_can_fit` form and nothing else. **Class:
+(c)** — the paragraph above is the written cost comparison §4.2 of the paper
+requires for that class; the solver-theory limit it also names (VERIFY-006
+cat 2) is the mechanism, the readable-predicate choice is the reason the
+mechanism is reached.
 
 **Functions affected**: `arena_alloc`, `arena_alloc_aligned`. 13 per
 function: 4 × `fits_ensures_part{2,3,4,5}` + 4 ×
@@ -1077,12 +1086,23 @@ mechanical: assume the parent's postconditions hold (per cat 2b's
 manual argument), apply mem_zero's verified postcondition or the
 boolean compound return's verified shape, conclude.
 
-#### Category 2d: arena_free_bytes ptr_offset / bytes_from call-site preconditions (2)
+#### Category 2d: arena_free_bytes ptr_offset / bytes_from call-site preconditions (0 — RETIRED at VERIFY-023; was 2)
 
 | # | Goal                                                       |
 |---|-------------------------------------------------------------|
 | 1 | `typed_cast_arena_free_bytes_call_bytes_from_requires`      |
 | 2 | `typed_cast_arena_free_bytes_call_bytes_from_requires_2`    |
+
+**Coverage update (2026-09-21) — this argument is RETIRED.** Both goals
+closed at CI #1285 when `ptr_offset` stated its result (VERIFY-023, which
+lists `arena_free_{,c}bytes_call_bytes_from_requires` among its 24). The
+category has covered no obligation since, which nobody noticed for fifteen
+days: the argument below reads exactly as it did while it was live, and no
+gate checks coverage. In the paper's terms (§3) a block covering nothing is
+retired whether or not anyone has said so; this is the campaign's first
+retirement, produced by a specification improvement, and it means the number
+of arguments *in force* has been 16 — not 17 — since 2026-09-06. The two rows
+are kept so the retirement is legible.
 
 **Functions affected**: `arena_free_bytes`.
 
@@ -1446,16 +1466,17 @@ construction. The C arithmetic is direct; the proof obstacle is WP's inability
 to carry the offset arithmetic across `arena_alloc`'s empty `nonnull` boundary
 and to discharge the nonlinear `capacity * object_size` product.
 
-#### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (6)
+#### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (1 — was 6)
 
 | # | Goal                                                       |
 |---|-------------------------------------------------------------|
-| 1 | `typed_cast_pool_alloc_assert_rte_mem_access`              |
-| 2 | `typed_cast_pool_alloc_call_ptr_elem_requires`            |
-| 3 | `typed_cast_pool_get_call_ptr_elem_requires`             |
-| 4 | `typed_cast_pool_get_in_bounds_ensures_part4`            |
-| 5 | `typed_cast_pool_get_const_call_ptr_elem_const_requires` |
-| 6 | `typed_cast_pool_get_const_in_bounds_ensures_part4`      |
+| 1  | `typed_cast_pool_alloc_assert_rte_mem_access`              |
+**Coverage update (2026-09-21).** Five of six closed at CI #1285 when
+`ptr_elem` / `ptr_elem_const` stated their result (VERIFY-023). The one that
+remains, `pool_alloc_assert_rte_mem_access`, is the pool allocator's write
+into the slot — the same address chain, one dereference deeper — and is the
+goal the VERIFY-08 argument audit found cited against a compiled-out runtime
+check. This block covers 1 goal.
 
 **Functions affected**: `pool_alloc`, `pool_get`, `pool_get_const`.
 
@@ -1491,15 +1512,14 @@ defence-in-depth measure at default and debug build levels only. Per the
 evidence standard, every class-(a) and class-(c) argument must now name the
 build configuration in which any cited control exists.
 
-#### Category 2c: bytes_from / mem_zero / mem_secure_zero call-sites (5)
+#### Category 2c: bytes_from / mem_zero / mem_secure_zero call-sites (1 — was 5)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
-| 1 | `typed_cast_pool_alloc_zero_call_mem_zero_requires`           |
-| 2 | `typed_cast_pool_as_bytes_call_bytes_from_requires`           |
-| 3 | `typed_cast_pool_as_bytes_call_bytes_from_requires_2`         |
-| 4 | `typed_cast_pool_reserved_bytes_call_bytes_from_requires`     |
-| 5 | `typed_cast_pool_reserved_bytes_call_bytes_from_requires_2`   |
+| 1  | `typed_cast_pool_alloc_zero_call_mem_zero_requires`           |
+**Coverage update (2026-09-21).** The four `bytes_from` call-site goals
+closed at CI #1285 (VERIFY-023). `pool_alloc_zero_call_mem_zero_requires`
+remains. This block covers 1 goal.
 
 **Functions affected**: `pool_alloc_zero`, `pool_as_bytes`,
 `pool_reserved_bytes` (and `pool_reset_secure`'s `mem_secure_zero`, counted in
@@ -1521,18 +1541,17 @@ or `object_size * capacity` (= region span); both are within bounds, and the
 base pointer is valid. The C matches `bytes_from`'s contract; the obstacle is
 the `ptr_offset` round-trip.
 
-#### Category 2d: arena delegation + reset wrapper assigns/ensures (8)
+#### Category 2d: arena delegation + reset wrapper assigns/ensures (5 — was 8)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
-| 1 | `typed_cast_pool_alloc_zero_assigns_normal_part3`             |
-| 2 | `typed_cast_pool_reset_call_arena_reset_to_requires_2`       |
-| 3 | `typed_cast_pool_reset_call_arena_alloc_requires`           |
-| 4 | `typed_cast_pool_reset_reset_ensures_part3`                 |
-| 5 | `typed_cast_pool_reset_reset_ensures_2_part3`               |
-| 6 | `typed_cast_pool_reset_secure_assigns_exit_part6`           |
-| 7 | `typed_cast_pool_reset_secure_assigns_normal_part6`         |
-| 8 | `typed_cast_pool_reset_secure_call_mem_secure_zero_requires`|
+| 1  | `typed_cast_pool_alloc_zero_assigns_normal_part3`             |
+| 2  | `typed_cast_pool_reset_call_arena_reset_to_requires_2`       |
+| 3  | `typed_cast_pool_reset_call_arena_alloc_requires`           |
+| 4  | `typed_cast_pool_reset_reset_ensures_part3`                 |
+| 5  | `typed_cast_pool_reset_reset_ensures_2_part3`               |
+**Coverage update (2026-09-21).** `pool_reset_secure`'s three closed at
+CI #1285 (VERIFY-023). Five remain. This block covers 5 goals.
 
 **Functions affected**: `pool_alloc_zero`, `pool_reset`, `pool_reset_secure`.
 
@@ -4957,8 +4976,10 @@ two errors are the same error from opposite directions: the boundary of
 VERIFY-009 block 5 — which goals are the chain and which are the opaque
 pointer — was drawn wrong in both predictions, and the runs redrew it. Block
 5 now covers exactly: the nine `fits_ensures*_part4`, the three
-aligned-variant `part3`, and the three `address` parts of row 2 — fifteen
-goals, all `part3`/`part4`, none of them about a callee's result.
+aligned-variant `part3`, and the three `address` parts of row 2 — sixteen
+goals (the nine are six `part4` and three `part3`; the four `does_not_fit`
+`part5` were omitted from the earlier count), none of them about a callee's
+result.
 
 **Retirement check, requested by VERIFY-027 §5.5 and answered here.**
 S-block 4 (ptr_span cascade, VERIFY-009 cat 2a, originally 8 goals) now
@@ -4978,7 +4999,9 @@ the rest — the DAG was checked nine times by accident.
 
 ### Next
 
-Row 2, `arena_alloc*`: state the address `(u8*)\result == (u8*)arena->buffer + \old(arena->offset) + pad` — expressible now that ptr_align_up's result bounds `pad`. Prediction stands as written in VERIFY-026 (no downstream change; the two pool call-site goals do not move; the four new ensures prove or become own residuals). One commit, one run, one scoring section appended here.
+Loop annotations in the macro bodies under `-CC` (the second half of
+VERIFY-025), as a pre-registration: the 14 `loop` goals of the paper's §4.3,
+predicted per goal before the annotations are written.
 
 ## MCDC-001: Coverage Flags Methodology
 
