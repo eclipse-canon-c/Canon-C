@@ -16,11 +16,17 @@ name: Canon-C CC (VERIFY-025)
 # under `-CC`, and diffs the residual set by name against the enforced
 # driver pin.
 #
-# MODE: REPORT-ONLY. Nothing here fails the build. The promotion protocol
-# (docs/verification.md) applies: name-stability across repeated runs, then
-# an acknowledged commit that pins count + proved line + roll-call and flips
-# ENFORCE to 1. The baseline this job diffs against is read from the main
-# workflow's CHECKS arrays at run time, never copied.
+# MODE: ENFORCED since the run after three set-identical report-only runs
+# (CC #1, #2, #3 — 2026-09-20/21). Gates, per family: (0) the pinned
+# proved-goal line, (1) zero Failed/Invalid/Stepout, (2) the exact residual
+# count, (3) a by-name roll-call — (2)+(3) is set equality. Any change in
+# either direction is red; the remedy is an acknowledged commit updating
+# pin, count and roll-call together (the ratchet, docs/verification.md).
+#
+# The diff against the driver job's pin (read from the main workflow at run
+# time, never copied) is kept as ADVISORY output: it says how the macro-body
+# contract surface differs from the prototype surface, which is information,
+# not a gate.
 #
 # Flags per family are the driver job's flags plus `-CC`; the memory model is
 # the family's home model (Typed for result/option/deque, Typed+Cast for
@@ -54,12 +60,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { family: slice,  model: "Typed+Cast", budget: 120, driver_job: frama-c-slice  }
-          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result }
-          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option }
-          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow }
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec    }
-          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque  }
+          - { family: slice,  model: "Typed+Cast", budget: 120, driver_job: frama-c-slice,  proved: "572 / 587",   unproved: 15  }
+          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "185 / 215",   unproved: 30  }
+          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "189 / 223",   unproved: 34  }
+          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2777 / 2796", unproved: 19  }
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5374 / 5566", unproved: 192 }
+          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
     steps:
       - uses: actions/checkout@v6
 
@@ -162,9 +168,454 @@ jobs:
           echo "  Full -CC residual list (name-stability record):"
           sed 's/^/    /' /tmp/cc_resid.txt
           echo "==============================================================="
-          echo "  REPORT-ONLY: no gate. Promotion requires name-stability across"
-          echo "  repeated runs, then an acknowledged commit pinning count, proved"
-          echo "  line and roll-call, and a diff record in docs/deviations.md."
+          echo "  (advisory diff ends; the gates are the next step)"
+          echo "==============================================================="
+
+      - name: "Gates 0-3: proved line, zero refutations, exact count, roll-call (ENFORCED)"
+        shell: bash
+        run: |
+          OUT="wp_cc_${{ matrix.family }}_output.txt"
+          FAM="${{ matrix.family }}"
+          ENFORCE=1
+          FAILURES=0
+
+          # --- pinned roll-call for this family (the ratchet edits these) ---
+          case "${FAM}" in
+            slice) cat > /tmp/cc_pin.txt <<'PIN_EOF'
+            typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_bytes_equal_call_memcmp_requires_valid_s1
+            typed_cast_bytes_equal_call_memcmp_requires_valid_s2
+            typed_cast_contract_default_handler_loop_invariant_established
+            typed_cast_contract_default_handler_terminates
+            typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1
+            typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2
+            typed_cast_str_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_str_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_str_equal_call_memcmp_requires_valid_s1
+            typed_cast_str_equal_call_memcmp_requires_valid_s2
+            typed_cast_str_from_cstr_call_strlen_requires_valid_string_s
+            typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1
+            typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2
+          PIN_EOF
+            ;;
+            result) cat > /tmp/cc_pin.txt <<'PIN_EOF'
+            typed_contract_default_handler_loop_invariant_established
+            typed_contract_default_handler_terminates
+            typed_result_int_VErr_and_then_assert_rte_function_pointer
+            typed_result_int_VErr_and_then_assigns_part1
+            typed_result_int_VErr_and_then_terminates_part1
+            typed_result_int_VErr_and_then_terminates_part2
+            typed_result_int_VErr_eq_assert_rte_function_pointer
+            typed_result_int_VErr_eq_assert_rte_function_pointer_2
+            typed_result_int_VErr_eq_assigns_part2
+            typed_result_int_VErr_eq_assigns_part4
+            typed_result_int_VErr_eq_terminates_part1
+            typed_result_int_VErr_eq_terminates_part2
+            typed_result_int_VErr_eq_terminates_part3
+            typed_result_int_VErr_eq_terminates_part4
+            typed_result_int_VErr_map_assert_rte_function_pointer
+            typed_result_int_VErr_map_assigns_exit_part2
+            typed_result_int_VErr_map_assigns_normal_part2
+            typed_result_int_VErr_map_err_assert_rte_function_pointer
+            typed_result_int_VErr_map_err_assigns_exit_part2
+            typed_result_int_VErr_map_err_assigns_normal_part3
+            typed_result_int_VErr_map_err_exits
+            typed_result_int_VErr_map_err_terminates_part2
+            typed_result_int_VErr_map_err_terminates_part3
+            typed_result_int_VErr_map_exits
+            typed_result_int_VErr_map_terminates_part2
+            typed_result_int_VErr_map_terminates_part3
+            typed_result_int_VErr_or_else_assert_rte_function_pointer
+            typed_result_int_VErr_or_else_assigns_part2
+            typed_result_int_VErr_or_else_terminates_part1
+            typed_result_int_VErr_or_else_terminates_part2
+          PIN_EOF
+            ;;
+            option) cat > /tmp/cc_pin.txt <<'PIN_EOF'
+            typed_contract_default_handler_loop_invariant_established
+            typed_contract_default_handler_terminates
+            typed_option_int_and_then_assert_rte_function_pointer
+            typed_option_int_and_then_assigns_exit_part2
+            typed_option_int_and_then_assigns_normal_part2
+            typed_option_int_and_then_exits_part1
+            typed_option_int_and_then_terminates_part2
+            typed_option_int_and_then_terminates_part3
+            typed_option_int_combine_with_assert_rte_function_pointer
+            typed_option_int_combine_with_assigns_exit_part2
+            typed_option_int_combine_with_assigns_normal_part2
+            typed_option_int_combine_with_exits_part1
+            typed_option_int_combine_with_terminates_part2
+            typed_option_int_combine_with_terminates_part3
+            typed_option_int_eq_assert_rte_function_pointer_part2
+            typed_option_int_eq_assigns_part5
+            typed_option_int_eq_terminates_part2
+            typed_option_int_eq_terminates_part4
+            typed_option_int_filter_assert_rte_function_pointer
+            typed_option_int_filter_assigns_exit_part2
+            typed_option_int_filter_assigns_normal_part2
+            typed_option_int_filter_exits_part1
+            typed_option_int_filter_terminates_part2
+            typed_option_int_filter_terminates_part3
+            typed_option_int_map_assert_rte_function_pointer
+            typed_option_int_map_assigns_exit_part2
+            typed_option_int_map_assigns_normal_part2
+            typed_option_int_map_exits_part1
+            typed_option_int_map_terminates_part2
+            typed_option_int_map_terminates_part3
+            typed_option_int_or_else_assert_rte_function_pointer
+            typed_option_int_or_else_assigns_part2
+            typed_option_int_or_else_terminates_part1
+            typed_option_int_or_else_terminates_part2
+          PIN_EOF
+            ;;
+            borrow) cat > /tmp/cc_pin.txt <<'PIN_EOF'
+            typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1
+            typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2
+            typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_bytes_equal_call_memcmp_requires_valid_s1
+            typed_cast_bytes_equal_call_memcmp_requires_valid_s2
+            typed_cast_checked_add_overflow_ensures
+            typed_cast_checked_add_u64_overflow_ensures
+            typed_cast_contract_default_handler_loop_invariant_established
+            typed_cast_contract_default_handler_terminates
+            typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1
+            typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2
+            typed_cast_str_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_str_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_str_equal_call_memcmp_requires_valid_s1
+            typed_cast_str_equal_call_memcmp_requires_valid_s2
+            typed_cast_str_from_cstr_call_strlen_requires_valid_string_s
+            typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1
+            typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2
+          PIN_EOF
+            ;;
+            vec) cat > /tmp/cc_pin.txt <<'PIN_EOF'
+            typed_cast_align_down_ensures
+            typed_cast_align_padding_ensures
+            typed_cast_align_up_ensures
+            typed_cast_arena_alloc_aligned_call_ptr_span_requires
+            typed_cast_arena_alloc_aligned_call_ptr_span_requires_2
+            typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5
+            typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5
+            typed_cast_arena_alloc_aligned_fits_ensures_2_part3
+            typed_cast_arena_alloc_aligned_fits_ensures_2_part4
+            typed_cast_arena_alloc_aligned_fits_ensures_3_part3
+            typed_cast_arena_alloc_aligned_fits_ensures_3_part4
+            typed_cast_arena_alloc_aligned_fits_ensures_address_part3
+            typed_cast_arena_alloc_aligned_fits_ensures_address_part4
+            typed_cast_arena_alloc_aligned_fits_ensures_part3
+            typed_cast_arena_alloc_aligned_fits_ensures_part4
+            typed_cast_arena_alloc_aligned_zero_assigns_normal_part3
+            typed_cast_arena_alloc_aligned_zero_ensures_3_part1
+            typed_cast_arena_alloc_call_ptr_span_requires
+            typed_cast_arena_alloc_call_ptr_span_requires_2
+            typed_cast_arena_alloc_does_not_fit_ensures_2_part5
+            typed_cast_arena_alloc_does_not_fit_ensures_part5
+            typed_cast_arena_alloc_fits_ensures_2_part4
+            typed_cast_arena_alloc_fits_ensures_3_part4
+            typed_cast_arena_alloc_fits_ensures_address_part4
+            typed_cast_arena_alloc_fits_ensures_part4
+            typed_cast_arena_alloc_zero_assigns_normal_part3
+            typed_cast_arena_alloc_zero_ensures_3_part1
+            typed_cast_arena_try_alloc_aligned_assigns_normal_part03
+            typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1
+            typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2
+            typed_cast_arena_try_alloc_assigns_normal_part03
+            typed_cast_arena_try_alloc_non_null_out_ensures_part1
+            typed_cast_arena_try_alloc_non_null_out_ensures_part2
+            typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_bytes_equal_call_memcmp_requires_valid_s1
+            typed_cast_bytes_equal_call_memcmp_requires_valid_s2
+            typed_cast_checked_add_overflow_ensures
+            typed_cast_checked_add_u64_overflow_ensures
+            typed_cast_contract_default_handler_loop_invariant_established
+            typed_cast_contract_default_handler_terminates
+            typed_cast_mem_align_normal_ensures_2_part3
+            typed_cast_mem_align_normal_ensures_part3
+            typed_cast_mem_align_to_normal_ensures_2_part3
+            typed_cast_mem_align_to_normal_ensures_part3
+            typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3
+            typed_cast_mem_alloc_assigns_normal_part2
+            typed_cast_mem_alloc_nonzero_size_ensures_part2
+            typed_cast_mem_compare_call_memcmp_requires_danglingness_s1
+            typed_cast_mem_compare_call_memcmp_requires_danglingness_s2
+            typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1
+            typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2
+            typed_cast_mem_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_mem_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_mem_free_assigns_normal
+            typed_cast_mem_free_call_free_requires_freeable
+            typed_cast_mem_get_alignment_assert_rte_signed_overflow
+            typed_cast_mem_get_alignment_nonnull_ensures_2_part2
+            typed_cast_mem_get_alignment_nonnull_ensures_part2
+            typed_cast_mem_is_aligned_nonnull_aligned_ensures
+            typed_cast_mem_is_aligned_nonnull_unaligned_ensures
+            typed_cast_option_int_and_then_assert_rte_function_pointer
+            typed_cast_option_int_and_then_assigns_exit_part2
+            typed_cast_option_int_and_then_assigns_normal_part2
+            typed_cast_option_int_and_then_exits_part1
+            typed_cast_option_int_and_then_terminates_part2
+            typed_cast_option_int_and_then_terminates_part3
+            typed_cast_option_int_combine_with_assert_rte_function_pointer
+            typed_cast_option_int_combine_with_assigns_exit_part2
+            typed_cast_option_int_combine_with_assigns_normal_part2
+            typed_cast_option_int_combine_with_exits_part1
+            typed_cast_option_int_combine_with_terminates_part2
+            typed_cast_option_int_combine_with_terminates_part3
+            typed_cast_option_int_eq_assert_rte_function_pointer_part2
+            typed_cast_option_int_eq_assigns_part5
+            typed_cast_option_int_eq_terminates_part2
+            typed_cast_option_int_eq_terminates_part4
+            typed_cast_option_int_filter_assert_rte_function_pointer
+            typed_cast_option_int_filter_assigns_exit_part2
+            typed_cast_option_int_filter_assigns_normal_part2
+            typed_cast_option_int_filter_exits_part1
+            typed_cast_option_int_filter_terminates_part2
+            typed_cast_option_int_filter_terminates_part3
+            typed_cast_option_int_map_assert_rte_function_pointer
+            typed_cast_option_int_map_assigns_exit_part2
+            typed_cast_option_int_map_assigns_normal_part2
+            typed_cast_option_int_map_exits_part1
+            typed_cast_option_int_map_terminates_part2
+            typed_cast_option_int_map_terminates_part3
+            typed_cast_option_int_or_else_assert_rte_function_pointer
+            typed_cast_option_int_or_else_assigns_part2
+            typed_cast_option_int_or_else_terminates_part1
+            typed_cast_option_int_or_else_terminates_part2
+            typed_cast_ptr_align_down_nonnull_ensures_bounded_part2
+            typed_cast_ptr_align_down_nonnull_ensures_not_above_part2
+            typed_cast_ptr_align_down_nonnull_ensures_same_base_part2
+            typed_cast_ptr_align_padding_call_align_padding_requires_3
+            typed_cast_ptr_align_padding_nonnull_ensures_part2
+            typed_cast_ptr_align_up_call_align_up_requires_3
+            typed_cast_ptr_align_up_nonnull_ensures_bounded_part2
+            typed_cast_ptr_align_up_nonnull_ensures_not_below_part2
+            typed_cast_ptr_align_up_nonnull_ensures_same_base_part2
+            typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer
+            typed_cast_result_Bool_Error_and_then_assigns_part1
+            typed_cast_result_Bool_Error_and_then_terminates_part1
+            typed_cast_result_Bool_Error_and_then_terminates_part2
+            typed_cast_result_Bool_Error_eq_assert_rte_function_pointer
+            typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2
+            typed_cast_result_Bool_Error_eq_assigns_part2
+            typed_cast_result_Bool_Error_eq_assigns_part4
+            typed_cast_result_Bool_Error_eq_terminates_part1
+            typed_cast_result_Bool_Error_eq_terminates_part2
+            typed_cast_result_Bool_Error_eq_terminates_part3
+            typed_cast_result_Bool_Error_eq_terminates_part4
+            typed_cast_result_Bool_Error_map_assert_rte_function_pointer
+            typed_cast_result_Bool_Error_map_assigns_exit_part2
+            typed_cast_result_Bool_Error_map_assigns_normal_part2
+            typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer
+            typed_cast_result_Bool_Error_map_err_assigns_exit_part2
+            typed_cast_result_Bool_Error_map_err_assigns_normal_part3
+            typed_cast_result_Bool_Error_map_err_exits
+            typed_cast_result_Bool_Error_map_err_terminates_part2
+            typed_cast_result_Bool_Error_map_err_terminates_part3
+            typed_cast_result_Bool_Error_map_exits
+            typed_cast_result_Bool_Error_map_terminates_part2
+            typed_cast_result_Bool_Error_map_terminates_part3
+            typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer
+            typed_cast_result_Bool_Error_or_else_assigns_part2
+            typed_cast_result_Bool_Error_or_else_terminates_part1
+            typed_cast_result_Bool_Error_or_else_terminates_part2
+            typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1
+            typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2
+            typed_cast_str_equal_call_memcmp_requires_danglingness_s1
+            typed_cast_str_equal_call_memcmp_requires_danglingness_s2
+            typed_cast_str_equal_call_memcmp_requires_valid_s1
+            typed_cast_str_equal_call_memcmp_requires_valid_s2
+            typed_cast_str_from_cstr_call_strlen_requires_valid_string_s
+            typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1
+            typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2
+            typed_cast_vec_int_alloc_call_vec_int_init_requires_2
+            typed_cast_vec_int_append_array_assigns_exit_part4
+            typed_cast_vec_int_append_array_assigns_normal_part14
+            typed_cast_vec_int_append_array_call_mem_copy_requires
+            typed_cast_vec_int_append_array_call_mem_copy_requires_2
+            typed_cast_vec_int_append_array_call_mem_copy_requires_3
+            typed_cast_vec_int_append_array_ok_assigns_exit_part4
+            typed_cast_vec_int_append_array_ok_assigns_normal_part14
+            typed_cast_vec_int_append_array_ok_ensures_4_part5
+            typed_cast_vec_int_extend_ok_assigns_normal_part1
+            typed_cast_vec_int_fill_assert_rte_mem_access_4_part1
+            typed_cast_vec_int_fill_assert_rte_mem_access_4_part2
+            typed_cast_vec_int_fill_assert_rte_mem_access_5_part1
+            typed_cast_vec_int_fill_assert_rte_mem_access_5_part2
+            typed_cast_vec_int_fill_assert_rte_mem_access_6_part1
+            typed_cast_vec_int_fill_assert_rte_mem_access_6_part2
+            typed_cast_vec_int_fill_assert_rte_mem_access_7_part1
+            typed_cast_vec_int_fill_assert_rte_mem_access_7_part2
+            typed_cast_vec_int_fill_assigns_part3
+            typed_cast_vec_int_fill_assigns_part4
+            typed_cast_vec_int_fill_assigns_part5
+            typed_cast_vec_int_fill_assigns_part6
+            typed_cast_vec_int_fill_live_assigns_part3
+            typed_cast_vec_int_fill_live_assigns_part4
+            typed_cast_vec_int_fill_live_assigns_part5
+            typed_cast_vec_int_fill_live_assigns_part6
+            typed_cast_vec_int_fill_live_ensures_2_part3
+            typed_cast_vec_int_fill_live_ensures_2_part4
+            typed_cast_vec_int_fill_live_ensures_3_part3
+            typed_cast_vec_int_fill_live_ensures_3_part4
+            typed_cast_vec_int_fill_live_ensures_part3
+            typed_cast_vec_int_fill_live_ensures_part4
+            typed_cast_vec_int_fill_terminates_part1
+            typed_cast_vec_int_fill_terminates_part2
+            typed_cast_vec_int_free_call_mem_free_requires
+            typed_cast_vec_int_insert_assigns_exit_part2
+            typed_cast_vec_int_insert_assigns_normal_part10
+            typed_cast_vec_int_insert_call_mem_move_requires
+            typed_cast_vec_int_insert_call_mem_move_requires_2
+            typed_cast_vec_int_insert_ok_assigns_exit_part2
+            typed_cast_vec_int_insert_ok_assigns_normal_part10
+            typed_cast_vec_int_insert_ok_ensures_5_part5
+            typed_cast_vec_int_pop_ok_ensures_4_part5
+            typed_cast_vec_int_remove_assigns_exit_part3
+            typed_cast_vec_int_remove_assigns_normal_part13
+            typed_cast_vec_int_remove_call_mem_move_requires
+            typed_cast_vec_int_remove_call_mem_move_requires_2
+            typed_cast_vec_int_remove_ok_assigns_exit_part3
+            typed_cast_vec_int_remove_ok_assigns_normal_part13
+            typed_cast_vec_int_remove_ok_ensures_4_part6
+            typed_cast_vec_int_remove_ok_ensures_4_part7
+            typed_cast_vec_int_remove_ok_ensures_5_part6
+            typed_cast_vec_int_swap_ensures
+          PIN_EOF
+            ;;
+            deque) cat > /tmp/cc_pin.txt <<'PIN_EOF'
+            typed_contract_default_handler_loop_invariant_established
+            typed_contract_default_handler_terminates
+            typed_deque_int_swap_ensures_10
+            typed_deque_int_swap_ensures_6
+            typed_deque_int_swap_ensures_7
+            typed_deque_int_swap_ensures_8
+            typed_deque_int_swap_ensures_9
+            typed_option_int_and_then_assert_rte_function_pointer
+            typed_option_int_and_then_assigns_exit_part2
+            typed_option_int_and_then_assigns_normal_part2
+            typed_option_int_and_then_exits_part1
+            typed_option_int_and_then_terminates_part2
+            typed_option_int_and_then_terminates_part3
+            typed_option_int_combine_with_assert_rte_function_pointer
+            typed_option_int_combine_with_assigns_exit_part2
+            typed_option_int_combine_with_assigns_normal_part2
+            typed_option_int_combine_with_exits_part1
+            typed_option_int_combine_with_terminates_part2
+            typed_option_int_combine_with_terminates_part3
+            typed_option_int_eq_assert_rte_function_pointer_part2
+            typed_option_int_eq_assigns_part5
+            typed_option_int_eq_terminates_part2
+            typed_option_int_eq_terminates_part4
+            typed_option_int_filter_assert_rte_function_pointer
+            typed_option_int_filter_assigns_exit_part2
+            typed_option_int_filter_assigns_normal_part2
+            typed_option_int_filter_exits_part1
+            typed_option_int_filter_terminates_part2
+            typed_option_int_filter_terminates_part3
+            typed_option_int_map_assert_rte_function_pointer
+            typed_option_int_map_assigns_exit_part2
+            typed_option_int_map_assigns_normal_part2
+            typed_option_int_map_exits_part1
+            typed_option_int_map_terminates_part2
+            typed_option_int_map_terminates_part3
+            typed_option_int_or_else_assert_rte_function_pointer
+            typed_option_int_or_else_assigns_part2
+            typed_option_int_or_else_terminates_part1
+            typed_option_int_or_else_terminates_part2
+            typed_result_Bool_Error_and_then_assert_rte_function_pointer
+            typed_result_Bool_Error_and_then_assigns_part1
+            typed_result_Bool_Error_and_then_terminates_part1
+            typed_result_Bool_Error_and_then_terminates_part2
+            typed_result_Bool_Error_eq_assert_rte_function_pointer
+            typed_result_Bool_Error_eq_assert_rte_function_pointer_2
+            typed_result_Bool_Error_eq_assigns_part2
+            typed_result_Bool_Error_eq_assigns_part4
+            typed_result_Bool_Error_eq_terminates_part1
+            typed_result_Bool_Error_eq_terminates_part2
+            typed_result_Bool_Error_eq_terminates_part3
+            typed_result_Bool_Error_eq_terminates_part4
+            typed_result_Bool_Error_map_assert_rte_function_pointer
+            typed_result_Bool_Error_map_assigns_exit_part2
+            typed_result_Bool_Error_map_assigns_normal_part2
+            typed_result_Bool_Error_map_err_assert_rte_function_pointer
+            typed_result_Bool_Error_map_err_assigns_exit_part2
+            typed_result_Bool_Error_map_err_assigns_normal_part3
+            typed_result_Bool_Error_map_err_exits
+            typed_result_Bool_Error_map_err_terminates_part2
+            typed_result_Bool_Error_map_err_terminates_part3
+            typed_result_Bool_Error_map_exits
+            typed_result_Bool_Error_map_terminates_part2
+            typed_result_Bool_Error_map_terminates_part3
+            typed_result_Bool_Error_or_else_assert_rte_function_pointer
+            typed_result_Bool_Error_or_else_assigns_part2
+            typed_result_Bool_Error_or_else_terminates_part1
+            typed_result_Bool_Error_or_else_terminates_part2
+          PIN_EOF
+            ;;
+          esac
+          sed -i 's/^[[:space:]]*//; /^$/d' /tmp/cc_pin.txt
+          sort -u /tmp/cc_pin.txt -o /tmp/cc_pin.txt
+          PIN_N=$(wc -l < /tmp/cc_pin.txt)
+
+          echo "==============================================================="
+          echo "  -CC (${FAM}) — ENFORCED — pinned at CC #3 (2026-09-21)"
+          echo "==============================================================="
+
+          # (0) proved-goal line
+          PROVED_LINE=$(grep -E '^\[wp\] Proved goals:' "${OUT}" | tail -1 | sed 's/^\[wp\] Proved goals: *//; s/  */ /g')
+          if [ "${PROVED_LINE}" != "${{ matrix.proved }}" ]; then
+            echo "FAIL (0): proved-goal summary '${PROVED_LINE}' != pinned '${{ matrix.proved }}'."
+            echo "          The goal surface drifted — reclassify in VERIFY-025, then"
+            echo "          ratchet proved, unproved and the roll-call together."
+            FAILURES=$((FAILURES+1))
+          else
+            echo "  (0) proved line: ${PROVED_LINE}  OK"
+          fi
+
+          # (1) zero refutations / prover errors
+          BAD=$(grep -cE '^\[wp\] \[(Failed|Invalid|Stepout)\]' "${OUT}" || true)
+          if [ "${BAD}" -ne 0 ]; then
+            echo "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."
+            FAILURES=$((FAILURES+1))
+          else
+            echo "  (1) Failed/Invalid/Stepout: 0  OK"
+          fi
+
+          # (2) exact count
+          grep -E '^\[wp\] \[(Timeout|Unknown)\] ' "${OUT}" | awk '{print $3}' | sort -u > /tmp/cc_resid.txt
+          N=$(wc -l < /tmp/cc_resid.txt)
+          if [ "${N}" -ne "${{ matrix.unproved }}" ]; then
+            echo "FAIL (2): unproved count ${N} != pinned ${{ matrix.unproved }}."
+            FAILURES=$((FAILURES+1))
+          else
+            echo "  (2) unproved count: ${N}  OK"
+          fi
+
+          # (3) roll-call: set equality
+          MISSING=$(comm -23 /tmp/cc_pin.txt /tmp/cc_resid.txt)
+          UNPINNED=$(comm -13 /tmp/cc_pin.txt /tmp/cc_resid.txt)
+          echo "  (3) roll-call: pinned ${PIN_N}, missing $(echo -n "${MISSING}" | grep -c . || true), unpinned $(echo -n "${UNPINNED}" | grep -c . || true)"
+          if [ -n "${MISSING}" ]; then
+            echo "FAIL (3): pinned residual(s) now PROVED — RATCHET, in an acknowledged commit:"
+            echo "${MISSING}" | sed 's/^/      /'
+            FAILURES=$((FAILURES+1))
+          fi
+          if [ -n "${UNPINNED}" ]; then
+            echo "FAIL (3): NEW unproved goal(s) not in the pin — INVESTIGATE:"
+            echo "${UNPINNED}" | sed 's/^/      /'
+            FAILURES=$((FAILURES+1))
+          fi
+
+          echo "==============================================================="
+          if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -gt 0 ]; then
+            echo "  VERIFY-025 ENFORCED FAIL: ${FAILURES} check(s) above."
+            exit 1
+          fi
+          echo "  VERIFY-025 ENFORCED: all gates green."
           echo "==============================================================="
 
       - uses: actions/upload-artifact@v6

@@ -4380,6 +4380,78 @@ longer is, is the *only* way to verify a macro family.
   That is the compositional gain, and it is exactly as large as the
   contracts are.
 
+### CI addendum — enforcement (2026-09-21)
+
+| Field | Value |
+|-------|-------|
+| **Workflow** | `.github/workflows/frama-c-cc.yml` — one job per family, bare `*_cc_experiment.h` driver, driver-job flags plus `-CC`, family's home memory model |
+| **Report-only runs** | CC #1 (41697e7), CC #2 (ae8ddce), CC #3 (manual dispatch) — set-identical by goal name on all six families |
+| **Enforced from** | the run after CC #3; gates (0)–(3) as every other enforced unit |
+| **Positive control** | each job counts ACSL blocks in the `gcc -E -CC` output of the bare driver before running WP (31 / 8 / 8 / 92 / 169 / 37) and stops if zero — the instrument is checked before the measurement, on the arena-32 principle |
+| **Baseline** | the driver job's roll-call, read from the main workflow at run time (union of every `*CHECKS=(` / `INHERITED=(` array in the job); nothing copied |
+
+**What three CI runs found, against the local runs in the table above.**
+
+| family | goals (driver → CC) | residuals | vs driver pin | vs local |
+|--------|---------------------|-----------|---------------|----------|
+| slice  | 394 → 587 | 15 | identical by name | as reported (the 15 are substrate/libc; the 14 slice functions themselves have none) |
+| result | 215 → 215 | 30 | identical | as reported |
+| option | 223 → 223 | 34 | identical | as reported |
+| borrow | 2458 → 2796 | 19 | identical (17 inherited + 2 own) | as reported |
+| vec    | 5501 → 5566 | 192 | +8, 0 closed | as reported — the eight named below |
+| deque  | 1668 → 1668 | 67 | identical | **not** as reported: see below |
+
+vec's eight, by name: `result_Bool_Error_and_then_assigns_part1`,
+`eq_assigns_part2`, `eq_assigns_part4`, `map_assigns_exit_part2`,
+`map_assigns_normal_part2`, `map_err_assigns_exit_part2`,
+`map_err_assigns_normal_part3`, `or_else_assigns_part2`. All are the
+VERIFY-015 function-pointer class on functions the old driver never
+contracted; the macro carries every contract, so the goals now travel with
+the instantiation. Nothing moved for any reason but contract surface.
+
+**Correction 1 — deque's "three closures" were a timeout artifact.** The
+table above reports deque 1589 → 1592 proved under the macro contracts,
+attributed to the inlined `deque_int_view`/`mut` predicates letting Qed see
+the conjuncts. That was at `-wp-timeout 3`, Alt-Ergo only. At CI's 120 s
+with three provers, the enforced *driver* job already proves 1601/1668, and
+the `-CC` job proves the same 1601/1668 with the same 67 names. The three
+goals the local run credited to the contract's shape were goals the driver
+also proves given time. The F3 observation about predicate inlining may still
+be true of Qed's behaviour; it is not evidenced by these three goals, and the
+sentence claiming so is withdrawn.
+
+**Correction 2 — the 14 `loop` goals did not move, and could not have.**
+This record established that ACSL inside macro bodies survives `-CC`; it
+migrated *function contracts*. No `loop invariant`, `loop assigns` or
+`loop variant` was written into any macro body (`grep 'loop invariant'
+data/vec/vec_impl.h` is empty). So `vec_int_fill`'s loop goals and their
+siblings are exactly where they were: residual, now with no construction
+argument covering them. The class-(d) argument for macro-body loops is
+retired as an *argument* — its premise is false — but the goals it covered
+are not retired; they are ordinary specification debt (class (c): an
+annotation nobody has written yet) until someone writes the invariants under
+`-CC` and they either prove or join a different class. The paper's v4.2–v4.4
+text saying enforcement makes "the 14 loop obligations leave the residue" is
+wrong and is corrected in the next paper pass. Retiring the argument and
+retiring the goals are two different events; this record produced the first.
+
+**Decision — alongside, not instead.** The `-CC` jobs run beside the driver
+jobs; neither replaces the other yet. The driver jobs remain the enforced home
+units of Table 1 (numbers stay at CI #1304 for the paper), and the `-CC` jobs
+are a seventh perturbation row: same code, same flags, same model, different
+contract surface, residual sets identical on five families and +8 on the
+sixth. Switching the home units to the macro-body contracts (and deleting the
+prototype contracts from `*_verify.h`) is a Table-1-wide re-base, deferred
+until after the paper is submitted.
+
+**One finding about the record's own method.** Local runs at 3 s / one prover
+were used to characterise the migration. Two of the six families produced
+numbers that CI at 120 s / three provers did not reproduce (deque's three
+"closures"; vec's local TO 204 vs CI 184). The residual *names* that matter
+were right in both cases; the counts were the artifact. Next time: the local
+baseline should be run at the CI configuration, or the record should say it
+is a fast approximation and defer the numbers to CI.
+
 ### Follow-ups
 
 - CI: `-CC` jobs for `slice`, `result`, `option`, `borrow`, `vec`, `deque`
