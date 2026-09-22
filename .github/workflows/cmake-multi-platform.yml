@@ -13,6 +13,7 @@ on:
       - '**.md'
       - 'LICENSE*'
       - '.gitignore'
+      - 'tools/**'
   pull_request:
     branches: [ "master" ]
     paths-ignore:
@@ -20,6 +21,7 @@ on:
       - '**.md'
       - 'LICENSE*'
       - '.gitignore'
+      - 'tools/**'
 
 # Two pushes to master minutes apart should not run two full matrices.
 # The newer push supersedes the older one; on pull requests the same applies
