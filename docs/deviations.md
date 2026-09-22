@@ -4822,7 +4822,7 @@ multiple of `align` at or above its argument, and the pointer round-trip
 preserves the object — and are argued under the existing class-(a)/(c)
 arithmetic argument in VERIFY-009, not a new one. Δ*A* = 0 for this change.
 
-**Manual proof argument** for the three: none new. They are instances of
+**Coverage** (no new manual proof argument) for the three: They are instances of
 memory.h category 2 (bitwise alignment through casts, VERIFY-008) at a new
 site; that block's argument covers them. Coverage recorded here so the next
 audit can check it.

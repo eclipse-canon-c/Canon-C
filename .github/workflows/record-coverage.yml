@@ -1,0 +1,37 @@
+name: Record coverage (argument blocks vs roll-calls)
+
+# ---------------------------------------------------------------------------
+# The gates pin the residual set by name. Nothing pins the record's claim about
+# which written argument covers which residual — the one evidence class no gate
+# checks (paper §5.7). This job joins the two: every goal listed in an argument
+# block's table must still be a pinned residual, and every block must still
+# cover something. It would have reported VERIFY-009 category 2d as empty on
+# 2026-09-06, the day VERIFY-023 closed its two goals; it was found by hand on
+# 2026-09-21.
+#
+# MODE: ADVISORY. Prints the report; never fails the build. Promote to
+# --strict once the four prose-listed records (option, result, borrow, diag)
+# list their goals by name, so the join is total.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'docs/deviations.md'
+      - '.github/workflows/cmake-multi-platform.yml'
+      - 'vmacros/vdrivers/cc_pins/*.txt'
+      - 'tools/record_coverage.py'
+      - '.github/workflows/record-coverage.yml'
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  record-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: "Join docs/deviations.md to the roll-calls (advisory)"
+        run: python3 tools/record_coverage.py
