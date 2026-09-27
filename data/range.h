@@ -22,7 +22,14 @@
 #include "core/primitives/checked.h"
 #include "semantics/option/option.h"
 
-CANON_OPTION(isize)
+/* VERIFY-028 F3: guarded, exactly as bitset.h guards option_usize, so a
+ * caller (or vmacros/vdrivers/range_verify.h) can interpose its own
+ * instantiation, and a second includer cannot redefine it. */
+#ifndef CANON_OPTION_ISIZE_DEFINED
+    #define CANON_OPTION_ISIZE_DEFINED
+    /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
+    CANON_OPTION(isize)
+#endif
 
 /**
  * @file range.h
@@ -141,6 +148,35 @@ typedef struct {
     isize step;    ///< Step size (positive = ascending, negative = descending)
 } range;
 
+/* ── ACSL logic layer (VERIFY-028) ──────────────────────────────────────────
+ * range_wf    : exactly the header's two documented invariants, nothing added.
+ * range_empty : mirrors range_is_empty, including the step == 0 arm that is
+ *               dead under range_wf (kept: the struct is public).
+ * range_count : the exact number of values still to be yielded, over
+ *               mathematical integers — no saturation, no wrap. ACSL `/` on
+ *               integers truncates toward zero, as C99 does; span - 1 >= 0
+ *               wherever it is evaluated, so the two agree.
+ * No lemmas, deliberately: VERIFY-028 P1/P6 test whether the count ensures
+ * prove WITHOUT help. Adding one later is legitimate, but is a recorded
+ * change to the experiment, and a lemma that does not prove is a residual.
+ */
+/*@
+  predicate range_wf(range r) =
+      r.step != 0 && r.step != CANON_ISIZE_MIN;
+
+  predicate range_empty(range r) =
+      r.step == 0
+   || (r.step > 0 && r.current >= r.end)
+   || (r.step < 0 && r.current <= r.end);
+
+  logic integer range_count(range r) =
+      r.step > 0 ? (r.current >= r.end ? 0
+                     : (r.end - r.current - 1) / r.step + 1)
+    : r.step < 0 ? (r.current <= r.end ? 0
+                     : (r.current - r.end - 1) / (-r.step) + 1)
+    : 0;
+*/
+
 /* ════════════════════════════════════════════════════════════════════════════
    Construction
    ════════════════════════════════════════════════════════════════════════════ */
@@ -169,6 +205,14 @@ typedef struct {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires step != CANON_ISIZE_MIN;
+  assigns \nothing;
+  ensures \result.current == start;
+  ensures \result.end == end;
+  ensures \result.step == (step == 0 ? 1 : step);
+  ensures range_wf(\result);
+*/
 static inline range range_make(isize start, isize end, isize step) {
     require_msg(step != CANON_ISIZE_MIN,
                 "range_make: step cannot be ISIZE_MIN (would overflow on negation)");
@@ -188,6 +232,13 @@ static inline range range_make(isize start, isize end, isize step) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  assigns \nothing;
+  ensures \result.current == 0;
+  ensures \result.end == end;
+  ensures \result.step == 1;
+  ensures range_wf(\result);
+*/
 static inline range range_upto(isize end) {
     return range_make(0, end, 1);
 }
@@ -205,6 +256,13 @@ static inline range range_upto(isize end) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  assigns \nothing;
+  ensures \result.current == start;
+  ensures \result.end == end;
+  ensures \result.step == 1;
+  ensures range_wf(\result);
+*/
 static inline range range_from_to(isize start, isize end) {
     return range_make(start, end, 1);
 }
@@ -221,6 +279,13 @@ static inline range range_from_to(isize start, isize end) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  assigns \nothing;
+  ensures \result.current == start;
+  ensures \result.end == 0;
+  ensures \result.step == -1;
+  ensures range_wf(\result);
+*/
 static inline range range_downfrom(isize start) {
     return range_make(start, 0, -1);
 }
@@ -238,6 +303,13 @@ static inline range range_downfrom(isize start) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  assigns \nothing;
+  ensures \result.current == start;
+  ensures \result.end == end;
+  ensures \result.step == -1;
+  ensures range_wf(\result);
+*/
 static inline range range_downto(isize start, isize end) {
     return range_make(start, end, -1);
 }
@@ -261,6 +333,18 @@ static inline range range_downto(isize start, isize end) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns \nothing;
+  behavior null:
+    assumes r == \null;
+    ensures \result == \true;
+  behavior nonnull:
+    assumes r != \null;
+    ensures \result <==> range_empty(*r);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool range_is_empty(const range* r) {
     if (!r) { return true; }
     if (r->step > 0) { return r->current >= r->end; }
@@ -280,6 +364,11 @@ static inline bool range_is_empty(const range* r) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns \nothing;
+  ensures \result <==> (r != \null && !range_empty(*r));
+*/
 static inline bool range_has_next(const range* r) {
     return !range_is_empty(r);
 }
@@ -294,6 +383,11 @@ static inline bool range_has_next(const range* r) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns \nothing;
+  ensures \result <==> (r != \null && !range_empty(*r));
+*/
 static inline bool range_is_valid(const range* r) {
     return r && !range_is_empty(r);
 }
@@ -328,6 +422,18 @@ static inline bool range_is_valid(const range* r) {
  * - Time:  O(1) — pure arithmetic, no iteration
  * - Space: O(1)
  */
+/*@
+  requires r == \null || (\valid_read(r) && range_wf(*r));
+  assigns \nothing;
+  behavior null:
+    assumes r == \null;
+    ensures \result == 0;
+  behavior nonnull:
+    assumes r != \null;
+    ensures len_count: \result == range_count(*r);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) { return 0; }
 
@@ -358,6 +464,18 @@ static inline usize range_len(const range* r) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || (\valid_read(r) && range_wf(*r));
+  assigns \nothing;
+  behavior null:
+    assumes r == \null;
+    ensures \result == 0;
+  behavior nonnull:
+    assumes r != \null;
+    ensures len_count: \result == range_count(*r);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline usize range_remaining(const range* r) {
     return range_len(r);
 }
@@ -375,6 +493,22 @@ static inline usize range_remaining(const range* r) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  requires out == \null || \valid(out);
+  assigns *out;
+  behavior absent:
+    assumes r == \null || out == \null || range_empty(*r);
+    assigns \nothing;
+    ensures \result == \false;
+  behavior present:
+    assumes r != \null && out != \null && !range_empty(*r);
+    assigns *out;
+    ensures \result == \true;
+    ensures *out == \old(r->current);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool range_peek(const range* r, isize* out) {
     if (!r || !out || range_is_empty(r)) { return false; }
     *out = r->current;
@@ -393,6 +527,19 @@ static inline bool range_peek(const range* r, isize* out) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || \valid_read(r);
+  assigns \nothing;
+  behavior absent:
+    assumes r == \null || range_empty(*r);
+    ensures !\result.has_value;
+  behavior present:
+    assumes r != \null && !range_empty(*r);
+    ensures \result.has_value;
+    ensures \result.value == r->current;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline option_isize range_peek_option(const range* r) {
     isize val;
     if (range_peek(r, &val)) { return option_isize_some(val); }
@@ -425,6 +572,23 @@ static inline option_isize range_peek_option(const range* r) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires \valid(r) && range_wf(*r) && !range_empty(*r);
+  assigns r->current;
+  ensures \result == \old(r->current);
+  ensures r->end == \old(r->end) && r->step == \old(r->step);
+  ensures range_wf(*r);
+  ensures next_inside:
+    ((\old(r->step) > 0 && \old(r->current) + \old(r->step) < \old(r->end))
+  || (\old(r->step) < 0 && \old(r->current) + \old(r->step) > \old(r->end)))
+      ==> r->current == \old(r->current) + \old(r->step);
+  ensures next_exhaust:
+    !((\old(r->step) > 0 && \old(r->current) + \old(r->step) < \old(r->end))
+   || (\old(r->step) < 0 && \old(r->current) + \old(r->step) > \old(r->end)))
+      ==> r->current == r->end;
+  ensures next_count:
+    range_count(*r) == range_count(\old(*r)) - 1;
+*/
 static inline isize range_next(range* r) {
     require_msg(r != NULL, "range_next: r cannot be NULL");
     ensure_msg(range_has_next(r), "range_next: called on exhausted range");
@@ -460,6 +624,20 @@ static inline isize range_next(range* r) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || \valid(r);
+  assigns r->current;
+  behavior null:
+    assumes r == \null;
+    assigns \nothing;
+  behavior nonnull:
+    assumes r != \null;
+    assigns r->current;
+    ensures r->current == new_start;
+    ensures r->end == \old(r->end) && r->step == \old(r->step);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void range_reset(range* r, isize new_start) {
     if (r != NULL) { r->current = new_start; }
 }
@@ -487,6 +665,30 @@ static inline void range_reset(range* r, isize new_start) {
  * - Time:  O(1)
  * - Space: O(1)
  */
+/*@
+  requires r == \null || (\valid(r) && range_wf(*r));
+  assigns r->current;
+  behavior noop:
+    assumes r == \null || n == 0 || range_empty(*r);
+    assigns \nothing;
+  behavior advance:
+    assumes r != \null && n != 0 && !range_empty(*r);
+    assigns r->current;
+    ensures r->end == \old(r->end) && r->step == \old(r->step);
+    ensures skip_inside:
+      ((\old(r->step) > 0 && \old(r->current) + n * \old(r->step) < \old(r->end))
+    || (\old(r->step) < 0 && \old(r->current) + n * \old(r->step) > \old(r->end)))
+        ==> r->current == \old(r->current) + n * \old(r->step);
+    ensures skip_exhaust:
+      !((\old(r->step) > 0 && \old(r->current) + n * \old(r->step) < \old(r->end))
+     || (\old(r->step) < 0 && \old(r->current) + n * \old(r->step) > \old(r->end)))
+        ==> r->current == r->end;
+    ensures skip_count:
+      range_count(*r) == (n >= range_count(\old(*r)) ? 0
+                                                      : range_count(\old(*r)) - n);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void range_skip(range* r, usize n) {
     if (!r || (n == 0u) || range_is_empty(r)) { return; }
 

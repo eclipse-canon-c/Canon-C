@@ -6198,6 +6198,133 @@ jobs:
           path: wp_pq_output.txt
           retention-days: 90
   # -------------------------------------------------------------------------
+  # data/range.h — VERIFY-028, RUN 1 of N, REPORT-ONLY.
+  #
+  # Module 18 in Table 5, and the first unit verified AFTER the saturation
+  # claim was written down: a prospective test (VERIFY-028 P1). Shape A in
+  # place; vmacros/vdrivers/range_verify.h only interposes a contracted
+  # option_isize (bitset_verify.h transcribed usize -> isize).
+  #
+  # RUN 1 IS ON THE UNFIXED BODIES, ON PURPOSE. F1 (range_len span
+  # overflow) and F2 (range_skip jump computed in isize) were demonstrated by
+  # probe before any contract was written. This run tests whether WP reports
+  # them where VERIFY-028 P3/P4 said it would. F3 (option guard) IS applied —
+  # the driver cannot interpose without it. F1, F2, F4 land in run 2.
+  #
+  # MODEL: Typed. range.h has no pointer<->integer casts. Goal names carry the
+  # typed_ prefix, so option's 32 compare with bitset's modulo BOTH the type
+  # (usize -> isize) and the model prefix (typed_cast_ -> typed_).
+  #
+  # Nothing is gated on the predictions. The block at the end PRINTS the
+  # evidence for each one; VERIFY-029 scores it. The job fails only if WP
+  # does not produce a summary.
+  # -------------------------------------------------------------------------
+  frama-c-range:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/range.h"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=0            # report-only until name-stable across runs 3-5
+          EXPECTED_UNPROVED=""
+          EXPECTED_PROVED=""
+          WP_MODEL="Typed"
+          OUT=wp_range_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          # show FILE [EMPTY_MSG]: indented listing, or a message if empty.
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/range_verify.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (range.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      Most likely on run 1: an ACSL parse error in range.h's"
+            echo "      logic layer (term-level ?: over relations, \\old(*r)),"
+            echo "      or the option_isize interposition clashing (F3 guard)."
+            grep -E "^\[(kernel|wp)" ${OUT} | head -20 || true
+          else
+            UNPROVED_RE='^\[wp\] \[(Timeout|Unknown)\]'
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[Failed\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              echo ""
+              echo "  !!! Failed/Invalid present — a contract is FALSE or a"
+              echo "      prover errored. Read these before anything else:"
+              grep -E '^\[wp\] \[(Failed|Invalid)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E "${UNPROVED_RE}" ${OUT} | awk '{print $3}' | sort -u > /tmp/rg_all.txt
+            # Partition by owner. Anything not matched by the three inherited
+            # patterns is range.h-own — including anything unexpected.
+            grep -E 'option_isize_'                   /tmp/rg_all.txt > /tmp/rg_opt.txt || true
+            grep -E 'contract_default_handler'        /tmp/rg_all.txt > /tmp/rg_ctr.txt || true
+            grep -E '_checked_'                       /tmp/rg_all.txt > /tmp/rg_chk.txt || true
+            grep -vE 'option_isize_|contract_default_handler|_checked_' /tmp/rg_all.txt > /tmp/rg_own.txt || true
+            echo ""
+            echo "  ================ VERIFY-028 EVIDENCE (not gating) ================"
+            echo "  P2  inherited: option $(wc -l < /tmp/rg_opt.txt) (pred 32)" \
+                 " + handler $(wc -l < /tmp/rg_ctr.txt) (pred 2)" \
+                 " + checked $(wc -l < /tmp/rg_chk.txt) (pred 2)" \
+                 " = $(cat /tmp/rg_opt.txt /tmp/rg_ctr.txt /tmp/rg_chk.txt | wc -l) (pred 36)"
+            echo "  checked.h residuals (pred: VERIFY-002's add / add_u64 overflow_ensures):"
+            show /tmp/rg_chk.txt
+            echo "  own: $(wc -l < /tmp/rg_own.txt)"
+            show /tmp/rg_own.txt
+            echo ""
+            echo "  P3  range_len — pred: exactly 2 signed_overflow RTE goals, len_count PROVES:"
+            grep -E 'range_len' /tmp/rg_own.txt > /tmp/rg_p3.txt || true; show /tmp/rg_p3.txt "(none unproved)"
+            echo "  P4  range_skip — pred: skip_inside unproved (F2b):"
+            grep -E 'range_skip' /tmp/rg_own.txt > /tmp/rg_p4.txt || true; show /tmp/rg_p4.txt "(none unproved)"
+            echo "      downcast RTE alarm present? (recorded, not scored):"
+            grep -E 'range_skip.*downcast' ${OUT} | head -3 > /tmp/rg_dc.txt || true; show /tmp/rg_dc.txt "no"
+            echo "  P5  own residuals OUTSIDE range_len / range_skip / *_count (pred 0):"
+            grep -vE 'range_len|range_skip|_count' /tmp/rg_own.txt > /tmp/rg_p5.txt || true; show /tmp/rg_p5.txt
+            echo "  P6  count ensures (division by a variable) — unproved ones:"
+            grep -E 'next_count|skip_count|len_count' /tmp/rg_own.txt > /tmp/rg_p6.txt || true; show /tmp/rg_p6.txt "(none — all proved)"
+            echo "  =================================================================="
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (range.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-range
+          path: wp_range_output.txt
+          retention-days: 90
+  # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #
   #    -DCANON_CHECKED_FORCE_FALLBACK and -DCANON_BITS_FORCE_FALLBACK are
