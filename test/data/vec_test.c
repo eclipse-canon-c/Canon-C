@@ -45,6 +45,7 @@
 #define CANON_CONTRACT_IMPL
 #include "semantics/option/option.h"
 #include "data/vec/vec.h"
+#include "data/vec/vec_range.h"   /* VERIFY-028 F5 regression */
 
 #ifdef CANON_LIFETIME_DEBUG
 #  include "core/arena.h"  /* needed for arena_alloc lifetime test */
@@ -58,6 +59,7 @@
 /* Option must be instantiated before DEFINE_VEC */
 CANON_OPTION(int)
 DEFINE_VEC(static inline, int)
+DEFINE_VEC_RANGE(static inline, int)
 
 /* Second instantiation — struct type, exercises all generated code paths */
 typedef struct { int x; int y; } Point;
@@ -1008,6 +1010,37 @@ static void test_lifetime_in_place_mutations_preserve_id(void)
 
 /* ── Suppress unused option API functions ────────────────────────────────── */
 
+/* ── VERIFY-028 F5: extend_from_range on a range wider than ISIZE_MAX ──────
+ * Before F1/F5: range_len returned 0, the capacity check passed, and the
+ * loop wrote all 3 elements into a capacity-1 buffer (ASan: buffer
+ * overflow). Now the call is rejected and nothing is written. The range's
+ * values never reach the (int) cast on the rejected path. */
+static void test_extend_from_range_wide_rejected_f5(void)
+{
+    int buf[1] = { 42 };
+    vec_int v = vec_int_init(buf, 1);
+    range r = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, CANON_ISIZE_MAX);
+    result__Bool_Error res = vec_int_extend_from_range(&v, r);
+    EXPECT(!res.is_ok);
+    EXPECT(v.len == 0u);
+    EXPECT(buf[0] == 42);
+}
+
+/* the ordinary path still works */
+static void test_extend_from_range_basic(void)
+{
+    int buf[8] = { 0 };
+    vec_int v = vec_int_init(buf, 8);
+    EXPECT(vec_int_push(&v, 7).is_ok);
+    result__Bool_Error res = vec_int_extend_from_range(&v, range_make(0, 10, 3));
+    EXPECT(res.is_ok);
+    EXPECT(v.len == 5u);               /* 7, 0, 3, 6, 9 */
+    EXPECT(buf[0] == 7 && buf[1] == 0 && buf[4] == 9);
+    res = vec_int_extend_from_range(&v, range_make(0, 4, 1));
+    EXPECT(!res.is_ok);                /* 5 + 4 > 8: rejected, untouched */
+    EXPECT(v.len == 5u);
+}
+
 static void vec_suppress_unused_option_fns(void)
 {
     (void)option_int_get;
@@ -1057,6 +1090,10 @@ static void vec_suppress_unused_option_fns(void)
 int main(void)
 {
     (void)vec_suppress_unused_option_fns;
+
+    /* VERIFY-028 F5 */
+    test_extend_from_range_wide_rejected_f5();
+    test_extend_from_range_basic();
 
     /* constructor */
     test_init_sets_state();

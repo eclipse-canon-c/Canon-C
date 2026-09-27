@@ -418,6 +418,84 @@ static void test_skip(void)
 
 /* ── RANGE_FOR macro ─────────────────────────────────────────────────────── */
 
+/* ── VERIFY-028 regressions: ranges wider than ISIZE_MAX ─────────────────
+ * Each of these fails (or trips UBSan) on the source before F1/F2. */
+
+static void test_len_wide_f1(void)
+{
+    /* F1: span > ISIZE_MAX. Was UB; observed returning 0 at -O2. */
+    range a = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, 1);
+    EXPECT(range_len(&a) == CANON_USIZE_MAX);
+
+    range b = range_make(-10, CANON_ISIZE_MAX, 1);
+    EXPECT(range_len(&b) == (usize)CANON_ISIZE_MAX + 10u);
+
+    range c = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, CANON_ISIZE_MAX);
+    EXPECT(range_len(&c) == 3u);   /* MIN, -1, ISIZE_MAX - 1 */
+
+    range d = range_make(CANON_ISIZE_MAX, CANON_ISIZE_MIN, -1);
+    EXPECT(range_len(&d) == CANON_USIZE_MAX);
+
+    range e = range_make(CANON_ISIZE_MAX, CANON_ISIZE_MIN, -CANON_ISIZE_MAX);
+    EXPECT(range_len(&e) == 3u);   /* MAX, 0, -ISIZE_MAX */
+
+    /* count agrees with actual iteration on the 3-element wide ranges */
+    usize n = 0; isize last = 0;
+    while (range_has_next(&c)) { last = range_next(&c); n++; }
+    EXPECT(n == 3u);
+    EXPECT(last == CANON_ISIZE_MAX - 1);
+    n = 0;
+    while (range_has_next(&e)) { last = range_next(&e); n++; }
+    EXPECT(n == 3u);
+    EXPECT(last == -CANON_ISIZE_MAX);
+}
+
+static void test_skip_huge_n_f2a(void)
+{
+    /* F2a: n > ISIZE_MAX. Was (isize)n < 0: moved BACKWARDS to -1. */
+    range r = range_make(0, 10, 1);
+    range_skip(&r, CANON_USIZE_MAX);
+    EXPECT(!range_has_next(&r));
+    EXPECT(range_len(&r) == 0u);
+
+    range d = range_make(10, 0, -1);
+    range_skip(&d, (usize)CANON_ISIZE_MAX + 1u);
+    EXPECT(!range_has_next(&d));
+}
+
+static void test_skip_wide_f2b(void)
+{
+    /* F2b: n * step > ISIZE_MAX but target inside. Was exhausted early. */
+    const usize n = ((usize)1 << 62) + 1u;
+
+    range r = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, 2);
+    const usize before = range_len(&r);
+    range_skip(&r, n);
+    EXPECT(range_has_next(&r));
+    EXPECT(r.current == 2);
+    EXPECT(range_len(&r) == before - n);
+
+    range d = range_make(CANON_ISIZE_MAX, CANON_ISIZE_MIN, -2);
+    range_skip(&d, n);
+    EXPECT(range_has_next(&d));
+    EXPECT(d.current == -3);
+
+    /* offset > ISIZE_MAX, step 1: exercises the two-step application */
+    range w = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, 1);
+    range_skip(&w, (usize)CANON_ISIZE_MAX + 5u);
+    EXPECT(w.current == 4);            /* MIN + ISIZE_MAX + 5 = 4 */
+    EXPECT(range_next(&w) == 4);
+
+    /* boundary: skip exactly count-1 leaves one; skip count exhausts */
+    range c1 = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, CANON_ISIZE_MAX);
+    range_skip(&c1, 2u);
+    EXPECT(range_len(&c1) == 1u);
+    EXPECT(range_next(&c1) == CANON_ISIZE_MAX - 1);
+    range c2 = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, CANON_ISIZE_MAX);
+    range_skip(&c2, 3u);
+    EXPECT(!range_has_next(&c2));
+}
+
 static void test_range_for(void)
 {
     isize sum = 0;
@@ -548,6 +626,9 @@ int main(void)
     test_remaining_decrements();
     test_reset();
     test_skip();
+    test_len_wide_f1();
+    test_skip_huge_n_f2a();
+    test_skip_wide_f2b();
     test_range_for();
     test_convenience_iteration();
 

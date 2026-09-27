@@ -6198,18 +6198,20 @@ jobs:
           path: wp_pq_output.txt
           retention-days: 90
   # -------------------------------------------------------------------------
-  # data/range.h — VERIFY-028, RUN 1 of N, REPORT-ONLY.
+  # data/range.h — VERIFY-028, RUN 2 of N, REPORT-ONLY.
   #
   # Module 18 in Table 5, and the first unit verified AFTER the saturation
   # claim was written down: a prospective test (VERIFY-028 P1). Shape A in
   # place; vmacros/vdrivers/range_verify.h only interposes a contracted
   # option_isize (bitset_verify.h transcribed usize -> isize).
   #
-  # RUN 1 IS ON THE UNFIXED BODIES, ON PURPOSE. F1 (range_len span
-  # overflow) and F2 (range_skip jump computed in isize) were demonstrated by
-  # probe before any contract was written. This run tests whether WP reports
-  # them where VERIFY-028 P3/P4 said it would. F3 (option guard) IS applied —
-  # the driver cannot interpose without it. F1, F2, F4 land in run 2.
+  # RUN 1 (c9138f4) was on the unfixed bodies: every own unproved goal was
+  # one F1 or F2 falsifies, as P3/P4/P5 predicted. RUN 2 fixes F1 (range_len
+  # in usize), F2 (range_skip by count, offset in usize), F4 (require_msg),
+  # and F5 in vec_range.h (not in this TU). CONTRACTS ARE UNCHANGED since
+  # run 1 — only bodies moved. This is the run that scores P1/P6: whether
+  # len_count and skip_count (division by a variable) prove on the fixed
+  # bodies without help.
   #
   # MODEL: Typed. range.h has no pointer<->integer casts. Goal names carry the
   # typed_ prefix, so option's 32 compare with bitset's modulo BOTH the type

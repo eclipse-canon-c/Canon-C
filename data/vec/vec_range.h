@@ -121,6 +121,12 @@
  * - Time:  O(count) where count = range_len(&r)
  * - Space: O(1) — no allocation, fills into existing buffer
  */
+/* VERIFY-028 F5: the loop is bounded by the SAME count the capacity check
+ * used, never by range_has_next. Before, a wrong range_len (F1: 0 for any
+ * range wider than ISIZE_MAX) passed the capacity check and the loop then
+ * wrote every element — a buffer overflow (ASan: 3 elements into capacity
+ * 1). F1 makes the count exact; this bound makes the capacity check and the
+ * writes agree by construction, whatever range_len returns. */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
 linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
@@ -133,7 +139,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
     if (total > v->capacity) { \
         return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
     } \
-    for (usize i = 0; range_has_next(&r); i++) { \
+    for (usize i = 0; i < count; i++) { \
         v->items[v->len + i] = (type)range_next(&r); \
     } \
     v->len = total; \

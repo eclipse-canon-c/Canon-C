@@ -396,15 +396,18 @@ static inline bool range_is_valid(const range* r) {
  * @brief Calculates the total number of remaining elements
  *
  * Pure arithmetic — does NOT consume the range.
- * Returns CANON_USIZE_MAX if the count cannot be represented in usize.
  *
  * @param r Range to measure (NULL-safe)
  * @return Exact element count, or 0 if NULL or empty
  *
- * Note on overflow guard:
- * diff is a non-negative isize, abs_step >= 1, so the result
- * (diff-1)/abs_step + 1 is at most ISIZE_MAX, which always fits in
- * usize without overflow. The result is exact.
+ * Exact over the whole isize domain (VERIFY-028 F1). The span of a range
+ * can reach 2*ISIZE_MAX + 1 = USIZE_MAX, which does NOT fit in isize, so
+ * it is computed in usize: casting isize -> usize is value-preserving
+ * modulo 2^N, and the unsigned difference of the two casts is the true
+ * span whenever the range is non-empty. The count (span-1)/|step| + 1 is
+ * at most span, so it always fits in usize — no saturation is needed.
+ * (Before F1 the span was an isize subtraction: undefined behaviour for
+ * any range wider than ISIZE_MAX, observed returning 0.)
  *
  * Note on abs_step computation:
  * The negation -r->step is safe here because range_make() rejects
@@ -437,21 +440,15 @@ static inline bool range_is_valid(const range* r) {
 static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) { return 0; }
 
-    /* Safe: range_make() rejects step == ISIZE_MIN, so -step is representable */
-    isize abs_step = (r->step > 0) ? r->step : -r->step;
-    isize diff     = (r->step > 0) ? (r->end - r->current)
-                                 : (r->current - r->end);
+    /* VERIFY-028 F1: all arithmetic in usize. |step| as 0 - (usize)step
+     * (modular) rather than -step, so no signed negation is needed at all. */
+    const usize abs_step = (r->step > 0) ? (usize)r->step
+                                         : ((usize)0 - (usize)r->step);
+    const usize span     = (r->step > 0) ? ((usize)r->end - (usize)r->current)
+                                         : ((usize)r->current - (usize)r->end);
 
-    if (diff <= 0) { return 0; }
-
-    /* diff is a positive isize; abs_step >= 1; result fits in usize. */
-    isize adjusted_diff;
-    if (!checked_sub_isize(diff, 1, &adjusted_diff)) {
-        return CANON_USIZE_MAX;
-    }
-
-    const isize steps = (adjusted_diff / abs_step) + 1;
-    return (usize)steps;
+    /* non-empty => span >= 1, and abs_step >= 1 */
+    return ((span - 1u) / abs_step) + 1u;
 }
 
 /**
@@ -591,7 +588,9 @@ static inline option_isize range_peek_option(const range* r) {
 */
 static inline isize range_next(range* r) {
     require_msg(r != NULL, "range_next: r cannot be NULL");
-    ensure_msg(range_has_next(r), "range_next: called on exhausted range");
+    /* VERIFY-028 F4: a caller obligation, so require_msg (active in release
+     * builds unless CANON_NO_REQUIRE), not ensure_msg (removed by NDEBUG). */
+    require_msg(range_has_next(r), "range_next: called on exhausted range");
 
     isize value = r->current;
     isize next_value;
@@ -645,14 +644,19 @@ static inline void range_reset(range* r, isize new_start) {
 /**
  * @brief Skips n elements forward in O(1) using direct arithmetic
  *
- * Advances current by (n * step), clamped to end on overflow or boundary crossing.
+ * Advances current by (n * step); if that would reach or cross end, the
+ * range is exhausted (current = end).
  *
  * @param r Range to advance (NULL-safe)
  * @param n Number of elements to skip
  *
  * @note Does not iterate — computes new position directly
- * @note Saturates to end on arithmetic overflow
- * @note Clamps to end if skip would cross the boundary
+ * @note Exact over the whole isize domain (VERIFY-028 F2): for every n,
+ *       range_len afterwards == max(0, range_len before - n). Before F2
+ *       the jump was an isize product: n > ISIZE_MAX reversed direction
+ *       (F2a), and on ranges wider than ISIZE_MAX a jump that overflowed
+ *       isize exhausted the range early even when the target was inside
+ *       it (F2b).
  *
  * Example:
  * ```c
@@ -692,27 +696,37 @@ static inline void range_reset(range* r, isize new_start) {
 static inline void range_skip(range* r, usize n) {
     if (!r || (n == 0u) || range_is_empty(r)) { return; }
 
-    isize jump;
-    if (!checked_mul_isize((isize)n, r->step, &jump)) {
-        /* Overflow in jump computation — saturate to end */
+    /* VERIFY-028 F2: decide exhaustion by COUNT, before any arithmetic. */
+    const usize count = range_len(r);
+    if (n >= count) {
         r->current = r->end;
         return;
     }
 
-    isize new_current;
-    if (!checked_add_isize(r->current, jump, &new_current)) {
-        /* Overflow in advance — saturate to end */
-        r->current = r->end;
-        return;
-    }
+    /* n < count = (span-1)/|step| + 1  ==>  n*|step| <= span-1 < USIZE_MAX,
+     * so the offset fits in usize, and the target lies strictly between
+     * current and end, so it is representable as an isize. The offset may
+     * still exceed ISIZE_MAX (span can reach USIZE_MAX), so it is applied in
+     * at most two steps of <= ISIZE_MAX each; each intermediate value lies
+     * between current and the target. No unsigned-to-signed conversion of an
+     * out-of-range value occurs. */
+    const usize abs_step = (r->step > 0) ? (usize)r->step
+                                         : ((usize)0 - (usize)r->step);
+    usize offset = n * abs_step;
+    const usize half = (usize)CANON_ISIZE_MAX;
 
-    /* Clamp to end if boundary crossed */
-    if ((r->step > 0) && (new_current >= r->end)) {
-        r->current = r->end;
-    } else if ((r->step < 0) && (new_current <= r->end)) {
-        r->current = r->end;
+    if (r->step > 0) {
+        if (offset > half) {
+            r->current = r->current + CANON_ISIZE_MAX;
+            offset     = offset - half;
+        }
+        r->current = r->current + (isize)offset;
     } else {
-        r->current = new_current;
+        if (offset > half) {
+            r->current = r->current - CANON_ISIZE_MAX;
+            offset     = offset - half;
+        }
+        r->current = r->current - (isize)offset;
     }
 }
 
