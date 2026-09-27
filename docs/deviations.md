@@ -7676,3 +7676,189 @@ it as one, not in the sense that CI turns red.
   are the ones whose comparator calls became the information horizon.
 - MCDC-013 — the justification-row reasoning this entry reuses.
 - VERIFY-021 — the failure-open mode PQ-A's exposure shares.
+
+---
+
+## VERIFY-028: Pre-registration — range.h, the Eighteenth Unit: Two Defects Demonstrated Before Any Contract, and a Prediction of Zero New Arguments
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-028 *(renumber if 028 was taken by the loop-annotation pre-registration)* |
+| **Date**       | 2026-09-26 |
+| **Status**     | PRE-REGISTERED — no contract written, no source changed; findings demonstrated by probe only |
+| **Baseline**   | 4e2eb2b (CI #____ — author fills) |
+| **Scope**      | `data/range.h` (15 functions, Shape A in place) + a thin interposition driver for `option_isize` |
+| **Category**   | Prospective test of the Table 5 saturation claim (module 18); prospective test of prover detection on known defects |
+
+**Why this record exists.** Table 5 reports that the written-argument base
+saturated at module 12 (verifier-bound) and module 7 (spec-bound) and held
+through every unit after. Every one of those units was verified *before* the
+saturation claim was written down. range.h is the first unit verified *after*
+it, so it is the first unit that can falsify it. This record commits the
+prediction, and the commit hash is the evidence that it predates the contracts.
+
+A second, independent test comes with it. Two defects in range.h were found by
+reading and demonstrated by probe (below) before any ACSL was written. This
+record predicts **which goals** WP will report for each on the unfixed bodies.
+If WP finds exactly those, the tool is corroborated on defects it had no hand
+in finding; if it finds others, those are new findings; if it misses one, that
+is a gap in the contract, not in the code.
+
+### The unit
+
+15 functions: `range_make`, `range_upto`, `range_from_to`, `range_downfrom`,
+`range_downto`, `range_is_empty`, `range_has_next`, `range_is_valid`,
+`range_len`, `range_remaining`, `range_peek`, `range_peek_option`,
+`range_next`, `range_reset`, `range_skip`. `RANGE_FOR` is a call-site macro:
+parked per `docs/vmacros.md`, the `DIAG_*` precedent.
+
+Closure: `types.h`, `limits.h`, `contract.h`, `checked.h`, `option.h`. No
+`ptr.h`, no `slice.h`, no `memory.h` — the smallest closure of any data/ unit.
+It is **not** zero core-substrate inheritance: checked.h is core substrate in
+bitset's own breakdown (58 = bits 15 + memory 20 + slice 13 + ptr 6 +
+**checked 2** + borrow 2), and all of checked.h's functions are defined in
+the TU, so VERIFY-002's two goals re-emit. range's core-substrate surface is
+predicted at 2 — one checked.h pair more than deque's 0.
+
+### Findings demonstrated before any contract
+
+**F1 — `range_len` signed overflow on ranges wider than `ISIZE_MAX`.**
+`diff = r->end - r->current` (and its descending mirror) is computed in
+`isize`. For any range whose span exceeds `ISIZE_MAX` this is undefined
+behaviour. Demonstrated:
+
+    range_make(ISIZE_MIN, ISIZE_MAX, 1)
+    UBSan: range.h:337: signed integer overflow:
+           9223372036854775807 - -9223372036854775808 cannot be represented
+    -O2, no sanitizer: range_len returns 0      (true count: USIZE_MAX)
+    range_make(-10, ISIZE_MAX, 1): returns 0    (true count: ISIZE_MAX + 10)
+
+A range the API accepts, reports as non-empty, and iterates correctly is
+reported as length zero. The header comment ("diff is a non-negative
+isize") states the false premise explicitly, and the `CANON_USIZE_MAX` branch
+it guards is dead: `checked_sub_isize(diff, 1)` cannot fail for `diff > 0`.
+The exact count *always* fits in `usize` (at most `2·ISIZE_MAX + 1 =
+USIZE_MAX`), so the correct fix computes the span as
+`(usize)end − (usize)current` (the conversions are value-preserving modulo
+2^N and the unsigned subtraction is well defined) and needs no saturation at
+all.
+
+**F2 — `range_skip` computes the jump in `isize`, with two failure modes.**
+
+*F2a, reversal.* `(isize)n` is an implementation-defined conversion that
+yields a negative value for `n > ISIZE_MAX` on every two's-complement target.
+The jump then runs *against* the step. Demonstrated:
+
+    range_make(0, 10, 1); range_skip(&r, SIZE_MAX);
+    current = -1, has_next = true, range_next yields -1
+
+A request to skip everything produces a value *before* the start, silently.
+Failure-open, the VERIFY-021 / PQ-A mode.
+
+*F2b, premature exhaustion.* No downcast involved: on a range wider than
+`ISIZE_MAX`, `n · step` can exceed `ISIZE_MAX` while the target is still
+inside the range, and the overflow branch saturates to `end`. Demonstrated:
+
+    range_make(ISIZE_MIN, ISIZE_MAX, 2); range_skip(&r, 2^62 + 1);
+    current = ISIZE_MAX (end), has_next = false   (correct: current = 2)
+
+Failure-closed, but wrong: elements the caller did not skip are lost.
+
+Fix: if `n >= range_count`, exhaust. Otherwise the offset `n · |step|` is at
+most `span − 1`, so it fits in `usize` but **not necessarily in `isize`** —
+comparing against `range_len` first (as an earlier draft of this record
+proposed) fixes F2a but not F2b. The target itself lies between `current`
+and `end` and is always representable, so apply the `usize` offset in at
+most two `checked_add_isize` steps of size ≤ `ISIZE_MAX` each, avoiding any
+unsigned-to-signed conversion.
+
+**Test gap.** The existing `range_test.c` passes, including under
+ASan/UBSan, on the defective source: no test uses a span wider than
+`ISIZE_MAX`. The fix commit adds the three probes above as regression
+tests; each fails (or trips UBSan) on the current source.
+
+**F3 — `CANON_OPTION(isize)` is unguarded.** The same wart as bitset's F3,
+one step milder: range.h *does* instantiate its own option (bitset once did
+not), but with no `CANON_OPTION_ISIZE_DEFINED` guard, so no caller — and no
+verification driver — can interpose a contracted instantiation first, and any
+second header instantiating `option_isize` in the same TU is a redefinition.
+Fix at the source with bitset's guard, not in the driver.
+
+**F4 — `range_next` states its precondition with `ensure_msg`.** Calling
+`range_next` on an exhausted range is a caller bug, which contract.h's own
+vocabulary assigns to `require_msg`. The difference is not only naming: in
+contract.h, `ensure_msg` compiles to nothing under `NDEBUG`, whereas
+`require_msg` is removed only by the explicit `CANON_NO_REQUIRE`. So in an
+ordinary release build the check vanishes and `range_next` on an exhausted
+range returns `r->current` unconditionally — a value outside `[start, end)`
+(e.g. `5` from `range_make(5, 3, 1)`). The ACSL contract will say `requires`
+regardless; the C should say the same thing.
+
+### Contract design, fixed before the run
+
+So the contracts cannot be tuned to the result afterwards:
+
+1. **Well-formedness** `range_wf(r) := r.step != 0 && r.step != ISIZE_MIN` —
+   exactly the header's documented invariants, nothing added. Every function
+   that dereferences `r` requires it in its non-null behaviour.
+   `range_make` ensures it.
+2. **Exact count.** A logic function `range_count(r)` over mathematical
+   integers: `0` if empty, else `(span − 1) / |step| + 1`. `range_len` ensures
+   `\result == range_count(*r)` over the **full** `isize` domain — that is the
+   claim F1 currently makes false.
+3. **Consumption, in two named layers.** *Positional* (no division):
+   `range_next` ensures `\result == \old(r->current)` and the new `current`
+   is `old + step` or `end`; `range_skip` ensures the new `current` is
+   `old + n·step` when that is strictly inside the range, else `end`.
+   *Count* (division by a variable): `range_next` ensures
+   `range_count(*r) == \old(range_count(*r)) − 1`; `range_skip` ensures
+   `range_count(*r) == max(0, \old(range_count(*r)) − n)`. Each count claim
+   is a separately named `ensures`, so its goal can be isolated.
+   **Decision rule, fixed now:** if a count ensures does not prove, it is
+   **kept and argued**, not weakened or dropped. P1's outcome must not be
+   decided by editing the specification after the run.
+4. **Not claimed:** the value sequence as a whole (no ghost model of
+   iteration); anything about `RANGE_FOR`.
+5. **Dead branch left in place:** `range_is_empty`'s `return true` for
+   `step == 0` is unreachable under `range_wf`. Kept (defensive, and the
+   struct is public), recorded as a predicted MC/DC justification row.
+
+### Run plan
+
+| Run | Source state | Mode |
+|-----|--------------|------|
+| 1 | contracts + F3 guard + driver; **F1, F2 unfixed** | report-only |
+| 2 | F1, F2, F4 fixed + regression tests; MC/DC measured (range.h has no MCDC record yet — every data/ unit since bitset ran both streams in one arc) | report-only |
+| 3–5 | unchanged | report-only, name-stability arc |
+| 6 | pinned | enforced |
+
+Run 1 on the unfixed bodies is deliberate: it is the detection test. F3 must
+land in run 1 because the driver cannot interpose without it.
+
+### Predictions (author — confirm or amend before committing)
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **Zero new `**Manual proof argument**` blocks.** Cumulative *A* stays 17; *V* and *S* both unchanged. Equivalent to: the two count ensures prove (P6). | any range.h residual not covered by an existing block — in practice, an unproved count ensures | M–L (tied to P6) |
+| P2 | Inherited residuals = **36**, byte-identical to documented sets: contract.h handler 2 + checked.h 2 (VERIFY-002) + option 32 (modulo the `isize` prefix, bitset's option_usize precedent). | any inherited count ≠ 36, or a name not in the documented sets | H |
+| P3 | Run 1 reports **F1** as exactly one unproved `signed_overflow` RTE goal at each of the two span subtractions in `range_len` (2) **and nothing else**: WP inserts each RTE check as an assertion and assumes it in every later goal, so `range_len`'s count ensures is predicted to **prove** in run 1 — F1 is visible only as the two RTE goals. The `-r->step` negation's RTE goal proves under `range_wf`. | either subtraction's goal proves, the count ensures fails, or any other `range_len` goal fails | H |
+| P4 | Run 1 reports **F2** as an unproved *positional* ensures on `range_skip` (F2b violates it with no cast involved, so this holds whatever the job's RTE flags). The job passes no `-warn-signed-downcast`; whether a downcast RTE goal also appears for F2a depends on the Frama-C 29 default, **not checked** — its presence or absence is recorded either way, not scored. | `range_skip`'s positional ensures proves on the unfixed body | H (ensures) |
+| P5 | Run 1: **no other own goal fails.** The twelve functions other than `range_len`, `range_next`, `range_skip` prove outright, and `range_next`'s positional ensures proves. | any own failure outside `range_len`'s two RTE goals, `range_skip`, and the two count ensures | M |
+| P6 | Run 2 (fixed): own residuals = **0**, *or* only the two count ensures (≤ 2 goals, class (a), division by a variable). **No existing block covers them**: VERIFY-002's checked.h pair is unsigned-add wraparound and prose-argued (outside the 17), and none of the 17 blocks argues division. So P6's second branch **falsifies P1**. | own residuals > 2, or of any other class | M–L |
+| P7 | `range_wf` requires no strengthening beyond the header's two documented invariants. | any goal that needs a third invariant to prove | M |
+
+**What each outcome means for the paper.** P1 holding is the first
+*prospective* data point for saturation — every point in Table 5 so far is
+retrospective. P1 failing is equally reportable: it gives the curve its first
+post-saturation increment, with a named cause (division by a variable, a
+verifier-bound *V* argument). Note what the test actually hinges on: P1 is
+decided by two goals, both in a class the argument base has never seen, and
+the decision rule above forbids resolving it by weakening the spec. That is
+what makes it a real test rather than a formality. P3/P4 holding means the
+tool confirmed human-found defects at predicted locations; the paper can say
+that without overclaiming that the tool *found* them.
+
+### Scoring
+
+VERIFY-029 scores this record goal by goal after run 2, and again at
+enforcement.
