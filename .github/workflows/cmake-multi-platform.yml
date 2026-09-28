@@ -6198,20 +6198,22 @@ jobs:
           path: wp_pq_output.txt
           retention-days: 90
   # -------------------------------------------------------------------------
-  # data/range.h — VERIFY-028, RUN 2 of N, REPORT-ONLY.
+  # data/range.h — VERIFY-028/029, RUN 3 of N, REPORT-ONLY.
   #
   # Module 18 in Table 5, and the first unit verified AFTER the saturation
   # claim was written down: a prospective test (VERIFY-028 P1). Shape A in
   # place; vmacros/vdrivers/range_verify.h only interposes a contracted
   # option_isize (bitset_verify.h transcribed usize -> isize).
   #
-  # RUN 1 (c9138f4) was on the unfixed bodies: every own unproved goal was
-  # one F1 or F2 falsifies, as P3/P4/P5 predicted. RUN 2 fixes F1 (range_len
-  # in usize), F2 (range_skip by count, offset in usize), F4 (require_msg),
-  # and F5 in vec_range.h (not in this TU). CONTRACTS ARE UNCHANGED since
-  # run 1 — only bodies moved. This is the run that scores P1/P6: whether
-  # len_count and skip_count (division by a variable) prove on the fixed
-  # bodies without help.
+  # RUN 1 (c9138f4): unfixed bodies; every own unproved goal was one F1 or
+  # F2 falsifies (P3/P4/P5 held). RUN 2 (5e778b7): F1/F2/F4 fixed, 11 own
+  # residuals — P6 FALSIFIED (VERIFY-029): group A (3) from run 2's modular
+  # usize arithmetic, group B (8) the nonlinear bound n*|step| <= span-1.
+  # RUN 3: range_len/range_skip rewritten with no wraparound (sign-split
+  # span, |step| by isize negation) + two lemmas in the logic layer
+  # (range_mul_le, range_div_shift), each proved as its own goal. The 15
+  # function contracts are UNCHANGED since run 1. Per VERIFY-029 this is the
+  # LAST provability rewrite: whatever remains after run 3 is argued.
   #
   # MODEL: Typed. range.h has no pointer<->integer casts. Goal names carry the
   # typed_ prefix, so option's 32 compare with bitset's modulo BOTH the type
@@ -6296,26 +6298,25 @@ jobs:
             grep -E '_checked_'                       /tmp/rg_all.txt > /tmp/rg_chk.txt || true
             grep -vE 'option_isize_|contract_default_handler|_checked_' /tmp/rg_all.txt > /tmp/rg_own.txt || true
             echo ""
-            echo "  ================ VERIFY-028 EVIDENCE (not gating) ================"
-            echo "  P2  inherited: option $(wc -l < /tmp/rg_opt.txt) (pred 32)" \
+            echo "  ============ VERIFY-029 RUN-3 EVIDENCE (not gating) ============"
+            echo "  Q1  inherited: option $(wc -l < /tmp/rg_opt.txt) (pred 32)" \
                  " + handler $(wc -l < /tmp/rg_ctr.txt) (pred 2)" \
                  " + checked $(wc -l < /tmp/rg_chk.txt) (pred 2)" \
-                 " = $(cat /tmp/rg_opt.txt /tmp/rg_ctr.txt /tmp/rg_chk.txt | wc -l) (pred 36)"
-            echo "  checked.h residuals (pred: VERIFY-002's add / add_u64 overflow_ensures):"
+                 " = $(cat /tmp/rg_opt.txt /tmp/rg_ctr.txt /tmp/rg_chk.txt | wc -l) (pred 36, names as runs 1-2)"
             show /tmp/rg_chk.txt
-            echo "  own: $(wc -l < /tmp/rg_own.txt)"
+            echo "  own: $(wc -l < /tmp/rg_own.txt)   (run 1: 12, run 2: 11, run-3 pred: 0)"
             show /tmp/rg_own.txt
             echo ""
-            echo "  P3  range_len — pred: exactly 2 signed_overflow RTE goals, len_count PROVES:"
-            grep -E 'range_len' /tmp/rg_own.txt > /tmp/rg_p3.txt || true; show /tmp/rg_p3.txt "(none unproved)"
-            echo "  P4  range_skip — pred: skip_inside unproved (F2b):"
-            grep -E 'range_skip' /tmp/rg_own.txt > /tmp/rg_p4.txt || true; show /tmp/rg_p4.txt "(none unproved)"
-            echo "      downcast RTE alarm present? (recorded, not scored):"
-            grep -E 'range_skip.*downcast' ${OUT} | head -3 > /tmp/rg_dc.txt || true; show /tmp/rg_dc.txt "no"
-            echo "  P5  own residuals OUTSIDE range_len / range_skip / *_count (pred 0):"
-            grep -vE 'range_len|range_skip|_count' /tmp/rg_own.txt > /tmp/rg_p5.txt || true; show /tmp/rg_p5.txt
-            echo "  P6  count ensures (division by a variable) — unproved ones:"
-            grep -E 'next_count|skip_count|len_count' /tmp/rg_own.txt > /tmp/rg_p6.txt || true; show /tmp/rg_p6.txt "(none — all proved)"
+            echo "  Q2  lemmas range_mul_le / range_div_shift — pred: both PROVE. Unproved:"
+            grep -E 'lemma' /tmp/rg_own.txt > /tmp/rg_q2.txt || true; show /tmp/rg_q2.txt "(none — both proved)"
+            echo "      (WP lists only UNPROVED goals, so a proved lemma does not appear."
+            echo "       A logic-layer parse error would have failed the summary above.)"
+            echo "  Q3  group A, range_len — pred: 0 unproved:"
+            grep -E 'range_len' /tmp/rg_own.txt > /tmp/rg_q3.txt || true; show /tmp/rg_q3.txt "(none)"
+            echo "  Q4  group B, range_skip — pred: 0 unproved:"
+            grep -E 'range_skip' /tmp/rg_own.txt > /tmp/rg_q4.txt || true; show /tmp/rg_q4.txt "(none)"
+            echo "  Q5  anything else own (pred 0):"
+            grep -vE 'range_len|range_skip|lemma' /tmp/rg_own.txt > /tmp/rg_q5.txt || true; show /tmp/rg_q5.txt "(none)"
             echo "  =================================================================="
           fi
           if [ "${FAILURES}" -ne 0 ]; then exit 1; fi

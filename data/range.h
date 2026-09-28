@@ -156,9 +156,13 @@ typedef struct {
  *               mathematical integers — no saturation, no wrap. ACSL `/` on
  *               integers truncates toward zero, as C99 does; span - 1 >= 0
  *               wherever it is evaluated, so the two agree.
- * No lemmas, deliberately: VERIFY-028 P1/P6 test whether the count ensures
- * prove WITHOUT help. Adding one later is legitimate, but is a recorded
- * change to the experiment, and a lemma that does not prove is a residual.
+ * Lemmas (VERIFY-029, run 3): runs 1-2 had none, to test whether the count
+ * ensures prove WITHOUT help (VERIFY-028 P6: they did not). The two below
+ * are the textbook division facts range_skip needs; WP proves each lemma
+ * as its own goal (typed_lemma_*), so they add no trusted assumption. A
+ * lemma that does not prove is a residual like any other.
+ *   range_mul_le    : n <= a/k          ==>  n*k <= a
+ *   range_div_shift : n*k <= a          ==>  (a - n*k)/k == a/k - n
  */
 /*@
   predicate range_wf(range r) =
@@ -175,6 +179,14 @@ typedef struct {
     : r.step < 0 ? (r.current <= r.end ? 0
                      : (r.current - r.end - 1) / (-r.step) + 1)
     : 0;
+
+  lemma range_mul_le:
+    \forall integer a, n, k;
+      a >= 0 && k > 0 && n >= 0 && n <= a / k ==> n * k <= a;
+
+  lemma range_div_shift:
+    \forall integer a, n, k;
+      a >= 0 && k > 0 && n >= 0 && n * k <= a ==> (a - n * k) / k == a / k - n;
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -440,14 +452,36 @@ static inline bool range_is_valid(const range* r) {
 static inline usize range_len(const range* r) {
     if (!r || range_is_empty(r)) { return 0; }
 
-    /* VERIFY-028 F1: all arithmetic in usize. |step| as 0 - (usize)step
-     * (modular) rather than -step, so no signed negation is needed at all. */
-    const usize abs_step = (r->step > 0) ? (usize)r->step
-                                         : ((usize)0 - (usize)r->step);
-    const usize span     = (r->step > 0) ? ((usize)r->end - (usize)r->current)
-                                         : ((usize)r->current - (usize)r->end);
+    /* VERIFY-028 F1 / VERIFY-029 run 3: every intermediate is exact — no
+     * unsigned wraparound is relied on (run 2's modular form was correct but
+     * left WP unable to see the span; see VERIFY-029 group A).
+     * |step|: negate in isize (range_make rejects ISIZE_MIN), then widen. */
+    usize abs_step;
+    if (r->step > 0) {
+        abs_step = (usize)r->step;
+    } else {
+        const isize neg_step = -r->step;
+        abs_step = (usize)neg_step;
+    }
 
-    /* non-empty => span >= 1, and abs_step >= 1 */
+    /* lo < hi: the endpoints in the direction of travel (non-empty). */
+    const isize lo = (r->step > 0) ? r->current : r->end;
+    const isize hi = (r->step > 0) ? r->end     : r->current;
+
+    /* span = hi - lo, in (0, USIZE_MAX], by sign cases:
+     *   same sign  : hi - lo <= ISIZE_MAX, exact in isize
+     *   lo < 0 <= hi: hi + (-(lo+1)) + 1, each part in [0, ISIZE_MAX], so
+     *                 the usize sum is at most 2*ISIZE_MAX + 1 = USIZE_MAX */
+    usize span;
+    if ((lo >= 0) || (hi < 0)) {
+        const isize diff = hi - lo;
+        span = (usize)diff;
+    } else {
+        const isize neg_lo_m1 = -(lo + 1);
+        span = (usize)hi + (usize)neg_lo_m1 + 1u;
+    }
+
+    /* span >= 1, abs_step >= 1: (span-1)/abs_step + 1 <= span */
     return ((span - 1u) / abs_step) + 1u;
 }
 
@@ -709,9 +743,15 @@ static inline void range_skip(range* r, usize n) {
      * still exceed ISIZE_MAX (span can reach USIZE_MAX), so it is applied in
      * at most two steps of <= ISIZE_MAX each; each intermediate value lies
      * between current and the target. No unsigned-to-signed conversion of an
-     * out-of-range value occurs. */
-    const usize abs_step = (r->step > 0) ? (usize)r->step
-                                         : ((usize)0 - (usize)r->step);
+     * out-of-range value occurs. The bound n*|step| <= span-1 is the lemma
+     * range_mul_le; the count after the skip is range_div_shift. */
+    usize abs_step;
+    if (r->step > 0) {
+        abs_step = (usize)r->step;
+    } else {
+        const isize neg_step = -r->step;
+        abs_step = (usize)neg_step;
+    }
     usize offset = n * abs_step;
     const usize half = (usize)CANON_ISIZE_MAX;
 

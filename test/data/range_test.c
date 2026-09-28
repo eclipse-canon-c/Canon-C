@@ -499,6 +499,30 @@ static void test_skip_wide_f2b(void)
     EXPECT(!range_has_next(&c2));
 }
 
+/* ── VERIFY-029 run 3: range_len's sign-split span ──────────────────────
+ * The span is computed by cases on the endpoint signs (lo >= 0 || hi < 0).
+ * MC/DC needs each condition shown to flip the decision independently:
+ *   lo >= 0            : same-sign, non-negative  (0..10 elsewhere)
+ *   lo < 0, hi < 0     : same-sign, all-negative  (THIS test — was untested)
+ *   lo < 0, hi >= 0    : mixed                    (wide-range tests) */
+static void test_len_sign_cases(void)
+{
+    range a = range_make(-10, -1, 3);          /* -10, -7, -4 */
+    EXPECT(range_len(&a) == 3u);
+    range d = range_make(-1, -10, -4);         /* -1, -5, -9  */
+    EXPECT(range_len(&d) == 3u);
+    range m = range_make(-3, 4, 2);            /* -3, -1, 1, 3 (mixed) */
+    EXPECT(range_len(&m) == 4u);
+
+    /* skip through an all-negative range */
+    range s = range_make(-10, -1, 3);
+    range_skip(&s, 2u);
+    EXPECT(s.current == -4);
+    EXPECT(range_len(&s) == 1u);
+    range_skip(&s, 1u);
+    EXPECT(!range_has_next(&s));
+}
+
 static void test_range_for(void)
 {
     isize sum = 0;
@@ -632,6 +656,7 @@ int main(void)
     test_len_wide_f1();
     test_skip_huge_n_f2a();
     test_skip_wide_f2b();
+    test_len_sign_cases();
     test_range_for();
     test_convenience_iteration();
 
