@@ -7862,3 +7862,192 @@ that without overclaiming that the tool *found* them.
 
 VERIFY-029 scores this record goal by goal after run 2, and again at
 enforcement.
+
+---
+
+## VERIFY-029: range.h Runs 1–2 Scored — Inheritance Held Exactly, Own Proofs Did Not; a Buffer Overflow Downstream; Run 3 Pre-Registered
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-029 |
+| **Date**       | 2026-09-28 |
+| **Status**     | SCORES runs 1–2 of VERIFY-028 (bd1da17); PRE-REGISTERS run 3 |
+| **Commits**    | pre-registration bd1da17 · run 1 c9138f4 (CI #1312) · run 2 source 4cf7f90 (CI #1313, build failed — see below) · run 2 evidence 5e778b7 (CI #1314) |
+| **Scope**      | `data/range.h` (module 18), plus `data/vec/vec_range.h` (F5) |
+| **Category**   | Prospective scoring; new finding; pre-registration of a remediation run |
+
+This record has three parts, and they must not be read out of order. Part 1
+scores VERIFY-028 against runs 1 and 2 exactly as it was committed — no
+prediction is reinterpreted. Part 2 records a finding VERIFY-028 did not
+predict. Part 3 pre-registers run 3, and is committed **before** any run-3
+code reaches the repository; its commit hash is the evidence for that.
+
+---
+
+### Part 1 — VERIFY-028 scored
+
+**Run 1** (c9138f4, unfixed bodies, report-only). 2504 goals, 48 unproved:
+36 inherited, 12 own.
+
+| # | prediction | result |
+|---|------------|--------|
+| P2 | inherited = 36 (handler 2 + checked 2 + option 32), documented names | **HELD, exact.** Checked's two are VERIFY-002's `checked_add_overflow_ensures` / `checked_add_u64_overflow_ensures`. |
+| P3 | F1 appears as exactly 2 `signed_overflow` RTE goals in `range_len`; `len_count` **proves** | **HELD, both halves.** WP assumes each RTE assertion in later goals, so F1 is visible only as the two RTE goals (`…_signed_overflow_3_part1`, `…_5_part2`). |
+| P4 | F2 appears as unproved `skip_inside` (F2b) | **HELD.** Also `skip_exhaust` unproved — see below. |
+| P4 | signed-downcast RTE alarm (recorded, not scored) | **Absent.** Frama-C 29 raises none under this job's flags. |
+| P5 | no own goal fails outside `range_len` / `range_skip` / count goals | **HELD.** Twelve functions prove outright; `range_next` fully proves. |
+| P7 | `range_wf` needs nothing beyond the two documented invariants | **HELD** (runs 1 and 2). |
+
+*F2 split by postcondition.* With no downcast alarm, WP models the
+`(isize)n` conversion rather than assuming it away, so F2a (reversal for
+`n > ISIZE_MAX`) falsifies `skip_exhaust` and F2b (premature exhaustion)
+falsifies `skip_inside`. Each half of the defect surfaced under its own named
+ensures. Splitting the positional claim into two named clauses (VERIFY-028
+contract design item 3) is what made that visible.
+
+*Wording constraint for the paper.* These are timeouts, not counterexamples.
+The supportable claim is: **every own goal WP failed to prove in run 1 is one
+that the independently demonstrated defects make false, and none outside
+them.** Not "WP detected F1 and F2" — the defects were found by reading and
+probing first.
+
+**Run 2.** First pushed at 4cf7f90; the build failed on two test-portability
+errors in the new regression tests (a 62-bit shift on the 32-bit job; an unused
+`static inline` in the clang fuzz build), so `frama-c-range` (`needs: build`)
+did not run. Fixed in 5e778b7, touching only `test/`. `range.h` and
+`vec_range.h` are byte-identical between 4cf7f90 and 5e778b7; **run 2's
+evidence is from 5e778b7.** 2475 goals, 47 unproved: 36 inherited, 11 own.
+
+| # | prediction | result |
+|---|------------|--------|
+| P2 | inherited 36 | **HELD, and name-identical to run 1** (two of the three name-stability runs). |
+| P5 | nothing own outside `range_len` / `range_skip` / count goals | **HELD.** |
+| P6 | run 2 own residuals = 0, or ≤ 2 (the count ensures), class (a) | **FALSIFIED — 11.** |
+| P1 | zero new argument blocks | **Scored at enforcement** (VERIFY-028 "Scoring"). After P6's failure it survives only if run 3 closes all own goals. |
+
+Also from run 2: `skip_exhaust` now proves; `next_count` — a
+division-by-variable goal — proved unaided in both runs. The class is not
+uniformly hard.
+
+**Diagnosis of the 11.** None is a defect: the regression tests pass on
+GCC 64-bit, GCC `-m32` (Release and Debug), clang, and the clang fuzz build,
+and a differential test (Part 3) agrees with exact 128-bit arithmetic. Two
+causes, with the evidence for each:
+
+- **Group A — 3 goals, `range_len`** (`assert_rte_division_by_zero_part4`,
+  `nonnull_ensures_len_count_part3`, `…_part6`). Run 2 computed
+  `|step| = (usize)0 − (usize)step` and `span = (usize)end − (usize)current`:
+  correct, but correct *because of* unsigned wraparound, which WP models as
+  reduction modulo 2^N. Evidence: `len_count` **proved in run 1**, where the
+  same division was taken over an `isize` difference; only the span
+  computation changed between runs. Confidence: high.
+- **Group B — 8 goals, `range_skip`** (four `signed_overflow` RTE goals,
+  `skip_inside` ×2, `skip_count` ×2). Each needs
+  `n < count ⟹ n·|step| ≤ span − 1`, i.e. `k·(a/k) ≤ a` with monotonicity —
+  multiplication meeting division. This is the class VERIFY-028 flagged (P6
+  confidence M–L). Confidence: high that this is the obstacle; the exact
+  split-part mapping is not established.
+
+**Methodological finding.** Group A was introduced by a MISRA-motivated
+choice: the run-2 fix wrote `(usize)0 − (usize)step` rather than
+`(usize)(−step)` specifically to avoid a Rule 10.8 composite-expression cast. The code became
+MISRA-clean and correct, and simultaneously unprovable by the deductive
+verifier. Two assurance tools pulled the same line in opposite directions.
+Run 3 shows the tension is resolvable (a named temporary satisfies both), but
+it had to be noticed first.
+
+**MC/DC** (GCC 14 `-fcondition-coverage`, CI job). `range.h`: 81.7% (49/60)
+at run 1 → **92.3% (48/52)** at run 2. The denominator changed because the
+branch structure changed; the regression tests reached outcomes nothing
+reached before. Four missed outcomes remain for the MCDC record.
+
+**MISRA.** 53 real violations at runs 1 and 2 = the pinned 53.
+
+---
+
+### Part 2 — F5: a buffer overflow downstream of F1 (not predicted)
+
+`vec_extend_from_range` (`data/vec/vec_range.h`) checked capacity against
+`range_len(&r)` and then wrote **until the range was exhausted**, not up to
+that count. Under F1, `range_len` returned 0 for a range wider than
+`ISIZE_MAX`, the capacity check passed, and the loop wrote past the buffer.
+Demonstrated before the fix, through the public API only:
+
+    range_make(ISIZE_MIN, ISIZE_MAX, ISIZE_MAX)   /* 3 elements */
+    into a vec of capacity 1
+    ASan: stack-buffer-overflow, WRITE of size 8
+
+F1 is therefore a memory-safety defect for any consumer that trusts
+`range_len` — not a wrong-answer defect. `vec_range.h` had no tests at all.
+Fixed at run 2 on both sides: F1 makes the count exact, and the loop is now
+bounded by the same `count` the capacity check used, so the check and the
+writes agree by construction whatever `range_len` returns. Regression tests
+in `vec_test.c` fail (ASan) on the old source and pass on the new.
+
+`vec_range.h` is not in any WP translation unit; F5 is a finding of this arc,
+not of the prover.
+
+---
+
+### Part 3 — Run 3, pre-registered
+
+**What changes.** `range_len` and `range_skip` bodies only, plus two lemmas
+in the ACSL logic layer. **The 15 function contracts are byte-identical to
+runs 1 and 2** (checked mechanically: of the 16 ACSL blocks, only block 0, the
+logic layer, differs).
+
+- `|step|`: negate in `isize` (safe under `range_wf`), then widen —
+  `const isize neg_step = −r->step; abs_step = (usize)neg_step;`
+- span, by endpoint signs, never wrapping: same sign → `hi − lo` exact in
+  `isize`; `lo < 0 ≤ hi` → `(usize)hi + (usize)(−(lo+1)) + 1`, each part in
+  `[0, ISIZE_MAX]`, sum ≤ `USIZE_MAX`.
+- lemmas, each proved by WP as its own goal (no trusted axiom):
+  `range_mul_le`: `a ≥ 0 ∧ k > 0 ∧ 0 ≤ n ≤ a/k ⟹ n·k ≤ a`;
+  `range_div_shift`: `a ≥ 0 ∧ k > 0 ∧ n ≥ 0 ∧ n·k ≤ a ⟹ (a − n·k)/k = a/k − n`.
+- one new test, `test_len_sign_cases`: the all-negative case (`lo < 0`,
+  `hi < 0`) is the only way to show `hi < 0` independently flips the new
+  decision `(lo >= 0) || (hi < 0)`; no existing test had one.
+
+**Checks already done** (none is a substitute for WP):
+- both lemmas valid in Z3 (integer arithmetic; ACSL `/` truncates, which
+  equals floor division on the lemmas' non-negative domain);
+- differential test: 21,055,064 `range_skip` cases and every `range_len`
+  against exact 128-bit reference arithmetic, weighted to the extremes —
+  0 mismatches, 0 UBSan reports;
+- full local matrix: GCC 64-bit 54/54, GCC `-m32` Release 54/54 and Debug
+  54/54, clang fuzz build (40 targets), clang unit tests under ASan/UBSan,
+  driver compiles under WP's flags;
+- MISRA (Cppcheck 2.13.0, the CI's version): rule-for-rule identical to run 2
+  on `range.h`; no Rule 10.8.
+
+**Rules fixed now.**
+1. **Run 3 is the last provability rewrite.** Whatever own goal remains
+   unproved after run 3 is kept and argued (VERIFY-028 decision rule), not
+   rewritten again. This closes the garden of forking paths: without it,
+   "zero arguments" could always be reached by iterating until the prover
+   agrees.
+2. **How lemmas count for P1.** A lemma WP proves adds no trusted
+   assumption and is not an argument block. A lemma WP does not prove is a
+   residual like any other, and needs one.
+3. **What P1 may claim if it holds.** "Zero new argument blocks" — true — but
+   never "unaided": the record states that P6 failed and that a body rewrite
+   plus two lemmas were required. Table 5's module-18 row carries that
+   footnote.
+
+**Predictions (author — confirm or amend before committing).**
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | inherited = 36, **name-identical** to runs 1–2 (third stability run) | any change in count or names | H |
+| Q2 | both lemmas prove | either `typed_lemma_range_*` unproved | M |
+| Q3 | group A closed: 0 unproved goals in `range_len` | any `range_len` goal unproved | M–H |
+| Q4 | group B closed: 0 unproved goals in `range_skip` | any `range_skip` goal unproved | M–L |
+| Q5 | no own goal unproved outside `range_len` / `range_skip` / lemmas | any other own goal | H |
+| Q6 | own total = 0 (so P1 survives to enforcement) | own ≥ 1 | M–L |
+| Q7 | MC/DC: `range.h` has no missed outcome *in the rewritten `range_len` decision* | a missed outcome there | M |
+
+Q4 is the weak point, as P6 was: the lemmas give the provers the right facts,
+but they must still instantiate them against terms involving the modelled
+`usize` multiplication. If Q4 fails, rule 1 applies — the remainder is argued,
+and the curve records module 18 as its first post-saturation increment, with
+this record as the explanation.
