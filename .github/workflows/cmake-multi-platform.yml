@@ -6198,7 +6198,7 @@ jobs:
           path: wp_pq_output.txt
           retention-days: 90
   # -------------------------------------------------------------------------
-  # data/range.h — VERIFY-028/029, RUN 3 of N, REPORT-ONLY.
+  # data/range.h — ENFORCED (VERIFY-030), pinned from CI #1315 / #1316.
   #
   # Module 18 in Table 5, and the first unit verified AFTER the saturation
   # claim was written down: a prospective test (VERIFY-028 P1). Shape A in
@@ -6214,6 +6214,10 @@ jobs:
   # (range_mul_le, range_div_shift), each proved as its own goal. The 15
   # function contracts are UNCHANGED since run 1. Per VERIFY-029 this is the
   # LAST provability rewrite: whatever remains after run 3 is argued.
+  # RUN 3 (c3c4e64, #1315) and RUN 4 (fa05034, #1316, header unchanged):
+  # own 0, the same 36 inherited names both times. ENFORCED from VERIFY-030:
+  # the enforcing run is the third on unchanged code (range.h changed only
+  # in comments), so it is also the last name-stability check.
   #
   # MODEL: Typed. range.h has no pointer<->integer casts. Goal names carry the
   # typed_ prefix, so option's 32 compare with bitset's modulo BOTH the type
@@ -6232,7 +6236,7 @@ jobs:
       - name: "WP: data/range.h"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0            # report-only until name-stable across runs 3-5
+          ENFORCE=1            # VERIFY-030
           EXPECTED_UNPROVED=""
           EXPECTED_PROVED=""
           WP_MODEL="Typed"
@@ -6318,6 +6322,96 @@ jobs:
             echo "  Q5  anything else own (pred 0):"
             grep -vE 'range_len|range_skip|lemma' /tmp/rg_own.txt > /tmp/rg_q5.txt || true; show /tmp/rg_q5.txt "(none)"
             echo "  =================================================================="
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ -n "${PROVED_LINE}" ]; then
+            # ===============================================================
+            # ENFORCED as of VERIFY-030, pinned from CI #1315 (c3c4e64) and
+            # #1316 (fa05034): 2611/2647, 36 residuals, name-identical both
+            # runs. range.h's own residual count is ZERO; all 36 are inherited:
+            #   32  option_isize combinators (function-pointer dispatch:
+            #       terminates / exits / assigns / \valid_function) -- the
+            #       same 32 bitset pins as option_usize (VERIFY-020)
+            #    2  contract_default_handler (abort path, VERIFY-002 class)
+            #    2  checked_add / checked_add_u64 overflow_ensures (VERIFY-002)
+            # A pinned name that starts proving is a RATCHET; a new name is a
+            # finding. Neither is ever absorbed silently.
+            # ===============================================================
+            EXPECTED_PROVED="2611 / 2647"
+            EXPECTED_UNPROVED=36
+            PIN_NAMES=(
+            "typed_checked_add_overflow_ensures"
+            "typed_checked_add_u64_overflow_ensures"
+            "typed_contract_default_handler_loop_invariant_established"
+            "typed_contract_default_handler_terminates"
+            "typed_option_isize_and_then_assert_rte_function_pointer"
+            "typed_option_isize_and_then_assigns_exit_part2"
+            "typed_option_isize_and_then_assigns_normal_part2"
+            "typed_option_isize_and_then_exits_part1"
+            "typed_option_isize_and_then_terminates_part2"
+            "typed_option_isize_and_then_terminates_part3"
+            "typed_option_isize_combine_with_assert_rte_function_pointer"
+            "typed_option_isize_combine_with_assigns_exit_part2"
+            "typed_option_isize_combine_with_assigns_normal_part2"
+            "typed_option_isize_combine_with_exits_part1"
+            "typed_option_isize_combine_with_terminates_part2"
+            "typed_option_isize_combine_with_terminates_part3"
+            "typed_option_isize_eq_assert_rte_function_pointer_part2"
+            "typed_option_isize_eq_assigns_part5"
+            "typed_option_isize_eq_terminates_part2"
+            "typed_option_isize_eq_terminates_part4"
+            "typed_option_isize_filter_assert_rte_function_pointer"
+            "typed_option_isize_filter_assigns_exit_part2"
+            "typed_option_isize_filter_assigns_normal_part2"
+            "typed_option_isize_filter_exits_part1"
+            "typed_option_isize_filter_terminates_part2"
+            "typed_option_isize_filter_terminates_part3"
+            "typed_option_isize_map_assert_rte_function_pointer"
+            "typed_option_isize_map_assigns_exit_part2"
+            "typed_option_isize_map_assigns_normal_part2"
+            "typed_option_isize_map_exits_part1"
+            "typed_option_isize_map_terminates_part2"
+            "typed_option_isize_map_terminates_part3"
+            "typed_option_isize_or_else_assert_rte_function_pointer"
+            "typed_option_isize_or_else_assigns_part2"
+            "typed_option_isize_or_else_terminates_part1"
+            "typed_option_isize_or_else_terminates_part2"
+            )
+            echo ""
+            echo "==============================================="
+            echo "  MODE: ENFORCED (VERIFY-030)"
+            echo "==============================================="
+            PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved-goal summary ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              note_fail "FAIL: ${F} Failed / ${I} Invalid goal(s) -- a REAL finding, never pinnable."
+            fi
+            printf '%s\n' "${PIN_NAMES[@]}" | sort -u > /tmp/rg_pin.txt
+            PIN_N=$(wc -l < /tmp/rg_pin.txt)
+            comm -23 /tmp/rg_pin.txt /tmp/rg_all.txt > /tmp/rg_missing.txt
+            comm -13 /tmp/rg_pin.txt /tmp/rg_all.txt > /tmp/rg_unpinned.txt
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 32 option + 2 handler + 2 checked + 0 own) ---"
+            echo "    missing (pinned, now proved):    $(wc -l < /tmp/rg_missing.txt)"; show /tmp/rg_missing.txt
+            echo "    unpinned (new, unproved):        $(wc -l < /tmp/rg_unpinned.txt)"; show /tmp/rg_unpinned.txt
+            if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: pin list has ${PIN_N} names, EXPECTED_UNPROVED is ${EXPECTED_UNPROVED} -- the job is inconsistent."
+            fi
+            if [ -s /tmp/rg_missing.txt ] || [ -s /tmp/rg_unpinned.txt ]; then
+              echo "FAIL: residual set differs from the pin by name."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              echo "        both     -> a goal oscillates across runs; the pin"
+              echo "                    is flaky and that is the finding."
+              FAILURES=$((FAILURES + 1))
+            fi
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "PASS: range.h verified -- ${PROVED_COUNT} proved, ${EXPECTED_UNPROVED}"
+              echo "      residuals, all inherited, all observed by name (VERIFY-030)."
+            else
+              echo "VERIFY-030 ENFORCED FAIL: ${FAILURES} check(s) above."
+            fi
+            echo "==============================================="
           fi
           if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
       - name: Upload WP proof output (range.h)

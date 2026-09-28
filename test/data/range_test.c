@@ -523,6 +523,24 @@ static void test_len_sign_cases(void)
     EXPECT(!range_has_next(&s));
 }
 
+/* ── MCDC-015: two test gaps found by the per-line MC/DC step ────────────
+ * G1: range_is_valid had never been called on a valid, non-empty range, so
+ *     neither condition of `r && !range_is_empty(r)` was shown to produce
+ *     the true outcome.
+ * G2: range_peek had never been called with out == NULL and a real range,
+ *     so `!out` was never shown to decide the guard on its own. */
+static void test_mcdc015_gaps(void)
+{
+    range ok = range_make(0, 3, 1);
+    EXPECT(range_is_valid(&ok));                 /* G1: r && !empty -> true */
+
+    isize sentinel = 77;
+    EXPECT(!range_peek(&ok, NULL));              /* G2: !out alone decides */
+    EXPECT(ok.current == 0);                     /* and nothing moved */
+    EXPECT(range_peek(&ok, &sentinel));
+    EXPECT(sentinel == 0);
+}
+
 static void test_range_for(void)
 {
     isize sum = 0;
@@ -657,6 +675,7 @@ int main(void)
     test_skip_huge_n_f2a();
     test_skip_wide_f2b();
     test_len_sign_cases();
+    test_mcdc015_gaps();
     test_range_for();
     test_convenience_iteration();
 

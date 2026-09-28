@@ -414,12 +414,12 @@ static inline bool range_is_valid(const range* r) {
  *
  * Exact over the whole isize domain (VERIFY-028 F1). The span of a range
  * can reach 2*ISIZE_MAX + 1 = USIZE_MAX, which does NOT fit in isize, so
- * it is computed in usize: casting isize -> usize is value-preserving
- * modulo 2^N, and the unsigned difference of the two casts is the true
- * span whenever the range is non-empty. The count (span-1)/|step| + 1 is
- * at most span, so it always fits in usize — no saturation is needed.
- * (Before F1 the span was an isize subtraction: undefined behaviour for
- * any range wider than ISIZE_MAX, observed returning 0.)
+ * it is accumulated in usize — by endpoint-sign cases, so that no
+ * intermediate ever wraps (VERIFY-029: a wrapping form was correct but
+ * unprovable). The count (span-1)/|step| + 1 is at most span, so it always
+ * fits in usize — no saturation is needed. (Before F1 the span was an
+ * isize subtraction: undefined behaviour for any range wider than
+ * ISIZE_MAX, observed returning 0.)
  *
  * Note on abs_step computation:
  * The negation -r->step is safe here because range_make() rejects
@@ -591,7 +591,7 @@ static inline option_isize range_peek_option(const range* r) {
  * @return Next value in sequence
  *
  * @pre r != NULL — checked via require_msg() (hard precondition)
- * @pre range_has_next(r) == true — checked via ensure_msg() (debug only)
+ * @pre range_has_next(r) == true — checked via require_msg() (VERIFY-028 F4)
  *
  * @post r->current is advanced by r->step using checked_add_isize()
  * @post On overflow, saturates to r->end for safety
