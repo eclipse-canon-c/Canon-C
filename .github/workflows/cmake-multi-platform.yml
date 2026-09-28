@@ -7541,6 +7541,41 @@ jobs:
           else
             echo "No lifetime.h.gcov file generated"
           fi
+      - name: "Debug: per-line MC/DC detail for range.h"
+        # Added with VERIFY-028/029 (the range.h arc). Baseline 81.7% (49/60)
+        # at run 1; 92.3% (48/52) at run 2 after the F1/F2 regression tests.
+        # Run 3 rewrote range_len around the decision (lo >= 0) || (hi < 0)
+        # and added test_len_sign_cases so each condition can be shown to
+        # flip it independently (VERIFY-029 Q7). The misses printed here are
+        # the input to range.h's MCDC entry, which will classify each one as
+        # a test gap or a justified dead outcome (e.g. range_is_empty's
+        # step == 0 arm, dead under range_wf — VERIFY-028 design item 5).
+        # range.h is ALSO compiled into vec_test via vec_range.h; that TU
+        # sees only the functions extend_from_range calls, so this step reads
+        # range_test's data — the unit's own tests, as every step above does.
+        # Report-only, like the sixteen steps above it. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "range_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate range_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" 2>&1 | \
+            grep -A 200 "range.h" | head -500
+          echo ""
+          GCOV=$(find . -name "range.h.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+            echo ""
+            echo "=== Condition outcomes not fully covered in range.h ==="
+            grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+          else
+            echo "No range.h.gcov file generated"
+          fi
 
 
   # -------------------------------------------------------------------------
