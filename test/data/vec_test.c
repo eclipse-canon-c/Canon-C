@@ -1208,6 +1208,9 @@ int main(void)
  */
 static void vec_fuzz_suppress_unused(void)
 {
+    /* VERIFY-028 F5 tests are unit-only; the fuzz build never calls it */
+    (void)vec_int_extend_from_range;
+
     /* int option API */
     (void)option_int_is_some;
     (void)option_int_is_none;

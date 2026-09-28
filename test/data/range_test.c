@@ -465,8 +465,11 @@ static void test_skip_huge_n_f2a(void)
 
 static void test_skip_wide_f2b(void)
 {
-    /* F2b: n * step > ISIZE_MAX but target inside. Was exhausted early. */
-    const usize n = ((usize)1 << 62) + 1u;
+    /* F2b: n * step > ISIZE_MAX but target inside. Was exhausted early.
+     * Width-independent: with w = bits in isize, ISIZE_MAX = 2^(w-1) - 1, so
+     * n = ISIZE_MAX/2 + 2 = 2^(w-2) + 1 and 2n = 2^(w-1) + 2 > ISIZE_MAX,
+     * while MIN + 2n = 2 and MAX - 2n = -3 on every width. */
+    const usize n = ((usize)CANON_ISIZE_MAX / 2u) + 2u;
 
     range r = range_make(CANON_ISIZE_MIN, CANON_ISIZE_MAX, 2);
     const usize before = range_len(&r);
