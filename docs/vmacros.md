@@ -332,6 +332,16 @@ verifies the core surface only. The three `DEFINE_VEC_SLICE` facade views
 (12 of MCDC-010's 158 outcomes) but not yet WP-driven; the facade-widening
 pass is a recorded follow-up.
 
+The deferral has a cost, now demonstrated once: `vec_range.h`'s
+`extend_from_range` had **no tests at all**, and when range.h's `range_len`
+under-reported wide ranges (VERIFY-028 F1) its capacity check passed and its
+loop wrote past the buffer — a memory-safety defect reachable through the
+public API (VERIFY-028/029 **F5**). It is fixed (the loop is bounded by the
+same count the capacity check used) and regression-tested in `vec_test.c`,
+but the extension is still outside every WP translation unit. range.h itself
+is now verified (VERIFY-030), which removes the dependency's side of the
+risk; the extension's own side remains deferred.
+
 ### Instantiation-identity rule (from the VERIFY-018 reconciliation)
 
 Composing a Shape-B module and instantiating one are **different acts

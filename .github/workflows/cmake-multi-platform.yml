@@ -6266,7 +6266,7 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (range.h) exit status: ${WP_EXIT}"
-          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          if [ "${ENFORCE}" -eq 1 ]; then echo "  MODE: ENFORCED (VERIFY-030)  MODEL: ${WP_MODEL}"; else echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"; fi
           echo "==============================================="
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
           echo "  ${PROVED_LINE}"

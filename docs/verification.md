@@ -10,11 +10,11 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 18 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h) — lifetime.h is a 19th unit of narrower scope, see VERIFY-021 |
-| **Functions**        | 412 annotated and verified (371 + priority_queue.h's 41; lifetime.h's 1 counted separately) |
-| **Total obligations**| 41933 (summed over the 18 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 40982 (97.73%)                                                                 |
-| **Unproved**         | 951 (all documented; see per-header sections)                                  |
+| **Headers verified** | 19 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h) — lifetime.h is a 20th unit of narrower scope, see VERIFY-021 |
+| **Functions**        | 427 annotated and verified (371 + priority_queue.h's 41 + range.h's 15; lifetime.h's 1 counted separately) |
+| **Total obligations**| 44580 (summed over the 19 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 43593 (97.79%)                                                                 |
+| **Unproved**         | 987 (all documented; see per-header sections)                                  |
 
 *Corrected 2026-08-21.* This card previously read 15 / 315 / 30599 / 29899 /
 700 — the state before deque was verified and before the vec F4 confirming
@@ -36,6 +36,13 @@ against +40 proved. See VERIFY-018's DEMONSTRATED note in
 
 Arithmetic: 30599 + 1668 + 38 = 32305; 29899 + 1601 + 40 = 31540;
 700 + 67 − 2 = 765.
+
+*Updated 2026-09-29.* This card previously read 18 / 412 / 41933 / 40982 /
+951 — the state before range.h was verified. **(6) range.h** (VERIFY-028/029/030;
+enforced CI #1317 / 9f7a9d0, name-identical to #1315 and #1316) adds a
+nineteenth unit: +15 functions, +2647 obligations, +2611 proved, +36
+unproved — all 36 inherited, **none own**. Arithmetic: 41933 + 2647 = 44580;
+40982 + 2611 = 43593; 951 + 36 = 987.
 
 *Corrected 2026-09-07.* This card previously read 17 / 371 / 37307 / 36379 —
 the state before VERIFY-023 (+6 goals in each of the 7 units including ptr.h,
@@ -145,12 +152,12 @@ ptr_elem, so it has no per-allocation alignment-pad arithmetic and arena.h's
 26-goal cat 2b arithmetic-chain residual class does not recur in pool.h's own
 surface. See VERIFY-010 in `docs/deviations.md` for the full classification.
 
-A note on totals: the 41933 obligation count is the row-sum of
+A note on totals: the 44580 obligation count is the row-sum of
 each header's own WP-relevant goals — checked.h's 1755, bits.h's
 757, compare.h's 208, ptr.h's 1959, slice.h's 394, memory.h's 2872,
 arena.h's 3527, pool.h's 4009, region.h's 3698, error.h's 65,
 option's 223, result's 215, borrow.h's 2458, diag.h's 3060, vec's
-5473, deque's 1668, bitset's 5008 and priority_queue.h's 4584 (each
+5473, deque's 1668, bitset's 5008, priority_queue.h's 4584 and range.h's 2647 (each
 counted in full because each header was
 verified atop its full substrate, with no separate substrate-free
 measurement available for downstream headers). The CI WP steps for
@@ -3468,6 +3475,58 @@ finding, and the method notes are in VERIFY-022. The coverage arc that
 preceded it, and the PQ-A finding that made six heap helpers internal, are
 MCDC-014.
 
+## data/range.h (in-place contracts, interposition driver)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals)            |
+| **Baseline commit**    | c3c4e64 (Canon-C CI #1315, run 3, first measurement at the final code state) → name-identical fa05034 (#1316) → enforced 9f7a9d0 (CI #1317), name-identical |
+| **Functions**          | 15 contracted and proved in place; `RANGE_FOR` (call-site macro) parked per `docs/vmacros.md` |
+| **Proof obligations**  | 2611 / 2647 discharged automatically (98.64%)   |
+| **Unproved**           | 36 — all inherited (32 option_isize + 2 contract handler + 2 checked.h), **0 own**; VERIFY-030; **0 Failed, 0 Invalid, 0 Stepout** |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed` |
+| **CI enforcement**     | Yes — pinned `2611 / 2647` + zero Failed/Invalid + exact count 36 + by-name roll-call (set equality) |
+| **MC/DC coverage**     | 98.39% (61/62 condition outcomes, 1 justified — see MCDC-015) |
+| **CI artifact**        | `wp-proof-range`                                |
+| **Job runtime**        | ~30 min                                          |
+
+range.h is **module 18** and the **first module verified after the
+argument-base saturation claim was written down** — the first prospective
+test of it. VERIFY-028 pre-registered the predictions (bd1da17) before any
+contract existed; VERIFY-029 scored runs 1–2 and pre-registered run 3
+(9c1cdfc) before any run-3 code existed; VERIFY-030 closed it.
+
+**What is claimed.** `range_wf` is exactly the header's two documented
+invariants (`step != 0`, `step != ISIZE_MIN`). `range_count` gives the exact
+number of values still to be yielded over mathematical integers, and every
+function is proved against it over the **whole** `isize` domain: `range_len`
+returns it exactly; `range_next` decrements it by one; `range_skip(n)` leaves
+`max(0, count − n)`, landing on `current + n·step` when inside the range and
+on `end` otherwise. **Not claimed**: the value sequence as a whole (no ghost
+model of iteration), and anything about `RANGE_FOR`.
+
+**Defects found before the prover ran** (VERIFY-028, by reading and probing):
+F1, `range_len` undefined for spans wider than `ISIZE_MAX` (observed returning
+0); F2a/F2b, `range_skip` reversing direction for `n > ISIZE_MAX` and
+exhausting wide ranges early; F3, an unguarded `CANON_OPTION(isize)`; F4, a
+caller precondition stated with `ensure_msg`. Tracing F1's consumers found
+**F5**, a buffer overflow in `vec_extend_from_range` (`data/vec/vec_range.h`)
+reachable through the public API. The existing suite passed on all of it.
+
+**The arc.** Run 1, on the unfixed bodies, failed on exactly the goals the
+defects falsify and on no others. Run 2 fixed them and falsified VERIFY-028
+P6: 11 own residuals, from two causes — a MISRA-motivated wraparound form of
+the F1 fix that was correct but opaque to the provers, and the nonlinear
+bound `n·|step| ≤ span − 1`. Run 3 — declared in advance as the last
+provability rewrite — removed the wraparound and added two lemmas
+(`range_mul_le`, `range_div_shift`) that WP proves as goals of their own.
+Own residuals: 12 → 11 → 0. **Zero new argument blocks** (P1 held), but not
+unaided; VERIFY-029/030 say so and Table 5 carries the footnote.
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -3586,13 +3645,14 @@ their audit expectations and VERIFY-018's method lessons (split patch
 first; composition before contract-weakening; three-run pinning
 discipline) recorded for deque.
 
-### data/ (in progress — vec, deque, bitset, priority_queue.h enforced)
+### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h enforced)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
 | vec (driver) | ✅ Verified  | 5285/5473 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; ratcheted CI #1202 and CI #1247/43a46b1 for the F4 closure; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 123 inherited byte-identically (largest TU to date; 91 core = arena.h's set verbatim, 32 option mod prefix) + 73 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 20 fresh result(Bool, Error) instantiation, the F4 pair having been removed by contract at CI #1247 — VERIFY-018 Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
 | deque (driver) | ✅ Verified  | 1601/1668 | Fourth driver-verified Shape-B module, second data/-layer module, first data/-layer driver on plain **Typed** (VERIFY-019, enforced CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240): 24 generated functions via the DEFINE_DEQUE_STRUCTS/FUNCTIONS split (VERIFY-018 F3's checklist item, landed CI #1225 with byte-identical expansion verified first); **zero core-substrate inheritance** — the first module whose inherited surface is SMALLER than its predecessor's, composability tested in the converse direction; 2 handler + 32 option (inheritance) + 28 fresh result(Bool, Error) + 5 own (swap cluster only); class (g) macro-body-loop **withdrawn** before the run (a ring shifts nothing); **memory-model invariant** (VERIFY-019-M); closed VERIFY-018 F4; MCDC-011 (82/82, 100%, zero justification rows) |
 | priority_queue.h | ✅ Verified | 4513/4584 | First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 71 residuals: 43 inherited + 22 result + 6 own (1 `\valid_function`, 5 memory.h `regions_overlap`-by-pointer-order — VERIFY-024 candidate). Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
+| range.h      | ✅ Verified | 2611/2647 | Module 18 and the **first prospective test of the saturation claim** (VERIFY-028 pre-registered, VERIFY-029 scored runs 1–2 and pre-registered run 3, VERIFY-030 enforced at CI #1317, name-identical to #1315/#1316). Shape A in place; thin driver interposes a contracted `option_isize` (F3 guard). Exact `range_count` proved over the whole `isize` domain. 36 residuals, **all inherited** (32 option + 2 handler + 2 checked), **0 own**. F1/F2a/F2b/F3/F4 found by reading before the prover ran; **F5** a buffer overflow in `vec_range.h` downstream of F1. P1 (zero new arguments) held; P6 failed at run 2 — closed by a no-wraparound rewrite + two proved lemmas. MC/DC 61/62, 1 justified (MCDC-015). |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 
 ### algo/ (longer term)

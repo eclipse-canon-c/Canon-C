@@ -8051,3 +8051,153 @@ but they must still instantiate them against terms involving the modelled
 `usize` multiplication. If Q4 fails, rule 1 applies — the remainder is argued,
 and the curve records module 18 as its first post-saturation increment, with
 this record as the explanation.
+
+---
+
+## VERIFY-030: range.h Enforced — Zero Own Residuals, 36 Inherited by Name, and P1 Survives Its First Prospective Test (Not Unaided)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-030 |
+| **Date**       | 2026-09-29 |
+| **Status**     | ENFORCED — CI #1317 / 9f7a9d0 |
+| **Pinned from**| CI #1315 (c3c4e64) and #1316 (fa05034), name-identical; #1317 the third, name-identical |
+| **Scope**      | `data/range.h` (module 18), `frama-c-range` job |
+| **Scores**     | VERIFY-028 P1 (final); VERIFY-029 Q1–Q7 |
+| **Related**    | VERIFY-028 (pre-registration), VERIFY-029 (runs 1–2 scored, run 3 pre-registered), MCDC-015 |
+
+This closes the range.h arc. It scores what VERIFY-028 and VERIFY-029 left
+open and records the enforced state. Nothing in either earlier record is
+reinterpreted.
+
+### The enforced state
+
+`frama-c-range` pins `2611 / 2647` and the 36 unproved goals **by name, as a
+set**, and fails on any Failed or Invalid goal, on a pinned goal that starts
+proving (ratchet), or on any new unproved goal (investigate). Each failure
+mode was dry-run against a synthetic log before the pin was committed.
+
+| Class | Goals | Owner | Prior record |
+|-------|-------|-------|--------------|
+| option_isize combinators (function-pointer dispatch: terminates / exits / assigns / `\valid_function`) | 32 | option (inherited) | VERIFY-014; the same 32 bitset pins as `option_usize` (VERIFY-020) |
+| `contract_default_handler` (abort path) | 2 | contract.h (inherited) | VERIFY-002 class |
+| `checked_add` / `checked_add_u64` `overflow_ensures` | 2 | checked.h (inherited) | VERIFY-002 |
+| **range.h own** | **0** | — | — |
+
+`tools/record_coverage.py` counts the 36 among the pinned names that records
+list by class rather than goal by goal (as for option, bitset and
+priority_queue), and reports 0 stale goals, 0 empty blocks, 0 heading drift,
+and **17 argument blocks — unchanged**.
+
+**Name stability.** #1315, #1316 and #1317 report the same 36 names. Two
+details that are not instability: the two `contract_default_handler` lines
+swap order between runs (the pin compares sorted sets), and which prover
+closes a given proved goal shifts run to run (e.g. CVC5 11 → 6). Neither
+changes the proved set, which is why the pin records names, not provers.
+#1317 changed `range.h` in comments only (every code line and all 16 ACSL
+blocks byte-identical to #1316), so it counts as the third unchanged run.
+
+### Scores
+
+| # | prediction (record) | result |
+|---|---------------------|--------|
+| Q1 | inherited 36, name-identical (029) | **HELD** — three runs |
+| Q2 | both lemmas prove (029) | **HELD** — neither appears unproved; inferred from absence, since WP lists only unproved goals, plus a clean parse |
+| Q3 | 0 unproved in `range_len` (029) | **HELD** |
+| Q4 | 0 unproved in `range_skip` (029, M–L) | **HELD** |
+| Q5 | nothing else own (029) | **HELD** |
+| Q6 | own total 0 (029) | **HELD** |
+| Q7 | no missed MC/DC outcome in the rewritten `range_len` decision (029) | **HELD** — `(lo >= 0) \|\| (hi < 0)` 4/4 (MCDC-015) |
+| P1 | zero new argument blocks (028) | **HELD at enforcement — with the VERIFY-029 footnote** |
+
+**How P1 must be reported.** Zero new argument blocks is true; cumulative
+*A* stays 17, *V* and *S* unchanged. It is **not** true that module 18 closed
+unaided: VERIFY-028 P6 was falsified at run 2 (11 own residuals), and closure
+took one body rewrite (no unsigned wraparound in `range_len`/`range_skip`) and
+two lemmas that WP proves as goals of their own, under the rule fixed in
+VERIFY-029 that run 3 was the last provability rewrite. The Table 5 row for
+module 18 carries that footnote; the saturation claim survives its first
+prospective test, and the record shows what it cost.
+
+Own residuals across the arc: **12 (run 1) → 11 (run 2) → 0 (run 3)**.
+
+### For Table 5 (module 18)
+
+| Quantity | Value |
+|----------|-------|
+| Module | `data/range.h` (Shape A, in place; thin interposition driver for `option_isize`) |
+| Functions | 15 |
+| Goals | 2611 / 2647 proved |
+| Residuals | 36 — 36 inherited, 0 own |
+| New argument blocks | **0** (cumulative A = 17) |
+| First post-saturation module | yes — prospective; P1 held, P6 failed (footnote above) |
+
+### Findings of the arc (for the summary)
+
+| ID | Finding | Kind | Status |
+|----|---------|------|--------|
+| F1 | `range_len` signed overflow for spans > ISIZE_MAX; observed returning 0 | UB / wrong count | fixed (run 2), proved (run 3) |
+| F2a | `range_skip` with `n > ISIZE_MAX` reversed direction | wrong result | fixed, proved |
+| F2b | `range_skip` exhausted wide ranges early | wrong result | fixed, proved |
+| F3 | unguarded `CANON_OPTION(isize)` blocked interposition | structural | fixed (run 1) |
+| F4 | `range_next` precondition stated with `ensure_msg` (off under NDEBUG) | contract vocabulary | fixed (run 2) |
+| F5 | `vec_extend_from_range` buffer overflow downstream of F1 (ASan) | **memory safety** | fixed (run 2), regression-tested |
+| M1 | a MISRA-motivated wraparound form made correct code unprovable | method | resolved (run 3) |
+
+F1–F4 were found by reading and probing before any contract; F5 by tracing
+F1's consumers. The prover found none of them first. What it did was fail
+exactly on the goals those defects falsify (run 1), then confirm the fixes.
+
+---
+
+## MCDC-015: A Wide-Range Blind Spot, Two Guard Gaps, and One Outcome Dead by Construction (range.h)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-015 |
+| **Date**       | 2026-09-29 |
+| **Baseline commit** | Canon-C CI #1312 (`c9138f4`), before any fix or new test. |
+| **Final commit** | Canon-C CI #1317 (`9f7a9d0`). |
+| **Scope**      | `data/range.h` MC/DC (from `range_test`): 49/60 (81.7%) → 48/52 (92.3%) → 58/62 (93.5%) → **61/62 (98.4%)**. Aggregate 1815/2018 → **1827/2020 (90.4%)**. |
+| **Category**   | Coverage completeness; run alongside VERIFY-028/029/030 |
+
+**Description**: `range.h` had a test suite that passed — under ASan and
+UBSan — on source containing F1 and F2 (VERIFY-028): no test used a range
+wider than `ISIZE_MAX`. Coverage said 81.7% and could not have said more,
+because MC/DC measures which outcomes the tests reach, not which input
+regions they sample. The two numbers answer different questions, and both
+were needed.
+
+Until this entry, no CI step printed per-line MC/DC for `range.h`; the
+coverage job's seventeenth per-line step was added for it (fa05034). The
+denominator changed twice because the code did — the F1/F2 fixes (run 2) and
+the no-wraparound rewrite (run 3) — so the percentages across stages are not
+a single series. The per-stage numerators are.
+
+### Stages
+
+| Stage | Commit | Outcomes | What moved it |
+|-------|--------|----------|---------------|
+| baseline | c9138f4 | 49/60 | — |
+| run 2 | 5e778b7 | 48/52 | F1/F2 removed branches; wide-range regression tests (F1, F2a, F2b) reached new ones |
+| run 3 | c3c4e64 → fa05034 | 58/62 | sign-split span added the decision `(lo >= 0) \|\| (hi < 0)`; `test_len_sign_cases` added the all-negative case, the only way to show `hi < 0` independently decides it |
+| final | 9f7a9d0 | **61/62** | G1, G2 below |
+
+### Disposition of the four misses at fa05034
+
+| # | Line (source) | Missed | Disposition |
+|---|---------------|--------|-------------|
+| G1 | 404 `return r && !range_is_empty(r)` | both conditions' TRUE outcome | **test gap** — `range_is_valid` had never been called on a valid, non-empty range. Closed: `test_mcdc015_gaps`. |
+| G2 | 544 `!r \|\| !out \|\| range_is_empty(r)` | `!out` TRUE | **test gap** — `range_peek` had never been called with `out == NULL` and a real range. Closed: `test_mcdc015_gaps`. |
+| J1 | 363 `if (r->step < 0)` | FALSE | **justified — dead by construction.** FALSE here means `step == 0`, which `range_make` never produces (0 is normalised to 1; `ISIZE_MIN` is rejected). Predicted in VERIFY-028 design item 5 and kept deliberately: the struct is public, and `range_empty` mirrors the arm in ACSL. Reaching it would mean building a `range` by hand in violation of the documented invariant, to move a number. |
+
+**Final**: 61/62, one justification row (J1). Any other miss printed by the
+per-line step is a regression.
+
+### Note on the second `range.h` row
+
+`range.h` is also compiled into `vec_test` through `vec_range.h` (F5's
+regression tests), which exercises only the functions `extend_from_range`
+calls: that TU reports 16/32. The summary table takes the per-file maximum,
+and the per-line step reads `range_test` — the unit's own tests — as every
+other per-line step does.

@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-09-07                                                   |
+| **Date**           | 2026-09-29                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 63d6705                                                      |
-| **CI run**         | Canon-C CI #1290                                             |
+| **Commit**         | 9f7a9d0                                                      |
+| **CI run**         | Canon-C CI #1317                                             |
 | **CI job**         | coverage + frama-c                                           |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -56,7 +56,16 @@
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | 55 instrumented (`Found 55 data files`), of which 4 are Shape-B cover TUs `option_cover`, `result_cover`, `vec_cover`, `deque_cover`; ctest registers 54 |
 
-> **Coverage moved by MCDC-014 (2026-09-05), twice.** MC/DC is now
+> **Coverage moved by MCDC-015 (2026-09-29).** MC/DC is now
+> **1827/2020 (90.45%)**; lines 2712/2797 (97.0%), functions 665/668
+> (99.6%), branches 1622/1808 (89.7%). The whole move is range.h: 49/60 →
+> 61/62 (+12 hit, +2 outcomes) across the VERIFY-028/029/030 arc — F1/F2
+> regression tests over ranges wider than `ISIZE_MAX`, the all-negative case
+> for the rewritten `range_len` decision, and two guard gaps (G1, G2). One
+> justification row (J1, `step == 0`, dead by construction). No other file
+> moved.
+>
+> **Coverage moved by MCDC-014 (2026-09-05), twice.** MC/DC was then
 > **1815/2018 (89.94%)**. The priority_queue coverage arc took the aggregate
 > 1796/2014 → 1816/2018 by tests (twelve gaps closed, including a swap path
 > that had zero executions), then 1816 → 1815 when PQ-A made the self-swap leg
@@ -670,6 +679,13 @@ by methodology):
   rename then made one leg unreachable and the measurement followed the
   code.
 
+- **range.h: 98.4% (61/62)** — the ceiling under MCDC-015. The single
+  uncovered outcome is J1, `range_is_empty`'s `step < 0` FALSE leg, i.e.
+  `step == 0`, which `range_make` never produces. The suite that reached
+  81.7% at baseline passed on source with three wide-range defects (F1, F2a,
+  F2b) and a downstream buffer overflow (F5): MC/DC measures outcomes
+  reached, not input regions sampled, and both questions had to be asked.
+
 Headers absent from the MC/DC table:
 
 `core/primitives/types.h`, `core/primitives/limits.h`,
@@ -811,7 +827,10 @@ place with no driver (VERIFY-022), its comparator proved as a verified
 configuration over compare.h's 24 built-ins via a `calls` clause; pinned
 4513 / 4584 with 71 residuals by name, of which 6 are its own and 5 of
 those are memory.h's `regions_overlap` predicate stated by pointer order
-(VERIFY-024 candidate).
+(VERIFY-024 candidate). As of 2026-09-29 (CI #1317), range.h is enforced
+(VERIFY-028/029/030) — module 18 and the first prospective test of the
+argument-base saturation claim: pinned 2611 / 2647 with 36 residuals by
+name, all inherited, **none own**, and zero new argument blocks.
 
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
@@ -834,7 +853,16 @@ those are memory.h's `regions_overlap` predicate stated by pointer order
 | bitset     | 32        |              5008 | 4845 (96.75%) | 163      | VERIFY-020/23 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
 | priority_queue.h | 41  |              4584 | 4513 (98.45%) | 71       | VERIFY-022   |
-| **Total**  | **413**   | **41937**         | **40986 (97.73%)**| **951**  |              |
+| range.h    | 15        |              2647 | 2611 (98.64%) | 36       | VERIFY-028/29/30 |
+| **Total**  | **428**   | **44584**         | **43597 (97.79%)**| **987**  |              |
+
+`range.h` is enforced as of CI #1317 (name-identical to #1315 and #1316; the
+third run changed comments only; VERIFY-030). Its 36 residuals are all
+inherited — 32 from the contracted `option_isize` instantiation (the same
+function-pointer-dispatch class bitset pins for `option_usize`), 2 from the
+contract handler, 2 from checked.h (VERIFY-002). It has **no own residuals**:
+own counts ran 12 → 11 → 0 over three runs, the last after a no-wraparound
+rewrite and two lemmas WP proves as goals of their own.
 
 `priority_queue.h` is enforced as of CI #1290 (name-identical to #1289 with no
 header change; VERIFY-022). Its 71 residuals are 43 inherited from memory.h,
@@ -944,7 +972,8 @@ Class arithmetic: 438 + 64 + 196 + 67 = 765. **Updated 2026-09-07:** the
 total is now 951 — 765 + 163 (bitset, VERIFY-020) − 48 (VERIFY-023 closed 8
 in arena and 16 more in pool, and the arena 8 were inherited by pool, region
 and vec: 8 + 24 + 8 + 8) + 71 (priority_queue, VERIFY-022: 43 inherited + 22
-result + 6 own). The per-class split in this paragraph was not recomputed;
+result + 6 own). **Updated 2026-09-29:** 987 = 951 + 36 (range.h,
+VERIFY-030: 32 option + 2 handler + 2 checked, all inherited). The per-class split in this paragraph was not recomputed;
 the per-module entries are the authoritative record. result additionally
 carries the union-model standing hypothesis (no goals; all
 union-member postconditions proved under a WP union model the tool
@@ -1396,5 +1425,6 @@ unprovable by construction — cites the coverage stream as its
 | 2026-09-02 | — | #1271 → #1275 | v1.3.0  | —      | —         | —        | 89.2%  | `lifetime.h` **enforced** (VERIFY-021): the token generator verified at ladder level 4 only, 4/4 with 0 unproved, name-identical at #1271/#1273/#1274, pinned at #1275. An instrument-integrity entry, not a module arc. MC/DC moved **down** to 1796/2014 (MCDC-013): `lifetime_test.c` compiles the generator into the coverage build and brings one platform-dead outcome into the denominator — the measurement got more honest, not less complete. Commit hash not recorded in this row; see VERIFY-021. |
 | 2026-09-05 → 09-07 | d0b6f2c → 63d6705 | #1280 → #1290 | v1.3.0  | 96.7%  | 99.6%     | 89.3%    | 89.9%  | priority_queue — MC/DC gap closure + PQ-A + in-place ACSL + WP through enforcement (MCDC-014, VERIFY-022), both streams in one arc; **fourth data/-layer module** and the first data/-layer module verified **in place with no driver** (Shape A); its core operation calls a caller-supplied function pointer from inside its loops. **Coverage** (d0b6f2c, #1280): 62/78 → 82/82 by twelve test gaps — including the large-element swap path, which had **zero executions** and was first misread as a justification row before being corrected — then 82/82 → 81/82 when PQ-A renamed the six heap helpers internal and made the self-swap leg dead by construction (J1); aggregate 1796/2014 → 1816/2018 → **1815/2018**. PQ-A's exposure was demonstrated, not argued: a client `pq_swap(&q, 0, 4)` broke the heap invariant silently and left an outstanding borrow validating against changed contents — failure-open, the VERIFY-021 mode. **WP** (#1281 → #1290, Typed+Cast, 41 functions): own residuals 199 → 170 → 143 → 144 → 18 → 7 → 6 over eight commits; three consecutive count predictions refuted before the job switched to named residual classes. The comparator call was an information horizon (~99 residuals downstream of `pq->cmp`), closed by `pq_cmp_` with a `calls` clause over compare.h's 24 built-ins — a **verified configuration**, nothing trusted; caller-supplied comparators are outside the proof. **F-WRAP** found by the prover: child-index arithmetic unguarded for `capacity > 2^63−1`, now bounded in `pq_wf`. Pinned **4513/4584, 71 by name** (43 memory.h + 22 result + 6 own) at #1289, enforced #1290 name-identical. Of the 6 own, 5 are memory.h's `regions_overlap` stated by pointer order — **VERIFY-024 candidate**. Run 2 of this arc is what exposed ptr.h's opaque address helpers and caused VERIFY-023 (next row). Docs pass followed (2026-09-07 to 09-09), with per-line MC/DC steps added for lifetime.h and priority_queue.h. |
 | 2026-09-06 | b79a51f | #1284 → #1285 | v1.3.0  | 96.7%  | 99.6%     | 89.3%    | 89.9%  | **VERIFY-023**: `ptr_offset`/`ptr_offset_const`/`ptr_elem`/`ptr_elem_const` gain an `ensures` stating their result. +6 goals in every TU including ptr.h (not the predicted +4: two of the four have a null branch and `-wp-split` fragments them). **24 pinned residuals closed** across arena (8), pool (16 own + 8), region (8), vec (8) — every one previously classified as arithmetic or call-site limits; all were the callee's opaque return address. Eight pins ratcheted in one commit. Also found: `frama-c-bitset` had no terminal exit and could not fail the build since #1259 — **enforcement of bitset begins here**; arena-32's embedded baseline was a stale copy of arena's pin. Coverage unchanged. |
+| 2026-09-26 → 09-29 | bd1da17 → 9f7a9d0 | #1312 → #1317 | v1.3.0  | 97.0%  | 99.6%     | 89.7%    | 90.4%  | range.h — **module 18, the first prospective test of the saturation claim**; both streams in one arc (VERIFY-028/029/030, MCDC-015). Predictions pre-registered before any contract (bd1da17) and again before the remediation run (9c1cdfc). **Findings before the prover ran**: F1 (`range_len` UB for spans > ISIZE_MAX, observed returning 0), F2a/F2b (`range_skip` reversal / early exhaustion), F3 (unguarded `CANON_OPTION(isize)`), F4 (`ensure_msg` precondition); tracing F1's consumers found **F5**, a buffer overflow in `vec_extend_from_range` (ASan, public API). **WP** (Typed, 15 functions): own residuals 12 → 11 → 0; run 1 failed exactly on the goals the defects falsify; run 2 falsified P6 (a MISRA-motivated wraparound form was correct but unprovable, plus a nonlinear bound); run 3, the pre-declared last rewrite, removed the wraparound and added two WP-proved lemmas. Pinned **2611/2647, 36 by name, all inherited**, name-identical over #1315/#1316/#1317; **zero new argument blocks** (P1 held — not unaided). **Coverage**: 49/60 → 61/62, one justification row (J1); aggregate 1815/2018 → **1827/2020**. MISRA 53 unchanged. Run 2's first push (4cf7f90) failed the build on two test-portability errors (a 62-bit shift on the 32-bit job; a clang fuzz unused-function); evidence is from 5e778b7, source identical. |
 
 ---
