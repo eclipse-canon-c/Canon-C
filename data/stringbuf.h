@@ -37,6 +37,44 @@
     #include "core/primitives/lifetime.h"  /* region_id_t, lifetime_t */
 #endif
 
+#ifdef __FRAMAC__
+/* ────────────────────────────────────────────────────────────────────────
+   WP-only trusted axiom for vsnprintf (VERIFY-031, design item 5).
+
+   Visible ONLY to Frama-C (__FRAMAC__), never to the C compiler. It is an
+   ASSUMED specification: an extern prototype with no body, which WP takes
+   as an axiom and never proves. diag.h's snprintf/fprintf pair is the
+   precedent; this is the project's third trusted axiom.
+
+   Design rule: the axiom states only the intersection of the libcs the
+   project claims. `term` is ISO C's guarantee for a complete conversion
+   (C11 7.21.6.12) and nothing more. It says nothing when \result < 0 and
+   nothing that rules out failure, so it holds on glibc AND on musl, which
+   fails with EOVERFLOW when n > INT_MAX (VERIFY-031 G2). It is weaker than
+   diag.h's unconditional `term`, which rests on an environmental
+   assumption this one does not need.
+
+   `sep` encodes the restrict qualification of s and format, for the
+   format's first byte only (G5). Separating the whole format string would
+   put the strlen axiomatics into a trusted clause, which is the noise
+   source VERIFY-017 recorded. The variadic arguments are invisible to the
+   axiom, so the `%s`-argument half of G5 is documented, not verified.
+
+   No \from clauses (WP ignores them). Frama-C's bundled libc declares its
+   own spec for vsnprintf; the two merge (VERIFY-031 Q2 records what
+   appears). vsnprintf is not itself variadic, so this binds whether or not
+   the Variadic plugin translates the callers (Q1).
+   ──────────────────────────────────────────────────────────────────────── */
+/*@
+  requires fmt_nonnull: format != \null;
+  requires valid_buf:   \valid(s + (0 .. n - 1));
+  requires sep:         \separated(s + (0 .. n - 1), format);
+  assigns  s[0 .. n - 1];
+  ensures  term: 0 <= \result < n ==> s[\result] == '\0';
+*/
+extern int vsnprintf(char *s, size_t n, const char *format, va_list arg);
+#endif /* __FRAMAC__ */
+
 /**
  * @file stringbuf.h
  * @brief Fixed-capacity incremental string builder (arena-backed or caller-owned buffer)
@@ -215,6 +253,72 @@ typedef struct {
 } StringBuf;
 
 /* ════════════════════════════════════════════════════════════════════════════
+   Formal specification (ACSL) — VERIFY-031
+   ════════════════════════════════════════════════════════════════════════════
+   Verified configuration: -DCANON_NO_REQUIRE -DNDEBUG, CANON_LIFETIME_DEBUG
+   off (the borrow.h precedent, OWN-001 §7). Model Typed+Cast.
+
+   STATUS — VERIFY-031 run 1 (report-only, the detection test): these
+   contracts sit on the UNFIXED bodies on purpose. G1 (overlap reaching
+   mem_copy), G2 (vsnprintf size > INT_MAX), G3 (pass-2 failure overwrites
+   the terminator), G5 (unstated restrict precondition) and G6 (the helper's
+   add_len > 0 @pre, violated by stringbuf_append("")) are fixed in run 2.
+   Run-1 preconditions are the documentation's, verbatim: the helper keeps
+   its own @pre; the public functions state none they do not document.
+
+   stringbuf_wf has exactly the five clauses VERIFY-031 fixed before any
+   contract was written:
+     1. data != NULL                      header invariant (initialised)
+     2. len < capacity                    header invariant
+     3. data[0 .. capacity-1] writable    ownership paragraph, memory form
+     4. the struct is not inside its own buffer   ditto
+     5. data[len] == '\0'                 header invariant
+   The header's third invariant (arena provenance) is not encoded: it is
+   provenance, not a property of the state.
+
+   The "zero state" (sb != NULL, data == NULL: a `StringBuf z = {0}`) is
+   what the NULL-safe functions document as "uninitialised"; each gets a
+   behaviour for it with the documented result.
+
+   Not claimed (VERIFY-031 design item 7): byte content of any append
+   except stringbuf_append_char (mem_copy assigns without a content
+   ensures — memory.h's specification-strength cap); strlen(data) == len
+   (embedded NULs are legal); arena provenance; anything under
+   CANON_LIFETIME_DEBUG; that a formatted append succeeds; the %s half of
+   G5.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/*@
+  predicate stringbuf_wf(StringBuf *sb) =
+    sb->data != \null &&
+    sb->len < sb->capacity &&
+    \valid(sb->data + (0 .. sb->capacity - 1)) &&
+    \separated(sb, sb->data + (0 .. sb->capacity - 1)) &&
+    sb->data[sb->len] == '\0';
+
+  // sb points at a readable struct that is either well-formed or in the
+  // zero state. The precondition of every function that dereferences sb.
+  predicate stringbuf_ok(StringBuf *sb) =
+    \valid(sb) && (sb->data == \null || stringbuf_wf(sb));
+
+  // The string value data[0 .. len] (terminator included) is the same at
+  // L1 and L2. VERIFY-031's `failure_unchanged`.
+  predicate stringbuf_unchanged{L1, L2}(StringBuf *sb) =
+    \at(sb->len, L1) == \at(sb->len, L2) &&
+    \at(sb->data, L1) == \at(sb->data, L2) &&
+    \at(sb->capacity, L1) == \at(sb->capacity, L2) &&
+    \forall integer i; 0 <= i <= \at(sb->len, L1) ==>
+        \at(sb->data[i], L1) == \at(sb->data[i], L2);
+
+  // The first n bytes are the same at L1 and L2 (the prefix an append
+  // must not disturb).
+  predicate stringbuf_prefix{L1, L2}(StringBuf *sb, integer n) =
+    \at(sb->data, L1) == \at(sb->data, L2) &&
+    \forall integer i; 0 <= i < n ==>
+        \at(sb->data[i], L1) == \at(sb->data[i], L2);
+*/
+
+/* ════════════════════════════════════════════════════════════════════════════
    Internal: lifetime helpers (compiled away in release)
    ════════════════════════════════════════════════════════════════════════════
    When CANON_LIFETIME_DEBUG is enabled, a StringBuf exposes a lifetime_t
@@ -275,6 +379,7 @@ typedef struct {
     }
 #endif
 
+/*@ assigns \nothing; */
 static inline void stringbuf_lifetime_open_(StringBuf* sb) {
 #ifdef CANON_LIFETIME_DEBUG
     sb->lt.id   = stringbuf_lifetime_next_id_(sb);
@@ -283,6 +388,7 @@ static inline void stringbuf_lifetime_open_(StringBuf* sb) {
     (void)sb;
 }
 
+/*@ assigns \nothing; */
 static inline void stringbuf_lifetime_close_(StringBuf* sb) {
 #ifdef CANON_LIFETIME_DEBUG
     sb->lt.open = false;
@@ -317,6 +423,22 @@ static inline void stringbuf_lifetime_close_(StringBuf* sb) {
  * - Time:  O(1) — single arena bump
  * - Space: O(initial_cap) consumed from arena
  */
+/*@
+  requires valid_sb:    \valid(sb);
+  requires arena_ok:    arena_invariant(arena);
+  requires cap_ok:      initial_cap > 1;
+  requires sep_arena:   \separated(sb, arena);
+  // sb may live in the arena's used part (allocated earlier from the same
+  // arena), but not in the free tail the new buffer will come from.
+  requires sep_storage: \separated(sb,
+                          ((char *)arena->buffer) + (arena->offset .. arena->capacity - 1));
+  assigns *sb, *arena,
+          ((char *)arena->buffer)[arena->offset .. arena->capacity - 1];
+  ensures arena_kept:   arena_invariant(arena);
+  ensures init_ok:      \result ==>
+                          stringbuf_wf(sb) && sb->len == 0 &&
+                          sb->capacity == initial_cap && sb->arena == arena;
+*/
 static inline bool stringbuf_init_arena(
         borrowed(StringBuf*) sb,
         borrowed(Arena*)     arena,
@@ -356,6 +478,16 @@ static inline bool stringbuf_init_arena(
  * - Time:  O(1)
  * - Space: O(1) — no allocation
  */
+/*@
+  requires valid_sb:  \valid(sb);
+  requires cap_ok:    cap > 1;
+  requires valid_buf: \valid(buffer + (0 .. cap - 1));
+  requires sep:       \separated(sb, buffer + (0 .. cap - 1));
+  assigns *sb, buffer[0];
+  ensures wf:     stringbuf_wf(sb);
+  ensures fields: sb->data == buffer && sb->len == 0 &&
+                  sb->capacity == cap && sb->arena == \null;
+*/
 static inline void stringbuf_init_buffer(
         borrowed(StringBuf*) sb,
         borrowed(char*)      buffer,
@@ -397,6 +529,10 @@ static inline void stringbuf_init_buffer(
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || \valid(sb);
+  assigns \nothing;
+*/
 static inline void stringbuf_close(borrowed(StringBuf*) sb) {
     if (!sb) { return; }
     stringbuf_lifetime_close_(sb);
@@ -422,6 +558,20 @@ static inline void stringbuf_close(borrowed(StringBuf*) sb) {
  * @pre add_len > 0
  * @pre [src, src+add_len) does not overlap sb->data (caller must guarantee)
  */
+/*@
+  requires wf:         stringbuf_wf(sb);
+  requires src_nonnull: src != \null;
+  requires add_pos:    add_len > 0;
+  requires src_read:   \valid_read(src + (0 .. add_len - 1));
+  requires no_overlap: \separated(src + (0 .. add_len - 1),
+                                  sb->data + (0 .. sb->capacity - 1));
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  ensures fits:   \result <==> \old(sb->len) + add_len + 1 <= \old(sb->capacity);
+  ensures grown:  \result ==> sb->len == \old(sb->len) + add_len;
+  ensures wf_ok:  \result ==> stringbuf_wf(sb);
+  ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+  ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+*/
 static inline bool _stringbuf_append_bytes(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) src,
@@ -461,6 +611,29 @@ static inline bool _stringbuf_append_bytes(
  *
  * Performance: O(strlen(s))
  */
+/*@
+  requires sb_ok:  sb == \null || stringbuf_ok(sb);
+  requires s_ok:   s == \null || valid_read_string(s);
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior no_source:
+    assumes sb != \null && sb->data != \null && s == \null;
+    assigns \nothing;
+    ensures \result == \true;
+  behavior append:
+    assumes sb != \null && sb->data != \null && s != \null;
+    ensures fits:   \result <==>
+                      \old(sb->len) + \at(strlen(s), Pre) + 1 <= \old(sb->capacity);
+    ensures grown:  \result ==> sb->len == \old(sb->len) + \at(strlen(s), Pre);
+    ensures wf_ok:  \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool stringbuf_append(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) s)
@@ -485,6 +658,29 @@ static inline bool stringbuf_append(
  *
  * Performance: O(s.len)
  */
+/*@
+  requires sb_ok: sb == \null || stringbuf_ok(sb);
+  requires s_ok:  (s.ptr != \null && s.len > 0) ==>
+                    \valid_read(s.ptr + (0 .. s.len - 1));
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior no_source:
+    assumes sb != \null && sb->data != \null && (s.ptr == \null || s.len == 0);
+    assigns \nothing;
+    ensures \result == \true;
+  behavior append:
+    assumes sb != \null && sb->data != \null && s.ptr != \null && s.len > 0;
+    ensures fits:   \result <==> \old(sb->len) + s.len + 1 <= \old(sb->capacity);
+    ensures grown:  \result ==> sb->len == \old(sb->len) + s.len;
+    ensures wf_ok:  \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool stringbuf_append_str(
         borrowed(StringBuf*) sb,
         str_t                s)
@@ -506,6 +702,24 @@ static inline bool stringbuf_append_str(
  *
  * Performance: O(1)
  */
+/*@
+  requires sb_ok: sb == \null || stringbuf_ok(sb);
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior append:
+    assumes sb != \null && sb->data != \null;
+    ensures fits:    \result <==> \old(sb->len) + 2 <= \old(sb->capacity);
+    ensures grown:   \result ==> sb->len == \old(sb->len) + 1;
+    ensures content: \result ==> sb->data[\old(sb->len)] == c;
+    ensures wf_ok:   \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix:  stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool stringbuf_append_char(
         borrowed(StringBuf*) sb,
         char                 c)
@@ -543,6 +757,23 @@ static inline bool stringbuf_append_char(
  *
  * Performance: O(n) — two vsnprintf passes
  */
+/*@
+  requires sb_ok:  sb == \null || stringbuf_ok(sb);
+  requires fmt_ok: fmt == \null || valid_read_string(fmt);
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || fmt == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior format:
+    assumes sb != \null && fmt != \null && sb->data != \null;
+    ensures grown:  \result ==> \old(sb->len) <= sb->len;
+    ensures wf_ok:  \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool stringbuf_append_fmt(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) fmt,
@@ -605,6 +836,23 @@ static inline bool stringbuf_append_fmt(
  *
  * Performance: O(n) — two vsnprintf passes via va_copy
  */
+/*@
+  requires sb_ok:  sb == \null || stringbuf_ok(sb);
+  requires fmt_ok: fmt == \null || valid_read_string(fmt);
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || fmt == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior format:
+    assumes sb != \null && fmt != \null && sb->data != \null;
+    ensures grown:  \result ==> \old(sb->len) <= sb->len;
+    ensures wf_ok:  \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool stringbuf_append_fmt_va(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) fmt,
@@ -661,6 +909,27 @@ static inline bool stringbuf_append_fmt_va(
  *
  * Performance: O(min(n, strlen(s)))
  */
+/*@
+  requires sb_ok: sb == \null || stringbuf_ok(sb);
+  requires s_ok:  (s != \null && n > 0) ==> valid_read_nstring(s, n);
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior no_source:
+    assumes sb != \null && sb->data != \null && (s == \null || n == 0);
+    assigns \nothing;
+    ensures \result == \true;
+  behavior append:
+    assumes sb != \null && sb->data != \null && s != \null && n > 0;
+    ensures grown:  \result ==> \old(sb->len) <= sb->len <= \old(sb->len) + n;
+    ensures wf_ok:  \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline bool stringbuf_append_n(
         borrowed(StringBuf*)  sb,
         borrowed(const char*) s,
@@ -673,6 +942,11 @@ static inline bool stringbuf_append_n(
 
     /* Determine how many bytes to actually copy: stop at null or n */
     actual_len = 0;
+    /*@ loop invariant bound:   0 <= actual_len <= n;
+        loop invariant no_nul:  \forall integer i; 0 <= i < actual_len ==> s[i] != '\0';
+        loop assigns actual_len;
+        loop variant n - actual_len;
+    */
     while ((actual_len < n) && (s[actual_len] != '\0')) { actual_len++; }
 
     if (actual_len == 0u) { return true; }
@@ -693,6 +967,13 @@ static inline bool stringbuf_append_n(
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures nonnull: \result != \null;
+  ensures live:    (sb != \null && sb->data != \null) ==> \result == sb->data;
+*/
 static inline borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb) {
     return (sb && sb->data) ? sb->data : "";
 }
@@ -712,6 +993,15 @@ static inline borrowed(const char*) stringbuf_str(borrowed(const StringBuf*) sb)
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.ptr == \null && \result.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.ptr == sb->data && \result.len == sb->len;
+*/
 static inline str_t stringbuf_as_str(borrowed(const StringBuf*) sb) {
     if (!sb || !sb->data) { return str_empty(); }
     return str_from(sb->data, sb->len);
@@ -731,6 +1021,15 @@ static inline str_t stringbuf_as_str(borrowed(const StringBuf*) sb) {
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.ptr == \null && \result.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.ptr == (u8 *)sb->data && \result.len == sb->len;
+*/
 static inline bytes_t stringbuf_as_bytes(borrowed(StringBuf*) sb) {
     if (!sb || !sb->data) { return bytes_empty(); }
     return bytes_from(sb->data, sb->len);
@@ -739,6 +1038,15 @@ static inline bytes_t stringbuf_as_bytes(borrowed(StringBuf*) sb) {
 /**
  * @brief Read-only twin of stringbuf_as_bytes() — see API-001
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.ptr == \null && \result.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.ptr == (u8 *)sb->data && \result.len == sb->len;
+*/
 static inline cbytes_t stringbuf_as_cbytes(borrowed(const StringBuf*) sb) {
     if (!sb || !sb->data) { return cbytes_empty(); }
     return cbytes_from(sb->data, sb->len);
@@ -755,6 +1063,15 @@ static inline cbytes_t stringbuf_as_cbytes(borrowed(const StringBuf*) sb) {
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.ptr == \null && \result.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.ptr == (u8 *)sb->data && \result.len == sb->capacity;
+*/
 static inline bytes_t stringbuf_buffer_bytes(borrowed(StringBuf*) sb) {
     if (!sb || !sb->data) { return bytes_empty(); }
     return bytes_from(sb->data, sb->capacity);
@@ -763,6 +1080,15 @@ static inline bytes_t stringbuf_buffer_bytes(borrowed(StringBuf*) sb) {
 /**
  * @brief Read-only twin of stringbuf_buffer_bytes() — see API-001
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.ptr == \null && \result.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.ptr == (u8 *)sb->data && \result.len == sb->capacity;
+*/
 static inline cbytes_t stringbuf_buffer_cbytes(borrowed(const StringBuf*) sb) {
     if (!sb || !sb->data) { return cbytes_empty(); }
     return cbytes_from(sb->data, sb->capacity);
@@ -792,6 +1118,15 @@ static inline cbytes_t stringbuf_buffer_cbytes(borrowed(const StringBuf*) sb) {
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.str.ptr == \null && \result.str.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.str.ptr == sb->data && \result.str.len == sb->len;
+*/
 static inline borrowed_str stringbuf_as_borrowed_str(borrowed(const StringBuf*) sb) {
     if (!sb || !sb->data) { return borrowed_str_empty(); }
     return borrowed_str_from_lifetime(
@@ -818,6 +1153,15 @@ static inline borrowed_str stringbuf_as_borrowed_str(borrowed(const StringBuf*) 
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.bytes.ptr == \null && \result.bytes.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.bytes.ptr == (u8 *)sb->data && \result.bytes.len == sb->len;
+*/
 static inline borrowed_bytes stringbuf_as_borrowed_bytes(borrowed(const StringBuf*) sb) {
     if (!sb || !sb->data) { return borrowed_bytes_empty(); }
     return borrowed_bytes_from_lifetime(
@@ -845,6 +1189,15 @@ static inline borrowed_bytes stringbuf_as_borrowed_bytes(borrowed(const StringBu
  *
  * Performance: O(1)
  */
+/*@
+  requires sb == \null || (\valid_read(sb) &&
+             (sb->data == \null || stringbuf_wf((StringBuf *)sb)));
+  assigns \nothing;
+  ensures empty: (sb == \null || sb->data == \null) ==>
+                   \result.bytes.ptr == \null && \result.bytes.len == 0;
+  ensures live:  (sb != \null && sb->data != \null) ==>
+                   \result.bytes.ptr == (u8 *)sb->data && \result.bytes.len == sb->capacity;
+*/
 static inline borrowed_bytes stringbuf_buffer_as_borrowed_bytes(borrowed(const StringBuf*) sb) {
     if (!sb || !sb->data) { return borrowed_bytes_empty(); }
     return borrowed_bytes_from_lifetime(
@@ -863,11 +1216,21 @@ static inline borrowed_bytes stringbuf_buffer_as_borrowed_bytes(borrowed(const S
    ════════════════════════════════════════════════════════════════════════════ */
 
 /** @brief Returns current string length (excluding '\0'). NULL-safe. O(1) */
+/*@
+  requires sb == \null || \valid_read(sb);
+  assigns \nothing;
+  ensures \result == (sb == \null ? 0 : sb->len);
+*/
 static inline usize stringbuf_len(borrowed(const StringBuf*) sb) {
     return sb ? sb->len : 0u;
 }
 
 /** @brief Returns total buffer capacity (including '\0' byte). NULL-safe. O(1) */
+/*@
+  requires sb == \null || \valid_read(sb);
+  assigns \nothing;
+  ensures \result == (sb == \null ? 0 : sb->capacity);
+*/
 static inline usize stringbuf_capacity(borrowed(const StringBuf*) sb) {
     return sb ? sb->capacity : 0u;
 }
@@ -879,6 +1242,14 @@ static inline usize stringbuf_capacity(borrowed(const StringBuf*) sb) {
  * Uses checked_sub to guard against len + 1 exceeding capacity without
  * wrapping.
  */
+/*@
+  requires sb == \null || \valid_read(sb);
+  assigns \nothing;
+  ensures absent: (sb == \null || sb->capacity == 0) ==> \result == 0;
+  ensures live:   (sb != \null && sb->data != \null &&
+                   stringbuf_wf((StringBuf *)sb)) ==>
+                    \result == sb->capacity - sb->len - 1;
+*/
 static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
     usize usable;
     if (!sb || (sb->capacity == 0u)) { return 0u; }
@@ -889,6 +1260,11 @@ static inline usize stringbuf_remaining(borrowed(const StringBuf*) sb) {
 }
 
 /** @brief Returns true if string is empty (len == 0). NULL-safe. O(1) */
+/*@
+  requires sb == \null || \valid_read(sb);
+  assigns \nothing;
+  ensures \result <==> (sb == \null || sb->len == 0);
+*/
 static inline bool stringbuf_is_empty(borrowed(const StringBuf*) sb) {
     return !sb || (sb->len == 0u);
 }
@@ -899,11 +1275,24 @@ static inline bool stringbuf_is_empty(borrowed(const StringBuf*) sb) {
  * Full when len + 1 >= capacity, i.e. only the null terminator slot remains.
  * Equivalent to stringbuf_remaining() == 0.
  */
+/*@
+  requires sb == \null || \valid_read(sb);
+  assigns \nothing;
+  ensures absent: sb == \null ==> \result;
+  ensures live:   (sb != \null && sb->data != \null &&
+                   stringbuf_wf((StringBuf *)sb)) ==>
+                    (\result <==> sb->len + 1 == sb->capacity);
+*/
 static inline bool stringbuf_is_full(borrowed(const StringBuf*) sb) {
     return !sb || ((sb->len + 1u) >= sb->capacity);
 }
 
 /** @brief Returns true if buffer was allocated from an arena. NULL-safe. O(1) */
+/*@
+  requires sb == \null || \valid_read(sb);
+  assigns \nothing;
+  ensures \result <==> (sb != \null && sb->arena != \null);
+*/
 static inline bool stringbuf_is_arena_backed(borrowed(const StringBuf*) sb) {
     return sb && (sb->arena != NULL);
 }
@@ -923,6 +1312,19 @@ static inline bool stringbuf_is_arena_backed(borrowed(const StringBuf*) sb) {
  *
  * Performance: O(1)
  */
+/*@
+  requires sb_ok: sb == \null || stringbuf_ok(sb);
+  behavior no_buffer:
+    assumes sb == \null || sb->data == \null;
+    assigns \nothing;
+  behavior live:
+    assumes sb != \null && sb->data != \null;
+    assigns sb->len, sb->data[0];
+    ensures emptied: sb->len == 0;
+    ensures wf_ok:   stringbuf_wf(sb);
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void stringbuf_clear(borrowed(StringBuf*) sb) {
     if (sb && sb->data) {
         sb->data[0] = '\0';
@@ -942,6 +1344,23 @@ static inline void stringbuf_clear(borrowed(StringBuf*) sb) {
  *
  * Performance: O(1)
  */
+/*@
+  requires sb_ok: sb == \null || stringbuf_ok(sb);
+  behavior no_buffer:
+    assumes sb == \null || sb->data == \null;
+    assigns \nothing;
+  behavior shorten:
+    assumes sb != \null && sb->data != \null && new_len < sb->len;
+    assigns sb->len, sb->data[new_len];
+    ensures shortened: sb->len == new_len;
+    ensures wf_ok:     stringbuf_wf(sb);
+    ensures prefix:    stringbuf_prefix{Pre, Post}(sb, new_len);
+  behavior keep:
+    assumes sb != \null && sb->data != \null && new_len >= sb->len;
+    assigns \nothing;
+  complete behaviors;
+  disjoint behaviors;
+*/
 static inline void stringbuf_truncate(borrowed(StringBuf*) sb, usize new_len) {
     if (sb && sb->data && (new_len < sb->len)) {
         sb->len           = new_len;

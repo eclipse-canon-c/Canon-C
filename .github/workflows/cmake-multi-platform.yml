@@ -6421,6 +6421,210 @@ jobs:
           name: wp-proof-range
           path: wp_range_output.txt
           retention-days: 90
+  frama-c-stringbuf:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/stringbuf.h (VERIFY-031 run 1, report-only)"
+        # stringbuf.h — module 19, Shape A in place, no driver. Typed+Cast
+        # (the header casts char* <-> u8* itself). Run 1 is the DETECTION
+        # TEST: contracts + the trusted vsnprintf axiom on the UNFIXED
+        # bodies (G1, G2, G3, G5, G6 unfixed; G4 not applied). Report-only:
+        # the job never fails on residuals, only on a missing summary.
+        # It prints the evidence VERIFY-031's predictions are scored on:
+        #   P2  inherited = 81 by name (arena.h's pinned 79 + borrow.h's 2)
+        #   P3  G1: no_overlap unproved at exactly 3 call sites
+        #   P4  G3: failure_unchanged unproved in both fmt functions
+        #   P5  G5: vsnprintf `sep` unproved at both pass-2 calls only
+        #   P7  nothing else own fails (pre-run addendum: init_arena x2, G6)
+        #   Q1/Q2 variadic translation / libc spec merge, recorded as seen
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=0            # VERIFY-031 run 1: report-only
+          WP_MODEL="Typed+Cast"
+          OUT=wp_stringbuf_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            data/stringbuf.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          echo "  VERIFY-031 run 1 — unfixed bodies, detection test"
+          echo "==============================================="
+          echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
+          grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      On run 1 this is VERIFY-031 Q1 firing: the kernel or WP"
+            echo "      rejected the variadic definitions. The pre-registered"
+            echo "      rule: repeat as run 1b with -variadic-no-translation,"
+            echo "      identical contracts. First diagnostics:"
+            grep -E "^\[(kernel|wp|variadic)" ${OUT} | head -25 || true
+          else
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[Failed\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ] || [ "${S}" -ne 0 ]; then
+              echo ""
+              echo "  !!! Failed/Invalid/Stepout present — read these first:"
+              grep -E '^\[wp\] \[(Failed|Invalid|Stepout)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/sb_all.txt
+            # P2's predicted inherited set, by name: frama-c-arena's 79 pinned
+            # names verbatim + borrow.h's 2 own memcmp-danglingness goals.
+            INHERITED=(
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires"
+            "typed_cast_arena_alloc_aligned_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_address_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_address_part4"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part3"
+            "typed_cast_arena_alloc_aligned_fits_ensures_part4"
+            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_call_ptr_span_requires"
+            "typed_cast_arena_alloc_call_ptr_span_requires_2"
+            "typed_cast_arena_alloc_does_not_fit_ensures_2_part5"
+            "typed_cast_arena_alloc_does_not_fit_ensures_part5"
+            "typed_cast_arena_alloc_fits_ensures_2_part4"
+            "typed_cast_arena_alloc_fits_ensures_3_part4"
+            "typed_cast_arena_alloc_fits_ensures_address_part4"
+            "typed_cast_arena_alloc_fits_ensures_part4"
+            "typed_cast_arena_alloc_zero_assigns_normal_part3"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
+            "typed_cast_arena_try_alloc_assigns_normal_part03"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
+            "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_contract_default_handler_loop_invariant_established"
+            "typed_cast_contract_default_handler_terminates"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_alloc_assigns_normal_part2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_free_assigns_normal"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_get_alignment_assert_rte_signed_overflow"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_ptr_align_down_nonnull_ensures_bounded_part2"
+            "typed_cast_ptr_align_down_nonnull_ensures_not_above_part2"
+            "typed_cast_ptr_align_down_nonnull_ensures_same_base_part2"
+            "typed_cast_ptr_align_padding_call_align_padding_requires_3"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_ptr_align_up_call_align_up_requires_3"
+            "typed_cast_ptr_align_up_nonnull_ensures_bounded_part2"
+            "typed_cast_ptr_align_up_nonnull_ensures_not_below_part2"
+            "typed_cast_ptr_align_up_nonnull_ensures_same_base_part2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_str_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_str_from_cstr_call_strlen_requires_valid_string_s"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            )
+            printf '%s\n' "${INHERITED[@]}" | sort -u > /tmp/sb_inh_pred.txt
+            comm -12 /tmp/sb_inh_pred.txt /tmp/sb_all.txt > /tmp/sb_inh.txt
+            comm -23 /tmp/sb_inh_pred.txt /tmp/sb_all.txt > /tmp/sb_inh_missing.txt
+            comm -13 /tmp/sb_inh_pred.txt /tmp/sb_all.txt > /tmp/sb_own.txt
+            grep -E 'stringbuf_append(_str|_n)?_.*_stringbuf_append_bytes_requires_no_overlap' /tmp/sb_own.txt > /tmp/sb_p3.txt || true
+            grep -E '_stringbuf_append_bytes_requires_add_pos'                                   /tmp/sb_own.txt > /tmp/sb_g6.txt || true
+            grep -E 'stringbuf_append_fmt(_va)?_.*failure_unchanged'                             /tmp/sb_own.txt > /tmp/sb_p4.txt || true
+            grep -E 'stringbuf_append_fmt(_va)?_.*vsnprintf.*requires_sep'                       /tmp/sb_own.txt > /tmp/sb_p5.txt || true
+            grep -E 'stringbuf_init_arena'                                                        /tmp/sb_own.txt > /tmp/sb_ia.txt || true
+            cat /tmp/sb_p3.txt /tmp/sb_g6.txt /tmp/sb_p4.txt /tmp/sb_p5.txt /tmp/sb_ia.txt | sort -u > /tmp/sb_grouped.txt
+            comm -23 /tmp/sb_own.txt /tmp/sb_grouped.txt > /tmp/sb_other.txt
+            echo ""
+            echo "  ================ VERIFY-031 RUN-1 EVIDENCE (not gating) ================"
+            echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 81 predicted"
+            echo "      predicted but not observed (proved here?): $(wc -l < /tmp/sb_inh_missing.txt)"; show /tmp/sb_inh_missing.txt
+            echo "  own (everything outside the 81): $(wc -l < /tmp/sb_own.txt)"
+            echo "  P3  G1 no_overlap at the call sites (pred: append, append_str, append_n — 3):"
+            show /tmp/sb_p3.txt
+            echo "      mem_copy's own non-overlap goal inside the helper (pred: proves):"
+            grep -E '_stringbuf_append_bytes_call_mem_copy' /tmp/sb_own.txt > /tmp/sb_p3b.txt || true; show /tmp/sb_p3b.txt "(none — proved)"
+            echo "  G6  add_pos at stringbuf_append's call (addendum pred: 1):"
+            show /tmp/sb_g6.txt
+            echo "  P4  G3 failure_unchanged (pred: fmt and fmt_va, nowhere else):"
+            show /tmp/sb_p4.txt
+            echo "  P5  G5 vsnprintf sep (pred: pass-2 call in fmt and fmt_va only):"
+            show /tmp/sb_p5.txt
+            echo "  P7  init_arena (addendum pred: assigns of buf[0] + init_ok's separation):"
+            show /tmp/sb_ia.txt
+            echo "  P7  anything else own (pred: none):"
+            show /tmp/sb_other.txt
+            echo "  ========================================================================"
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (stringbuf.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-stringbuf
+          path: wp_stringbuf_output.txt
+          retention-days: 90
   # -------------------------------------------------------------------------
   # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
   #

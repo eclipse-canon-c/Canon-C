@@ -8521,3 +8521,68 @@ enforcement. Probe sources: `p_overlap.c` (G1), `p_bigcap.c` (G2),
 tests in run 2, except `p_bigcap.c`, which is musl-only, and `p_fmtalias.c`,
 which is undefined behaviour by construction and stays a recorded probe,
 never a test.
+
+### Pre-run addendum (before run 1)
+
+Written after 9268da3 while the contracts were being written, and committed
+together with them, **before** CI had produced any result. It changes no
+prediction above and no scoring rule. P1–P9 are scored exactly as committed
+at 9268da3. The addendum records two things that writing the contracts
+exposed, so that they also count as predicted rather than discovered.
+
+**A1 — G6, a sixth finding: the helper's own `@pre` is violated by its own
+caller.** `_stringbuf_append_bytes` documents `@pre add_len > 0`.
+`stringbuf_append` calls it with `strlen(s)`, which is 0 for `""`. The
+violation is benign: with `add_len == 0` the helper still behaves correctly
+(`mem_copy` is a no-op for size 0, `len` is unchanged, and the terminator is
+rewritten in place). So the defect is in the `@pre`, not the code. Design
+item 4 carries the helper's `@pre` verbatim, so run 1 is predicted to report
+**exactly one** further unproved goal: `add_pos` at `stringbuf_append`'s call
+site. It is not reported at `append_str` or `append_n`, which both guard
+zero length. Fix in run 2: drop the `@pre`.
+
+**A2 — `init_arena` cannot be proved against arena.h's present contract.**
+`arena_alloc` declares `assigns *arena` and gives no frame on
+`arena->buffer` or `arena->capacity`. Its `address` ensures places the
+result relative to the *post*-state buffer. Two of `init_arena`'s goals need
+the *pre*-state buffer:
+
+- the assigns check for the `buf[0] = '\0'` write, whose assigns location is
+  necessarily stated in the pre-state;
+- `init_ok`'s `\separated(sb, data …)` conjunct (`stringbuf_wf` clause 4),
+  which can only come from a pre-state precondition.
+
+Run 1 is predicted to report both as unproved; `-wp-split` may list the
+second as a `_part` goal. This **falsifies P7 as committed**, and P7 is
+scored as committed. The cause is a specification-strength cap in a
+verified callee. It is not a stringbuf.h defect and not a prover limit.
+Resolution is decided at run 2 between two options:
+
+- (a) add a frame to `arena_alloc`, i.e.
+  `ensures arena->buffer == \old(arena->buffer) && arena->capacity ==
+  \old(arena->capacity)`. This adds proved goals to arena.h and to every job
+  that inherits it, so their pinned proved-counts move, in one acknowledged
+  ratchet.
+- (b) keep the two goals and argue them, which bears on P1.
+
+Weakening `init_arena`'s contract is not an option (design item 6).
+
+**Run-1 own residuals, predicted in total:** P3's 3, plus A1's 1, plus P4's
+pair, plus P5's pair, plus A2's 2, **= 10** (counting each `_part` family as
+one). Nothing else.
+
+**A3 — Q1/Q2, first observation (not scored).** Ubuntu's Frama-C 25.0
+package has no WP plugin, but its kernel and Variadic plugin were usable
+locally:
+
+- All 29 contracts, the predicates, the loop annotation and the axiom parse
+  and type-check (`-c11`).
+- The Variadic plugin translates `stringbuf_append_fmt`'s definition:
+  `va_start` becomes an assignment from `__va_params`, `va_copy` an
+  assignment, `va_end` disappears. The contract survives the translation.
+- The kernel reports merging the axiom with the bundled libc spec. Frama-C
+  25's libc spec is only `assigns s[0..n-1] \from format[..], arg`.
+
+CI's Frama-C 29 is authoritative for Q1 and Q2. The compiled C is unchanged
+by this commit: the preprocessed TU is identical apart from `__LINE__`
+values, since every addition is an ACSL comment or `__FRAMAC__`-only.
