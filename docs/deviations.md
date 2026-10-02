@@ -8201,3 +8201,323 @@ regression tests), which exercises only the functions `extend_from_range`
 calls: that TU reports 16/32. The summary table takes the per-file maximum,
 and the per-line step reads `range_test` — the unit's own tests — as every
 other per-line step does.
+
+---
+
+## VERIFY-031: Pre-registration — stringbuf.h, the Nineteenth Unit: Three Defects Demonstrated Before Any Contract, One the Prover Cannot See
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-031 |
+| **Date**       | 2026-10-02 |
+| **Status**     | PRE-REGISTERED — no contract written, no source changed; findings demonstrated by probe only |
+| **Baseline**   | 21fe8d9 (CI #____ — author fills) |
+| **Scope**      | `data/stringbuf.h` (29 functions in the verified configuration, Shape A in place, no driver) + one `__FRAMAC__`-gated trusted `vsnprintf` axiom |
+| **Category**   | Second prospective test of the Table 5 saturation claim (module 19); prospective test of prover detection on known defects; first test of a defect class the trusted base is predicted to hide |
+
+**Why this record exists.** range.h (VERIFY-028/029/030) was the first unit
+verified after the saturation claim was written down. P1 held there, but not
+unaided: run 3 needed two lemmas. One prospective point is not a trend.
+stringbuf.h is the second, and it differs from range.h on every axis that
+might matter: memory-heavy rather than arithmetic, a deep core closure
+(arena.h) rather than the shallowest one, libc string and formatting calls,
+a loop, and the project's first variadic *definitions*. If saturation is a
+property of the method rather than of range.h, it should hold here too. This
+record commits the prediction; its commit hash is the evidence that it
+predates the contracts.
+
+The second test is sharper than VERIFY-028's. Of the three defects below, the
+record predicts the prover will report two at named goals and will **not**
+report the third, and says why in advance.
+
+### The unit
+
+29 functions in the verified configuration (`CANON_LIFETIME_DEBUG` off — the
+borrow.h precedent, OWN-001 §7): `stringbuf_lifetime_open_`,
+`stringbuf_lifetime_close_` (empty bodies in this configuration),
+`stringbuf_init_arena`, `stringbuf_init_buffer`, `stringbuf_close`,
+`_stringbuf_append_bytes`, `stringbuf_append`, `stringbuf_append_str`,
+`stringbuf_append_char`, `stringbuf_append_fmt`, `stringbuf_append_fmt_va`,
+`stringbuf_append_n`, `stringbuf_str`, `stringbuf_as_str`,
+`stringbuf_as_bytes`, `stringbuf_as_cbytes`, `stringbuf_buffer_bytes`,
+`stringbuf_buffer_cbytes`, `stringbuf_as_borrowed_str`,
+`stringbuf_as_borrowed_bytes`, `stringbuf_buffer_as_borrowed_bytes`,
+`stringbuf_len`, `stringbuf_capacity`, `stringbuf_remaining`,
+`stringbuf_is_empty`, `stringbuf_is_full`, `stringbuf_is_arena_backed`,
+`stringbuf_clear`, `stringbuf_truncate`. `stringbuf_lifetime_next_id_`
+exists only under `CANON_LIFETIME_DEBUG` and is outside the configuration.
+`stringbuf_printf` is a name alias (`#define`), with no body of its own.
+
+Closure: types, limits, contract, ptr, checked, memory, arena, slice,
+ownership, borrow. No option or result instance — the first data/ unit since
+deque with none. The core closure is arena.h's exactly, plus borrow.h.
+Model: **Typed+Cast** (the header casts `char*` ↔ `u8*` itself). Job:
+`frama-c -wp` directly on `data/stringbuf.h` with `-I semantics` added to
+arena's include set; no driver is needed because nothing must be interposed.
+
+### Findings demonstrated before any contract
+
+All probes: GCC 13.3 and 14.2, glibc 2.39; musl 1.2.4 via `musl-gcc`. The
+existing `stringbuf_test.c` passes on all of it, including under ASan/UBSan.
+
+**G1 — a documented-valid view, appended back, reaches `memcpy` with
+overlapping regions.** The header says a view captured before
+`stringbuf_clear`/`stringbuf_truncate` "still points at valid memory".
+Appending such a view after a truncate makes source and destination overlap.
+`_stringbuf_append_bytes` passes them to `mem_copy`, whose own precondition
+forbids overlap. The only statement of that requirement in stringbuf.h is the
+internal helper's `@pre`. No public function states it.
+
+    stringbuf_append(&sb, "report.txt");
+    str_t all = stringbuf_as_str(&sb);       /* [0,10) */
+    stringbuf_truncate(&sb, 6);
+    stringbuf_append_str(&sb, all);          /* src [0,10), dst [6,16) */
+
+    default / NDEBUG build:  contract abort in mem_copy
+                             ("mem_copy: regions overlap — use mem_move")
+    verified configuration (-DCANON_NO_REQUIRE), ASan:
+                             memcpy-param-overlap at stringbuf.h:437
+
+`stringbuf_append` and `stringbuf_append_n` reach the same call with a stale
+`const char*`. The program satisfies every precondition the public API
+states. In ordinary builds it then aborts inside a library-internal callee.
+In the verified configuration it has undefined behaviour. **Fix:** call
+`mem_move` — the contract message already says so — and delete the helper's
+separation `@pre`. The alternative, adding a separation precondition to
+three public functions, would make callers carry an obligation the
+documentation tells them they do not have. Both fmt functions write in place
+and are not affected; G5 covers them.
+
+**G2 — `vsnprintf`'s size argument is the whole remaining capacity; on a
+POSIX-conforming libc every formatted append then fails.** POSIX requires
+`vsnprintf` to fail with `EOVERFLOW` when `n > INT_MAX`. glibc does not
+enforce this; musl does. Both fmt functions pass `sb->capacity - sb->len`:
+
+    StringBuf over a (usize)INT_MAX + 16 byte buffer
+    stringbuf_append(&sb, "x=");  stringbuf_append_fmt(&sb, "%d", 42);
+    glibc:  ok=1/1  "x=42"
+    musl:   ok=1/0  "x="        (fails; buffer correctly unchanged)
+
+The failure is closed (nothing is written), but it is permanent. Once a
+StringBuf has more than 2 GiB free, no formatted append succeeds on musl, a
+libc that embedded targets actually use. **Fix:** pass `needed + 1`. The
+measure pass has already checked that this fits. It is at most `INT_MAX + 1`
+only when the output itself is `INT_MAX` bytes long (recorded, not fixed).
+It also shrinks the write frame from `[len, capacity)` to exactly
+`[len, end]`.
+
+**G3 — the documented failure guarantee does not hold on the write pass's
+failure path.** "On failure the buffer is unchanged and remains
+null-terminated." On the pass-2 failure branch
+(`written < 0 || written != needed`), `vsnprintf` has already written from
+`data[len]` onward. The function returns `false` with `len` unchanged and
+`data[len]` overwritten. In defined behaviour on glibc this branch is
+unreachable: two passes with identical arguments agree. Before G2's fix it
+is reachable on musl, but musl fails before writing anything. The only
+demonstration available goes through undefined behaviour (G5):
+
+    format string stored in the buffer's stale tail, then appended
+    glibc:  ok=0 len=1 strlen=11 data[len]='1'    (invariant broken)
+    musl:   ok=1 len=10 "i1234567AB"              (UB resolves differently)
+
+This is recorded as a **specification gap the code does not close**, not as
+a demonstrated defect in defined behaviour. **Fix:** restore
+`data[len] = '\0'` inside the existing failure branch (no new condition), and
+reword the guarantee to the string value `data[0 .. len]`. Bytes past the
+terminator are scratch on this path.
+
+**G4 — structural, not a defect: two copies of one body.**
+`stringbuf_append_fmt` re-implements `stringbuf_append_fmt_va` line for line
+(18 MC/DC outcomes of duplicated logic). After the fixes, `append_fmt`
+becomes `va_start; r = stringbuf_append_fmt_va(sb, fmt, args); va_end;
+return r;`. This is portable C99, since `_va` already `va_copy`s both
+passes. The result is one body to prove and one to cover, and the variadic
+*definition* becomes a branch-free wrapper (see Q1).
+
+**G5 — an unstated `restrict` precondition.** `vsnprintf`'s `s` and
+`format` are `restrict`-qualified, and overlapping copies are undefined
+(C11 7.21.6.5). A format string, or a `%s` argument, that points into the
+region being written is undefined behaviour. G3's probe uses exactly this.
+Pointing into the *current* string `[0, len)` is fine, so
+`stringbuf_append_fmt(&sb, "%s", stringbuf_str(&sb))` is legal. Pointing
+into the stale tail `[len, capacity)` is not. **Fix:** state it in both fmt
+functions' documentation and in their contracts. The ACSL can bind `fmt`
+only, because untranslated variadic arguments are invisible to the axiom
+(the VERIFY-017 limit). The `%s` half stays documented and unverified.
+
+**Also found, not defects** (each becomes a *Not claimed* line below):
+`stringbuf_append_char(sb, '\0')` and any `str_t` containing NUL produce
+embedded NULs, so `strlen(data) == len` is not an invariant. The header never
+claims it, and the record will not either. The measure pass's failure branch
+(`needed_i < 0`) is reachable in tests: `"%ls"` with a non-ASCII wide string
+in the C locale returns −1 on both libcs, and the buffer is unchanged
+(probe-confirmed). This differs from diag.h's MCDC-009 outcome 2. There the
+format strings are fixed and the caller cannot inject `%ls`.
+
+### Contract design, fixed before the run
+
+1. **Well-formedness** `stringbuf_wf(sb)`, exactly five clauses:
+   `data != \null`; `len < capacity`;
+   `\valid(data + (0 .. capacity − 1))`;
+   `\separated(sb, data + (0 .. capacity − 1))`; `data[len] == '\0'`.
+   The first, second and fifth are the header's documented invariants. The
+   third and fourth are its ownership paragraph (the buffer is borrowed and
+   must outlive the StringBuf) in memory-model form. The header's third
+   invariant ("if `arena != NULL`, data came from that arena") is
+   **not encoded**: it is provenance, not a property of the state.
+2. **Zero state.** Every function documented as NULL-safe or
+   "uninitialised-safe" gets a behaviour for `sb == \null || sb->data ==
+   \null` with the documented result. The field readers (`len`, `capacity`,
+   `remaining`, `is_empty`, `is_full`, `is_arena_backed`) require only
+   `sb == \null || \valid_read(sb)`.
+3. **Appends.** The shared clause `failure_unchanged`:
+   `!\result ==> len == \old(len)` and `data[0 .. len]` unchanged. On
+   success: `wf` preserved, prefix `data[0 .. \old(len) − 1]` unchanged, and
+   for the byte appends `len == \old(len) + k`. **Content is not claimed for
+   the byte appends.** `mem_copy`/`mem_move` assign without an ensures on
+   contents, which is memory.h's specification-strength cap (the VERIFY-020
+   F4 family), inherited rather than worked around. `stringbuf_append_char`
+   writes directly, so it claims `data[\old(len)] == c`. The fmt appends
+   claim length growth and terminator only; formatting is opaque.
+4. **Run-1 preconditions are the documentation's, verbatim.**
+   `_stringbuf_append_bytes` carries its own `@pre` as
+   `\separated(src + (0 .. add_len − 1), data + (0 .. capacity − 1))`. The
+   public appends and both fmt functions carry no separation precondition,
+   because their documentation states none. G1 and G5 are therefore visible
+   to the prover in run 1, if it can see them.
+5. **The trusted axiom**, `__FRAMAC__`-only and assumed, never proved
+   (diag.h's pattern):
+
+        requires fmt_nonnull: format != \null;
+        requires valid_buf:   \valid(s + (0 .. n − 1));        // empty when n == 0
+        requires sep:         \separated(s + (0 .. n − 1), format);
+        assigns  s[0 .. n − 1];
+        ensures  term: 0 <= \result < n ==> s[\result] == '\0';
+
+   `term` is ISO C's guarantee for a complete conversion, and nothing more:
+   it says nothing for `\result < 0`, and nothing that rules out failure. It
+   is therefore true on glibc *and* musl. That is a stated design rule: the
+   trusted base asserts only the intersection of the libcs the project
+   claims. It is also **weaker** than diag.h's unconditional `term`, which
+   rests on an environmental assumption this one does not need. `sep` binds
+   the format's first byte. Separating the whole string would need the
+   strlen axiomatics in a trusted clause, which is the diag lesson's noise
+   source, and one byte is enough to make G5 visible. Trusted axioms go from
+   2 to 3. This is recorded separately from *A*: an assumption is not an
+   argument.
+6. **Decision rule (VERIFY-028's, restated).** An own goal that does not
+   prove is **kept and argued**, never weakened or dropped. P1 must not be
+   decided by editing the specification after the run.
+7. **Not claimed:** byte content of any append except `append_char`;
+   `strlen(data) == len`; arena provenance; anything under
+   `CANON_LIFETIME_DEBUG` (runtime-verified by `borrow_test.c` Phase 5, as
+   for borrow.h); that a formatted append succeeds; the `%s`-argument half of
+   G5.
+
+### Run plan
+
+| Run | Source state | Mode |
+|-----|--------------|------|
+| 1 | contracts + axiom + `frama-c-stringbuf` job; **G1, G2, G3, G5 unfixed**, G4 not applied | report-only — the detection test |
+| 2 | G1–G5 applied; regression tests (G1 probe; the `%ls` measure failure); MC/DC tests (below); MC/DC measured | report-only |
+| 3–4 | unchanged | report-only, name-stability |
+| 5 | pinned | enforced |
+
+G2 has no glibc regression test: glibc passes before and after the fix. Its
+evidence is the musl probe in this record plus the code change. A musl CI leg
+is out of scope here and noted as follow-up.
+
+### Predictions (author — confirm or amend before committing)
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **Zero new `**Manual proof argument**` blocks.** Cumulative *A* stays 17. Trusted axioms 2 → 3, reported separately. | any own residual at enforcement that no existing block covers | M |
+| P2 | Inherited residuals = **81**, by name: `frama-c-arena`'s 79 pinned names verbatim + borrow.h's `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1/_s2`. No option or result instance, so no option/result inheritance. | count ≠ 81, or any inherited name outside that set | H |
+| P3 | **Run 1, G1 detected at the seam.** The separation precondition of `_stringbuf_append_bytes` is unproved at exactly its three public call sites (`stringbuf_append`, `_append_str`, `_append_n`). Inside the helper, `mem_copy`'s non-overlap precondition **proves** (it follows from the helper's own `@pre`). | any of the three call-site goals proves, or the `mem_copy` call goal fails | H |
+| P4 | **Run 1, G3 detected.** `failure_unchanged`'s terminator conjunct is unproved in both fmt functions (the pass-2 failure path) and proves everywhere else it appears. | it proves in either fmt function, or fails anywhere else | M–H (split granularity may show it as several goals per function; counted as one family) |
+| P5 | **Run 1, G5 detected.** The axiom's `sep` precondition is unproved at the pass-2 `vsnprintf` call in both fmt functions and proves at both pass-1 calls (`n == 0`, empty range). | either pass-2 `sep` goal proves, or either pass-1 goal fails | H |
+| P6 | **G2 is invisible to WP, in every run.** No goal changes status because of the size argument, before or after the fix. musl's −1 satisfies `term` vacuously, and the contract cannot claim a formatted append succeeds. A safety proof is silent about availability. | any goal's status is attributable to the `n` argument | H |
+| P7 | **Run 1: no other own goal fails.** This includes `init_arena`'s `wf` (derived from `arena_alloc`'s `address` ensures, assumed at the call even though it is itself an inherited residual), `append`'s `strlen` use, and `append_n`'s loop. | any own failure outside P3–P5 | M |
+| P8 | **Run 2: own residuals = 0**, or only `append_n`'s read-validity goals (≤ 2, from Frama-C's `valid_read_nstring`/`strlen` axiomatics). Under P1 those must fall to an existing libc-string block; if none covers them, **P1 fails**, and the cause is named. | own residuals > 2, or of any other class | M–L |
+| P9 | `stringbuf_wf` needs no sixth clause. | any goal needs one to prove | M |
+
+**Open questions** — recorded, not scored:
+
+- **Q1 — the variadic definitions.** This is the first unit in the project
+  that *defines* a variadic function and uses `va_start`/`va_copy`. Run 1
+  uses Frama-C 29's default Variadic translation; `vsnprintf` itself is not
+  variadic, so the axiom binds either way. Rule, fixed now: if the kernel
+  rejects the definitions, run 1 is repeated with `-variadic-no-translation`
+  (diag.h's flag) as run 1b with identical contracts. If neither mode
+  ingests the fmt pair, it is recorded as a **tool-reach boundary** (the
+  lifetime.h precedent). Shipped code is never `#ifndef __FRAMAC__`-excluded,
+  the other 27 functions are verified, and the pair carries test and MC/DC
+  evidence only. P4 and P5 are void in that case, not failed.
+- **Q2** — whether Frama-C's bundled libc spec for `vsnprintf` merges with
+  the axiom and adds caller obligations. Whatever appears is recorded.
+
+### MC/DC (MCDC-016 at closure)
+
+**Baseline, this source**, measured locally with the coverage job's recipe
+(GCC 14.2, `-fcondition-coverage`, `CANON_NO_REQUIRE`, forced fallbacks):
+**101 / 136** (74.3%), 35 missed. Author confirms from the next CI log.
+
+**Blind spot.** `stringbuf_close` and the three `_as_borrowed_*` accessors
+are never called from `stringbuf_test.c`, so GCC does not emit them in that
+TU, and their **14 outcomes are absent from the denominator**. `borrow_test.c`
+calls them, but the per-file table takes the largest-denominator TU. This
+is MCDC-015's wide-range blind spot in another form: the number looks
+complete and is not.
+
+The 35 missed outcomes, classified:
+
+| Class | Outcomes | Disposition |
+|-------|----------|-------------|
+| Zero state (`sb` non-null, `data == NULL`): never tested | 15 | test with `StringBuf z = {0}` |
+| NULL/empty argument sides (`!sb`, `!fmt`, `s.len == 0`, `actual_len == 0`) | 5 | test |
+| `checked_add` overflow true sides (7 sites) | 7 | test with a fabricated struct or view — every site returns before touching memory |
+| `with_nul > capacity` in `_va` | 1 | test |
+| measure failure `needed_i < 0` | 2 | test (`"%ls"`, C locale — demonstrated) |
+| pass-2 failure `written < 0`, `written != needed` | 4 | 2 removed with `append_fmt`'s copy (G4); 2 remain, **environmental** (MCDC-009 family) |
+| `remaining`'s `!checked_sub` true side | 1 | test with a fabricated struct |
+
+**A policy choice, made now — and where it differs from MCDC-015.** A
+guard whose *only* job is to reject inputs outside the documented domain is
+**tested** with such an input, provided the function returns before any
+memory access. If it is never exercised, there is no evidence it works, and
+evidence that it works is the only reason it exists. MCDC-015 J1 declined a
+hand-built `range` in explicit terms ("to move a number"). The cases differ:
+J1's line, `if (r->step < 0)`, is direction logic that is meaningful under
+the invariant, and its FALSE arm degenerates to `step == 0` only for an
+invalid struct. The 8 guards here have no meaning except on invalid input.
+MCDC-015 is not reopened. If the author prefers J1's rule throughout, the
+fabricated-input rows become justification rows instead, and the prediction
+below becomes 122 / 132 with 10 rows. That choice is made before committing,
+not after measuring.
+
+**Prediction:** denominator 136 − 18 (`append_fmt`'s copy, G4) + 14 (the
+blind spot, brought in by calling those four functions from
+`stringbuf_test.c`) = **132**; final **130 / 132**, **2 justification rows**,
+both pass-2 failure outcomes in `stringbuf_append_fmt_va`. Falsified if the
+denominator is not 132 or there are more than 2 rows.
+
+### What each outcome means for the paper
+
+P1 holding twice is a trend of two, on two units that share almost nothing.
+P1 failing is the curve's first unaided post-saturation increment, with a
+named cause. P3 and P5 holding mean the tool confirmed human-found defects
+at the exact seam the record names: the gap between an internal `@pre` and
+the public contract. P6 holding is the newest kind of data point: a
+**pre-registered blind spot**. A defect visible only on a second libc, which
+the trusted base cannot see *because* it was written to be true on that
+libc. That bounds what "verified" means here, and the paper should say so in
+those words.
+
+### Scoring
+
+VERIFY-032 scores this record goal by goal after run 2, and again at
+enforcement. Probe sources: `p_overlap.c` (G1), `p_bigcap.c` (G2),
+`p_fmtalias.c` (G3/G5), `p_enc.c` (measure failure). They become regression
+tests in run 2, except `p_bigcap.c`, which is musl-only, and `p_fmtalias.c`,
+which is undefined behaviour by construction and stays a recorded probe,
+never a test.
