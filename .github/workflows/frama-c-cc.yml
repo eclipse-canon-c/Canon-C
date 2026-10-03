@@ -72,7 +72,10 @@ jobs:
           - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "185 / 215",   unproved: 30  }
           - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "189 / 223",   unproved: 34  }
           - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2777 / 2796", unproved: 19  }
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5374 / 5566", unproved: 192 }
+          # vec: +20 at VERIFY-033/034 (arena_alloc{,_aligned} frame clauses,
+          # 2 clauses x 2 functions x 5 split parts; CC #13 measured 5394/5586,
+          # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5394 / 5586", unproved: 192 }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
     steps:
       - uses: actions/checkout@v6

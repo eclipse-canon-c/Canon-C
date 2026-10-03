@@ -9017,3 +9017,31 @@ lesson as VERIFY-032's: the evidence was already in the file.
   b785d52, is stringbuf's second name-stability run; #1322 is the first.
   One more identical run, then enforcement, following the range.h
   #1315–#1317 pattern.
+
+### Addendum — the seventh pin (Canon-C CC #13, b785d52)
+
+VERIFY-033's job inventory named six jobs. There was a seventh:
+`frama-c-cc-vec`, the VERIFY-025 macro-body experiment. It lives in a
+separate workflow file (`frama-c-cc.yml`), and the inventory scanned only
+`cmake-multi-platform.yml`. Its TU compiles arena.h like the others.
+
+CC #13 measured **5394 / 5586** against the pinned 5374 / 5566, i.e. the
+same **+20** as every other arena-including TU. Gates (1)–(3) all passed:
+
+- 0 Failed, Invalid or Stepout;
+- 192 unproved, unchanged;
+- roll-call: pinned 192, missing 0, unpinned 0.
+
+So F1 and F4 hold for this TU too, and F2's ×5 is confirmed a seventh time.
+The other five CC families (slice, result, option, borrow, deque) do not
+include arena.h and stayed green, consistent with the rule.
+
+The CC workflow triggers only on source and CC-file changes, so the docs-
+and workflow-only ratchet commit (aaa09c7) did not re-run it. The pin moves
+to 5394 / 5586 in the commit carrying this addendum, which edits
+`frama-c-cc.yml` and therefore re-runs it.
+
+**Method note, extending the one above:** a cross-job ratchet's inventory is
+every workflow file under `.github/workflows/` that runs WP on a TU
+including the changed header, not the main workflow alone. `grep -l` across
+the directory for the header's pinned figures finds them in seconds.
