@@ -8952,3 +8952,68 @@ The pins carry the predicted values: arena and arena-32 at 3480 / 3559, pool
 at 3954 / 4045, region at 3628 / 3730, vec at 5321 / 5505. EXPECTED_UNPROVED
 and every name roll-call are unchanged, which is F4. The compiled C is
 untouched: the change is ACSL comments only, so F5 has nothing to move.
+
+---
+
+## VERIFY-034: Scoring VERIFY-033 — The Frame Closes A2; Every Prediction Holds Except the Count, Which Was Off by Exactly ×5
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-034 |
+| **Date**       | 2026-10-03 |
+| **Status**     | SCORED at CI #1322 (b785d52); pins ratcheted in the commit carrying this record |
+| **Scores**     | VERIFY-033 (pre-registered at 8629d10) |
+
+**Observed (CI #1322).** The five enforced jobs failed on their proved-count
+pins only. Each failure moved by exactly the same amount, and no residual
+count or name moved.
+
+| Job | Predicted | Observed | Unproved | Names |
+|-----|-----------|----------|----------|-------|
+| arena | 3480 / 3559 | **3496 / 3575** | 79 | same 79 |
+| arena-32 | 3480 / 3559 | **3496 / 3575** | 79 | set equality with arena: 0 / 0 / 79 |
+| pool | 3954 / 4045 | **3970 / 4061** | 91 | same 91 |
+| region | 3628 / 3730 | **3644 / 3746** | 102 | same 102 |
+| vec | 5321 / 5505 | **5337 / 5521** | 184 | same 184 |
+| stringbuf (report-only) | 4751 / 4832 | **4767 / 4848** | 81 | the 81 inherited; **own 0** |
+
+Every TU gained **+20** goals, not +4, and every new goal proved.
+stringbuf's +23 proved = 20 new + A2's 3 closed.
+
+| # | Verdict | Evidence |
+|---|---------|----------|
+| F1 | **HELD** | No `…frame_*` goal is unproved in any of six TUs. |
+| F2 | **FAILED** | +20 per TU, not +4. Each clause is 5 goals, not 1. |
+| F3 | **HELD** | All three `stringbuf_init_arena` goals proved; stringbuf own residuals 3 → 0. |
+| F4 | **HELD** | Unproved counts 79 / 79 / 91 / 102 / 184 unchanged; arena-32's set equality holds; pool's goals stayed open, as predicted. |
+| F5 | **HELD** | MC/DC `data/stringbuf.h` 136 / 138, unchanged; ACSL-only change. |
+
+**Why ×5, traced.** Under `-wp-split`, an ensures over a function body is
+split by the paths that reach the return. `arena_alloc` and
+`arena_alloc_aligned` each have five:
+
+- `size == 0`;
+- the three disjuncts of the overflow/capacity guard;
+- success.
+
+The same five-way split was already visible in the pinned names
+`arena_alloc_does_not_fit_ensures_part5` and
+`arena_alloc_aligned_does_not_fit_ensures_part5`. They prove in Qed one part
+at a time, so they count once per part. F2 assumed the simplifier would
+collapse a trivially-true frame before splitting; it splits first. **Method
+note:** a part-count prediction should be read off the highest `_partN` of
+the same function's existing goals, not assumed to be 1. That is the same
+lesson as VERIFY-032's: the evidence was already in the file.
+
+**What this decides.**
+
+- P1 of VERIFY-031 can now be scored HELD at stringbuf's enforcement:
+  stringbuf has zero own residuals, so no argument block is needed and
+  cumulative *A* stays 17.
+- The pool/try-alloc aliasing reading (VERIFY-033 F4) stays a hypothesis
+  for a later arc.
+- **Ratchet:** the five pins move to the observed values in the commit
+  carrying this record. That CI run, on stringbuf source unchanged since
+  b785d52, is stringbuf's second name-stability run; #1322 is the first.
+  One more identical run, then enforcement, following the range.h
+  #1315–#1317 pattern.

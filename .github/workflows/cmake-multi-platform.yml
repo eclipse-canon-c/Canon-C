@@ -1467,7 +1467,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/arena.h"
-        # arena.h — Typed+Cast. Expected: 3480 / 3559 proved, exactly 79
+        # arena.h — Typed+Cast. Expected: 3496 / 3575 proved, exactly 79
         # unproved (VERIFY-009): 43 inherited (memory.h's full surface) +
         # 48 own (ptr_span call-sites 8, fits/does_not_fit arithmetic 26,
         # zero/try wrappers 10, free_bytes helpers 4 — the mutable pair
@@ -1549,10 +1549,10 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          # VERIFY-033: +4 proved, +4 total — the frame_buffer/frame_capacity
-          # ensures of arena_alloc and arena_alloc_aligned (predicted pin).
-          if [ "${PROVED_COUNT}" != "3480 / 3559" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3480 / 3559)."
+          # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
+          # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
+          if [ "${PROVED_COUNT}" != "3496 / 3575" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3496 / 3575)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1674,7 +1674,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: arena.h verified — 3480/3559 proved, 79 documented"
+          echo "PASS: arena.h verified — 3496/3575 proved, 79 documented"
           echo "      residuals all observed (VERIFY-009): 43 inherited +"
           echo "      40 arena.h-own (48 until VERIFY-023 closed 8). Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
@@ -1693,7 +1693,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/pool.h"
-        # pool.h — Typed+Cast. Expected: 3954 / 4045 proved, exactly 95
+        # pool.h — Typed+Cast. Expected: 3970 / 4061 proved, exactly 95
         # unproved (VERIFY-010): 91 inherited (arena.h's full surface,
         # two-hop transitive) + 28 own across cats 2a/2b/2c/2d. Any
         # deviation is a regression.
@@ -1778,10 +1778,10 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          # VERIFY-033: +4 proved, +4 total — the frame_buffer/frame_capacity
-          # ensures of arena_alloc and arena_alloc_aligned (predicted pin).
-          if [ "${PROVED_COUNT}" != "3954 / 4045" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3954 / 4045)."
+          # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
+          # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
+          if [ "${PROVED_COUNT}" != "3970 / 4061" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3970 / 4061)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1915,7 +1915,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: pool.h verified — 3954/4045 proved, 95 documented"
+          echo "PASS: pool.h verified — 3970/4061 proved, 95 documented"
           echo "      residuals all observed by name (VERIFY-010): 89"
           echo "      inherited (arena.h's full surface, verbatim) + 24"
           echo "      pool.h-own. Full set equality enforced. Composable"
@@ -1955,7 +1955,7 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/region.h"
         # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
-        # Expected: 3628 / 3730 proved, exactly 106 unproved (VERIFY-011):
+        # Expected: 3644 / 3746 proved, exactly 106 unproved (VERIFY-011):
         # 91 inherited (arena.h's full surface, two-hop transitive) + 23
         # region.h-own (region_begin / region_end loop+terminates+assigns /
         # attach_arena / register / set_parent). Any deviation is a regression.
@@ -2042,10 +2042,10 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          # VERIFY-033: +4 proved, +4 total — the frame_buffer/frame_capacity
-          # ensures of arena_alloc and arena_alloc_aligned (predicted pin).
-          if [ "${PROVED_COUNT}" != "3628 / 3730" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3628 / 3730)."
+          # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
+          # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
+          if [ "${PROVED_COUNT}" != "3644 / 3746" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3644 / 3746)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2190,7 +2190,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: region.h verified — 3628/3730 proved, 106 documented"
+          echo "PASS: region.h verified — 3644/3746 proved, 106 documented"
           echo "      residuals all observed by name (VERIFY-011): 89"
           echo "      inherited (arena.h's full surface, verbatim) + 23"
           echo "      region.h-own. Full set equality enforced. Composable"
@@ -2382,7 +2382,7 @@ jobs:
           echo "==============================================="
           echo "  WP (arena.h, ${MACHDEP}) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — gate is SET EQUALITY with the 64-bit residuals."
-          echo "  64-bit baseline for comparison: 3480 / 3559 proved,"
+          echo "  64-bit baseline for comparison: 3496 / 3575 proved,"
           echo "  79 residuals (VERIFY-009, ratcheted by VERIFY-023)."
           echo "==============================================="
 
@@ -2581,10 +2581,10 @@ jobs:
 
           # Gate C — pinned goal surface, must move with the 64-bit pin.
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          # VERIFY-033: +4 proved, +4 total — the frame_buffer/frame_capacity
-          # ensures of arena_alloc and arena_alloc_aligned (predicted pin).
-          if [ "${PROVED_COUNT}" != "3480 / 3559" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3480 / 3559)."
+          # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
+          # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
+          if [ "${PROVED_COUNT}" != "3496 / 3575" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3496 / 3575)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"
             echo "      and this job's embedded baseline in one commit."
             FAILURES=$((FAILURES + 1))
@@ -2604,7 +2604,7 @@ jobs:
 
           if [ "${FAILURES}" -eq 0 ]; then
             echo "PASS: arena.h proves identically at 32-bit and 64-bit —"
-            echo "      3480/3559, 79 residuals, same 79 names, zero delta."
+            echo "      3496/3575, 79 residuals, same 79 names, zero delta."
             echo "      Machdep control established. Tier 1's minimum width"
             echo "      is evidenced, not asserted."
           else
@@ -3257,7 +3257,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-033 ratchet: 5321/5505, 184 unproved"
+          echo "  baseline: VERIFY-034 ratchet: 5337/5521, 184 unproved"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3294,10 +3294,10 @@ jobs:
           # out of the TU, a deleted contract, an include-graph change)
           # that gates 1-3 could miss.
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          # VERIFY-033: +4 proved, +4 total — the frame_buffer/frame_capacity
-          # ensures of arena_alloc and arena_alloc_aligned (predicted pin).
-          if [ "${PROVED_COUNT}" != "5321 / 5505" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5321 / 5505)."
+          # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
+          # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
+          if [ "${PROVED_COUNT}" != "5337 / 5521" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5337 / 5521)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -6438,7 +6438,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: data/stringbuf.h (VERIFY-033 run, report-only)"
+      - name: "WP: data/stringbuf.h (name-stability, report-only)"
         # stringbuf.h — module 19, Shape A in place, no driver. Typed+Cast
         # (the header casts char* <-> u8* itself).
         # Run 1 (CI #1319, f6e54ca) was the detection test on the unfixed
@@ -6456,8 +6456,11 @@ jobs:
         # invariant; expectation: own exactly A2's 3.
         # Run 3 (CI #1321, fc924e2): 4744/4828, 81 inherited, own exactly A2's
         # 3 — every prediction held.
-        # VERIFY-033 run: arena_alloc{,_aligned} gain frame_buffer and
-        # frame_capacity. Predicted 4751/4832, 81 inherited, own 0 (A2 closes).
+        # VERIFY-033 run (CI #1322, b785d52): arena_alloc{,_aligned} gain
+        # frame_buffer/frame_capacity. 4767/4848, 81 inherited, own 0 — A2
+        # closed (predicted 4751/4832: the +4 was +20, VERIFY-034 F2).
+        # From here: name-stability runs on unchanged stringbuf source, then
+        # enforcement (pin 4767/4848, the 81 names).
         # Report-only: the job never fails on residuals, only on a missing
         # summary.
         run: |
