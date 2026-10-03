@@ -8815,3 +8815,124 @@ pre-registration for module 20 should grep `deviations.md` for every callee
 precondition the new contracts will meet: `regions_overlap`, `\valid` of
 the struct pointer, string predicates. That check costs minutes, and here
 it would have moved two of three failures into the predicted column.
+
+---
+
+## VERIFY-033: Pre-registration — arena.h's Allocators State Their Frame: One Missing Fact, Three stringbuf Goals, Six Pins
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-033 |
+| **Date**       | 2026-10-03 |
+| **Status**     | PRE-REGISTERED — no contract touched; predictions committed before any change |
+| **Baseline**   | fc924e2 (CI #1321): stringbuf 4744 / 4828, 84 unproved, 3 own |
+| **Scope**      | `core/arena.h`: `arena_alloc`, `arena_alloc_aligned` |
+| **Category**   | Callee specification-strength fix (the VERIFY-023 / VERIFY-026 shape), cross-job ratchet |
+
+**Why this record exists.** VERIFY-031's addendum A2 predicted, and runs 1–3
+confirmed, that `stringbuf_init_arena` keeps three unproved goals:
+
+- `assigns_exit_part4`
+- `assigns_normal_part05`
+- `ensures_init_ok_part2`
+
+The cause named there: `arena_alloc` declares `assigns *arena` and says
+nothing about `arena->buffer` or `arena->capacity`. A caller therefore
+cannot connect the post-state buffer, which `arena_alloc`'s `address`
+ensures is stated against, to the pre-state buffer, which its own assigns
+clause and preconditions are stated against. VERIFY-032 left P1 open on
+exactly this. This record predicts what stating the missing fact does, job
+by job, before the contract is edited.
+
+**The fact is already stated three times in the same header.**
+`arena_reset`, `arena_reset_secure` and `arena_reset_to` each carry:
+
+    ensures arena->buffer == \old(arena->buffer);
+    ensures arena->capacity == \old(arena->capacity);
+
+The two allocators are the only `*arena`-mutating primitives that do not.
+The bodies write `offset` and `padding_accum` only (plus the debug counters,
+outside the verified configuration). The fact is true by inspection; it has
+simply never been written down.
+
+### The change, fixed now
+
+Exactly two global, named clauses, appended after the behaviours in
+**`arena_alloc` and `arena_alloc_aligned`** and nowhere else:
+
+    ensures frame_buffer:   arena->buffer   == \old(arena->buffer);
+    ensures frame_capacity: arena->capacity == \old(arena->capacity);
+
+Named, so that no existing unnamed clause is renumbered and no existing goal
+name moves. `assigns *arena` stays: narrowing it to
+`arena->offset, arena->padding_accum` would be false under
+`CANON_ARENA_DEBUG`, which writes `alloc_count` and `peak`.
+
+**Out of scope, and why.**
+
+- The wrappers (`arena_alloc_zero`, `arena_alloc_aligned_zero`,
+  `arena_try_alloc`, `arena_try_alloc_aligned`) are not called by any
+  verified module that needs the frame.
+- Their open residuals have a different, already-visible shape.
+  `try_alloc`'s `non_null_out_ensures_part{1,2}` is `arena_invariant` after
+  a `*out` write that nothing separates from `*arena`. `alloc_zero`'s
+  `assigns_normal_part3` is a `mem_zero` write into the buffer that
+  `assigns *arena` does not cover.
+- A frame clause would fix neither. Adding it would only add goals to six
+  pins for no closure.
+
+### Predictions (author — confirm or amend before committing)
+
+New goals per translation unit: 2 clauses × 2 functions = **4**. Each is an
+atomic equality over a field the body never writes, expected to close in Qed
+as one goal each. This is predicted for every TU that compiles arena.h.
+Jobs that do not include arena.h (all others) do not move.
+
+| # | Job | Now | Predicted | Residual names |
+|---|-----|-----|-----------|----------------|
+| R1 | `frama-c-arena` | 3476 / 3555, 79 | **3480 / 3559, 79** | the same 79 |
+| R2 | `frama-c-arena-32` | 3476 / 3555, 79 | **3480 / 3559, 79** | set equality with R1 still holds |
+| R3 | `frama-c-pool` | 3950 / 4041, 91 | **3954 / 4045, 91** | the same 91 |
+| R4 | `frama-c-region` | 3624 / 3726, 102 | **3628 / 3730, 102** | the same 102 |
+| R5 | `frama-c-vec` | 5317 / 5501, 184 | **5321 / 5505, 184** | the same 184 |
+| R6 | `frama-c-stringbuf` | 4744 / 4828, 84 | **4751 / 4832, 81** | the 81 inherited; **own 3 → 0** |
+
+| # | Prediction | Falsified if | Confidence |
+|---|------------|--------------|------------|
+| F1 | All four new goals prove in every TU (no new residual anywhere). | any `…_ensures_frame_*` goal unproved | H |
+| F2 | Each new clause is exactly one goal (`+4` per TU, not split into parts). | any total in R1–R6 off by other than 4 | M |
+| F3 | A2 closes: all three `stringbuf_init_arena` goals prove. | any of the three survives | M–H |
+| F4 | No residual outside stringbuf changes status. In particular the pool and try-alloc goals do not close (aliasing, not framing — see below). | any pinned residual in R1–R5 closes or appears | M |
+| F5 | Nothing else moves: MC/DC, MISRA (54) and every test are unchanged, since the change is ACSL only. | any of these changes | H |
+
+**F4 is the risky one, and why.** `pool_reset`'s two open goals
+(`reset_ensures_part3`, `reset_ensures_2_part3`) have a frame-shaped
+reading: `pool_invariant` needs `end_mark <= arena->capacity` after an
+`arena_alloc` that, today, forgets the capacity. But `pool_reset`'s first
+failing goal is `pool->used == 0`. That one cannot depend on the arena's
+frame; it fails because nothing separates `*pool` from the `*arena` the
+call havocs. `pool_init`'s four (`ensures{,_2,_3}_part4`, `ensures_4_part3`)
+read the same way. So the prediction is that the frame is necessary but not
+sufficient there, and those goals stay. If any of them closes, F4 fails in
+the good direction, and VERIFY-034 records which goals moved and which
+argument blocks retire. The pool/try-alloc aliasing reading is recorded as
+a **hypothesis** for a later arc, not as a finding.
+
+**What the run decides.** If F1 and F3 hold, stringbuf has zero own
+residuals. Then P1 can be scored HELD at enforcement, *A* stays 17, and
+stringbuf proceeds to three name-stability runs and enforcement (the
+range.h #1315–#1317 pattern). If F3 fails, the three goals are traced from
+the goal text before anything else is changed. If F1 fails anywhere, the
+arena pins do not ratchet on a guess: the failing clause is traced first.
+
+### Mechanics
+
+The change commit carries the **predicted** pins, so a correct prediction
+runs green and a wrong one fails visibly at the job that missed:
+
+- R1–R5's `PROVED_COUNT` pins and the arena-32 embedded 64-bit baseline
+  text;
+- the stringbuf job's evidence block (own predicted 0).
+
+A failed pin is a scored outcome, followed by a ratchet commit, as at
+VERIFY-027's CI #1299 → #1300. VERIFY-034 scores this record.
