@@ -8701,3 +8701,117 @@ only misses are the two pass-2 failure outcomes in `_va`
 exactly what this record pre-registered at 9268da3. The prediction was
 committed before any of this code existed; the local measurement only
 reveals its outcome early. CI is authoritative, and MCDC-016 records it.
+
+### Run 2 — observed (CI #1320, 600f238)
+
+**4716 / 4802**, 86 unproved (83 Timeout, 3 Unknown, 0 Failed, 0 Invalid).
+
+- **Inherited: 81 of 81, the same names as run 1.**
+- **MC/DC:** CI reports `data/stringbuf.h` at **130 / 132**, the
+  pre-registered figure. The two misses are the pass-2 failure outcomes in
+  `_va`.
+- **MISRA:** 54 real, matching the new pin.
+- **Own: 5, against 3 predicted.**
+
+| Goals | Status |
+|-------|--------|
+| A2's three `stringbuf_init_arena` names | as predicted, unchanged from run 1 |
+| G1/G6 seam, `mem_copy`, helper rte, G3 `failure_unchanged`, G2/G5 `vsnprintf` preconditions | **all closed**, as predicted |
+| `stringbuf_append_fmt_no_buffer_assigns_normal_part2` | **not predicted** — traced below |
+| `stringbuf_append_n_call…requires_src_read_part2` | **H-n partly right:** 2 of run 1's 3 closed (the loop read and `src_read_part1`); this one remains |
+
+**The wrapper goal, traced.** G4 made `stringbuf_append_fmt` a pure
+delegation. WP frames a call with the callee's *top-level* `assigns`
+(`sb->len, sb->data[len .. capacity-1]`), not with the behaviour that
+applies at the call site. So the wrapper's `no_buffer` behaviour,
+`assigns \nothing`, cannot be established, even though `_va`'s own
+`no_buffer` behaviour says exactly that. The run-2 prediction missed a
+consequence of its own structural change. Decision rule 6 forbids dropping
+the frame claim, so the code changes instead: the wrapper repeats `_va`'s
+guard and returns before the call.
+
+**The `append_n` goal, hypothesis H-n2 (not traced).**
+`stringbuf_nreadable` gives *pointwise* readability (`\valid_read(s + i)`
+for each qualifying `i`). The helper requires *range* readability,
+`\valid_read(s + (0 .. actual_len - 1))`. Turning the first into the
+second needs the prover to instantiate the quantifier at both ends of the
+range, under a nested quantifier, and Z3 times out on one split part. Run 3
+adds the loop invariant `readable: \valid_read(s + (0 .. actual_len - 1))`,
+which extends by one element per iteration from the read the loop has just
+made. This is a proof annotation; no contract changes.
+
+### Run 3 — changes and expectation (committed before CI)
+
+- **`stringbuf_append_fmt`:** `if (!sb || !fmt || !sb->data) return false;`
+  before `va_start`.
+- **`stringbuf_append_n`:** the `readable` loop invariant.
+- **Tests:** `_va`'s own guard through `fmt_va_helper` (NULL `sb`, NULL
+  `fmt`, zero state). The wrapper now answers those cases first, so without
+  these tests `_va`'s guard outcomes would drop out of coverage.
+
+**Expected:**
+
+- inherited 81, same names;
+- **own exactly 3, A2's names**; total unproved 84.
+
+**MC/DC moves, measured locally before commit:** **136 / 138**. The
+wrapper's guard adds 6 outcomes and all are covered. The same two pass-2
+justification rows remain. The pre-registered 130 / 132 held at run 2;
+this change re-baselines the denominator for a traced WP reason, and
+MCDC-016 records both figures.
+
+**Schedule moves by one run.** Runs 4 and 5 are name-stability runs on
+unchanged code; run 6 is enforcement. A2 is still deferred to the
+VERIFY-033 candidate.
+
+---
+
+## VERIFY-032: Scoring VERIFY-031 After Run 2 — Five Held, Three Failed, One Open; Every Planted Defect Found Where Named, and the Blind Spot Stayed Blind
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-032 |
+| **Date**       | 2026-10-03 |
+| **Status**     | SCORED at run 2 (CI #1320, 600f238). Re-scored at enforcement for P1 only. |
+| **Scores**     | VERIFY-031 (pre-registered at 9268da3, addendum at f6e54ca) |
+
+Each prediction is scored **as committed**. The run-1 and run-2 sections of
+VERIFY-031 hold the facts; this record holds only the verdicts.
+
+| # | Verdict | Evidence |
+|---|---------|----------|
+| P1 | **OPEN** | Decided at enforcement. A2's three goals need either VERIFY-033 (an `arena_alloc` frame) or an argument block. The latter fails P1. |
+| P2 | **HELD** | 81 / 81 inherited by name in both runs. None missing, none extra. |
+| P3 | **FAILED** | The call-site half held exactly: `no_overlap` was unproved at the three named call sites and nowhere else. The helper half failed: `mem_copy_requires_3` did not prove. The cause is memory.h's pointer-ordering `regions_overlap`, a class VERIFY-022 had already recorded and P3 overlooked. |
+| P4 | **HELD** | `failure_unchanged` was unproved in both fmt functions and in no other function. |
+| P5 | **HELD** | `sep` was unproved at both pass-2 calls; both pass-1 calls proved. |
+| P6 | **HELD** | G2's fix changed the size argument between runs, and no goal changed status because of it. `valid_buf` and `sep` proved in run 2; `term` is assumed. musl's failure mode stayed invisible, as predicted. |
+| P7 | **FAILED** | Conceded before the run by the addendum (A1, A2). Eight further own goals came from three causes: the overlooked memory.h class, a missing `\valid(sb)` in the helper's contract, and `append_n`'s read-validity. |
+| P8 | **FAILED** | Run 2 had 5 own goals: A2's 3 (stated in advance as falsifying P8), one `append_n` part (within P8's allowance), and the wrapper's `no_buffer` assigns (outside it). |
+| P9 | **HELD** | No sixth `stringbuf_wf` clause was needed. The helper's missing `\valid(sb)` was a precondition omission, not an invariant gap: every public function carries it through `stringbuf_ok`. |
+| Q1 | answered | Frama-C 29's default Variadic translation ingests both variadic definitions. |
+| Q2 | answered | The axiom merged with the bundled libc spec, with no extra caller obligation. |
+| A1 | **HELD** | Exactly one `add_pos` goal, at `stringbuf_append`'s call site. |
+| A2 | **HELD** (count off by one) | Both predicted goals failed. The assigns clause yielded two goals (normal and exit paths), so 3 goals, not 2. |
+| MC/DC | **HELD exactly** | 130 / 132 at run 2. The 2 justification rows are the pass-2 outcomes in `_va`. |
+
+**Totals:** 5 held (P2, P4, P5, P6, P9), 3 failed (P3, P7, P8), 1 open (P1).
+Both addendum items held, and the MC/DC figure held exactly.
+
+**The detection test.** Of the five pre-run findings, the prover reported
+the four that are visible to it (G1, G3, G5, G6) at the named goals. It did
+not report G2, and it was predicted not to. Every report sat at the seam
+the record named: the internal-helper/public-contract boundary for G1 and
+G6, the failure path for G3, the restrict pair for G5. What the
+pre-registration got wrong was never *where* a defect would surface. It was
+what else would surface beside it. One cause was a class the project had
+already written down (VERIFY-022); one was a precondition omitted the same
+way VERIFY-022 recorded for `pop_raw`; one was the tool's call-site frame
+rule, missed by the run-2 restructure (G4) itself.
+
+**Method note for the next unit.** Two of run 1's three unpredicted causes
+were already documented in this file. Before writing predictions, the
+pre-registration for module 20 should grep `deviations.md` for every callee
+precondition the new contracts will meet: `regions_overlap`, `\valid` of
+the struct pointer, string predicates. That check costs minutes, and here
+it would have moved two of three failures into the predicted column.

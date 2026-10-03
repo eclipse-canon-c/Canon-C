@@ -276,6 +276,9 @@ typedef struct {
    Plus one contract omission run 1 exposed: the helper read sb->len
    without requiring \valid(sb) (stringbuf_wf does not include it; the
    public functions get it from stringbuf_ok).
+   Run 3: stringbuf_append_fmt repeats _va's NULL/zero-state guard (WP
+   frames a call with the callee's top-level assigns), and append_n's loop
+   carries the range-validity invariant `readable`.
 
    stringbuf_wf has exactly the five clauses VERIFY-031 fixed before any
    contract was written:
@@ -917,6 +920,13 @@ static inline bool stringbuf_append_fmt(
     va_list args;
     bool    ok;
 
+    /* The same guard as stringbuf_append_fmt_va's, repeated here on
+     * purpose: WP frames a call with the callee's top-level assigns, not
+     * with the behaviour that applies, so without a local early return the
+     * no_buffer behaviour's `assigns \nothing` is unprovable (VERIFY-031
+     * run 2). */
+    if (!sb || !fmt || !sb->data) { return false; }
+
     va_start(args, fmt);
     ok = stringbuf_append_fmt_va(sb, fmt, args);
     va_end(args);
@@ -972,8 +982,9 @@ static inline bool stringbuf_append_n(
 
     /* Determine how many bytes to actually copy: stop at null or n */
     actual_len = 0;
-    /*@ loop invariant bound:   0 <= actual_len <= n;
-        loop invariant no_nul:  \forall integer i; 0 <= i < actual_len ==> s[i] != '\0';
+    /*@ loop invariant bound:    0 <= actual_len <= n;
+        loop invariant no_nul:   \forall integer i; 0 <= i < actual_len ==> s[i] != '\0';
+        loop invariant readable: \valid_read(s + (0 .. actual_len - 1));
         loop assigns actual_len;
         loop variant n - actual_len;
     */

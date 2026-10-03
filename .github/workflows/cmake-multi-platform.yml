@@ -6428,7 +6428,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: data/stringbuf.h (VERIFY-031 run 2, report-only)"
+      - name: "WP: data/stringbuf.h (VERIFY-031 run 3, report-only)"
         # stringbuf.h — module 19, Shape A in place, no driver. Typed+Cast
         # (the header casts char* <-> u8* itself).
         # Run 1 (CI #1319, f6e54ca) was the detection test on the unfixed
@@ -6440,6 +6440,10 @@ jobs:
         #   frame on buffer/capacity; deferred to its own arc)
         #   every run-1 family other than A2 closes, including append_n's
         #   three (hypothesis H-n: the cause was valid_read_nstring)
+        # Run 2 (CI #1320, 600f238): 4716/4802, 81 inherited, 5 own — A2's
+        # 3, plus the wrapper's no_buffer assigns and one append_n src_read
+        # part. Run 3 adds the wrapper guard and append_n's `readable` loop
+        # invariant; expectation: own exactly A2's 3.
         # Report-only: the job never fails on residuals, only on a missing
         # summary.
         run: |
@@ -6471,7 +6475,7 @@ jobs:
           echo "==============================================="
           echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
           echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
-          echo "  VERIFY-031 run 2 — fixes G1-G6 applied"
+          echo "  VERIFY-031 run 3 — wrapper guard + append_n readable invariant"
           echo "==============================================="
           echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
           grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
@@ -6600,10 +6604,10 @@ jobs:
             cat /tmp/sb_g16.txt /tmp/sb_rte.txt /tmp/sb_p4.txt /tmp/sb_p5.txt /tmp/sb_an.txt /tmp/sb_ia.txt | sort -u > /tmp/sb_grouped.txt
             comm -23 /tmp/sb_own.txt /tmp/sb_grouped.txt > /tmp/sb_other.txt
             echo ""
-            echo "  ================ VERIFY-031 RUN-2 EVIDENCE (not gating) ================"
+            echo "  ================ VERIFY-031 RUN-3 EVIDENCE (not gating) ================"
             echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 81 predicted (names as run 1)"
             echo "      predicted but not observed: $(wc -l < /tmp/sb_inh_missing.txt)"; show /tmp/sb_inh_missing.txt
-            echo "  own (everything outside the 81): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run-2 pred: 3)"
+            echo "  own (everything outside the 81): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run-3 pred: 3)"
             echo "  A2  init_arena (pred: the same 3 names as run 1):"
             show /tmp/sb_ia.txt
             echo "  G1/G6 helper seam: no_overlap, add_pos, mem_copy (pred: none):"
@@ -6614,9 +6618,9 @@ jobs:
             show /tmp/sb_p4.txt
             echo "  G2/G5 vsnprintf call preconditions (pred: none):"
             show /tmp/sb_p5.txt
-            echo "  H-n append_n (pred: none — run 1 had 3):"
+            echo "  H-n append_n (pred: none — run 1 had 3, run 2 had 1):"
             show /tmp/sb_an.txt
-            echo "  anything else own (pred: none):"
+            echo "  anything else own (pred: none — run 2 had the wrapper's no_buffer assigns):"
             show /tmp/sb_other.txt
             echo "  ========================================================================"
           fi

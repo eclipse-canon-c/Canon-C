@@ -603,6 +603,15 @@ static void test_null_and_empty_args(void)
     EXPECT(stringbuf_append_str(&sb, empty_view));   /* non-NULL, zero length */
     EXPECT(stringbuf_append_n(&sb, "", 5));          /* stops at once */
     EXPECT(stringbuf_len(&sb) == 0u);
+
+    /* the va_list entry point's own guard (the wrapper now checks first) */
+    {
+        StringBuf z;
+        memset(&z, 0, sizeof z);
+        EXPECT(!fmt_va_helper(NULL, "%d", 1));
+        EXPECT(!fmt_va_helper(&sb, no_fmt));
+        EXPECT(!fmt_va_helper(&z, "%d", 1));
+    }
 }
 
 /* Out-of-domain guards (VERIFY-031's MC/DC policy): each guard exists to
