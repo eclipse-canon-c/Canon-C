@@ -8936,3 +8936,19 @@ runs green and a wrong one fails visibly at the job that missed:
 
 A failed pin is a scored outcome, followed by a ratchet commit, as at
 VERIFY-027's CI #1299 → #1300. VERIFY-034 scores this record.
+
+### Change (committed before CI)
+
+The two clauses went into both contracts exactly as written above, with one
+placement note. ACSL requires default-behaviour clauses before the named
+behaviours, so they sit directly after `assigns *arena;`. Placed after the
+behaviours, they would have attached to the last behaviour (`does_not_fit`)
+and stopped being global. The "appended after the behaviours" wording above
+describes intent, not position. Checked with the Frama-C 25 kernel
+pretty-printer: both clauses print as global `ensures` ahead of
+`behavior size_zero`.
+
+The pins carry the predicted values: arena and arena-32 at 3480 / 3559, pool
+at 3954 / 4045, region at 3628 / 3730, vec at 5321 / 5505. EXPECTED_UNPROVED
+and every name roll-call are unchanged, which is F4. The compiled C is
+untouched: the change is ACSL comments only, so F5 has nothing to move.

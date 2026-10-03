@@ -322,6 +322,11 @@ static inline void arena_reset_secure(Arena* arena) {
 /*@
   requires arena_invariant(arena);
   assigns *arena;
+  // VERIFY-033: the frame arena_reset{,_secure,_to} already state. The body
+  // writes offset and padding_accum only; without these a caller cannot
+  // relate the post-state buffer (the address ensures) to the pre-state one.
+  ensures frame_buffer:   arena->buffer   == \old(arena->buffer);
+  ensures frame_capacity: arena->capacity == \old(arena->capacity);
   behavior size_zero:
     assumes size == 0;
     ensures \result == \null;
@@ -376,6 +381,9 @@ static inline void* arena_alloc(Arena* arena, usize size) {
   requires arena_invariant(arena);
   requires is_power_of_two_logic(alignment);
   assigns *arena;
+  // VERIFY-033: see arena_alloc.
+  ensures frame_buffer:   arena->buffer   == \old(arena->buffer);
+  ensures frame_capacity: arena->capacity == \old(arena->capacity);
   behavior size_zero:
     assumes size == 0;
     ensures \result == \null;
