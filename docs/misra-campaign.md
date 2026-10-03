@@ -304,3 +304,17 @@ each was established after a specific failure:
 There is no CHANGELOG. The change record is the CI history: every landed
 commit has an Actions run carrying its verification, coverage and MISRA
 results, and the records above cite those runs by number.
+
+---
+
+## 2026-10-02 — 53 → 54 (VERIFY-031)
+
+One finding added, rule 21.2, at `data/stringbuf.h`'s `__FRAMAC__`-only
+extern redeclaration of `vsnprintf`. That redeclaration is the trusted
+axiom VERIFY-031 design item 5 specifies, and it has the same shape as
+`semantics/diag.h`'s two (`snprintf`, `fprintf`), already among the 53.
+Cppcheck analyses every configuration, including `__FRAMAC__`, so it
+cannot be avoided without moving the axiom out of the header it specifies.
+First seen at CI #1319 (f6e54ca), reproduced locally with Cppcheck 2.13.0,
+and pinned in the job's ledger from the next commit. `21.2 x2` in the table
+above is now `x3`.

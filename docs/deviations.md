@@ -8586,3 +8586,118 @@ locally:
 CI's Frama-C 29 is authoritative for Q1 and Q2. The compiled C is unchanged
 by this commit: the preprocessed TU is identical apart from `__LINE__`
 values, since every addition is an ACSL comment or `__FRAMAC__`-only.
+
+### Run 1 — observed (CI #1319, f6e54ca)
+
+Report-only. Frama-C 29; Alt-Ergo 2.6.3, CVC5 1.2.1, Z3 4.15.2.
+**4810 / 4913**, 103 unproved (97 Timeout, 6 Unknown, 0 Failed, 0 Invalid).
+The facts are recorded here. Scoring is VERIFY-032's job, as committed.
+
+**Inherited: 81 of 81, by name.** Every predicted name appears, none is
+missing, and nothing outside the set is inherited.
+
+**Own: 22 goals in eight causes.**
+
+| # | Goals | Where | Cause | Predicted? |
+|---|-------|-------|-------|------------|
+| 1 | 4 | `no_overlap` at `stringbuf_append`, `_append_str`, `_append_n` (two `_part`s) | G1: the helper's separation `@pre`, which no public function states | yes, P3 — exactly the three call sites |
+| 2 | 1 | `_stringbuf_append_bytes_call_mem_copy_requires_3` | traced below | **no** — P3 said this proves |
+| 3 | 1 | `add_pos` at `stringbuf_append` | G6 | yes, addendum A1 |
+| 4 | 4 | `failure_unchanged` `_part06`/`_part07` in both fmt functions | G3: the write pass overwrites `data[len]` | yes, P4 — nowhere else |
+| 5 | 2 | `vsnprintf_2_requires_sep` in both fmt functions | G5: the `restrict` precondition. Both pass-1 calls proved. | yes, P5 |
+| 6 | 3 | `stringbuf_init_arena`: `ensures_init_ok_part2`, `assigns_exit_part4`, `assigns_normal_part05` | A2: `arena_alloc` has no frame on `buffer`/`capacity` | yes, addendum A2. It predicted 2; the assigns clause yields two goals (normal and exit paths) |
+| 7 | 4 | `_stringbuf_append_bytes` `assert_rte_mem_access` ×4 | traced below | **no** |
+| 8 | 3 | `stringbuf_append_n`: `assert_rte_mem_access_2` (Unknown), `call…requires_src_read_part1/_part2` | not traced (hypothesis below) | **no** |
+
+**Cause 2, traced.** `mem_copy`'s third `requires` is
+`!regions_overlap((char *)dest, (char *)src, size)`. memory.h defines
+`regions_overlap` by pointer ordering (`a < b + size && b < a + size`).
+VERIFY-022 already recorded that `\separated` cannot discharge it across
+bases. priority_queue.h carries four instances, and VERIFY-024 is the
+candidate fix. P3's claim that this goal proves overlooked a class the
+project had already named. G1's fix removes the call: `mem_move` has no
+overlap precondition.
+
+**Cause 7, traced.** The helper required only `stringbuf_wf(sb)`, and
+`stringbuf_wf` does not contain `\valid(sb)`. The public functions get it
+from `stringbuf_ok`; the helper had nothing, so its four field accesses
+could not be proved. This is a contract omission of exactly the kind
+VERIFY-022 recorded for `pop_raw`, made again here. It was caught by the
+class tally on the first run.
+
+**Cause 8, not traced.** The log names the goals but not their hypotheses.
+**Hypothesis H-n:** `valid_read_nstring` is a disjunction ("n bytes
+readable" *or* "a valid string"). Its second branch needs the strlen
+axiomatics to bound the loop index by `strlen(s)`. Run 2 tests H-n by
+stating the precondition as exactly what the loop reads (see below). If
+any of the three goals survives run 2, H-n is wrong and the cause is still
+open.
+
+**Q1 answered:** Frama-C 29's default Variadic translation ingests both
+variadic definitions, so no run 1b was needed. **Q2:** the kernel merged
+the axiom with the bundled libc spec (`stdio.h:242`). As for every
+bodiless libc function, it generated default `exits`/`terminates` clauses.
+No extra caller obligation surfaced, and both pass-1 calls proved.
+
+**Unpredicted, outside WP: MISRA 53 → 54.** The axiom's extern
+redeclaration of `vsnprintf` is a rule 21.2 finding, the same shape as
+diag.h's two. This was reproduced locally with Cppcheck 2.13.0: the only
+stringbuf.h finding is `21.2` at line 75. The job is advisory and stayed
+green, but its pinned count went stale. Run 2 updates it.
+
+**MC/DC baseline confirmed:** CI reports `data/stringbuf.h` at
+**101 / 136**, the figure this record measured locally.
+
+### Run 2 — the fixes, and what they predict (committed before CI)
+
+**Changes**, all in one commit:
+
+- **G1:** the helper copies with `mem_move`. Its separation `@pre` is
+  deleted, and its docs now say a stale view may be appended (memmove
+  semantics).
+- **G2:** the write pass passes `with_nul - len` (= `needed + 1`) as the
+  size.
+- **G3:** a failed write pass restores `data[len] = '\0'`. The failure
+  guarantee is reworded to "the string `data[0 .. len]` is unchanged".
+- **G4:** `stringbuf_append_fmt` is now a wrapper over `_va` (va_start,
+  delegate, va_end). `_va` moves above it.
+- **G5:** both fmt functions document the separation and carry it as
+  `fmt_sep`.
+- **G6:** the helper's `add_len > 0` `@pre` is deleted.
+- **Cause 7:** the helper requires `\valid(sb)`.
+- **H-n:** `stringbuf_append_n` requires a new predicate,
+  `stringbuf_nreadable(s, n)`: every byte up to the first NUL, or the
+  first n bytes, is readable. This is a *weaker* precondition than
+  `valid_read_nstring`, so it admits every caller the documentation admits
+  and strengthens the contract rather than tuning it.
+- **Tests:** G1 regression (both entry points; fails on the run-1 source
+  with ASan `memcpy-param-overlap`), G6, the `%ls` measure failure, the
+  zero state, NULL/empty arguments, the 8 out-of-domain guards with
+  fabricated inputs, and the four blind-spot functions.
+- **MISRA ledger:** 54.
+
+**Expected:**
+
+- **inherited 81, same names;**
+- **own exactly 3, the same three `stringbuf_init_arena` names** (A2 is
+  not fixed in this run);
+- total unproved 84;
+- every other run-1 family closes, including H-n's three;
+- no goal's status is attributable to G2's size change (P6).
+
+**A2 is deferred, deliberately.** Giving `arena_alloc` a frame adds goals
+to every job that includes arena.h: arena, arena-32, pool, region, vec and
+stringbuf. Every one of their pinned proved-counts would move, so it is
+its own arc with its own ratchet: **VERIFY-033 candidate**, the VERIFY-024
+pattern. Stated now, before the run: if A2 is still open, **P8 as
+committed is falsified by run 2** (P8 allowed only `append_n` goals), and
+at enforcement A2 needs either VERIFY-033 or an argument block, which bears
+on P1.
+
+**MC/DC — measured locally before commit, not a fresh prediction.**
+Measured with the coverage job's recipe (GCC 14.2): **130 / 132**. The
+only misses are the two pass-2 failure outcomes in `_va`
+(`written < 0`, `written != needed`), and the denominator is 132. That is
+exactly what this record pre-registered at 9268da3. The prediction was
+committed before any of this code existed; the local measurement only
+reveals its outcome early. CI is authoritative, and MCDC-016 records it.

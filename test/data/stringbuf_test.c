@@ -64,6 +64,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <wchar.h>
 
 /* ════════════════════════════════════════════════════════════════════════════
    Unit test build
@@ -478,6 +479,200 @@ static void test_failed_append_unchanged(void)
     EXPECT(sb.data[saved_len] == '\0');
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   VERIFY-031 / MCDC-016 — regressions and coverage
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* G1: a view captured before truncate, appended back. Before the fix this
+ * reached mem_copy with overlapping regions: a contract abort in ordinary
+ * builds, memcpy-param-overlap (UB) in the verified configuration. Now the
+ * helper uses mem_move, and the bytes are those the view held at the call. */
+static void test_g1_stale_view_append(void)
+{
+    char buf[64];
+    StringBuf sb;
+    str_t all;
+    const char* tail;
+
+    stringbuf_init_buffer(&sb, buf, sizeof buf);
+    EXPECT(stringbuf_append(&sb, "report.txt"));
+    all = stringbuf_as_str(&sb);                  /* [0,10) */
+    stringbuf_truncate(&sb, 6);                   /* data[6] = '\0' */
+    EXPECT(stringbuf_append_str(&sb, all));       /* src [0,10) dst [6,16) */
+    EXPECT(stringbuf_len(&sb) == 16u);
+    EXPECT(memcmp(buf, "reportreport\0txt", 16) == 0);
+    EXPECT(buf[16] == '\0');
+
+    /* the same through the C-string entry point: a stale suffix pointer
+     * that starts past the new length and overlaps the destination */
+    stringbuf_clear(&sb);
+    EXPECT(stringbuf_append(&sb, "abcdef"));
+    tail = stringbuf_str(&sb) + 3;                /* "def" at [3,6) */
+    stringbuf_truncate(&sb, 2);                   /* "ab"; tail intact */
+    EXPECT(stringbuf_append(&sb, tail));          /* src [3,6) dst [2,5) */
+    EXPECT(stringbuf_len(&sb) == 5u);
+    EXPECT(strcmp(stringbuf_str(&sb), "abdef") == 0);
+}
+
+/* G6: stringbuf_append("") hands the helper add_len == 0. */
+static void test_g6_append_empty(void)
+{
+    char buf[8];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, buf, sizeof buf);
+    EXPECT(stringbuf_append(&sb, "ab"));
+    EXPECT(stringbuf_append(&sb, ""));
+    EXPECT(stringbuf_len(&sb) == 2u);
+    EXPECT(buf[2] == '\0');
+}
+
+/* The measure pass can fail in defined behaviour: %ls with a character the
+ * C locale cannot encode returns -1 on glibc and musl. Other libcs may
+ * encode it; either way the string must be intact afterwards. */
+static void test_fmt_measure_failure(void)
+{
+    static const wchar_t wide[] = { (wchar_t)0x00E9, (wchar_t)0 };
+    char buf[32];
+    StringBuf sb;
+    bool ok;
+    stringbuf_init_buffer(&sb, buf, sizeof buf);
+    EXPECT(stringbuf_append(&sb, "ab"));
+    ok = stringbuf_append_fmt(&sb, "%ls", wide);
+    if (!ok) {
+        EXPECT(stringbuf_len(&sb) == 2u);
+        EXPECT(strcmp(stringbuf_str(&sb), "ab") == 0);
+    } else {
+        EXPECT(stringbuf_len(&sb) > 2u);
+    }
+    EXPECT(buf[stringbuf_len(&sb)] == '\0');
+
+    /* the write pass's capacity check, reached through the wrapper */
+    EXPECT(!stringbuf_append_fmt(&sb, "%s", "this does not fit in 32 bytes at all"));
+    EXPECT(buf[stringbuf_len(&sb)] == '\0');
+}
+
+/* The zero state: a StringBuf that was never initialised (all-zero). Every
+ * function documented as NULL/uninitialised-safe returns its documented
+ * result and touches nothing. */
+static void test_zero_state(void)
+{
+    StringBuf z;
+    str_t s;
+    bytes_t b;
+    cbytes_t cb;
+    borrowed_str bs;
+    borrowed_bytes bb;
+
+    memset(&z, 0, sizeof z);
+    EXPECT(!stringbuf_append(&z, "a"));
+    EXPECT(!stringbuf_append_str(&z, str_from_cstr("a")));
+    EXPECT(!stringbuf_append_char(&z, 'a'));
+    EXPECT(!stringbuf_append_fmt(&z, "%d", 1));
+    EXPECT(!stringbuf_append_n(&z, "a", 1));
+    EXPECT(strcmp(stringbuf_str(&z), "") == 0);
+    s = stringbuf_as_str(&z);            EXPECT(s.ptr == NULL && s.len == 0u);
+    b = stringbuf_as_bytes(&z);          EXPECT(b.ptr == NULL && b.len == 0u);
+    cb = stringbuf_as_cbytes(&z);        EXPECT(cb.ptr == NULL && cb.len == 0u);
+    b = stringbuf_buffer_bytes(&z);      EXPECT(b.ptr == NULL && b.len == 0u);
+    cb = stringbuf_buffer_cbytes(&z);    EXPECT(cb.ptr == NULL && cb.len == 0u);
+    bs = stringbuf_as_borrowed_str(&z);  EXPECT(bs.str.ptr == NULL && bs.str.len == 0u);
+    bb = stringbuf_as_borrowed_bytes(&z);        EXPECT(bb.bytes.ptr == NULL && bb.bytes.len == 0u);
+    bb = stringbuf_buffer_as_borrowed_bytes(&z); EXPECT(bb.bytes.ptr == NULL && bb.bytes.len == 0u);
+    EXPECT(stringbuf_remaining(&z) == 0u);
+    stringbuf_clear(&z);
+    stringbuf_truncate(&z, 0);
+    EXPECT(z.data == NULL && z.len == 0u && z.capacity == 0u);
+}
+
+/* NULL / empty argument sides not reached elsewhere. */
+static void test_null_and_empty_args(void)
+{
+    char buf[16];
+    StringBuf sb;
+    const char* no_fmt = NULL;
+    str_t empty_view;
+    bool ok;
+
+    stringbuf_init_buffer(&sb, buf, sizeof buf);
+    EXPECT(!stringbuf_append_fmt(NULL, "%d", 1));
+    ok = stringbuf_append_fmt(&sb, no_fmt);
+    EXPECT(!ok);
+    EXPECT(!stringbuf_append_n(NULL, "a", 1));
+    empty_view.ptr = "abc";
+    empty_view.len = 0u;
+    EXPECT(stringbuf_append_str(&sb, empty_view));   /* non-NULL, zero length */
+    EXPECT(stringbuf_append_n(&sb, "", 5));          /* stops at once */
+    EXPECT(stringbuf_len(&sb) == 0u);
+}
+
+/* Out-of-domain guards (VERIFY-031's MC/DC policy): each guard exists to
+ * reject an input outside the documented domain, and returns before any
+ * memory access — so a fabricated struct or view exercises it safely.
+ * Exercising it is the evidence that it works. */
+static void test_out_of_domain_guards(void)
+{
+    char buf[8];
+    StringBuf sb;
+    StringBuf f;
+    str_t huge;
+
+    /* _stringbuf_append_bytes: len + add_len overflows */
+    stringbuf_init_buffer(&sb, buf, sizeof buf);
+    EXPECT(stringbuf_append(&sb, "a"));
+    huge.ptr = "x";
+    huge.len = CANON_USIZE_MAX;                       /* never read */
+    EXPECT(!stringbuf_append_str(&sb, huge));
+    /* _stringbuf_append_bytes: end + 1 overflows */
+    huge.len = CANON_USIZE_MAX - 1u;
+    EXPECT(!stringbuf_append_str(&sb, huge));
+    EXPECT(stringbuf_len(&sb) == 1u && buf[1] == '\0');
+
+    memset(&f, 0, sizeof f);
+    f.data = buf;
+
+    /* append_char: len + 2 overflows */
+    f.len = CANON_USIZE_MAX - 1u;
+    f.capacity = CANON_USIZE_MAX;
+    EXPECT(!stringbuf_append_char(&f, 'x'));
+    /* append_fmt_va: len + needed overflows ("42": needed == 2) */
+    EXPECT(!stringbuf_append_fmt(&f, "%d", 42));
+    /* append_fmt_va: end + 1 overflows */
+    f.len = CANON_USIZE_MAX - 2u;
+    EXPECT(!stringbuf_append_fmt(&f, "%d", 42));
+    /* remaining: len + 1 > capacity */
+    f.len = 10u;
+    f.capacity = 5u;
+    EXPECT(stringbuf_remaining(&f) == 0u);
+}
+
+/* The blind spot: close and the three borrowed views were never called in
+ * this TU, so GCC did not emit them and their outcomes were outside the
+ * MC/DC denominator. */
+static void test_borrowed_views_and_close(void)
+{
+    char buf[16];
+    StringBuf sb;
+    borrowed_str bs;
+    borrowed_bytes bb;
+
+    stringbuf_init_buffer(&sb, buf, sizeof buf);
+    EXPECT(stringbuf_append(&sb, "hey"));
+    bs = stringbuf_as_borrowed_str(&sb);
+    EXPECT(bs.str.ptr == buf && bs.str.len == 3u);
+    bb = stringbuf_as_borrowed_bytes(&sb);
+    EXPECT(bb.bytes.len == 3u);
+    bb = stringbuf_buffer_as_borrowed_bytes(&sb);
+    EXPECT(bb.bytes.len == sizeof buf);
+    bs = stringbuf_as_borrowed_str(NULL);
+    EXPECT(bs.str.ptr == NULL);
+    bb = stringbuf_as_borrowed_bytes(NULL);
+    EXPECT(bb.bytes.ptr == NULL);
+    bb = stringbuf_buffer_as_borrowed_bytes(NULL);
+    EXPECT(bb.bytes.ptr == NULL);
+    stringbuf_close(NULL);
+    stringbuf_close(&sb);
+}
+
 /* ── Suppress unused ─────────────────────────────────────────────────────── */
 static void stringbuf_suppress_unused(void)
 {
@@ -520,6 +715,13 @@ int main(void)
     test_truncate();
     test_always_null_terminated();
     test_failed_append_unchanged();
+    test_g1_stale_view_append();
+    test_g6_append_empty();
+    test_fmt_measure_failure();
+    test_zero_state();
+    test_null_and_empty_args();
+    test_out_of_domain_guards();
+    test_borrowed_views_and_close();
 
     if (g_failed == 0) {
         printf("OK  stringbuf_test  (all assertions passed)\n");

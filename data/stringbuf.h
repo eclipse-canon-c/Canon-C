@@ -86,7 +86,7 @@ extern int vsnprintf(char *s, size_t n, const char *format, va_list arg);
  * ────────────────────────────────────────────────────────────────────────────
  * - Capacity is fixed at initialization — no automatic growth or reallocation
  * - Always null-terminated — even when empty or after a failed append
- * - All appends return bool — fail gracefully and leave buffer unchanged
+ * - All appends return bool — fail gracefully and leave the string unchanged
  * - Two backing strategies: Arena-allocated (recommended) or caller-owned buffer
  * - Zero hidden state, no global variables, minimal overhead
  * - str_t / bytes_t views via stringbuf_as_str() / stringbuf_as_bytes()
@@ -127,9 +127,9 @@ extern int vsnprintf(char *s, size_t n, const char *format, va_list arg);
  * Both stringbuf_append_fmt and stringbuf_append_fmt_va use two vsnprintf
  * passes (measure, then write). Each pass requires a fresh va_list:
  *
- * - stringbuf_append_fmt:    va_start / va_end for the measure pass;
- *                            va_start / va_end for the write pass.
- *                            Two independent va_start calls on the same __VA_ARGS__.
+ * - stringbuf_append_fmt:    One va_start / va_end around a call to
+ *                            stringbuf_append_fmt_va, which does both passes
+ *                            (VERIFY-031 G4: one formatting body).
  *
  * - stringbuf_append_fmt_va: The caller-supplied args must not be consumed.
  *                            Both the measure pass and the write pass each
@@ -161,7 +161,9 @@ extern int vsnprintf(char *s, size_t n, const char *format, va_list arg);
  *     stable for the StringBuf's whole lifetime. A view captured before
  *     a clear or append still points at valid memory; the substrate
  *     does not catch use-of-truncated-characters or use-of-stale-len,
- *     consistent with the dynstring docblock.
+ *     consistent with the dynstring docblock. Appending such a view back
+ *     into the same StringBuf is well-defined: the bytes are moved with
+ *     memmove semantics (VERIFY-031 G1).
  *   - Arena resets: if a StringBuf was initialized via stringbuf_init_arena
  *     and the Arena is reset, the StringBuf's data pointer becomes
  *     dangling. The StringBuf's lt does NOT track this — the Arena
@@ -258,13 +260,22 @@ typedef struct {
    Verified configuration: -DCANON_NO_REQUIRE -DNDEBUG, CANON_LIFETIME_DEBUG
    off (the borrow.h precedent, OWN-001 §7). Model Typed+Cast.
 
-   STATUS — VERIFY-031 run 1 (report-only, the detection test): these
-   contracts sit on the UNFIXED bodies on purpose. G1 (overlap reaching
-   mem_copy), G2 (vsnprintf size > INT_MAX), G3 (pass-2 failure overwrites
-   the terminator), G5 (unstated restrict precondition) and G6 (the helper's
-   add_len > 0 @pre, violated by stringbuf_append("")) are fixed in run 2.
-   Run-1 preconditions are the documentation's, verbatim: the helper keeps
-   its own @pre; the public functions state none they do not document.
+   STATUS — VERIFY-031 run 2 (report-only). Run 1 (CI #1319, f6e54ca) put
+   these contracts on the unfixed bodies; run 2 applies the fixes:
+     G1  the helper copies with mem_move, so a view captured before
+         clear/truncate may be appended back (well-defined, memmove
+         semantics); the helper's separation @pre is gone.
+     G2  vsnprintf's size is needed + 1, never the remaining capacity
+         (POSIX: n > INT_MAX fails with EOVERFLOW; musl enforces it).
+     G3  a failed write pass restores data[len] = '\0'.
+     G4  stringbuf_append_fmt is a wrapper over stringbuf_append_fmt_va.
+     G5  the format string must not point into [data+len, data+capacity)
+         — stated in the docs and as fmt_sep below.
+     G6  the helper's add_len > 0 @pre is gone (stringbuf_append("") passes
+         0, and the helper is correct for 0).
+   Plus one contract omission run 1 exposed: the helper read sb->len
+   without requiring \valid(sb) (stringbuf_wf does not include it; the
+   public functions get it from stringbuf_ok).
 
    stringbuf_wf has exactly the five clauses VERIFY-031 fixed before any
    contract was written:
@@ -316,6 +327,16 @@ typedef struct {
     \at(sb->data, L1) == \at(sb->data, L2) &&
     \forall integer i; 0 <= i < n ==>
         \at(sb->data[i], L1) == \at(sb->data[i], L2);
+
+  // stringbuf_append_n's reading precondition, stated as exactly what the
+  // loop reads: every byte up to and including the first NUL, or the
+  // first n bytes, whichever comes first, is readable. It is weaker than
+  // Frama-C's valid_read_nstring (which demands all n bytes OR a whole
+  // valid string), so it admits every caller the documentation admits.
+  predicate stringbuf_nreadable(char *s, integer n) =
+    \forall integer i; 0 <= i < n ==>
+      (\forall integer j; 0 <= j < i ==> s[j] != '\0') ==>
+        \valid_read(s + i);
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -553,18 +574,23 @@ static inline void stringbuf_close(borrowed(StringBuf*) sb) {
  *   checked_add(end, 1u, &with_nul)     guards the +1 for the null terminator.
  *   Both must succeed and with_nul must not exceed capacity.
  *
+ * Copies with mem_move, so src may point into sb's own buffer — including
+ * a view captured before stringbuf_clear()/stringbuf_truncate(), whose
+ * bytes may now overlap the destination (VERIFY-031 G1). The bytes
+ * appended are the bytes src held at the call, as memmove defines.
+ *
+ * add_len == 0 is allowed: nothing is copied and the terminator is
+ * rewritten in place (VERIFY-031 G6 — stringbuf_append("") passes 0).
+ *
  * @pre sb != NULL && sb->data != NULL
  * @pre src != NULL
- * @pre add_len > 0
- * @pre [src, src+add_len) does not overlap sb->data (caller must guarantee)
+ * @pre [src, src+add_len) readable
  */
 /*@
+  requires valid_sb:   \valid(sb);
   requires wf:         stringbuf_wf(sb);
   requires src_nonnull: src != \null;
-  requires add_pos:    add_len > 0;
   requires src_read:   \valid_read(src + (0 .. add_len - 1));
-  requires no_overlap: \separated(src + (0 .. add_len - 1),
-                                  sb->data + (0 .. sb->capacity - 1));
   assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
   ensures fits:   \result <==> \old(sb->len) + add_len + 1 <= \old(sb->capacity);
   ensures grown:  \result ==> sb->len == \old(sb->len) + add_len;
@@ -584,7 +610,7 @@ static inline bool _stringbuf_append_bytes(
     if (!checked_add(end, 1u, &with_nul))        { return false; }
     if (with_nul > sb->capacity)                 { return false; }
 
-    mem_copy((u8*)sb->data + sb->len, src, add_len);
+    mem_move((u8*)sb->data + sb->len, src, add_len);
     sb->len = end;
     sb->data[sb->len] = '\0';
     return true;
@@ -739,81 +765,6 @@ static inline bool stringbuf_append_char(
 }
 
 /**
- * @brief Appends formatted text (printf-style)
- *
- * Uses two independent vsnprintf passes (measure then write), each with its
- * own va_start / va_end pair. This is the only portable pattern for replaying
- * variadic arguments across all C99 ABIs.
- *
- * On failure the buffer is unchanged and remains null-terminated.
- *
- * @param sb  StringBuf to append to
- * @param fmt printf-style format string
- * @param ... Format arguments
- * @return true on success, false on failure or insufficient space
- *
- * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as
- * stringbuf_append.
- *
- * Performance: O(n) — two vsnprintf passes
- */
-/*@
-  requires sb_ok:  sb == \null || stringbuf_ok(sb);
-  requires fmt_ok: fmt == \null || valid_read_string(fmt);
-  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
-  behavior no_buffer:
-    assumes sb == \null || fmt == \null || sb->data == \null;
-    assigns \nothing;
-    ensures \result == \false;
-  behavior format:
-    assumes sb != \null && fmt != \null && sb->data != \null;
-    ensures grown:  \result ==> \old(sb->len) <= sb->len;
-    ensures wf_ok:  \result ==> stringbuf_wf(sb);
-    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
-    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
-  complete behaviors;
-  disjoint behaviors;
-*/
-static inline bool stringbuf_append_fmt(
-        borrowed(StringBuf*)  sb,
-        borrowed(const char*) fmt,
-        ...)
-{
-    va_list args;
-    int     needed_i;
-    usize   needed;
-    usize   end;
-    usize   with_nul;
-    int     written;
-
-    if (!sb || !fmt || !sb->data) { return false; }
-
-    /* Pass 1: measure */
-    va_start(args, fmt);
-    needed_i = vsnprintf(NULL, 0, fmt, args);
-    va_end(args);
-
-    if (needed_i < 0) { return false; }
-    needed = (usize)needed_i;
-
-    if (!checked_add(sb->len, needed, &end))  { return false; }
-    if (!checked_add(end, 1u, &with_nul))      { return false; }
-    if (with_nul > sb->capacity)               { return false; }
-
-    /* Pass 2: write — fresh va_start required; prior va_end consumed args */
-    va_start(args, fmt);
-    written = vsnprintf(
-        (char*)((u8*)sb->data + sb->len),
-        sb->capacity - sb->len,
-        fmt, args);
-    va_end(args);
-
-    if ((written < 0) || ((usize)written != needed)) { return false; }
-    sb->len = end;
-    return true;
-}
-
-/**
  * @brief Appends formatted text using an existing va_list
  *
  * Both the measure pass and the write pass receive their own va_copy so
@@ -826,6 +777,12 @@ static inline bool stringbuf_append_fmt(
  *   only portable solution. Both passes use independent va_copy instances;
  *   the original args is left intact throughout.
  *
+ * On failure the string (data[0 .. len], terminator included) is
+ * unchanged; bytes past the terminator may have been overwritten.
+ *
+ * @pre The same separation as stringbuf_append_fmt(): fmt and any %s
+ *      argument must not point into [data + len, data + capacity).
+ *
  * @param sb   StringBuf to append to
  * @param fmt  Format string
  * @param args va_list of arguments (caller manages va_start/va_end)
@@ -837,8 +794,10 @@ static inline bool stringbuf_append_fmt(
  * Performance: O(n) — two vsnprintf passes via va_copy
  */
 /*@
-  requires sb_ok:  sb == \null || stringbuf_ok(sb);
-  requires fmt_ok: fmt == \null || valid_read_string(fmt);
+  requires sb_ok:   sb == \null || stringbuf_ok(sb);
+  requires fmt_ok:  fmt == \null || valid_read_string(fmt);
+  requires fmt_sep: (sb == \null || fmt == \null || sb->data == \null) ||
+                    \separated(fmt, sb->data + (sb->len .. sb->capacity - 1));
   assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
   behavior no_buffer:
     assumes sb == \null || fmt == \null || sb->data == \null;
@@ -880,17 +839,88 @@ static inline bool stringbuf_append_fmt_va(
     if (!checked_add(end, 1u, &with_nul))      { return false; }
     if (with_nul > sb->capacity)               { return false; }
 
-    /* Pass 2: write — second independent copy, original args still intact */
+    /* Pass 2: write — second independent copy, original args still intact.
+     * The size is exactly needed + 1 (= with_nul - len), never the whole
+     * remaining capacity: POSIX requires vsnprintf to fail with EOVERFLOW
+     * when n > INT_MAX, and musl does (VERIFY-031 G2). */
     va_copy(write_args, args);
     written = vsnprintf(
         (char*)((u8*)sb->data + sb->len),
-        sb->capacity - sb->len,
+        with_nul - sb->len,
         fmt, write_args);
     va_end(write_args);
 
-    if ((written < 0) || ((usize)written != needed)) { return false; }
+    if ((written < 0) || ((usize)written != needed)) {
+        /* The write pass may already have overwritten data[len]; restore
+         * the terminator so the string is unchanged (VERIFY-031 G3). */
+        sb->data[sb->len] = '\0';
+        return false;
+    }
     sb->len = end;
     return true;
+}
+
+/**
+ * @brief Appends formatted text (printf-style)
+ *
+ * A wrapper around stringbuf_append_fmt_va(): it opens the argument list,
+ * delegates, and closes it again (VERIFY-031 G4 — one formatting body,
+ * not two copies of it).
+ *
+ * On failure the string (data[0 .. len], terminator included) is
+ * unchanged. Bytes past the terminator may have been overwritten by a
+ * failed write pass; they are not part of the string.
+ *
+ * @pre fmt, and any argument a conversion reads (e.g. a %s string), must
+ *      not point into the unused tail [data + len, data + capacity) — the
+ *      region this call writes. vsnprintf's buffer and format are
+ *      restrict-qualified, and overlapping copies are undefined
+ *      (C11 7.21.6.5). Pointing into the CURRENT string [data, data + len)
+ *      is fine: stringbuf_append_fmt(&sb, "%s", stringbuf_str(&sb)) is
+ *      legal. (VERIFY-031 G5. The fmt half is verified as fmt_sep; the
+ *      argument half is invisible to the verifier and is documentation.)
+ *
+ * @param sb  StringBuf to append to
+ * @param fmt printf-style format string
+ * @param ... Format arguments
+ * @return true on success, false on failure or insufficient space
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): does NOT restamp. Same rationale as
+ * stringbuf_append.
+ *
+ * Performance: O(n) — two vsnprintf passes
+ */
+/*@
+  requires sb_ok:   sb == \null || stringbuf_ok(sb);
+  requires fmt_ok:  fmt == \null || valid_read_string(fmt);
+  requires fmt_sep: (sb == \null || fmt == \null || sb->data == \null) ||
+                    \separated(fmt, sb->data + (sb->len .. sb->capacity - 1));
+  assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+  behavior no_buffer:
+    assumes sb == \null || fmt == \null || sb->data == \null;
+    assigns \nothing;
+    ensures \result == \false;
+  behavior format:
+    assumes sb != \null && fmt != \null && sb->data != \null;
+    ensures grown:  \result ==> \old(sb->len) <= sb->len;
+    ensures wf_ok:  \result ==> stringbuf_wf(sb);
+    ensures failure_unchanged: !\result ==> stringbuf_unchanged{Pre, Post}(sb);
+    ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+  complete behaviors;
+  disjoint behaviors;
+*/
+static inline bool stringbuf_append_fmt(
+        borrowed(StringBuf*)  sb,
+        borrowed(const char*) fmt,
+        ...)
+{
+    va_list args;
+    bool    ok;
+
+    va_start(args, fmt);
+    ok = stringbuf_append_fmt_va(sb, fmt, args);
+    va_end(args);
+    return ok;
 }
 
 /**
@@ -911,7 +941,7 @@ static inline bool stringbuf_append_fmt_va(
  */
 /*@
   requires sb_ok: sb == \null || stringbuf_ok(sb);
-  requires s_ok:  (s != \null && n > 0) ==> valid_read_nstring(s, n);
+  requires s_ok:  (s != \null && n > 0) ==> stringbuf_nreadable((char *)s, n);
   assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
   behavior no_buffer:
     assumes sb == \null || sb->data == \null;
