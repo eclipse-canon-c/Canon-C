@@ -9045,3 +9045,214 @@ to 5394 / 5586 in the commit carrying this addendum, which edits
 every workflow file under `.github/workflows/` that runs WP on a TU
 including the changed header, not the main workflow alone. `grep -l` across
 the directory for the header's pinned figures finds them in seconds.
+
+---
+
+## VERIFY-035: stringbuf.h Enforced — Module 19 Closes With Zero Own Residuals and Zero New Argument Blocks
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-035 |
+| **Date**       | 2026-10-03 |
+| **Status**     | ENFORCED — pinned from CI #1322 (b785d52) and #1324 (50045d2), name-identical; the commit carrying this record is the third run |
+| **Scope**      | `data/stringbuf.h`: 29 functions in place, Typed+Cast, no driver |
+| **Closes**     | VERIFY-031 (pre-registration), VERIFY-032 (run-2 scoring), VERIFY-033/034 (the arena_alloc frame that closed A2) |
+
+**Pinned.** **4767 / 4848**, exactly **81** unproved, **0 Failed, 0 Invalid,
+0 Stepout**. All 81 are inherited:
+
+- `frama-c-arena`'s 79 pinned names, verbatim;
+- borrow.h's two own memcmp-danglingness goals.
+
+**Own residuals: 0.** #1322 and #1324 report the same 81 names. Their
+Timeout/Unknown split differs (78/3 against 76/5), which is why the gate
+pools the two classes. Pooling them is the VERIFY-019-M lesson: which goals
+need a solver is invariant, while which solver reaches a goal first is
+scheduling.
+
+**Gates** (`frama-c-stringbuf`, enforced from this commit):
+
+0. a summary exists;
+1. zero Failed/Invalid/Stepout;
+2. proved line == `4767 / 4848`;
+3. Timeout + Unknown == 81;
+4. roll-call: the unproved names equal the 81 pinned names by set
+   equality, so own == 0.
+
+A ratchet edits gates 2 and 3 and the roll-call together.
+
+### The arc
+
+| Step | Commit / CI | Proved | Own | What moved it |
+|------|-------------|--------|-----|---------------|
+| pre-registration | 9268da3 | — | — | G1, G2, G3, G5 demonstrated by probe; P1–P9 committed |
+| run 1 (detection) | f6e54ca / #1319 | 4810 / 4913 | 22 | contracts on the unfixed bodies; addendum A1 (G6) and A2 (init_arena) committed with them |
+| run 2 (fixes) | 600f238 / #1320 | 4716 / 4802 | 5 | G1–G6 fixed; helper `\valid(sb)`; `stringbuf_nreadable` |
+| run 3 (provability) | fc924e2 / #1321 | 4744 / 4828 | 3 | fmt wrapper guard (the WP call-site frame rule); `append_n` `readable` invariant |
+| VERIFY-033 | b785d52 / #1322 | 4767 / 4848 | **0** | `arena_alloc{,_aligned}` state `frame_buffer`/`frame_capacity`; A2 closes; +20 in every arena-including TU |
+| ratchets | aaa09c7 / #1323, 50045d2 / #1324 | 4767 / 4848 | 0 | seven pins moved, stringbuf source untouched: stability runs |
+| **enforced** | this commit | 4767 / 4848 | 0 | gate switched on |
+
+### Final scoreboard (VERIFY-031)
+
+| # | Verdict | Note |
+|---|---------|------|
+| P1 | **HELD** | Zero new argument blocks; cumulative *A* stays 17. Not unaided: closing A2 took a callee specification fix (VERIFY-033), the range.h footnote's shape. |
+| P2 | **HELD** | 81 inherited by name in every run. |
+| P3 | **FAILED** | The call-site half held exactly. The helper half failed on memory.h's known `regions_overlap` class (VERIFY-022). |
+| P4 | **HELD** | |
+| P5 | **HELD** | |
+| P6 | **HELD** | G2 was invisible to WP before and after its fix: a pre-registered blind spot that stayed blind. |
+| P7 | **FAILED** | Conceded by addendum A2, plus 8 unpredicted goals. |
+| P8 | **FAILED** | A2's 3, the wrapper frame and one `append_n` part at run 2. |
+| P9 | **HELD** | |
+| A1, A2 | **HELD** | A2 counted 3 goals, not 2. |
+| MC/DC | **HELD** at run 2 | 130 / 132; final 136 / 138 after run 3's guard (MCDC-016). |
+
+**Trusted base:** 3 axioms. `vsnprintf`'s `term` (ISO C, true on glibc and
+musl) is added to diag.h's two.
+
+**MISRA:** 54, with one 21.2 at the axiom. MISRA-DEV-018 (all three
+verifier-only declarations) is recorded as an option, not taken here.
+
+### For Table 5 (module 19)
+
+| Field | Value |
+|-------|-------|
+| Module | `data/stringbuf.h` |
+| Functions | 29 |
+| Model | Typed+Cast (originated by the header's own casts) |
+| Inherited residuals | 81 (arena.h's 79 + borrow.h's 2), byte-identical by name |
+| Own residuals | 22 → 5 → 3 → **0** |
+| New argument blocks | **0** (cumulative *A* = 17) |
+| Trusted axioms added | 1 (cumulative 3) |
+| Defects found and fixed | G1 (overlap reaching `mem_copy`: abort / UB through the public API), G2 (`vsnprintf` size > `INT_MAX`: every formatted append fails on musl), G3 (failure path overwrites the terminator), G5 (unstated `restrict` precondition), G6 (helper `@pre` violated by its own caller); G4 structural |
+| Side effect upstream | arena.h: the allocators' missing frame (VERIFY-033), +20 goals in six TUs plus the CC experiment's vec, every one proved |
+
+**What the paper can say.** Saturation held for a second prospective unit,
+and this unit shares almost nothing with range.h: memory-heavy rather than
+arithmetic, the deepest core closure, libc string and formatting calls, a
+loop, and the project's first variadic definitions.
+
+The detection test also held. Every defect visible to the prover was
+reported at the seam the pre-registration named. The one defect it was
+predicted not to see, G2, it did not see. What the predictions missed was
+never *where* a defect surfaces, only what else surfaces beside it. Three of
+those misses were already written down in this file (VERIFY-022 twice, and
+the highest `_partN` of an existing goal name). VERIFY-032 and VERIFY-034
+record the resulting method notes.
+
+---
+
+## MCDC-016: stringbuf.h — 101/136 → 136/138, a Four-Function Blind Spot Closed, Two Outcomes Environmental
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-016 |
+| **Date**       | 2026-10-03 |
+| **Baseline commit** | Canon-C CI #1319 (f6e54ca); the coverage recipe on this code was first measured locally at 9268da3 and matched. |
+| **Final commit** | Canon-C CI #1321 (fc924e2); unchanged at #1322 and #1324. |
+| **Scope**      | `data/stringbuf.h` MC/DC from `stringbuf_test`: 101/136 (74.3%) → 130/132 (98.5%) → **136/138 (98.55%)**. |
+| **Category**   | Coverage completeness; run alongside VERIFY-031..035 |
+
+**Description.** At baseline the suite passed under ASan and UBSan on source
+containing G1, G2, G3 and G5 (VERIFY-031), and it measured 74.3%. That
+number also overstated the real figure, because four functions were never
+called from `stringbuf_test.c`: `stringbuf_close` and the three
+`_as_borrowed_*` accessors. GCC does not emit an unused `static inline`
+function, so their 14 outcomes were not in the denominator at all.
+`borrow_test.c` calls them, but the summary table takes the
+largest-denominator TU.
+
+### Stages
+
+| Stage | Commit | Outcomes | What moved it |
+|-------|--------|----------|---------------|
+| baseline | f6e54ca | 101 / 136 | — |
+| run 2 | 600f238 | 130 / 132 | −18 (`append_fmt`'s duplicated body removed, G4); +14 (the blind-spot functions called); zero state; NULL/empty arguments; the `%ls` measure failure; six out-of-domain guards driven by fabricated inputs |
+| run 3 | fc924e2 | **136 / 138** | +6, all covered: the fmt wrapper's own guard (VERIFY-032). `_va`'s guard is now reached directly by `fmt_va_helper` tests, since the wrapper returns first. |
+
+The run-2 figure, 130 / 132, was pre-registered at 9268da3, before any of
+that code existed, and held exactly.
+
+**Policy, as decided in VERIFY-031.** A guard whose only job is to reject
+inputs outside the documented domain is tested with such an input, provided
+the function returns before any memory access. In the final source that is
+six outcomes, all TRUE sides:
+
+- 612 and 613 (helper `checked_add` overflows, via an oversized `str_t`
+  view);
+- 761 (`append_char`, fabricated `len`);
+- 841 and 842 (`_va`, fabricated `len`);
+- 1299 (`remaining`, `len + 1 > capacity`).
+
+This diverges from MCDC-015 J1, for the reason VERIFY-031 records: those
+guards have no meaning except on invalid input.
+
+### Line by line (`data/stringbuf.h` at fc924e2, `stringbuf_test`)
+
+| Line | Function | Decision | Outcomes |
+|------|----------|----------|----------|
+| 476 | `stringbuf_init_arena` | `!buf` | 2/2 |
+| 561 | `stringbuf_close` | `!sb` | 2/2 |
+| 612 | `_stringbuf_append_bytes` | `!checked_add(len, add_len, &end)` | 2/2 |
+| 613 | `_stringbuf_append_bytes` | `!checked_add(end, 1, &with_nul)` | 2/2 |
+| 614 | `_stringbuf_append_bytes` | `with_nul > capacity` | 2/2 |
+| 670 | `stringbuf_append` | `!sb \|\| !sb->data` | 4/4 |
+| 671 | `stringbuf_append` | `!s` | 2/2 |
+| 717 | `stringbuf_append_str` | `!sb \|\| !sb->data` | 4/4 |
+| 718 | `stringbuf_append_str` | `!s.ptr \|\| s.len == 0` | 4/4 |
+| 758 | `stringbuf_append_char` | `!sb \|\| !sb->data` | 4/4 |
+| 761 | `stringbuf_append_char` | `!checked_add(len, 2, &with_nul)` | 2/2 |
+| 762 | `stringbuf_append_char` | `with_nul > capacity` | 2/2 |
+| 831 | `stringbuf_append_fmt_va` | `!sb \|\| !fmt \|\| !sb->data` | 6/6 |
+| 838 | `stringbuf_append_fmt_va` | `needed_i < 0` | 2/2 |
+| 841 | `stringbuf_append_fmt_va` | `!checked_add(len, needed, &end)` | 2/2 |
+| 842 | `stringbuf_append_fmt_va` | `!checked_add(end, 1, &with_nul)` | 2/2 |
+| 843 | `stringbuf_append_fmt_va` | `with_nul > capacity` | 2/2 |
+| **856** | `stringbuf_append_fmt_va` | `(written < 0) \|\| ((usize)written != needed)` | **2/4** — J1, J2 |
+| 928 | `stringbuf_append_fmt` | `!sb \|\| !fmt \|\| !sb->data` | 6/6 |
+| 980 | `stringbuf_append_n` | `!sb \|\| !sb->data` | 4/4 |
+| 981 | `stringbuf_append_n` | `!s \|\| n == 0` | 4/4 |
+| 991 | `stringbuf_append_n` | `actual_len < n && s[actual_len] != '\0'` | 4/4 |
+| 993 | `stringbuf_append_n` | `actual_len == 0` | 2/2 |
+| 1019 | `stringbuf_str` | `sb && sb->data` | 4/4 |
+| 1047 | `stringbuf_as_str` | `!sb \|\| !sb->data` | 4/4 |
+| 1075 | `stringbuf_as_bytes` | `!sb \|\| !sb->data` | 4/4 |
+| 1092 | `stringbuf_as_cbytes` | `!sb \|\| !sb->data` | 4/4 |
+| 1117 | `stringbuf_buffer_bytes` | `!sb \|\| !sb->data` | 4/4 |
+| 1134 | `stringbuf_buffer_cbytes` | `!sb \|\| !sb->data` | 4/4 |
+| 1172 | `stringbuf_as_borrowed_str` | `!sb \|\| !sb->data` | 4/4 |
+| 1207 | `stringbuf_as_borrowed_bytes` | `!sb \|\| !sb->data` | 4/4 |
+| 1243 | `stringbuf_buffer_as_borrowed_bytes` | `!sb \|\| !sb->data` | 4/4 |
+| 1266 | `stringbuf_len` | `sb` | 2/2 |
+| 1276 | `stringbuf_capacity` | `sb` | 2/2 |
+| 1296 | `stringbuf_remaining` | `!sb \|\| capacity == 0` | 4/4 |
+| 1299 | `stringbuf_remaining` | `!checked_sub(capacity, len + 1, &usable)` | 2/2 |
+| 1310 | `stringbuf_is_empty` | `!sb \|\| len == 0` | 4/4 |
+| 1328 | `stringbuf_is_full` | `!sb \|\| len + 1 >= capacity` | 4/4 |
+| 1338 | `stringbuf_is_arena_backed` | `sb && arena != NULL` | 4/4 |
+| 1370 | `stringbuf_clear` | `sb && sb->data` | 4/4 |
+| 1406 | `stringbuf_truncate` | `sb && sb->data && new_len < len` | 6/6 |
+| | **41 decisions** | | **136 / 138** |
+
+The four functions without a decision (`stringbuf_init_buffer`,
+`stringbuf_lifetime_open_`, `stringbuf_lifetime_close_` in the verified
+configuration, and the `stringbuf_printf` alias) contribute nothing to the
+denominator. Line numbers are those of fc924e2; the coverage job's
+eighteenth per-line step (added with this entry) prints them on every run.
+
+### Disposition of the two misses
+
+| # | Line | Missed | Disposition |
+|---|------|--------|-------------|
+| J1 | 856 | `written < 0` TRUE | **justified — environmental.** Pass 2 runs with the same format and arguments as pass 1, which already succeeded, and since G2 its size is exactly `needed + 1`, which is ≤ `INT_MAX + 1`. No libc in the matrix fails the second of two identical conversions. Before G2, musl reached it (n > `INT_MAX`, VERIFY-031); G2 removed the cause. The failure branch is kept, and G3 made it restore the terminator. |
+| J2 | 856 | `(usize)written != needed` TRUE | **justified — environmental, same argument.** Two conversions with identical arguments agree in defined behaviour. The only demonstration, VERIFY-031's `p_fmtalias.c`, is undefined behaviour by construction (G5) and stays a recorded probe, never a test. |
+
+The measure-failure outcome (838) is covered on CI's glibc through `%ls`
+with a character the C locale cannot encode. A libc whose C locale encodes
+that character would leave 838 uncovered; the test asserts the invariant
+either way.
+
+**Final**: 136 / 138, two justification rows (J1, J2). Any other miss
+printed by the per-line step is a regression.

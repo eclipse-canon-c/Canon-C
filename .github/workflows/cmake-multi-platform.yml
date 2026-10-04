@@ -6438,7 +6438,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: data/stringbuf.h (name-stability, report-only)"
+      - name: "WP: data/stringbuf.h (VERIFY-035, ENFORCED)"
         # stringbuf.h — module 19, Shape A in place, no driver. Typed+Cast
         # (the header casts char* <-> u8* itself).
         # Run 1 (CI #1319, f6e54ca) was the detection test on the unfixed
@@ -6459,13 +6459,20 @@ jobs:
         # VERIFY-033 run (CI #1322, b785d52): arena_alloc{,_aligned} gain
         # frame_buffer/frame_capacity. 4767/4848, 81 inherited, own 0 — A2
         # closed (predicted 4751/4832: the +4 was +20, VERIFY-034 F2).
-        # From here: name-stability runs on unchanged stringbuf source, then
-        # enforcement (pin 4767/4848, the 81 names).
-        # Report-only: the job never fails on residuals, only on a missing
-        # summary.
+        # Name-stability: #1322 (b785d52) and #1324 (50045d2), stringbuf.h
+        # unchanged since fc924e2, report the same 81 names; Timeout/Unknown
+        # split differs (78/3 vs 76/5), the names do not.
+        # ENFORCED from VERIFY-035. Gates, all exact:
+        #   (0) a summary exists
+        #   (1) zero Failed / Invalid / Stepout
+        #   (2) proved line == 4767 / 4848
+        #   (3) Timeout + Unknown == 81
+        #   (4) roll-call: the unproved names == the 81 pinned below, by
+        #       set equality (nothing missing, nothing extra; own == 0)
+        # A ratchet edits (2), (3) and the INHERITED roll-call together.
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0            # VERIFY-031 run 1: report-only
+          ENFORCE=1            # VERIFY-035: enforced
           WP_MODEL="Typed+Cast"
           OUT=wp_stringbuf_output.txt
           FAILURES=0
@@ -6491,8 +6498,8 @@ jobs:
           echo ""
           echo "==============================================="
           echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
-          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
-          echo "  VERIFY-033 run — arena_alloc frame clauses (A2 predicted to close)"
+          echo "  MODE: ENFORCED (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          echo "  pinned: 4767 / 4848, 81 unproved, all inherited (VERIFY-035)"
           echo "==============================================="
           echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
           grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
@@ -6621,7 +6628,7 @@ jobs:
             cat /tmp/sb_g16.txt /tmp/sb_rte.txt /tmp/sb_p4.txt /tmp/sb_p5.txt /tmp/sb_an.txt /tmp/sb_ia.txt | sort -u > /tmp/sb_grouped.txt
             comm -23 /tmp/sb_own.txt /tmp/sb_grouped.txt > /tmp/sb_other.txt
             echo ""
-            echo "  ================ VERIFY-033 EVIDENCE (not gating) ================"
+            echo "  ================ EVIDENCE (families from the arc, VERIFY-031..035) ================"
             echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 81 predicted (names as run 1)"
             echo "      predicted but not observed: $(wc -l < /tmp/sb_inh_missing.txt)"; show /tmp/sb_inh_missing.txt
             echo "  own (everything outside the 81): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run 3: 3, VERIFY-033 pred: 0)"
@@ -6640,8 +6647,23 @@ jobs:
             echo "  anything else own (pred: none — run 2 had the wrapper's no_buffer assigns):"
             show /tmp/sb_other.txt
             echo "  ========================================================================"
+            if [ "${ENFORCE}" = "1" ]; then
+              echo ""
+              echo "  ================ VERIFY-035 GATES (ENFORCED) ================"
+              BAD=$((F + I + S))
+              if [ "${BAD}" -ne 0 ]; then note_fail "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."; else echo "  (1) Failed/Invalid/Stepout: 0  OK"; fi
+              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4767 / 4848"; then
+                note_fail "FAIL (2): proved-goal summary changed (pinned: 4767 / 4848). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
+              else echo "  (2) proved: 4767 / 4848  OK"; fi
+              if [ "$((T + U))" -ne 81 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 81."; else echo "  (3) unproved count: 81  OK"; fi
+              NMISS=$(wc -l < /tmp/sb_inh_missing.txt); NOWN=$(wc -l < /tmp/sb_own.txt)
+              if [ "${NMISS}" -ne 0 ] || [ "${NOWN}" -ne 0 ]; then
+                note_fail "FAIL (4): roll-call — pinned 81, missing ${NMISS}, unpinned ${NOWN} (lists above)."
+              else echo "  (4) roll-call: pinned 81, missing 0, unpinned 0  OK"; fi
+              echo "  ============================================================="
+            fi
           fi
-          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+          if [ "${FAILURES}" -ne 0 ]; then echo "  VERIFY-035 ENFORCED FAIL: ${FAILURES} check(s) above."; exit 1; fi
       - name: Upload WP proof output (stringbuf.h)
         if: always()
         uses: actions/upload-artifact@v6
@@ -7898,6 +7920,41 @@ jobs:
           else
             echo "No range.h.gcov file generated"
           fi
+      - name: "Debug: per-line MC/DC detail for stringbuf.h"
+        # Added with MCDC-016 (the stringbuf.h arc, VERIFY-031..035). Baseline
+        # 101/136 at f6e54ca; 130/132 at 600f238 (run 2: zero state, NULL /
+        # empty arguments, out-of-domain guards with fabricated inputs, the
+        # %ls measure failure, and the four blind-spot functions now called);
+        # final 136/138 at fc924e2 (run 3: the fmt wrapper's guard, +6, all
+        # covered, plus direct _va guard tests). The two remaining misses are
+        # MCDC-016 J1/J2: the pass-2 failure outcomes of _va's
+        # (written < 0) || ((usize)written != needed), environmental once G2
+        # sized the write pass to needed + 1. Any OTHER miss printed here is
+        # a regression. stringbuf.h is ALSO compiled into borrow_test; this
+        # step reads stringbuf_test's data, the unit's own tests.
+        # Report-only, like the seventeen steps above it. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "stringbuf_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate stringbuf_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" 2>&1 | \
+            grep -A 200 "stringbuf.h" | head -500
+          echo ""
+          GCOV=$(find . -name "stringbuf.h.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+            echo ""
+            echo "=== Condition outcomes not fully covered in stringbuf.h ==="
+            grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+          else
+            echo "No stringbuf.h.gcov file generated"
+          fi
 
 
   # -------------------------------------------------------------------------
@@ -8074,7 +8131,9 @@ jobs:
           echo "  because MISRA-SCAN-001 re-baselined the analysis surface"
           echo "  itself (template fragments are not translation units):"
           echo "    pre-2026-07-25 surface: 1672 -> 108"
-          echo "    corrected surface:       98 ->  53"
+          echo "    corrected surface:       98 ->  53 -> 54"
+          echo "  (53 at the campaign's close; the 54th is the VERIFY-031"
+          echo "  axiom above — a recorded addition, not a regression.)"
           echo "  -10 of that step is the INSTRUMENT, not the code, and the"
           echo "  two segments are not directly comparable. See"
           echo "  MISRA-SCAN-001 for the reachability proof that excluding"

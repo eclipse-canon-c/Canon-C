@@ -56,6 +56,16 @@
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | 55 instrumented (`Found 55 data files`), of which 4 are Shape-B cover TUs `option_cover`, `result_cover`, `vec_cover`, `deque_cover`; ctest registers 54 |
 
+> **Coverage moved by MCDC-016 (2026-10-03).** MC/DC is now
+> **1862/2022 (92.09%)**; lines 2727/2814 (96.9%), functions 672/675
+> (99.6%), branches 1658/1810 (91.6%). The whole move is stringbuf.h:
+> 101/136 → 136/138 (+35 hit, +2 outcomes) across the VERIFY-031..035 arc.
+> That covers the zero state, NULL/empty arguments, the `%ls` measure
+> failure, six out-of-domain guards driven by fabricated inputs, and four
+> functions that `stringbuf_test` had never called and so were never in the
+> denominator. Two justification rows (J1, J2: the write pass's failure
+> outcomes, environmental). No other file moved.
+>
 > **Coverage moved by MCDC-015 (2026-09-29).** MC/DC is now
 > **1827/2020 (90.45%)**; lines 2712/2797 (97.0%), functions 665/668
 > (99.6%), branches 1622/1808 (89.7%). The whole move is range.h: 49/60 →
@@ -686,6 +696,15 @@ by methodology):
   F2b) and a downstream buffer overflow (F5): MC/DC measures outcomes
   reached, not input regions sampled, and both questions had to be asked.
 
+- **stringbuf.h: 98.55% (136/138)** — the ceiling under MCDC-016. The two
+  uncovered outcomes are J1/J2, both TRUE sides of `_va`'s
+  `(written < 0) || ((usize)written != needed)`: a second conversion with
+  the same arguments as a successful first one, sized exactly `needed + 1`
+  since G2. At baseline the suite reached 74.3% on source with four
+  demonstrated defects (G1, G2, G3, G5), and four functions were outside
+  the denominator because `stringbuf_test` never called them. The
+  coverage job's eighteenth per-line step prints the file on every run.
+
 Headers absent from the MC/DC table:
 
 `core/primitives/types.h`, `core/primitives/limits.h`,
@@ -837,24 +856,38 @@ name, all inherited, **none own**, and zero new argument blocks.
 | checked.h  | 30        |              1755 | 1753 (99.89%) | 2        | VERIFY-002   |
 | bits.h     | 18        |               757 | 742 (98.02%) | 15       | VERIFY-003/4 |
 | compare.h  | 28        |               208 | 208 (100.00%) | 0        | VERIFY-005   |
-| ptr.h      | 21        |              1959 | 1949 (99.49%) | 10       | VERIFY-006/23 |
+| ptr.h      | 21        |              1973 | 1957 (99.19%) | 16       | VERIFY-006/23 |
 | slice.h    | 22        |               394 | 379 (96.19%) | 15       | VERIFY-007/12 |
-| memory.h   | 27        |              2872 | 2829 (98.50%) | 43       | VERIFY-008/12/23 |
-| arena.h    | 25        |              3527 | 3444 (97.65%) | 83       | VERIFY-009/12/23 |
-| pool.h     | 21        |              4009 | 3914 (97.63%) | 95       | VERIFY-010/12/23 |
-| region.h   | 12        |              3698 | 3592 (97.13%) | 106      | VERIFY-011/12/23 |
+| memory.h   | 27        |              2886 | 2837 (98.30%) | 49       | VERIFY-008/12/23 |
+| arena.h    | 25        |              3575 | 3496 (97.79%) | 79       | VERIFY-009/12/23/33 |
+| pool.h     | 21        |              4061 | 3970 (97.76%) | 91       | VERIFY-010/12/23/33 |
+| region.h   | 12        |              3746 | 3644 (97.28%) | 102      | VERIFY-011/12/23/33 |
 | error.h    | 4         |                65 | 65 (100.00%) | 0        | VERIFY-013   |
 | option     | 16        |               223 | 189 (84.75%) | 34       | VERIFY-014   |
 | result     | 17        |               215 | 185 (86.05%) | 30       | VERIFY-015   |
 | borrow.h   | 24        |              2458 | 2439 (99.23%) | 19       | VERIFY-016   |
 | diag.h     | 13        |              3060 | 3050 (99.67%) | 10       | VERIFY-017   |
-| vec        | 37        |              5473 | 5285 (96.56%) | 188      | VERIFY-018/23 |
+| vec        | 37        |              5521 | 5337 (96.67%) | 184      | VERIFY-018/23/33 |
 | deque      | 24        |              1668 | 1601 (95.98%) | 67       | VERIFY-019   |
-| bitset     | 32        |              5008 | 4845 (96.75%) | 163      | VERIFY-020/23 |
+| bitset     | 32        |              5022 | 4853 (96.63%) | 169      | VERIFY-020/23 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
-| priority_queue.h | 41  |              4584 | 4513 (98.45%) | 71       | VERIFY-022   |
+| priority_queue.h | 41  |              4598 | 4521 (98.33%) | 77       | VERIFY-022   |
 | range.h    | 15        |              2647 | 2611 (98.64%) | 36       | VERIFY-028/29/30 |
-| **Total**  | **428**   | **44584**         | **43597 (97.79%)**| **987**  |              |
+| stringbuf.h | 29       |              4848 | 4767 (98.33%) | 81       | VERIFY-031..35 |
+| **Total**  | **457**   | **49684**         | **48608 (97.83%)**| **1076** |              |
+
+*Brought to the enforced pins 2026-10-03 (VERIFY-035).* The ptr.h, memory.h,
+arena.h, pool.h, region.h, vec, bitset and priority_queue.h rows still showed
+figures from before VERIFY-026/027 and VERIFY-033/034; every row now reads the
+pin its job enforces, and the total is their sum.
+
+`stringbuf.h` is enforced from the commit carrying VERIFY-035 (pinned from
+#1322 and #1324, name-identical). Its 81 residuals are all inherited:
+arena.h's 79 pinned names verbatim and borrow.h's two memcmp-danglingness
+goals. It has **no own residuals**: own counts ran 22 → 5 → 3 → 0. The last
+step was arena.h's own fix (VERIFY-033), which stated the frame its three
+reset functions already state and added 20 proved goals to every unit that
+includes it.
 
 `range.h` is enforced as of CI #1317 (name-identical to #1315 and #1316; the
 third run changed comments only; VERIFY-030). Its 36 residuals are all
@@ -1426,5 +1459,6 @@ unprovable by construction — cites the coverage stream as its
 | 2026-09-05 → 09-07 | d0b6f2c → 63d6705 | #1280 → #1290 | v1.3.0  | 96.7%  | 99.6%     | 89.3%    | 89.9%  | priority_queue — MC/DC gap closure + PQ-A + in-place ACSL + WP through enforcement (MCDC-014, VERIFY-022), both streams in one arc; **fourth data/-layer module** and the first data/-layer module verified **in place with no driver** (Shape A); its core operation calls a caller-supplied function pointer from inside its loops. **Coverage** (d0b6f2c, #1280): 62/78 → 82/82 by twelve test gaps — including the large-element swap path, which had **zero executions** and was first misread as a justification row before being corrected — then 82/82 → 81/82 when PQ-A renamed the six heap helpers internal and made the self-swap leg dead by construction (J1); aggregate 1796/2014 → 1816/2018 → **1815/2018**. PQ-A's exposure was demonstrated, not argued: a client `pq_swap(&q, 0, 4)` broke the heap invariant silently and left an outstanding borrow validating against changed contents — failure-open, the VERIFY-021 mode. **WP** (#1281 → #1290, Typed+Cast, 41 functions): own residuals 199 → 170 → 143 → 144 → 18 → 7 → 6 over eight commits; three consecutive count predictions refuted before the job switched to named residual classes. The comparator call was an information horizon (~99 residuals downstream of `pq->cmp`), closed by `pq_cmp_` with a `calls` clause over compare.h's 24 built-ins — a **verified configuration**, nothing trusted; caller-supplied comparators are outside the proof. **F-WRAP** found by the prover: child-index arithmetic unguarded for `capacity > 2^63−1`, now bounded in `pq_wf`. Pinned **4513/4584, 71 by name** (43 memory.h + 22 result + 6 own) at #1289, enforced #1290 name-identical. Of the 6 own, 5 are memory.h's `regions_overlap` stated by pointer order — **VERIFY-024 candidate**. Run 2 of this arc is what exposed ptr.h's opaque address helpers and caused VERIFY-023 (next row). Docs pass followed (2026-09-07 to 09-09), with per-line MC/DC steps added for lifetime.h and priority_queue.h. |
 | 2026-09-06 | b79a51f | #1284 → #1285 | v1.3.0  | 96.7%  | 99.6%     | 89.3%    | 89.9%  | **VERIFY-023**: `ptr_offset`/`ptr_offset_const`/`ptr_elem`/`ptr_elem_const` gain an `ensures` stating their result. +6 goals in every TU including ptr.h (not the predicted +4: two of the four have a null branch and `-wp-split` fragments them). **24 pinned residuals closed** across arena (8), pool (16 own + 8), region (8), vec (8) — every one previously classified as arithmetic or call-site limits; all were the callee's opaque return address. Eight pins ratcheted in one commit. Also found: `frama-c-bitset` had no terminal exit and could not fail the build since #1259 — **enforcement of bitset begins here**; arena-32's embedded baseline was a stale copy of arena's pin. Coverage unchanged. |
 | 2026-09-26 → 09-29 | bd1da17 → 9f7a9d0 | #1312 → #1317 | v1.3.0  | 97.0%  | 99.6%     | 89.7%    | 90.4%  | range.h — **module 18, the first prospective test of the saturation claim**; both streams in one arc (VERIFY-028/029/030, MCDC-015). Predictions pre-registered before any contract (bd1da17) and again before the remediation run (9c1cdfc). **Findings before the prover ran**: F1 (`range_len` UB for spans > ISIZE_MAX, observed returning 0), F2a/F2b (`range_skip` reversal / early exhaustion), F3 (unguarded `CANON_OPTION(isize)`), F4 (`ensure_msg` precondition); tracing F1's consumers found **F5**, a buffer overflow in `vec_extend_from_range` (ASan, public API). **WP** (Typed, 15 functions): own residuals 12 → 11 → 0; run 1 failed exactly on the goals the defects falsify; run 2 falsified P6 (a MISRA-motivated wraparound form was correct but unprovable, plus a nonlinear bound); run 3, the pre-declared last rewrite, removed the wraparound and added two WP-proved lemmas. Pinned **2611/2647, 36 by name, all inherited**, name-identical over #1315/#1316/#1317; **zero new argument blocks** (P1 held — not unaided). **Coverage**: 49/60 → 61/62, one justification row (J1); aggregate 1815/2018 → **1827/2020**. MISRA 53 unchanged. Run 2's first push (4cf7f90) failed the build on two test-portability errors (a 62-bit shift on the 32-bit job; a clang fuzz unused-function); evidence is from 5e778b7, source identical. |
+| 2026-10-02 → 10-03 | 9268da3 → (VERIFY-035) | #1319 → #1324 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | stringbuf.h — **module 19, the second prospective test of the saturation claim**; both streams in one arc (VERIFY-031..035, MCDC-016). Predictions pre-registered before any contract (9268da3), an addendum before run 1 (f6e54ca). **Findings before the prover ran**: G1 (a stale view appended back reaches `memcpy` with overlapping regions — abort in ordinary builds, UB in the verified configuration), G2 (`vsnprintf` sized to the remaining capacity — every formatted append fails on musl above 2 GiB free), G3 (failure path overwrites the terminator), G5 (unstated `restrict` precondition); writing contracts found G6. **WP** (Typed+Cast, 29 functions, first variadic definitions, third trusted axiom): own 22 → 5 → 3 → 0; run 1 reported every prover-visible defect at the named seam, and G2 stayed invisible as pre-registered. The last three goals closed through **VERIFY-033/034**: `arena_alloc{,_aligned}` gained the frame clauses the header already stated for its resets, +20 proved goals in arena, arena-32, pool, region, vec, stringbuf and the CC experiment's vec (predicted +4: five split parts per clause). Pinned **4767/4848, 81 by name, all inherited**; **zero new argument blocks**. **Coverage**: 101/136 → 136/138, two environmental rows; aggregate 1827/2020 → **1862/2022**. MISRA 53 → 54 (one 21.2 at the axiom). |
 
 ---

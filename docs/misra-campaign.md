@@ -4,7 +4,9 @@ This document exists because the per-record files (`deviations.md`,
 `verification.md`, `traceability.md`) answer *"what is the status of finding
 X?"* but not *"what happened here, and what is it worth?"* Sixteen commits
 moved the advisory count from 1672 to 53, and a reader arriving cold cannot
-reconstruct from the records alone what that number means.
+reconstruct from the records alone what that number means. (The count has
+been **54** since VERIFY-031 added one verifier-only declaration; see the
+dated note at the end. Every "53" below describes the campaign's close.)
 
 It is written to be read by someone deciding whether to trust this work.
 
@@ -43,8 +45,12 @@ kept in two segments for that reason:
 
 ```
 pre-2026-07-25 surface (114 headers):  1672 → 108
-corrected surface       (86 headers):    98 →  53
+corrected surface       (86 headers):    98 →  53 → 54
 ```
+
+The last step is not part of the campaign: it is VERIFY-031's `__FRAMAC__`-only
+`vsnprintf` declaration, the third rule-21.2 site of the same shape as
+diag.h's two (see "2026-10-02 — 53 → 54" below).
 
 Anyone quoting "1672 → 53" as a single reduction is quoting across an
 instrument change.
@@ -189,16 +195,21 @@ now excluded from the coverage *run*, and untouched files stop moving.
   the rules and is not a qualified checker. For certification, a qualified
   tool (Polyspace, LDRA, PC-lint, Parasoft) is required. The workflow says
   this at the job that produces the number.
-- **Not a defect-free library.** It claims that 53 findings remain, each one
+- **Not a defect-free library.** It claims that 54 findings remain (53 at
+  the campaign's close, plus VERIFY-031's axiom declaration), each one
   classified, and that the instrument producing that number is itself tested
   — the `canary/misra_canary.h` carries three intentional violations and the
   job fails if they are not detected, because a silently-broken addon
   otherwise reports a fake-green zero.
-- **Not that the remaining 53 are a backlog.** See below.
+- **Not that the remaining 54 are a backlog.** See below.
 
 ---
 
 ## The remaining 53, and why they are not a to-do list
+
+*Current count 54 (2026-10-02, VERIFY-031): the 53 described here plus one
+more 21.2 — the `21.2 x2` block below is `x3` today. Nothing else in this
+section changes.*
 
 The largest blocks, from the CI #1202 report:
 
