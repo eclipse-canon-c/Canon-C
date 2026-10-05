@@ -1507,7 +1507,7 @@ construction. The C arithmetic is direct; the proof obstacle is WP's inability
 to carry the offset arithmetic across `arena_alloc`'s empty `nonnull` boundary
 and to discharge the nonlinear `capacity * object_size` product.
 
-#### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (1 — was 6)
+#### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (0 — RETIRED at VERIFY-036 F2; was 1, originally 6)
 
 | # | Goal                                                       |
 |---|-------------------------------------------------------------|
@@ -1529,6 +1529,14 @@ segfaults under `-DCANON_NO_REQUIRE` (probe
 `tools/probes/verify-036/p_pool_null.c`). The slot-bounds argument below is
 sound about the slot; it is not about this goal. This is the block's second
 defect; the first was corrected on 2026-08-09.
+
+**Coverage update (2026-10-05, VERIFY-036 F2) — this argument is RETIRED.**
+The last goal closed at CI #1328 (8163f06) when `pool_alloc`'s contract
+required a live pool. F2 added nothing to the proof but `pool != \null`, since
+`pool_invariant` was already a hypothesis on every non-null path, so the goal
+can only have failed on the NULL path: the slot-address attribution above is
+refuted by measurement. The block covers nothing; its argument never applied
+to the goal it was last filed against. Row kept for legibility.
 
 **Functions affected**: `pool_alloc`, `pool_get`, `pool_get_const`.
 
@@ -1643,10 +1651,10 @@ contract, conclude `pool_invariant` and the assigns shape.
 | Category | Goals | Functions affected                                   | WP feature gap                              |
 |----------|-------|------------------------------------------------------|---------------------------------------------|
 | 2a       | 5     | pool_init                                            | pool_invariant arithmetic across arena_alloc boundary (3 LIMITATION-SUSPECTED) |
-| 2b       | 6     | pool_alloc, pool_get, pool_get_const                | ptr_elem cascade (VERIFY-006 empty nonnull) |
-| 2c       | 5     | pool_alloc_zero, pool_as_bytes, pool_reserved_bytes | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
-| 2d       | 8     | pool_alloc_zero, pool_reset, pool_reset_secure      | arena delegation + wrapper assigns/ensures  |
-| **Total**| **24**|                                                      |                                             |
+| 2b       | 0     | (retired at VERIFY-036 F2)                          | ptr_elem cascade (VERIFY-006 empty nonnull) |
+| 2c       | 1     | pool_alloc_zero                                     | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
+| 2d       | 5     | pool_alloc_zero, pool_reset                         | arena delegation + wrapper assigns/ensures  |
+| **Total**| **11**|                                                      | counts as of VERIFY-036 F2 (was 6/5/8, total 24, before VERIFY-023) |
 
 Cats 2b, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no `ensures`
@@ -9323,7 +9331,7 @@ printed by the per-line step is a regression.
 |----------------|-------|
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
-| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2–F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
+| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F3–F5 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -9481,7 +9489,8 @@ clauses.
 No block retires yet, and *A* in force stays 16 until a fix closes a block's
 last goal; F2 is predicted to retire VERIFY-010 Cat 2b. Each affected block
 carries a 2026-10-05 coverage update naming its finding, with the original
-argument kept legible, as for the retired Cat 2d.
+argument kept legible, as for the retired Cat 2d. F2 retired VERIFY-010 Cat 2b
+(CI #1328): *A* in force is 15.
 
 All four defects sit in modules 5–7, the rising segment of the budget curve,
 as VERIFY-023's 24 misattributions did.
@@ -9629,6 +9638,43 @@ argument was right: it never applied to this goal.
 name with nothing new beyond the stated fragment-index exposure, and no job
 other than `frama-c-pool` goes red. The proved and total lines are scored by
 the observed g.
+
+### F2 — scored (fix 8163f06; CI #1328, CC #17)
+
+**Result: every exact prediction held; the count estimate missed.**
+
+| Item | Predicted | Observed |
+|------|-----------|----------|
+| unproved, `frama-c-pool` | 89 | 89 |
+| roll-call | loses exactly `pool_alloc_assert_rte_mem_access` | loses exactly that name; nothing new |
+| `pool_alloc_zero_assigns_normal_part3` | stays residual; index may shift (M) | stays residual; index unchanged |
+| jobs red | `frama-c-pool` only | `frama-c-pool` only |
+| total | 4060 − g | 4050 |
+| proved | 3971 − g | 3961 |
+| g | 2 to 4 (L) | 10 — missed |
+
+**The closure confirms the mechanism.** F2 added one fact to `pool_alloc`'s
+proof: `pool != \null`. On every non-null path `pool_invariant` was already a
+hypothesis. A goal that closes under F2 can therefore only have failed on the
+NULL path, so VERIFY-010 Cat 2b's slot-address attribution is refuted by
+measurement, not only by reading; the JSON source-line check F2 asked for is
+no longer needed.
+
+**The count.** Total and proved both fell by the same g, net of the one
+closure, exactly as the relation predicted; g itself was 10, not 2 to 4. Where
+the ten come from is not traced: the job archives no per-goal report. As with
+VERIFY-034's ×5, a count for a contract edit should be predicted from a goal
+list, not from the contract text.
+
+**By name.** The pool job stops at the proved-line gate before its roll-call;
+the printed unproved list shows the memory and arena blocks unchanged and the
+pool section short exactly the predicted name. The by-name gate runs in the
+ratchet. One inherited goal moved from Timeout to Unknown
+(`arena_try_alloc_non_null_out_ensures_part2`) while every pooled count stayed
+exact, as P5 records.
+
+**What it changes.** VERIFY-010 Cat 2b covers nothing and retires: *A* in
+force 16 → 15. Runtime behaviour, MC/DC and MISRA (54 = 54) did not move.
 
 ### For the paper
 

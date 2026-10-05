@@ -1745,7 +1745,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_pool_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_pool_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=90   # VERIFY-036 F1 ratchet (CI #1326): was 91
+          EXPECTED_UNPROVED=89   # VERIFY-036 F2 ratchet (CI #1328): was 90 (F1: was 91)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -1778,8 +1778,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "3970 / 4060" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3970 / 4060)."
+          if [ "${PROVED_COUNT}" != "3961 / 4050" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3961 / 4050)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1880,7 +1880,6 @@ jobs:
             "typed_cast_pool_init_ensures_3_part4"
             "typed_cast_pool_init_ensures_4_part3"
             "typed_cast_pool_init_call_arena_alloc_requires"
-            "typed_cast_pool_alloc_assert_rte_mem_access"
             "typed_cast_pool_alloc_zero_call_mem_zero_requires"
             "typed_cast_pool_alloc_zero_assigns_normal_part3"
             "typed_cast_pool_reset_call_arena_reset_to_requires_2"
@@ -1912,7 +1911,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: pool.h verified — 3970/4060 proved, 90 documented"
+          echo "PASS: pool.h verified — 3961/4050 proved, 89 documented"
           echo "      residuals all observed by name (VERIFY-010): 89"
           echo "      inherited (arena.h's full surface, verbatim) + 24"
           echo "      pool.h-own. Full set equality enforced. Composable"
