@@ -345,15 +345,12 @@ static inline bool pool_init(
  * Returns a pointer into the pre-reserved region. Does not advance the
  * arena offset (the region was fully committed at pool_init()).
  *
+ * @pre  pool != NULL (NULL is a contract violation, as in arena_alloc)
  * @return Pointer to the object slot, or NULL if the pool is full
  */
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool_invariant(pool);
   assigns  pool->used;
-  behavior null_pool:
-    assumes pool == \null;
-    assigns \nothing;
-    ensures \result == \null;
   behavior full:
     assumes pool != \null && pool->used >= pool->capacity;
     assigns \nothing;
@@ -378,9 +375,9 @@ static inline void* pool_alloc(Pool* pool) {
     return slot;
 }
 
-/** @brief Allocates and zeroes the next object slot */
+/** @brief Allocates and zeroes the next object slot; pool must not be NULL */
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool_invariant(pool);
   assigns  pool->used;
 */
 static inline void* pool_alloc_zero(Pool* pool) {
@@ -390,9 +387,9 @@ static inline void* pool_alloc_zero(Pool* pool) {
     return p;
 }
 
-/** @brief Allocates and writes result to *out; returns false if full */
+/** @brief Allocates and writes result to *out; returns false if full; pool must not be NULL */
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool_invariant(pool);
   requires out == \null || \valid(out);
   assigns  pool->used, *out;
 */
@@ -404,9 +401,9 @@ static inline bool pool_try_alloc(Pool* pool, void** out) {
     return p != NULL;
 }
 
-/** @brief Allocates, zeroes, and writes result to *out; returns false if full */
+/** @brief Allocates, zeroes, and writes result to *out; returns false if full; pool must not be NULL */
 /*@
-  requires pool == \null || pool_invariant(pool);
+  requires pool_invariant(pool);
   requires out == \null || \valid(out);
   assigns  pool->used, *out;
 */
