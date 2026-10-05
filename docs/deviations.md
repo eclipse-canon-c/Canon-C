@@ -591,7 +591,7 @@ detection, NULL handling, zero-size handling, and round-trip
 allocation-and-free are all exercised. ASan and UBSan verify
 absence of leaks, double-free, and use-after-free.
 
-#### Category 2: WP integer theory / bitwise alignment (9)
+#### Category 2: WP integer theory / bitwise alignment (8 — was 9)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
@@ -601,17 +601,18 @@ absence of leaks, double-free, and use-after-free.
 | 4 | `typed_cast_mem_align_to_normal_ensures_2_part3`               |
 | 5 | `typed_cast_mem_is_aligned_nonnull_aligned_ensures`            |
 | 6 | `typed_cast_mem_is_aligned_nonnull_unaligned_ensures`          |
-| 7 | `typed_cast_mem_get_alignment_assert_rte_signed_overflow`      |
-| 8 | `typed_cast_mem_get_alignment_nonnull_ensures_part2`           |
-| 9 | `typed_cast_mem_get_alignment_nonnull_ensures_2_part2`         |
+| 7 | `typed_cast_mem_get_alignment_nonnull_ensures_part2`           |
+| 8 | `typed_cast_mem_get_alignment_nonnull_ensures_2_part2`         |
 
-**Coverage update (2026-10-05, VERIFY-036 F1) — one goal is false.** Goal 7,
-`typed_cast_mem_get_alignment_assert_rte_signed_overflow`, is not a
-cast-round-trip limitation. `-(intptr_t)addr` overflows when `addr` has only
-its top bit set, which on 32-bit targets is `0x80000000`, an ordinary
-user-space address (probe `tools/probes/verify-036/p_getalign.c`). The
-root-cause paragraph below is wrong about this goal, and the argument does not
-address it. The finding concerns goal 7 only.
+**Coverage update (2026-10-05, VERIFY-036 F1) — one goal was false; closed.**
+The former goal 7, `typed_cast_mem_get_alignment_assert_rte_signed_overflow`,
+was not a cast-round-trip limitation: `-(intptr_t)addr` overflowed when `addr`
+had only its top bit set, which on 32-bit targets is `0x80000000`, an ordinary
+user-space address (probe `tools/probes/verify-036/p_getalign.c`). F1
+(f1ba2de) negates in unsigned arithmetic; the goal is no longer generated (CI
+#1326) and its row is removed from the table above. The root-cause paragraph
+below still describes it as a cast-round-trip limitation, which was wrong; the
+argument never addressed it.
 
 **Functions affected**: `mem_align`, `mem_align_to`, `mem_is_aligned`,
 `mem_get_alignment`.
@@ -731,12 +732,13 @@ of uninitialized-byte reads in real execution.
 | Category | Goals | Functions affected | WP feature gap |
 |----------|-------|--------------------|--------------------------------|
 | 2a       | 5     | mem_alloc/free/array_checked | `\fresh`, `\freeable` |
-| 2b       | 9     | mem_align*, mem_is_aligned, mem_get_alignment | bitwise-alignment integer theory |
+| 2b       | 8     | mem_align*, mem_is_aligned, mem_get_alignment | bitwise-alignment integer theory |
 | 2c       | 6     | mem_compare/equal/equal_bytes | `\dangling` (initialization closed, VERIFY-012) |
-| **Total**| **20**|                              |                                |
+| **Total**| **19**|                              |                                |
 
-All 20 residuals would be discharged by improvements to Frama-C's
-`\dangling`/`\fresh`/`\freeable` theory or its integer theory.
+All 19 remaining residuals would be discharged by improvements to Frama-C's
+`\dangling`/`\fresh`/`\freeable` theory or its integer theory. (A twentieth,
+closed by VERIFY-036 F1, was a real signed overflow, not a tool limit.)
 **Correction (VERIFY-012, supersedes this entry's original claim):** an
 earlier version of this section stated that "strengthening memory.h's
 predicates would produce no improvement." That is now falsified.
@@ -9308,7 +9310,7 @@ printed by the per-line step is a regression.
 |----------------|-------|
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
-| **Status**     | OPEN — findings recorded; no contract or code changed. Each fix (F1–F4) is preceded by a committed prediction row and followed by its scoring, in the VERIFY-026/027 form |
+| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2–F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -9498,6 +9500,46 @@ count equal the prediction exactly and each roll-call differs from its pin by
 exactly that one name. The fix commit is expected to turn exactly these ten
 jobs red; the ratchet commit then moves exactly these pins, removes goal 7 from
 VERIFY-008 Cat 2's table, and records the score here.
+
+### F1 — scored (fix f1ba2de; CI #1326, CC #15)
+
+**Result: the prediction held exactly.** Every row matches to the digit.
+
+| Job | Predicted | Observed |
+|-----|-----------|----------|
+| `frama-c-memory` | 2837 / 2885, 48 | 2837 / 2885, 48 |
+| `frama-c-arena` | 3496 / 3574, 78 | 3496 / 3574, 78 |
+| `frama-c-arena-32` | 3496 / 3574, 78 | 3496 / 3574, 78 |
+| `frama-c-pool` | 3970 / 4060, 90 | 3970 / 4060, 90 |
+| `frama-c-region` | 3644 / 3745, 101 | 3644 / 3745, 101 |
+| `frama-c-vec` | 5337 / 5520, 183 | 5337 / 5520, 183 |
+| `frama-c-bitset` | 4853 / 5021, 168 | 4853 / 5021, 168 |
+| `frama-c-priority-queue` | 4521 / 4597, 76 | 4521 / 4597, 76 |
+| `frama-c-stringbuf` | 4767 / 4847, 80 | 4767 / 4847, 80 |
+| `cc-vec` (`frama-c-cc.yml`) | 5394 / 5585, 191 | 5394 / 5585, 191 |
+
+**By name.** Where a roll-call ran (arena-32, bitset, priority-queue,
+stringbuf, cc-vec), the only difference from the pin was the one predicted
+name, with nothing unpinned. The memory, arena, pool, region and vec jobs stop
+at the proved-line gate before their roll-calls, so their by-name check is the
+ratchet run; the containing units already confirm them: priority-queue finds
+48 of memory's 49 names and stringbuf 80 of its 81, each missing only this
+one. Both `mem_get_alignment` ensures stayed residual, as predicted (M). No
+job outside the ten went red.
+
+**Two readings of the red runs.** arena-32 reported the name as "residual at
+64-bit, not at 32-bit": its baseline is an embedded copy of the 64-bit list,
+still pre-fix. The 64-bit job lost the same name, so width invariance held (78
+= 78); the embedded duplicate made a width-invariant change look like a width
+difference until ratcheted, which is the limit §6.2 of the paper records for
+that gate. Timeout/Unknown splits moved between units (arena 76/2, arena-32
+74/4) while every pooled count was exact, as P5 records.
+
+**What it changes.** VERIFY-008 Cat 2 covers 8 goals; no block retires and *A*
+in force stays 16. One code change, made because the obligation was false,
+closed one pinned name in every unit whose closure contains `core/memory.h`,
+at unit gain, exactly where predicted. `p_getalign.c` now runs clean under
+UBSan.
 
 ### For the paper
 

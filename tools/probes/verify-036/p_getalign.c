@@ -23,7 +23,8 @@
  *
  * Build from the repository root:
  *   gcc -std=c99 -fsanitize=signed-integer-overflow -I. tools/probes/verify-036/p_getalign.c -o p && ./p
- * Expected: UBSan "negation of ... cannot be represented".
+ * Before F1 (f1ba2de): UBSan "negation of ... cannot be represented".
+ * After F1: runs clean and prints the top-bit address's alignment.
  */
 #define CANON_CONTRACT_IMPL
 #include <stdio.h>
