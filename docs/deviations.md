@@ -9464,6 +9464,41 @@ proved. Either moves the pinned proved line (gate 2) as well as the roll-call.
 F3 and F4 are also a fresh test of the inheritance claim: each predicts that
 every arena-including unit moves by exactly the own delta.
 
+### F1 — committed prediction (before the fix commit)
+
+**Change.** `core/memory.h`, `mem_get_alignment`: `(uintptr_t)(-(intptr_t)addr)`
+becomes `(~addr + (uintptr_t)1)`. No other source change. This supersedes the
+F1 draft row above.
+
+**Prediction.** `typed_cast_mem_get_alignment_assert_rte_signed_overflow` is no
+longer generated. In each job below the proved count is unchanged, the total
+and the unproved count fall by exactly 1, and the roll-call loses exactly that
+name. No other job moves, and no other goal in these jobs changes status or
+name.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-memory` | 2837 / 2886, 49 | 2837 / 2885, 48 |
+| `frama-c-arena` | 3496 / 3575, 79 | 3496 / 3574, 78 |
+| `frama-c-arena-32` | 3496 / 3575, 79 | 3496 / 3574, 78; 64/32 symmetric difference stays empty |
+| `frama-c-pool` | 3970 / 4061, 91 | 3970 / 4060, 90 |
+| `frama-c-region` | 3644 / 3746, 102 | 3644 / 3745, 101 |
+| `frama-c-vec` | 5337 / 5521, 184 | 5337 / 5520, 183 |
+| `frama-c-bitset` | 4853 / 5022, 169 | 4853 / 5021, 168 |
+| `frama-c-priority-queue` | 4521 / 4598, 77 | 4521 / 4597, 76; memory's CHECKS parses to 48 names |
+| `frama-c-stringbuf` | 4767 / 4848, 81 | 4767 / 4847, 80 |
+| `cc-vec` (`frama-c-cc.yml`) | 5394 / 5586, 192 | 5394 / 5585, 191 |
+
+**Also predicted.** `mem_get_alignment_nonnull_ensures_part2` and
+`_nonnull_ensures_2_part2` stay residual (M). MC/DC, MISRA and every
+non-proof job are unchanged (M for MISRA). Confidence for the table: H.
+
+**Scoring rule.** F1 holds if every row's observed proved line and unproved
+count equal the prediction exactly and each roll-call differs from its pin by
+exactly that one name. The fix commit is expected to turn exactly these ten
+jobs red; the ratchet commit then moves exactly these pins, removes goal 7 from
+VERIFY-008 Cat 2's table, and records the score here.
+
 ### For the paper
 
 §3.3's worked example is F2's goal, and its explanation changes. §5 gains a row
