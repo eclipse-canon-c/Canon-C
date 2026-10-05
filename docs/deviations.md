@@ -1088,6 +1088,13 @@ under Typed+Cast.
 parent's postconditions per Cat 2b's argument, which VERIFY-036 found
 defective. Its status follows F4.
 
+**Coverage update (2026-10-05, VERIFY-036 F5) — goals 2 and 4 are false.**
+`arena_alloc_zero` and `arena_alloc_aligned_zero` zero the returned bytes,
+which lie in the buffer, not in `*arena`, the whole of their assigns clause.
+The two `assigns_normal_part3` goals fail because the clause is too narrow,
+not by inheritance from Cat 2b. Probe:
+`tools/probes/verify-036/p_zero_assigns.c`.
+
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
 `arena_try_alloc`, `arena_try_alloc_aligned`.
 
@@ -1597,6 +1604,12 @@ the `ptr_offset` round-trip.
 | 5  | `typed_cast_pool_reset_reset_ensures_2_part3`               |
 **Coverage update (2026-09-21).** `pool_reset_secure`'s three closed at
 CI #1285 (VERIFY-023). Five remain. This block covers 5 goals.
+
+**Coverage update (2026-10-05, VERIFY-036 F5) — goal 1 is false.**
+`pool_alloc_zero` zeroes the slot, which is not `pool->used`, the whole of its
+assigns clause. The goal fails because the clause is too narrow;
+`pool_alloc`'s assigns goals all prove, so the "through-effect" below does not
+exist. Probe: `tools/probes/verify-036/p_zero_assigns.c`.
 
 **Functions affected**: `pool_alloc_zero`, `pool_reset`, `pool_reset_secure`.
 
@@ -9322,7 +9335,8 @@ and pinned by name. What was wrong was the explanation attached to it.
 
 Blocks found defective: 3 of 17 before this record (the argument audit of
 2026-08-09), 6 of 17 after it. VERIFY-010 Cat 2b is defective for the second
-time, for a different reason.
+time, for a different reason. F5, recorded after F1 was scored, adds two more:
+8 of 17.
 
 ### F1 — `mem_get_alignment`: the signed negation can overflow (VERIFY-008 Cat 2, goal 7)
 
@@ -9429,6 +9443,39 @@ states what the code does. General; whether it proves is the open question.
 but it repairs only `arena_alloc`: `arena_alloc_aligned` with
 `alignment > CANON_DEFAULT_ALIGN` still needs (a).
 
+### F5 — the zero wrappers' assigns clauses omit the zeroed bytes (VERIFY-009 Cat 2c; VERIFY-010 Cat 2d)
+
+**Record says.** Arena Cat 2c files `arena_alloc_zero_assigns_normal_part3`
+and `arena_alloc_aligned_zero_assigns_normal_part3` as inheritance from Cat 2b
+through wrapper delegation. Pool Cat 2d says
+`pool_alloc_zero_assigns_normal_part3` chains through `pool_alloc`'s
+partially-unproved assigns.
+
+**Code does.** `arena_alloc_zero` and `arena_alloc_aligned_zero` declare
+`assigns *arena;` and `pool_alloc_zero` declares `assigns pool->used;`, but
+each zeroes the returned bytes with `mem_zero`. Those bytes live in the
+caller's buffer, outside `*arena` and `pool->used`, and existed before the
+call, so each assigns clause is false whenever they were not already zero. The
+three goals are false obligations, not inherited difficulty. Nor is there a
+partially-unproved assigns to chain through: every `pool_alloc` assigns goal
+proves.
+
+**Probe.** `p_zero_assigns.c`. With the buffer filled with 0xFF,
+`arena_alloc_zero(&a, 8)` and `pool_alloc_zero(&p)` each leave a byte reading
+0x00 at a location outside the declared assigns set.
+
+**Consequence.** A caller that knows the region's prior contents can derive a
+contradiction from the frame together with the zeroing ensures. The zeroed
+bytes were unallocated, so no live data changes; the defect is in the
+contract, not the behaviour.
+
+**Fix (author's decision).** Add the zeroed range to each assigns clause. For
+the arena pair, the free tail of the buffer,
+`((u8*)arena->buffer)[arena->offset .. arena->capacity - 1]`, covers every
+byte the call can zero; for `pool_alloc_zero`, the free part of the reserved
+window. Predicted to close the three goals; the author names the exact
+clauses.
+
 ### What this changes in the count
 
 No block retires yet, and *A* in force stays 16 until a fix closes a block's
@@ -9462,6 +9509,7 @@ proved. Either moves the pinned proved line (gate 2) as well as the roll-call.
 | F2(b) | `requires pool_invariant(pool)` on `pool_alloc`, `pool_alloc_zero`, `pool_try_alloc` | `pool_alloc_assert_rte_mem_access` closes; `null_pool` goals vanish; no call-site goal opens if all three tighten | `frama-c-pool` only | as F2(a) | H |
 | F3 | pad in integer arithmetic before the guard | the four `arena_alloc{,_aligned}_call_ptr_span_requires{,_2}` vanish; new call-site goals on the integer helper (author to name) | every arena-including TU, by the same delta | VERIFY-009 Cat 2a covers nothing and retires | author |
 | F4 | address-based `arena_can_fit`, or an alignment precondition | the 16 Cat 2b goals become true; whether they prove is the open question | every arena-including TU, by the same delta | Cat 2b rewritten or retired; Cat 2c follows | author |
+| F5 | add the zeroed bytes to the three zero wrappers' assigns | the three `*_zero_assigns_normal_part3` close | the two arena goals in every arena-including TU; pool's in `frama-c-pool` | Cat 2c covers 8 (was 10); Cat 2d covers 4 (was 5) | author |
 
 F3 and F4 are also a fresh test of the inheritance claim: each predicts that
 every arena-including unit moves by exactly the own delta.
@@ -9540,6 +9588,47 @@ in force stays 16. One code change, made because the obligation was false,
 closed one pinned name in every unit whose closure contains `core/memory.h`,
 at unit gain, exactly where predicted. `p_getalign.c` now runs clean under
 UBSan.
+
+### F2 — committed prediction, option (b) (before the fix commit)
+
+**Change.** `core/pool.h`: `requires pool_invariant(pool);` replaces `requires
+pool == \null || pool_invariant(pool);` on `pool_alloc`, `pool_alloc_zero`,
+`pool_try_alloc` and `pool_try_alloc_zero`; `pool_alloc`'s `null_pool`
+behaviour is deleted; the doc comments state the precondition. No executable
+change: each function already rejects NULL with `require_msg`.
+
+**Why (b).** The code, its `require_msg` messages and its doc comment already
+treat NULL as a precondition violation, and arena draws the same line:
+allocation requires a live arena, while reset and teardown accept NULL. Option
+(a) would have turned the default build's abort into a silent NULL return.
+
+**Prediction.** Only `frama-c-pool` moves; no other verified unit includes
+`core/pool.h`.
+
+- Exact (H): unproved 90 → 89. The roll-call loses exactly
+  `typed_cast_pool_alloc_assert_rte_mem_access`, which closes because the
+  precondition now gives `pool != \null` before the first access. No residual
+  appears.
+- Count: total 4060 → 4060 − g and proved 3970 → 3971 − g, where g is the number
+  of goals WP generated for the deleted `null_pool` behaviour (its ensures and
+  assigns, split fragments included). g is not predicted to the digit; estimate
+  2 to 4 (L).
+- Name exposure (M): `pool_alloc_zero_assigns_normal_part3` stays residual (it
+  is false, F5), but its fragment index may shift, since the call it splits over
+  loses a behaviour. If it moves, one name leaves and one arrives for the same
+  obligation.
+- No call-site goal opens: the only verified callers of `pool_alloc` are the
+  three wrappers tightened with it (H). MC/DC, MISRA, tests and sanitizers do
+  not move: the edit is ACSL and comments only (H).
+
+**Blocks.** VERIFY-010 Cat 2b covers nothing and retires; *A* in force 16 → 15
+(H). The goal closes because the contract changed, not because the block's
+argument was right: it never applied to this goal.
+
+**Scoring rule.** F2 holds if unproved is 89, the roll-call loses exactly that
+name with nothing new beyond the stated fragment-index exposure, and no job
+other than `frama-c-pool` goes red. The proved and total lines are scored by
+the observed g.
 
 ### For the paper
 
