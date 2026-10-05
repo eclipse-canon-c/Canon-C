@@ -605,6 +605,14 @@ absence of leaks, double-free, and use-after-free.
 | 8 | `typed_cast_mem_get_alignment_nonnull_ensures_part2`           |
 | 9 | `typed_cast_mem_get_alignment_nonnull_ensures_2_part2`         |
 
+**Coverage update (2026-10-05, VERIFY-036 F1) — one goal is false.** Goal 7,
+`typed_cast_mem_get_alignment_assert_rte_signed_overflow`, is not a
+cast-round-trip limitation. `-(intptr_t)addr` overflows when `addr` has only
+its top bit set, which on 32-bit targets is `0x80000000`, an ordinary
+user-space address (probe `tools/probes/verify-036/p_getalign.c`). The
+root-cause paragraph below is wrong about this goal, and the argument does not
+address it. The finding concerns goal 7 only.
+
 **Functions affected**: `mem_align`, `mem_align_to`, `mem_is_aligned`,
 `mem_get_alignment`.
 
@@ -895,6 +903,16 @@ two `\valid_read` requires per variant, which are genuinely false when
 `ptr_span` only subtracts): a `ptr_span` contract question, tracked in
 VERIFY-006. This block covers 4 goals; the argument below is unchanged.
 
+**Coverage update (2026-10-05, VERIFY-036 F3) — argument defective.** The four
+goals are false on a wider region than the note above says. `ptr_span` runs
+before the capacity guard, so whenever `offset + pad > capacity` (a failing
+allocation on a nearly full arena) the aligned pointer lies beyond
+one-past-the-end of the buffer. There the subtraction inside `ptr_span` is
+itself outside C99 6.5.6p9, so weakening `ptr_span`'s requires would not cover
+it. The argument below says both pointers lie within the buffer; it is wrong
+for exactly the goals it still covers. Probe:
+`tools/probes/verify-036/p_arena_span.c`.
+
 **Functions affected**: `arena_alloc`, `arena_alloc_aligned`.
 
 **Root cause**: arena_alloc's body computes the alignment pad through
@@ -972,6 +990,16 @@ difficulty is the readable `arena_can_fit` form and nothing else. **Class:
 requires for that class; the solver-theory limit it also names (VERIFY-006
 cat 2) is the mechanism, the readable-predicate choice is the reason the
 mechanism is reached.
+
+**Coverage update (2026-10-05, VERIFY-036 F4) — argument defective; the 16
+goals are false.** The argument's central step, that the C pad equals the ACSL
+pad, holds only for buffers aligned to the requested alignment.
+`arena_can_fit` pads from the offset, the code pads from the address, and
+neither `arena_init` nor `arena_invariant` requires alignment. For any other
+buffer both `fits` and `does_not_fit` are violated, including
+`arena_alloc_aligned(.., 64)` on a malloc-style 16-aligned buffer (probe
+`tools/probes/verify-036/p_arena_pad.c`). The readability trade described
+below is real, but it is not why these goals fail.
 
 **Functions affected**: `arena_alloc`, `arena_alloc_aligned`. 13 per
 function: 4 × `fits_ensures_part{2,3,4,5}` + 4 ×
@@ -1053,6 +1081,10 @@ under Typed+Cast.
 | 8  | `typed_cast_arena_try_alloc_aligned_assigns_normal_part03`      |
 | 9  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1` |
 | 10 | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2` |
+
+**Coverage update (2026-10-05, VERIFY-036 F4).** This argument assumes the
+parent's postconditions per Cat 2b's argument, which VERIFY-036 found
+defective. Its status follows F4.
 
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
 `arena_try_alloc`, `arena_try_alloc_aligned`.
@@ -1477,6 +1509,17 @@ remains, `pool_alloc_assert_rte_mem_access`, is the pool allocator's write
 into the slot — the same address chain, one dereference deeper — and is the
 goal the VERIFY-08 argument audit found cited against a compiled-out runtime
 check. This block covers 1 goal.
+
+**Coverage update (2026-10-05, VERIFY-036 F2) — the argument does not cover
+this goal.** `pool_alloc` never dereferences the slot. Its contract admits
+`pool == \null`, and its only null check is `require_msg`, which every WP job
+compiles out, so the first memory access, `pool->used`, is unguarded. An
+unsuffixed `assert_rte_mem_access` names that first access (to confirm from
+the goal's source line in `frama-c-pool`'s JSON report). `pool_alloc(NULL)`
+segfaults under `-DCANON_NO_REQUIRE` (probe
+`tools/probes/verify-036/p_pool_null.c`). The slot-bounds argument below is
+sound about the slot; it is not about this goal. This is the block's second
+defect; the first was corrected on 2026-08-09.
 
 **Functions affected**: `pool_alloc`, `pool_get`, `pool_get_const`.
 
@@ -9256,3 +9299,181 @@ either way.
 
 **Final**: 136 / 138, two justification rows (J1, J2). Any other miss
 printed by the per-line step is a regression.
+
+---
+
+## VERIFY-036: Four Arguments Read Against Their Code — Three More Blocks Defective, One Defective Twice
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-036 |
+| **Date**       | 2026-10-05 |
+| **Status**     | OPEN — findings recorded; no contract or code changed. Each fix (F1–F4) is preceded by a committed prediction row and followed by its scoring, in the VERIFY-026/027 form |
+| **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
+| **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
+
+**Summary.** Four in-force arguments cover obligations that are false, not
+true-but-unprovable. Each is demonstrated by a probe against master as of
+2026-10-04. In the paper's terms (§5) all four are arguments wrong on their own
+terms. The gates were right throughout: every one of these goals was unproved
+and pinned by name. What was wrong was the explanation attached to it.
+
+Blocks found defective: 3 of 17 before this record (the argument audit of
+2026-08-09), 6 of 17 after it. VERIFY-010 Cat 2b is defective for the second
+time, for a different reason.
+
+### F1 — `mem_get_alignment`: the signed negation can overflow (VERIFY-008 Cat 2, goal 7)
+
+**Record says.** Cat 2's root-cause paragraph attributes
+`typed_cast_mem_get_alignment_assert_rte_signed_overflow` to the cast
+round-trip losing integer bounds. The block's argument does not address it.
+
+**Code does.** `(uintptr_t)(-(intptr_t)addr)` overflows when `addr` has only
+its top bit set, so that `(intptr_t)addr == INTPTR_MIN`. On 32-bit targets that
+address is `0x80000000`, an ordinary user-space address, and
+`frama-c-arena-32` carries the goal.
+
+**Probe.** `p_getalign.c`. UBSan reports the negation at `core/memory.h:450`.
+
+**Fix.** Negate in unsigned arithmetic:
+`return (usize)(addr & (~addr + (uintptr_t)1));`. The RTE plugin emits no
+signed-overflow alarm for it.
+
+### F2 — `pool_alloc`: the remaining goal is a compiled-out null check (VERIFY-010 Cat 2b)
+
+**Record says.** The block's one remaining goal,
+`typed_cast_pool_alloc_assert_rte_mem_access`, is the slot address chain
+through the `uintptr_t` round-trip, one dereference deeper than the five
+VERIFY-023 closed.
+
+**Code does.** `pool_alloc` never dereferences the slot. Its contract admits
+`pool == \null` (`requires pool == \null || pool_invariant(pool)`; behavior
+`null_pool` ensures `\result == \null`), and the body's only null check is
+`require_msg`, which `-DCANON_NO_REQUIRE`, the configuration of every WP job,
+compiles to `((void)0)`. The first memory access is then `pool->used`. An
+unsuffixed `assert_rte_mem_access` is the first mem-access alarm WP emits in
+the function, and every later access proves because WP takes that assertion as
+a hypothesis. This also explains why VERIFY-023 closed five goals in this block
+and left this one: it was never about the slot. **To confirm:** the goal's
+source line in `frama-c-pool`'s `-wp-report-json` output should be the
+`if (pool->used >= pool->capacity)` line.
+
+**Consequence.** The `null_pool` ensures is proved only relative to that
+unproved assertion. In the proof configuration `pool_alloc(NULL)` dereferences
+NULL; in the default build it aborts. No configuration returns NULL as the
+contract promises.
+
+**Probe.** `p_pool_null.c`. Segmentation fault under
+`-DCANON_NO_REQUIRE -DNDEBUG`; contract-violation abort in the default build.
+
+**Fix (author's decision).** (a) Make the code match the contract: replace the
+`require_msg` with `if (pool == NULL) { return NULL; }`. Local, but the default
+build changes from abort to returning NULL. (b) Make the contract match the
+code and its doc comment: `requires pool_invariant(pool)`, dropping the
+`== \null` disjunct and `null_pool`. This fits `require_msg`-as-precondition,
+but `pool_alloc_zero` and `pool_try_alloc` also admit NULL, so their contracts
+tighten with it or their call sites open false goals.
+
+### F3 — `arena_alloc{,_aligned}`: `ptr_span` runs before the capacity guard (VERIFY-009 Cat 2a)
+
+**Record says.** Both pointers lie within the buffer at the `ptr_span` call.
+The 2026-09-21 coverage note concedes the four `\valid_read` requires are false
+at `offset == capacity`, and the VERIFY-026 addendum of 2026-09-18 defers that
+case as a `ptr_span` contract question, since `ptr_span` only subtracts.
+
+**Code does.** `ptr_span(aligned_ptr, current)` is called before the guard.
+Whenever `offset + pad > capacity`, not only at `offset == capacity`, the
+aligned pointer lies beyond one-past-the-end of the caller's buffer. There a
+weaker `ptr_span` requires would not help, because the subtraction itself is
+outside C99 6.5.6p9.
+
+**Probe.** `p_arena_span.c`. On a 100-byte `malloc`'d buffer,
+`arena_alloc(&a, 97)` then `arena_alloc(&a, 1)` gives ASan
+`invalid-pointer-pair` in `ptr_span` (`core/primitives/ptr.h:851`), called from
+`arena_alloc` (`core/arena.h:364`), with the aligned pointer 12 bytes past the
+object.
+
+**Fix (author's decision).** Do not form the aligned pointer before the guard:
+compute `pad` in integer arithmetic on the address, test capacity, then form
+the result pointer. Decide together with F4, which constrains how `pad` is
+specified; commit separately so each delta stays readable.
+
+### F4 — `arena_can_fit` pads from the offset, the code from the address (VERIFY-009 Cat 2b; Cat 2c by dependency)
+
+**Record says.** When `arena_can_fit` holds, its let-bindings give
+`cur + pad + size <= capacity`, so the guard does not fire, and the only
+obstacle is proving that the C pad equals the ACSL pad under Typed+Cast. The
+block is filed (c), the predicate's readable form being the deliberate trade.
+
+**Code does.** The ACSL pad is `(alignment - (offset % alignment)) % alignment`.
+The C pad is computed by `ptr_align_up` on the address `buffer + offset`. They
+are equal only when the buffer is aligned to `alignment`, and neither
+`arena_init` nor `arena_invariant` requires that. For any other buffer both
+`fits` and `does_not_fit` are violated, so the 16 goals are false, not hard.
+Cat 2c's argument assumes the parent's postconditions per Cat 2b and rests on
+it. Downstream proofs that used `fits` or `does_not_fit` were made against a
+contract that is false for unaligned buffers; they are re-checked after F4.
+
+**Probe.** `p_arena_pad.c`, three cases, each meeting the precondition and
+violating the selected behaviour: `arena_alloc` with `buffer % 16 == 1`
+(`fits` selected, NULL returned); `arena_alloc` with `buffer % 16 == 15` after
+one ordinary allocation (`does_not_fit` selected, non-NULL returned);
+`arena_alloc_aligned(.., 64)` on a 16-aligned, malloc-style buffer (`fits`
+selected, NULL returned). Same results under `-DCANON_NO_REQUIRE -DNDEBUG`.
+
+**Fix (author's decision).** (a) Pad from the address in the predicate, so it
+states what the code does. General; whether it proves is the open question.
+(b) Require buffer alignment in `arena_init` and `arena_invariant`. Simpler,
+but it repairs only `arena_alloc`: `arena_alloc_aligned` with
+`alignment > CANON_DEFAULT_ALIGN` still needs (a).
+
+### What this changes in the count
+
+No block retires yet, and *A* in force stays 16 until a fix closes a block's
+last goal; F2 is predicted to retire VERIFY-010 Cat 2b. Each affected block
+carries a 2026-10-05 coverage update naming its finding, with the original
+argument kept legible, as for the retired Cat 2d.
+
+All four defects sit in modules 5–7, the rising segment of the budget curve,
+as VERIFY-023's 24 misattributions did.
+
+### Proposed rule (decide before F1)
+
+Every class (a) and (c) argument lists its hypotheses and, for each, where it
+is established at the goal's program point: a precondition, an invariant, or a
+guard dominating the point. F3 and F4 are failures of exactly this: the range
+hypothesis held only after the guard, and the alignment hypothesis was never
+established. F2 is a third: the non-null hypothesis was established by a check
+the proof configuration compiles out. That is §3.2's configuration field,
+applied to the function's own guard rather than to a cited control.
+
+### Predictions (author — fill and commit before each fix)
+
+Draft rows, AI-assisted: edit, then commit each row before its fix. "Vanishes"
+means the goal is no longer generated; "closes" means it is generated and now
+proved. Either moves the pinned proved line (gate 2) as well as the roll-call.
+
+| Fix | Change | Own goals | Downstream | Blocks | Conf. |
+|-----|--------|-----------|------------|--------|-------|
+| F1 | unsigned negation in `mem_get_alignment` | `mem_get_alignment_assert_rte_signed_overflow` vanishes; `_nonnull_ensures_part2` and `_nonnull_ensures_2_part2` stay residual (the lowest-set-bit identity is bitwise reasoning) | the same name vanishes from every TU whose closure contains `core/memory.h`, `frama-c-arena-32` included; nothing else moves | VERIFY-008 Cat 2 covers 8 (was 9); none retires | H vanish; M ensures |
+| F2(a) | `require_msg` replaced by `if (pool == NULL) return NULL;` | `pool_alloc_assert_rte_mem_access` closes; other `pool_alloc` fragment names may shift with the new branch | `frama-c-pool` only | VERIFY-010 Cat 2b covers nothing and retires; *A* in force 16 → 15 | H closure; M names |
+| F2(b) | `requires pool_invariant(pool)` on `pool_alloc`, `pool_alloc_zero`, `pool_try_alloc` | `pool_alloc_assert_rte_mem_access` closes; `null_pool` goals vanish; no call-site goal opens if all three tighten | `frama-c-pool` only | as F2(a) | H |
+| F3 | pad in integer arithmetic before the guard | the four `arena_alloc{,_aligned}_call_ptr_span_requires{,_2}` vanish; new call-site goals on the integer helper (author to name) | every arena-including TU, by the same delta | VERIFY-009 Cat 2a covers nothing and retires | author |
+| F4 | address-based `arena_can_fit`, or an alignment precondition | the 16 Cat 2b goals become true; whether they prove is the open question | every arena-including TU, by the same delta | Cat 2b rewritten or retired; Cat 2c follows | author |
+
+F3 and F4 are also a fresh test of the inheritance claim: each predicts that
+every arena-including unit moves by exactly the own delta.
+
+### For the paper
+
+§3.3's worked example is F2's goal, and its explanation changes. §5 gains a row
+for this audit (17 blocks read against their code; 4 defects; 6 of 17 blocks
+defective). §3.4 should say that some pinned residuals were false obligations
+rather than true-but-unprovable ones.
+
+### Scoring
+
+Each fix is scored goal by goal in a later record, as VERIFY-027 scored
+VERIFY-026. Probes become regression tests as their fixes land, except
+`p_arena_span.c`, which needs ASan's pointer-pair checking and stays a recorded
+probe unless a sanitizer job adopts it.
