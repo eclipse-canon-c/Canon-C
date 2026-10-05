@@ -446,8 +446,9 @@ static inline usize mem_get_alignment(const void* ptr) {
     uintptr_t addr;
     if (!ptr) { return 0; }
     addr = (uintptr_t)ptr;
-    /* lowest set bit == largest power-of-2 that divides addr */
-    return (usize)(addr & (uintptr_t)(-(intptr_t)addr));
+    /* lowest set bit == largest power-of-2 that divides addr; the negation is
+       done in unsigned arithmetic, defined for every addr (VERIFY-036 F1) */
+    return (usize)(addr & (~addr + (uintptr_t)1));
 }
 
 /**
