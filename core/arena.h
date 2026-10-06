@@ -21,7 +21,7 @@
 #include "core/primitives/types.h"    /* u8, usize */
 #include "core/primitives/limits.h"   /* CANON_ARENA_MAX_SIZE, CANON_USIZE_MAX, CANON_DEFAULT_ALIGN */
 #include "core/primitives/contract.h" /* require_msg */
-#include "core/primitives/ptr.h"      /* ptr_offset, ptr_align_up, ptr_span, is_power_of_two */
+#include "core/primitives/ptr.h"      /* ptr_offset, ptr_align_padding, is_power_of_two */
 #include "core/memory.h"              /* mem_zero, mem_secure_zero */
 #include "core/slice.h"               /* bytes_t, bytes_from, bytes_empty */
 
@@ -352,7 +352,6 @@ static inline void arena_reset_secure(Arena* arena) {
 */
 static inline void* arena_alloc(Arena* arena, usize size) {
     void* current;
-    void* aligned_ptr;
     void* result;
     usize pad;
 
@@ -360,8 +359,9 @@ static inline void* arena_alloc(Arena* arena, usize size) {
     if (size == 0u) { return NULL; }
 
     current     = ptr_offset(arena->buffer, arena->offset);
-    aligned_ptr = ptr_align_up(current, CANON_DEFAULT_ALIGN);
-    pad         = ptr_span(aligned_ptr, current);
+    /* VERIFY-036 F3: pad from the address as an integer; no pointer past the
+       buffer is formed before the capacity guard below. */
+    pad         = ptr_align_padding(current, CANON_DEFAULT_ALIGN);
 
     if ((arena->offset > (CANON_USIZE_MAX - pad)) ||
         ((arena->offset + pad) > (CANON_USIZE_MAX - size)) ||
@@ -409,7 +409,6 @@ static inline void* arena_alloc(Arena* arena, usize size) {
 */
 static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignment) {
     void* current;
-    void* aligned_ptr;
     void* result;
     usize pad;
 
@@ -419,8 +418,8 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
     if (size == 0u) { return NULL; }
 
     current     = ptr_offset(arena->buffer, arena->offset);
-    aligned_ptr = ptr_align_up(current, alignment);
-    pad         = ptr_span(aligned_ptr, current);
+    /* VERIFY-036 F3: see arena_alloc. */
+    pad         = ptr_align_padding(current, alignment);
 
     if ((arena->offset > (CANON_USIZE_MAX - pad)) ||
         ((arena->offset + pad) > (CANON_USIZE_MAX - size)) ||
