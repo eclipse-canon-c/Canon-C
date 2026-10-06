@@ -359,6 +359,8 @@ static inline bool pool_init(
     assumes pool != \null && pool->used < pool->capacity;
     ensures pool->used == \old(pool->used) + 1;
     ensures pool_invariant(pool);
+    ensures address: (u8*)\result == pool->arena->buffer + pool->base_mark
+                                     + \old(pool->used) * pool->object_size;
   complete behaviors;
   disjoint behaviors;
 */
