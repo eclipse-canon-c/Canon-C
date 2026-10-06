@@ -1572,7 +1572,7 @@ defence-in-depth measure at default and debug build levels only. Per the
 evidence standard, every class-(a) and class-(c) argument must now name the
 build configuration in which any cited control exists.
 
-#### Category 2c: bytes_from / mem_zero / mem_secure_zero call-sites (1 — was 5)
+#### Category 2c: bytes_from / mem_zero / mem_secure_zero call-sites (0 — RETIRED at VERIFY-036 F6; was 1, originally 5)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
@@ -1580,6 +1580,13 @@ build configuration in which any cited control exists.
 **Coverage update (2026-09-21).** The four `bytes_from` call-site goals
 closed at CI #1285 (VERIFY-023). `pool_alloc_zero_call_mem_zero_requires`
 remains. This block covers 1 goal.
+
+**Coverage update (2026-10-06, VERIFY-036 F6) — this argument is RETIRED.**
+The last goal closed at CI #1332 (c069881) when `pool_alloc` stated its result
+address. The root cause below names the `ptr_offset` boundary, which
+VERIFY-023 removed; after that the goal stayed only because `pool_alloc` did
+not pass the address on, so the attribution had been stale since #1285. The
+block covers nothing. Row kept for legibility.
 
 **Functions affected**: `pool_alloc_zero`, `pool_as_bytes`,
 `pool_reserved_bytes` (and `pool_reset_secure`'s `mem_secure_zero`, counted in
@@ -1601,15 +1608,14 @@ or `object_size * capacity` (= region span); both are within bounds, and the
 base pointer is valid. The C matches `bytes_from`'s contract; the obstacle is
 the `ptr_offset` round-trip.
 
-#### Category 2d: arena delegation + reset wrapper assigns/ensures (5 — was 8)
+#### Category 2d: arena delegation + reset wrapper assigns/ensures (4 — was 8)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
-| 1  | `typed_cast_pool_alloc_zero_assigns_normal_part3`             |
-| 2  | `typed_cast_pool_reset_call_arena_reset_to_requires_2`       |
-| 3  | `typed_cast_pool_reset_call_arena_alloc_requires`           |
-| 4  | `typed_cast_pool_reset_reset_ensures_part3`                 |
-| 5  | `typed_cast_pool_reset_reset_ensures_2_part3`               |
+| 1  | `typed_cast_pool_reset_call_arena_reset_to_requires_2`       |
+| 2  | `typed_cast_pool_reset_call_arena_alloc_requires`           |
+| 3  | `typed_cast_pool_reset_reset_ensures_part3`                 |
+| 4  | `typed_cast_pool_reset_reset_ensures_2_part3`               |
 **Coverage update (2026-09-21).** `pool_reset_secure`'s three closed at
 CI #1285 (VERIFY-023). Five remain. This block covers 5 goals.
 
@@ -1625,6 +1631,12 @@ predicted, because `pool_alloc` states nothing about where its result lies and
 WP cannot place the zeroed slot in the window. The argument below still
 misattributes it; it is rewritten with F6, which states `pool_alloc`'s result
 address.
+
+**Coverage update (2026-10-06, VERIFY-036 F6).** The former goal 1,
+`pool_alloc_zero_assigns_normal_part3`, closed at CI #1332 once `pool_alloc`
+stated its result address; its row is removed. False until F5 and opaque until
+F6, it was never the delegation effect this block argues. The four
+`pool_reset` goals remain.
 
 **Functions affected**: `pool_alloc_zero`, `pool_reset`, `pool_reset_secure`.
 
@@ -1659,9 +1671,9 @@ contract, conclude `pool_invariant` and the assigns shape.
 |----------|-------|------------------------------------------------------|---------------------------------------------|
 | 2a       | 5     | pool_init                                            | pool_invariant arithmetic across arena_alloc boundary (3 LIMITATION-SUSPECTED) |
 | 2b       | 0     | (retired at VERIFY-036 F2)                          | ptr_elem cascade (VERIFY-006 empty nonnull) |
-| 2c       | 1     | pool_alloc_zero                                     | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
-| 2d       | 5     | pool_alloc_zero, pool_reset                         | arena delegation + wrapper assigns/ensures  |
-| **Total**| **11**|                                                      | counts as of VERIFY-036 F2 (was 6/5/8, total 24, before VERIFY-023) |
+| 2c       | 0     | (retired at VERIFY-036 F6)                          | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
+| 2d       | 4     | pool_reset                                          | arena delegation + wrapper assigns/ensures  |
+| **Total**| **9** |                                                      | counts as of VERIFY-036 F6 (was 6/5/8, total 24, before VERIFY-023) |
 
 Cats 2b, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no `ensures`
@@ -9338,7 +9350,7 @@ printed by the per-line step is a regression.
 |----------------|-------|
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
-| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F3, F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
+| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F6 fixed (c069881) and scored exact at CI #1332 / CC #20; F3, F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -9497,7 +9509,7 @@ No block retires yet, and *A* in force stays 16 until a fix closes a block's
 last goal; F2 is predicted to retire VERIFY-010 Cat 2b. Each affected block
 carries a 2026-10-05 coverage update naming its finding, with the original
 argument kept legible, as for the retired Cat 2d. F2 retired VERIFY-010 Cat 2b
-(CI #1328): *A* in force is 15.
+(CI #1328) and F6 retired VERIFY-010 Cat 2c (CI #1332): *A* in force is 14.
 
 All four defects sit in modules 5–7, the rising segment of the budget curve,
 as VERIFY-023's 24 misattributions did.
@@ -9798,6 +9810,33 @@ force 15 → 14), and pool Cat 2d covers 4 (was 5).
 **Scoring rule.** F6 holds if no residual appears, both `pool_alloc_zero`
 goals leave the roll-call, the total grows by 2, and only `frama-c-pool` goes
 red.
+
+### F6 — scored (fix c069881; CI #1332, CC #20)
+
+**Result: the prediction held exactly**, both medium-confidence closures and the goal count
+included.
+
+| Item | Predicted | Observed |
+|------|-----------|----------|
+| `frama-c-pool` | 3967 / 4052, 85 | 3967 / 4052, 85 |
+| new `address` clause | proves; no residual | no residual |
+| `pool_alloc_zero` goals | both close (M) | both closed |
+| goals added | 2 (M) | 2 |
+
+**By name.** The pool section of the unproved list is the five `pool_init`
+goals and the four `pool_reset` goals; both `pool_alloc_zero` names are gone
+and nothing new appears. The pool job stops at the proved-line gate, so its
+by-name gate runs in the ratchet. This run also stood in for the F5 ratchet's
+confirmation, which the F6 push cancelled: every job F6 cannot reach was
+green.
+
+**What the closures show.** The nonlinear step the prediction flagged as the
+risk, the slot inside the reserved window, did not stop the provers. The two
+goals closed only when `pool_alloc` passed on the address it already computed,
+which is VERIFY-023's opaque-result pattern one level up. Pool Cat 2c's stated
+cause, the `ptr_offset` boundary, had been stale since VERIFY-023 removed it:
+one more misattributed obligation, at obligation level. Cat 2c retires and Cat
+2d covers 4: *A* in force 15 → 14.
 
 ### For the paper
 
