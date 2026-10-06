@@ -442,7 +442,7 @@ static inline void* arena_alloc_aligned(Arena* arena, usize size, usize alignmen
 
 /*@
   requires arena_invariant(arena);
-  assigns *arena;
+  assigns *arena, ((char *)arena->buffer)[arena->offset .. arena->capacity - 1];
   ensures arena_invariant(arena);
   ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
   ensures \result != \null ==>
@@ -459,7 +459,7 @@ static inline void* arena_alloc_zero(Arena* arena, usize size) {
 /*@
   requires arena_invariant(arena);
   requires is_power_of_two_logic(alignment);
-  assigns *arena;
+  assigns *arena, ((char *)arena->buffer)[arena->offset .. arena->capacity - 1];
   ensures arena_invariant(arena);
   ensures \result == \null || \valid((u8*)\result + (0 .. size - 1));
   ensures \result != \null ==>

@@ -378,7 +378,8 @@ static inline void* pool_alloc(Pool* pool) {
 /** @brief Allocates and zeroes the next object slot; pool must not be NULL */
 /*@
   requires pool_invariant(pool);
-  assigns  pool->used;
+  assigns  pool->used,
+           ((char *)pool->arena->buffer)[pool->base_mark .. pool->end_mark - 1];
 */
 static inline void* pool_alloc_zero(Pool* pool) {
     void* p;
@@ -405,7 +406,8 @@ static inline bool pool_try_alloc(Pool* pool, void** out) {
 /*@
   requires pool_invariant(pool);
   requires out == \null || \valid(out);
-  assigns  pool->used, *out;
+  assigns  pool->used, *out,
+           ((char *)pool->arena->buffer)[pool->base_mark .. pool->end_mark - 1];
 */
 static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
     void* p;
