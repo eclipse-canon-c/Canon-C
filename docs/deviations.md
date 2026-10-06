@@ -881,7 +881,7 @@ memory.h+substrate → arena.h with 43 inherited), is that substrate
 residuals propagate without amplification: a downstream header's
 inherited count equals the upstream's total, not greater.
 
-### arena.h-own residuals (46)
+### arena.h-own residuals (28 — was 46)
 
 Four categories. Cats 2a and 2d are call-chain residuals at ptr.h
 boundary functions whose `nonnull` behavior carries no `ensures` clause
@@ -1069,30 +1069,30 @@ range extends through `capacity - 1`. Each step is direct; the
 obstacle is WP's inability to prove the C pad equals the ACSL pad
 under Typed+Cast.
 
-#### Category 2c: zero / try wrappers (10)
+#### Category 2c: zero / try wrappers (8 — was 10)
 
 | #  | Goal                                                            |
 |----|------------------------------------------------------------------|
 | 1  | `typed_cast_arena_alloc_zero_ensures_3_part1`                   |
-| 2  | `typed_cast_arena_alloc_zero_assigns_normal_part3`              |
-| 3  | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1`           |
-| 4  | `typed_cast_arena_alloc_aligned_zero_assigns_normal_part3`      |
-| 5  | `typed_cast_arena_try_alloc_assigns_normal_part03`              |
-| 6  | `typed_cast_arena_try_alloc_non_null_out_ensures_part1`         |
-| 7  | `typed_cast_arena_try_alloc_non_null_out_ensures_part2`         |
-| 8  | `typed_cast_arena_try_alloc_aligned_assigns_normal_part03`      |
-| 9  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1` |
-| 10 | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2` |
+| 2  | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1`           |
+| 3  | `typed_cast_arena_try_alloc_assigns_normal_part03`              |
+| 4  | `typed_cast_arena_try_alloc_non_null_out_ensures_part1`         |
+| 5  | `typed_cast_arena_try_alloc_non_null_out_ensures_part2`         |
+| 6  | `typed_cast_arena_try_alloc_aligned_assigns_normal_part03`      |
+| 7  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1` |
+| 8  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2` |
 
 **Coverage update (2026-10-05, VERIFY-036 F4).** This argument assumes the
 parent's postconditions per Cat 2b's argument, which VERIFY-036 found
 defective. Its status follows F4.
 
-**Coverage update (2026-10-05, VERIFY-036 F5) — goals 2 and 4 are false.**
-`arena_alloc_zero` and `arena_alloc_aligned_zero` zero the returned bytes,
-which lie in the buffer, not in `*arena`, the whole of their assigns clause.
-The two `assigns_normal_part3` goals fail because the clause is too narrow,
-not by inheritance from Cat 2b. Probe:
+**Coverage update (2026-10-05, VERIFY-036 F5) — two goals were false;
+closed.** The former goals 2 and 4, `arena_alloc_zero_assigns_normal_part3`
+and `arena_alloc_aligned_zero_assigns_normal_part3`, failed because the
+assigns clause named only `*arena` while the functions zero bytes of the
+buffer, not by inheritance from Cat 2b. F5 (c5281dc) added the free tail to
+both clauses and both goals closed at CI #1330, in every unit that pinned
+them; their rows are removed from the table above. Probe:
 `tools/probes/verify-036/p_zero_assigns.c`.
 
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
@@ -1169,11 +1169,11 @@ round-trip through ptr_offset, identical to cat 2a's situation.
 
 | Category | Goals | Functions affected                                            | WP feature gap                              |
 |----------|-------|---------------------------------------------------------------|---------------------------------------------|
-| 2a       | 8     | arena_alloc, arena_alloc_aligned                              | ptr.h empty nonnull behavior (VERIFY-006)   |
-| 2b       | 26    | arena_alloc, arena_alloc_aligned                              | arithmetic chain through ptr_align_up       |
-| 2c       | 10    | arena_alloc_zero, arena_alloc_aligned_zero, arena_try_alloc{,_aligned} | Wrapper delegation through cat 2b          |
-| 2d       | 2     | arena_free_bytes                                              | ptr.h empty nonnull behavior (VERIFY-006)   |
-| **Total**| **46**|                                                               |                                             |
+| 2a       | 4     | arena_alloc, arena_alloc_aligned                              | ptr.h empty nonnull behavior (VERIFY-006)   |
+| 2b       | 16    | arena_alloc, arena_alloc_aligned                              | arithmetic chain through ptr_align_up       |
+| 2c       | 8     | arena_alloc_zero, arena_alloc_aligned_zero, arena_try_alloc{,_aligned} | Wrapper delegation through cat 2b          |
+| 2d       | 0     | (retired at VERIFY-023)                                       | ptr.h empty nonnull behavior (VERIFY-006)   |
+| **Total**| **28**|                                                               | counts as of VERIFY-036 F5 (was 8/26/10/2, total 46) |
 
 Cats 2a, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no
@@ -1618,6 +1618,13 @@ CI #1285 (VERIFY-023). Five remain. This block covers 5 goals.
 assigns clause. The goal fails because the clause is too narrow;
 `pool_alloc`'s assigns goals all prove, so the "through-effect" below does not
 exist. Probe: `tools/probes/verify-036/p_zero_assigns.c`.
+
+**Coverage update (2026-10-05, VERIFY-036 F5 scored).** F5 (c5281dc) added the
+reserved window to the clause, so goal 1 is now true; it stays residual, as
+predicted, because `pool_alloc` states nothing about where its result lies and
+WP cannot place the zeroed slot in the window. The argument below still
+misattributes it; it is rewritten with F6, which states `pool_alloc`'s result
+address.
 
 **Functions affected**: `pool_alloc_zero`, `pool_reset`, `pool_reset_secure`.
 
@@ -9331,7 +9338,7 @@ printed by the per-line step is a regression.
 |----------------|-------|
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
-| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F3–F5 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
+| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F3, F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -9723,6 +9730,35 @@ No block retires; *A* in force stays 15.
 
 **Scoring rule.** F5 holds if the two arena goals leave every listed roll-call
 and nothing else moves; the pool goal staying is part of the prediction.
+
+### F5 — scored (fix c5281dc; CI #1330, CC #18)
+
+**Result: the prediction held exactly**, both medium-confidence closures included.
+
+| Job | Predicted | Observed |
+|-----|-----------|----------|
+| `frama-c-arena` | 3498 / 3574, 76 | 3498 / 3574, 76 |
+| `frama-c-arena-32` | 3498 / 3574, 76 | 3498 / 3574, 76 |
+| `frama-c-pool` | 3963 / 4050, 87 | 3963 / 4050, 87 |
+| `frama-c-region` | 3646 / 3745, 99 | 3646 / 3745, 99 |
+| `frama-c-vec` | 5339 / 5520, 181 | 5339 / 5520, 181 |
+| `frama-c-stringbuf` | 4769 / 4847, 78 | 4769 / 4847, 78 |
+| `cc-vec` (`frama-c-cc.yml`) | 5396 / 5585, 189 | 5396 / 5585, 189 |
+
+**By name.** Where a roll-call ran (arena-32, stringbuf, cc-vec), exactly the
+two arena goals left and nothing new arrived.
+`pool_alloc_zero_assigns_normal_part3` stayed in the pool list, as predicted
+(H), and no `pool_try_alloc_zero` goal appeared. Every total was unchanged, as
+predicted. arena-32 again reported the closures against its embedded pre-fix
+baseline; the 64-bit job lost the same two names, so width invariance held. No
+job outside the seven went red.
+
+**What the closures show.** The two goals closed the moment their clause
+stated what the code writes, with nothing else changed, so they were false
+obligations, not inherited difficulty: Cat 2c's attribution to the fits chain
+is refuted by measurement for both. Arena Cat 2c covers 8 (was 10). Pool Cat
+2d still covers 5, its `pool_alloc_zero` goal now true and still misattributed
+until F6. No block retires; *A* in force stays 15.
 
 ### For the paper
 

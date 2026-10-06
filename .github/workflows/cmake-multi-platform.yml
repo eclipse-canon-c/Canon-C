@@ -1517,7 +1517,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_arena_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_arena_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=78   # VERIFY-036 F1 ratchet (CI #1326): was 79
+          EXPECTED_UNPROVED=76   # VERIFY-036 F5 ratchet (CI #1330): was 78 (F1: was 79)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -1550,8 +1550,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "3496 / 3574" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3496 / 3574)."
+          if [ "${PROVED_COUNT}" != "3498 / 3574" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3498 / 3574)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1638,9 +1638,7 @@ jobs:
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
             "typed_cast_arena_alloc_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
             "typed_cast_arena_try_alloc_assigns_normal_part03"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
@@ -1672,7 +1670,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: arena.h verified — 3496/3574 proved, 78 documented"
+          echo "PASS: arena.h verified — 3498/3574 proved, 76 documented"
           echo "      residuals all observed (VERIFY-009): 43 inherited +"
           echo "      40 arena.h-own (48 until VERIFY-023 closed 8). Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
@@ -1745,7 +1743,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_pool_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_pool_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=89   # VERIFY-036 F2 ratchet (CI #1328): was 90 (F1: was 91)
+          EXPECTED_UNPROVED=87   # VERIFY-036 F5 ratchet (CI #1330): was 89 (F2: 90, F1: 91)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -1778,8 +1776,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "3961 / 4050" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3961 / 4050)."
+          if [ "${PROVED_COUNT}" != "3963 / 4050" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3963 / 4050)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1866,9 +1864,7 @@ jobs:
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
             "typed_cast_arena_alloc_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
             "typed_cast_arena_try_alloc_assigns_normal_part03"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
@@ -1911,7 +1907,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: pool.h verified — 3961/4050 proved, 89 documented"
+          echo "PASS: pool.h verified — 3963/4050 proved, 87 documented"
           echo "      residuals all observed by name (VERIFY-010): 89"
           echo "      inherited (arena.h's full surface, verbatim) + 24"
           echo "      pool.h-own. Full set equality enforced. Composable"
@@ -2007,7 +2003,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_region_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_region_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=101   # VERIFY-036 F1 ratchet (CI #1326): was 102
+          EXPECTED_UNPROVED=99   # VERIFY-036 F5 ratchet (CI #1330): was 101 (F1: was 102)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -2040,8 +2036,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "3644 / 3745" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3644 / 3745)."
+          if [ "${PROVED_COUNT}" != "3646 / 3745" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3646 / 3745)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2128,9 +2124,7 @@ jobs:
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
             "typed_cast_arena_alloc_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
             "typed_cast_arena_try_alloc_assigns_normal_part03"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
@@ -2185,7 +2179,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: region.h verified — 3644/3745 proved, 101 documented"
+          echo "PASS: region.h verified — 3646/3745 proved, 99 documented"
           echo "      residuals all observed by name (VERIFY-011): 89"
           echo "      inherited (arena.h's full surface, verbatim) + 23"
           echo "      region.h-own. Full set equality enforced. Composable"
@@ -2377,8 +2371,8 @@ jobs:
           echo "==============================================="
           echo "  WP (arena.h, ${MACHDEP}) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — gate is SET EQUALITY with the 64-bit residuals."
-          echo "  64-bit baseline for comparison: 3496 / 3574 proved,"
-          echo "  78 residuals (VERIFY-009, ratcheted by VERIFY-023 and VERIFY-036 F1)."
+          echo "  64-bit baseline for comparison: 3498 / 3574 proved,"
+          echo "  76 residuals (VERIFY-009, ratcheted by VERIFY-023 and VERIFY-036 F1, F5)."
           echo "==============================================="
 
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_arena32_output.txt || true)
@@ -2485,9 +2479,7 @@ jobs:
           typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5
           typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5
           typed_cast_arena_alloc_zero_ensures_3_part1
-          typed_cast_arena_alloc_zero_assigns_normal_part3
           typed_cast_arena_alloc_aligned_zero_ensures_3_part1
-          typed_cast_arena_alloc_aligned_zero_assigns_normal_part3
           typed_cast_arena_try_alloc_assigns_normal_part03
           typed_cast_arena_try_alloc_non_null_out_ensures_part1
           typed_cast_arena_try_alloc_non_null_out_ensures_part2
@@ -2577,8 +2569,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "3496 / 3574" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3496 / 3574)."
+          if [ "${PROVED_COUNT}" != "3498 / 3574" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3498 / 3574)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"
             echo "      and this job's embedded baseline in one commit."
             FAILURES=$((FAILURES + 1))
@@ -2598,7 +2590,7 @@ jobs:
 
           if [ "${FAILURES}" -eq 0 ]; then
             echo "PASS: arena.h proves identically at 32-bit and 64-bit —"
-            echo "      3496/3574, 78 residuals, same 78 names, zero delta."
+            echo "      3498/3574, 76 residuals, same 76 names, zero delta."
             echo "      Machdep control established. Tier 1's minimum width"
             echo "      is evidenced, not asserted."
           else
@@ -3251,7 +3243,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-036 F1 ratchet: 5337/5520, 183 unproved (VERIFY-034: 5337/5521, 184)"
+          echo "  baseline: VERIFY-036 F5 ratchet: 5339/5520, 181 unproved (F1: 5337/5520, 183)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3290,8 +3282,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "5337 / 5520" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5337 / 5520)."
+          if [ "${PROVED_COUNT}" != "5339 / 5520" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5339 / 5520)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3307,7 +3299,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=183   # VERIFY-036 F1 ratchet (CI #1326): was 184
+          EXPECTED_UNPROVED=181   # VERIFY-036 F5 ratchet (CI #1330): was 183 (F1: was 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
@@ -3482,9 +3474,7 @@ jobs:
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_part5"
             "typed_cast_arena_alloc_aligned_does_not_fit_ensures_2_part5"
             "typed_cast_arena_alloc_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
-            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
             "typed_cast_arena_try_alloc_assigns_normal_part03"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part1"
             "typed_cast_arena_try_alloc_non_null_out_ensures_part2"
@@ -6457,9 +6447,9 @@ jobs:
         # ENFORCED from VERIFY-035. Gates, all exact:
         #   (0) a summary exists
         #   (1) zero Failed / Invalid / Stepout
-        #   (2) proved line == 4767 / 4847   (VERIFY-036 F1; was 4767 / 4848)
-        #   (3) Timeout + Unknown == 80   (VERIFY-036 F1; was 81)
-        #   (4) roll-call: the unproved names == the 80 pinned below, by
+        #   (2) proved line == 4769 / 4847   (VERIFY-036 F5; F1: 4767 / 4847)
+        #   (3) Timeout + Unknown == 78   (VERIFY-036 F5; F1: 80)
+        #   (4) roll-call: the unproved names == the 78 pinned below, by
         #       set equality (nothing missing, nothing extra; own == 0)
         # A ratchet edits (2), (3) and the INHERITED roll-call together.
         run: |
@@ -6491,7 +6481,7 @@ jobs:
           echo "==============================================="
           echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
-          echo "  pinned: 4767 / 4847, 80 unproved, all inherited (VERIFY-035; VERIFY-036 F1)"
+          echo "  pinned: 4769 / 4847, 78 unproved, all inherited (VERIFY-035; VERIFY-036 F1, F5)"
           echo "==============================================="
           echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
           grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
@@ -6539,7 +6529,6 @@ jobs:
             "typed_cast_arena_alloc_aligned_fits_ensures_address_part4"
             "typed_cast_arena_alloc_aligned_fits_ensures_part3"
             "typed_cast_arena_alloc_aligned_fits_ensures_part4"
-            "typed_cast_arena_alloc_aligned_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
             "typed_cast_arena_alloc_call_ptr_span_requires"
             "typed_cast_arena_alloc_call_ptr_span_requires_2"
@@ -6549,7 +6538,6 @@ jobs:
             "typed_cast_arena_alloc_fits_ensures_3_part4"
             "typed_cast_arena_alloc_fits_ensures_address_part4"
             "typed_cast_arena_alloc_fits_ensures_part4"
-            "typed_cast_arena_alloc_zero_assigns_normal_part3"
             "typed_cast_arena_alloc_zero_ensures_3_part1"
             "typed_cast_arena_try_alloc_aligned_assigns_normal_part03"
             "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1"
@@ -6620,9 +6608,9 @@ jobs:
             comm -23 /tmp/sb_own.txt /tmp/sb_grouped.txt > /tmp/sb_other.txt
             echo ""
             echo "  ================ EVIDENCE (families from the arc, VERIFY-031..035) ================"
-            echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 80 pinned (run 1's 81, less VERIFY-036 F1)"
+            echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 78 pinned (run 1's 81, less VERIFY-036 F1 and F5)"
             echo "      predicted but not observed: $(wc -l < /tmp/sb_inh_missing.txt)"; show /tmp/sb_inh_missing.txt
-            echo "  own (everything outside the 80): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run 3: 3, VERIFY-033 pred: 0)"
+            echo "  own (everything outside the 78): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run 3: 3, VERIFY-033 pred: 0)"
             echo "  A2  init_arena (VERIFY-033 F3 pred: none — run 3 had 3):"
             show /tmp/sb_ia.txt
             echo "  G1/G6 helper seam: no_overlap, add_pos, mem_copy (pred: none):"
@@ -6643,14 +6631,14 @@ jobs:
               echo "  ================ VERIFY-035 GATES (ENFORCED) ================"
               BAD=$((F + I + S))
               if [ "${BAD}" -ne 0 ]; then note_fail "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."; else echo "  (1) Failed/Invalid/Stepout: 0  OK"; fi
-              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4767 / 4847"; then
-                note_fail "FAIL (2): proved-goal summary changed (pinned: 4767 / 4847). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
-              else echo "  (2) proved: 4767 / 4847  OK"; fi
-              if [ "$((T + U))" -ne 80 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 80."; else echo "  (3) unproved count: 80  OK"; fi
+              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4769 / 4847"; then
+                note_fail "FAIL (2): proved-goal summary changed (pinned: 4769 / 4847). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
+              else echo "  (2) proved: 4769 / 4847  OK"; fi
+              if [ "$((T + U))" -ne 78 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 78."; else echo "  (3) unproved count: 78  OK"; fi
               NMISS=$(wc -l < /tmp/sb_inh_missing.txt); NOWN=$(wc -l < /tmp/sb_own.txt)
               if [ "${NMISS}" -ne 0 ] || [ "${NOWN}" -ne 0 ]; then
-                note_fail "FAIL (4): roll-call — pinned 80, missing ${NMISS}, unpinned ${NOWN} (lists above)."
-              else echo "  (4) roll-call: pinned 80, missing 0, unpinned 0  OK"; fi
+                note_fail "FAIL (4): roll-call — pinned 78, missing ${NMISS}, unpinned ${NOWN} (lists above)."
+              else echo "  (4) roll-call: pinned 78, missing 0, unpinned 0  OK"; fi
               echo "  ============================================================="
             fi
           fi

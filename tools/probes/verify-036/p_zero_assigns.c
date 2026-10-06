@@ -23,8 +23,9 @@
  *
  * Build from the repository root:
  *   gcc -std=c99 -Wall -Wextra -DCANON_NO_REQUIRE -DNDEBUG -I. tools/probes/verify-036/p_zero_assigns.c -o p && ./p
- * Expected: both lines report a byte that was 0xFF and is now 0x00, at a
- * location outside the declared assigns set.
+ * Expected: both lines report a byte that was 0xFF and is now 0x00. Before
+ * F5 (c5281dc) that location was outside the declared assigns set; F5 added
+ * the arena's free tail and the pool's reserved window to the clauses.
  */
 #define CANON_CONTRACT_IMPL
 #include <stdio.h>
