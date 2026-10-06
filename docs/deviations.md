@@ -9760,6 +9760,45 @@ is refuted by measurement for both. Arena Cat 2c covers 8 (was 10). Pool Cat
 2d still covers 5, its `pool_alloc_zero` goal now true and still misattributed
 until F6. No block retires; *A* in force stays 15.
 
+### F6 — `pool_alloc` states its result address (committed prediction)
+
+**Why.** F5 left `pool_alloc_zero_assigns_normal_part3` true but unprovable,
+and `pool_alloc_zero_call_mem_zero_requires` (pool Cat 2c) fails for the same
+reason: `pool_alloc`'s contract says nothing about where its result lies, so
+WP cannot place the slot `pool_alloc_zero` zeroes. That is VERIFY-023's
+opaque-result pattern one level up: VERIFY-023 made `ptr_elem` state its
+result; `pool_alloc`, which returns `ptr_elem`'s result, never passed it on.
+
+**Change.** One clause in `pool_alloc`'s `alloc` behaviour: `ensures address:
+(u8*)\result == pool->arena->buffer + pool->base_mark + \old(pool->used) *
+pool->object_size;` No executable change.
+
+**Prediction.** Only `frama-c-pool` moves; no other verified unit includes `core/pool.h`.
+
+- (H/M) The new clause proves: `ptr_offset` and `ptr_elem` already state their
+  results (VERIFY-023), so the address is their composition. No residual
+  appears.
+- (M) Both `pool_alloc_zero` goals close:
+  `pool_alloc_zero_call_mem_zero_requires` and
+  `pool_alloc_zero_assigns_normal_part3`. Each needs the slot inside the
+  reserved window, which is the nonlinear step `(used + 1) * object_size <=
+  capacity * object_size` from `used < capacity`. They rest on the same fact, so
+  they should close or stay together; if they stay, they are true solver-limit
+  residuals and get a correct class (a) argument.
+- (M) The clause adds two goals, one per path of `pool_alloc`'s early return,
+  the infeasible one discharged as unreachable.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-pool` | 3963 / 4050, 87 | 3967 / 4052, 85 |
+
+**Blocks.** If both close: pool Cat 2c covers nothing and retires (*A* in
+force 15 → 14), and pool Cat 2d covers 4 (was 5).
+
+**Scoring rule.** F6 holds if no residual appears, both `pool_alloc_zero`
+goals leave the roll-call, the total grows by 2, and only `frama-c-pool` goes
+red.
+
 ### For the paper
 
 §3.3's worked example is F2's goal, and its explanation changes. §5 gains a row
