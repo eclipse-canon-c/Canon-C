@@ -9676,6 +9676,54 @@ exact, as P5 records.
 **What it changes.** VERIFY-010 Cat 2b covers nothing and retires: *A* in
 force 16 → 15. Runtime behaviour, MC/DC and MISRA (54 = 54) did not move.
 
+### F5 — committed prediction (before the fix commit)
+
+**Change.** The zeroed bytes join the assigns clauses. `arena_alloc_zero` and
+`arena_alloc_aligned_zero` gain `((char *)arena->buffer)[arena->offset ..
+arena->capacity - 1]`, the free tail, which contains every byte the call can
+zero. `pool_alloc_zero` and `pool_try_alloc_zero` gain `((char
+*)pool->arena->buffer)[pool->base_mark .. pool->end_mark - 1]`, the reserved
+window. The `char` typing matches `mem_zero`'s own assigns clause. No
+executable change. `pool_try_alloc_zero` is included because it calls
+`pool_alloc_zero`: left narrow, its frame would become the next false clause.
+
+**Prediction.**
+
+- (M) The two arena goals close: `arena_alloc_zero_assigns_normal_part3` and
+  `arena_alloc_aligned_zero_assigns_normal_part3`. `arena_alloc`'s contract
+  already gives the result's address, the offset bound and the frame of `buffer`
+  (VERIFY-033), which place the zeroed bytes inside the free tail. They close in
+  every unit that pins them. Risk: the inclusion can still fail on location
+  typing under Typed+Cast; then the goals stay, true.
+- (H) `pool_alloc_zero_assigns_normal_part3` stays residual, now true.
+  `pool_alloc` states nothing about where its result lies, so WP cannot place
+  the zeroed slot inside the window. That is VERIFY-023's opaque-result pattern
+  one level up, and it is also why `pool_alloc_zero_call_mem_zero_requires` (Cat
+  2c) does not prove. Stating `pool_alloc`'s result address is a follow-up (F6),
+  not part of F5.
+- (M) No goal opens, `pool_try_alloc_zero` included, and every total is
+  unchanged: an assigns clause gains a location, not a goal.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-arena` | 3496 / 3574, 78 | 3498 / 3574, 76 |
+| `frama-c-arena-32` | 3496 / 3574, 78 | 3498 / 3574, 76; 64/32 set equality holds |
+| `frama-c-pool` | 3961 / 4050, 89 | 3963 / 4050, 87 |
+| `frama-c-region` | 3644 / 3745, 101 | 3646 / 3745, 99 |
+| `frama-c-vec` | 5337 / 5520, 183 | 5339 / 5520, 181 |
+| `frama-c-stringbuf` | 4767 / 4847, 80 | 4769 / 4847, 78 |
+| `cc-vec` (`frama-c-cc.yml`) | 5394 / 5585, 191 | 5396 / 5585, 189 |
+
+Memory, bitset and priority-queue do not include `core/arena.h` and do not
+move.
+
+**Blocks.** Arena Cat 2c covers 8 (was 10). Pool Cat 2d still covers 5, but
+its argument for the `pool_alloc_zero` goal is wrong and is rewritten with F6.
+No block retires; *A* in force stays 15.
+
+**Scoring rule.** F5 holds if the two arena goals leave every listed roll-call
+and nothing else moves; the pool goal staying is part of the prediction.
+
 ### For the paper
 
 §3.3's worked example is F2's goal, and its explanation changes. §5 gains a row
