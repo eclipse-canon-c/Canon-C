@@ -9838,6 +9838,48 @@ cause, the `ptr_offset` boundary, had been stale since VERIFY-023 removed it:
 one more misattributed obligation, at obligation level. Cat 2c retires and Cat
 2d covers 4: *A* in force 15 → 14.
 
+### F3 — committed prediction (before the fix commit)
+
+**Design (decided 2026-10-06).** Both allocators compute `pad` with
+`ptr_align_padding(current, alignment)`, which works on the address as an
+integer, instead of forming `ptr_align_up(current, alignment)` and subtracting
+it with `ptr_span`. No pointer past the buffer is formed and no pointer
+subtraction remains; the result pointer is still formed by `ptr_offset` after
+the capacity guard, as now. Run-time results are unchanged wherever the old
+code was defined. F4, the predicate, follows as its own change.
+
+**Prediction.**
+
+- (H) The four `arena_alloc{,_aligned}_call_ptr_span_requires{,_2}` residuals
+  vanish from every unit that pins them: arena, arena-32, pool, region, vec,
+  stringbuf and cc-vec. No residual appears: `ptr_align_padding`'s two requires
+  are the pair `ptr_align_up`'s were, and those proved.
+- (M) In each of those units the total falls by 8 and proved by 4: each
+  allocator loses four `ptr_span` and two `ptr_align_up` call-site goals and
+  gains two `ptr_align_padding` ones.
+- (M/H) The 16 Cat 2b goals stay residual under unchanged names. `pad` is still
+  known only to lie in `[0, alignment)`, which is what `ptr_align_up` gave; they
+  stay false for unaligned buffers until F4.
+- `p_arena_span.c` runs clean under ASan pointer-pair checking; `p_arena_pad.c`
+  still reports three violations.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-arena` | 3498 / 3574, 76 | 3494 / 3566, 72 |
+| `frama-c-arena-32` | 3498 / 3574, 76 | 3494 / 3566, 72; 64/32 set equality holds |
+| `frama-c-pool` | 3967 / 4052, 85 | 3963 / 4044, 81 |
+| `frama-c-region` | 3646 / 3745, 99 | 3642 / 3737, 95 |
+| `frama-c-vec` | 5339 / 5520, 181 | 5335 / 5512, 177 |
+| `frama-c-stringbuf` | 4769 / 4847, 78 | 4765 / 4839, 74 |
+| `cc-vec` (`frama-c-cc.yml`) | 5396 / 5585, 189 | 5392 / 5577, 185 |
+
+**Blocks.** VERIFY-009 Cat 2a covers nothing and retires: *A* in force 14 →
+13. Its goals vanish rather than close: the call that generated them is gone.
+
+**Scoring rule.** F3 holds if the four names leave every listed roll-call with
+nothing new, and only the seven listed jobs go red. The counts are scored as
+observed.
+
 ### For the paper
 
 §3.3's worked example is F2's goal, and its explanation changes. §5 gains a row
