@@ -10123,3 +10123,72 @@ the job is green, P1 to P4 hold; if not, the gate output says which part
 failed. After scoring, `tools/idioms` is extended to read the `-CC` matrix and
 the catalogue is rebuilt, so that `option@struct` and `vec@struct` become
 catalogued and the driver itself measures n = 0.
+
+## VERIFY-038: Scoring VERIFY-037 — Unscored, Its Premise Refuted: option's Contracts State Zero With an Integer Literal; Re-registered With an Aggregate Variant
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-038 |
+| **Date**       | 2026-10-08 |
+| **Status**     | VERIFY-037 SCORED (unscorable, premise refuted); RE-REGISTERED — predictions below precede the fix commit |
+| **Evidence**   | CC #26 (99613e4), job `frama-c-cc-vec_struct`: Frama-C aborted in the kernel; WP never ran |
+| **Scope**      | `semantics/option/option_defn.h` (new aggregate variants of `none` and `take`), `vmacros/vdrivers/vec_struct_cc_experiment.h`, the `vec_struct` matrix entry |
+
+**What happened.** Frama-C rejected the translation unit before generating a
+single goal:
+
+    [kernel:annot-error] vec_struct_cc_experiment.h:19: Warning:
+      incompatible types ℤ and Rec. Ignoring logic specification of function option_Rec_none
+    [kernel] User Error: warning annot-error treated as fatal error.
+
+`DEFINE_OPTION_NONE` promises `ensures \result.value == 0;` and
+`DEFINE_OPTION_TAKE` promises `ensures o->value == 0;`. At an integer element
+both type-check; at a struct they compare a record with an integer literal,
+and the contract is ill-typed. Frama-C stops at the first such error, so only
+`none` was reported; `take` carries the same clause. A scan of every
+`Rec`-typed contract after `-CC` expansion finds no third site.
+
+**Score.** P1 to P4 are unscorable: no goal exists. The premise is refuted.
+VERIFY-037 said that at a struct type "nothing else in the translation unit
+differs" beyond structural equality, struct copies and the element size. That
+was wrong: `option`'s contracts are not type-generic. They state the zero
+value of an empty option with an integer literal, so `option` at a struct type
+was never verifiable as written. No residual and no argument is involved; the
+finding is a contract that only type-checks at scalar element types, surfaced
+by the catalogue extension before any goal existed. The prediction did not
+anticipate it.
+
+**Decision.** Three repairs were considered. Dropping both clauses everywhere
+would give one macro for every type but remove a verified guarantee — no
+indeterminate memory exposed through `.value` — from every scalar
+instantiation, and re-pin about ten jobs. Comparing against a zero-initialized
+`static const` of type *T* would keep the guarantee generically, but changes
+every scalar contract with uncertain provability. Chosen: **aggregate
+variants**. `DEFINE_OPTION_NONE_AGGREGATE` and `DEFINE_OPTION_TAKE_AGGREGATE`
+are the same functions with the zero clause removed, assembled by
+`DEFINE_OPTION_FUNCTIONS_AGGREGATE` and `DEFINE_OPTION_ALL_AGGREGATE`. Every
+existing instantiation keeps its contract exactly; a struct instantiation gets
+an honest, weaker one. The C bodies are unchanged, so the value is still
+zero-initialized; the contract no longer states it, because ACSL has no
+type-generic zero.
+
+### Re-registered predictions (for the fix commit)
+
+- **P0 (M).** Frama-C accepts the corrected translation unit: the two zero
+  clauses were the only scalar-only constructs, and the structural equalities in
+  `vec`'s contracts are well-typed. A further `annot-error` would be the next
+  finding, recorded the same way.
+- **P1.** Zero new argument blocks.
+- **P2.** The residual set is `cc_pins/vec_struct.txt` as committed with
+  VERIFY-037 (38404b9), unchanged: the removed clauses were proved goals at
+  `int`, so removing them removes no residual. P2a (option arm, H), P2b (result
+  and substrate arms, H) and P2c (vec arm, M) as before.
+- **P3 (M).** 5404 / 5573 proved, 169 unproved: two goals fewer than `cc-vec`,
+  one per removed clause (`option_*_none`'s second `ensures`, `option_*_take`'s
+  fourth), each proved at `int`.
+- **P4 (H).** No Failed, Invalid or Stepout goal.
+- **P5 (H).** No existing job moves: the new macros are used only by the
+  `vec_struct` driver.
+
+**Scoring rule.** As VERIFY-037: by part, P0 first; the `-CC` gate scores P2
+and P3 mechanically, P1 after classification against the code.
