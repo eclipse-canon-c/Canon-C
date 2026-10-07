@@ -598,6 +598,10 @@ static inline bool ptr_is_aligned(const void* p, usize align) {
     behavior nonnull:
         assumes p != \null;
         ensures \result < align;
+        // VERIFY-036 F4: the exact value, align_padding's ensures with its
+        // argument substituted; callers need it to relate pad to an address.
+        ensures exact: \result == (((usize)(uintptr_t)p + align - 1) & ~(align - 1))
+                                   - (usize)(uintptr_t)p;
     complete behaviors;
     disjoint behaviors;
  */

@@ -115,9 +115,13 @@ typedef usize ArenaMark;
       a->offset <= a->capacity &&
       \valid(a->buffer + (0 .. a->capacity - 1));
 
+  // VERIFY-036 F4: the pad is computed from the address, as the code computes
+  // it (ptr_align_padding); padding from the offset agreed only for aligned
+  // buffers.
   predicate arena_can_fit{L}(Arena *a, integer size, integer alignment) =
-      \let cur = a->offset;
-      \let pad = (alignment - (cur % alignment)) % alignment;
+      \let cur  = a->offset;
+      \let addr = (usize)(uintptr_t)(a->buffer + cur);
+      \let pad  = ((addr + alignment - 1) & ~(alignment - 1)) - addr;
       cur <= CANON_USIZE_MAX - pad &&
       cur + pad <= CANON_USIZE_MAX - size &&
       cur + pad + size <= a->capacity;
