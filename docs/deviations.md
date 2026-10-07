@@ -10054,3 +10054,72 @@ Each fix is scored goal by goal in a later record, as VERIFY-027 scored
 VERIFY-026. Probes become regression tests as their fixes land, except
 `p_arena_span.c`, which needs ASan's pointer-pair checking and stays a recorded
 probe unless a sanitizer job adopts it.
+
+## VERIFY-037: Pre-registration — vec and option at a Struct Type: Extending the Catalogue the §4.3 Test Is Measured Against
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-037 |
+| **Date**       | 2026-10-08 |
+| **Status**     | PRE-REGISTERED — the driver is not yet in CI; the predicted pin is committed with this entry |
+| **Baseline**   | da323da (CI #1337 substrate; `tools/idioms` catalogue at 6290f4a) |
+| **Scope**      | a bare `-CC` driver, `vmacros/vdrivers/vec_struct_cc_experiment.h`, instantiating `option(Rec)`, `result(bool, Error)` and `vec(Rec)` with `Rec = struct { u32 id; i64 due; }`; verified as a new `-CC` family `vec_struct` (Typed+Cast, the `cc-vec` flags) |
+| **Category**   | Catalogue extension for the §4.3 test; a third prospective test of P1 (zero new argument blocks) |
+
+**Why this record exists.** The committed test of the paper's §4.3 needs a
+program *P* with n(*P*) = 0, computed by `tools/idioms` from source text
+alone. `vec` and `option` have only ever been verified at integer types, so a
+realistic program that stores records in a `vec` measures n(*P*) = 1
+(`family:vec@struct`) and leaves the zero case untested. Rather than shape *P*
+around the catalogue, this record extends the catalogue: it verifies both
+families at a struct type. Under `-CC` the contracts live in the macro bodies
+(VERIFY-025), so the struct instantiation is verified against the same
+contract text as `cc-vec`'s, with nothing duplicated that could drift.
+
+**What changes at a struct type.** Element equality in the contracts becomes
+structural equality on records — `v->items[i] == val` in `set`, the
+`v->items[\old(v->len)] == item` postconditions of the push family, and every
+frame clause `v->items[k] == \old(v->items[k])`; element assignment becomes a
+struct copy; and the element size passed to `mem_move` and `mem_copy` becomes
+16 bytes instead of 4. Nothing else in the translation unit differs: the
+result instantiation and the substrate are the same, and `gcc -E -CC` exposes
+169 ACSL blocks for both drivers.
+
+**Measured now (not predicted).** `tools/idioms` measures the driver at
+n = 2 against the da323da catalogue: `family:option@struct` and
+`family:vec@struct`, and nothing else.
+
+### Predictions
+
+- **P1 (zero new argument blocks).** Every residual of `vec_struct` is covered
+  by an argument already in the record, judged against the code, not the name.
+- **P2 (by name; committed as `cc_pins/vec_struct.txt`).** The residual set is
+  `cc_pins/vec.txt` with `vec_int_` renamed to `vec_Rec_` and `option_int_` to
+  `option_Rec_`: 169 names, of which 85 are renamed. Scored by part:
+  - P2a (H): the option arm, 32 names, renamed exactly. Its residuals are
+    function-pointer, termination and frame shapes that do not mention the
+    element type.
+  - P2b (H): the result arm (28) and the substrate arm (56) are byte-identical:
+    the same instantiation and the same includes.
+  - P2c (M): the vec arm, 53 names, renamed exactly. If it fails, every
+    difference is in a function whose contract compares elements — `set`, the
+    push family, `insert`, `remove`, `swap`, `fill`, `pop` — the
+    structural-equality sites.
+- **P3 (counts, L).** 5406 / 5575 proved, 169 unproved — identical to `cc-vec`,
+  since the annotations and the runtime-error structure are the same. Committed
+  as the matrix entry. Count predictions have missed before (VERIFY-034,
+  VERIFY-036 F2 and F3), hence the low confidence.
+- **P4 (H).** No Failed, Invalid or Stepout goal.
+
+**Scoring rule.** By part, in the order above. The `-CC` gate scores P2 and P3
+mechanically: a missing name is a renamed residual that proved, an unpinned
+name is a new one. P1 is scored after classification: an unpinned residual
+that no existing argument's mechanism covers, read against the code, refutes
+it; its class and shape are then the result.
+
+**Procedure.** This commit holds the prediction and the predicted pin. The
+next commit adds the driver and the matrix entry; the `-CC` run scores it. If
+the job is green, P1 to P4 hold; if not, the gate output says which part
+failed. After scoring, `tools/idioms` is extended to read the `-CC` matrix and
+the catalogue is rebuilt, so that `option@struct` and `vec@struct` become
+catalogued and the driver itself measures n = 0.
