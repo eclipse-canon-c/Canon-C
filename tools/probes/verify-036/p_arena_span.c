@@ -24,7 +24,8 @@
  * Build from the repository root:
  *   gcc -std=c99 -g -fsanitize=address,pointer-subtract -I. tools/probes/verify-036/p_arena_span.c -o p
  *   ASAN_OPTIONS=detect_invalid_pointer_pairs=2 ./p
- * Expected: AddressSanitizer: invalid-pointer-pair in ptr_span <- arena_alloc.
+ * Expected before F3 (baf8ee9): AddressSanitizer: invalid-pointer-pair in
+ * ptr_span <- arena_alloc. Since F3: runs clean, the allocation returns NULL.
  */
 #define CANON_CONTRACT_IMPL
 #include <stdio.h>

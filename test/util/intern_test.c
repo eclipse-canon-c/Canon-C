@@ -86,6 +86,10 @@ typedef struct {
 } TestFixture;
 
 static bool fixture_init(TestFixture* f, usize capacity) {
+    /* Zero first: most tests ignore the result, and a failed init leaves
+       pool fields unset. mingw GCC -O3 flagged the read as
+       -Wmaybe-uninitialized once VERIFY-036 F3 changed arena_alloc. */
+    memset(f, 0, sizeof *f);
     arena_init(&f->arena, f->backing, sizeof(f->backing));
     return intern_pool_init(&f->pool, &f->arena, capacity);
 }

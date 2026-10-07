@@ -881,7 +881,7 @@ memory.h+substrate → arena.h with 43 inherited), is that substrate
 residuals propagate without amplification: a downstream header's
 inherited count equals the upstream's total, not greater.
 
-### arena.h-own residuals (28 — was 46)
+### arena.h-own residuals (24 — was 46)
 
 Four categories. Cats 2a and 2d are call-chain residuals at ptr.h
 boundary functions whose `nonnull` behavior carries no `ensures` clause
@@ -889,7 +889,7 @@ boundary functions whose `nonnull` behavior carries no `ensures` clause
 arithmetic-chain residual at arena_alloc / arena_alloc_aligned. Cat 2c
 inherits from cat 2b through wrapper delegation.
 
-#### Category 2a: ptr_span call-site preconditions in arena_alloc / arena_alloc_aligned (4 — was 8)
+#### Category 2a: ptr_span call-site preconditions in arena_alloc / arena_alloc_aligned (0 — RETIRED at VERIFY-036 F3; was 4, originally 8)
 
 | # | Goal                                                      |
 |---|------------------------------------------------------------|
@@ -914,6 +914,12 @@ itself outside C99 6.5.6p9, so weakening `ptr_span`'s requires would not cover
 it. The argument below says both pointers lie within the buffer; it is wrong
 for exactly the goals it still covers. Probe:
 `tools/probes/verify-036/p_arena_span.c`.
+
+**Coverage update (2026-10-07, VERIFY-036 F3) — this argument is RETIRED.** F3
+(baf8ee9) computes the pad on the address with `ptr_align_padding` and no
+longer calls `ptr_align_up` or `ptr_span`; the four goals vanished at CI #1334
+in every unit that pinned them. They were removed, not proved: the call that
+generated them is gone. Rows kept for legibility.
 
 **Functions affected**: `arena_alloc`, `arena_alloc_aligned`.
 
@@ -1169,11 +1175,11 @@ round-trip through ptr_offset, identical to cat 2a's situation.
 
 | Category | Goals | Functions affected                                            | WP feature gap                              |
 |----------|-------|---------------------------------------------------------------|---------------------------------------------|
-| 2a       | 4     | arena_alloc, arena_alloc_aligned                              | ptr.h empty nonnull behavior (VERIFY-006)   |
+| 2a       | 0     | (retired at VERIFY-036 F3)                                    | ptr.h empty nonnull behavior (VERIFY-006)   |
 | 2b       | 16    | arena_alloc, arena_alloc_aligned                              | arithmetic chain through ptr_align_up       |
 | 2c       | 8     | arena_alloc_zero, arena_alloc_aligned_zero, arena_try_alloc{,_aligned} | Wrapper delegation through cat 2b          |
 | 2d       | 0     | (retired at VERIFY-023)                                       | ptr.h empty nonnull behavior (VERIFY-006)   |
-| **Total**| **28**|                                                               | counts as of VERIFY-036 F5 (was 8/26/10/2, total 46) |
+| **Total**| **24**|                                                               | counts as of VERIFY-036 F3 (was 8/26/10/2, total 46) |
 
 Cats 2a, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no
@@ -9350,7 +9356,7 @@ printed by the per-line step is a regression.
 |----------------|-------|
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
-| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F6 fixed (c069881) and scored exact at CI #1332 / CC #20; F3, F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
+| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F6 fixed (c069881) and scored exact at CI #1332 / CC #20; F3 fixed (baf8ee9) and scored at CI #1334 / CC #21 (exact on names; count and job-set misses recorded); F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -9509,7 +9515,8 @@ No block retires yet, and *A* in force stays 16 until a fix closes a block's
 last goal; F2 is predicted to retire VERIFY-010 Cat 2b. Each affected block
 carries a 2026-10-05 coverage update naming its finding, with the original
 argument kept legible, as for the retired Cat 2d. F2 retired VERIFY-010 Cat 2b
-(CI #1328) and F6 retired VERIFY-010 Cat 2c (CI #1332): *A* in force is 14.
+(CI #1328) and F6 retired VERIFY-010 Cat 2c (CI #1332), and F3 retired VERIFY-009 Cat 2a (CI #1334):
+*A* in force is 13.
 
 All four defects sit in modules 5–7, the rising segment of the budget curve,
 as VERIFY-023's 24 misattributions did.
@@ -9879,6 +9886,47 @@ code was defined. F4, the predicate, follows as its own change.
 **Scoring rule.** F3 holds if the four names leave every listed roll-call with
 nothing new, and only the seven listed jobs go red. The counts are scored as
 observed.
+
+### F3 — scored (fix baf8ee9; CI #1334, CC #21)
+
+**Result: exact on every goal name and every unproved count; two misses, both recorded.**
+
+| Job | Predicted | Observed |
+|-----|-----------|----------|
+| `frama-c-arena` | 3494 / 3566, 72 | 3490 / 3562, 72 |
+| `frama-c-arena-32` | 3494 / 3566, 72 | 3490 / 3562, 72 |
+| `frama-c-pool` | 3963 / 4044, 81 | 3959 / 4040, 81 |
+| `frama-c-region` | 3642 / 3737, 95 | 3638 / 3733, 95 |
+| `frama-c-vec` | 5335 / 5512, 177 | 5331 / 5508, 177 |
+| `frama-c-stringbuf` | 4765 / 4839, 74 | 4761 / 4835, 74 |
+| `cc-vec` (`frama-c-cc.yml`) | 5392 / 5577, 185 | 5388 / 5573, 185 |
+
+**By name.** Where a roll-call ran (arena-32, stringbuf, cc-vec), exactly the
+four `ptr_span` names left and nothing new arrived; the 16 Cat 2b names
+stayed, unchanged. The 64-bit arena job lost the same four, so width
+invariance held.
+
+**Miss 1, the count (M).** Every unit lost 12 goals and 8 proved, not 8 and 4.
+The unproved change was exact everywhere, so the four extra goals per unit
+were all proved ones, and the prover breakdown places them: in arena, pool and
+region alike, Qed's count fell by 4 more than predicted. Four trivially
+discharged goals per unit went with the old calls; which ones is not traced,
+the jobs keep no per-goal report. As with F2: count from a goal list.
+
+**Miss 2, the job set.** `mingw (Release)` went red, outside the seven. Its
+GCC, at -O3, rejected `test/util/intern_test.c` with -Wmaybe-uninitialized:
+most tests ignore `fixture_init`'s result, and a failed `intern_pool_init`
+leaves `pool.arena` unset. F3 changed what the optimiser could see of
+`arena_alloc`, and the latent read became visible. Neither Linux GCC 13 nor 14
+reproduces it. The ratchet carries a test-only fix, zeroing the fixture first;
+predicted: `mingw (Release)` green, no proof job moves.
+
+**What it changes.** No pointer past the buffer is formed and no pointer
+subtraction remains; `p_arena_span.c` runs clean under ASan pointer-pair
+checking, and old and new allocators agree on 80,000 random allocations.
+VERIFY-009 Cat 2a retires by removal: *A* in force 14 → 13. CI #1333 (the F6
+ratchet), attempt 1: `frama-c-lifetime` hit its 15-minute limit; the re-run
+passed in about a minute.
 
 ### For the paper
 
