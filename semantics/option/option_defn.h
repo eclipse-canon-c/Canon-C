@@ -157,6 +157,26 @@
     MANGLE_OPTION_NONE(_t)(void) \
         IMPL_OPTION_NONE(_t, MANGLE_OPTION_TYPE(_t))
 
+/**
+ * @brief Define None constructor for an aggregate value type (VERIFY-038)
+ *
+ * The same function as DEFINE_OPTION_NONE, with one contract clause fewer.
+ * `\result.value == 0` compares the value with an integer literal, which
+ * Frama-C rejects as ill-typed when _t is a struct or union. The body is the
+ * same, so the value is still zero-initialized; the contract does not state
+ * it, because ACSL has no type-generic zero.
+ *
+ * @param _linkage Linkage specifier
+ * @param _t       The value type (a struct or union)
+ */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
+#define DEFINE_OPTION_NONE_AGGREGATE(_linkage, _t) \
+    /*@ assigns \nothing;                                                  \
+        ensures \result.has_value == \false; */                            \
+    _linkage MANGLE_OPTION_TYPE(_t) \
+    MANGLE_OPTION_NONE(_t)(void) \
+        IMPL_OPTION_NONE(_t, MANGLE_OPTION_TYPE(_t))
+
 /* ════════════════════════════════════════════════════════════════════════════
    QUERY FUNCTION DEFINITIONS
    ════════════════════════════════════════════════════════════════════════════ */
@@ -537,6 +557,27 @@
         IMPL_OPTION_TAKE(_t, MANGLE_OPTION_TYPE(_t), o, \
                          MANGLE_OPTION_NONE(_t))
 
+/**
+ * @brief Define take() for an aggregate value type (VERIFY-038)
+ *
+ * The same function as DEFINE_OPTION_TAKE without `o->value == 0`, for the
+ * reason given at DEFINE_OPTION_NONE_AGGREGATE.
+ *
+ * @param _linkage Linkage specifier
+ * @param _t       The value type (a struct or union)
+ */
+/* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
+#define DEFINE_OPTION_TAKE_AGGREGATE(_linkage, _t) \
+    /*@ requires \valid(o);                                                \
+        assigns *o;                                                        \
+        ensures \result.has_value == \old(o->has_value);                   \
+        ensures \result.value == \old(o->value);                           \
+        ensures o->has_value == \false; */                                 \
+    _linkage MANGLE_OPTION_TYPE(_t) \
+    MANGLE_OPTION_TAKE(_t)(MANGLE_OPTION_TYPE(_t)* o) \
+        IMPL_OPTION_TAKE(_t, MANGLE_OPTION_TYPE(_t), o, \
+                         MANGLE_OPTION_NONE(_t))
+
 /* ════════════════════════════════════════════════════════════════════════════
    COMPARISON FUNCTION DEFINITIONS
    ════════════════════════════════════════════════════════════════════════════ */
@@ -609,6 +650,35 @@
     DEFINE_OPTION_EQ(_linkage, _t)
 
 /**
+ * @brief Define all Option<T> functions for an aggregate value type (VERIFY-038)
+ *
+ * DEFINE_OPTION_FUNCTIONS with the aggregate variants of none() and take(),
+ * whose contracts do not compare the value with an integer literal. Use it
+ * when _t is a struct or union; for scalar types use DEFINE_OPTION_FUNCTIONS,
+ * whose contracts also state that an empty option's value is zero.
+ *
+ * @param _linkage Linkage specifier (e.g., static inline for header-only)
+ * @param _t       The value type (a struct or union)
+ */
+#define DEFINE_OPTION_FUNCTIONS_AGGREGATE(_linkage, _t) \
+    DEFINE_OPTION_SOME(_linkage, _t) \
+    DEFINE_OPTION_NONE_AGGREGATE(_linkage, _t) \
+    DEFINE_OPTION_IS_SOME(_linkage, _t) \
+    DEFINE_OPTION_IS_NONE(_linkage, _t) \
+    DEFINE_OPTION_GET(_linkage, _t) \
+    DEFINE_OPTION_UNWRAP_OR(_linkage, _t) \
+    DEFINE_OPTION_UNWRAP(_linkage, _t) \
+    DEFINE_OPTION_EXPECT(_linkage, _t) \
+    DEFINE_OPTION_MAP(_linkage, _t) \
+    DEFINE_OPTION_AND_THEN(_linkage, _t) \
+    DEFINE_OPTION_OR_ELSE(_linkage, _t) \
+    DEFINE_OPTION_FILTER(_linkage, _t) \
+    DEFINE_OPTION_COMBINE_WITH(_linkage, _t) \
+    DEFINE_OPTION_REPLACE(_linkage, _t) \
+    DEFINE_OPTION_TAKE_AGGREGATE(_linkage, _t) \
+    DEFINE_OPTION_EQ(_linkage, _t)
+
+/**
  * @brief Define complete Option<T> type and all functions
  *
  * One-shot macro to define everything needed for Option<T>:
@@ -646,6 +716,11 @@
 #define DEFINE_OPTION_ALL(_linkage, _t) \
     DEFINE_OPTION_STRUCT(_t) \
     DEFINE_OPTION_FUNCTIONS(_linkage, _t)
+
+/** @brief DEFINE_OPTION_ALL for an aggregate value type (VERIFY-038) */
+#define DEFINE_OPTION_ALL_AGGREGATE(_linkage, _t) \
+    DEFINE_OPTION_STRUCT(_t) \
+    DEFINE_OPTION_FUNCTIONS_AGGREGATE(_linkage, _t)
 
 /* ════════════════════════════════════════════════════════════════════════════
    USAGE EXAMPLES
