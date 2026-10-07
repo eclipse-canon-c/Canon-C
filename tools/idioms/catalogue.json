@@ -1,0 +1,1282 @@
+{
+ "meta": {
+  "tool_version": "1",
+  "substrate_commit": "6290f4a",
+  "clang": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+  "workflow": ".github/workflows/cmake-multi-platform.yml"
+ },
+ "verified_units": [
+  {
+   "job": "frama-c-checked",
+   "files": [
+    "core/primitives/checked.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 12
+  },
+  {
+   "job": "frama-c-bits",
+   "files": [
+    "core/primitives/bits.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 11
+  },
+  {
+   "job": "frama-c-compare",
+   "files": [
+    "core/primitives/compare.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 7
+  },
+  {
+   "job": "frama-c-ptr",
+   "files": [
+    "core/primitives/ptr.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 28
+  },
+  {
+   "job": "frama-c-slice",
+   "files": [
+    "core/slice.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 25
+  },
+  {
+   "job": "frama-c-memory",
+   "files": [
+    "core/memory.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 41
+  },
+  {
+   "job": "frama-c-arena",
+   "files": [
+    "core/arena.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 43
+  },
+  {
+   "job": "frama-c-pool",
+   "files": [
+    "core/pool.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 44
+  },
+  {
+   "job": "frama-c-region",
+   "files": [
+    "core/region.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 44
+  },
+  {
+   "job": "frama-c-arena-32",
+   "files": [
+    "core/arena.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 43
+  },
+  {
+   "job": "frama-c-error",
+   "files": [
+    "semantics/error.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 5
+  },
+  {
+   "job": "frama-c-option",
+   "files": [
+    "vmacros/vdrivers/option_verify.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 24
+  },
+  {
+   "job": "frama-c-result",
+   "files": [
+    "vmacros/vdrivers/result_verify.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 25
+  },
+  {
+   "job": "frama-c-vec",
+   "files": [
+    "vmacros/vdrivers/vec_verify.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    "data",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 54
+  },
+  {
+   "job": "frama-c-deque",
+   "files": [
+    "vmacros/vdrivers/deque_verify.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    "data",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 34
+  },
+  {
+   "job": "frama-c-borrow",
+   "files": [
+    "semantics/borrow.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 28
+  },
+  {
+   "job": "frama-c-diag",
+   "files": [
+    "semantics/diag.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 33
+  },
+  {
+   "job": "frama-c-bitset",
+   "files": [
+    "vmacros/vdrivers/bitset_verify.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    "data",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 50
+  },
+  {
+   "job": "frama-c-lifetime",
+   "files": [
+    "core/primitives/lifetime.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    ".",
+    "-DCANON_LIFETIME_DEBUG",
+    "-DCANON_LIFETIME_NO_ATOMICS",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 4
+  },
+  {
+   "job": "frama-c-priority-queue",
+   "files": [
+    "data/priority_queue.h"
+   ],
+   "cpp": [
+    "-I",
+    "data",
+    "-I",
+    "core",
+    "-I",
+    "core/primitives",
+    "-I",
+    "semantics",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 49
+  },
+  {
+   "job": "frama-c-range",
+   "files": [
+    "vmacros/vdrivers/range_verify.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    "data",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 31
+  },
+  {
+   "job": "frama-c-stringbuf",
+   "files": [
+    "data/stringbuf.h"
+   ],
+   "cpp": [
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 48
+  }
+ ],
+ "verified_closure": [
+  "core/arena.h",
+  "core/memory.h",
+  "core/ownership.h",
+  "core/pool.h",
+  "core/primitives/bits.h",
+  "core/primitives/checked.h",
+  "core/primitives/compare.h",
+  "core/primitives/contract.h",
+  "core/primitives/lifetime.h",
+  "core/primitives/limits.h",
+  "core/primitives/ptr.h",
+  "core/primitives/types.h",
+  "core/region.h",
+  "core/slice.h",
+  "data/bitset.h",
+  "data/deque/deque_defn.h",
+  "data/deque/deque_impl.h",
+  "data/deque/deque_mangle.h",
+  "data/priority_queue.h",
+  "data/range.h",
+  "data/stringbuf.h",
+  "data/vec/vec_defn.h",
+  "data/vec/vec_impl.h",
+  "data/vec/vec_mangle.h",
+  "semantics/borrow.h",
+  "semantics/diag.h",
+  "semantics/error.h",
+  "semantics/option/option.h",
+  "semantics/option/option_defn.h",
+  "semantics/option/option_impl.h",
+  "semantics/option/option_mangle.h",
+  "semantics/result/result.h",
+  "semantics/result/result_defn.h",
+  "semantics/result/result_impl.h",
+  "semantics/result/result_mangle.h",
+  "vmacros/vdrivers/bitset_verify.h",
+  "vmacros/vdrivers/deque_verify.h",
+  "vmacros/vdrivers/option_verify.h",
+  "vmacros/vdrivers/range_verify.h",
+  "vmacros/vdrivers/result_verify.h",
+  "vmacros/vdrivers/vec_verify.h"
+ ],
+ "A": {
+  "acsl-builtin:\\at": [
+   "frama-c-bitset",
+   "frama-c-stringbuf"
+  ],
+  "acsl-builtin:\\base_addr": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\exists": [
+   "frama-c-diag"
+  ],
+  "acsl-builtin:\\false": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\forall": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\freeable": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\fresh": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\from": [
+   "frama-c-diag"
+  ],
+  "acsl-builtin:\\initialized": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\let": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-pool",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\min": [
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\nothing": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-compare",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-error",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\null": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-error",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\old": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\result": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-compare",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-error",
+   "frama-c-lifetime",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\separated": [
+   "frama-c-bitset",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-priority-queue",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\true": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\valid": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\valid_read": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-compare",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:assigns": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-compare",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-error",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:assumes": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:behavior": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:calls": [
+   "frama-c-priority-queue"
+  ],
+  "acsl-clause:complete behaviors": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:disjoint behaviors": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:ensures": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-compare",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-error",
+   "frama-c-lifetime",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:exits": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:lemma": [
+   "frama-c-range"
+  ],
+  "acsl-clause:logic": [
+   "frama-c-bitset",
+   "frama-c-range"
+  ],
+  "acsl-clause:loop assigns": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:loop invariant": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:loop variant": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:predicate": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:requires": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-compare",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-logic:pointer-to-integer cast": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-pattern:behavior leaves the result unconstrained": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-pattern:pointer result left unconstrained": [
+   "frama-c-pool"
+  ]
+ },
+ "B": {
+  "c:bitwise or shift operator": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bits",
+   "frama-c-bitset",
+   "frama-c-lifetime",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:dynamic allocation": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:floating point": [
+   "frama-c-compare",
+   "frama-c-priority-queue"
+  ],
+  "c:indirect call": [
+   "frama-c-bitset",
+   "frama-c-deque",
+   "frama-c-option",
+   "frama-c-priority-queue",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-vec"
+  ],
+  "c:integer-to-pointer cast": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:loop": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:loop in a macro body": [
+   "frama-c-vec"
+  ],
+  "c:nonlinear arithmetic": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-checked",
+   "frama-c-deque",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:pointer-to-integer cast": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-lifetime",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:union": [
+   "frama-c-deque",
+   "frama-c-priority-queue",
+   "frama-c-result",
+   "frama-c-vec"
+  ],
+  "c:variadic call": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "c:variadic definition": [
+   "frama-c-stringbuf"
+  ],
+  "libc:abort": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:fflush": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:fprintf": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-deque",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-option",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-ptr",
+   "frama-c-range",
+   "frama-c-region",
+   "frama-c-result",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:memcmp": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:memcpy": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:memmove": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:memset": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-diag",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:snprintf": [
+   "frama-c-diag"
+  ],
+  "libc:strlen": [
+   "frama-c-arena",
+   "frama-c-arena-32",
+   "frama-c-bitset",
+   "frama-c-borrow",
+   "frama-c-memory",
+   "frama-c-pool",
+   "frama-c-priority-queue",
+   "frama-c-region",
+   "frama-c-slice",
+   "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "libc:vsnprintf": [
+   "frama-c-stringbuf"
+  ]
+ },
+ "C": {
+  "family:deque": [
+   "frama-c-deque"
+  ],
+  "family:deque@integer": [
+   "frama-c-deque"
+  ],
+  "family:option": [
+   "frama-c-bitset",
+   "frama-c-deque",
+   "frama-c-option",
+   "frama-c-range",
+   "frama-c-vec"
+  ],
+  "family:option@integer": [
+   "frama-c-bitset",
+   "frama-c-deque",
+   "frama-c-option",
+   "frama-c-range",
+   "frama-c-vec"
+  ],
+  "family:result": [
+   "frama-c-deque",
+   "frama-c-priority-queue",
+   "frama-c-result",
+   "frama-c-vec"
+  ],
+  "family:result@integer+enum": [
+   "frama-c-deque",
+   "frama-c-priority-queue",
+   "frama-c-result",
+   "frama-c-vec"
+  ],
+  "family:vec": [
+   "frama-c-vec"
+  ],
+  "family:vec@integer": [
+   "frama-c-vec"
+  ]
+ }
+}

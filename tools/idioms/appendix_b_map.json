@@ -1,0 +1,18 @@
+{
+ "about": "Which extracted features evidence each residual class of §3.2 (paper Appendix B). Hand-written; checked by `extract.py crosscheck`. A class with no mapped feature in the catalogue means the extractor is too coarse to see a shape the record says produces residuals.",
+ "classes": {
+  "a": {"name": "solver-theory limit",
+        "features": ["c:pointer-to-integer cast", "c:integer-to-pointer cast", "acsl-logic:pointer-to-integer cast",
+                     "c:bitwise or shift operator", "c:nonlinear arithmetic"]},
+  "b": {"name": "verifier feature gap",
+        "features": ["c:indirect call", "c:dynamic allocation", "acsl-builtin:\\fresh", "acsl-builtin:\\freeable",
+                     "c:union", "c:variadic definition", "c:variadic call", "libc:memcmp", "libc:strlen", "libc:vsnprintf"]},
+  "c": {"name": "specification trade (incl. unwritten macro-body loop annotations)",
+        "features": ["acsl-builtin:\\let", "acsl-clause:predicate", "acsl-clause:behavior", "c:loop in a macro body"]},
+  "d": {"name": "unprovable by construction (non-returning handler)",
+        "features": ["libc:abort", "c:loop"]},
+  "e": {"name": "call-site cascade",
+        "features": ["acsl-pattern:behavior leaves the result unconstrained", "acsl-pattern:pointer result left unconstrained",
+                     "acsl-clause:requires"]}
+ }
+}
