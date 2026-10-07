@@ -9928,6 +9928,67 @@ VERIFY-009 Cat 2a retires by removal: *A* in force 14 → 13. CI #1333 (the F6
 ratchet), attempt 1: `frama-c-lifetime` hit its 15-minute limit; the re-run
 passed in about a minute.
 
+### F4 — committed prediction (before the fix commit)
+
+**Design (decided 2026-10-07).** The contract is made to say what the code
+does; buffers are not required to be aligned. That would break callers passing
+ordinary byte arrays and would still leave `arena_alloc_aligned` wrong above
+16. Two clauses, one commit:
+
+- `ptr_align_padding` (ptr.h) states its exact result in its `nonnull`
+  behaviour, the expression its body already gets from `align_padding`: `ensures
+  exact: \result == (((usize)(uintptr_t)p + align - 1) & ~(align - 1)) -
+  (usize)(uintptr_t)p;` It promised only `\result < align`: the opaque-result
+  pattern, a third time.
+- `arena_can_fit` (arena.h) computes the pad from the address with the same
+  expression, `addr = (usize)(uintptr_t)(a->buffer + a->offset)`, instead of
+  from the offset.
+
+No executable change. The four units that include `ptr.h` but not `arena.h`
+(ptr, memory, bitset, priority-queue) isolate the first clause; the arena
+units show both.
+
+**Prediction.**
+
+- (H/M) The `exact` clause proves: it is `align_padding`'s ensures with its
+  argument substituted. No residual appears in any of the eleven units that
+  verify `ptr.h`.
+- (M) It adds two goals per unit, one per path of the null test, the null path
+  unreachable.
+- (M) The 16 Cat 2b goals close in all seven arena units. With both pads now the
+  same expression of the same address, the guard and the predicate say the same
+  thing, and what is left is linear. The risk is one step: WP must see that
+  `(uintptr_t)current` and `(uintptr_t)(a->buffer + a->offset)` are the same
+  integer, from `ptr_offset`'s `(u8*)\result == (u8*)p + n`; pointer-to-integer
+  conversion is where WP is weakest. If that step fails, the 16 stay, now true,
+  and nothing else moves.
+- (M) Cat 2c's eight goals stay; their failures are not the fits chain's. Parts
+  1 to 3 of the fits goals, which prove from the capacity bound alone, stay
+  proved.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-ptr` | 1957 / 1973, 16 | 1959 / 1975, 16 |
+| `frama-c-memory` | 2837 / 2885, 48 | 2839 / 2887, 48 |
+| `frama-c-bitset` | 4853 / 5021, 168 | 4855 / 5023, 168 |
+| `frama-c-priority-queue` | 4521 / 4597, 76 | 4523 / 4599, 76 |
+| `frama-c-arena` | 3490 / 3562, 72 | 3508 / 3564, 56 |
+| `frama-c-arena-32` | 3490 / 3562, 72 | 3508 / 3564, 56; 64/32 set equality holds |
+| `frama-c-pool` | 3959 / 4040, 81 | 3977 / 4042, 65 |
+| `frama-c-region` | 3638 / 3733, 95 | 3656 / 3735, 79 |
+| `frama-c-vec` | 5331 / 5508, 177 | 5349 / 5510, 161 |
+| `frama-c-stringbuf` | 4761 / 4835, 74 | 4779 / 4837, 58 |
+| `cc-vec` (`frama-c-cc.yml`) | 5388 / 5573, 185 | 5406 / 5575, 169 |
+
+**Blocks.** If the 16 close, VERIFY-009 Cat 2b covers nothing and retires: *A*
+in force 13 → 12. It would be the first false block to retire by its goals
+becoming true and then proving, rather than by removal or a contract that
+stopped claiming them.
+
+**Scoring rule.** Scored by part: the `exact` clause (no residual, two goals,
+eleven units), then the 16 (close or stay, all together), then the job set
+(only the eleven).
+
 ### For the paper
 
 §3.3's worked example is F2's goal, and its explanation changes. §5 gains a row
