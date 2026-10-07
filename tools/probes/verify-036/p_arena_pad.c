@@ -25,16 +25,30 @@
  * Build from the repository root:
  *   gcc -std=c99 -Wall -Wextra -I. tools/probes/verify-036/p_arena_pad.c -o p && ./p
  * Same result under the proof configuration: add -DCANON_NO_REQUIRE -DNDEBUG.
+ *
+ * Since F4 (e953219) arena_can_fit pads from the address. The probe checks
+ * both predicates: the pre-F4 one must report three VIOLATED lines, the
+ * current one three ok lines. It is now a regression test for F4.
  */
 #define CANON_CONTRACT_IMPL
 #include <stdio.h>
 #include <stdint.h>
 #include "core/arena.h"
 
-/* arena_can_fit, transcribed from its ACSL definition in core/arena.h */
-static int acsl_can_fit(const Arena* a, usize size, usize alignment) {
+/* arena_can_fit before F4: pad computed from the offset */
+static int acsl_can_fit_pre_f4(const Arena* a, usize size, usize alignment) {
     usize cur = a->offset;
     usize pad = (alignment - (cur % alignment)) % alignment;
+    return cur <= CANON_USIZE_MAX - pad &&
+           cur + pad <= CANON_USIZE_MAX - size &&
+           cur + pad + size <= a->capacity;
+}
+
+/* arena_can_fit since F4, transcribed from core/arena.h: pad from the address */
+static int acsl_can_fit(const Arena* a, usize size, usize alignment) {
+    usize cur  = a->offset;
+    usize addr = (usize)(uintptr_t)(a->buffer + cur);
+    usize pad  = ((addr + alignment - 1) & ~(alignment - 1)) - addr;
     return cur <= CANON_USIZE_MAX - pad &&
            cur + pad <= CANON_USIZE_MAX - size &&
            cur + pad + size <= a->capacity;
@@ -43,10 +57,12 @@ static int acsl_can_fit(const Arena* a, usize size, usize alignment) {
 static _Alignas(64) unsigned char storage[512];
 
 static void report(const char* label, const Arena* a, usize size, usize al, void* r) {
-    int fits = acsl_can_fit(a, size, al);
-    printf("%-34s contract selects '%s' (promises %s); code returned %s  -> %s\n",
-           label, fits ? "fits" : "does_not_fit", fits ? "non-NULL" : "NULL",
-           r ? "non-NULL" : "NULL", (fits == (r != NULL)) ? "ok" : "VIOLATED");
+    int old_fits = acsl_can_fit_pre_f4(a, size, al);
+    int fits     = acsl_can_fit(a, size, al);
+    printf("%-34s code returned %-8s  pre-F4 contract: %-8s  current contract: %s\n",
+           label, r ? "non-NULL" : "NULL",
+           (old_fits == (r != NULL)) ? "ok" : "VIOLATED",
+           (fits == (r != NULL)) ? "ok" : "VIOLATED");
 }
 
 int main(void) {

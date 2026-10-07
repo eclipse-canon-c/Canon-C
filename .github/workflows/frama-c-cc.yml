@@ -75,7 +75,7 @@ jobs:
           # vec: +20 at VERIFY-033/034 (arena_alloc{,_aligned} frame clauses,
           # 2 clauses x 2 functions x 5 split parts; CC #13 measured 5394/5586,
           # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5388 / 5573", unproved: 185 }
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5406 / 5575", unproved: 169 }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
     steps:
       - uses: actions/checkout@v6

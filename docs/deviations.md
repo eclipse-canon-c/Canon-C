@@ -881,7 +881,7 @@ memory.h+substrate → arena.h with 43 inherited), is that substrate
 residuals propagate without amplification: a downstream header's
 inherited count equals the upstream's total, not greater.
 
-### arena.h-own residuals (24 — was 46)
+### arena.h-own residuals (8 — was 46)
 
 Four categories. Cats 2a and 2d are call-chain residuals at ptr.h
 boundary functions whose `nonnull` behavior carries no `ensures` clause
@@ -962,7 +962,7 @@ The C semantics match ptr_span's preconditions exactly; the proof
 obstacle is WP's inability to track this through the uintptr_t casts
 in ptr_align_up's body. Same root cause as VERIFY-006 cat 3.
 
-#### Category 2b: arena_alloc / arena_alloc_aligned fits / does_not_fit ensures (16 — was 26)
+#### Category 2b: arena_alloc / arena_alloc_aligned fits / does_not_fit ensures (0 — RETIRED at VERIFY-036 F4; was 16, originally 26)
 
 | #  | Goal                                                                     |
 |----|--------------------------------------------------------------------------|
@@ -1008,6 +1008,12 @@ buffer both `fits` and `does_not_fit` are violated, including
 `arena_alloc_aligned(.., 64)` on a malloc-style 16-aligned buffer (probe
 `tools/probes/verify-036/p_arena_pad.c`). The readability trade described
 below is real, but it is not why these goals fail.
+
+**Coverage update (2026-10-07, VERIFY-036 F4 scored) — this argument is
+RETIRED.** F4 (e953219) made `arena_can_fit` pad from the address, as the code
+does, and gave `ptr_align_padding` its exact result. All 16 goals closed at CI
+#1336, in every unit that pinned them. They were false before F4; they became
+true and then proved. The block covers nothing. Rows kept for legibility.
 
 **Functions affected**: `arena_alloc`, `arena_alloc_aligned`. 13 per
 function: 4 × `fits_ensures_part{2,3,4,5}` + 4 ×
@@ -1101,6 +1107,12 @@ both clauses and both goals closed at CI #1330, in every unit that pinned
 them; their rows are removed from the table above. Probe:
 `tools/probes/verify-036/p_zero_assigns.c`.
 
+**Coverage update (2026-10-07, VERIFY-036 F4) — attribution refuted.** This
+block filed its eight remaining goals as inheritance from Cat 2b. F4 made
+every Cat 2b goal prove and all eight stayed, unchanged, at CI #1336: whatever
+blocks them, it is not the fits chain. They are misattributed obligations; the
+argument needs rewriting before it can cover them.
+
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
 `arena_try_alloc`, `arena_try_alloc_aligned`.
 
@@ -1176,10 +1188,10 @@ round-trip through ptr_offset, identical to cat 2a's situation.
 | Category | Goals | Functions affected                                            | WP feature gap                              |
 |----------|-------|---------------------------------------------------------------|---------------------------------------------|
 | 2a       | 0     | (retired at VERIFY-036 F3)                                    | ptr.h empty nonnull behavior (VERIFY-006)   |
-| 2b       | 16    | arena_alloc, arena_alloc_aligned                              | arithmetic chain through ptr_align_up       |
+| 2b       | 0     | (retired at VERIFY-036 F4)                                    | arithmetic chain through ptr_align_up       |
 | 2c       | 8     | arena_alloc_zero, arena_alloc_aligned_zero, arena_try_alloc{,_aligned} | Wrapper delegation through cat 2b          |
 | 2d       | 0     | (retired at VERIFY-023)                                       | ptr.h empty nonnull behavior (VERIFY-006)   |
-| **Total**| **24**|                                                               | counts as of VERIFY-036 F3 (was 8/26/10/2, total 46) |
+| **Total**| **8** |                                                               | counts as of VERIFY-036 F4 (was 8/26/10/2, total 46) |
 
 Cats 2a, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no
@@ -9356,7 +9368,7 @@ printed by the per-line step is a regression.
 |----------------|-------|
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
-| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F6 fixed (c069881) and scored exact at CI #1332 / CC #20; F3 fixed (baf8ee9) and scored at CI #1334 / CC #21 (exact on names; count and job-set misses recorded); F4 pending. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
+| **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F6 fixed (c069881) and scored exact at CI #1332 / CC #20; F3 fixed (baf8ee9) and scored at CI #1334 / CC #21 (exact on names; count and job-set misses recorded); F4 fixed (e953219) and scored exact at CI #1336 / CC #23. All six fixes landed; the arguments of arena Cat 2c and pool Cat 2d still need rewriting. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -9515,8 +9527,8 @@ No block retires yet, and *A* in force stays 16 until a fix closes a block's
 last goal; F2 is predicted to retire VERIFY-010 Cat 2b. Each affected block
 carries a 2026-10-05 coverage update naming its finding, with the original
 argument kept legible, as for the retired Cat 2d. F2 retired VERIFY-010 Cat 2b
-(CI #1328) and F6 retired VERIFY-010 Cat 2c (CI #1332), and F3 retired VERIFY-009 Cat 2a (CI #1334):
-*A* in force is 13.
+(CI #1328) and F6 retired VERIFY-010 Cat 2c (CI #1332), F3 retired VERIFY-009 Cat 2a (CI #1334), and F4 retired VERIFY-009
+Cat 2b (CI #1336): *A* in force is 12.
 
 All four defects sit in modules 5–7, the rising segment of the budget curve,
 as VERIFY-023's 24 misattributions did.
@@ -9988,6 +10000,46 @@ stopped claiming them.
 **Scoring rule.** Scored by part: the `exact` clause (no residual, two goals,
 eleven units), then the 16 (close or stay, all together), then the job set
 (only the eleven).
+
+### F4 — scored (fix e953219; CI #1336, CC #23)
+
+**Result: exact in all eleven units**, the medium-confidence closure of the 16 included.
+
+| Job | Predicted | Observed |
+|-----|-----------|----------|
+| `frama-c-ptr` | 1959 / 1975, 16 | 1959 / 1975, 16 |
+| `frama-c-memory` | 2839 / 2887, 48 | 2839 / 2887, 48 |
+| `frama-c-bitset` | 4855 / 5023, 168 | 4855 / 5023, 168 |
+| `frama-c-priority-queue` | 4523 / 4599, 76 | 4523 / 4599, 76 |
+| `frama-c-arena` | 3508 / 3564, 56 | 3508 / 3564, 56 |
+| `frama-c-arena-32` | 3508 / 3564, 56 | 3508 / 3564, 56 |
+| `frama-c-pool` | 3977 / 4042, 65 | 3977 / 4042, 65 |
+| `frama-c-region` | 3656 / 3735, 79 | 3656 / 3735, 79 |
+| `frama-c-vec` | 5349 / 5510, 161 | 5349 / 5510, 161 |
+| `frama-c-stringbuf` | 4779 / 4837, 58 | 4779 / 4837, 58 |
+| `cc-vec` (`frama-c-cc.yml`) | 5406 / 5575, 169 | 5406 / 5575, 169 |
+
+**By part.** The `exact` clause proved and added two goals in all eleven
+units; the four units without `arena.h`, which isolate it, moved by exactly
+that and nothing else. The 16 Cat 2b names left every roll-call that ran
+(arena-32, stringbuf, cc-vec, bitset's and priority-queue's set equality
+held), with nothing new; the 64-bit arena job lost the same 16, so width
+invariance held. Cat 2c's eight stayed, as predicted. Only the eleven went
+red.
+
+**What the closure shows.** The step flagged as the risk, WP identifying
+`(uintptr_t)current` with `(uintptr_t)(a->buffer + a->offset)`, held. These
+are the first false goals in the campaign retired by becoming true and then
+proving, rather than by removal or by a contract that stopped claiming them.
+Run-time evidence agrees: `p_arena_pad.c` now reports the pre-F4 contract
+violated and the current one satisfied in all three cases, and on 160,000
+random allocations over skewed buffers the current predicate disagrees with
+the code 0 times, the pre-F4 one 1,529 times.
+
+**What else it shows.** Cat 2c filed its eight goals as inheritance from Cat
+2b. Cat 2b now proves and the eight did not move, so that attribution is
+refuted by measurement: eight more misattributed obligations. VERIFY-009 Cat
+2b retires: *A* in force 13 → 12.
 
 ### For the paper
 
