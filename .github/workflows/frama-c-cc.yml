@@ -77,6 +77,10 @@ jobs:
           # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
           - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5406 / 5575", unproved: 169 }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
+          # vec_struct: VERIFY-037 — vec and option at a struct type (Rec). The proved
+          # line, the count and cc_pins/vec_struct.txt are the committed prediction
+          # (cc-vec's, with vec_int_/option_int_ renamed), not a measurement.
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5406 / 5575", unproved: 169 }
     steps:
       - uses: actions/checkout@v6
 
