@@ -10254,7 +10254,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 demonstrated by probe; its fix awaits a decision; the rest of the audit not begun |
+| **Status**     | OPEN — G1 demonstrated by probe; repair (a) chosen and its prediction committed, fix pending; the rest of the audit not begun |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10340,3 +10340,116 @@ VERIFY-036 F4), pool Cat 2d (`pool_reset`), `pool_alloc_zero`'s missing
 `ensures`, and the ten blocks never read against their code. Next in line
 after G1: the other out-parameter functions in deque and the priority queue,
 then the rest of VERIFY-018's categories.
+
+### G1 — committed prediction, option (a) (before the fix commit)
+
+**Decision (2026-10-08).** (a), as recommended above. Every postcondition
+keeps its strength; a caller may no longer pass an `out` that points into the
+vector's buffer.
+
+**Change.** One `requires`, the last in each contract, added to both contract
+surfaces: the macro bodies in `data/vec/vec_impl.h`, which `cc-vec` and
+`vec_struct` read under `-CC`, and the prototypes in
+`vmacros/vdrivers/vec_verify.h`, which `frama-c-vec` reads under `-C`. In
+`get`, `pop` and `remove` it is the third:
+
+```
+requires (v != \null && out != \null) ==>
+    \separated(out, v->items + (0 .. v->capacity - 1));
+```
+
+In `iter_next` it is the fourth, the same over `it->vec` under the guard
+`it != \null && it->vec != \null && out != \null`. Being last, it renumbers no
+existing clause. Each doc comment gains a `@pre` line. No executable change:
+`vec_test` passes in both build configurations. The same commit repairs the
+advisory parse VERIFY-038 recorded (`grep -o 'EXPECTED_UNPROVED=[0-9]*'`
+instead of every number on the line); no gate reads that step.
+
+No WP run on the changed code precedes this prediction. The only local check
+was parsing: Frama-C 25.0, with no prover, accepts all three drivers, and each
+normalized AST carries the four new clauses.
+
+**By goal.** Names are short and at `int`. At `Rec` every `vec_int` and
+`option_int` in a name becomes `vec_Rec` and `option_Rec`, the callee's
+included.
+
+| Goal | `frama-c-vec` | `cc-vec` | `vec_struct` | Conf. |
+|------|---------------|----------|--------------|-------|
+| `pop_ok_ensures_4_part5` | closes | closes | closes | H at `int`; M at `Rec` |
+| `remove_ok_ensures_4_part6`, `remove_ok_ensures_4_part7` | close | close | close | M |
+| `remove_ok_ensures_5_part6` | stays | stays | stays | H |
+| `get_hit_ensures_2_part4` | not residual | not residual | closes | M |
+| `iter_next_yield_ensures_3_part5` | not residual | not residual | closes | M |
+| `pop_option_call_vec_int_pop_requires_3` (new) | proved | proved | proved | H generated; H/M proved |
+| `remove_option_call_vec_int_remove_requires_3` (new) | proved | proved | proved | H generated; H/M proved |
+
+Why, row by row:
+
+- `pop`'s frame. Apart from `v->len`, the store through `out` is `pop`'s only
+  write, and with `out` outside the buffer it reaches no element. At `Rec` the
+  proof must also get from separation of the objects to disjointness of their
+  fields, a step the `int` units do not need.
+- `remove`'s frame below `i`. The store through `out` is excluded the same
+  way. The only other write to the buffer, `mem_move`, assigns
+  `((char *)dest)[0 .. size - 1]` from `dest = &v->items[i]`, which cannot
+  reach below `i`. M, because the frame has to cross that char-typed
+  `assigns`, the step the Typed+Cast model handles worst (category (h)).
+- `remove`'s shift. It becomes true and stays unprovable: `mem_move`'s contract
+  says which bytes it may write, not what it writes, so no contract-level
+  argument yields `items[k] == \old(items[k + 1])`. Of the four, this is the
+  one goal category (d)'s stated mechanism covers, once it is true.
+- `get` and `iter_next` at `Rec`. VERIFY-038's hypothesis, tested here: the
+  clause excludes the partial overlap a two-field element lets WP consider. If
+  either stays, it is another mechanism and needs an argument of its own.
+- The call sites. `pop_option` and `remove_option` pass the address of a
+  local, which is separated from any buffer valid at entry; with capacity zero
+  the range is empty. A call-site goal that fails to prove is a new residual,
+  and moves one goal in the table below from proved to unproved.
+
+**By job.**
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-vec` | 5349 / 5510, 161 | 5354 / 5512, 158 |
+| `cc-vec` (`frama-c-cc.yml`) | 5406 / 5575, 169 | 5411 / 5577, 166 |
+| `vec_struct` (`frama-c-cc.yml`) | 5404 / 5573, 169 (VERIFY-037's prediction; CC #27 observed 5402 / 5573, 171) | 5409 / 5575, 166 |
+
+- (H) Each unit gains exactly the two call-site goals. Nothing else is
+  generated, removed or renumbered: the clause is a hypothesis in the four
+  functions' own goals and a new obligation only where they are called, and
+  neither call site sits under a branch. A wrong row in the goal table moves
+  this table by exactly that goal.
+- `vec_struct`'s residual set is `cc-vec`'s predicted set renamed. Against the
+  committed pin its gate prints missing 4 (the three closed fragments and the
+  mis-transcribed `typed_cast_vec_Rec_alloc_call_vec_int_init_requires_2`)
+  and unpinned 1 (that goal's real name,
+  `typed_cast_vec_Rec_alloc_call_vec_Rec_init_requires_2`).
+- (H) No other goal in the three units changes status or name, including
+  `remove`'s six other residuals, category (h)'s `assigns` and `mem_move`
+  call goals, which the clause does not touch.
+- (H) No other job moves. The macro-body clauses are invisible to every `-C`
+  unit, and only `frama-c-vec` reads `vec_verify.h`. The other five `-CC`
+  families, every other WP job, MC/DC, MISRA, the builds and the tests stay
+  as they are.
+- (H) No Failed, Invalid or Stepout goal.
+- (H) The advisory step prints one count, `EXPECTED_UNPROVED=161`, for
+  `cc-vec` and `vec_struct`, with no warning and no shell error.
+
+**What goes red.** `frama-c-vec` and `cc-vec` turn red, `vec_struct` stays
+red, and nothing else is red. The ratchet commit then moves exactly these three
+pins, corrects `vec_struct`'s mis-transcribed name, and records the score.
+
+**What it settles.** If the three frame fragments close, the false obligations
+leave the record and category (d) keeps three live goals, each a content
+postcondition across `mem_copy` or `mem_move`: `remove_ok_ensures_5_part6`,
+`insert_ok_ensures_5_part5` and `append_array_ok_ensures_4_part5`. Whether its
+mechanism is right for the other two is part of the audit. If `get` and
+`iter_next` close as well, VERIFY-038's P1 holds by a contract change, as for
+range.h and stringbuf.h, and its P2c miss stands; no argument is added or
+retired, and *A* does not move.
+
+**Scoring rule.** By part: (1) the three frame fragments, per unit; (2) the
+shift fragment stays; (3) the two `Rec`-only goals; (4) the two call-site
+goals; (5) the job set and the counts. VERIFY-038's P5 (no existing job moved
+at 98b5283) is still unconfirmed; if CI #1340 is not checked first, this run's
+other jobs, green at unchanged pins, settle it.
