@@ -10277,7 +10277,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 predicted, fix pending; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10676,3 +10676,65 @@ establish either goal. Which argument they are filed under, this block
 rewritten or the frame-only-callee shape VERIFY-017 and VERIFY-018 already
 use, is settled in the filing pass, by one rule for every obligation. *A*
 stays at 12 until then.
+
+### G3 — `mem_zero` states that it writes zeros (committed prediction)
+
+**Why.** VERIFY-009 Cat 2c's last two goals, `arena_alloc_zero_ensures_3_part1`
+and `arena_alloc_aligned_zero_ensures_3_part1`, are true and unprovable
+because `mem_zero`'s contract says which bytes it may write but not their
+values, and the block's argument cites a `mem_zero` postcondition that does
+not exist (G2, scored). G3 tests that reading by intervention: it gives
+`mem_zero` the postcondition the argument assumed. If the two goals then
+prove, the frame-only contract was the whole obstacle.
+
+**Change.** `core/memory.h`, `mem_zero`'s `zero` behaviour gains
+`ensures zeroed: \forall integer i; 0 <= i < size ==> ((char *)ptr)[i] == 0;`
+and its doc comment a `@post` line. No executable change. The rest of
+memory.h's frame-only family (`mem_zero_bytes`, `mem_copy`, `mem_move`,
+`mem_set`) is left as it is: one intervention per prediction.
+
+**By goal.**
+
+| Goal | Prediction | Conf. |
+|------|------------|-------|
+| `mem_zero_zero_ensures_zeroed`, in every unit whose closure includes `core/memory.h` | generated as three parts, one per path to the return (`!ptr`, `size == 0`, the `memset` call): VERIFY-034's rule. Parts 1 and 2 contradict the behaviour's `assumes` and prove in Qed; part 3 proves from `memset`'s `acsl_c_equiv` postcondition and the libc axiom `memset_def` | H generated; M/H proved |
+| `arena_alloc_zero_ensures_3_part1`, `arena_alloc_aligned_zero_ensures_3_part1` | close, on the reading that WP's typed model keeps both 8-bit types in one memory chunk: the goal reads the bytes through `u8 *`, the postcondition states them through `char *` | M |
+| the bitset residuals about the zeroed words (`bitset_init_ensures_4`, `_6`; `bitset_clear_all_live_ensures_part3`, `_2_part3`) | stay: on the same reading, `u64` words live in a different chunk from `char`, so a byte-level fact does not reach them | H |
+| every other goal | unchanged in status and name; none generated or removed elsewhere | H |
+
+**By job.** Every unit gains three goals. The three without `arena.h` prove
+them and nothing else moves; the eight with it also close the two Cat 2c
+goals.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-memory` | 2839 / 2887, 48 | 2842 / 2890, 48 |
+| `frama-c-bitset` | 4855 / 5023, 168 | 4858 / 5026, 168 |
+| `frama-c-priority-queue` | 4523 / 4599, 76 | 4526 / 4602, 76 |
+| `frama-c-arena` | 3514 / 3564, 50 | 3519 / 3567, 48 |
+| `frama-c-arena-32` | 3514 / 3564, 50 | 3519 / 3567, 48; 64/32 set equality holds |
+| `frama-c-pool` | 3983 / 4042, 59 | 3988 / 4045, 57 |
+| `frama-c-region` | 3662 / 3735, 73 | 3667 / 3738, 71 |
+| `frama-c-vec` | 5360 / 5512, 152 | 5365 / 5515, 150 |
+| `frama-c-stringbuf` | 4785 / 4837, 52 | 4790 / 4840, 50 |
+| `cc-vec` (`frama-c-cc.yml`) | 5417 / 5577, 160 | 5422 / 5580, 158 |
+| `vec_struct` (`frama-c-cc.yml`) | 5415 / 5575, 160 | 5420 / 5578, 158 |
+
+- (H) No other job moves. These eleven are exactly the units whose include
+  closure contains `core/memory.h`.
+- (H) No Failed, Invalid or Stepout goal.
+
+**How it is scored.** As G2: the fix commit carries these pins, so a green run
+is set equality in all eleven units. A red run reads directly. If the two Cat
+2c goals stay, the eight arena units show two fewer proved and those two names
+unpinned, and the other three stay green. If part 3 of the new postcondition
+does not prove, all eleven show `typed_cast_mem_zero_zero_ensures_zeroed_part3`
+unpinned. If the split is not three parts, every unit's total is off by the
+same amount.
+
+**What it settles.** If the two close, Cat 2c covers nothing and retires: *A*
+in force 12 → 11. It would be the second block to retire by its goals proving,
+after Cat 2b at F4, and by the same kind of change: a callee stating what it
+does. It also tests by intervention the frame-only reading that VERIFY-018's
+category (d) applies to `mem_copy` and `mem_move`. If they stay, the obstacle is the byte-type bridge,
+and they are filed under that mechanism.
