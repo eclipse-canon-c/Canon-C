@@ -530,6 +530,9 @@ static inline void mem_move(void* dest, const void* src, usize size) {
  * @brief Zero-fills a memory region
  *
  * No-op if ptr is NULL or size == 0.
+ *
+ * @post the size bytes at ptr are zero (stated since VERIFY-039 G3; the
+ *       contract used to give only the frame)
  */
 /*@
   requires ptr == \null || size == 0 ||
@@ -542,6 +545,7 @@ static inline void mem_move(void* dest, const void* src, usize size) {
   behavior zero:
     assumes ptr != \null && size > 0;
     assigns ((char *)ptr)[0 .. size - 1];
+    ensures zeroed: \forall integer i; 0 <= i < size ==> ((char *)ptr)[i] == 0;
 
   complete behaviors;
   disjoint behaviors;
