@@ -1113,6 +1113,14 @@ every Cat 2b goal prove and all eight stayed, unchanged, at CI #1336: whatever
 blocks them, it is not the fits chain. They are misattributed obligations; the
 argument needs rewriting before it can cover them.
 
+**Coverage update (2026-10-08, VERIFY-039 G2) — the eight read against the
+code.** Goals 3 and 6 are false: the default `assigns *arena` omits `*out`,
+which both try wrappers write. Goals 4, 5, 7 and 8 are true but unprovable as
+stated: `arena_invariant` after a store through an `out` that nothing
+separates from `*arena`. Goals 1 and 2 fail because `mem_zero`'s contract does
+not say that it writes zeros. None is inheritance from Cat 2b. See VERIFY-039
+G2.
+
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
 `arena_try_alloc`, `arena_try_alloc_aligned`.
 
@@ -10266,7 +10274,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 closed: fix 40cccd9 scored exact at CI #1341 / CC #28 and ratcheted; the rest of the audit in progress |
+| **Status**     | OPEN — G1 closed: fix 40cccd9 scored exact at CI #1341 / CC #28 and ratcheted; G2 found, its fix pending; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10515,3 +10523,59 @@ functions. P5 held: CI #1340 concluded success, and in CC #27 only
 5409 / 5575, 166, its roll-call written from the observed set, which corrects
 the mis-transcribed name. VERIFY-018 category (d) carries a coverage update.
 Expected on the ratchet run: every job green.
+
+### G2 — arena's try wrappers: a write their default `assigns` omits, and an unseparated `out`
+
+**Where it came from.** After G1, the out-parameter functions outside vec,
+read against their code:
+
+- deque's `pop_front`, `pop_back`, `peek_front` and `peek_back` separate `out`
+  from the deque but not from its buffer, and say nothing about the elements
+  that remain, so no clause can be falsified through `out`. The contracts are
+  weaker than vec's, not wrong.
+- The priority queue's `pq_pop_raw`, `pq_pop` and `pq_peek` already require
+  `out` to be separated from the queue's storage.
+- `range_peek`, `slice_get`, `pool_try_alloc{,_zero}` and option's and result's
+  getters make no claim that a write through `out` could break.
+- `arena_try_alloc` and `arena_try_alloc_aligned` do.
+
+**Finding.** Both functions store their allocation into `*out` whenever `out`
+is non-null. Their contracts declare `assigns *arena;` for the default
+behaviour and list `*out` only in the `non_null_out` behaviour. ACSL's
+default-behaviour `assigns` holds on every call, so it is false for the
+ordinary call `void* p; arena_try_alloc(&a, 8, &p)`: `p` changes, and it is not
+part of `*arena`. `tools/probes/verify-039/p_try_alloc_assigns.c` shows this
+for both functions in both build configurations, with the sanitizers clean.
+The pinned goals are `arena_try_alloc_assigns_normal_part03` and
+`arena_try_alloc_aligned_assigns_normal_part03`; the store through `out` is the
+only write that `*arena` does not cover.
+
+The other four, `non_null_out_ensures_part1` and `_part2` of each function, are
+`arena_invariant(arena)` after that store, the shape VERIFY-033 noted. Nothing
+separates `out` from `*arena`, so WP has to consider a store into
+`arena->buffer`, which would break the invariant's validity conjunct. C does
+not allow that store: `out` is a `void **`, and a `void *` lvalue may not access
+`Arena`'s `u8 *` and `usize` fields (C11 6.5p7). These four are true, and
+unprovable as stated.
+
+**What the record said.** VERIFY-009 Category 2c files all eight of its goals
+as inheritance from Category 2b, an attribution VERIFY-036 F4 refuted by
+measurement. Read against the code, two are false (the default `assigns`),
+four are true but unprovable without a separation precondition, and the last
+two, `arena_alloc_zero_ensures_3_part1` and
+`arena_alloc_aligned_zero_ensures_3_part1`, fail because `mem_zero`'s contract
+says which bytes it may write but not that it writes zeros: the frame-only
+shape of vec's category (d). The block's stated mechanism covers none of the
+eight.
+
+**Where they are pinned.** The six try-wrapper goals are pinned in eight units:
+`frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`,
+`frama-c-vec`, `frama-c-stringbuf`, `cc-vec` and `vec_struct`. No verified
+code calls either wrapper.
+
+**Repair (recommended; the shape of F5 and G1).** In both contracts, add
+`*out` to the default `assigns`, and add `requires out == \null ||
+\separated(out, arena);`. The first makes the clause true; the second excludes
+only calls that C already leaves undefined. The prediction, by goal and unit,
+precedes the fix and follows the G1 ratchet run, because `frama-c-vec`,
+`cc-vec` and `vec_struct` pin these goals too.
