@@ -77,13 +77,16 @@ jobs:
           # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
           # VERIFY-039 G1 (CC #28): out separated from the buffer; pop's and
           # remove's false frame fragments closed, two call-site goals added.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5411 / 5577", unproved: 166 }
+          # VERIFY-039 G2 (predicted pin): arena's try wrappers; their six goals
+          # close in every unit that includes arena.h.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5417 / 5577", unproved: 160 }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
           # with VERIFY-039 G1 at CC #28, which also corrected one
           # mis-transcribed name in cc_pins/vec_struct.txt.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5409 / 5575", unproved: 166 }
+          # VERIFY-039 G2: predicted pin, as cc-vec's.
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5415 / 5575", unproved: 160 }
     steps:
       - uses: actions/checkout@v6
 

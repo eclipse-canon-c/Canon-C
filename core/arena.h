@@ -490,12 +490,21 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
      false). The current form is the correct one — see
      test/core/arena_test.c::test_try_alloc_null_out for the test that
      pins this behaviour.
+
+   Frame note (VERIFY-039 G2):
+     Both functions store the allocation into *out whenever out is
+     non-NULL, so the default behaviour's assigns lists *out as well as
+     *arena. It listed only *arena, which was false for every non-NULL out
+     outside the arena. out must also not point into *arena: C's aliasing
+     rules already keep a void** off Arena's fields, but WP needs the
+     separation to carry arena_invariant across the store.
    ============================================================================ */
 
 /*@
   requires arena_invariant(arena);
   requires out == \null || \valid(out);
-  assigns *arena;
+  requires out == \null || \separated(out, arena);
+  assigns *arena, *out;
   behavior null_out:
     assumes out == \null;
     assigns *arena;
@@ -520,7 +529,8 @@ static inline bool arena_try_alloc(Arena* arena, usize size, void** out) {
   requires arena_invariant(arena);
   requires is_power_of_two_logic(alignment);
   requires out == \null || \valid(out);
-  assigns *arena;
+  requires out == \null || \separated(out, arena);
+  assigns *arena, *out;
   behavior null_out:
     assumes out == \null;
     assigns *arena;
