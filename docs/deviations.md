@@ -10274,7 +10274,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 closed: fix 40cccd9 scored exact at CI #1341 / CC #28 and ratcheted; G2 found, its fix pending; the rest of the audit in progress |
+| **Status**     | OPEN — G1 closed: fix 40cccd9 scored exact at CI #1341 / CC #28 and ratcheted; G2: repair chosen and its prediction committed, fix pending; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10579,3 +10579,56 @@ code calls either wrapper.
 only calls that C already leaves undefined. The prediction, by goal and unit,
 precedes the fix and follows the G1 ratchet run, because `frama-c-vec`,
 `cc-vec` and `vec_struct` pin these goals too.
+
+### G2 — committed prediction (before the fix commit)
+
+**Decision (2026-10-08).** The recommended repair, in both contracts: the
+default behaviour's `assigns *arena;` becomes `assigns *arena, *out;`, and a
+new last precondition `requires out == \null || \separated(out, arena);` is
+added. No verified code calls either wrapper, so the precondition adds no
+goal. No executable change.
+
+**Recorded from the G1 ratchet run.** CI #1342 and CC #29 (598540e) were
+green in every job, as expected. The advisory parse held there: the report
+step printed `driver pin (frama-c-vec): 158 names, EXPECTED_UNPROVED=158`,
+with no warning and no shell error.
+
+**By goal.** The same in all eight units.
+
+| Goal | Prediction | Conf. |
+|------|------------|-------|
+| `arena_try_alloc_assigns_normal_part03`, `arena_try_alloc_aligned_assigns_normal_part03` | close: the store through `out` is the only write the default frame missed | H |
+| `arena_try_alloc_non_null_out_ensures_part1` and `_part2`, and the same two of `arena_try_alloc_aligned` | close: with `out` separated from `*arena`, the store cannot reach the fields `arena_invariant` reads | M |
+| `arena_alloc_zero_ensures_3_part1`, `arena_alloc_aligned_zero_ensures_3_part1` | stay: `mem_zero`'s contract is unchanged | H |
+| every other goal | unchanged in status and name; none generated or removed | H |
+
+**By job.** In each unit: proved +6, total unchanged, unproved −6.
+
+| Job | Pinned now | Predicted |
+|-----|------------|-----------|
+| `frama-c-arena` | 3508 / 3564, 56 | 3514 / 3564, 50 |
+| `frama-c-arena-32` | 3508 / 3564, 56 | 3514 / 3564, 50; 64/32 set equality holds |
+| `frama-c-pool` | 3977 / 4042, 65 | 3983 / 4042, 59 |
+| `frama-c-region` | 3656 / 3735, 79 | 3662 / 3735, 73 |
+| `frama-c-vec` | 5354 / 5512, 158 | 5360 / 5512, 152 |
+| `frama-c-stringbuf` | 4779 / 4837, 58 | 4785 / 4837, 52 |
+| `cc-vec` (`frama-c-cc.yml`) | 5411 / 5577, 166 | 5417 / 5577, 160 |
+| `vec_struct` (`frama-c-cc.yml`) | 5409 / 5575, 166 | 5415 / 5575, 160 |
+
+- (H) No other job moves. These eight are exactly the units whose include
+  closure contains `core/arena.h`.
+- (H) No Failed, Invalid or Stepout goal.
+
+**How it is scored.** The fix commit carries these pins, as VERIFY-037 carried
+`vec_struct`'s: each of the eight units' proved line, count and roll-call (the
+current roll-call less the six names) is set to the table above in the fix
+commit itself. A green run therefore means every gated quantity matched in all
+eight units and nothing else moved. A red job is a miss, read from its log,
+and a ratchet follows. VERIFY-036 left pins to a ratchet after the fix; with
+eight units, predicted pins let the gates score by name.
+
+**What it settles.** If the six close, two false obligations leave the record
+and four true ones prove. VERIFY-009 Cat 2c then covers two goals, the
+zero-content postconditions, and its stated mechanism, inheritance from Cat
+2b, is wrong for both: they wait on `mem_zero`'s contract. No block retires,
+and *A* stays at 12.
