@@ -10192,3 +10192,151 @@ type-generic zero.
 
 **Scoring rule.** As VERIFY-037: by part, P0 first; the `-CC` gate scores P2
 and P3 mechanically, P1 after classification against the code.
+
+### VERIFY-038 — scored (CC #27, 98b5283)
+
+| Part | Predicted | Observed | Score |
+|------|-----------|----------|-------|
+| P0 (M) | Frama-C accepts the unit | accepted; WP scheduled 5335 goals; exit 0 | held |
+| P1 | zero new argument blocks | two new residuals that no existing argument covers, read against the code | refuted as stated; resolution pending (VERIFY-039 G1) |
+| P2a (H) | option arm, 32 names renamed | 32, exact | held |
+| P2b (H) | result (28) and substrate (56) arms byte-identical | exact | held |
+| P2c (M) | vec arm, 53 names renamed | all 53 present (one under a mis-transcribed pin name), plus 2 new | missed |
+| P3 (M) | 5404 / 5573, 169 unproved | 5402 / 5573, 171 unproved | total exact; proved and unproved off by the 2 new residuals |
+| P4 (H) | no Failed, Invalid or Stepout goal | none | held |
+| P5 (H) | no existing job moves | pending confirmation | — |
+
+**The two new residuals.** `typed_cast_vec_Rec_get_hit_ensures_2_part4` and
+`typed_cast_vec_Rec_iter_next_yield_ensures_3_part5`. Both are the
+postcondition of a direct element copy through a caller's pointer — `*out =
+v->items[i]` in `get`, `*out = it->vec->items[it->index++]` in `iter_next` —
+stating that `*out` equals the source element, and both contracts require of
+`out` only `out == \null || \valid(out)`. P2c's localization held, since both
+functions compare elements in their contracts, but its list (set, the push
+family, insert, remove, swap, fill, pop) omitted the two functions that copy
+an element out through a pointer parameter. Neither involves `mem_copy` or
+`mem_move`, so VERIFY-018 category (d), whose stated mechanism is those
+functions' frame-only contracts, cannot cover them, and no other existing
+argument does: P1 is refuted as stated. At `int` both postconditions are
+proved. No C probe can show them false: `*out` may coincide with the source
+element exactly, which leaves the claim true, and any partial overlap is
+undefined behaviour for a struct assignment (C11 6.5.16.1p3). The hypothesis,
+to be tested by intervention, is that both fail on the same unconstrained
+`out` as VERIFY-039 G1, which a two-field element makes visible to WP where a
+one-cell element does not. If requiring `out` to be separated from the buffer
+closes them, no argument is needed and P1's conclusion survives by a contract
+change, not unaided, as with range.h and stringbuf.h; if it does not, they are
+a different mechanism and get an argument of their own.
+
+**An error in the committed pin.** `cc_pins/vec_struct.txt` (38404b9) lists
+`typed_cast_vec_Rec_alloc_call_vec_int_init_requires_2`. The renaming replaced
+only the name's prefix, but the goal also names its callee, so the correct
+name is `typed_cast_vec_Rec_alloc_call_vec_Rec_init_requires_2`, which the run
+reports. The goal behaved as predicted; the committed artifact was wrong in
+one name. The gate counts it as one missing and one unpinned name, so the
+roll-call "missing 1, unpinned 3" is this error plus the two new residuals.
+
+**A broken advisory parse.** The report-only step reads the driver's
+`EXPECTED_UNPROVED=` with `grep -o '[0-9]*'` over the whole line. Since the
+VERIFY-036 F3 ratchet that line carries a comment with earlier counts, so for
+`cc-vec` and `vec_struct` the step has printed a list of numbers and a shell
+error instead of one count. No gate reads it; it is fixed with the next
+workflow change.
+
+**Disposition.** The pin is not ratcheted yet. The `-CC` gate's rule is to
+classify new residuals before ratcheting, and the classification runs through
+VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
+
+
+## VERIFY-039: Making Every Filing Explicit — G1: vec's Out-Parameters Are Not Separated From the Buffer; Two Frame Postconditions Are False and Misfiled
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-039 |
+| **Date**       | 2026-10-08 |
+| **Status**     | OPEN — G1 demonstrated by probe; its fix awaits a decision; the rest of the audit not begun |
+| **Baseline**   | 98b5283 (CI #1340, CC #27) |
+| **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
+
+**Why this record exists.** At CI #1337 the record files 59 of the 402
+residual obligations under a counted block by goal name. The rest are filed by
+function and count (70: option, result, borrow, diag), by family convention
+(94: fresh instantiations), by category in the container records (135: vec,
+deque, bitset, priority queue), or under the primitives' uncounted
+module-level prose (44). The paper's §2 defines a record as a coverage
+relation over every obligation, so until each obligation is filed explicitly
+the record is not one in that sense. The 135 container filings matter most:
+they are where the paper's §8 says stretching would hide, and no audit has
+read them against the code. G1 below came from the VERIFY-038 run before the
+audit began.
+
+### G1 — vec's out-parameters
+
+**Finding.** `vec_pop`, `vec_remove`, `vec_get` and `vec_iter_next` write an
+element through a caller's `out` pointer and require of it only `out == \null
+|| \valid(out)`. Nothing keeps `out` out of the vector's own buffer — unlike
+`vec_append_array`, which in the same file requires its source to be
+`\separated` from the destination. For `pop` and `remove` that makes frame
+postconditions false:
+
+- `pop`'s fourth `ensures` (every remaining element unchanged) is false when
+  `out` points at a remaining element: `pop(&v, &v.items[0])` on [10, 20, 30]
+  leaves [30, 20].
+- `remove`'s fourth `ensures` (elements before `i` unchanged) is false when
+  `out` points before `i`, and its fifth (elements after `i` shifted left) is
+  false when `out` points after `i`: `remove(v, 2, &items[0])` and `remove(v, 1,
+  &items[3])` on [10, 20, 30, 40].
+
+Each call is admitted by the contract and is defined C: the probes run clean
+under AddressSanitizer and UBSan, in both build configurations
+(`tools/probes/verify-039/`).
+
+**What the record said.** VERIFY-018 files these residuals —
+`pop_ok_ensures_4_part5` and `remove_ok_ensures_4_part6`, `_4_part7` and
+`_5_part6`, pinned in `frama-c-vec` and `cc-vec` and, renamed, in `vec_struct`
+— under category (d), "element-transfer ensures", whose stated root cause is
+that `mem_copy` and `mem_move` carry frame-only contracts, "the same weak-spec
+shape as diag.h's `push_shift_semantics` (VERIFY-017)". `pop` calls neither
+function. A frame-only contract yields exactly a frame, so it cannot explain
+`remove`'s fourth `ensures` either. For `remove`'s fifth it may be a second,
+independent obstacle, but the obligation is false regardless. Four of the
+category's six live goals are fragments of these three false postconditions —
+which split part carries the aliasing case WP cannot say — and for three of
+the four the stated mechanism cannot apply. (The category's heading says five; six are
+live: the four above, `insert_ok_ensures_5_part5` and
+`append_array_ok_ensures_4_part5`.)
+
+**Why it matters beyond vec.** vec is module 13, the first module of the flat
+segment of the paper's Table 1: the argument budget last grew at module 12,
+diag.h, and vec's 53 own residuals were filed under existing arguments.
+Category (d) filed these by shape, citing diag.h's argument — the last one
+written before the curve went flat — rather than by mechanism. They are the
+first false obligations, and the first misattribution, found in the flat
+segment (VERIFY-025's false toolchain premise concerned flat-segment loop
+goals, but those obligations were true). This is the mechanism the paper's §8
+calls stretching: an existing argument filed over obligations it does not
+cover — here, obligations that are false. It is one instance; the audit will
+say how many there are.
+
+**Decision (pending).** Two repairs:
+
+- (a) Require `out` to be separated from the buffer in all four functions —
+  `\separated(out, v->items + (0 .. v->capacity - 1))` under the existing null
+  guards, and for `iter_next` the iterated vector's buffer. Every postcondition
+  keeps its strength; a caller may no longer pass an `out` that points into the
+  vector. This matches `append_array`.
+- (b) Weaken `pop`'s and `remove`'s frames to the elements `*out` does not
+  overlap. Callers stay unrestricted; the guarantees weaken, and `get` and
+  `iter_next` would need weaker postconditions too.
+
+Recommended: (a). After the decision, a prediction commit by goal name and
+unit precedes the fix, as in VERIFY-036; it covers the four false-obligation
+goals, VERIFY-038's two new residuals, and the call-site goals `pop_option`
+and `remove_option` gain, since they call `pop` and `remove` with a local.
+
+**Rest of the audit.** File the 343, read the 135 container filings against
+the code, and settle the open items — arena Cat 2c (attribution refuted by
+VERIFY-036 F4), pool Cat 2d (`pool_reset`), `pool_alloc_zero`'s missing
+`ensures`, and the ten blocks never read against their code. Next in line
+after G1: the other out-parameter functions in deque and the priority queue,
+then the rest of VERIFY-018's categories.
