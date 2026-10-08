@@ -1081,18 +1081,12 @@ range extends through `capacity - 1`. Each step is direct; the
 obstacle is WP's inability to prove the C pad equals the ACSL pad
 under Typed+Cast.
 
-#### Category 2c: zero / try wrappers (8 — was 10)
+#### Category 2c: zero / try wrappers (2 — was 8)
 
 | #  | Goal                                                            |
 |----|------------------------------------------------------------------|
 | 1  | `typed_cast_arena_alloc_zero_ensures_3_part1`                   |
 | 2  | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1`           |
-| 3  | `typed_cast_arena_try_alloc_assigns_normal_part03`              |
-| 4  | `typed_cast_arena_try_alloc_non_null_out_ensures_part1`         |
-| 5  | `typed_cast_arena_try_alloc_non_null_out_ensures_part2`         |
-| 6  | `typed_cast_arena_try_alloc_aligned_assigns_normal_part03`      |
-| 7  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part1` |
-| 8  | `typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2` |
 
 **Coverage update (2026-10-05, VERIFY-036 F4).** This argument assumes the
 parent's postconditions per Cat 2b's argument, which VERIFY-036 found
@@ -1120,6 +1114,15 @@ stated: `arena_invariant` after a store through an `out` that nothing
 separates from `*arena`. Goals 1 and 2 fail because `mem_zero`'s contract does
 not say that it writes zeros. None is inheritance from Cat 2b. See VERIFY-039
 G2.
+
+**Coverage update (2026-10-08, VERIFY-039 G2) — six goals closed.** The former
+goals 3 to 8, the try wrappers', closed at CI #1343 and CC #30 in all eight
+units that pinned them, after G2 (f4a846a) added `*out` to both default
+`assigns` clauses and separated `out` from `*arena`; their rows are removed
+from the table above. The block now covers two goals, true but unprovable
+because `mem_zero`'s contract states no values. The argument below does not
+cover them as written: it relies on a `mem_zero` postcondition that does not
+exist. Probe: `tools/probes/verify-039/p_try_alloc_assigns.c`.
 
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
 `arena_try_alloc`, `arena_try_alloc_aligned`.
@@ -10274,7 +10277,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 closed: fix 40cccd9 scored exact at CI #1341 / CC #28 and ratcheted; G2: repair chosen and its prediction committed, fix pending; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10632,3 +10635,44 @@ and four true ones prove. VERIFY-009 Cat 2c then covers two goals, the
 zero-content postconditions, and its stated mechanism, inheritance from Cat
 2b, is wrong for both: they wait on `mem_zero`'s contract. No block retires,
 and *A* stays at 12.
+
+### G2 — scored (fix f4a846a; CI #1343, CC #30)
+
+**Result: exact in all eight units.** The fix commit carried the predicted
+pins (prediction 5178a91), and both runs were green in every job: in each of
+the eight units the proved line, the count and the roll-call matched the
+prediction, the four medium-confidence closures included, and no other job
+moved.
+
+| Job | Predicted and observed |
+|-----|------------------------|
+| `frama-c-arena` | 3514 / 3564, 50 |
+| `frama-c-arena-32` | 3514 / 3564, 50; 64/32 set equality held |
+| `frama-c-pool` | 3983 / 4042, 59 |
+| `frama-c-region` | 3662 / 3735, 73 |
+| `frama-c-vec` | 5360 / 5512, 152 |
+| `frama-c-stringbuf` | 4785 / 4837, 52 |
+| `cc-vec` (`frama-c-cc.yml`) | 5417 / 5577, 160 |
+| `vec_struct` (`frama-c-cc.yml`) | 5415 / 5575, 160 |
+
+**By part.** Both default-`assigns` goals closed: the store through `out` was
+the only write the frame missed. The four `arena_invariant` parts closed:
+separation was the only missing step. The two zero-content goals stayed. No
+Failed, Invalid or Stepout goal anywhere. The gates score by name, so no log
+had to be read: a green run is set equality in every unit.
+
+**What it shows.** All six try-wrapper goals that Cat 2c filed as inheritance
+from Cat 2b are resolved, two of them false obligations made true and four
+true ones proved under a precondition C already implies. Cat 2c's stated
+mechanism covered none of them.
+
+**Cat 2c now.** Two goals, `arena_alloc_zero_ensures_3_part1` and
+`arena_alloc_aligned_zero_ensures_3_part1`. Both are true: `mem_zero` calls
+`memset` with zero over exactly the returned bytes. Both are unprovable for a
+reason the block does not state: `mem_zero`'s contract says which bytes it may
+write, not what it writes. The block's manual argument cites "mem_zero's
+verified postcondition", and `mem_zero` has none, so as written it does not
+establish either goal. Which argument they are filed under, this block
+rewritten or the frame-only-callee shape VERIFY-017 and VERIFY-018 already
+use, is settled in the filing pass, by one rule for every obligation. *A*
+stays at 12 until then.

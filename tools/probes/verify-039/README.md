@@ -14,7 +14,7 @@ same `vec<int>` instantiation CI verifies; the G2 probe includes `core/arena.h`.
 |---|---|---|---|
 | `p_pop_frame.c` | G1 | VERIFY-018 cat (d): `vec_int_pop_ok_ensures_4_part5` | unchanged at run time: `pop(&v, &v.items[0])` on [10, 20, 30] leaves [30, 20], ensures 1–3 hold, the frame (ensures 4) is `VIOLATED`; exit 1, sanitizers clean. Since G1 (40cccd9) the call is outside the contract, which requires `out` to be separated from the buffer |
 | `p_remove_frame.c` | G1 | VERIFY-018 cat (d): `vec_int_remove_ok_ensures_4_part6`, `_4_part7`, `_5_part6` | unchanged at run time: `out` before `i` violates ensures 4, `out` after `i` violates ensures 5; exit 1, sanitizers clean. Since G1 (40cccd9) both calls are outside the contract |
-| `p_try_alloc_assigns.c` | G2 | VERIFY-009 Cat 2c: `arena_try_alloc_assigns_normal_part03`, `arena_try_alloc_aligned_assigns_normal_part03` | for both functions, only the caller's `p` changes: the pre-G2 default `assigns *arena` is `VIOLATED`, the current `assigns *arena, *out` holds on every watched location; exit 0, sanitizers clean (regression test since G2's fix) |
+| `p_try_alloc_assigns.c` | G2 | VERIFY-009 Cat 2c: `arena_try_alloc_assigns_normal_part03`, `arena_try_alloc_aligned_assigns_normal_part03` | for both functions, only the caller's `p` changes: the pre-G2 default `assigns *arena` is `VIOLATED`, the current `assigns *arena, *out` holds on every watched location; exit 0, sanitizers clean (regression test since G2, f4a846a; both goals closed at CI #1343 and CC #30) |
 
 All three build with any C99 compiler; add
 `-fsanitize=address,undefined -fno-sanitize-recover=all` to confirm that the
