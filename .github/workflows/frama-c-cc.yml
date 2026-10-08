@@ -161,7 +161,10 @@ jobs:
             | awk '/(CHECKS|INHERITED)=\(/ {f=1} f {print} f && /^ *\)/ {f=0}' \
             | grep -o '"typed[a-z_]*_[^"]*"' | tr -d '"' | sort -u > /tmp/drv_checks.txt
           PIN_N=$(wc -l < /tmp/drv_checks.txt)
-          EXPECTED=$(awk -v s="${START}" 'NR>=s && /EXPECTED_UNPROVED=/ {print; exit}' "${WF}" | grep -o '[0-9]*')
+          # The value of the assignment only: since the VERIFY-036 F3 ratchet the
+          # line also carries a comment listing earlier counts (VERIFY-038).
+          EXPECTED=$(awk -v s="${START}" 'NR>=s && /EXPECTED_UNPROVED=/ {print; exit}' "${WF}" \
+            | grep -o 'EXPECTED_UNPROVED=[0-9]*' | head -1 | cut -d= -f2)
           echo "  driver pin (${JOB}): ${PIN_N} names, EXPECTED_UNPROVED=${EXPECTED}"
           if [ -z "${EXPECTED}" ] || [ "${PIN_N}" -ne "${EXPECTED}" ]; then
             echo "  WARNING: parsed ${PIN_N} names but the driver job pins ${EXPECTED};"

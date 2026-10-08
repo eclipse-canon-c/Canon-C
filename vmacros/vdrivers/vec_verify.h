@@ -534,6 +534,8 @@ static inline bool vec_int_is_full(borrowed(const vec_int*) v);
 
 /*@ requires v == \null || vec_int_view(v);
     requires out == \null || \valid(out);
+    requires (v != \null && out != \null) ==>
+    \separated(out, v->items + (0 .. v->capacity - 1));
     assigns *out;
     behavior hit:
       assumes v != \null && out != \null && i < v->len;
@@ -681,6 +683,8 @@ static inline void vec_int_push_unchecked(borrowed(vec_int*) v, int item);
 
 /*@ requires v == \null || vec_int_mut(v);
     requires out == \null || \valid(out);
+    requires (v != \null && out != \null) ==>
+    \separated(out, v->items + (0 .. v->capacity - 1));
     assigns v->len, *out;
     behavior invalid:
       assumes v == \null || out == \null || (v != \null && v->items == \null);
@@ -767,6 +771,8 @@ static inline result__Bool_Error vec_int_insert(borrowed(vec_int*) v, usize i, i
 
 /*@ requires v == \null || vec_int_mut(v);
     requires out == \null || \valid(out);
+    requires (v != \null && out != \null) ==>
+    \separated(out, v->items + (0 .. v->capacity - 1));
     assigns v->len, *out, v->items[0 .. v->capacity - 1];
     behavior invalid:
       assumes v == \null || out == \null || (v != \null && v->items == \null);
@@ -937,6 +943,8 @@ static inline vec_int_iter vec_int_iter_init(borrowed(vec_int*) v);
 /*@ requires it == \null || \valid(it);
     requires (it != \null && it->vec != \null) ==> vec_int_view(it->vec);
     requires out == \null || \valid(out);
+    requires (it != \null && it->vec != \null && out != \null) ==>
+    \separated(out, it->vec->items + (0 .. it->vec->capacity - 1));
     assigns it->index, *out;
     behavior exhausted_or_invalid:
       assumes it == \null || out == \null
