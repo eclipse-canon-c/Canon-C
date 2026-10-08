@@ -75,13 +75,15 @@ jobs:
           # vec: +20 at VERIFY-033/034 (arena_alloc{,_aligned} frame clauses,
           # 2 clauses x 2 functions x 5 split parts; CC #13 measured 5394/5586,
           # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5406 / 5575", unproved: 169 }
+          # VERIFY-039 G1 (CC #28): out separated from the buffer; pop's and
+          # remove's false frame fragments closed, two call-site goals added.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5411 / 5577", unproved: 166 }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
-          # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec). The
-          # proved line, the count and cc_pins/vec_struct.txt are the committed
-          # prediction, not a measurement: cc-vec's residuals renamed, and two
-          # goals fewer (option's aggregate none/take drop the `value == 0` clauses).
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5404 / 5573", unproved: 169 }
+          # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
+          # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
+          # with VERIFY-039 G1 at CC #28, which also corrected one
+          # mis-transcribed name in cc_pins/vec_struct.txt.
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5409 / 5575", unproved: 166 }
     steps:
       - uses: actions/checkout@v6
 

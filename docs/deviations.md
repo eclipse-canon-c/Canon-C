@@ -3103,6 +3103,18 @@ be established — the same weak-spec shape as diag.h's
 `test/data/vec_test.c`'s insert/remove/append content assertions and
 the cover TU's shift legs.
 
+**Coverage update (2026-10-08, VERIFY-039 G1) — three goals were false;
+closed.** `pop_ok_ensures_4_part5`, `remove_ok_ensures_4_part6` and
+`remove_ok_ensures_4_part7` were not element-transfer residuals: `pop` calls
+neither `mem_copy` nor `mem_move`, and a frame-only contract yields exactly a
+frame. All three failed on an `out` the contracts let point into the buffer,
+and each was false for such a call (`tools/probes/verify-039/`). G1 (40cccd9)
+requires `out` to be separated from the buffer; the three closed at CI #1341
+and CC #28 in every unit that pinned them. The category now covers three
+goals, each a content postcondition across `mem_copy` or `mem_move`, the
+mechanism it states: `remove_ok_ensures_5_part6`, `insert_ok_ensures_5_part5`
+and `append_array_ok_ensures_4_part5`.
+
 **Category (g) — fill macro-body loop (24)**: `vec_int_fill`'s entire
 goal cluster (terminates ×2, rte_mem_access ×8, assigns ×4,
 live-ensures ×6, live-assigns ×4). Root cause: the `for` loop lives
@@ -10254,7 +10266,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 demonstrated by probe; repair (a) chosen and its prediction committed, fix pending; the rest of the audit not begun |
+| **Status**     | OPEN — G1 closed: fix 40cccd9 scored exact at CI #1341 / CC #28 and ratcheted; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10453,3 +10465,53 @@ shift fragment stays; (3) the two `Rec`-only goals; (4) the two call-site
 goals; (5) the job set and the counts. VERIFY-038's P5 (no existing job moved
 at 98b5283) is still unconfirmed; if CI #1340 is not checked first, this run's
 other jobs, green at unchanged pins, settle it.
+
+### G1 — scored (fix 40cccd9; CI #1341, CC #28)
+
+**Result: exact in all three units, every part.**
+
+| Job | Predicted | Observed |
+|-----|-----------|----------|
+| `frama-c-vec` | 5354 / 5512, 158 | 5354 / 5512, 158 |
+| `cc-vec` (`frama-c-cc.yml`) | 5411 / 5577, 166 | 5411 / 5577, 166 |
+| `vec_struct` (`frama-c-cc.yml`) | 5409 / 5575, 166 | 5409 / 5575, 166 |
+
+**By part.**
+
+1. The three frame fragments, `pop_ok_ensures_4_part5`, `remove_ok_ensures_4_part6`
+   and `remove_ok_ensures_4_part7`, closed in all three units, the
+   medium-confidence closures at `Rec` included.
+2. `remove_ok_ensures_5_part6` stayed in all three, under the same name.
+3. At `Rec`, `get_hit_ensures_2_part4` and `iter_next_yield_ensures_3_part5`
+   closed. VERIFY-038's hypothesis held: they failed on the same unconstrained
+   `out`.
+4. Each unit gained the two call-site goals and proved them. No goal was
+   removed or renumbered.
+5. `frama-c-vec` and `cc-vec` turned red, `vec_struct` stayed red, and every
+   other job of CI #1341 and CC #28 passed. No Failed, Invalid or Stepout goal
+   anywhere.
+
+`frama-c-vec` stops at gate 0, so its roll-call was read from the WP log: 154
+Timeout and 4 Unknown, exactly its pin less the three names. `vec_struct`'s
+gate printed missing 4 and unpinned 1, the names predicted, so its residual
+set is `cc-vec`'s renamed. The advisory parse (H) is not scored here: the
+pasted output does not include the report step, so it is read from the ratchet
+run.
+
+**What it shows.** The three goals VERIFY-018 filed as element-transfer
+residuals were false obligations; once the contract was true, they proved with
+no argument. They are the first false obligations removed from the flat
+segment. Every medium-confidence row held, those at `Rec` included, where the
+risk was the step from separation of objects to disjointness of fields.
+
+**VERIFY-038, settled.** P1 holds by a contract change: the two residuals it
+found closed with no argument, so vec at a struct type adds no argument block,
+as with range.h and stringbuf.h. P2c's miss stands; its list omitted the two
+functions. P5 held: CI #1340 concluded success, and in CC #27 only
+`vec_struct` failed, as expected (GitHub's run pages, read 2026-10-08).
+
+**Ratchet (this commit).** `frama-c-vec` 5349 / 5510, 161 → 5354 / 5512, 158;
+`cc-vec` 5406 / 5575, 169 → 5411 / 5577, 166; `vec_struct` 5404 / 5573, 169 →
+5409 / 5575, 166, its roll-call written from the observed set, which corrects
+the mis-transcribed name. VERIFY-018 category (d) carries a coverage update.
+Expected on the ratchet run: every job green.

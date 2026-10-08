@@ -3161,7 +3161,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-036 F4 ratchet: 5349/5510, 161 unproved (F3: 5331/5508, 177)"
+          echo "  baseline: VERIFY-039 G1 ratchet: 5354/5512, 158 unproved (F4: 5349/5510, 161)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3200,8 +3200,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "5349 / 5510" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5349 / 5510)."
+          if [ "${PROVED_COUNT}" != "5354 / 5512" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5354 / 5512)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3217,7 +3217,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=161   # VERIFY-036 F4 ratchet (CI #1336): was 177 (F3: 181, F5: 183, F1: 184)
+          EXPECTED_UNPROVED=158   # VERIFY-039 G1 ratchet (CI #1341): was 161 (F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
@@ -3381,7 +3381,6 @@ jobs:
             "typed_cast_arena_try_alloc_aligned_non_null_out_ensures_part2"
             "typed_cast_vec_int_alloc_call_vec_int_init_requires_2"
             "typed_cast_vec_int_free_call_mem_free_requires"
-            "typed_cast_vec_int_pop_ok_ensures_4_part5"
             "typed_cast_vec_int_insert_assigns_exit_part2"
             "typed_cast_vec_int_insert_assigns_normal_part10"
             "typed_cast_vec_int_insert_call_mem_move_requires"
@@ -3393,8 +3392,6 @@ jobs:
             "typed_cast_vec_int_remove_assigns_normal_part13"
             "typed_cast_vec_int_remove_call_mem_move_requires"
             "typed_cast_vec_int_remove_call_mem_move_requires_2"
-            "typed_cast_vec_int_remove_ok_ensures_4_part6"
-            "typed_cast_vec_int_remove_ok_ensures_4_part7"
             "typed_cast_vec_int_remove_ok_ensures_5_part6"
             "typed_cast_vec_int_remove_ok_assigns_exit_part3"
             "typed_cast_vec_int_remove_ok_assigns_normal_part13"
