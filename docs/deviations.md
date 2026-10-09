@@ -1578,6 +1578,19 @@ included, is `arena_alloc`'s own postcondition, which is what goal 1's
 `arena_invariant(p->arena)` part rests on. The argument covers the conjunct
 as written.
 
+**Coverage update (2026-10-09, VERIFY-039 G4, pool repair).** Goal 1,
+`pool_init_ensures_part4`, now also states the conjunct `pool_invariant`
+gained: the `Pool` lies outside its slots,
+`buffer + (base_mark .. end_mark - 1)`. By `arena_alloc`'s postconditions
+(`frame_buffer`, `address`, `offset >= \old(offset) + size`,
+`offset <= capacity`), the slots lie in the free tail at the call,
+`buffer + (\old(offset) .. capacity - 1)`, which `pool_init`'s new
+precondition separates from `*pool`. That holds only if `*pool` and
+`*arena` do not overlap, so that `pool_init`'s stores into the one and
+`arena_alloc`'s into the other leave each other's fields alone. The argument
+presumes this without stating it, `pool_init`'s contract does not state it,
+and without it the goal is not true for an admitted call; G5 records that.
+
 #### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (0 — RETIRED at VERIFY-036 F2; was 1, originally 6)
 
 | # | Goal                                                       |
@@ -1729,6 +1742,16 @@ chain through the parent allocators' contracts:
   conjunct included, as its own postcondition, and so does `arena_alloc`; the
   conjunct depends on nothing else but the `Arena`'s address. The argument
   covers it as written.
+
+  **Coverage update (2026-10-09, VERIFY-039 G4, pool repair).** Goal 4,
+  `pool_reset_reset_ensures_2_part3`, now also states the conjunct
+  `pool_invariant` gained: the `Pool` lies outside its slots. `pool_reset`
+  stores only `pool->used` into the `Pool`, and the two arena calls keep
+  `buffer` (their frames), so the `Pool`'s address, `arena`, `base_mark` and
+  `end_mark` and the `Arena`'s `buffer` are those of the precondition, whose
+  `pool_invariant(pool)` states the conjunct. The argument covers it under
+  the presumption cat 2a's goal 1 rests on: that `*pool` and `*pool->arena`
+  do not overlap, which `pool_invariant` does not state (G5).
 - `pool_reset_secure`'s `assigns_{exit,normal}_part6` and the
   `mem_secure_zero` validity precondition chain through the region computation
   (cat 2c shape) plus the `pool_reset` delegation.
@@ -10356,7 +10379,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entry 1 (arena) repaired and scored exact (fix 7e5757f, CI #1346 / CC #33: nothing moved, as predicted), entry 2 (pool) found, its repair predicted; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11375,3 +11398,38 @@ invisible to WP, and `pool_reset_secure`'s postcondition is true from here on
 by an argument — the zeroed range lies in the slots, which the invariant now
 separates from `*pool`, and in the arena's buffer, which entry 1's conjunct
 separates from `*arena`.
+
+### G4 — listing entry 2, scored (fix f3d9520; CI #1347, CC #34)
+
+**Result: exact. Nothing moved.** The fix commit changed no pin (prediction
+f75802c), and every job of CI #1347 and CC #34 was green, so every unit's
+proved line, count and roll-call are as they were, by set equality. Record
+coverage #43 was green. The G4 probe did not run: the push touched none of
+its paths. (GitHub's run pages, read 2026-10-09.)
+
+**By part.**
+
+1. No goal generated or removed (H): held. Every proved line is unchanged,
+   totals included.
+2. `pool_reset_secure`'s `ensures pool_invariant(pool)` stays proved (H):
+   held. It is not among the residuals.
+3. No other goal changed status (M): held, by set equality in every unit.
+4. Every pin stays (H): held.
+5. `p_pool_self.c` (H): unchanged at run time, checked locally. Since the
+   fix, its case B is outside `pool_init`'s contract, as its case A is
+   outside `arena_init`'s.
+
+**What it shows.** As for entry 1, the repair is invisible to WP.
+`pool_reset_secure`'s `ensures pool_invariant(pool)` is one of entry 1's
+nine; it was false in a second way, with the `Pool` inside its own slots.
+Its argument now has both halves: the zeroed range lies in the slots, which
+`pool_invariant` separates from `*pool`, inside the arena's buffer, which
+`arena_invariant` separates from `*arena`. The count of goals proved with an
+argument as their evidence stays nine.
+
+**The two residual arguments, re-read.** Pool Cat 2a's goal 1 and Cat 2d's
+goal 4 state the conjunct, and each carries a coverage update. Both
+arguments cover it only under a presumption they make and the contracts do
+not state: that the `Pool` and its `Arena` do not overlap. Re-reading them
+for this conjunct brought back VERIFY-033 F4's hypothesis, which G5 takes
+up.
