@@ -10379,7 +10379,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11433,3 +11433,84 @@ arguments cover it only under a presumption they make and the contracts do
 not state: that the `Pool` and its `Arena` do not overlap. Re-reading them
 for this conjunct brought back VERIFY-033 F4's hypothesis, which G5 takes
 up.
+
+### G5 — the `Pool` is not separated from its `Arena` (opened)
+
+**Origin.** VERIFY-033 F4 recorded this reading as a hypothesis for a later
+arc: `pool_reset_reset_ensures_part3` (`pool->used == 0`) "fails because
+nothing separates `*pool` from the `*arena` the call havocs", and
+`pool_init`'s four `ensures` goals "read the same way". The argument blocks
+still file those goals under arithmetic (pool Cat 2a) and delegation (pool
+Cat 2d). Re-reading both blocks for entry 2's conjunct brought the
+hypothesis back, and G5 takes it up.
+
+**Finding.** `pool_init` requires `\valid(pool)` and `arena_invariant(arena)`
+and, since the G4 pool repair, that the `Pool` lie outside the arena's free
+tail. `pool_invariant` states `\valid(p)` and `arena_invariant(p->arena)`.
+Nothing separates `*pool` from `*arena`, so a `Pool` that overlaps its
+`Arena` is admitted.
+
+In C the overlap reaches `pool_init`'s first postcondition. `pool_init`
+stores the `Pool`'s first four fields, calls `arena_alloc`, then stores
+`base_mark` and `end_mark`. `tools/probes/verify-039/p_pool_arena.c` places
+the `Arena` at the `Pool`'s `base_mark` field in one heap block, so that
+`base_mark` and `end_mark` are the bytes of the `Arena`'s `buffer` and
+`capacity`. The first four stores miss the `Arena`, `arena_alloc` runs on it
+intact, and the last two overwrite `buffer` with the region's offset, 0, and
+`capacity` with the arena's new offset. `pool_init` returns true, and its
+second and third postconditions hold. The `Arena` it was given can no longer
+be used: its `buffer` field holds bytes stored as a `usize`, and the next
+read of that field through its own type is undefined (C11 6.5p7; G4's scope
+calls this the undefined step). Read as bytes, through `memcpy`, the field
+is a null pointer, and on that reading the first postcondition,
+`pool_invariant(pool)`, is false. The library and the probe make no
+undefined access: the block is heap storage, each field the library reads
+after a `Pool` store was last stored with a compatible type, and the probe
+reads the overwritten fields only through `memcpy` and `memcmp`. The result
+is the same in both build configurations, at LP64 and ILP32, with gcc and
+clang at `-O0` and `-O2`, and the sanitizers are clean. No placement we
+found reaches the fields of the other four goals below without such a read
+inside the library: each overlap that reaches them makes the library read an
+`Arena` or `Pool` field last stored through a field of another type.
+
+WP leaves the first postcondition unproved. Its goal is pool Cat 2a's
+goal 1, `pool_init_ensures_part4`, filed under arithmetic. Cat 2a's argument
+derives the arithmetic conjunct "by construction", and the arena repair's
+coverage update rests the `arena_invariant(p->arena)` part on
+`arena_alloc`'s postcondition, presuming that nothing before the call
+changes the `Arena`. Neither covers the two stores after the call, the ones
+the probe uses: for goal 1 the argument is defective as written. In WP's
+typed model the two structs' `usize` fields share one memory array and
+their pointer fields another, so without the separation a store into either
+may change the other, and a call that assigns `*arena` may change the
+`Pool`. The other four goals VERIFY-033 F4 named state no arithmetic at all:
+
+| Goal | Statement | Filed under |
+|---|---|---|
+| `pool_init_ensures_2_part4` | `pool->used == 0` | pool Cat 2a, goal 2 (arithmetic) |
+| `pool_init_ensures_3_part4` | `pool->capacity == max_objects` | pool Cat 2a, goal 3 (arithmetic) |
+| `pool_init_ensures_4_part3` | on failure, `arena->offset == \old(arena->offset)` | pool Cat 2a, goal 4 (arithmetic) |
+| `pool_reset_reset_ensures_part3` | `pool->used == 0` | pool Cat 2d, goal 3 (delegation) |
+
+Cat 2d's root-cause bullet describes `reset_ensures_part3` as the
+re-establishment of `pool_invariant`; that is `reset_ensures_2_part3`, and
+`reset_ensures_part3` is `pool->used == 0`.
+
+Each states a field the function stores, or one it must leave as it found
+it, across stores into the other struct or a call that assigns `*arena`:
+`pool_init` stores four `Pool` fields before `arena_alloc`, and `pool_reset`
+stores `used` before it. The missing separation suffices to explain all
+four, and the arithmetic the record names explains none; whether adding it
+closes them is the repair's prediction. Cat 2a's own note already doubts the
+classification of the `ensures_part4` goals (LIMITATION-SUSPECTED). This is
+G1's shape: a separation the contract lacks, goals unproved and misfiled,
+and one of them not true for an admitted call.
+
+**Repair (recommended, next).** `pool_init` gains
+`requires \separated(pool, arena);` and `pool_invariant` the conjunct
+`\separated(p, p->arena)`, so every function that takes the invariant has
+it. The prediction will say which of the goals above close, and whether
+`pool_init_call_arena_alloc_requires`, `pool_reset_call_arena_alloc_requires`
+and `pool_reset_reset_ensures_2_part3`, which state `arena_invariant` or
+`pool_invariant` across the same stores, go with them. One intervention per
+prediction: it follows the runner pin's scoring.

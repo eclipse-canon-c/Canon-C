@@ -11,7 +11,8 @@ Run from the repository root. Exact commands are in each file's header. The
 G1 probes use the bare `-CC` driver `vmacros/vdrivers/vec_cc_experiment.h`, the
 same `vec<int>` instantiation CI verifies; the G2 probe includes `core/arena.h`,
 the G4 probes `core/memory.h`, and for the listing `core/arena.h`,
-`core/pool.h` and `data/stringbuf.h`.
+`core/pool.h` and `data/stringbuf.h`; the G5 probe includes `core/arena.h` and
+`core/pool.h`.
 
 | Probe | Finding | Filing | Expected today |
 |---|---|---|---|
@@ -21,8 +22,9 @@ the G4 probes `core/memory.h`, and for the listing `core/arena.h`,
 | `p_frame_typed.c` | G4 | VERIFY-005's hypothesis: frames proved across writes stated through `char *` | at run time, every `_frame` claim (the object unchanged after `mem_zero`) is `VIOLATED` and every `_zero` claim holds, at `int`, `u8` and `char`; exit 0, sanitizers clean. Under WP (`g4-probe.yml`), predicted before it ran: the `int` and `u8` frames prove although false, the `char` zero proves, the other three do not (VERIFY-039 G4) |
 | `p_arena_self.c` | G4, entry 1 | `arena_alloc_zero`, `arena_alloc_aligned_zero` (`arena_invariant`, the address `ensures`), `arena_reset_secure` (the `buffer` and `capacity` frames, `arena_invariant`), `stringbuf_init_arena` (`arena_kept`): proved in every unit that has them, false for an `Arena` inside its own buffer | the `Arena` placed inside the 256-byte heap block it manages, each call's write covering it: all eight `VIOLATED`; exit 1, sanitizers clean, at LP64 and ILP32. Since the G4 arena repair the calls are outside `arena_init`'s contract, which requires the `Arena` to lie outside its buffer; run-time behaviour unchanged |
 | `p_pool_self.c` | G4, entries 2 and 1 | `pool_reset_secure`'s `pool_invariant`: proved in `frama-c-pool`, false when the zeroed slots cover the `Pool` (case B, entry 2) or the `Arena` (case A, entry 1) | both `VIOLATED` in the proof configuration; case B also in the default build, where case A is skipped (`ensure_msg` stops `pool_reset`); exit 1, sanitizers clean. Since the G4 arena repair case A is outside `arena_init`'s contract, and since the G4 pool repair case B is outside `pool_init`'s; run-time behaviour unchanged |
+| `p_pool_arena.c` | G5 | pool Cat 2a: `pool_init_ensures_part4` (`pool_invariant`), unproved, filed under arithmetic | the `Arena` placed at the `Pool`'s `base_mark` field, so that the stores of `base_mark` and `end_mark` overwrite the `Arena`'s `buffer` and `capacity`: `pool_init` returns true, ensures 2 and 3 hold, ensures 1 `VIOLATED` on the overwritten bytes (read through `memcpy`); exit 1, sanitizers clean, both build configurations, LP64 and ILP32 |
 
-All six build with any C99 compiler; add
+All seven build with any C99 compiler; add
 `-fsanitize=address,undefined -fno-sanitize-recover=all` to confirm that the
 violating calls are defined C, and `-DCANON_NO_REQUIRE -DNDEBUG` for the proof
 configuration. Since G1's fix (40cccd9) the same calls fall outside the
