@@ -1567,6 +1567,17 @@ construction. The C arithmetic is direct; the proof obstacle is WP's inability
 to carry the offset arithmetic across `arena_alloc`'s empty `nonnull` boundary
 and to discharge the nonlinear `capacity * object_size` product.
 
+**Coverage update (2026-10-09, VERIFY-039 G4, arena repair).** Goals 1 and 5,
+`pool_init_ensures_part4` and `pool_init_call_arena_alloc_requires`, now also
+state the conjunct `arena_invariant` gained: the `Arena` lies outside its
+buffer. The conjunct depends only on the `Arena`'s address, `buffer` and
+`capacity`. The argument takes `arena_invariant(arena)` at the call from
+`pool_init`'s precondition, so it already presumes that nothing before the
+call changes those; after the call, `arena_invariant(arena)`, conjunct
+included, is `arena_alloc`'s own postcondition, which is what goal 1's
+`arena_invariant(p->arena)` part rests on. The argument covers the conjunct
+as written.
+
 #### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (0 — RETIRED at VERIFY-036 F2; was 1, originally 6)
 
 | # | Goal                                                       |
@@ -1709,6 +1720,15 @@ chain through the parent allocators' contracts:
   rollback-and-re-reserve) and the `arena_reset_to` / `arena_alloc` call-site
   preconditions reduce to the same arithmetic chain cat 2a leaves unproved,
   inherited through the delegation to `arena_reset_to` / `arena_alloc`.
+
+  **Coverage update (2026-10-09, VERIFY-039 G4, arena repair).** Goals 2 and
+  4, `pool_reset_call_arena_alloc_requires` and
+  `pool_reset_reset_ensures_2_part3`, now also state `arena_invariant`'s
+  conjunct, that the `Arena` lies outside its buffer. `arena_reset_to` keeps
+  `buffer` and `capacity` (its frames) and re-establishes `arena_invariant`,
+  conjunct included, as its own postcondition, and so does `arena_alloc`; the
+  conjunct depends on nothing else but the `Arena`'s address. The argument
+  covers it as written.
 - `pool_reset_secure`'s `assigns_{exit,normal}_part6` and the
   `mem_secure_zero` validity precondition chain through the region computation
   (cat 2c shape) plus the `pool_reset` delegation.
@@ -2014,6 +2034,15 @@ obstacle is that WP has no `calls` clause to encode it, and
 `\valid_function` is unimplemented in Frama-C 29. This is a verifier
 feature gap plus a deliberate API-generality choice, not a code defect.
 
+**Coverage update (2026-10-09, VERIFY-039 G4, arena repair).** Goals 4 and
+19, `region_end_ensures_4_part1` and `region_end_call_arena_reset_requires`,
+now also state `arena_invariant`'s conjunct, that the `Arena` lies outside
+its buffer. Goal 4's arena disjunct is trivial once `r->arena` is null. For
+goal 19, the hook contract the argument relies on lets a hook allocate from
+the arena; every arena function preserves `arena_invariant`, conjunct
+included, and none moves the `Arena` or changes its `buffer` or `capacity`,
+which is all the conjunct depends on. The argument covers it as written.
+
 #### Category 2: region_invariant re-establishment on trivial mutators (4)
 
 | # | Goal                                              |
@@ -2043,6 +2072,13 @@ construction. The hook-count bound (`0 <= num_hooks <=
 REGION_MAX_CLEANUP`) is maintained by the explicit guard in
 region_register. The C matches the predicate; the obstacle is WP
 carrying arena_invariant's composed body through the postcondition.
+
+**Coverage update (2026-10-09, VERIFY-039 G4, arena repair).** All four goals
+now also state `arena_invariant`'s conjunct, that the `Arena` lies outside
+its buffer, through `region_invariant`. The argument covers it as written:
+each mutator leaves `r->arena` null, stores a pointer of which the caller has
+proved `arena_invariant` (now with the conjunct), or leaves it alone, and none
+writes an `Arena`.
 
 ### Summary of region.h-own residuals
 
@@ -10320,7 +10356,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) found, entry 1's repair predicted; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entry 1 (arena) repaired and scored exact (fix 7e5757f, CI #1346 / CC #33: nothing moved, as predicted), entry 2 (pool) found; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11258,3 +11294,40 @@ lies in the buffer, which the invariant now separates from `*arena`. That
 argument is part of their evidence from here on. If a goal moves, the
 conjunct reached WP in a way this reading does not foresee, and the log says
 where.
+
+### G4 — listing entry 1, scored (fix 7e5757f; CI #1346, CC #33, probe run #2)
+
+**Result: exact. Nothing moved.** The fix commit changed no pin (prediction
+e51f1d9), and every job of CI #1346 and CC #33 was green, so every unit's
+proved line, count and roll-call are as they were, by set equality. The G4
+probe, re-run by the same push at its pinned `4 / 7`, was green (GitHub's run
+pages, read 2026-10-09).
+
+**By part.**
+
+1. No goal generated or removed (H): held. Every proved line is unchanged,
+   totals included.
+2. Entry 1's nine postconditions stay proved (H): held. None is among the
+   residuals.
+3. No other goal changed status (M): held, by set equality in every unit.
+4. Every pin stays (H): held.
+5. The G4 probe green at `4 / 7` (H): held. The pinned observation repeated.
+6. The C probes (H): unchanged at run time, checked locally. Since the fix,
+   `p_arena_self.c`'s calls and `p_pool_self.c`'s case A are outside
+   `arena_init`'s contract; case B is not (entry 2).
+
+**What it shows.** The repair is invisible to WP, as G4 said it must be.
+Before it, nine proved postconditions were false for calls the contracts
+admitted; after it, they are true; WP's output is the same in every unit.
+What tells the two apart is the argument the record now carries — every write
+lies in the buffer, which the invariant separates from `*arena` — and the
+nine are the first goals the record holds as proved with an argument as
+their evidence. G4's listing settles how such goals are filed.
+
+**The ten residual arguments, re-read.** Each of the ten residuals that
+state the conjunct is covered by its argument as written: the conjunct
+depends only on the `Arena`'s address, `buffer` and `capacity`, which no
+function involved changes, and wherever an argument re-establishes
+`arena_invariant` it does so through an arena function's postcondition,
+which now carries the conjunct. Pool Cat 2a and 2d and region Cat 1 and 2
+each carry a coverage update saying so.
