@@ -29,7 +29,9 @@ on:
 
 jobs:
   record-coverage:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: see the runner note in
+    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6

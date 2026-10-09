@@ -114,6 +114,19 @@ concurrency:
 #   or workaround as of the time of writing. Memory safety on Windows is
 #   covered by the MSVC build with /W4 /WX and by Valgrind on Linux.
 #   Re-enable dr-memory when upstream ships a compatible release.
+#
+# NOTE — the Linux runner is pinned: every Linux job runs on ubuntu-24.04,
+#   never ubuntu-latest (docs/deviations.md, VERIFY-039, runner pin).
+#   GitHub moves the ubuntu-latest label to Ubuntu 26.04 between 2026-10-19
+#   and 2026-11-19 (actions/runner-images#14748). While a label migrates,
+#   the image it names can differ from push to push (the misra job's
+#   lesson; see its banner) and between the jobs of one run, each of which
+#   gets its own runner. What the gates measure depends on the image: the
+#   gcc that preprocesses every Frama-C unit, the system the cached opam
+#   switch is restored onto (the cache key names runner.os, which is Linux
+#   on any Ubuntu), and the apt-installed tools (cppcheck, clang-tidy,
+#   gcc-14, lcov, valgrind, clang, gcc-multilib). Move the label
+#   DELIBERATELY, as its own predicted change, never by drift.
 # ---------------------------------------------------------------------------
 jobs:
   # -------------------------------------------------------------------------
@@ -124,22 +137,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         build_type: [Release, Debug]
         c_compiler: [gcc, clang, cl]
         include:
           - os: windows-latest
             c_compiler: cl
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             c_compiler: gcc
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             c_compiler: clang
           - os: macos-latest
             c_compiler: clang
         exclude:
           - os: windows-latest
             c_compiler: gcc
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             c_compiler: cl
           - os: macos-latest
             c_compiler: cl
@@ -196,7 +209,7 @@ jobs:
   # -------------------------------------------------------------------------
   build-32bit:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -287,12 +300,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: Install clang-tidy and Cppcheck (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-tidy cppcheck
@@ -331,14 +344,14 @@ jobs:
           Add-Content $env:GITHUB_PATH $Exe.DirectoryName
           & $Exe.FullName --version
       - name: Configure CMake for compile_commands.json (Linux only)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -S "${{ github.workspace }}"
       - name: Run clang-tidy (Linux only)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         shell: bash
         run: |
           SKIP="dynstring_test.c dynvec_test.c"
@@ -444,7 +457,7 @@ jobs:
   # -------------------------------------------------------------------------
   valgrind:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Valgrind
@@ -474,7 +487,7 @@ jobs:
   # -------------------------------------------------------------------------
   fuzzing:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Clang with libFuzzer runtime
@@ -557,7 +570,7 @@ jobs:
   # =========================================================================
   frama-c-checked:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -671,7 +684,7 @@ jobs:
           retention-days: 90
   frama-c-bits:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -791,7 +804,7 @@ jobs:
           retention-days: 90
   frama-c-compare:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -943,7 +956,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-ptr:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -1090,7 +1103,7 @@ jobs:
           retention-days: 90
   frama-c-slice:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -1268,7 +1281,7 @@ jobs:
           retention-days: 90
   frama-c-memory:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -1461,7 +1474,7 @@ jobs:
           retention-days: 90
   frama-c-arena:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -1658,7 +1671,7 @@ jobs:
           retention-days: 90
   frama-c-pool:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -1886,7 +1899,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-region:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350          # clean cancel before the 6h platform kill
     steps:
       - uses: actions/checkout@v6
@@ -2191,7 +2204,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-arena-32:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
@@ -2520,7 +2533,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-error:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -2677,7 +2690,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-option:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -2888,7 +2901,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-result:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -3108,7 +3121,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-vec:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
@@ -3492,7 +3505,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-deque:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
@@ -4006,7 +4019,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-borrow:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -4274,7 +4287,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-diag:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -4514,7 +4527,7 @@ jobs:
 
   frama-c-bitset:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # GUARDS REMOVED, 2026-08-24. Added after CI #1254 and both withdrawn:
     #   -wp-par 2        was aimed at the OOM, but the OOM was E1's unbounded
     #                    shift exponent, reverted since. It roughly DOUBLED
@@ -5230,7 +5243,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-lifetime:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # 15, not the 60 every other WP job carries. Run 0 (CI #1271) analysed
     # 4 goals in seconds. A 60-minute ceiling on a unit this size would let
     # a hang look like slowness for an hour before failing.
@@ -5607,7 +5620,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-priority-queue:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # 330: run 1 (CI #1282) took 3h55m against 240 — five minutes to spare —
     # and commit 2's loop annotations add preservation and variant goals.
     # Still under GitHub's 6h kill, same reasoning as region's 350.
@@ -6086,7 +6099,7 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-range:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -6280,7 +6293,7 @@ jobs:
           retention-days: 90
   frama-c-stringbuf:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
@@ -6502,7 +6515,7 @@ jobs:
   # -------------------------------------------------------------------------
   coverage:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Install GCC 14 and lcov
@@ -8087,7 +8100,7 @@ jobs:
   # -------------------------------------------------------------------------
   lifetime-token-concurrency:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
@@ -8233,22 +8246,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         build_type: [Release, Debug]
         c_compiler: [gcc, clang, cl]
         include:
           - os: windows-latest
             c_compiler: cl
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             c_compiler: gcc
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             c_compiler: clang
           - os: macos-latest
             c_compiler: clang
         exclude:
           - os: windows-latest
             c_compiler: gcc
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             c_compiler: cl
           - os: macos-latest
             c_compiler: cl
@@ -8321,7 +8334,7 @@ jobs:
   # -------------------------------------------------------------------------
   compcert:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.repository == 'eclipse-canon-c/Canon-C'
     continue-on-error: true
     steps:

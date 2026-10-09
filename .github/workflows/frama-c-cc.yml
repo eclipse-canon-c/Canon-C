@@ -62,7 +62,9 @@ concurrency:
 jobs:
   frama-c-cc:
     name: frama-c-cc-${{ matrix.family }}
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: see the runner note in
+    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.budget }}
     strategy:
       fail-fast: false
