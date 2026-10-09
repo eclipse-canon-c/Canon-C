@@ -199,6 +199,21 @@ contract (each comparator documents the expected pointer type). This
 is the same pattern used by `qsort`, `bsearch`, and every C standard
 library generic interface.
 
+**Update (2026-10-09, VERIFY-039 G3) — the proofs use a broader hypothesis
+than the one stated.** The WP manual lists the selector `Typed+Cast` adds,
+`cast`, as "Typed memory model with unlimited casts (unsound)" (29.0, §2.4.3).
+The typed model keeps one array per atomic type, integers by exact kind, so a
+write through `char *` changes only the `sint8` array. A proof that relates a
+location of another type across a call whose `assigns` are stated through
+`char *` (memory.h's byte-level functions; libc's `memset`, `memcpy` and
+`memmove`) rests on the hypothesis that a location is accessed at one type,
+which those calls break by design whenever they write a typed buffer — not
+only on callers passing correctly-typed pointers. In the model, content
+stated through `char *` does not reach a read at another type (shown for
+`uint8` at VERIFY-039 G3), and, as WP 29 frames such calls, a frame across one
+at another type proves without its range being checked (VERIFY-039 G4, to be
+tested by probe).
+
 **Mitigation**: compare.h achieves 208/208 proved goals (100%) with
 `Typed+Cast`. The flag is applied only to compare.h, ptr.h (see
 VERIFY-006), slice.h (see VERIFY-007), memory.h (see VERIFY-008), and
@@ -1123,6 +1138,22 @@ from the table above. The block now covers two goals, true but unprovable
 because `mem_zero`'s contract states no values. The argument below does not
 cover them as written: it relies on a `mem_zero` postcondition that does not
 exist. Probe: `tools/probes/verify-039/p_try_alloc_assigns.c`.
+
+**Coverage update (2026-10-09, VERIFY-039 G3) — the premise exists; the
+bridge remains.** G3 (76a1f94) gave `mem_zero` the postcondition the argument
+below cites — the bytes at `ptr` are zero — stated through `char *`, as libc's
+`memset` states its own. It proved in every unit, and both goals stayed at CI
+#1344 and CC #31: WP's typed model keeps `char` (`sint8`) and `u8` (`uint8`)
+in separate arrays, so a fact about the bytes through `char *` does not reach
+a read through `u8 *`, and, as WP 29 frames the call, the `uint8` array keeps
+its old values. Both goals are true in C. Their mechanism is the byte-type bridge,
+as G3 pre-registered. The argument now has its premise; it covers both goals
+once it states the one step the model cannot take — a byte written as zero
+through `char *` reads 0 through `u8 *` — and drops the inheritance from Cat
+2b it claims. Whether it is rewritten that way or the two goals move to an
+existing byte-view block is the filing pass's decision; until then this block
+lists them, and its argument as written does not cover them. See VERIFY-039
+G3.
 
 **Functions affected**: `arena_alloc_zero`, `arena_alloc_aligned_zero`,
 `arena_try_alloc`, `arena_try_alloc_aligned`.
@@ -3125,6 +3156,18 @@ and CC #28 in every unit that pinned them. The category now covers three
 goals, each a content postcondition across `mem_copy` or `mem_move`, the
 mechanism it states: `remove_ok_ensures_5_part6`, `insert_ok_ensures_5_part5`
 and `append_array_ok_ensures_4_part5`.
+
+**Coverage update (2026-10-09, VERIFY-039 G3) — frame-only is not the whole
+obstacle.** The stated root cause, frame-only contracts on `mem_copy` and
+`mem_move`, is one obstacle, not the whole: G3 gave `mem_zero` a content
+postcondition through `char *`, and the two arena goals that read the same
+bytes through `u8 *` stayed, because WP's typed model keeps one array per
+integer kind. The three goals here read `int` cells (`Rec` fields in
+`vec_struct`) across writes stated through `char *`, so content
+postconditions on `mem_copy` and `mem_move` would not reach them either
+(deduced, not tested). By the same mechanism the frames across the same
+calls, `insert`'s and `remove`'s elements below `i`, would prove without the
+call's range being checked; VERIFY-039 G4 tests that.
 
 **Category (g) — fill macro-body loop (24)**: `vec_int_fill`'s entire
 goal cluster (terminates ×2, rte_mem_access ×8, assigns ×4,
@@ -10277,7 +10320,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 predicted, fix pending; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 scored (fix 76a1f94, CI #1344 / CC #31): the new postcondition held, the two Cat 2c closures missed, the mechanism identified; G4 opened (frames across byte-level callees); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10738,3 +10781,188 @@ after Cat 2b at F4, and by the same kind of change: a callee stating what it
 does. It also tests by intervention the frame-only reading that VERIFY-018's
 category (d) applies to `mem_copy` and `mem_move`. If they stay, the obstacle is the byte-type bridge,
 and they are filed under that mechanism.
+
+### G3 — scored (fix 76a1f94; CI #1344, CC #31)
+
+**Result: the new postcondition held in all eleven units; the two Cat 2c
+closures missed in all eight arena units.** The fix commit carried the
+predicted pins (prediction bcc7343). `frama-c-memory`, `frama-c-bitset` and
+`frama-c-priority-queue` were green. The eight arena units were red, each
+with two fewer proved than predicted and the same total; wherever the
+residual set can be read, it is the predicted set plus the two zero-content
+goals.
+
+| Job | Predicted | Observed |
+|-----|-----------|----------|
+| `frama-c-memory` | 2842 / 2890, 48 | as predicted |
+| `frama-c-bitset` | 4858 / 5026, 168 | as predicted |
+| `frama-c-priority-queue` | 4526 / 4602, 76 | as predicted |
+| `frama-c-arena` | 3519 / 3567, 48 | 3517 / 3567, 50 |
+| `frama-c-arena-32` | 3519 / 3567, 48; 64/32 set equality holds | 3517 / 3567, 50; the 32-bit set equals the observed 64-bit set |
+| `frama-c-pool` | 3988 / 4045, 57 | 3986 / 4045, 59 |
+| `frama-c-region` | 3667 / 3738, 71 | 3665 / 3738, 73 |
+| `frama-c-vec` | 5365 / 5515, 150 | 5363 / 5515, 152 |
+| `frama-c-stringbuf` | 4790 / 4840, 50 | 4788 / 4840, 52 |
+| `cc-vec` (`frama-c-cc.yml`) | 5422 / 5580, 158 | 5420 / 5580, 160 |
+| `vec_struct` (`frama-c-cc.yml`) | 5420 / 5578, 158 | 5418 / 5578, 160 |
+
+**By part.**
+
+1. `mem_zero_zero_ensures_zeroed` (H generated; M/H proved): held. Every
+   unit's total rose by exactly three, and no `mem_zero` goal is among the
+   residuals any gate or log shows; in `frama-c-vec`, whose pasted log is
+   partial, the counts (+3 proved, +3 total) are those of three proved goals.
+   The logs give prover totals, not provers by goal, so which prover closed
+   which part is not scored.
+2. `arena_alloc_zero_ensures_3_part1` and
+   `arena_alloc_aligned_zero_ensures_3_part1` (M): missed. Both stayed, under
+   the same names, in all eight units.
+3. The bitset residuals about the zeroed words (H): held. `frama-c-bitset`
+   was green, and its gate checks all 168 names in both directions.
+4. Every other goal (H): held, as far as the sets can be read. In seven of
+   the eight arena units the observed residual set is the G2 set exactly:
+   read from the logs for arena, arena-32, pool, region and stringbuf, and
+   from the gates for `cc-vec` and `vec_struct` (missing 0, unpinned 2).
+   arena-32's gate reported its set "no longer identical to the 64-bit set
+   (0 newly proved, 2 width-specific)" because it compares with the baseline
+   the fix commit embedded, which lacked the two names; the observed 64-bit
+   set is identical to it. `frama-c-vec` stops at gate 0, and its pasted log
+   lists 102 of its 152 names, all in the G2 set, the two among them; the
+   ratchet run's roll-call checks the rest. memory and the priority queue
+   were green, at set equality.
+5. The job set (H): held. CI #1344 failed in exactly the six main-workflow
+   arena jobs and CC #31 in exactly `cc-vec` and `vec_struct`; every other
+   job passed (GitHub's run pages, read 2026-10-09). No Failed, Invalid or
+   Stepout goal: in every unit the proved count plus the Timeouts and
+   Unknowns equals the total. (The gates' Failed checks grep `[Failed]`,
+   which WP 29 prints only in smoke-test mode; it prints a prover failure as
+   `[Failure]` and a goal with no result not at all. In these eleven units
+   the pinned proved line and count add up to the total, so a green gate
+   cannot hide either; the regexes are a separate fix.)
+
+The red jobs are the ones the prediction named for this case: "If the two
+Cat 2c goals stay, the eight arena units show two fewer proved and those two
+names unpinned, and the other three stay green."
+
+**Why the closures failed.** The prediction rested on the reading that WP's
+typed model keeps both 8-bit types in one memory chunk. It does not. The model
+stores heap values in "several separated global arrays, one for each atomic
+type" (WP manual 29.0, §1.4), and in WP's source the integer arrays are split
+by exact kind (`M_int of Ctypes.c_int`). WP takes `void *` as `char *`
+(VERIFY-005), and plain `char` is signed under both machdeps, so `mem_zero`'s
+new `zeroed`, like the libc `memset` contract it is proved from, speaks of the
+`sint8` array. The goal, `((u8*)\result)[i] == 0`, reads the `uint8` array,
+of which `zeroed` says nothing. The call's frame does not help either:
+`mem_zero` has no default `assigns`, so WP 29 frames the call by the union of
+its complete behaviours' clauses, `((char *)ptr)[0 .. size - 1]` (the log
+warns "No default assigns clause, using complete behaviors assigns" at the
+first such call, `core/arena.h:458`), and havocs only the `sint8` array and
+the initialization map. In the model the `uint8` bytes keep whatever values
+they had, and no postcondition stated through `char *` reaches the goal. The
+run's log shows the type split at the goals themselves: at both goal lines (`core/arena.h:452` and `:469`) WP warns
+`Cast with incompatible pointers types (source: sint8*) (target: uint8*)`,
+and both goals carry `(Stronger, 3 warnings)`. The same warnings are in CI
+#1341's log, read for G1. The evidence was in hand before the prediction, and
+the prediction did not consult it.
+
+It is not the call's behaviour selection: the call is under `p != NULL`, and
+with `size == 0` the goal is vacuous. (WP's source was read in Frama-C 25.0,
+whose source was at hand, and in 29.0 on ocaml.org: 29.0's `MemTyped` declares
+the same per-kind arrays. The call frame is 29's: 25.0 takes a missing default
+`assigns` as writing everything.)
+
+**Cat 2c: the mechanism, as pre-registered, is the byte-type bridge.** Both
+goals are true in C: `memset` writes zero bytes, and a zero byte reads 0
+through `char` and `unsigned char` alike. Both are unprovable in this model
+as stated, and a `mem_zero` contract can only move the gap: stated through
+`u8 *`, its postcondition would let the two goals prove and leave the same
+gap in `mem_zero`'s own proof, which starts from `memset`'s `char`-typed
+postcondition. This is the libc byte-view class (VERIFY-007, VERIFY-008;
+diag.h's Category 1; vec's category (h)), here between two 8-bit kinds. Cat
+2c's argument now has the premise it cites, and covers both goals once it
+states the bridging step and drops the inheritance from Cat 2b it still
+claims. Which block's argument carries them, Cat 2c rewritten that way or an
+existing byte-view block, is the filing pass's decision; until then Cat 2c
+lists them and its argument as written does not cover them. *A* stays at 12.
+`mem_zero` keeps its postcondition: it is true, it proves, and it states what
+the function does. One intervention would test the reading directly: state
+the two postconditions through `char *`, which in C says the same of a zero
+byte; the mechanism predicts both close. The filing pass weighs it, since it
+fits a specification to the model's arrays.
+
+**What it shows.**
+
+- **Content across byte-level callees.** A frame-only callee contract was not
+  the whole obstacle: stating the content through `char *` did not suffice.
+  VERIFY-018's category (d) is in the same position by the same mechanism.
+  Its three live goals read `int` cells (`Rec` fields at `vec_struct`) after
+  `mem_copy` or `mem_move`, whose writes are stated through `char *`; content
+  postconditions on those two would not reach them either. This is deduced
+  from the mechanism, not tested.
+- **Frames across byte-level callees (from WP 29's handling of the call; not
+  yet tested).** The same separation works the other way. A call framed by
+  `char`-typed `assigns` havocs only the `sint8` array and the
+  initialization map, so every location outside them keeps its value across
+  the call, wherever the call writes, and a frame postcondition across such a
+  call should prove without the call's range being compared with it. G1's frame in `remove`, the
+  elements below `i`, would be one: it holds in C because `mem_move` writes
+  from `&items[i]` on, and G1's prediction expected the proof to cross the
+  `char`-typed `assigns`; by the source, in the model there is nothing to
+  cross. If so, such a proof is evidence only under the model's hypothesis
+  that each location is accessed at one type, which these callees break by
+  design: they write typed buffers through `char *`. The project runs WP's
+  `cast` selector (`Typed+Cast`), which the WP manual lists as "Typed memory
+  model with unlimited casts (unsound)" (29.0, §2.4.3); VERIFY-005 calls the
+  model sound "under the assumption that callers pass correctly-typed
+  pointers", a narrower hypothesis than such proofs use. The record already
+  cites one as evidence of a range: VERIFY-017 and MCDC-009 read diag.h's
+  `d->depth` surviving `push`'s `memmove` as WP framing the byte-level write
+  correctly by its footprint. G4 below opens the item.
+
+**Ratchet (this commit).** The eight arena units return to their G2
+roll-calls and counts, with the three new goals in their proved lines:
+`frama-c-arena` and `frama-c-arena-32` 3517 / 3567, 50; `frama-c-pool`
+3986 / 4045, 59; `frama-c-region` 3665 / 3738, 73; `frama-c-vec` 5363 / 5515,
+152; `frama-c-stringbuf` 4788 / 4840, 52; `cc-vec` 5420 / 5580, 160;
+`vec_struct` 5418 / 5578, 160. memory, bitset and the priority queue keep the
+pins they passed at. VERIFY-009 Cat 2c and VERIFY-018 category (d) carry
+coverage updates, and VERIFY-005 an update on its hypothesis. Expected on the
+ratchet run: every job green.
+
+### G4 — frames across byte-level callees (opened)
+
+**Finding (from WP 29's handling of these calls; not yet tested by probe).**
+Twelve memory.h functions state their writes through `char *` — `mem_copy`,
+`mem_move`, `mem_zero`, `mem_set`, `mem_secure_zero`, `mem_swap`,
+`mem_swap_buf` and the five `_bytes` variants — inside behaviours, with no
+default `assigns`; WP 29 frames a call to one by the union of its complete
+behaviours' clauses, and warns "No default assigns clause, using complete
+behaviors assigns". libc's `memset`, `memcpy` and `memmove`, which diag.h
+calls directly, state theirs at top level. Either way a call havocs only the
+`sint8` array and the initialization map, so every location of another type
+keeps its value across it, whatever the call's range. A postcondition or
+assertion that such a location is unchanged across the call should therefore
+prove without the range being compared with it; G1's frame in `remove`
+proved at CI #1341, as this predicts. Where the
+code's ranges avoid the location, as in `insert`'s and `remove`'s frames
+below `i` and diag.h's `d->depth` across `push`'s `memmove`, the property is
+true and its proof is not the evidence of it. Were a range to overlap, the
+property would be false and would still prove.
+
+**Why it matters.** The record treats a proved goal as needing no argument.
+These would need one: the model's hypothesis, and the code's ranges, which no
+prover has checked. In vec the ranges are bounded by the `ok` behaviours'
+`assigns` clauses, whose goals are category (h) residuals; whether every such
+frame has a bound of that kind is what the listing must establish. The record
+already reads one such proof as evidence of the range: VERIFY-017 ("WP frames
+`d->depth` correctly past the byte-level write") and MCDC-009 ("the memmove's
+assigns footprint covers `frames` bytes only"), whose cross-stream instance
+rests on that reading.
+
+**Plan.** First a probe, its outcome committed before it runs: a function
+that zeroes an `int` through `mem_zero` and claims the `int` unchanged, false
+in C and predicted to prove, with controls at `u8` and at `char`. Then the
+listing: every proved goal that relates a location of another type across one
+of these calls, VERIFY-017's and MCDC-009's included, each read against the
+call's range and filed under one stated hypothesis. Until then such proofs
+stand relative to the typed model's hypothesis, and VERIFY-005 says so.

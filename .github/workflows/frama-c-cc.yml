@@ -79,16 +79,17 @@ jobs:
           # remove's false frame fragments closed, two call-site goals added.
           # VERIFY-039 G2 (predicted pin): arena's try wrappers; their six goals
           # close in every unit that includes arena.h.
-          # VERIFY-039 G3 (predicted pin): mem_zero states its zeros; +3 goals,
-          # and arena's two zero-content goals close.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5422 / 5580", unproved: 158 }
+          # VERIFY-039 G3 (CC #31): mem_zero states its zeros; +3 goals, all
+          # proved. Arena's two zero-content goals stayed, against the
+          # prediction: the byte-type bridge (VERIFY-039 G3, scored).
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5420 / 5580", unproved: 160 }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
           # with VERIFY-039 G1 at CC #28, which also corrected one
           # mis-transcribed name in cc_pins/vec_struct.txt.
-          # VERIFY-039 G2, G3: predicted pins, as cc-vec's.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5420 / 5578", unproved: 158 }
+          # VERIFY-039 G2: predicted pin, as cc-vec's; G3 ratcheted at CC #31.
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5418 / 5578", unproved: 160 }
     steps:
       - uses: actions/checkout@v6
 
