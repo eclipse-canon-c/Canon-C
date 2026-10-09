@@ -24,8 +24,10 @@
  * struct, and two placements make them do so:
  *
  *   B (entry 2): the Pool lives inside the slot region it manages, which
- *     pool_init admits: it separates neither *pool from the arena's free
- *     tail nor, in pool_invariant, *pool from its slots. The Arena is
+ *     pool_init admitted until the G4 pool repair: it separated neither
+ *     *pool from the arena's free tail nor, in pool_invariant, *pool from
+ *     its slots. Since the repair the call is outside pool_init's contract;
+ *     the run-time behaviour is unchanged. The Arena is
  *     outside its buffer, as arena_init requires since the G4 arena repair.
  *   A (entry 1): the Arena lives inside its own buffer and the pool's
  *     slots cover it. Since the G4 arena repair, arena_init's contract

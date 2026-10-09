@@ -84,6 +84,9 @@
  * ✗ Calling pool_reset() when you need post-init arena allocations to survive
  * ✗ Calling arena_reset() / arena_reset_secure() on the pool's backing arena
  *   while the pool is still live — see "Lifetime tracking" below.
+ * ✗ Placing the Pool struct in the arena's free tail, where its own slots
+ *   will be reserved: pool_reset_secure() zeroes the slots and would zero
+ *   the Pool (VERIFY-039 G4)
  *
  * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
  * ────────────────────────────────────────────────────────────────────────────
@@ -181,6 +184,10 @@ typedef struct {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*@
+  // VERIFY-039 G4: the last conjunct keeps the Pool out of its own slots.
+  // pool_reset_secure zeroes the slots through `char *`, which WP's typed
+  // model cannot see reach the Pool's fields; in C this is what keeps it off
+  // them.
   predicate pool_invariant(Pool *p) =
       \valid(p) &&
       arena_invariant(p->arena) &&
@@ -189,7 +196,8 @@ typedef struct {
       p->capacity <= CANON_USIZE_MAX / p->object_size &&
       p->base_mark <= p->end_mark &&
       p->end_mark <= p->arena->capacity &&
-      p->end_mark - p->base_mark == p->capacity * p->object_size;
+      p->end_mark - p->base_mark == p->capacity * p->object_size &&
+      \separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1));
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -277,6 +285,10 @@ typedef struct {
   requires \valid(pool) && arena_invariant(arena);
   requires object_size > 0;
   requires max_objects > 0;
+  // VERIFY-039 G4: the slots come from the arena's free tail; the Pool must
+  // not lie there (as stringbuf_init_arena's sep_storage).
+  requires \separated(pool,
+                      ((char *)arena->buffer) + (arena->offset .. arena->capacity - 1));
   assigns  *pool, *arena;
   ensures  \result == \true ==> pool_invariant(pool);
   ensures  \result == \true ==> pool->used == 0;
