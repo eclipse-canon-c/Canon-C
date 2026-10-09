@@ -42,6 +42,9 @@
  *   - O(1) alloc (pointer bump + alignment padding only)
  *   - Zero hidden allocations or metadata overhead
  *   - Caller owns and controls the backing buffer
+ *   - The Arena struct must live outside the buffer it manages: the zeroing
+ *     calls, arena_reset_secure() and callers writing into the blocks it
+ *     hands out would overwrite it (VERIFY-039 G4)
  *   - Two reset modes: fast (offset = 0) and secure (memset 0 over full used+pad range)
  *   - Checkpoint/rollback via ArenaMark
  *   - NOT thread-safe — synchronize externally if needed
@@ -108,12 +111,17 @@ typedef usize ArenaMark;
   predicate is_power_of_two_logic(integer n) =
       n > 0 && (n & (n - 1)) == 0;
 
+  // VERIFY-039 G4: the Arena does not live in the block it manages. The
+  // zeroing calls and arena_reset_secure write that block through `char *`,
+  // which WP's typed model cannot see reach the Arena's fields; this conjunct
+  // is what keeps those writes off them in C.
   predicate arena_invariant(Arena *a) =
       \valid(a) &&
       a->capacity > 0 &&
       a->capacity <= CANON_ARENA_MAX_SIZE &&
       a->offset <= a->capacity &&
-      \valid(a->buffer + (0 .. a->capacity - 1));
+      \valid(a->buffer + (0 .. a->capacity - 1)) &&
+      \separated(a, a->buffer + (0 .. a->capacity - 1));
 
   // VERIFY-036 F4: the pad is computed from the address, as the code computes
   // it (ptr_align_padding); padding from the offset agreed only for aligned
@@ -247,6 +255,8 @@ static inline ArenaStats arena_stats(const Arena* arena) {
   requires \valid((u8*)buffer + (0 .. capacity - 1));
   requires capacity > 0;
   requires capacity <= CANON_ARENA_MAX_SIZE;
+  // VERIFY-039 G4: the Arena must not lie inside the buffer it manages.
+  requires \separated(arena, (u8*)buffer + (0 .. capacity - 1));
   assigns *arena;
   ensures arena_invariant(arena);
   ensures arena->buffer == (u8*)buffer;

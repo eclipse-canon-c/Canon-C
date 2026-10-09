@@ -26,9 +26,10 @@
  *   B (entry 2): the Pool lives inside the slot region it manages, which
  *     pool_init admits: it separates neither *pool from the arena's free
  *     tail nor, in pool_invariant, *pool from its slots. The Arena is
- *     outside its buffer, as entry 1's repair would require.
+ *     outside its buffer, as arena_init requires since the G4 arena repair.
  *   A (entry 1): the Arena lives inside its own buffer and the pool's
- *     slots cover it. Entry 1's repair would exclude this placement.
+ *     slots cover it. Since the G4 arena repair, arena_init's contract
+ *     excludes this placement; the run-time behaviour is unchanged.
  *
  * From the repository root, in the proof configuration:
  *   gcc -std=c99 -Wall -Wextra -DCANON_NO_REQUIRE -DNDEBUG -I. \

@@ -33,8 +33,10 @@
  *
  * Each case puts the Arena inside a 256-byte heap block (no declared type,
  * so every access is defined C), initializes it over the block, and makes
- * the call so that the written range covers the Arena. Every call meets the
- * function's contract as it stands.
+ * the call so that the written range covers the Arena. Every call met its
+ * function's contract until the G4 arena repair; since then arena_init
+ * requires the Arena to lie outside its buffer, so these calls are outside
+ * its contract. The run-time behaviour is unchanged.
  *
  * From the repository root:
  *   gcc -std=c99 -Wall -Wextra -DCANON_NO_REQUIRE -DNDEBUG -I. \
