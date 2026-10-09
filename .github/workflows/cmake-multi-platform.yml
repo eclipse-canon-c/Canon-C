@@ -1676,9 +1676,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/pool.h"
-        # pool.h — Typed+Cast. Expected: 3970 / 4061 proved, exactly 95
-        # unproved (VERIFY-010): 91 inherited (arena.h's full surface,
-        # two-hop transitive) + 28 own across cats 2a/2b/2c/2d. Any
+        # pool.h — Typed+Cast. Expected: the Proved line and
+        # EXPECTED_UNPROVED pinned below, since VERIFY-039 G5 3993 / 4045
+        # and 52 (VERIFY-010): 50 inherited from the substrate + 2 own. Any
         # deviation is a regression.
         # (2026-07-16 retrofit): roll-call COMPLETED from a 33-name sample
         # to the full 119-name set — the inherited 89 is arena.h's pinned
@@ -1730,7 +1730,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_pool_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_pool_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=59   # VERIFY-039 G3 ratchet (CI #1344): 59 as at G2; G3 predicted 57 (G2: 65, F4: 81, F3: 85, F6: 87, F5: 89, F2: 90, F1: 91)
+          EXPECTED_UNPROVED=52   # VERIFY-039 G5 predicted: 59 -> 52 (G3 ratchet, CI #1344: 59; G3 predicted 57; G2: 65, F4: 81, F3: 85, F6: 87, F5: 89, F2: 90, F1: 91)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -1763,8 +1763,8 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "3986 / 4045" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3986 / 4045)."
+          if [ "${PROVED_COUNT}" != "3993 / 4045" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3993 / 4045)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1833,14 +1833,7 @@ jobs:
             "typed_cast_arena_alloc_zero_ensures_3_part1"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
             "typed_cast_pool_init_ensures_part4"
-            "typed_cast_pool_init_ensures_2_part4"
-            "typed_cast_pool_init_ensures_3_part4"
-            "typed_cast_pool_init_ensures_4_part3"
-            "typed_cast_pool_init_call_arena_alloc_requires"
             "typed_cast_pool_reset_call_arena_reset_to_requires_2"
-            "typed_cast_pool_reset_call_arena_alloc_requires"
-            "typed_cast_pool_reset_reset_ensures_part3"
-            "typed_cast_pool_reset_reset_ensures_2_part3"
           )
           MISSING=0
           for goal in "${CHECKS[@]}"; do
@@ -1866,10 +1859,10 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: pool.h verified — 3986/4045 proved, 59 documented"
-          echo "      residuals all observed by name (VERIFY-010): 89"
-          echo "      inherited (arena.h's full surface, verbatim) + 24"
-          echo "      pool.h-own. Full set equality enforced. Composable"
+          echo "PASS: pool.h verified — 3993/4045 proved, 52 documented"
+          echo "      residuals all observed by name (VERIFY-010): 50"
+          echo "      inherited from the substrate + 2 pool.h-own (VERIFY-039"
+          echo "      G5). Full set equality enforced. Composable"
           echo "      verification holds across a two-hop transitive"
           echo "      include: zero new substrate residuals."
           echo "==============================================="

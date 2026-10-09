@@ -16,8 +16,10 @@
 /* VERIFY-039 G5 -- docs/deviations.md: a Pool that overlaps its Arena.
  *
  * pool_init requires \valid(pool) and arena_invariant(arena), and that the
- * Pool lie outside the arena's free tail; nothing separates *pool from
- * *arena. pool_init stores the Pool's first four fields, calls arena_alloc,
+ * Pool lie outside the arena's free tail; until the G5 repair nothing
+ * separated *pool from *arena. Since the repair, pool_init requires that
+ * too, so the call below is outside its contract; its run-time behaviour is
+ * unchanged. pool_init stores the Pool's first four fields, calls arena_alloc,
  * then stores base_mark and end_mark. Here the Arena lies at the Pool's
  * base_mark field in one heap block, so that base_mark and end_mark are the
  * bytes of the Arena's buffer and capacity fields. The four stores before

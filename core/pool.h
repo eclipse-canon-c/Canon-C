@@ -87,6 +87,9 @@
  * ✗ Placing the Pool struct in the arena's free tail, where its own slots
  *   will be reserved: pool_reset_secure() zeroes the slots and would zero
  *   the Pool (VERIFY-039 G4)
+ * ✗ Placing the Pool struct over its Arena: pool_init() and pool_reset()
+ *   store the Pool's fields and call arena functions that store the
+ *   Arena's, and each would overwrite the other (VERIFY-039 G5)
  *
  * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
  * ────────────────────────────────────────────────────────────────────────────
@@ -184,10 +187,13 @@ typedef struct {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*@
-  // VERIFY-039 G4: the last conjunct keeps the Pool out of its own slots.
-  // pool_reset_secure zeroes the slots through `char *`, which WP's typed
-  // model cannot see reach the Pool's fields; in C this is what keeps it off
-  // them.
+  // VERIFY-039 G4: the next-to-last conjunct keeps the Pool out of its own
+  // slots. pool_reset_secure zeroes the slots through `char *`, which WP's
+  // typed model cannot see reach the Pool's fields; in C this is what keeps
+  // it off them.
+  // VERIFY-039 G5: the last keeps the Pool off its Arena. pool_reset stores
+  // into *p and calls functions that assign *p->arena; each would otherwise
+  // be free to overwrite the other.
   predicate pool_invariant(Pool *p) =
       \valid(p) &&
       arena_invariant(p->arena) &&
@@ -197,7 +203,8 @@ typedef struct {
       p->base_mark <= p->end_mark &&
       p->end_mark <= p->arena->capacity &&
       p->end_mark - p->base_mark == p->capacity * p->object_size &&
-      \separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1));
+      \separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1)) &&
+      \separated(p, p->arena);
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -289,6 +296,9 @@ typedef struct {
   // not lie there (as stringbuf_init_arena's sep_storage).
   requires \separated(pool,
                       ((char *)arena->buffer) + (arena->offset .. arena->capacity - 1));
+  // VERIFY-039 G5: pool_init stores into *pool and calls arena_alloc, which
+  // assigns *arena; the two must not overlap.
+  requires \separated(pool, arena);
   assigns  *pool, *arena;
   ensures  \result == \true ==> pool_invariant(pool);
   ensures  \result == \true ==> pool->used == 0;
