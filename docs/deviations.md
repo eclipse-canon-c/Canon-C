@@ -10379,7 +10379,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin predicted (nothing moves); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11711,3 +11711,57 @@ placements. Beyond entries 1 to 5:
 
 The typed wrappers that `DEFINE_PRIORITY_QUEUE` generates are instantiated
 in no verified unit. The listing's repairs follow G5's, one per prediction.
+
+### Protocol — the Linux runner pinned to `ubuntu-24.04` (committed prediction, before the pin commit)
+
+**Decision (2026-10-09).** Every job that runs on `ubuntu-latest` moves to
+`ubuntu-24.04`, in all six workflows. That covers each such `runs-on`, the
+`ubuntu-latest` value of the three matrices that list it (`build`,
+`static-analysis`, `lifetime-debug`) with their `include` and `exclude`
+entries, and the three `matrix.os` conditions in `static-analysis`. The
+`misra` job already runs on `ubuntu-24.04`. A note in
+`cmake-multi-platform.yml`'s header says why, and each other workflow points
+to it. No source, driver, pin or gate changes.
+
+**Why now.** Every `ubuntu-latest` job of CI #1346 and #1347 carries
+GitHub's notice that the label moves to Ubuntu 26 from 2026-10-19. The
+announcement (actions/runner-images#14748) moves it from Ubuntu 24.04 to
+26.04 between 2026-10-19 and 2026-11-19, and names `ubuntu-24.04` as the
+way to stay. While a label migrates, the image it names can differ from
+push to push and, since each job is given its own runner, between the jobs
+of one run. The `misra` job met this, its count flipping between 780 and
+1004 across pushes, and was pinned for it (its banner;
+`docs/misra-campaign.md`). What the Frama-C jobs measure depends on the
+image too. It supplies the gcc that preprocesses each unit, which the jobs
+give no `-std`, and the system the cached opam switch is restored onto,
+since the cache key names the runner only by `runner.os`. A pin that moved
+during the migration could not be told apart from a change of image, and
+the audit's next rounds fall inside it.
+
+**Predicted: nothing moves.**
+
+- (H) Every job of the CI and CC runs on the pin commit is green, and every
+  proved line, count and roll-call is as it is now. Until 2026-10-19
+  `ubuntu-latest` is Ubuntu 24.04, so the pinned label selects the image the
+  jobs already run on, and the opam cache key, which names `runner.os`
+  (`Linux` on both labels), restores the same switch.
+- (H) The G4 probe runs, because its workflow file changes, and is green at
+  its pinned `4 / 7`.
+- (H) Record coverage runs, because its workflow file and
+  `cmake-multi-platform.yml` change, and is green. Of the workflow it reads
+  only the roll-call arrays.
+
+`vc-identity` and `f4-control` run only on dispatch, so this push does not
+exercise their pin. Job names that carry the matrix's `os` value change
+(`build (ubuntu-24.04, …)` for `build (ubuntu-latest, …)`), and nothing in
+the repository reads them. Required status checks in the repository's
+settings, if any name these jobs, are outside the tree and would need
+renaming by hand.
+
+**What it settles.** From the pin commit on, the record's Linux
+measurements are made on a fixed Ubuntu release, 24.04, not on a moving
+label. The image's updates within 24.04 continue, as they have for every
+run so far. Moving to 26.04 is a change of its own, to be predicted like any
+other. The Windows and macOS jobs keep their `-latest` labels; none of them
+runs Frama-C. The rows of `docs/traceability.md` that say `ubuntu-latest`
+describe the runs they were measured on and stay as written.
