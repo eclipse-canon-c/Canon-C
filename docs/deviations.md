@@ -10379,7 +10379,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5's repair predicted (seven goals close, two stay); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11794,3 +11794,80 @@ switch after a missed cache restore; the job logs, which need a sign-in,
 would say. If that is what happened, those three jobs built Frama-C and its
 provers from the pinned versions and still met every pin, a harder test
 than the prediction set.
+
+### G5 — committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-09).** The repair recommended with the finding, in
+`core/pool.h`. `pool_init` gains a last precondition,
+`requires \separated(pool, arena);`, so no clause is renumbered, and
+`pool_invariant` gains the conjunct `\separated(p, p->arena)`. The header's
+list of unsafe patterns says it for callers. No executable change. No other
+verified unit includes `core/pool.h`, so only `frama-c-pool` can move. The
+fix commit carries that job's predicted pins, as G2's and G3's did.
+
+No WP run on the changed code precedes this prediction. The only local
+check is a Frama-C 25.0 parse of `core/pool.h`.
+
+**Predicted.** With the separation, a store into `*pool` no longer reaches
+`*arena` in the model, and a call that assigns `*arena` no longer reaches the
+`Pool`. Of the nine pool goals in the roll-call, seven close and two stay:
+
+| # | Goal | Statement | Predicted | Confidence |
+|---|---|---|---|---|
+| 1 | `pool_init_ensures_2_part4` | `pool->used == 0` | closes | H |
+| 2 | `pool_init_ensures_3_part4` | `pool->capacity == max_objects` | closes | H |
+| 3 | `pool_init_ensures_4_part3` | on failure, `arena->offset == \old(arena->offset)` | closes | H |
+| 4 | `pool_init_call_arena_alloc_requires` | `arena_invariant(arena)` after the four stores | closes | H |
+| 5 | `pool_reset_call_arena_alloc_requires` | `arena_invariant(pool->arena)` after the store to `used` | closes | H |
+| 6 | `pool_reset_reset_ensures_part3` | `pool->used == 0` | closes | H |
+| 7 | `pool_reset_reset_ensures_2_part3` | `pool_invariant(pool)` after the reset | closes | M |
+| 8 | `pool_init_ensures_part4` | `pool_invariant(pool)` on success | stays | M |
+| 9 | `pool_reset_call_arena_reset_to_requires_2` | `pool->base_mark <= pool->arena->offset` | stays | H |
+
+- Goals 1 to 3 and 6 ask only that a field the function stores, or one it
+  must leave as it found it, survive stores into the other struct or a call
+  that assigns `*arena`; goals 4 and 5, that `arena_invariant` survive the
+  stores into `*pool`. With the separation each follows from hypotheses WP
+  already has: the callees' `assigns` and postconditions, and
+  `pool_invariant`'s new conjunct at `pool_reset`.
+- Goal 7 re-establishes every conjunct of `pool_invariant` from the
+  precondition. The `Pool`'s fields other than `used` are kept, the arena
+  calls keep `buffer` and `capacity` (their frames) and re-establish
+  `arena_invariant`, and the two separations carry over. M because it is
+  the largest of the seven.
+- Goal 8 also needs the conjunct `capacity <= CANON_USIZE_MAX / object_size`,
+  which `pool_init` must derive from `checked_mul`'s `no_overflow`
+  assumption, `aligned_size <= CANON_USIZE_MAX / max_objects`: the same bound
+  read the other way, which takes nonlinear reasoning about integer division.
+  Cat 2a's argument does not cover that conjunct. If goal 8 stays, its
+  argument gains it: `aligned_size * max_objects <= CANON_USIZE_MAX`, so
+  `max_objects <= CANON_USIZE_MAX / aligned_size`. M: the provers may
+  manage it, and then this row misses in the good direction.
+- Goal 9 asks for `base_mark <= arena->offset`, which `pool_invariant` does
+  not state, and the separation does not bear on it. It is also not true for
+  an admitted call: after `arena_reset` on the pool's arena, which the
+  header lists as unsafe but no contract excludes, `pool_reset`'s call to
+  `arena_reset_to` violates it whenever `base_mark > 0`. It stays, and is a
+  finding of its own after this scoring.
+
+Also:
+
+- (H) No goal is generated or removed. `pool_init` has no verified caller,
+  and the conjunct does not split. The total stays 4045.
+- (M) No other goal changes status. Every function that establishes
+  `pool_invariant` keeps `p` and `p->arena`, so the new conjunct carries
+  over.
+- (H) No other unit moves.
+
+**Pins carried by the fix commit.** `frama-c-pool`: `3993 / 4045`, 52
+unproved, the roll-call less goals 1 to 7. A green run means every row held.
+A red `frama-c-pool` is a miss, read from its log, and a ratchet follows.
+Until the scoring commit retires their rows, record coverage, which is
+advisory, will list the seven as stale in pool Cat 2a and Cat 2d.
+
+**What it settles.** If goals 1 to 7 close, VERIFY-033 F4's hypothesis is
+confirmed by intervention for four of the five goals it named; the fifth,
+goal 8, needs the separation (G5's probe) but not only that. Pool Cat 2a
+keeps goal 8, filed under the division bound; Cat 2d keeps goal 9, which an
+admitted call falsifies, to be recorded as a finding rather than filed under
+an argument.
