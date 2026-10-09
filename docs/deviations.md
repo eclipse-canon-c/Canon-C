@@ -10320,7 +10320,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) found; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) found, entry 1's repair predicted; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11196,3 +11196,65 @@ configurations, sanitizers clean. Entry 1's repair does not reach it.
 `*p` from its slots, and `pool_init` a precondition separating `*pool` from
 the arena's free tail, as `stringbuf_init_arena` has. One intervention per
 prediction: it follows entry 1's scoring.
+
+### G4 — listing entry 1, committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-09).** The recommended repair, in `core/arena.h`.
+`arena_invariant` gains the conjunct
+`\separated(a, a->buffer + (0 .. a->capacity - 1))`. `arena_init` gains a
+last precondition, so no clause is renumbered:
+`requires \separated(arena, (u8*)buffer + (0 .. capacity - 1));`. The
+file's list of properties says it for callers. No executable change.
+
+No WP run on the changed code precedes this prediction. The only local checks
+were the C probes and a Frama-C 25.0 parse of the changed code as each of the
+eight units reads it (`arena.h` also at `x86_32`): all accept both clauses,
+and each normalized AST carries them.
+
+**Predicted: nothing moves, in any unit.**
+
+- (H) No goal is generated or removed. `arena_init` has no verified caller,
+  so the new precondition is a goal nowhere, and a conjunct inside a
+  predicate does not split: WP 29 splits by paths and `||` guards
+  (VERIFY-034).
+- (H) The nine postconditions of entry 1 stay proved. WP proves them across
+  the character-type writes whether or not the `Arena` is separated from its
+  buffer; that is G4's finding.
+- (M) No other goal changes status. Wherever `arena_invariant` is
+  established, `buffer` and `capacity` are either left as they were — the
+  arena functions write `offset` and `padding_accum`, pool, region,
+  `stringbuf` and vec their own state — or set from `arena_init`'s arguments,
+  so the new conjunct follows from the old invariant or from the new
+  precondition. Where it is assumed it is one more hypothesis, and no
+  residual is known to wait on it.
+- (H) Every pin stays as it is. The fix commit changes no pin, so a green run
+  is set equality in every unit; a red job is a miss, read from its log.
+- (H) The G4 probe is green with its count pinned at `4 / 7`: the push that
+  carries this commit carries the probe ratchet too, which re-runs it, and
+  nothing it reads changes.
+- (H) The C probes behave at run time as before. Since the fix,
+  `p_arena_self.c`'s calls and `p_pool_self.c`'s case A are outside
+  `arena_init`'s contract; case B still meets every contract, because entry 2
+  is not repaired here.
+
+**Residuals whose statement changes.** Ten pinned residuals contain
+`arena_invariant`, directly or through `pool_invariant` and
+`region_invariant`, and now state the conjunct too: pool Cat 2a's
+`pool_init_ensures_part4` and `pool_init_call_arena_alloc_requires`; pool
+Cat 2d's `pool_reset_call_arena_alloc_requires` and
+`pool_reset_reset_ensures_2_part3`; region Cat 2's four
+(`region_begin_ensures_5`, `region_attach_arena_ensures_2`,
+`region_register_ensures_part2`, `region_set_parent_ensures_2`); and
+`region_end_ensures_4_part1` and `region_end_call_arena_reset_requires`.
+Their names and pins do not change. Their written arguments predate the
+conjunct; the scoring re-reads each for it. None of those functions writes an
+`Arena`'s `buffer` or `capacity`, so the step each argument needs is that the
+conjunct survives unchanged.
+
+**What it settles.** If nothing moves, the repair is invisible to WP, as G4
+says it must be: the nine postconditions prove before it and after it, and
+only an argument tells the true version from the false one — every write
+lies in the buffer, which the invariant now separates from `*arena`. That
+argument is part of their evidence from here on. If a goal moves, the
+conjunct reached WP in a way this reading does not foresee, and the log says
+where.
