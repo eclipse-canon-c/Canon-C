@@ -10379,7 +10379,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin predicted (nothing moves); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11765,3 +11765,32 @@ run so far. Moving to 26.04 is a change of its own, to be predicted like any
 other. The Windows and macOS jobs keep their `-latest` labels; none of them
 runs Frama-C. The rows of `docs/traceability.md` that say `ubuntu-latest`
 describe the runs they were measured on and stay as written.
+
+### Protocol — the runner pin, scored (pin 25133fe; CI #1348, CC #35, G4 probe run #3)
+
+**Result: exact on every scored part.** The pin commit changed no pin
+(prediction 400da1d). Every job of CI #1348 and CC #35 was green, so every
+unit's proved line, count and roll-call are as they were, by set equality.
+The G4 probe ran, because its workflow file changed, and was green at its
+pinned `4 / 7`. Record coverage #44 was green. GitHub's notice that
+`ubuntu-latest` will migrate, which every `ubuntu-latest` job of CI #1346
+and #1347 carried, appears on no job of these runs; the macOS jobs still
+carry their notices about queue times. (GitHub's run pages, read
+2026-10-09.)
+
+**By part.**
+
+1. Every CI and CC job green, every pin as it was (H): held.
+2. The G4 probe re-runs green at `4 / 7` (H): held.
+3. Record coverage green (H): held.
+
+**A stated reason, not observed as stated.** The prediction expected the
+opam cache to restore the same switch in every job. Three jobs took about
+forty minutes longer than before: `frama-c-error` 43m 7s (1m 17s at
+CI #1346), `frama-c-bitset` 2h 56m (2h 17m) and the G4 probe run 46m 50s
+(4m 29s at run #2). Every other job took within a few minutes of what it
+took before. Forty extra minutes is consistent with a cold build of the
+switch after a missed cache restore; the job logs, which need a sign-in,
+would say. If that is what happened, those three jobs built Frama-C and its
+provers from the pinned versions and still met every pin, a harder test
+than the prediction set.
