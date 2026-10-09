@@ -1,9 +1,10 @@
 name: G4 probe (VERIFY-039, frames across byte-level writes)
 
 # ---------------------------------------------------------------------------
-# VERIFY-039 G4 — an experiment, not a gate. It runs when the probe or this
-# file changes, and on demand; it never touches the enforced jobs, and its
-# result is scored in docs/deviations.md, VERIFY-039 G4.
+# VERIFY-039 G4 — an experiment, not a gate. It runs when the probe, this
+# file, core/memory.h or the toolchain pins change, and on demand; it never
+# touches the enforced jobs, and its result is scored in docs/deviations.md,
+# VERIFY-039 G4.
 #
 # QUESTION: in WP's typed model a write stated through `char *` changes only
 # the `sint8` array (VERIFY-039 G3), and WP 29 frames a call to mem_zero by
@@ -19,12 +20,16 @@ name: G4 probe (VERIFY-039, frames across byte-level writes)
 # same -cpp-extra-args as frama-c-memory), restricted to the six named
 # postconditions with -wp-prop.
 #
-# PREDICTED (committed before this file; VERIFY-039 G4): proved
-# g4_int_frame, g4_u8_frame and g4_char_zero; not proved g4_int_zero,
-# g4_u8_zero and g4_char_frame; "Proved goals: 3 / 6". The WP step prints
-# MATCH or MISS for the names, for the count, and for the accounting (the
-# listed goals explain the summary), and exits 0 only if all three match.
-# Either way the log is read and scored in the record.
+# PINNED at run #1 (1e6434c; VERIFY-039 G4, probe scored): six goals
+# scheduled; proved g4_int_frame, g4_u8_frame and g4_char_zero; not proved
+# g4_int_zero, g4_u8_zero and g4_char_frame; "Proved goals: 4 / 7". The
+# seventh is not one of the six: WP's reachability pass closes the
+# annotations of dead statements without consulting -wp-prop, and counted
+# one ("Unreachable: 1"). The prediction said 3 / 6; that part missed.
+# The WP step prints MATCH or MISS for the names, for the count, and for
+# the accounting (the listed goals explain the summary), and exits 0 only if
+# all three match. A red run means WP's behaviour here changed: read the log
+# and record it.
 # ---------------------------------------------------------------------------
 
 on:
@@ -33,6 +38,8 @@ on:
     paths:
       - 'tools/probes/verify-039/p_frame_typed.c'
       - '.github/workflows/g4-probe.yml'
+      - 'core/memory.h'
+      - '.github/actions/framac-setup/**'
   workflow_dispatch:
 
 jobs:
@@ -76,6 +83,8 @@ jobs:
           PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_g4_output.txt || true)
           echo "  ${PROVED_LINE:-no summary line: WP did not run to the end}"
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oE '[0-9]+ / [0-9]+' | head -1 || true)
+          SCHEDULED=$(grep -oE "^\[wp\] [0-9]+ goals scheduled" wp_g4_output.txt | grep -oE "[0-9]+" | head -1 || true)
+          echo "  goals scheduled: ${SCHEDULED:-none reported} (pinned: 6, the six postconditions)"
           # WP 29 tags: [Timeout] [Unknown] [Stepout] [Invalid]; a prover
           # failure prints as [Failure] ([Failed] only in smoke tests), and a
           # goal with no result prints nothing, which the accounting catches.
@@ -87,16 +96,16 @@ jobs:
             typed_cast_g4_zero_char_ensures_g4_char_frame | sort -u > g4_predicted.txt
           echo "  not proved, observed:"
           sed 's/^/    /' g4_not_proved.txt
-          echo "  not proved, predicted:"
+          echo "  not proved, pinned:"
           sed 's/^/    /' g4_predicted.txt
           echo "  the not-proved goals as WP prints them:"
           grep -E "^\[wp\] \[[A-Za-z]+\] typed_cast_g4_" wp_g4_output.txt | sed 's/^/    /' || true
           echo "==============================================="
           MISS=0
-          if [ "${PROVED_COUNT}" = "3 / 6" ]; then
-            echo "MATCH (count): Proved goals: 3 / 6"
+          if [ "${PROVED_COUNT}" = "4 / 7" ] && [ "${SCHEDULED}" = "6" ]; then
+            echo "MATCH (count): Proved goals: 4 / 7, six scheduled"
           else
-            echo "MISS (count): observed '${PROVED_COUNT}', predicted '3 / 6'"
+            echo "MISS (count): observed '${PROVED_COUNT}' with '${SCHEDULED}' scheduled, pinned '4 / 7' with 6"
             MISS=1
           fi
           LISTED=$(wc -l < g4_not_proved.txt)
@@ -116,9 +125,9 @@ jobs:
             MISS=1
           fi
           if cmp -s g4_not_proved.txt g4_predicted.txt; then
-            echo "MATCH (names): the not-proved set is the predicted one"
+            echo "MATCH (names): the not-proved set is the pinned one"
           else
-            echo "MISS (names): observed less predicted, then predicted less observed:"
+            echo "MISS (names): observed less pinned, then pinned less observed:"
             comm -23 g4_not_proved.txt g4_predicted.txt | sed 's/^/    + /'
             comm -13 g4_not_proved.txt g4_predicted.txt | sed 's/^/    - /'
             MISS=1
@@ -126,7 +135,7 @@ jobs:
           for g in int u8; do
             if grep -qx "typed_cast_g4_zero_${g}_ensures_g4_${g}_frame" g4_not_proved.txt; then
               echo "  g4_${g}_frame (false in C): NOT proved"
-            elif [ "${ACCOUNTED}" = "1" ] && [ "${T}" = "6" ]; then
+            elif [ "${ACCOUNTED}" = "1" ] && [ "${SCHEDULED}" = "6" ]; then
               echo "  g4_${g}_frame (false in C): PROVED"
             else
               echo "  g4_${g}_frame (false in C): not listed as unproved, but the six goals are not all accounted for; read the log"

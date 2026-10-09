@@ -10320,7 +10320,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 scored (fix 76a1f94, CI #1344 / CC #31): the new postcondition held, the two Cat 2c closures missed, the mechanism identified; G4 opened (frames across byte-level callees), its probe predicted; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) found; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11033,3 +11033,166 @@ than its source reads, such frames are checked against the write after all,
 and VERIFY-005's update loses its frame clause. If the `char` pair does not
 behave as predicted, the probe itself is in question, and nothing is
 concluded from the other two.
+
+### G3 — ratchet confirmed (CI #1345, CC #32)
+
+Both runs at 1e6434c — the ratchet, with G4's prediction and probe — were
+green in every job (GitHub's run pages, read 2026-10-09; one warning, a
+Node.js deprecation notice on `compcert`). `frama-c-vec`'s gate checked its
+152 names by set equality, which settles what G3's part 4 left to this run:
+its residual set is the G2 set. G3 is closed.
+
+### G4 — probe scored (`g4-probe.yml` run #1, 1e6434c)
+
+**Result: both false frames proved, and the not-proved set is exactly the
+predicted one; the proved line missed by one goal outside the six.**
+
+| Goal | In C | Predicted | Observed |
+|------|------|-----------|----------|
+| `g4_int_frame` | false | proves | proved |
+| `g4_int_zero` | true | does not prove | Timeout (Z3), `Stronger` |
+| `g4_u8_frame` | false | proves | proved |
+| `g4_u8_zero` | true | does not prove | Timeout (Alt-Ergo), `Stronger` |
+| `g4_char_frame` | false | does not prove | Timeout (Alt-Ergo) |
+| `g4_char_zero` | true | proves | proved |
+
+WP scheduled exactly the six goals. Three timed out, the predicted three, and
+three proved: two by Qed alone and one by Alt-Ergo, which fits the two frames
+(nothing is left to prove once the call leaves their arrays alone) and
+`g4_char_zero` (from `zeroed`). The log shows the step the frames rest on:
+"No default assigns clause, using complete behaviors assigns" at the call to
+`mem_zero`, line 53, and the casts from `sint32*` and `uint8*` to `sint8*` at
+the calls, with no cast at the `char` call.
+
+**By part.**
+
+1. The `_frame` claims at `int` and `u8` (H): held. WP proved two
+   postconditions that are false in C.
+2. The `_zero` claims at `int` and `u8` (H): held. G3's account, in
+   isolation.
+3. The `char` control (H): held. The model sees a write in the same array:
+   the false frame stayed unproved, the true zero proved.
+4. The C step (H): held. It passed — the run's only error annotation is on
+   the WP step — so every `_frame` was VIOLATED and every `_zero` held at run
+   time, with the sanitizers clean.
+5. No Failed, Invalid or Stepout goal (H): held, and the accounting matched:
+   3 listed = 7 − 4.
+6. The proved line (M): missed. Observed `4 / 7`, predicted `3 / 6`. The
+   seventh goal is none of the six: WP counted one goal `Unreachable`, closed
+   by its reachability pass, which marks the annotations of statements it
+   finds dead as proved without consulting `-wp-prop` (WP 29, `cfgInfos.ml`).
+   The log does not say which annotation. The prediction's reason, that
+   `-wp-prop` selects the six and nothing else, was wrong for that pass.
+7. No enforced job moved (H): held. CI #1345 and CC #32 were green.
+
+The gate exited 1 on part 6 alone. Its frame lines printed "not all accounted
+for" rather than PROVED, as designed when the total is not 6; the reading
+above rests on the six scheduled goals and the prover counts.
+
+**What it shows.** Under the options every unit uses, WP proves
+postconditions that are false in C across a write stated through `char *`.
+G4's reading holds, and the listing proceeds.
+
+**Probe ratchet (this commit).** The workflow now expects `4 / 7`, six goals
+scheduled, and the same not-proved set, and it also runs when
+`core/memory.h` or the toolchain pins in `.github/actions/framac-setup/`
+change. It stays as a standing check of this WP behaviour: if a later WP
+stops proving the false frames, or frames the call more widely, the run
+turns red.
+
+### G4 — scope, corrected
+
+G4 opened on fifteen functions; the gap is wider. WP's typed model keeps one
+array per integer kind, so in the model a write through one type is never
+seen through another. C sees it in two cases (C11 6.5p6–7). An object may be
+read or written through a character type whatever its own type; and through
+the signed or unsigned counterpart of its type. Elsewhere, reading an object
+through a type other than its own (or a qualified or compatible one, or an
+aggregate or union containing it) is undefined; in allocated storage a store
+through any type is defined and gives the bytes that type, so a later read
+through the old type is the undefined step. The character types fill two of
+the model's arrays: `char` and `signed char` share `sint8` on the project's
+machdeps, and `unsigned char` (`u8`) has `uint8`. Unions are the other known
+gap (VERIFY-015's hypothesis).
+
+The listing therefore covers three kinds of pair: a character-type write —
+plain stores into `char` and `u8` buffers included, not only the fifteen
+functions — and a postcondition that reads another type; a write through any
+type and a postcondition that reads the bytes through a character type; and
+signed and unsigned counterparts.
+
+### G4 — listing, entry 1: an `Arena` inside its own buffer
+
+**Finding.** `arena_invariant` does not separate `*arena` from
+`arena->buffer`, and no arena contract requires it, so an `Arena` that lives
+inside the block it manages is admitted, from `arena_init` on. Three arena
+functions write that block through `char *`: `arena_alloc_zero` and
+`arena_alloc_aligned_zero` zero the new allocation with `mem_zero`, and
+`arena_reset_secure` zeroes the used bytes with `mem_secure_zero`. Two
+clients do the same to blocks the arena handed out: `pool_reset_secure`
+zeroes the pool's slots, and `stringbuf_init_arena` stores `'\0'` into its
+new block, a plain `char` store. When the written range covers the `Arena`,
+nine postconditions that WP proves are false:
+
+| Function | Postconditions false when the write covers `*arena` | Units |
+|---|---|---|
+| `arena_alloc_zero` | `arena_invariant(arena)`; the address `ensures` | the eight that include `arena.h` |
+| `arena_alloc_aligned_zero` | `arena_invariant(arena)`; the address `ensures` | the same eight |
+| `arena_reset_secure` | `buffer == \old(buffer)`; `capacity == \old(capacity)`; `arena_invariant(arena)` | the same eight |
+| `pool_reset_secure` | `pool_invariant(pool)`, through its `arena_invariant(p->arena)` | `frama-c-pool` |
+| `stringbuf_init_arena` | `arena_kept: arena_invariant(arena)` | `frama-c-stringbuf` |
+
+No part of any of them is among the residuals: WP proves each across the
+character-type write, as G4's probe does. Two probes make the calls with the
+`Arena` placed so that the written range covers it; every call meets its
+function's contract as it stands. `tools/probes/verify-039/p_arena_self.c`
+shows the arena functions' seven and `stringbuf`'s one VIOLATED, in both
+build configurations and at ILP32 as at LP64; its placements are computed
+from `offsetof` and `CANON_DEFAULT_ALIGN`. In the `stringbuf` case the store
+lands on the first byte of `capacity`, which on the project's little-endian
+targets is its low byte: 255 becomes 0. `tools/probes/verify-039/p_pool_self.c`,
+case A, shows `pool_reset_secure`'s in the proof configuration; in the default
+build `pool_reset`'s `ensure_msg` stops the program before the function
+returns. The blocks are heap storage, and the writes that clobber the `Arena`
+are character-type writes, so every access is defined C. The sanitizers are
+clean throughout.
+
+These are the first proved postconditions of the library that the audit
+finds false. In G1 a missing separation left false postconditions unproved,
+because the store and the element it clobbered shared a memory array in the
+model. Here they do not, and the model proves the falsehood.
+
+**Decision (recommended; the shape of G1 and G2).** Make the separation part
+of the invariant: `arena_invariant` gains
+`\separated(a, a->buffer + (0 .. a->capacity - 1))`, and `arena_init` the
+matching precondition. Every arena function then excludes the self-hosted
+arena, and every block the arena hands out is separated from the `Arena`,
+which a repair at the three arena functions alone would not give `pool` or
+`stringbuf`. No code in the repository places an `Arena` in its own buffer.
+WP cannot see the difference: the nine postconditions prove with or without
+it. What makes them true is an argument — every write lies in the buffer,
+which the invariant separates from `*arena` — so they join the goals G4's
+listing collects: proved, with an argument as their evidence. How those
+enter the record, and whether as a block that counts in *A*, is settled with
+the listing.
+
+### G4 — listing, entry 2: a `Pool` inside its own slots
+
+**Finding.** `pool_init` requires `\valid(pool)` and `arena_invariant(arena)`
+but does not separate `*pool` from the arena's free tail, where its slots
+will come from, and `pool_invariant` does not separate `*pool` from the
+slots. A `Pool` that lives inside its own slot region is therefore admitted.
+`pool_reset_secure` zeroes the used slots through `char *`, and its proved
+`ensures pool_invariant(pool)` (`frama-c-pool`) is false when they cover the
+`Pool`: `p_pool_self.c`, case B, puts the `Pool` at the start of the arena's
+buffer, so slot 0 is the `Pool` itself, with the `Arena` outside its buffer
+as entry 1's repair requires. After `pool_alloc` and `pool_reset_secure` the
+`Pool`'s fields are zero, and `pool_invariant` is VIOLATED, in both build
+configurations, sanitizers clean. Entry 1's repair does not reach it.
+`stringbuf_init_arena` already carries the separation this lacks
+(`sep_storage`), and `stringbuf_wf` the invariant's half.
+
+**Repair (recommended, next).** `pool_invariant` gains the separation of
+`*p` from its slots, and `pool_init` a precondition separating `*pool` from
+the arena's free tail, as `stringbuf_init_arena` has. One intervention per
+prediction: it follows entry 1's scoring.
