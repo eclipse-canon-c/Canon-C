@@ -10379,7 +10379,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11514,3 +11514,200 @@ it. The prediction will say which of the goals above close, and whether
 and `pool_reset_reset_ensures_2_part3`, which state `arena_invariant` or
 `pool_invariant` across the same stores, go with them. One intervention per
 prediction: it follows the runner pin's scoring.
+
+### G4 — listing, entry 3: a `Bitset` whose fields lie in its own words
+
+**Finding.** `bitset_mut`, and `bitset_view` within it, does not separate
+`*bs` from `bs->words`. `bitset_init` requires the separation, but
+`bitset_clear_all` and `bitset_set_all` require only `bitset_mut(bs)`, so
+they admit a `Bitset` built otherwise, with its fields inside the words it
+manages. Both write the words through `char *`: `bitset_clear_all` with
+`mem_zero`, and `bitset_set_all` with `mem_set` before it calls
+`bitset_clear_padding`, which requires `bitset_mut(bs)`. Three goals that WP
+proves in `frama-c-bitset` are false when the write covers the `Bitset`:
+
+| Function | Goals false when the write covers `*bs` |
+|---|---|
+| `bitset_clear_all` | `ensures bitset_mut(bs)` |
+| `bitset_set_all` | at its call to `bitset_clear_padding`, `requires bitset_mut(bs)`; its own `ensures bitset_mut(bs)` |
+
+None is among the residuals. `tools/probes/verify-039/p_bitset_self.c`
+places the `Bitset` at the start of a heap block, with its words starting at
+its `word_count` field, so that `word_count` lies in `words[0]`. With
+capacity 128, two words, `bitset_mut` holds before each call.
+`bitset_clear_all` leaves `word_count` at 0 and `bitset_set_all` at all
+ones. The capacity is a multiple of 64, so `bitset_clear_padding` writes
+nothing, and the state after `bitset_set_all` is the state at that call.
+`bitset_mut` is VIOLATED at all three points. The result is the same in
+both build configurations, at LP64 and ILP32, with gcc and clang at `-O0`
+and `-O2`, and the sanitizers are clean. The block is heap storage, the
+clobbering writes are character-type writes, and nothing reads `words[0]`
+as a `u64`.
+
+**Decision (recommended).** `bitset_mut` gains
+`\separated(bs, bs->words + (0 .. bs->word_count - 1))`, which `bitset_init`
+already establishes. The same separation bears on G6.
+
+### G4 — listing, entry 4: `diag_render` into a buffer that covers the `Diag`
+
+**Finding.** `diag_render` requires `d` readable with `diag_invariant(*d)`
+and `buf` valid for `buf_size` bytes, and does not separate the two. It
+writes through `char *`: `buf[0] = '\0'`, then `snprintf` at `buf + total`,
+which on the first iteration is `buf` itself, under the trusted axiom whose
+`assigns` is `((char *)buf)[0 .. size - 1]`. In the model those writes
+cannot reach `d->depth`, a `usize`, so the loop invariant
+`render_i_bounds`, `0 <= i <= d->depth`, proves preserved, and none of
+`diag_render`'s goals is among the residuals.
+`tools/probes/verify-039/p_diag_render.c` gives a `Diag` two frames and
+points `buf` into it at the last frame's message, unused, with `buf_size`
+running to the end of `depth`. `buf` is derived from `(char *)&d`, so it
+ranges over the `Diag`'s bytes (C11 6.3.2.3p7). A pointer derived from the
+`message` member could not go past it, and gcc at `_FORTIFY_SOURCE=3`
+aborts one that tries; level 2, and clang, do not. Frame 0's message is
+sized so that its rendered line is exactly as long as the distance from
+`buf` to `depth`. `snprintf`'s terminating `'\0'` then lands on `depth`'s
+first byte, its low byte on the project's little-endian targets, and
+`depth` goes from 2 to 0. The loop has run once, so at its next head `i` is
+1 and `depth` is 0: the invariant is false there, and the loop exits after
+one frame of two. `diag_render`'s own postcondition holds. The result is the
+same in both build configurations, at LP64 and ILP32, with gcc and clang at
+`-O0`, `-O2` and `-D_FORTIFY_SOURCE=3`, and the sanitizers are clean. The
+`Diag` is a declared object, every write into it from `buf` is a
+character-type write, `depth` is read back through its declared type, and
+the rendered line overlaps none of `snprintf`'s string arguments.
+
+This goal is not a postcondition: it is a step of the proof, false while
+the contract's own clauses hold. G4 concerns goals, and this one is proved
+and false.
+
+**Decision (recommended).** `diag_render` gains a precondition separating
+`buf + (0 .. buf_size - 1)` from `*d`, guarded like `r_buf`.
+`diag_render_frame` writes through `char *` with `buf` likewise unseparated
+from `*f`, but no goal reads `*f` after its writes, so it is not an entry.
+
+### G4 — listing, entry 5: a vec in its own items
+
+**Finding.** The vec contracts require `*v` readable and writable and
+`v->items` valid up to `capacity`, and do not separate the two. That holds
+for `frama-c-vec`'s driver predicates, `vec_int_view` and `vec_int_mut`, and
+for the inlined first `requires` of the macro-body contracts the `-CC` units
+verify. Two placements falsify goals that WP proves.
+
+*In the free tail.* `append_array` copies the new elements with
+`mem_copy`, through `char *`, and its ensures 3,
+`\forall k < \old(v->len): v->items[k] == \old(v->items[k])`, proves; of its
+ensures only the fourth is among the residuals.
+`tools/probes/verify-039/p_vec_append_self.c` places a `vec_int` at
+`items[len]`, the first free slot, so the copy overwrites its `items` field.
+The two "ints" appended are the bytes of a pointer to another array, stored
+there as an `int *`. The copy gives the overwritten bytes the effective type
+of their source, so after the call `v->items` reads, through its own type,
+as a pointer to that array, and ensures 3 compares it with the old
+elements: VIOLATED. `append_array` stores `v->len` again after the copy, so
+ensures 1 and 2 hold, and it reads no element of `src` as an `int`. Both
+build configurations, LP64 and ILP32, gcc and clang at `-O0`, `-O2` and
+`-D_FORTIFY_SOURCE=3`; sanitizers clean. This is the `vec_int` of
+`frama-c-vec` and `cc-vec`. At this placement `insert` with `i < len`
+moves elements up to `items[len]`, the start of the vec's `items` field,
+which `v->items[i] = item` then reads: that call is undefined. With
+`i == len`, and in `push`, `try_push` and `push_unchecked`, the element
+store itself lands on the `items` field: a typed store over a pointer,
+G5's case. `remove`'s move, over `items[i .. len - 2]`, never reaches the
+vec.
+
+*In its live elements, where `len` is a `Rec`'s `due`.* `cc-vec_struct`
+verifies `vec_Rec`, with `Rec` = `struct { u32 id; i64 due; }`. In the
+x86_64 machdep, and with glibc on LP64, a `vec_Rec` placed at `items[0]` has
+its `len` field exactly where `Rec[0].due` is: a `usize` (`unsigned long`)
+over an `i64` (`long`), signed and unsigned counterparts, which the model
+keeps in two arrays. Every store the library makes to
+`v->len` then changes `Rec[0]`, an element the frames say is unchanged.
+`tools/probes/verify-039/p_vec_rec_live.c` makes seven calls, each on a
+fresh vec, and reads `Rec[0].due` through a plain `i64` lvalue, the
+counterpart of the `usize` stored there, and through `memcpy`; seven goals
+are VIOLATED, none among the residuals:
+
+| Call | Goal |
+|---|---|
+| `insert(v, 2, item)` at `len` 2 | ensures 4, `items[k]` unchanged for `k < i` |
+| `remove(v, 2, &out)` at `len` 3 | ensures 4, the same |
+| `push`, `try_push` at `len` 2 | ensures 4, `items[k]` unchanged for `k < \old(len)` |
+| `push_unchecked` at `len` 2 | ensures 3, the same |
+| `pop(v, &out)` at `len` 3 | ensures 4, `items[k]` unchanged for `k < len` |
+| `append_array(v, src, 2)` at `len` 2 | ensures 3, `items[k]` unchanged for `k < \old(len)` |
+
+The vec's `items` field lies over `Rec[0].id` and its padding, and its
+`capacity` over `Rec[1]`'s; the library reads them through their own types
+and stores no element there, so every access is defined. Both build
+configurations, gcc and clang at `-O0`, `-O2` and `-D_FORTIFY_SOURCE=3`,
+sanitizers clean. On ILP32 `len` is four bytes and covers only half of
+`due`, and the probe says so.
+At `vec_int` the same placement changes `int` elements through a `usize`
+store. Reading them through their own type afterwards is the undefined step
+of G4's scope, so G4 does not count them. Read as bytes, as G5 reads
+`buffer`, the same frames at `vec_int` (`frama-c-vec`, `cc-vec`), which WP
+proves, are not true for an admitted call: that is G5's reading, and the
+repair covers it.
+
+**Decision (recommended).** The vec's mutable predicate, and the macro-body
+`requires` that inlines it, gains
+`\separated(v, v->items + (0 .. v->capacity - 1))`.
+
+### G6 — bitset's single-bit residuals are false for a `Bitset` in its own words (opened)
+
+**Finding.** In the x86_64 machdep WP uses, and with glibc on LP64, `u64`
+and `usize` are the same C type, `unsigned long`, and share one memory
+array in the model. With entry 3's placement,
+`bitset_set`, `bitset_clear` and `bitset_toggle` store a word over
+`word_count`: a same-type store, defined C, with no character write.
+`bitset_set(bs, 0)` and `bitset_toggle(bs, 0)` leave `word_count` at 3,
+and `bitset_clear(bs, 1)` at 0, and each one's `ensures bitset_mut(bs)` is
+then false. Those three goals, `bitset_{set,clear,toggle}_live_ensures_4_part3`,
+are residuals. VERIFY-020 files them in its single-bit family, under the
+class it defines as "a true property the solver could not reach". They are
+not
+true for an admitted call: G5's shape, unproved and misfiled. The model
+keeps the store and `word_count` in one array, so WP could not prove them,
+and was right not to.
+
+`bitset_assign` delegates to `bitset_set` and `bitset_clear`, and its live
+`ensures bitset_mut(bs)` is not among the residuals: WP proves it from their
+contracts. It is false whenever theirs is: proved, and false, because it
+rests on residuals that are. `p_bitset_self.c`'s second part shows all
+four, with both of `bitset_assign`'s branches, on LP64 Linux, sanitizers
+clean. Where `u64` and `usize` are different types (ILP32; macOS, where
+`u64` is `unsigned long long`), the compound assignment over `word_count`
+reads it through `u64` before storing, which is undefined, and the part is
+skipped.
+
+**Repair.** Entry 3's: `bitset_mut` gains the separation. The prediction
+for it will say which of the single-bit family's residuals close.
+
+### G4 — listing, the rest of the survey
+
+Every verified unit was read for the three kinds of pair G4's scope lists:
+a character-type write (the `mem_*` functions, `memcpy`, `memset`,
+`memmove`, `snprintf`, `vsnprintf`, and stores through `char`, `u8` or `i8`
+lvalues) followed by a goal that reads another type; a write of any type
+followed by a goal that reads the same bytes through a character type; and
+writes and reads of signed and unsigned counterparts. For each write, every
+goal evaluated after it that names an object it may overlap was checked.
+Typed stores over an object of another, non-counterpart type in allocated
+storage are G5's case, not G4's: the next read through the old type is
+undefined. G5's case was not surveyed beyond `pool` and entry 5's `vec_int`
+placements. Beyond entries 1 to 5:
+
+- **Separated by a precondition or an invariant:** `stringbuf`
+  (`stringbuf_wf`, and `sep` at `stringbuf_init_buffer`), the priority queue
+  (`pq_wf`, and the separations of `out`), and `bitset_init`.
+- **No goal after the write names another object:** `memory.h`'s
+  primitives, the `u8` checked functions, `pool_alloc_zero`,
+  `pool_try_alloc_zero`, `diag_render_frame` and `pq_peek`.
+- **Disjoint by layout:** `diag_push`'s copies stay inside a frame's
+  `message` array or the `frames` array, and `depth` lies outside both.
+- **Counterparts:** the only pair in a verified unit is `vec_Rec`'s `i64`
+  member against the vec's `usize` fields (`cc-vec_struct`), reached by the
+  vec's own `usize` stores over a `Rec`'s `due` (entry 5).
+
+The typed wrappers that `DEFINE_PRIORITY_QUEUE` generates are instantiated
+in no verified unit. The listing's repairs follow G5's, one per prediction.
