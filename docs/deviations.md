@@ -10356,7 +10356,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entry 1 (arena) repaired and scored exact (fix 7e5757f, CI #1346 / CC #33: nothing moved, as predicted), entry 2 (pool) found; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entry 1 (arena) repaired and scored exact (fix 7e5757f, CI #1346 / CC #33: nothing moved, as predicted), entry 2 (pool) found, its repair predicted; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11331,3 +11331,47 @@ function involved changes, and wherever an argument re-establishes
 `arena_invariant` it does so through an arena function's postcondition,
 which now carries the conjunct. Pool Cat 2a and 2d and region Cat 1 and 2
 each carry a coverage update saying so.
+
+### G4 — listing entry 2, committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-09).** The repair recommended with the finding, in
+`core/pool.h`. `pool_invariant` gains the conjunct
+`\separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1))`.
+`pool_init` gains a last precondition, so no clause is renumbered:
+`requires \separated(pool, ((char *)arena->buffer) + (arena->offset .. arena->capacity - 1));`,
+the separation `stringbuf_init_arena` states as `sep_storage`. The header's
+list of unsafe patterns says it for callers. No executable change.
+
+No WP run on the changed code precedes this prediction. The only local checks
+were the C probe and a Frama-C 25.0 parse of `core/pool.h`, the one unit that
+includes it, which accepts both clauses and carries them in the normalized
+AST.
+
+**Predicted: nothing moves, in any unit.**
+
+- (H) No goal is generated or removed. `pool_init` has no verified caller,
+  and the conjunct does not split.
+- (H) `pool_reset_secure`'s `ensures pool_invariant(pool)` stays proved: WP
+  proves it across the character-type write whether or not the `Pool` is
+  separated from its slots.
+- (M) No other goal changes status. Wherever `pool_invariant` is
+  established, the `Pool`'s address, `arena`, `base_mark` and `end_mark` and
+  the `Arena`'s `buffer` are left as they were — `pool_alloc` writes `used`,
+  `pool_reset` writes `used` and calls arena functions whose frames keep
+  `buffer` — or, at `pool_init`, set from the region `arena_alloc` returns,
+  inside the free tail the new precondition separates from the `Pool`.
+- (H) Every pin stays as it is; the fix commit changes none.
+- (H) `p_pool_self.c` behaves at run time as before; since the fix its case
+  B is outside `pool_init`'s contract, as case A is outside `arena_init`'s.
+
+**Residuals whose statement changes.** Two pinned residuals contain
+`pool_invariant` and now state the conjunct too: pool Cat 2a's
+`pool_init_ensures_part4` and pool Cat 2d's `pool_reset_reset_ensures_2_part3`.
+Their names and pins do not change; the scoring re-reads their arguments for
+it.
+
+**What it settles.** As for entry 1: if nothing moves, the repair is
+invisible to WP, and `pool_reset_secure`'s postcondition is true from here on
+by an argument — the zeroed range lies in the slots, which the invariant now
+separates from `*pool`, and in the arena's buffer, which entry 1's conjunct
+separates from `*arena`.
