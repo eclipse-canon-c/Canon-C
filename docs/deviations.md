@@ -10320,7 +10320,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 scored (fix 76a1f94, CI #1344 / CC #31): the new postcondition held, the two Cat 2c closures missed, the mechanism identified; G4 opened (frames across byte-level callees); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 scored (fix 76a1f94, CI #1344 / CC #31): the new postcondition held, the two Cat 2c closures missed, the mechanism identified; G4 opened (frames across byte-level callees), its probe predicted; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -10966,3 +10966,70 @@ listing: every proved goal that relates a location of another type across one
 of these calls, VERIFY-017's and MCDC-009's included, each read against the
 call's range and filed under one stated hypothesis. Until then such proofs
 stand relative to the typed model's hypothesis, and VERIFY-005 says so.
+
+### G4 — committed prediction for the probe (before the probe commit)
+
+**Probe.** `tools/probes/verify-039/p_frame_typed.c`, in the next commit.
+Three functions each zero one object through `mem_zero` — an `int`, a `u8`
+and a `char` — and state two named postconditions of it: `g4_<type>_frame`,
+that it is unchanged, and `g4_<type>_zero`, that it is zero. In C every
+`_frame` is false whenever the object was non-zero and every `_zero` is true;
+the file's `main`, outside the analysed code, checks that at run time. The
+`int` pair is the question; the `u8` pair sets G3's two goals beside their
+frame, in isolation; the `char` pair is the control, where the write and the
+claims share the `sint8` array. `.github/workflows/g4-probe.yml`, in the same
+commit, runs the C check and then WP under the units' options (`Typed+Cast`,
+`-wp-rte`, `-wp-split`, Alt-Ergo, Z3 and CVC5 at 120 s, frama-c-memory's
+`-cpp-extra-args`), restricted to the six postconditions with `-wp-prop`. It
+runs when the probe or the workflow changes, and on demand.
+
+No WP run on the probe precedes this prediction. The only local checks were
+the C run, in both build configurations and with the sanitizers clean, and a
+Frama-C 25.0 parse, which accepts the six clauses and leaves `main` out.
+
+**By goal.** Each name is prefixed `typed_cast_g4_zero_<type>_ensures_`.
+
+| Goal | In C | Predicted | Conf. |
+|------|------|-----------|-------|
+| `g4_int_frame` | false | proves: WP 29 frames the call by `mem_zero`'s complete behaviours' `assigns`, which write only the `sint8` array, and `*a` lives in the `sint32` array | H |
+| `g4_int_zero` | true | does not prove: `zeroed` speaks of the `sint8` array | H |
+| `g4_u8_frame` | false | proves, as at `int` | H |
+| `g4_u8_zero` | true | does not prove: G3's two goals, in isolation | H |
+| `g4_char_frame` | false | does not prove: the write and the claim share the `sint8` array | H |
+| `g4_char_zero` | true | proves from `zeroed` | H |
+
+The `_zero` claims test G3's account, one array per integer kind. The
+`_frame` claims test the call's frame: WP 29's fallback to the union of the
+complete behaviours' `assigns` when a contract has no default clause, which
+G1's `remove` frame, proved at CI #1341, already suggests. Only that path is
+probed; libc's three functions state their `assigns` at top level, a second
+path to the same frame.
+
+- (M) The proved line is `3 / 6`: `-wp-prop` selects the six and nothing
+  else, and each lies on one path, so none splits.
+- (H) The C step prints every `_frame` VIOLATED and every `_zero` holding,
+  and exits 0 with the sanitizers clean.
+- (H) No Failed, Invalid or Stepout goal; the workflow also lists
+  `[Failure]` and `[NoResult]`, the tags WP 29 prints for a prover failure
+  and a goal with no result, and checks that the listed goals account for
+  the summary.
+- (H) No enforced job moves: the probe adds no header, driver, test or pin.
+  The workflow file is outside the main CI's `paths-ignore`, so the push runs
+  the full matrix, at the G3 ratchet's pins.
+
+**How it is scored.** The workflow prints MATCH or MISS for the not-proved
+set, by name, for the proved line, and for the accounting, and exits 0 only
+if all three match. A MISS is read from the log, part by part.
+
+**What it settles.** The probe separates the two steps. If `g4_int_zero` and
+`g4_u8_zero` stay unproved while `g4_char_zero` proves, G3's account holds in
+isolation. If `g4_int_frame` and `g4_u8_frame` prove, WP proves
+postconditions that are false in C across a write stated through `char *`:
+G4's reading holds, every proved goal that relates a location of another type
+across one of the fifteen functions is evidence only under the typed model's
+hypothesis, and the listing proceeds, each such goal read against the call's
+range. If a `_frame` claim does not prove, WP frames the call more widely
+than its source reads, such frames are checked against the write after all,
+and VERIFY-005's update loses its frame clause. If the `char` pair does not
+behave as predicted, the probe itself is in question, and nothing is
+concluded from the other two.
