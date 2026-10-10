@@ -891,7 +891,8 @@ static inline usize diag_render_frame(const DiagFrame *f,
  * Space: O(1) — writes to caller-supplied buffer, no internal allocation.
  *
  * @param d         Diag chain. NULL-safe: returns 0.
- * @param buf       Destination buffer. NULL-safe: returns 0.
+ * @param buf       Destination buffer. NULL-safe: returns 0. Must not
+ *                  overlap *d (VERIFY-039 G4).
  * @param buf_size  Size of buf in bytes. 0-safe: returns 0.
  * @return          Total bytes that would be written (excluding null
  *                  terminator). Compare against buf_size to detect
@@ -905,6 +906,11 @@ static inline usize diag_render_frame(const DiagFrame *f,
        0 <= j < d->depth ==> frame_strings_ok(d->frames[j]));
   requires r_buf:
     buf == \null || buf_size == 0 || \valid(buf + (0 .. buf_size - 1));
+  // VERIFY-039 G4, listing entry 4: snprintf writes the rendering through
+  // `char *`, which WP's typed model cannot see reach *d; the loop invariant
+  // render_i_bounds reads d->depth. In C this keeps the writes off it.
+  requires r_sep: d == \null || buf == \null || buf_size == 0 ||
+    \separated(buf + (0 .. buf_size - 1), d);
 
   behavior no_buffer:
     assumes buf == \null || buf_size == 0;

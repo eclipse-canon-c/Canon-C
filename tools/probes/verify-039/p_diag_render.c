@@ -17,7 +17,10 @@
  * buffer that covers the Diag's depth.
  *
  * diag_render requires buf to be valid for buf_size bytes and the Diag to
- * be readable, and does not separate the two. It writes the rendering
+ * be readable; until the G4 diag repair it did not separate the two. Since
+ * the repair it requires buf + (0 .. buf_size - 1) to be separated from
+ * *d, so the call below is outside its contract; its run-time behaviour is
+ * unchanged. It writes the rendering
  * through `char *` (snprintf, under the trusted axiom whose assigns is
  * ((char *)buf)[0 .. size - 1]). In WP's typed model a `char` write cannot
  * reach d->depth, a usize, so the loop invariant render_i_bounds,
