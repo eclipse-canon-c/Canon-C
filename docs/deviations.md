@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` predicted (ten goals close); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12411,3 +12411,119 @@ Bitset's 52 own residuals are now: the ten loop goals, which the next
 repair addresses; the four padding postconditions, true since the repair
 and filed as prover weakness; G8's false invariant; and the 37 the
 separation does not bear on.
+
+### G4 — listing entry 3, the two loops bounded by `word_count`: committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-11).** `bitset_not`'s loop and `bitset_and`'s second
+loop bound the words they write by the current count:
+`loop assigns w, bs->words[0 .. bs->word_count - 1]` and
+`loop assigns w, bs->words[n .. bs->word_count - 1]`. Both bounds become
+`\at(bs->word_count, Pre)`, the count on entry, which neither loop changes
+in C. Specification only; only `frama-c-bitset` can move. `bitset_not`'s
+invariant and postcondition stay as they are, for G8's repair.
+
+No external prover (Alt-Ergo, Z3, CVC5) has been run on the changed code.
+Unlike the earlier predictions, WP has: WP 25.0-beta, built locally from its
+source with only its interface to Why3 adapted to Why3 1.6.0, generated and
+printed the unit's goals at 27e24f9 and with the change, with CI's options
+less the provers (`-wp -wp-rte -wp-model "Typed+Cast" -wp-split
+-wp-prover none -wp-print`), plus `-c11`, which Frama-C 25 needs for the
+unit's `_Static_assert`. Printing runs WP's simplifier, Qed, which CI's
+summary counts among its provers: three of the four H goals below are its
+result under WP 25. Both runs generate 4842 goals, and only `bitset_and`'s
+and `bitset_not`'s goals, 35 of them, change in statement. WP 25's
+`-wp-split` also splits conjunctions, and WP 29's, CI's, only if-then-else,
+so CI's parts are coarser; the names below are CI's. The other local check
+is a Frama-C 25.0-beta parse of `vmacros/vdrivers/bitset_verify.h`, the same
+binary the earlier entries call Frama-C 25.0.
+
+**Reading.** WP takes a loop's `assigns` in the loop's havocked state,
+which entry 3's prediction relied on and CI #1352 bore out. With the bound
+fixed at entry, the region is the same words in every iteration, the ones
+`bitset_mut`'s separation keeps off the `Bitset`, and `capacity` and
+`word_count` keep their entry values through both loops, as they do through
+the loops bounded by `n`. WP 25's statements of the goals add two things.
+
+- A loop's own `loop assigns` goals, and its variant's decrease, are proved
+  under the invariants at the next loop head. WP's loop rule proves each
+  invariant there and then assumes it before these goals (`cfgCalculus.ml`;
+  WP 29's has the same order), and they appear among the hypotheses. That
+  is why those goals were proved while the region could reach the `Bitset`.
+  It also accounts for the observation entry 3's prediction left open:
+  before 27e24f9 the decrease of `bitset_not`'s variant at the first
+  iteration could be proved only from G8's invariant at the next loop head,
+  and the variant, written after the invariants, is proved under them. The
+  check of a loop's region against the function's `assigns` is not among
+  these goals: it comes before the invariants at the loop head are assumed,
+  as entry 3's prediction said.
+- With the bound, the store check of `bitset_and`'s second loop needs the
+  store's index below the entry count, which the frame supplies. Where `n`
+  is the `Bitset`'s own count the second loop's body is unreachable, which
+  the first loop's frame shows, as it did for the second loop's entry
+  invariant at CI #1352. Where `n` is `other`'s count, `word_count` keeps
+  its value only through both loops' havocs: two steps of the frame with the
+  separation, where every closure at CI #1352 needed one.
+
+**Predicted to close: the ten.**
+
+| Goals | n | Confidence |
+|---|---|---|
+| `bitset_not_live_assigns_exit_part1`, `_normal_part1`: the loop's region against the function's `assigns`, now the same range, which WP 25's simplifier reduces to true | 2 | H |
+| `bitset_and_live_assigns_part5`, `_part6`: the second loop's region, from `n` to the entry count, against the function's, from 0. WP 25's simplifier reduces the first to true; the second needs only `0 <= n`, which `n`'s type gives | 2 | H |
+| Where `n` is the `Bitset`'s own count, one step of the frame: `bitset_and_loop_invariant_3_preserved_part1`, `bitset_and_assert_rte_mem_access_11_part1` and `bitset_and_live_ensures_part3`, the second loop's body unreachable and `bitset_mut` after both loops | 3 | M |
+| Where `n` is `other`'s count, two steps: `bitset_and_loop_invariant_3_preserved_part2` (the store no longer reaches `word_count`), `bitset_and_assert_rte_mem_access_11_part2` (the store's index below the entry count) and `bitset_and_live_ensures_part4` (`bitset_mut` after both loops) | 3 | M |
+
+The three where `n` is `other`'s count are the less certain: no closure at
+CI #1352 needed two steps. Which part is which branch follows WP 25's order,
+which CI's is taken to follow; the pins do not depend on it.
+
+**Predicted to stay: the other 42 of bitset's own residuals, and every
+inherited one (H).** The four padding postconditions and the 37 the
+separation does not bear on are not among the goals whose statement
+changes. G8's invariant is among them, and its preservation, false at the
+first iteration, stays unproved.
+
+**Also predicted.**
+
+- (H) No goal is generated or removed; the total stays 5026. The change
+  adds no clause, branch or call, and CI's parts are fixed by the code's
+  branches and statements, which it does not touch. WP 25 generates the
+  same 4842 goals with and without it, and among `bitset_and`'s and
+  `bitset_not`'s goals those that are true as generated, before Qed
+  simplifies them, which WP groups apart, are the same three both times;
+  the changed goals are not among them. Two things here rest on WP 25
+  alone: CI's grouping code could not be read (its source page is cut
+  short), and CI's termination and `exits` goals have no counterpart in
+  WP 25's print.
+- (M) No proved goal becomes unproved. Among the 35, four proved goals lose
+  the proof they had:
+  - `bitset_and`'s second-loop store check where `n` is `other`'s count
+    (WP 25's `bitset_and_loop_assigns_2_part5`), proved until now from the
+    invariant at the next loop head, now needs the store's index below the
+    entry count: two steps of the frame;
+  - the same check where `n` is the `Bitset`'s own count (`_part4`), now
+    unreachable by one step;
+  - `bitset_not`'s call precondition for `bitset_clear_padding`
+    (`bitset_mut` after the loop), which needs one step where it had the
+    empty havoc, the step `bitset_xor`'s took at CI #1352;
+  - `bitset_not`'s store check, proved until now from the invariant at the
+    next loop head, which now needs G8's contradiction there or one step.
+
+  The other changed goals that were proved keep their proof; the rest are
+  the ten closures and G8's invariant. The three M closures where `n` is
+  `other`'s count and that branch's store check rest on the same two steps
+  and fail together: if the provers do not take them, those three stay and
+  the store check becomes unproved, which reads `4883 / 5026` with 143
+  unproved: the three, which the pinned roll-call no longer lists, and the
+  store check, a name not seen unproved before.
+- (H) No other unit moves.
+
+**Pins carried by the fix commit.** `frama-c-bitset`: `4887 / 5026`, 139
+unproved, the roll-call less the ten.
+
+**What it settles.** If the ten close, VERIFY-020's array framing class was
+the missing separation and a loop bound for 24 of its 26 goals; of the
+other two, one is false (G8) and one is the null guard. Bitset's own
+residuals are then the four padding postconditions, G8's invariant and the
+37 the separation does not bear on: the 42 the first draft of entry 3's
+prediction expected from the separation alone.
