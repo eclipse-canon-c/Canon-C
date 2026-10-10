@@ -16,13 +16,17 @@
 /* VERIFY-039 G4, listing entry 3, and G6 -- docs/deviations.md: a Bitset
  * whose word_count field is its own first word.
  *
- * bitset_mut does not separate *bs from bs->words, and bitset_clear_all and
- * bitset_set_all require only bitset_mut(bs) (bitset_init requires the
- * separation, but nothing obliges a Bitset to come from bitset_init). The
- * two functions write the words through `char *`: mem_zero and mem_set. In
- * WP's typed model a `char` write cannot reach the Bitset's fields, so
- * clear_all's `ensures bitset_mut(bs)` proves, and so does set_all's call
- * to bitset_clear_padding, which requires bitset_mut(bs).
+ * Until the entry-3 repair bitset_mut did not separate *bs from
+ * bs->words, and bitset_clear_all and bitset_set_all require only
+ * bitset_mut(bs) (bitset_init requires the separation, but nothing obliged
+ * a Bitset to come from bitset_init). Since the repair, bitset_mut states
+ * the separation too, and every call below is outside its contract: the
+ * probe checks bitset_mut as it stood before the repair, and its run-time
+ * behaviour is unchanged. The two functions write the words through
+ * `char *`: mem_zero and mem_set. In WP's typed model a `char` write
+ * cannot reach the Bitset's fields, so clear_all's
+ * `ensures bitset_mut(bs)` proves, and so does set_all's call to
+ * bitset_clear_padding, which requires bitset_mut(bs).
  *
  * Here the Bitset lies at the start of a heap block and its words array
  * starts at the Bitset's word_count field, so that word_count lies in
@@ -35,12 +39,13 @@
  * G6, the second part: with glibc on LP64, and in the x86_64 machdep WP
  * uses, u64 and usize are both unsigned long, so bitset_set, bitset_clear
  * and bitset_toggle read and store a word over word_count through the same
- * type, defined C, with no character write. Their ensures bitset_mut(bs), pinned
- * residuals, are false; so is bitset_assign's, which WP proves from their
- * contracts. Where u64 and usize are different types (ILP32; macOS, where
- * u64 is unsigned long long), the compound assignment would read
- * word_count through u64, which is undefined, and the part is skipped. The check is
- * __builtin_types_compatible_p (gcc, clang); other compilers skip it.
+ * type, defined C, with no character write. Their ensures bitset_mut(bs),
+ * residuals before the repair, are false; so is bitset_assign's, which WP
+ * proves from their contracts. Where u64 and usize are different types
+ * (ILP32; macOS, where u64 is unsigned long long), the compound assignment
+ * would read word_count through u64, which is undefined, and the part is
+ * skipped. The check is __builtin_types_compatible_p (gcc, clang); other
+ * compilers skip it.
  *
  * G6, the third part: the words start at the Bitset's capacity, 97, so that
  * words[1] is word_count, 2, and words[2] lies past the Bitset, in the
@@ -55,12 +60,13 @@
  *   gcc -std=c99 -Wall -Wextra -DCANON_NO_REQUIRE -DNDEBUG -I. \
  *       -fsanitize=address,undefined -fno-sanitize-recover=all \
  *       tools/probes/verify-039/p_bitset_self.c -o p && ./p
- * Expected: bitset_mut holds before each call and is VIOLATED after it
- * (word_count 0 after clear_all, all ones after set_all); on LP64 Linux,
- * also after set, clear, toggle and both assigns (word_count 3 or 0), and
- * in the third part bitset_pad VIOLATED after clear, toggle and set, with
- * bitset_mut holding after the first two; exit 1, sanitizers clean. The
- * same without the two defines (the default build).
+ * Expected: bitset_mut, as it stood before the repair, holds before each
+ * call and is VIOLATED after it (word_count 0 after clear_all, all ones
+ * after set_all); on LP64 Linux, also after set, clear, toggle and both
+ * assigns (word_count 3 or 0), and in the third part bitset_pad VIOLATED
+ * after clear, toggle and set, with bitset_mut holding after the first
+ * two; exit 1, sanitizers clean. The same without the two defines (the
+ * default build).
  */
 #define CANON_CONTRACT_IMPL
 #include <stddef.h>
@@ -74,7 +80,9 @@
 #  define G6_SAME_TYPE 0
 #endif
 
-/* bitset_mut's conjuncts that C can check (\valid aside). */
+/* bitset_mut's conjuncts that C can check, as it stood before the entry-3
+ * repair (\valid aside); the separation it gained fails for every Bitset
+ * built here. */
 static int mut_ok(const Bitset* bs) {
     return bs->words != NULL && bs->capacity > 0 &&
            bs->capacity <= CANON_USIZE_MAX - 63u &&

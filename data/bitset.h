@@ -224,6 +224,11 @@
  *
  * Invariant: bits at indices [capacity, word_count*64) are always zero.
  *
+ * The Bitset must not lie in its own word array: every function that
+ * writes through a live Bitset requires bitset_mut, which separates the two
+ * (VERIFY-039 G4, G6). bitset_init requires the separation and establishes
+ * bitset_mut.
+ *
  * Memory layout:
  * - sizeof(Bitset) = sizeof(u64*) + 2*sizeof(usize)
  *   [+ sizeof(lifetime_t) under CANON_LIFETIME_DEBUG]
@@ -327,10 +332,17 @@ typedef struct {
       && bs->word_count == bitset_words_for(bs->capacity)
       && \valid_read(bs->words + (0 .. bs->word_count - 1));
 
+  // VERIFY-039 G4, listing entry 3, and G6: the Bitset lies outside its
+  // words, as bitset_init requires. With glibc on LP64, and in the x86_64
+  // machdep WP uses, a word and capacity or word_count are the same C type,
+  // so without it a store to a word may land on either field; and the
+  // set_all / clear_all writes through `char *`, which WP's typed model
+  // cannot see reach the fields, would otherwise be free to.
   predicate bitset_mut{L}(Bitset* bs) =
       bitset_view(bs)
       && \valid(bs)
-      && \valid(bs->words + (0 .. bs->word_count - 1));
+      && \valid(bs->words + (0 .. bs->word_count - 1))
+      && \separated(bs, bs->words + (0 .. bs->word_count - 1));
 
   // DO NOT "SIMPLIFY" THIS. The `% 64` keeps the shift exponent
   // syntactically bounded in [0,63], and the disjunct gives the solver a

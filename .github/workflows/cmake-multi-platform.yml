@@ -4574,8 +4574,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=168   # VERIFY-036 F1 ratchet (CI #1326): was 169
-          EXPECTED_PROVED="4858 / 5026"   # VERIFY-039 G3 predicted pin: +3 goals (F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=149   # VERIFY-039 entry 3 / G6 predicted: 168 -> 149 (VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4877 / 5026"   # VERIFY-039 entry 3 / G6 predicted: 19 more proved (G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4792,10 +4792,9 @@ jobs:
               "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
-              # ARM D — bitset's OWN residuals, 71 (was 66; +5 at CI #1264, see the
-              #         F5 proof-cost note in the commit message).
-              "typed_cast_bitset_clear_padding_ensures_2_part1"
-              "typed_cast_bitset_clear_padding_ensures_3_part1"
+              # ARM D — bitset's OWN residuals, 52 since VERIFY-039 entry 3 / G6
+              #         (71 before it; was 66, +5 at CI #1264, see the F5
+              #         proof-cost note in that commit message).
               "typed_cast_bitset_clear_padding_ensures_part1"
               "typed_cast_bitset_init_assigns_exit_part5"
               "typed_cast_bitset_init_assigns_normal_part5"
@@ -4806,13 +4805,10 @@ jobs:
               "typed_cast_bitset_init_ensures_6"
               "typed_cast_bitset_set_assert_rte_mem_access"
               "typed_cast_bitset_set_live_ensures_3_part3"
-              "typed_cast_bitset_set_live_ensures_4_part3"
               "typed_cast_bitset_clear_assert_rte_mem_access"
               "typed_cast_bitset_clear_live_ensures_3_part3"
-              "typed_cast_bitset_clear_live_ensures_4_part3"
               "typed_cast_bitset_toggle_assert_rte_mem_access"
               "typed_cast_bitset_toggle_live_ensures_3_part3"
-              "typed_cast_bitset_toggle_live_ensures_4_part3"
               "typed_cast_bitset_test_assert_rte_mem_access"
               "typed_cast_bitset_assign_null_assigns_normal_part1"
               "typed_cast_bitset_assign_null_assigns_normal_part2"
@@ -4835,22 +4831,8 @@ jobs:
               "typed_cast_bitset_and_live_assigns_part6"
               "typed_cast_bitset_and_live_ensures_part3"
               "typed_cast_bitset_and_live_ensures_part4"
-              "typed_cast_bitset_and_loop_invariant_2_preserved_part1"
-              "typed_cast_bitset_and_loop_invariant_2_preserved_part2"
-              "typed_cast_bitset_and_loop_invariant_3_established_part1"
-              "typed_cast_bitset_and_loop_invariant_3_established_part2"
               "typed_cast_bitset_and_loop_invariant_3_preserved_part1"
               "typed_cast_bitset_and_loop_invariant_3_preserved_part2"
-              "typed_cast_bitset_or_live_ensures_part3"
-              "typed_cast_bitset_or_live_ensures_part4"
-              "typed_cast_bitset_or_loop_invariant_2_preserved_part1"
-              "typed_cast_bitset_or_loop_invariant_2_preserved_part2"
-              "typed_cast_bitset_xor_call_bitset_clear_padding_requires_part1"
-              "typed_cast_bitset_xor_call_bitset_clear_padding_requires_part2"
-              "typed_cast_bitset_xor_live_assigns_normal_part5"
-              "typed_cast_bitset_xor_live_assigns_normal_part6"
-              "typed_cast_bitset_xor_loop_invariant_2_preserved_part1"
-              "typed_cast_bitset_xor_loop_invariant_2_preserved_part2"
               "typed_cast_bitset_count_assert_rte_mem_access"
               "typed_cast_bitset_is_empty_assert_rte_mem_access"
               "typed_cast_bitset_is_full_assert_rte_mem_access"
