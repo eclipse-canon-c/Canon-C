@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4's repair predicted (nothing moves); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12143,3 +12143,39 @@ postcondition states it for every word but the last, and for the last, when
 cleared, and otherwise the complement. That needs `bitset_clear_padding` to
 state what it leaves in the last word; today it states only `bitset_pad`.
 With entry 3's separation, in the bitset repair.
+
+### G4 — listing entry 4, committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-10).** The repair recommended with the finding, in
+`semantics/diag.h`. `diag_render` gains a precondition after `r_buf`,
+guarded as it is:
+`requires r_sep: d == \null || buf == \null || buf_size == 0 || \separated(buf + (0 .. buf_size - 1), d);`.
+Its documentation says it for callers. No executable change. `diag.h` is
+verified in `frama-c-diag` alone: no other unit includes it, and no function
+in it calls `diag_render`.
+
+No WP run on the changed code precedes this prediction. The only local
+check is a Frama-C 25.0 parse of `semantics/diag.h`.
+
+**Predicted: nothing moves.**
+
+- (H) No goal is generated or removed. A precondition is a hypothesis of
+  its own function's goals and a goal only at a call, and no verified
+  function calls `diag_render`. `-wp-split` splits conditional statements
+  (WP manual, §2.4.4), not a precondition's disjuncts, and the job passes
+  no option that splits more. The total stays 3060.
+- (H) `render_i_bounds` stays proved: WP proves its preservation across the
+  character-type writes whether or not `buf` is separated from `*d`.
+- (M) No other goal changes status. The clause adds a hypothesis to
+  `diag_render`'s goals and nothing else, and none of them is a residual.
+- (H) Every pin stays as it is: `3050 / 3060`, 10 unproved, the same
+  roll-call. The fix commit changes none, and no other unit moves.
+- (H) `p_diag_render.c` behaves at run time as before; since the fix its
+  call is outside `diag_render`'s contract.
+
+**What it settles.** As for entries 1 and 2: if nothing moves, the repair
+is invisible to WP, and `render_i_bounds` is true from here on by an
+argument. `snprintf` writes only inside `buf`, which the new precondition
+separates from `*d`, so `d->depth` keeps its value through the loop. The
+goal joins those the record holds as proved with an argument as their
+evidence: nine, now ten.
