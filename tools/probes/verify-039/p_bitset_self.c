@@ -42,15 +42,25 @@
  * word_count through u64, which is undefined, and the part is skipped. The check is
  * __builtin_types_compatible_p (gcc, clang); other compilers skip it.
  *
+ * G6, the third part: the words start at the Bitset's capacity, 97, so that
+ * words[1] is word_count, 2, and words[2] lies past the Bitset, in the
+ * block. bitset_mut and bitset_pad hold (2 >> 33 is 0). bitset_clear(bs, 5)
+ * and bitset_toggle(bs, 5) clear bit 5 of the capacity, which becomes 65:
+ * bitset_mut still holds, and bitset_pad does not, 2 >> 1 being 1.
+ * bitset_set(bs, 64) sets bit 0 of word_count, which becomes 3, and the
+ * padding test then reads words[2], all ones: both are false. The accesses
+ * are the second part's kind, and the part is skipped where that one is.
+ *
  * From the repository root:
  *   gcc -std=c99 -Wall -Wextra -DCANON_NO_REQUIRE -DNDEBUG -I. \
  *       -fsanitize=address,undefined -fno-sanitize-recover=all \
  *       tools/probes/verify-039/p_bitset_self.c -o p && ./p
  * Expected: bitset_mut holds before each call and is VIOLATED after it
  * (word_count 0 after clear_all, all ones after set_all); on LP64 Linux,
- * also after set, clear, toggle and both assigns (word_count 3 or 0);
- * exit 1, sanitizers clean. The same without the two defines (the default
- * build).
+ * also after set, clear, toggle and both assigns (word_count 3 or 0), and
+ * in the third part bitset_pad VIOLATED after clear, toggle and set, with
+ * bitset_mut holding after the first two; exit 1, sanitizers clean. The
+ * same without the two defines (the default build).
  */
 #define CANON_CONTRACT_IMPL
 #include <stddef.h>
@@ -71,6 +81,12 @@ static int mut_ok(const Bitset* bs) {
            bs->word_count == (bs->capacity + 63u) / 64u;
 }
 
+/* bitset_pad, as the predicate states it. */
+static int pad_ok(const Bitset* bs) {
+    return bs->capacity % 64u == 0u ||
+           (bs->words[bs->word_count - 1u] >> (bs->capacity % 64u)) == 0u;
+}
+
 static int say(const char* what, int holds) {
     printf("    %-58s %s\n", what, holds ? "holds" : "VIOLATED");
     return holds ? 0 : 1;
@@ -87,8 +103,22 @@ static Bitset* self_hosted(unsigned char* block) {
     return bs;
 }
 
+/* G6, third part: the words start at the Bitset's capacity; words[1] is its
+ * word_count, and words[2] lies past it, in the block. */
+static Bitset* at_capacity(unsigned char* block, u64 past) {
+    Bitset* bs = (Bitset*)(void*)block;
+    u64* words = (u64*)(void*)(block + offsetof(Bitset, capacity));
+    bs->words = words;
+    bs->capacity = 97u;
+    bs->word_count = 2u;        /* words[1] */
+    words[2] = past;
+    return bs;
+}
+
 int main(void) {
-    unsigned char* block = malloc(offsetof(Bitset, word_count) + 2u * sizeof(u64));
+    size_t size2 = offsetof(Bitset, word_count) + 2u * sizeof(u64);
+    size_t size3 = offsetof(Bitset, capacity) + 3u * sizeof(u64);
+    unsigned char* block = malloc(size2 > size3 ? size2 : size3);
     Bitset* bs;
     int bad = 0;
 
@@ -134,6 +164,28 @@ int main(void) {
             (void)snprintf(what, sizeof what, "%s: ensures bitset_mut(bs), word_count %zu",
                            ops[k].call, (size_t)bs->word_count);
             bad += say(what, mut_ok(bs));
+        }
+
+        printf("G6, ensures bitset_pad(bs): words from capacity 97, word_count in words[1]:\n");
+        {
+            static const struct { const char* call; int which; } pads[] = {
+                {"bitset_clear(bs, 5)", 0}, {"bitset_toggle(bs, 5)", 1},
+                {"bitset_set(bs, 64)", 2}};
+            size_t j;
+            for (j = 0; j < sizeof pads / sizeof pads[0]; j++) {
+                bs = at_capacity(block, pads[j].which == 2 ? ~(u64)0 : 0u);
+                bad += say("before the call: bitset_mut(bs) and bitset_pad(bs)",
+                           mut_ok(bs) && pad_ok(bs));
+                switch (pads[j].which) {
+                    case 0: bitset_clear(bs, 5u); break;
+                    case 1: bitset_toggle(bs, 5u); break;
+                    default: bitset_set(bs, 64u); break;
+                }
+                printf("      %s: capacity %zu, word_count %zu\n", pads[j].call,
+                       (size_t)bs->capacity, (size_t)bs->word_count);
+                bad += say("ensures bitset_mut(bs)", mut_ok(bs));
+                bad += say("ensures bitset_pad(bs)", pad_ok(bs));
+            }
         }
     }
 
