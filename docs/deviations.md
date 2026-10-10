@@ -10415,7 +10415,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened (`pool_reset` after its arena is reset: pool Cat 2d's last goal is not true for an admitted call); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened (`pool_reset` after its arena is reset: pool Cat 2d's last goal is not true for an admitted call; its repair predicted to close it); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11987,3 +11987,56 @@ conjunct, a rollback to or into the pool's region still meets the
 contracts: `arena_reset` when the region starts at offset 0, or
 `arena_reset_to` with a mark inside it. The header's unsafe patterns name
 the first and not the second; the repair adds the second.
+
+### G7 — committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-10).** The repair recommended with the finding, in
+`core/pool.h`: `pool_invariant` gains a last conjunct,
+`p->base_mark <= p->arena->offset`. The header's unsafe pattern on resetting
+the pool's arena says what the contracts now exclude, and a new one names
+`arena_reset_to` into the pool's region, which they still admit. No
+executable change. Only `frama-c-pool` can move, and the fix commit carries
+its predicted pins.
+
+No WP run on the changed code precedes this prediction. The only local
+check is a Frama-C 25.0 parse of `core/pool.h`.
+
+**Predicted.**
+
+- (H) `pool_reset_call_arena_reset_to_requires_2` closes. With the conjunct
+  in `pool_reset`'s precondition, the call-site precondition is one of its
+  hypotheses: at the call, `pool->base_mark` and `pool->arena->offset` are
+  those of the precondition.
+- (M) Every proved goal that establishes `pool_invariant` still proves.
+  `pool_alloc` changes neither `base_mark` nor the offset. In `pool_reset`,
+  `arena_reset_to` sets the offset to `base_mark`, the store to `used` does
+  not reach the `Arena` (G5), and each of `arena_alloc`'s behaviours leaves
+  the offset at or above its old value. `pool_reset_secure` takes its
+  postcondition from `pool_reset`'s contract. The goals at the call sites
+  that require it still prove too: `pool_try_alloc` and `pool_alloc_zero`
+  pass their precondition to `pool_alloc`, `pool_try_alloc_zero` to
+  `pool_alloc_zero`, and `pool_reset_secure` to `pool_reset`: directly on
+  its first path, and on its second after `mem_secure_zero`, whose `char`
+  writes reach neither `base_mark` nor the offset in the model, and in C
+  stay inside the slots, which `pool_invariant` keeps the `Pool` off and
+  `arena_invariant` the `Arena`. M because
+  `pool_reset_reset_ensures_2_part3` closed only at CI #1349 and gains a
+  conjunct.
+- (M) `pool_init_ensures_part4` stays, as at G5. The new conjunct is linear
+  there (the region starts `needed` bytes below the new offset), and nothing
+  changes for the division bound, the conjunct its argument names.
+- (H) No goal is generated or removed: the conjunct does not split, and the
+  total stays 4045.
+- (H) No other unit moves.
+
+**Pins carried by the fix commit.** `frama-c-pool`: `3994 / 4045`, 51
+unproved, the roll-call less the closing goal. A green run means every row
+held; a red `frama-c-pool` is a miss, read from its log, and a ratchet
+follows. Until the scoring commit retires the row, record coverage, which is
+advisory, will list the goal as stale, pool Cat 2d as empty and its
+heading's count as drifted.
+
+**What it settles.** If the goal closes, pool Cat 2d covers nothing and
+retires: *A* in force 12 → 11. Then every goal it ever held has closed,
+and its delegation reading covered none of the last four. Pool's own
+residuals come down to one, the division bound.
