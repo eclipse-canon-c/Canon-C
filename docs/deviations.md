@@ -1518,15 +1518,11 @@ recur in pool.h's own surface. pool.h's own cat 2b is a narrower
 `pool_invariant`-establishment arithmetic at pool_init, not a per-allocation
 chain.
 
-#### Category 2a: pool_invariant postcondition arithmetic at pool_init (5)
+#### Category 2a: pool_invariant postcondition arithmetic at pool_init (1 — was 5)
 
 | # | Goal                                                |
 |---|------------------------------------------------------|
 | 1 | `typed_cast_pool_init_ensures_part4`                |
-| 2 | `typed_cast_pool_init_ensures_2_part4`              |
-| 3 | `typed_cast_pool_init_ensures_3_part4`              |
-| 4 | `typed_cast_pool_init_ensures_4_part3`              |
-| 5 | `typed_cast_pool_init_call_arena_alloc_requires`    |
 
 **Functions affected**: `pool_init`.
 
@@ -1590,6 +1586,33 @@ precondition separates from `*pool`. That holds only if `*pool` and
 `arena_alloc`'s into the other leave each other's fields alone. The argument
 presumes this without stating it, `pool_init`'s contract does not state it,
 and without it the goal is not true for an admitted call; G5 records that.
+
+**Coverage update (2026-10-10, VERIFY-039 G5).** Goals 2 to 5
+(`pool_init_ensures_2_part4`, `_3_part4`, `_4_part3` and
+`pool_init_call_arena_alloc_requires`) closed at CI #1349 once `pool_init`
+required `\separated(pool, arena)` (fix 528bfa1); their rows are removed.
+They were never arithmetic: each asked only that a field stored or kept, or
+`arena_invariant`, survive the stores into the other struct or
+`arena_alloc`'s `assigns *arena` (VERIFY-033 F4's hypothesis, G5). The
+presumption the two G4 coverage updates above name is now `pool_init`'s
+precondition. Goal 1 stayed, as predicted. Every conjunct of
+`pool_invariant` but one follows from `pool_init`'s preconditions, the two
+separations among them, the values it stores and its callees'
+postconditions; the product equality needs only its factors swapped
+(`needed` is `aligned_size * max_objects`, the conjunct's product
+`capacity * object_size`). The one that needs more is
+`capacity <= CANON_USIZE_MAX / object_size`: on success both factors are
+nonzero and `checked_mul` returned true, so its `no_overflow` behaviour
+applies and gives `aligned_size <= CANON_USIZE_MAX / max_objects`, so
+`aligned_size * max_objects <= CANON_USIZE_MAX`, so
+`max_objects <= CANON_USIZE_MAX / aligned_size`; `pool_init` stores
+`max_objects` as `capacity` and `aligned_size` as `object_size`. The
+LIMITATION-SUSPECTED review of the note above is thereby done: two of the
+three `ensures_part4` goals were the separation; the third stays, and the
+argument, which had spelled out only the product equality,
+`arena_invariant(p->arena)` and the `Pool`'s separation from its slots, now
+covers every conjunct, this bound included. That the bound is what WP fails
+on is the reason given, not observed.
 
 #### Category 2b: ptr_elem cascade in pool_alloc / pool_get / pool_get_const (0 — RETIRED at VERIFY-036 F2; was 1, originally 6)
 
@@ -1692,14 +1715,11 @@ or `object_size * capacity` (= region span); both are within bounds, and the
 base pointer is valid. The C matches `bytes_from`'s contract; the obstacle is
 the `ptr_offset` round-trip.
 
-#### Category 2d: arena delegation + reset wrapper assigns/ensures (4 — was 8)
+#### Category 2d: arena delegation + reset wrapper assigns/ensures (1 — was 4, originally 8)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
 | 1  | `typed_cast_pool_reset_call_arena_reset_to_requires_2`       |
-| 2  | `typed_cast_pool_reset_call_arena_alloc_requires`           |
-| 3  | `typed_cast_pool_reset_reset_ensures_part3`                 |
-| 4  | `typed_cast_pool_reset_reset_ensures_2_part3`               |
 **Coverage update (2026-09-21).** `pool_reset_secure`'s three closed at
 CI #1285 (VERIFY-023). Five remain. This block covers 5 goals.
 
@@ -1768,15 +1788,23 @@ postconditions (per cats 2a–2c's manual arguments), apply `mem_secure_zero` /
 `mem_zero`'s verified zeroing postcondition or `arena_reset_to`'s rollback
 contract, conclude `pool_invariant` and the assigns shape.
 
+**Coverage update (2026-10-10, VERIFY-039 G5).** Goals 2, 3 and 4
+(`pool_reset_call_arena_alloc_requires`, `pool_reset_reset_ensures_part3`
+and `pool_reset_reset_ensures_2_part3`) closed at CI #1349 once
+`pool_invariant` separated `*p` from `*p->arena` (fix 528bfa1); their rows
+are removed. They were the missing separation, not delegation (VERIFY-033
+F4, G5). Goal 1 stays, and it is not covered by this block's argument: an
+admitted call sequence falsifies it (G5's prediction, goal 9).
+
 ### Summary of pool.h-own residuals
 
 | Category | Goals | Functions affected                                   | WP feature gap                              |
 |----------|-------|------------------------------------------------------|---------------------------------------------|
-| 2a       | 5     | pool_init                                            | pool_invariant arithmetic across arena_alloc boundary (3 LIMITATION-SUSPECTED) |
+| 2a       | 1     | pool_init                                            | the division bound `capacity <= CANON_USIZE_MAX / object_size` (VERIFY-039 G5) |
 | 2b       | 0     | (retired at VERIFY-036 F2)                          | ptr_elem cascade (VERIFY-006 empty nonnull) |
 | 2c       | 0     | (retired at VERIFY-036 F6)                          | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
-| 2d       | 4     | pool_reset                                          | arena delegation + wrapper assigns/ensures  |
-| **Total**| **9** |                                                      | counts as of VERIFY-036 F6 (was 6/5/8, total 24, before VERIFY-023) |
+| 2d       | 1     | pool_reset                                          | `base_mark <= arena->offset`, falsified by an admitted call unless `pool_invariant` states it (G5's prediction, goal 9) |
+| **Total**| **2** |                                                      | counts as of VERIFY-039 G5 (9 before it; 24 before VERIFY-023) |
 
 Cats 2b, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no `ensures`
@@ -1785,6 +1813,14 @@ uintptr_t round-trip. pool.h inherits the cascade through up to four call
 layers (pool.h → arena.h → ptr.h → uintptr_t). Cat 2a is pool.h's own
 invariant-establishment arithmetic at pool_init; three of its five goals are
 LIMITATION-SUSPECTED pending the manual review noted above.
+
+**Update (2026-10-10, VERIFY-039 G5).** The paragraph above no longer
+holds for cats 2a and 2d. Four of cat 2a's five goals and three of cat 2d's
+four were the missing separation of the `Pool` from its `Arena`, not
+arithmetic or VERIFY-006's cascade, and closed with it at CI #1349; the
+LIMITATION-SUSPECTED review is done (cat 2a's coverage update). Cat 2a
+keeps the division bound; cat 2d keeps one goal, which an admitted call
+falsifies, to be recorded as a finding of its own.
 
 ### Verification scope
 
@@ -10379,7 +10415,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5's repair predicted (seven goals close, two stay); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -11871,3 +11907,41 @@ goal 8, needs the separation (G5's probe) but not only that. Pool Cat 2a
 keeps goal 8, filed under the division bound; Cat 2d keeps goal 9, which an
 admitted call falsifies, to be recorded as a finding rather than filed under
 an argument.
+
+### G5 — scored (fix 528bfa1; CI #1349, CC #36)
+
+**Result: exact.** The fix commit carried the predicted pins (prediction
+f146e51), and every job of CI #1349 and CC #36 was green. `frama-c-pool`
+stood at `3993 / 4045` with 52 unproved, its roll-call the old one less the
+seven, by set equality, and no other unit moved. Record coverage #45 was
+green. (GitHub's run pages, read 2026-10-10.) It is advisory: run on the
+tree at 528bfa1, it lists the seven as stale in pool Cat 2a and Cat 2d, as
+the prediction said, and the two headings' counts as drifted, which the
+prediction did not say. This commit removes the rows and corrects the
+counts.
+
+| # | Goal | Predicted | Observed |
+|---|---|---|---|
+| 1–6 | `pool_init_ensures_2_part4`, `_3_part4`, `_4_part3`, `pool_init_call_arena_alloc_requires`, `pool_reset_call_arena_alloc_requires`, `pool_reset_reset_ensures_part3` | close (H) | closed |
+| 7 | `pool_reset_reset_ensures_2_part3` | closes (M) | closed |
+| 8 | `pool_init_ensures_part4` | stays (M) | stayed |
+| 9 | `pool_reset_call_arena_reset_to_requires_2` | stays (H) | stayed |
+
+Also held: no goal generated or removed, the total still 4045 (H); no other
+goal changed status (M), by set equality; no other unit moved (H).
+
+**What it shows.** VERIFY-033 F4's hypothesis is confirmed by intervention
+for four of the five goals it named, and the same separation closed three it
+did not name: the two call-site `arena_invariant` goals and `pool_reset`'s
+`pool_invariant`. Seven goals the record filed under arithmetic or
+delegation were the missing separation. The fifth goal F4 named,
+`pool_init_ensures_part4`, stayed, as predicted: the separation is necessary
+for it to hold (G5's probe) but not sufficient for WP to prove it, and pool
+Cat 2a's argument now covers every conjunct, the division bound included.
+Pool's own residuals are down from nine to two. No block retires, so *A*
+stays at 12.
+
+**Two of the three long run times did not recur.** `frama-c-error` took
+49s and `frama-c-bitset` 2h 18m, their usual times; the G4 probe did not
+run, the push touching none of its paths. That fits a one-off missed cache
+restore at CI #1348; the logs would still say.
