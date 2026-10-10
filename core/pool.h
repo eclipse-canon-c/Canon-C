@@ -83,7 +83,14 @@
  * Unsafe patterns:
  * ✗ Calling pool_reset() when you need post-init arena allocations to survive
  * ✗ Calling arena_reset() / arena_reset_secure() on the pool's backing arena
- *   while the pool is still live — see "Lifetime tracking" below.
+ *   while the pool is still live — see "Lifetime tracking" below. Since
+ *   VERIFY-039 G7 the pool's contracts require the arena's offset to be at
+ *   or above the pool's region start, so after this call they admit no pool
+ *   call unless the region starts at offset 0.
+ * ✗ Calling arena_reset_to() on the pool's backing arena with a mark below
+ *   the pool's end while the pool is still live: later arena allocations
+ *   can be handed the pool's slots. A mark at or above the region start
+ *   still meets the pool's contracts (VERIFY-039 G7).
  * ✗ Placing the Pool struct in the arena's free tail, where its own slots
  *   will be reserved: pool_reset_secure() zeroes the slots and would zero
  *   the Pool (VERIFY-039 G4)
@@ -187,13 +194,17 @@ typedef struct {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*@
-  // VERIFY-039 G4: the next-to-last conjunct keeps the Pool out of its own
-  // slots. pool_reset_secure zeroes the slots through `char *`, which WP's
-  // typed model cannot see reach the Pool's fields; in C this is what keeps
-  // it off them.
-  // VERIFY-039 G5: the last keeps the Pool off its Arena. pool_reset stores
-  // into *p and calls functions that assign *p->arena; each would otherwise
-  // be free to overwrite the other.
+  // VERIFY-039 G4: \separated(p, p->arena->buffer + ...) keeps the Pool
+  // out of its own slots. pool_reset_secure zeroes the slots through
+  // `char *`, which WP's typed model cannot see reach the Pool's fields; in
+  // C this is what keeps it off them.
+  // VERIFY-039 G5: \separated(p, p->arena) keeps the Pool off its Arena.
+  // pool_reset stores into *p and calls functions that assign *p->arena;
+  // each would otherwise be free to overwrite the other.
+  // VERIFY-039 G7: p->base_mark <= p->arena->offset keeps the arena's offset
+  // at or above the pool's region start, which pool_reset's
+  // arena_reset_to(arena, base_mark) requires; resetting the arena below
+  // base_mark leaves the pool outside its contract.
   predicate pool_invariant(Pool *p) =
       \valid(p) &&
       arena_invariant(p->arena) &&
@@ -204,7 +215,8 @@ typedef struct {
       p->end_mark <= p->arena->capacity &&
       p->end_mark - p->base_mark == p->capacity * p->object_size &&
       \separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1)) &&
-      \separated(p, p->arena);
+      \separated(p, p->arena) &&
+      p->base_mark <= p->arena->offset;
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
