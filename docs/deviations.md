@@ -4143,6 +4143,13 @@ The name-stability evidence from #1259 onward is real — every roll-call printe
 is now **4845 / 5008, 163 residuals**, set unchanged by name; the +6 is
 VERIFY-023's goal delta.
 
+**Reading note (2026-10-10, VERIFY-039 G8).** `bitset_not`'s pointwise
+postcondition and its loop invariant 2 are false as written: in ACSL `~` is
+the integer complement, negative for a `u64` word. The invariant's unproved
+preservation, counted above under array framing, is unproved because it is
+false, and the postcondition counted among the probe's results ("both
+postconditions proved") is proved from it. See VERIFY-039 G8.
+
 ## VERIFY-021: An Instrument Verified, and a Frame Clause That Cannot Be Written (lifetime.h, ladder level 4 only)
 
 | Field          | Value |
@@ -10427,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12084,3 +12091,55 @@ down to one, the division bound, which pool Cat 2a's argument covers;
 
 `docs/verification.md`'s rows for arena.h, pool.h and region.h, which
 predated VERIFY-036, now carry the pins CI #1350 confirmed.
+
+### G8 — `bitset_not`'s postcondition and loop invariant are false as written (opened)
+
+**Finding.** `bitset_not`'s live behaviour ensures
+`\forall integer k; 0 <= k < bs->word_count ==> bs->words[k] == ~\old(bs->words[k])`,
+and its loop carries the same equation over the words already inverted, as
+`loop invariant 2`. In ACSL the value of a C integer is promoted to a
+mathematical integer, and `~` complements its infinite two's-complement
+representation: `~x` is `-x - 1` (ACSL 1.18, §2.2.4 and §2.2.4.6, whose
+Example 2.6 gives `~5 == -6`; Frama-C's E-ACSL plugin, run locally,
+translates the term with GMP's `mpz_com`). For a `u64` word the right-hand
+side is negative and the left-hand side is not. Every live call has at
+least one word, so the postcondition is false for every call, and the
+invariant at every loop head after the first.
+
+Read as the comment above the loop intends, with the complement taken in
+`u64`, the equation holds for every word but, possibly, the last. After the
+loop `bitset_not` calls `bitset_clear_padding`, which clears the last word's
+bits from `capacity % 64` up, so for a capacity that is not a multiple of 64
+the last word is not the complement either, unless every padding bit was set
+on entry, which `bitset_pad` excludes and the precondition, `bitset_mut`
+alone, does not.
+`tools/probes/verify-039/p_bitset_not.c` inverts a fresh `Bitset` of
+capacity 100: word 0 is the complement, and word 1 is
+`0x0000000fffffffff`, not `0xffffffffffffffff`, `VIOLATED`. At capacity 128
+both words hold. Both build configurations, LP64 and ILP32, gcc and clang at
+`-O0` and `-O2`; the sanitizers are clean.
+
+**Filing.** The invariant's preservation,
+`bitset_not_loop_invariant_2_preserved`, is a residual, and VERIFY-020
+files it as array framing ("array framing on and / or / xor / not";
+`data/bitset.h`'s comment glosses it "writing words[w] leaves words[0..w-1]
+alone"). It is unproved because it is false. The postcondition is not among the
+residuals: WP proves it. A false goal can be proved only from a false
+hypothesis, and for an ordinary `Bitset` the only one WP has there is the
+invariant, which WP assumes at the loop's exit, where it states that a word
+equals a negative number. Every goal after the loop has that hypothesis, so
+its proof says nothing about whether it is true. VERIFY-020 counts the
+postcondition among what contracting the loop delivered ("6 → 3 with both
+postconditions proved"); it was never true. The other one,
+`ensures bitset_pad(bs)`, also follows from `bitset_clear_padding`'s
+postcondition, and nothing here says it needed the contradiction.
+
+This is G1's shape twice over: a residual unproved because it is false,
+filed as prover weakness, and a proved goal that rests on it, as at G6.
+
+**Repair (recommended).** Both clauses take the complement in `u64`. The
+postcondition states it for every word but the last, and for the last, when
+`capacity % 64 != 0`, the complement with the bits from `capacity % 64` up
+cleared, and otherwise the complement. That needs `bitset_clear_padding` to
+state what it leaves in the last word; today it states only `bitset_pad`.
+With entry 3's separation, in the bitset repair.
