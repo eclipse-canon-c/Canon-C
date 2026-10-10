@@ -1715,7 +1715,7 @@ or `object_size * capacity` (= region span); both are within bounds, and the
 base pointer is valid. The C matches `bytes_from`'s contract; the obstacle is
 the `ptr_offset` round-trip.
 
-#### Category 2d: arena delegation + reset wrapper assigns/ensures (1 — was 4, originally 8)
+#### Category 2d: arena delegation + reset wrapper assigns/ensures (0 — RETIRED at VERIFY-039 G7; was 1, originally 8)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
@@ -1796,6 +1796,14 @@ are removed. They were the missing separation, not delegation (VERIFY-033
 F4, G5). Goal 1 stays, and it is not covered by this block's argument: an
 admitted call sequence falsifies it (G7).
 
+**Coverage update (2026-10-10, VERIFY-039 G7) — this argument is RETIRED.**
+The last goal, `pool_reset_call_arena_reset_to_requires_2`, closed at
+CI #1350 (f5c616c) once `pool_invariant` stated
+`base_mark <= arena->offset`. It was never delegation: it was not true for an
+admitted call (G7). All eight goals the block ever held have closed, and its
+delegation reading covered none of the last four. The block covers nothing.
+Row kept for legibility.
+
 ### Summary of pool.h-own residuals
 
 | Category | Goals | Functions affected                                   | WP feature gap                              |
@@ -1803,8 +1811,8 @@ admitted call sequence falsifies it (G7).
 | 2a       | 1     | pool_init                                            | the division bound `capacity <= CANON_USIZE_MAX / object_size` (VERIFY-039 G5) |
 | 2b       | 0     | (retired at VERIFY-036 F2)                          | ptr_elem cascade (VERIFY-006 empty nonnull) |
 | 2c       | 0     | (retired at VERIFY-036 F6)                          | bytes_from / mem_zero call-site (VERIFY-006/007/008) |
-| 2d       | 1     | pool_reset                                          | `base_mark <= arena->offset`, falsified by an admitted call unless `pool_invariant` states it (VERIFY-039 G7) |
-| **Total**| **2** |                                                      | counts as of VERIFY-039 G5 (9 before it; 24 before VERIFY-023) |
+| 2d       | 0     | (retired at VERIFY-039 G7)                          | arena delegation + wrapper assigns/ensures; its last goal, `base_mark <= arena->offset`, closed once `pool_invariant` stated it |
+| **Total**| **1** |                                                      | counts as of VERIFY-039 G7 (2 at G5, 9 before it; 24 before VERIFY-023) |
 
 Cats 2b, 2c, and 2d are downstream consequences of VERIFY-006's
 forward-implication note: ptr.h's `nonnull` behaviors carry no `ensures`
@@ -1821,6 +1829,10 @@ arithmetic or VERIFY-006's cascade, and closed with it at CI #1349; the
 LIMITATION-SUSPECTED review is done (cat 2a's coverage update). Cat 2a
 keeps the division bound; cat 2d keeps one goal, which G7 records as false
 for an admitted call.
+
+**Update (2026-10-10, VERIFY-039 G7).** Cat 2d's last goal closed at
+CI #1350 once `pool_invariant` stated `base_mark <= arena->offset`, and the
+block is retired. Pool's own residuals: one, cat 2a's division bound.
 
 ### Verification scope
 
@@ -10415,7 +10427,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened (`pool_reset` after its arena is reset: pool Cat 2d's last goal is not true for an admitted call; its repair predicted to close it); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12040,3 +12052,35 @@ heading's count as drifted.
 retires: *A* in force 12 → 11. Then every goal it ever held has closed,
 and its delegation reading covered none of the last four. Pool's own
 residuals come down to one, the division bound.
+
+### G7 — scored (fix f5c616c; CI #1350, CC #37)
+
+**Result: exact.** The fix commit carried the predicted pins (prediction
+8cd3eff), and every job of CI #1350 and CC #37 was green. `frama-c-pool`
+stood at `3994 / 4045` with 51 unproved, its roll-call the old one less
+`pool_reset_call_arena_reset_to_requires_2`, by set equality, and no other
+unit moved. Record coverage #46 was green. (GitHub's run pages, read
+2026-10-10.) Run on the tree at f5c616c, it lists the goal as stale, pool
+Cat 2d as empty and its heading's count as drifted, as the prediction said.
+This commit retires the block.
+
+| # | Goal or claim | Predicted | Observed |
+|---|---|---|---|
+| 1 | `pool_reset_call_arena_reset_to_requires_2` | closes (H) | closed |
+| 2 | every proved goal that establishes `pool_invariant`, and the goals at the call sites that require it | still prove (M) | held, by set equality |
+| 3 | `pool_init_ensures_part4` | stays (M) | stayed |
+| 4 | no goal generated or removed, the total 4045 | (H) | held |
+| 5 | no other unit moves | (H) | held |
+
+**What it shows.** The goal had G1's shape: not true for an admitted call,
+and filed under an argument, delegation, that presumed what no contract
+stated. One conjunct closed it. Pool Cat 2d covers nothing and retires:
+*A* in force 12 → 11. All eight goals the block ever held have closed: three
+at VERIFY-023, one at VERIFY-036 F6, three at G5 and this one. Its
+delegation reading covered none of the last four. Pool's own residuals are
+down to one, the division bound, which pool Cat 2a's argument covers;
+`frama-c-pool`'s 51 are arena.h's 50 and that one. No job ran long:
+`frama-c-error` took 1m 8s and `frama-c-bitset` 2h 18m.
+
+`docs/verification.md`'s rows for arena.h, pool.h and region.h, which
+predated VERIFY-036, now carry the pins CI #1350 confirmed.

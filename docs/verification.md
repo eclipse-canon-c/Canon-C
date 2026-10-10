@@ -3683,11 +3683,22 @@ the complete installation and registration procedure.
 |--------------|------------------|-----------|------------------------------------------------------------------------|
 | slice.h      | ✅ Verified       | 379/394   | 15 documented timeouts (VERIFY-007/-012); MCDC-002 closed              |
 | memory.h     | ✅ Verified       | 2829/2872 | 43 documented timeouts (VERIFY-008/-012); 23 inherited + 20 own; +6 goals at VERIFY-023, set unchanged |
-| arena.h      | ✅ Verified       | 3496/3575 | 79 documented timeouts (VERIFY-033/034: +20 frame goals, all proved); formerly 83 (VERIFY-009/-012/-023); 43 inherited + 40 own — 8 closed by VERIFY-023, previously misattributed; MCDC-003 |
-| pool.h       | ✅ Verified       | 3970/4061 | 91 documented timeouts (VERIFY-033/034: +20, all proved); formerly 95 (VERIFY-010/-012/-023); 83 inherited + 12 own — 24 closed by VERIFY-023, previously misattributed; MCDC-004 |
-| region.h     | ✅ Verified       | 3644/3746 | 102 documented timeouts (VERIFY-033/034: +20, all proved); formerly 106 (VERIFY-011/-012/-023); 83 inherited + 23 own; MCDC-005 |
+| arena.h      | ✅ Verified       | 3517/3567 | 50 documented residuals at CI #1350: 48 inherited + 2 own, VERIFY-009 Cat 2c (the zero-content `ensures` of `arena_alloc_zero` and `arena_alloc_aligned_zero`); formerly 79 (VERIFY-033/034), 83 (VERIFY-009/-012/-023); VERIFY-036 and VERIFY-039 G2 closed the rest, each step in the job's pin comment; MCDC-003 |
+| pool.h       | ✅ Verified       | 3994/4045 | 51 documented residuals at CI #1350: arena.h's 50, inherited, + 1 own, VERIFY-010 Cat 2a's division bound; formerly 91 (VERIFY-033/034), 95 (VERIFY-010/-012/-023); VERIFY-036 and VERIFY-039 (G2, G5, G7) closed the rest, each step in the job's pin comment; MCDC-004 |
+| region.h     | ✅ Verified       | 3665/3738 | 73 documented residuals at CI #1350: arena.h's 50, inherited, + 23 own; formerly 102 (VERIFY-033/034), 106 (VERIFY-011/-012/-023); every movement since was in the inherited part; MCDC-005 |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
+
+*Rows for arena.h, pool.h and region.h brought to the pins CI #1350
+confirmed (2026-10-10, VERIFY-039 G7 scored). Stale: ptr.h and memory.h, as
+recomputed at VERIFY-023 (2026-09-07) and moved at VERIFY-026 and since;
+vec, priority_queue.h and stringbuf.h, as recomputed at VERIFY-035
+(2026-10-03) and moved since. The other rows match their pins, and bitset
+has no row in the data/ table. The summary card at the top stands as
+recomputed at VERIFY-035, and the per-header Summary cards of memory.h,
+arena.h, pool.h, region.h, vec, bitset, priority_queue.h and stringbuf.h
+carry older figures. Until they are recomputed, the pins in
+`.github/workflows/cmake-multi-platform.yml` are the authority.*
 
 ### semantics/ (complete)
 
