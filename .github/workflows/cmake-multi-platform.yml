@@ -4574,8 +4574,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=149   # VERIFY-039 entry 3 / G6 predicted: 168 -> 149 (VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4877 / 5026"   # VERIFY-039 entry 3 / G6 predicted: 19 more proved (G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=139   # VERIFY-039 entry 3 loop bounds predicted: 149 -> 139 (entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4887 / 5026"   # VERIFY-039 entry 3 loop bounds predicted: 10 more proved (entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4679,7 +4679,7 @@ jobs:
             # ── BY-NAME ROLL-CALL (set equality), VERIFY-020 ──────────────
             # The count gate above is necessary but NOT sufficient: a residual
             # could vanish while a new one appears and the total would not move.
-            # This checks all 158 by NAME, and separately that no unlisted goal
+            # This checks every one by NAME, and separately that no unlisted goal
             # is unproved -- both directions, i.e. set equality, as vec and
             # deque pin.
             #
@@ -4687,7 +4687,8 @@ jobs:
             # exactly the mechanical-error class this arc kept tripping on. The
             # array below was produced by script from #1259 output and its arm
             # partition verified arithmetically -- 2 + 32 + 58 + 66 = 158
-            # when written; 71 own / 163 total since #1264. No
+            # when written; 71 own / 163 total at #1264, 42 own / 139 total
+            # since VERIFY-039 entry 3's loop bounds. No
             # duplicates, nothing unclassified -- before being written here.
             CHECKS=(
               "typed_cast_ptr_align_down_nonnull_ensures_same_base_part2"
@@ -4792,9 +4793,10 @@ jobs:
               "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
-              # ARM D — bitset's OWN residuals, 52 since VERIFY-039 entry 3 / G6
-              #         (71 before it; was 66, +5 at CI #1264, see the F5
-              #         proof-cost note in that commit message).
+              # ARM D — bitset's OWN residuals, 42 since VERIFY-039 entry 3's
+              #         loop bounds (52 after entry 3 / G6, 71 before it; was
+              #         66, +5 at CI #1264, see the F5 proof-cost note in that
+              #         commit message).
               "typed_cast_bitset_clear_padding_ensures_part1"
               "typed_cast_bitset_init_assigns_exit_part5"
               "typed_cast_bitset_init_assigns_normal_part5"
@@ -4822,17 +4824,7 @@ jobs:
               "typed_cast_bitset_set_all_live_assigns_exit_part1"
               "typed_cast_bitset_set_all_live_assigns_normal_part1"
               "typed_cast_bitset_not_assert_rte_mem_access"
-              "typed_cast_bitset_not_live_assigns_exit_part1"
-              "typed_cast_bitset_not_live_assigns_normal_part1"
               "typed_cast_bitset_not_loop_invariant_2_preserved"
-              "typed_cast_bitset_and_assert_rte_mem_access_11_part1"
-              "typed_cast_bitset_and_assert_rte_mem_access_11_part2"
-              "typed_cast_bitset_and_live_assigns_part5"
-              "typed_cast_bitset_and_live_assigns_part6"
-              "typed_cast_bitset_and_live_ensures_part3"
-              "typed_cast_bitset_and_live_ensures_part4"
-              "typed_cast_bitset_and_loop_invariant_3_preserved_part1"
-              "typed_cast_bitset_and_loop_invariant_3_preserved_part2"
               "typed_cast_bitset_count_assert_rte_mem_access"
               "typed_cast_bitset_is_empty_assert_rte_mem_access"
               "typed_cast_bitset_is_full_assert_rte_mem_access"

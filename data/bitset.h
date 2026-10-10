@@ -948,7 +948,11 @@ static inline void bitset_not(borrowed(Bitset*) bs) {
             0 <= k < w ==> bs->words[k] == ~\at(bs->words[k], Pre);
         loop invariant \forall integer k;
             w <= k < bs->word_count ==> bs->words[k] == \at(bs->words[k], Pre);
-        loop assigns w, bs->words[0 .. bs->word_count - 1];
+        // VERIFY-039: bounded by the count on entry, which the loop does not
+        // change. WP evaluates loop assigns in the havocked loop state, where
+        // a bound read from bs->word_count can stretch the region over the
+        // Bitset itself.
+        loop assigns w, bs->words[0 .. \at(bs->word_count, Pre) - 1];
         loop variant bs->word_count - w;
     */
     for (usize w = 0; w < bs->word_count; w++) {
@@ -1048,7 +1052,8 @@ static inline void bitset_and(borrowed(Bitset*) bs, borrowed(const Bitset*) othe
     /* words beyond other's range become 0 — AND with implicit 0 */
     /*@ loop invariant n <= w <= bs->word_count;
         loop invariant \forall integer k; n <= k < w ==> bs->words[k] == 0;
-        loop assigns w, bs->words[n .. bs->word_count - 1];
+        // VERIFY-039: bounded by the count on entry, as in bitset_not.
+        loop assigns w, bs->words[n .. \at(bs->word_count, Pre) - 1];
         loop variant bs->word_count - w;
     */
     for (usize w = n; w < bs->word_count; w++) {
