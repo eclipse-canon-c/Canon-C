@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12737,3 +12737,76 @@ separation does not bear on: the sixteen null-guard reads of `bs->words`,
 the thirteen `char` and `u64` bridges, `bitset_init`'s postconditions 3 to
 6, `bitset_assign`'s two null-behaviour assigns and the two goals of the
 read-only finds.
+
+### G4 — listing, entry 6: `remove`'s `out` over the `vec_Rec`
+
+**Finding.** `remove` requires `out` to be valid and, since G1, separated
+from the vec's buffer. Nothing separates it from `*v`, and entry 5's repair
+does not: it keeps the vec off its buffer. In `cc-vec_struct`, on LP64, a
+`Rec` at the vec's own address has its `id` over the vec's `items` field,
+its padding over the rest of that field, and its `due` over `len`: an `i64`
+over a `usize`, signed and unsigned counterparts, which the model keeps in
+two arrays. `remove` stores the removed element through `out` and then reads
+`v->len`, which now holds the element's `due`. When that makes
+`i < v->len - 1` false, `remove` skips the move, reads `v->items` no more,
+and stores `v->len - 1` over `out->due`. Two goals that WP proves are then
+false:
+
+| Goal | Statement | After `p_vec_rec_out.c`'s call |
+|---|---|---|
+| `vec_Rec_remove_ok_ensures_2` | `*out == \old(v->items[i])` | `*out` is `{2, 0}`; the element was `{2, 1}` |
+| `vec_Rec_remove_ok_ensures_3` | `v->len == \old(v->len) - 1` | `len` is 0, not 2 |
+
+`tools/probes/verify-039/p_vec_rec_out.c` calls `remove(v, 2, out)` at `len`
+3, the element's `due` 1, with `out` at the vec and the buffer a separate
+block, so the call meets `remove`'s contract, before entry 5's repair and
+after it. No part of either clause is among `cc-vec_struct`'s residuals. In
+WP 25's statements of the path without the move (`_part7`), the element's
+`due` lies in the `sint64` array and `len` in the `uint64` one: the store to
+`len` leaves `*out` as stored, and the store through `out` leaves `len`.
+
+Every access is defined C, on the reading of C11 6.5p6 and 6.5p7 that entry
+5 uses, in which each member of a stored `Rec` takes its own effective type.
+Both blocks are heap storage. `remove` reads `v->len` after the store
+through `out`, a counterpart read, and `v->items` only before it. The probe
+reads `out->id` through its own type, `out->due` as an `i64`, the
+counterpart of the `usize` stored there last, and through `memcpy`, and
+`v->len` through its own type. It does not read `v->items`, whose bytes now
+hold `out`'s `id` and padding: ensures 4 and 5 read it, and that read is the
+undefined step of G4's scope. gcc and clang at `-O0`, `-O2` and
+`-D_FORTIFY_SOURCE=3`, both build configurations; the sanitizers are clean.
+On ILP32 `due` covers `len` and `capacity`, two four-byte `usize` fields,
+and the probe says so.
+
+No other vec function has such a goal. At `vec_int` (`frama-c-vec`,
+`cc-vec`), on LP64, an `out` over the vec stores an `int` over its pointer
+or `usize` fields, and the next read of that field through its own type is
+undefined: G5's case. (On ILP32, where `usize` is `unsigned int`, an `int`
+over `len` would be a counterpart store; no unit verifies vec there.) `pop`
+stores `len` and `*out` in one expression, `*out = v->items[--v->len]`, so
+an `out` over `len` makes two unsequenced stores to the same bytes, which is
+undefined (C11 6.5p2), and `iter_next` does the same with the iterator's
+index. After `get`'s and `iter_next`'s stores, their goals read the vec's
+`items` field, overwritten when `out` lies on it, and are true when `out`
+lies past it.
+
+G1's score says that the frames it closed proved with no argument once the
+contract was true. That stands for those frames, but the contract G1 left
+still admits this call, for which `remove`'s ensures 2 and 3 are false.
+
+**The survey.** Its counterparts bullet named one route to this pair, the
+vec's own `usize` stores over a `Rec`'s `due`: entry 5. This is the other, a
+`Rec` stored through `out` over the vec's `len`. The survey states that for
+each write it checked every goal evaluated after it that names an object the
+write may overlap. For this write it did not: it took `out` as unable to
+overlap `*v`, which G1 separates from the buffer only. The other
+out-parameters in verified units give no further pair: deque's store an
+`int`, no counterpart of a `usize` on LP64, and the priority queue's are
+separated from the queue or followed by no goal that names it. The survey's
+list of pairs stands; its entries for this pair are 5 and 6.
+
+**Decision (recommended).** `remove`'s `out` is separated from the vec as
+well as from its buffer, within G1's guard: `\separated(out, v)`. `pop`'s,
+`get`'s and `iter_next`'s go with it (`iter_next`'s from the iterator and
+its vec), so the four functions G1 changed keep one shape. In both contract
+surfaces, as at G1. One intervention per prediction: after entry 5's.
