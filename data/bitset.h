@@ -474,7 +474,11 @@ static inline u64 bitset_mask_of(usize i) { return (u64)1 << (i % BITSET_BITS_PE
 /* Does NOT require bitset_pad on entry — this is the function that
    establishes it, and set_all / not call it exactly when it is broken.
    `assigns` is an upper bound, so the rem == 0 path writing nothing is
-   within the clause. */
+   within the clause.
+   VERIFY-039 G8: the last two clauses state what the last word holds,
+   which bitset_not's postcondition needs. The mask is written with the
+   code's casts. They change no value for capacity % 64 in 1..63, and they
+   make WP's translation of the clause the code's own. */
 /*@ requires bitset_mut(bs);
 
     assigns bs->words[bs->word_count - 1];
@@ -483,6 +487,12 @@ static inline u64 bitset_mask_of(usize i) { return (u64)1 << (i % BITSET_BITS_PE
     ensures \forall integer k;
         0 <= k < bs->word_count - 1 ==> bs->words[k] == \old(bs->words[k]);
     ensures bitset_mut(bs);
+    ensures bs->capacity % 64 == 0 ==>
+        bs->words[bs->word_count - 1] == \old(bs->words[bs->word_count - 1]);
+    ensures bs->capacity % 64 != 0 ==>
+        bs->words[bs->word_count - 1] ==
+            (\old(bs->words[bs->word_count - 1]) &
+             (u64)((u64)((u64)1 << (usize)(bs->capacity % 64)) - 1));
 */
 static inline void bitset_clear_padding(borrowed(Bitset*) bs) {
     require_msg(bs != NULL, "bitset_clear_padding: bs cannot be NULL");
@@ -934,8 +944,17 @@ static inline void bitset_set_all(borrowed(Bitset*) bs) {
     behavior live:
       assumes bs != \null && bs->words != \null;
       assigns bs->words[0 .. bs->word_count - 1];
-      ensures \forall integer k;
-          0 <= k < bs->word_count ==> bs->words[k] == ~\old(bs->words[k]);
+      // VERIFY-039 G8: the complement is taken in u64, since ACSL's ~ on a
+      // word promoted to integer is negative, and the last word is stated
+      // as bitset_clear_padding leaves it, with its mask.
+      ensures \forall integer k; 0 <= k < bs->word_count - 1 ==>
+          bs->words[k] == (u64)~\old(bs->words[k]);
+      ensures bs->capacity % 64 == 0 ==>
+          bs->words[bs->word_count - 1] == (u64)~\old(bs->words[bs->word_count - 1]);
+      ensures bs->capacity % 64 != 0 ==>
+          bs->words[bs->word_count - 1] ==
+              ((u64)~\old(bs->words[bs->word_count - 1]) &
+               (u64)((u64)((u64)1 << (usize)(bs->capacity % 64)) - 1));
       ensures bitset_pad(bs);
 
     complete behaviors;
@@ -944,8 +963,9 @@ static inline void bitset_set_all(borrowed(Bitset*) bs) {
 static inline void bitset_not(borrowed(Bitset*) bs) {
     if (!bs || !bs->words) { return; }
     /*@ loop invariant 0 <= w <= bs->word_count;
+        // VERIFY-039 G8: the complement taken in u64, as in the postcondition.
         loop invariant \forall integer k;
-            0 <= k < w ==> bs->words[k] == ~\at(bs->words[k], Pre);
+            0 <= k < w ==> bs->words[k] == (u64)~\at(bs->words[k], Pre);
         loop invariant \forall integer k;
             w <= k < bs->word_count ==> bs->words[k] == \at(bs->words[k], Pre);
         // VERIFY-039: bounded by the count on entry, which the loop does not
@@ -996,6 +1016,11 @@ static inline void bitset_not(borrowed(Bitset*) bs) {
    the two live_assigns parts -- array framing (writing words[w] leaves
    words[0..w-1] alone), not predicate cost. Expect the same shape here:
    roughly two to three residuals per loop, mostly framing.
+   VERIFY-039: the first postcondition and invariant 2 were false as
+   written, ACSL's ~ taken on the promoted integer (G8), and the two
+   live_assigns parts needed the Bitset kept off its words and the loop
+   bounded by the count on entry (entry 3). Both are repaired; see
+   docs/deviations.md.
 
    THE ALIASING DECISION, STATED RATHER THAN HIDDEN
    and / or / xor read other->words[w] at the same index they write
