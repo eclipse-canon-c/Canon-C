@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5's repair predicted (nothing moves); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12810,3 +12810,111 @@ well as from its buffer, within G1's guard: `\separated(out, v)`. `pop`'s,
 `get`'s and `iter_next`'s go with it (`iter_next`'s from the iterator and
 its vec), so the four functions G1 changed keep one shape. In both contract
 surfaces, as at G1. One intervention per prediction: after entry 5's.
+
+### G4 — listing entry 5, committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-11).** The repair recommended with entry 5: the vec's
+mutable form gains a last conjunct,
+`\separated(v, v->items + (0 .. v->capacity - 1))`. In
+`vmacros/vdrivers/vec_verify.h` that form is the predicate `vec_int_mut`,
+which `frama-c-vec` reads. In `data/vec/vec_impl.h` it is the form that the
+macro-body contracts inline as the first `requires` of fourteen functions,
+read under `-CC` by `cc-vec` and `cc-vec_struct`: `free`, `set`, `push`,
+`try_push`, `push_unchecked`, `pop`, `pop_option`, `clear`, `insert`,
+`remove`, `remove_option`, `append_array`, `extend` and `fill`. Each of the
+fourteen gains a `@pre` line in its documentation. No executable change.
+Entry 6, `remove`'s `out`, is not part of it.
+
+Of the jobs that run on a push, only these three units read the changed
+text. `vec_int_mut` is defined in `vec_verify.h`, which `frama-c-vec` alone
+verifies, and of the `-CC` units only the two vec drivers expand the macro
+bodies; a unit that includes vec's headers without `-CC` sees no macro-body
+contract.
+
+**Before the prediction.** No external prover has been run on the changed
+code. WP 25.0-beta, built locally, printed the three units' goals with CI's
+options less the provers, plus `-c11`, before and after the change, each
+goal under its name (the local printer was patched to show it); printing
+runs Qed.
+
+-  Each unit keeps its goals: 5223, 5267 and 5265 under WP 25, the same
+  names before and after.
+-  `frama-c-vec`: no goal changes in statement. WP keeps `vec_int_mut` as a
+  predicate, `P_vec_int_mut`; only its definition gains the conjunct.
+-  `cc-vec` and `cc-vec_struct`: 174 and 175 goals change in statement, all
+  in the fourteen functions, each gaining the conjunct among its hypotheses;
+  45 of them in each unit are pinned residuals, by WP 25's names. Two in
+  each must also prove it, `pop_option`'s call to `pop` and
+  `remove_option`'s call to `remove`, and their hypotheses carry it in the
+  same terms: before the call the caller only allocates and initialises its
+  local `out`, which leaves the vec's `items` and `capacity` as they were.
+  `extend`'s call to `append_array` reduces to true, before and after. The
+  one more goal at `vec_Rec` is `remove`'s ensures 2 on the path without the
+  move, which WP 25's simplifier reduces to true at `vec_int`, where `*out`
+  is a scalar.
+
+The local run gives names and what each statement gains, not provability,
+and it differs from CI's WP 29 in three ways that bear here. WP 25's
+`-wp-split` also splits conjunctions, so some of CI's names are WP 25 parts:
+`vec_Rec_swap_ensures`, among the pins, is three. WP 29 generates
+termination and `exits` goals that WP 25 does not; among the pins are
+`fill_terminates_part1` and `_part2`, on which the local run says nothing.
+And WP 25 takes a call to a defined function whose contract gives `assigns`
+per behaviour only, as `mem_copy`'s and `mem_move`'s do, as writing all
+memory, where WP 29 uses the complete behaviours' `assigns` (the G4 probe's
+log: "No default assigns clause, using complete behaviors assigns"), so the
+goals after those calls read differently under the two. In each CC unit, 45
+of the vec's 50 own residuals change in WP 25's statements. Of the other
+five, `alloc`'s call to `init` lies outside the fourteen functions,
+`extend`'s `assigns` part does not change, and the two termination goals and
+`swap`'s postcondition have no WP 25 goal of their name.
+
+**Predicted: nothing moves, in any unit.**
+
+-  (H) No goal is generated or removed. The conjunct sits inside an existing
+  clause, under its `v == \null ||` everywhere but in `push_unchecked`,
+  whose precondition no verified function calls, and it does not split, as
+  at G5, G7 and entry 3. The totals stay: `frama-c-vec` 5515, `cc-vec` 5580,
+  `cc-vec_struct` 5578.
+-  (H) No residual closes. Each of the vec's residuals in the three units
+  has an obstacle that does not depend on where the vec lies: `fill`'s loop,
+  which has no annotations (class (g), 24 goals); the `int` and `char`
+  bridging at `mem_copy` and `mem_move`, in their preconditions and in the
+  `assigns` parts that set a byte range against the element range (class
+  (h)); the element-transfer postconditions, for which `mem_copy` and
+  `mem_move` state no contents (class (d)); `\fresh` and `\freeable` (class
+  (e)); `extend`'s `assigns` part, the delegate's wider `assigns`; and
+  `swap`, which has no mutable form. The inherited residuals are in other
+  headers' functions, whose contracts do not change.
+-  (M) No proved goal becomes unproved. The conjunct is a hypothesis
+  everywhere but at the two calls, where the caller's precondition gives it
+  in the same terms.
+-  (H) No other unit moves.
+-  (H) `p_vec_append_self.c` and `p_vec_rec_live.c` behave at run time as
+  before; since the fix their calls are outside the contracts.
+  `p_vec_rec_out.c`'s call stays inside `remove`'s: its vec and buffer are
+  separate blocks.
+
+**Pins carried by the fix commit.** None changes: `frama-c-vec` at
+`5363 / 5515` with 152 unproved, `cc-vec` at `5420 / 5580` and
+`cc-vec_struct` at `5418 / 5578` with 160 each, and the same roll-calls. A
+green run means every row held.
+
+**What it settles.** As for entries 1, 2 and 4: if nothing moves, the repair
+is invisible to WP. Entry 5's eight goals, `append_array`'s ensures 3 at
+`vec_int` (`frama-c-vec` and `cc-vec`) and the seven frames at `vec_Rec`
+(`cc-vec_struct`), are then true by an argument: none of the function's
+writes reaches the elements a frame keeps. The element stores and the byte
+ranges of `mem_copy` and `mem_move` lie in the buffer, outside those
+elements; the stores to the vec's own fields are kept off the buffer by the
+new conjunct; the store through `out` is kept off it by G1's. The frames
+read the elements through `v->items`, which none of these functions stores
+except through `out`: where `out` lies on that field, the frames of `remove`
+and `pop` read an overwritten field, the undefined step G4 does not count,
+and where it lies on `len`, `pop`'s store is itself undefined (entry 6). The
+goals the record holds as proved with an argument as their evidence are then
+21. The six other frames at `vec_int` that G5's byte reading finds false
+(entry 5), those of `insert`, `remove`, `push`, `try_push`, `push_unchecked`
+and `pop`, are true under it by the same argument; G4 does not count them,
+nor does the tally. Entry 6's two goals stay false: the repair keeps the vec
+off its buffer, not off `out`.
