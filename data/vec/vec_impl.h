@@ -195,6 +195,11 @@
  * - IterType  — forward iterator struct (vec pointer + index)
  * - SliceType — zero-copy view struct (items pointer + len)
  *
+ * A vector must not overlap its own buffer: the contracts of the functions
+ * that modify one in place require *v to be separated from
+ * items[0 .. capacity - 1] (VERIFY-039 G4). swap, which only exchanges the
+ * two structs, does not need it.
+ *
  * Also generates per-instantiation static inline lifetime helpers
  * (named via fn_lt_open and fn_lt_close, by default
  * vec_##type##_lifetime_open_ and vec_##type##_lifetime_close_) that
@@ -425,6 +430,7 @@ linkage VecType fn_alloc(usize capacity) { \
  * ```
  *
  * @pre v was allocated via fn_alloc() — NOT stack or arena backed
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
  *
  * @post v->items == NULL
  * @post v->len == 0
@@ -443,7 +449,7 @@ linkage VecType fn_alloc(usize capacity) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_FREE(linkage, VecType, fn, fn_lt_close) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires (v != \null && v->items != \null) ==> \freeable(v->items);          \
     assigns *v;                                                                  \
     behavior null:                                                               \
@@ -779,6 +785,8 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
  * bool fn(borrowed(VecType*) v, usize i, type val);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns false if v == NULL or i >= v->len
  *
  * Performance:
@@ -787,7 +795,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v, usize i) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_SET(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->items[0 .. v->capacity - 1];                                      \
     behavior hit:                                                                \
     assumes v != \null && i < v->len;                                            \
@@ -892,6 +900,8 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  * result__Bool_Error fn(borrowed(VecType*) v, type item);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns Err(ERR_INVALID_ARG)       if v == NULL or v->items == NULL
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if v->len >= v->capacity
  * @post On Ok: v->len incremented by 1, item stored at v->items[old_len]
@@ -905,7 +915,7 @@ linkage borrowed(type*) fn(borrowed(const VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior invalid:                                                            \
     assumes v == \null || (v != \null && v->items == \null);                     \
@@ -940,6 +950,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
  * bool fn(borrowed(VecType*) v, type item);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns false if v == NULL, v->items == NULL, or v is full
  *
  * Performance:
@@ -948,7 +960,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_TRY_PUSH(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior refuse:                                                             \
     assumes v == \null || (v != \null && (v->items == \null || v->len >= v->capacity)); \
@@ -981,6 +993,7 @@ linkage bool fn(borrowed(VecType*) v, type item) { \
  * @pre v != NULL
  * @pre v->items != NULL
  * @pre v->len < v->capacity — caller must guarantee this
+ * @pre the vector does not overlap its own buffer (VERIFY-039 G4)
  *
  * @note Preconditions enforced by ensure_msg() in debug builds only.
  *       Undefined behavior in release builds if violated.
@@ -991,7 +1004,7 @@ linkage bool fn(borrowed(VecType*) v, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_PUSH_UNCHECKED(linkage, VecType, fn, type) \
-/*@ requires ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires v->items != \null;                                                  \
     requires v->len < v->capacity;                                               \
     assigns v->len, v->items[v->len];                                            \
@@ -1019,6 +1032,7 @@ linkage void fn(borrowed(VecType*) v, type item) { \
  * ```
  *
  * @pre out, if non-NULL, does not point into v's buffer (VERIFY-039 G1)
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
  *
  * @post Returns Err(ERR_INVALID_ARG)   if v == NULL, out == NULL, or v->items == NULL
  * @post Returns Err(ERR_INVALID_STATE) if v->len == 0
@@ -1032,7 +1046,7 @@ linkage void fn(borrowed(VecType*) v, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires out == \null || \valid(out);                                        \
     requires (v != \null && out != \null) ==>                                    \
     \separated(out, v->items + (0 .. v->capacity - 1));                          \
@@ -1070,6 +1084,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
  * OptionType fn(borrowed(VecType*) v);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns None if v == NULL, v->items == NULL, or v->len == 0
  *
  * Performance:
@@ -1078,7 +1094,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(type*) out) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_POP_OPTION(linkage, VecType, fn, fn_pop, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len;                                                              \
     behavior some:                                                               \
     assumes v != \null && v->items != \null && v->len > 0;                       \
@@ -1106,6 +1122,8 @@ linkage OptionType fn(borrowed(VecType*) v) { \
  * void fn(borrowed(VecType*) v);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @note NULL-safe — does nothing if v == NULL
  * @note Memory contents are not zeroed. For sensitive data, zero manually first.
  *
@@ -1119,7 +1137,7 @@ linkage OptionType fn(borrowed(VecType*) v) { \
  * - Space: O(1)
  */
 #define IMPL_VEC_CLEAR(linkage, VecType, fn) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len;                                                              \
     behavior null:                                                               \
     assumes v == \null;                                                          \
@@ -1146,6 +1164,8 @@ linkage void fn(borrowed(VecType*) v) { \
  * result__Bool_Error fn(borrowed(VecType*) v, usize i, type item);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns Err(ERR_INVALID_ARG)       if v or v->items is NULL
  * @post Returns Err(ERR_OUT_OF_RANGE)      if i > v->len
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if v->len >= v->capacity
@@ -1159,7 +1179,7 @@ linkage void fn(borrowed(VecType*) v) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_INSERT(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior invalid:                                                            \
     assumes v == \null || (v != \null && v->items == \null);                     \
@@ -1206,6 +1226,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  * ```
  *
  * @pre out, if non-NULL, does not point into v's buffer (VERIFY-039 G1)
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
  *
  * @post Returns Err(ERR_INVALID_ARG)   if v, v->items, or out is NULL
  * @post Returns Err(ERR_INVALID_STATE) if v->len == 0
@@ -1220,7 +1241,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires out == \null || \valid(out);                                        \
     requires (v != \null && out != \null) ==>                                    \
     \separated(out, v->items + (0 .. v->capacity - 1));                          \
@@ -1270,6 +1291,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out
  * OptionType fn(borrowed(VecType*) v, usize i);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns None if v == NULL, v->items == NULL, v->len == 0, or i >= v->len
  *
  * Performance:
@@ -1278,7 +1301,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, borrowed(type*) out
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_REMOVE_OPTION(linkage, VecType, fn, fn_remove, OptionType, fn_some, fn_none, fn_result_is_ok, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior some:                                                               \
     assumes v != \null && v->items != \null && i < v->len;                       \
@@ -1310,6 +1333,8 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  * result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @post Returns Err(ERR_INVALID_ARG)       if v, v->items, or src is NULL
  * @post Returns Err(ERR_OVERFLOW)          if v->len + count overflows usize
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if total > v->capacity
@@ -1321,7 +1346,7 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_APPEND_ARRAY(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires (v != \null && v->items != \null && src != \null                    \
     && v->len + count <= v->capacity) ==>                                        \
     \valid_read(src + (0 .. count - 1));                                         \
@@ -1377,6 +1402,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  * result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @sa IMPL_VEC_APPEND_ARRAY — identical semantics
  *
  * Performance:
@@ -1385,7 +1412,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND(linkage, VecType, fn, fn_append_array, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires (v != \null && v->items != \null && src != \null                    \
     && v->len + count <= v->capacity) ==>                                        \
     \valid_read(src + (0 .. count - 1));                                         \
@@ -1428,6 +1455,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  * void fn(borrowed(VecType*) v, type value, usize count);
  * ```
  *
+ * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ *
  * @note Silently fills min(count, remaining) elements — does not error on overflow.
  *       If strict filling is required, check remaining() before calling.
  * @note NULL-safe — does nothing if v == NULL or v->items == NULL
@@ -1438,7 +1467,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_FILL(linkage, VecType, fn, type) \
-/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))); \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior skip:                                                               \
     assumes v == \null || (v != \null && v->items == \null);                     \

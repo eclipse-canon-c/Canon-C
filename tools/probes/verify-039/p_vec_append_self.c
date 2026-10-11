@@ -17,10 +17,13 @@
  * the free tail of its own items buffer.
  *
  * The vec contracts require the vec readable and writable and its items
- * valid up to capacity; nothing separates *v from v->items. append_array
- * copies the new elements with mem_copy, through `char *`. In WP's typed
- * model a `char` write cannot reach v->items, a pointer, so ensures 3,
+ * valid up to capacity; until the G4 vec repair nothing separated *v from
+ * v->items. append_array copies the new elements with mem_copy, through
+ * `char *`. In WP's typed model a `char` write cannot reach v->items, a
+ * pointer, so ensures 3,
  * \forall k < \old(v->len): v->items[k] == \old(v->items[k]), proves.
+ * Since the repair the contracts require the separation, so the call below
+ * is outside append_array's contract; its run-time behaviour is unchanged.
  *
  * Here the vec struct lies at items[len], the first free slot, so the copy
  * of the new elements overwrites its items field. The two "ints" appended

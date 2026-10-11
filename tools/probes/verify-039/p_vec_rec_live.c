@@ -24,6 +24,9 @@
  * the library makes to v->len changes Rec[0], an element below i or below
  * \old(v->len), and the frame postconditions that WP proves across the store
  * are false: `v->items[0] == \old(v->items[0])` fails on the due member.
+ * Since the G4 vec repair the contracts require *v to be separated from
+ * its buffer, so every call below is outside its contract; the run-time
+ * behaviour is unchanged.
  *
  * The vec's items field lies over Rec[0].id and its padding and its
  * capacity over Rec[1]'s; the library reads them through their own types

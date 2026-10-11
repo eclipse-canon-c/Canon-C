@@ -397,10 +397,16 @@ DEFINE_VEC_STRUCTS(int)
     && (v->items == \null ==> v->capacity == 0)
     && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)));
 
+  // VERIFY-039 G4, listing entry 5: the vec lies outside its own buffer.
+  // Without it an element store or a mem_copy could land on the vec's
+  // fields, which WP's typed model cannot see: append_array's frame was
+  // proved, and false for a vec in its own free tail. The macro-body
+  // contracts in data/vec/vec_impl.h carry the same conjunct.
   predicate vec_int_mut(vec_int * v) =
     vec_int_view(v)
     && \valid(v)
-    && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)));
+    && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1)))
+    && \separated(v, v->items + (0 .. v->capacity - 1));
 
   predicate vec_int_slice_view(vec_int_slice * s) =
     \valid_read(s)
