@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -13040,3 +13040,108 @@ goals of its six entries, every library goal G4 found proved and false. G4's
 plan for the listing also covers the proved goals that cross the same kind
 of write and are, on the survey's reading, true all along: their evidence is
 an argument too, and they are not yet filed. The next section takes that up.
+
+### G4 — the proved goals whose evidence is an argument: how they are filed (decision and method)
+
+**What is to be filed.** WP's typed model keeps one memory array per integer
+kind and per character type, so a write through one is never seen through
+another. C sees it in two cases (G4, scope): through a character type, and
+through the signed or unsigned counterpart. A goal WP proves across such a
+write takes from the model that the write left the location the goal reads
+alone; the proof does not show that it did, and the evidence is an argument.
+The listing's six entries were the 23 library goals for which nothing kept
+the write off: false for an admitted call, and true now by the separations
+the repairs added. The other goals that cross such a write are, on the
+survey's reading, true all along, kept apart by a precondition, an
+invariant, the code's index ranges or layout, and their evidence is the same
+kind of argument. G4's plan (G4, opened) files all of them under one stated
+hypothesis, each read against the write's range, VERIFY-017's and MCDC-009's
+readings of `diag_push` included. But for the 23, held so in prose, the
+record still treats every proved goal as needing no argument.
+
+**Decision (recommended).** One block, a `**Proved-goal argument**`, states
+the hypothesis once and lists the properties it covers, by unit, function
+and clause, each with the write it crosses and the fact that keeps the write
+off what the property reads. A property is filed when, after such a write,
+it reads a location of another type, or a typed object's bytes through a
+character type, or a counterpart, and its proof takes from the model that
+the write left that location alone. A property proved from a filed one
+through a callee's contract, at the call (the callee's precondition) or
+after it (its postcondition), is not filed again: WP's modular proof carries
+the filed property's truth to it, as it carries any proved contract's. A
+property with a part among CI's residuals is filed for its other parts.
+`tools/record_coverage.py` will check that no filed part becomes a residual,
+since a filed goal that stops proving needs a residual argument instead.
+
+The block is the counterpart, for proved goals, of a residual's argument
+block. It is not counted in *A*, which counts the arguments that cover
+residual obligations (the paper's §2). The record reports it beside *A*, as
+it reports trusted axioms (VERIFY-031), with its numbers of properties, of
+write sites and of the facts that keep a write off, since each fact is a
+reason a reviewer reads. The paper's reading of *A* as the size of the
+unverified human evidence (§2, §5) then holds for the residue only, and its
+next revision says so.
+
+**Method.** WP 25, printed with the goal names as for entries 5 and 6, gives
+for each unit (every verified unit but `frama-c-arena-32`, which verifies
+`frama-c-arena`'s functions at the 32-bit machdep) the goals evaluated after
+a call to a named byte-level writer: `mem_copy`, `mem_move`, `mem_zero`,
+`mem_set`, `mem_secure_zero`, `mem_swap`, `mem_swap_buf`, `mem_copy_bytes`,
+`mem_move_bytes`, `mem_zero_bytes`, `mem_set_bytes`,
+`mem_secure_zero_bytes`, `memcpy`, `memmove`, `memset`, `snprintf` and
+`vsnprintf`. Properties are named by WP's property prefix, without `_partk`,
+since WP 25's parts can differ from CI's. Less the pinned residuals, that
+list has 157 properties in 28 functions at f74e95a:
+
+| Unit or family | Functions (properties) |
+|---|---|
+| `core/memory.h`, in the ten units here that include it and `frama-c-arena-32` | `mem_swap` (8), `mem_swap_buf` (6), `mem_zero` (1), `mem_secure_zero_bytes` (1) |
+| `core/arena.h`, seven units here and `frama-c-arena-32` | `arena_alloc_zero` (4), `arena_alloc_aligned_zero` (4), `arena_reset_secure` (6) |
+| `core/pool.h` | `pool_alloc_zero` (1), `pool_reset_secure` (5) |
+| `data/stringbuf.h` | `_stringbuf_append_bytes` (8), `stringbuf_append_fmt_va` (6) |
+| `data/bitset.h` | `bitset_clear_all` (1), `bitset_init` (3), `bitset_set_all` (3) |
+| `semantics/diag.h` | `diag_init` (2), `diag_push` (24), `diag_render` (4) |
+| `data/priority_queue.h` | `pq_peek` (1), `pq_pop_raw` (19), `pq_push_result` (7), `pq_remove_at_result` (5), `pq_swap_` (2) |
+| vec at `int` (`frama-c-vec`, `cc-vec`) | `insert` (10), `remove` (5), `append_array` (3) |
+| vec at `Rec` (`cc-vec_struct`) | `insert` (10), `remove` (5), `append_array` (3) |
+
+Twelve of these properties have a part among CI's residuals: `insert`'s four
+`assigns` properties, at `int` and at `Rec`, and `bitset_set_all`'s and
+`diag_push`'s two.
+
+The list is where the filing starts, not a superset. Some of its properties
+read after the write only the bytes it wrote, through the same type, or no
+memory at all, and are not filed. It misses five kinds, which the filing
+adds:
+
+- goals WP's simplifier reduces to true, which WP 25 prints without their
+  hypotheses, so no call shows, as `pq_remove_at_result`'s call to
+  `pq_sift_down_` (`i < pq->len` after `mem_copy` and `pq_sift_up_`).
+  Printed with
+  `-wp-no-simpl -wp-no-let -wp-no-filter -wp-no-clean -wp-no-core`, every
+  goal keeps its path, and the same search lists 348 properties in 36
+  functions;
+- goals after a call to another function whose `assigns` writes a character
+  range, as `pq_swap_`, the priority queue's sift, result and wrapper
+  functions and `stringbuf`'s appenders: with them the search lists 429
+  properties in 46 functions, among them `pq_sift_up_`'s invariant
+  `idx < pq->len` across `pq_swap_`;
+- goals after stores through `char` and `u8` lvalues, which are not calls,
+  `stringbuf_init_arena`'s `arena_kept` among them;
+- goals that read a typed object's bytes through a character type after a
+  store of another type, as `stringbuf_truncate`'s `prefix` after its store
+  to `sb->len`;
+- in `cc-vec_struct`, the goals across the counterpart pair of entries 5 and
+  6, a `usize` store and an `i64` read or the reverse, among them four of
+  entry 5's frames, `push`'s, `try_push`'s, `push_unchecked`'s and `pop`'s.
+
+More than a hundred of the 272 properties the two larger lists add belong,
+by their behaviours' names, to paths the write is not on; both lists are to
+be read, not filed whole. The filing goes unit by unit, each commit
+accounting for its candidates, filed or not and why.
+
+Of the six entries' 23 goals, 22 are filed under these rules: the 17 the
+named-call list has, `stringbuf_init_arena`'s after a `char` store, and the
+four `Rec` frames across the counterpart pair. The 23rd, `bitset_set_all`'s
+`ensures bitset_mut(bs)`, was false only because the precondition at its
+call to `bitset_clear_padding` was, and rests on that filed goal.
