@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8's repair predicted (G8's residual closes; ten goals added, all proved); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12701,3 +12701,39 @@ contradiction are proved without it. VERIFY-020's array framing class is
 then proved for 25 of its 26 goals, the null guard the one left. The masked
 clauses are proved in a form shaped for WP, which the comment beside them
 says.
+
+### G8 — scored (fix e732bd1; CI #1354, CC #41)
+
+**Result: exact.** The fix commit carried the predicted pins (prediction
+9b12703), and CI #1354 and CC #41 were green in every job. `frama-c-bitset`
+stood at `4898 / 5036` with 138 unproved, its roll-call the old one less
+G8's residual, by set equality, and no other unit moved. Record coverage
+#50 was green. (GitHub's run pages, read 2026-10-11.)
+
+| Goals or claim | n | Predicted | Observed |
+|---|---|---|---|
+| `bitset_not_loop_invariant_2_preserved`, G8's residual | 1 | closes (H) | closed |
+| the six new goals WP 25's simplifier reduces to true | 6 | proved (H) | proved |
+| `bitset_clear_padding_ensures_4_part1`, `_5_part1`, `_5_part2` | 3 | proved (M) | proved |
+| `bitset_not_live_ensures_3_part3`, the masked last word | 1 | proved (M) | proved |
+| the restated `bitset_not_live_ensures_part3` and `_2_part3` | 2 | proved (M) | proved |
+| ten goals added, none removed, the total 5036 | | (H) | held |
+| no proved goal becomes unproved, eight losing G8's contradiction | | (M) | held, by set equality |
+| the other 41 own residuals and every inherited goal | 138 | stay (H) | stayed |
+| no other unit moves | | (H) | held |
+
+**What it shows.** G8 is closed. `bitset_not`'s postcondition and loop
+invariant are true and proved, no goal in the record rests on G8's false
+invariant, and the eight goals whose proofs could stand on its
+contradiction are proved without it. VERIFY-020's array framing class is
+proved for 25 of its 26 goals; the null guard is the one left. The masked
+clauses are proved in the form written with the code's casts; the record
+does not say which prover took `bitset_not`'s, the one that needs `land`
+to commute. `frama-c-bitset` ran in 1h 49m, against 1h 39m at CI #1353.
+
+Bitset's 41 own residuals are now the four padding postconditions, true
+since entry 3's repair and filed as prover weakness, and the 37 the
+separation does not bear on: the sixteen null-guard reads of `bs->words`,
+the thirteen `char` and `u64` bridges, `bitset_init`'s postconditions 3 to
+6, `bitset_assign`'s two null-behaviour assigns and the two goals of the
+read-only finds.
