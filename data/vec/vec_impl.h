@@ -655,6 +655,7 @@ linkage bool fn(borrowed(const VecType*) v) { \
  * ```
  *
  * @pre out, if non-NULL, does not point into v's buffer (VERIFY-039 G1)
+ * @pre out, if non-NULL, does not overlap the vector (VERIFY-039 G4)
  *
  * @post *out is set if return is true
  * @post Returns false if v == NULL, out == NULL, or i >= v->len
@@ -667,7 +668,8 @@ linkage bool fn(borrowed(const VecType*) v) { \
 /*@ requires v == \null || (\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))); \
     requires out == \null || \valid(out);                                        \
     requires (v != \null && out != \null) ==>                                    \
-    \separated(out, v->items + (0 .. v->capacity - 1));                          \
+    \separated(out, v->items + (0 .. v->capacity - 1))                           \
+    && \separated(out, v);                                                       \
     assigns *out;                                                                \
     behavior hit:                                                                \
     assumes v != \null && out != \null && i < v->len;                            \
@@ -1032,6 +1034,7 @@ linkage void fn(borrowed(VecType*) v, type item) { \
  * ```
  *
  * @pre out, if non-NULL, does not point into v's buffer (VERIFY-039 G1)
+ * @pre out, if non-NULL, does not overlap the vector (VERIFY-039 G4)
  * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
  *
  * @post Returns Err(ERR_INVALID_ARG)   if v == NULL, out == NULL, or v->items == NULL
@@ -1049,7 +1052,8 @@ linkage void fn(borrowed(VecType*) v, type item) { \
 /*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires out == \null || \valid(out);                                        \
     requires (v != \null && out != \null) ==>                                    \
-    \separated(out, v->items + (0 .. v->capacity - 1));                          \
+    \separated(out, v->items + (0 .. v->capacity - 1))                           \
+    && \separated(out, v);                                                       \
     assigns v->len, *out;                                                        \
     behavior invalid:                                                            \
     assumes v == \null || out == \null || (v != \null && v->items == \null);     \
@@ -1226,6 +1230,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
  * ```
  *
  * @pre out, if non-NULL, does not point into v's buffer (VERIFY-039 G1)
+ * @pre out, if non-NULL, does not overlap the vector (VERIFY-039 G4)
  * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
  *
  * @post Returns Err(ERR_INVALID_ARG)   if v, v->items, or out is NULL
@@ -1244,7 +1249,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, usize i, type item) { \
 /*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires out == \null || \valid(out);                                        \
     requires (v != \null && out != \null) ==>                                    \
-    \separated(out, v->items + (0 .. v->capacity - 1));                          \
+    \separated(out, v->items + (0 .. v->capacity - 1))                           \
+    && \separated(out, v);                                                       \
     assigns v->len, *out, v->items[0 .. v->capacity - 1];                        \
     behavior invalid:                                                            \
     assumes v == \null || out == \null || (v != \null && v->items == \null);     \
@@ -1565,6 +1571,7 @@ linkage IterType fn(borrowed(VecType*) v) { \
  * ```
  *
  * @pre out, if non-NULL, does not point into the iterated vector's buffer (VERIFY-039 G1)
+ * @pre out, if non-NULL, overlaps neither the iterator nor the vector (VERIFY-039 G4)
  *
  * @post Returns false when iteration is exhausted
  * @post *out is set on true return only
@@ -1587,7 +1594,8 @@ linkage IterType fn(borrowed(VecType*) v) { \
     requires (it != \null && it->vec != \null) ==> (\valid_read(it->vec) && it->vec->len <= it->vec->capacity && it->vec->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*it->vec->items) && (it->vec->items == \null ==> it->vec->capacity == 0) && (it->vec->capacity > 0 ==> \valid_read(it->vec->items + (0 .. it->vec->capacity - 1)))); \
     requires out == \null || \valid(out);                                        \
     requires (it != \null && it->vec != \null && out != \null) ==>               \
-    \separated(out, it->vec->items + (0 .. it->vec->capacity - 1));              \
+    \separated(out, it->vec->items + (0 .. it->vec->capacity - 1))               \
+    && \separated(out, it) && \separated(out, it->vec);                          \
     assigns it->index, *out;                                                     \
     behavior exhausted_or_invalid:                                               \
     assumes it == \null || out == \null                                          \

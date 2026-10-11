@@ -18,9 +18,13 @@
  *
  * Rec is `struct { u32 id; i64 due; }` (vmacros/vdrivers/
  * vec_struct_cc_experiment.h, the cc-vec_struct unit). remove requires out
- * valid and, since G1, separated from v's buffer; nothing separates it from
- * *v. On LP64 a Rec at the vec's own address has its id over the vec's
- * items field, its padding over the rest of that field, and its due over the
+ * valid and, since G1, separated from v's buffer; until the G4 entry 6
+ * repair nothing separated it from *v. Since the repair remove requires
+ * that too, so the call below is outside its contract; its run-time
+ * behaviour is unchanged.
+ *
+ * On LP64 a Rec at the vec's own address has its id over the vec's items
+ * field, its padding over the rest of that field, and its due over the
  * vec's len: an i64 over a usize, signed and unsigned counterparts (C11
  * 6.5p7), which WP's typed model keeps in two arrays (sint64 and uint64).
  *
