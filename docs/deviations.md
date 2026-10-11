@@ -10434,7 +10434,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8's repair predicted (G8's residual closes; ten goals added, all proved); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -12565,3 +12565,139 @@ and the 37 the separation does not bear on: the sixteen null-guard reads of
 `bs->words`, the thirteen `char` and `u64` bridges, `bitset_init`'s
 postconditions 3 to 6, `bitset_assign`'s two null-behaviour assigns and the
 two goals of the read-only finds.
+
+### G8 — committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-11).** The repair recommended with the finding, in
+`data/bitset.h`:
+
+- `bitset_not`'s loop invariant 2 and postcondition take the complement in
+  `u64`: `(u64)~\at(bs->words[k], Pre)`. The postcondition states it for
+  every word but the last in one clause, and the last word in two: the
+  complement when `capacity % 64 == 0`, and otherwise the complement and
+  the mask of the bits below `capacity % 64`. `ensures bitset_pad(bs)`
+  stays.
+- `bitset_clear_padding` gains the two matching clauses, its last word
+  unchanged or masked. Its three clauses stay.
+- The mask is written with the code's casts,
+  `(u64)((u64)((u64)1 << (usize)(bs->capacity % 64)) - 1)`. They change no
+  value for `capacity % 64` from 1 to 63, and they make WP's translation of
+  the clause the code's own. Written plainly,
+  `((u64)1 << (capacity % 64)) - 1`, the store path's clause in
+  `bitset_clear_padding` asks the provers to show that the shifted value
+  stays below 2^64, bit-level reasoning of the kind bits.h's residuals
+  record them not reaching.
+
+No executable change; only `frama-c-bitset` can move.
+
+**The probe.** `tools/probes/verify-039/p_bitset_not.c` now checks the
+repaired clauses of both functions too, at eight capacities from 1 to 129
+and three patterns, one with every padding bit set, which `bitset_pad`
+excludes and the precondition admits. They hold in all 48 checks, 24 cases
+for each function. The old postcondition read in `u64` is `VIOLATED` for
+the last word in 11 of the 24, holding at 64 and 128 and wherever every
+padding bit was set (at 63 the mixed pattern's one padding bit is), as G8
+says. gcc and clang, `-O0` and `-O2`, both build configurations, LP64 and
+ILP32; the sanitizers are clean. The probe now exits 0: its status counts
+the repaired clauses only.
+
+**Before the prediction.** No external prover has been run on the changed
+code. As for the loop bounds, WP 25.0-beta, built locally, printed the
+unit's goals with CI's options less the provers, plus `-c11`; printing runs
+Qed. The mask's form was chosen from those statements: in the plain form
+the store path's clause keeps the shift, and in the cast form it reduces to
+the code's own term. With the change WP 25 generates 4852 goals, against
+4842: ten new, all in `bitset_clear_padding` and `bitset_not`. Outside
+those two functions, three goals change in statement, call-effect `assigns`
+goals of `bitset_set_all` and `bitset_xor`, which gain the new clauses
+among their hypotheses.
+
+**Reading.**
+
+- Invariant 2 in `u64` is true, and its preservation needs neither the
+  frame nor the separation: the store writes the complement of the word
+  that the third invariant, at the current head, says is the word on entry,
+  and leaves the others. G8's residual closes.
+- G8's invariant was contradictory at the next loop head, at the loop's
+  exit, where the count is at least 1, and at the current head after the
+  first iteration; with the repair it is a fact. At ecb3c0d eleven proved
+  goals of `bitset_not` had it among their hypotheses: the first
+  postcondition, restated below, and ten others. Two of the ten do not
+  need it, reads that `\valid_read(bs)` and the store's own assertion cover
+  (WP 25's `assert_rte_mem_access_2` and `_6`). The proofs of the other
+  eight could stand on its contradiction, and now need one of their own:
+  - the counter's bound and the frame of the words not yet inverted
+    (`loop_invariant_preserved`, `loop_invariant_3_preserved`) and the
+    variant's decrease: the third invariant with the separation suffices.
+    A store reaching `word_count` would find it, by that invariant, at its
+    entry value, so the store's index, below that count, would be below
+    the entry count, which the separation rules out;
+  - the store's validity (WP 25's `assert_rte_mem_access_3`), the loop's
+    own check of the store (WP 25's `loop_assigns_part3`), the call's
+    precondition (`call_bitset_clear_padding_requires`) and the call's
+    effect against the function's `assigns` (`live_assigns_exit_part2`,
+    `_normal_part2`): one step of the frame through the loop's havoc with
+    `bitset_mut`'s separation, the kind of step the closures at CI #1352
+    and #1353 took.
+- `bitset_clear_padding`'s new clauses, on the path with the store, need
+  the store's frame for `capacity` and `word_count`, which its `bitset_mut`
+  clause needed at CI #1352, and `word_count` at least 1, which
+  `bitset_view` gives, so that the code's index is the clause's; the masked
+  clause then reduces to the code's term. On that path the clause for an
+  unchanged word is a contradiction through the same frame. On the other
+  path the masked clause is a contradiction, `capacity % 64` nonzero
+  against the code's remainder zero, the range fact the code's shift
+  assertion, proved, rests on; the clause for an unchanged word is true
+  there.
+- `bitset_not`'s new clauses follow from `bitset_clear_padding`'s,
+  invariant 2 at the loop's exit and the call's frame: the call's effect, a
+  store of an unknown value to the last word, kept off the `Bitset` by
+  `bitset_mut` at the call. For the last word they also need one step of
+  the loop's frame, and the masked word that `land` commutes: in WP 25's
+  statements, after its simplifier orders their operands, the two `&`
+  terms list them the other way round. Of CI's three provers only Alt-Ergo
+  is given commutativity, as Why3's `meta AC`. These clauses are proved from
+  `bitset_clear_padding`'s contract, whatever its own proof does.
+
+**Predicted.**
+
+| Goals | n | Predicted |
+|---|---|---|
+| `bitset_not_loop_invariant_2_preserved`, G8's residual | 1 | closes (H) |
+| new, reduced to true by WP 25's simplifier: `bitset_clear_padding_ensures_4_part2`; `bitset_not_live_ensures_3_part1`, `_3_part2`, `_4_part1`, `_4_part2`, `_4_part3` | 6 | proved (H) |
+| new: `bitset_clear_padding_ensures_4_part1`, the unchanged word on the store path; `_ensures_5_part1`, the masked word; `_ensures_5_part2`, the masked clause without the store | 3 | proved (M) |
+| new: `bitset_not_live_ensures_3_part3`, the masked last word | 1 | proved (M) |
+| restated: `bitset_not_live_ensures_part3`, every word but the last, and `_2_part3`, the last word when `capacity % 64 == 0` (`_2` was `bitset_pad`, which WP 25's simplifier reduces to true, now `_4`); their parts 1 and 2, on the paths the live behaviour excludes, stay true | 2 | proved (M) |
+
+**Also predicted.**
+
+- (H) Ten goals added, none removed: 5036. WP 25's ten new names are those
+  above. The new clauses have no top-level conjunction, so WP 29's parts are
+  WP 25's: two per clause in `bitset_clear_padding` and three in
+  `bitset_not`, as their existing clauses have
+  (`bitset_clear_padding_ensures_part1`;
+  `bitset_clear_all_live_ensures_part3` for `bitset_not`'s guard). The
+  goals true as generated are the same 277 with and without the change.
+- (M) No proved goal becomes unproved: the eight goals of `bitset_not`
+  above, by the routes given; the three goals of `bitset_set_all` and
+  `bitset_xor` gain hypotheses only. The other goals of
+  `bitset_clear_padding` and `bitset_not` that change in statement gain
+  bindings and typing facts, or, `bitset_not`'s two reads, see invariant 2
+  in `u64`: nothing their proofs need.
+- (H) The other 41 of bitset's own residuals and every inherited goal
+  stay. One of them, `bitset_clear_padding_ensures_part1`, changes in
+  statement: it gains typing facts (`is_uint64`) for the words and fields
+  the new clauses read, nothing its bit-level step needs. No other one
+  changes.
+- (H) No other unit moves.
+
+**Pins carried by the fix commit.** `frama-c-bitset`: `4898 / 5036`, 138
+unproved, the roll-call less G8's residual.
+
+**What it settles.** If it holds, G8 closes: `bitset_not`'s postcondition
+and loop invariant are true and proved, and no goal in the record rests on
+G8's false invariant; the eight whose proofs could stand on its
+contradiction are proved without it. VERIFY-020's array framing class is
+then proved for 25 of its 26 goals, the null guard the one left. The masked
+clauses are proved in a form shaped for WP, which the comment beside them
+says.
