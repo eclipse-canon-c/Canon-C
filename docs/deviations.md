@@ -3054,6 +3054,13 @@ memmove all proved (`push_depth_bounds`, `push_depth_step`,
 see MCDC-009): WP frames `d->depth` correctly past the byte-level
 write; only the frame-content and byte-range-validity goals resist.
 
+**Reading note (2026-10-12, VERIFY-039 G4).** WP's typed model never lets a
+`char` write reach `d->depth`, so these proofs would stand even if the
+`memmove` covered it. What makes them true is the layout: the shift writes
+`frames[0 .. DIAG_MAX_FRAMES - 2]`, and `depth` lies after the last frame.
+`push_overflow_flag` reads no memory after the shift. The others are filed
+under VERIFY-039's proved-goal argument (facts F5 and F6, rows 8 and 9).
+
 **Manual proof argument**: on the overflow path, `d` is `\valid` by
 precondition, so its full object — including the `(char *)` byte view
 of `frames[0 .. DIAG_MAX_FRAMES-1]` and any subarray — is valid for
@@ -6574,6 +6581,12 @@ footprint covers `frames` bytes only), even while the frame-content
 goals at the same call site remain residuals (VERIFY-017 category 1).
 The clamp is deliberately preserved: it is toolchain-defensive code
 whose absence breaks the build on a supported compiler.
+
+**Reading note (2026-10-12, VERIFY-039 G4).** The parenthesis carries the
+argument. WP's typed model never lets a `char` write reach `d->depth`, so
+the proof would stand even if the footprint covered it; that it does not is
+the evidence. The assertion is filed under VERIFY-039's proved-goal argument
+(fact F5, row 8).
 
 ### Outcome 2 — the encoding-error skip (libc-environmental, permanent)
 
@@ -10434,7 +10447,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (76 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -13173,6 +13186,21 @@ The facts that keep a write off what a property reads:
 - **F2** — `pool_invariant(p)`, since G4 entry 2's repair (f3d9520):
   `\separated(p, p->arena->buffer + (p->base_mark .. p->end_mark - 1))`. A
   write inside the slots leaves `*p` alone.
+- **F3** — `bitset_mut(bs)`, since G4 entry 3's repair (27e24f9):
+  `\separated(bs, bs->words + (0 .. bs->word_count - 1))`. A write inside
+  the words leaves `*bs` alone.
+- **F4** — `bitset_init`'s precondition, since its first contract (f42841c):
+  `\separated(bs, words + (0 .. bitset_words_for(capacity) - 1))`.
+- **F5** — `Diag`'s layout: the overflow shift's destination,
+  `(DIAG_MAX_FRAMES - 1) * sizeof(DiagFrame)` bytes from `&d->frames[0]`, is
+  `frames[0 .. DIAG_MAX_FRAMES - 2]`, and `depth` lies after
+  `frames[DIAG_MAX_FRAMES - 1]`.
+- **F6** — `DiagFrame`'s layout and the copy's bound: the loop invariant
+  `copy_len_bounds` keeps `len <= DIAG_MAX_MSG_LEN - 1`, so the copy and its
+  `'\0'` stay inside the pushed frame's `message`, a member of its own;
+  `depth`, that frame's other members and the other frames lie outside it.
+- **F7** — `diag_render`'s `r_sep`, since G4 entry 4's repair (838a204):
+  `\separated(buf + (0 .. buf_size - 1), d)`.
 
 | # | Function | Write, and why its range is inside the fact's | Units | Properties | Read after the write | Kept off by |
 |---|---|---|---|---|---|---|
@@ -13180,14 +13208,21 @@ The facts that keep a write off what a property reads:
 | 2 | `arena_alloc_aligned_zero` | `mem_zero(p, size)` on the block `arena_alloc_aligned` returned: the same range, for the same reasons | `arena.h`'s eight | `typed_cast_arena_alloc_aligned_zero_ensures`, `typed_cast_arena_alloc_aligned_zero_ensures_4` | the same | F1 |
 | 3 | `arena_reset_secure` | `mem_secure_zero(arena->buffer, arena->offset)`: `buffer + (0 .. offset - 1)`, inside the buffer as the precondition's `arena_invariant` gives `offset <= capacity` | `arena.h`'s eight | `typed_cast_arena_reset_secure_non_empty_ensures_3`, `typed_cast_arena_reset_secure_non_empty_ensures_4`, `typed_cast_arena_reset_secure_non_empty_ensures_5` | `buffer` and `capacity`, alone and in `arena_invariant` (`offset` and `padding_accum` are stored after the write) | F1 |
 | 4 | `pool_reset_secure` | `mem_secure_zero(base, object_size * used)` on the used slots: `buffer + (base_mark .. base_mark + object_size * used - 1)`, inside the slots as `pool_invariant` gives `used <= capacity` and `end_mark - base_mark == capacity * object_size`, and inside the buffer as it gives `end_mark <= arena->capacity` | `frama-c-pool` | `typed_cast_pool_reset_secure_call_pool_reset_2_requires`, `typed_cast_pool_reset_secure_assigns_exit`, `typed_cast_pool_reset_secure_assigns_normal` | at the second call to `pool_reset`: `*pool` and `*pool->arena`, in its precondition `pool_invariant`; `pool->arena`, in its `assigns` | F2 for `*pool`, F1 for `*pool->arena` |
+| 5 | `bitset_clear_all` | `mem_zero(bs->words, bs->word_count * sizeof(u64))`: `words + (0 .. word_count - 1)`, the words `bitset_mut` names | `frama-c-bitset` | `typed_cast_bitset_clear_all_live_ensures_3` | `*bs`, in `bitset_mut` | F3 |
+| 6 | `bitset_init` | `mem_zero(words, bs->word_count * sizeof(u64))`, after the store of `word_count` as `bitset_words_for(capacity)`: `words + (0 .. bitset_words_for(capacity) - 1)` | `frama-c-bitset` | `typed_cast_bitset_init_ensures`, `typed_cast_bitset_init_ensures_2` | `bs->words` and `bs->capacity` | F4 |
+| 7 | `bitset_set_all` | `mem_set(bs->words, 0xFF, bs->word_count * sizeof(u64))`: the words, as in row 5 | `frama-c-bitset` | `typed_cast_bitset_set_all_call_bitset_clear_padding_requires`, `typed_cast_bitset_set_all_live_assigns_exit` (not `_part1`), `typed_cast_bitset_set_all_live_assigns_normal` (not `_part1`) | at the call to `bitset_clear_padding`: `*bs`, in its precondition `bitset_mut`; `bs->words` and `bs->word_count`, in its `assigns` | F3 |
+| 8 | `diag_push` | on the overflow path, the shift `memmove(&d->frames[0], &d->frames[1], (DIAG_MAX_FRAMES - 1) * sizeof(DiagFrame))`: `frames[0 .. DIAG_MAX_FRAMES - 2]` | `frama-c-diag` | `typed_cast_diag_push_assert_dead_by_invariant_clamp`, `typed_cast_diag_push_assert_rte_mem_access_9`, `typed_cast_diag_push_assert_rte_mem_access_10`, `typed_cast_diag_push_assert_rte_mem_access_11`, `typed_cast_diag_push_assert_rte_mem_access_12`, `typed_cast_diag_push_assert_rte_mem_access_14`, `typed_cast_diag_push_assert_rte_mem_access_15`, `typed_cast_diag_push_call_memcpy_requires_valid_dest`, `typed_cast_diag_push_call_memcpy_requires_separation`, `typed_cast_diag_push_valid_diag_assigns_exit` (not `_part02`), `typed_cast_diag_push_valid_diag_assigns_normal` (not `_part03`) | `depth`, read by `d->depth--` after the shift, and so the pushed frame's place, `f = &d->frames[d->depth]`, its stores and the copy into it | F5 |
+| 9 | `diag_push` | the message copy, `memcpy(f->message, msg, len)` then `f->message[len] = '\0'`, or `f->message[0] = '\0'`: the pushed frame's `message[0 .. len]` | `frama-c-diag` | `typed_cast_diag_push_valid_diag_ensures_push_depth_bounds`, `typed_cast_diag_push_valid_diag_ensures_push_depth_step`, `typed_cast_diag_push_valid_diag_ensures_push_frame_code`, `typed_cast_diag_push_valid_diag_ensures_push_frame_file`, `typed_cast_diag_push_valid_diag_ensures_push_frame_func`, `typed_cast_diag_push_valid_diag_ensures_push_frame_line`, `typed_cast_diag_push_valid_diag_ensures_push_frames_preserved`, `typed_cast_diag_push_valid_diag_ensures_push_msg_terminated` | `depth`; the pushed frame's `file`, `func`, `line` and `code`; the other frames' `code` | F6, and on the overflow path F5 |
+| 10 | `diag_render` | `buf[0] = '\0'`, before the guard that reads `d->depth` | `frama-c-diag` | `typed_cast_diag_render_nothing_to_render_ensures_r_ntr_zero`, `typed_cast_diag_render_nothing_to_render_ensures_r_ntr_cleared`, `typed_cast_diag_render_nothing_to_render_assigns_exit`, `typed_cast_diag_render_nothing_to_render_assigns_normal` | `depth`, in the guard, 0 by the behaviour's assumption, which keeps the loop off | F7 |
+| 11 | `diag_render` | each iteration's `snprintf(dst, rem, ...)`: `dst + (0 .. rem - 1)`, inside `buf + (0 .. buf_size - 1)`; at the next head the loop's `assigns` stands for it | `frama-c-diag` | `typed_cast_diag_render_loop_invariant_render_i_bounds_preserved`, `typed_cast_diag_render_loop_variant_decrease`, `typed_cast_diag_render_assert_rte_mem_access_4`, `typed_cast_diag_render_assert_rte_mem_access_5`, `typed_cast_diag_render_assert_rte_mem_access_6`, `typed_cast_diag_render_assert_rte_mem_access_7`, `typed_cast_diag_render_assert_rte_mem_access_8`, `typed_cast_diag_render_assert_rte_mem_access_9`, `typed_cast_diag_render_assert_rte_mem_access_10` | `depth`, at each head and after each call, and so which frames the body reads | F7 |
 
 Properties are named as the decision names them, by WP's property prefix
 without `_partk`. A property with a part among the residuals is filed for
 its other parts, and its row names that part as "(not `_partk`)".
 `arena.h`'s eight units are `frama-c-arena`, `frama-c-arena-32`,
 `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`,
-`cc-vec` and `cc-vec_struct`. Filed: 10 properties at 4 write sites, kept
-off by 2 facts (group A).
+`cc-vec` and `cc-vec_struct`. Filed: 48 properties at 11 write sites, kept
+off by 7 facts (groups A and B).
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -13324,4 +13359,148 @@ prefix. `frama-c-arena-32` is not run here; its Gate D holds its residuals
 to the 64-bit set by name, so the arena rows' properties are proved there
 too.
 
+**Correction (2026-10-12, at the `bitset.h` and `diag.h` filing).** The
+search matched `(* Call '...' *)` markers only. An `assigns_exit` goal that
+checks a writer's own effect at its exit is marked `(* Exit '...' *)`, and
+the search missed 23 here: the two `assigns_exit` of each of `mem_copy`,
+`mem_move`, `mem_set`, `mem_zero`, `mem_copy_bytes`, `mem_move_bytes`,
+`mem_set_bytes`, `mem_zero_bytes` and `mem_secure_zero_bytes`;
+`arena_alloc_zero`'s, `arena_alloc_aligned_zero`'s and `pool_alloc_zero`'s;
+and `arena_reset_secure`'s two. None is pinned, and each checks the writer's
+own clause, taken before the write, so none is filed and none could be
+false. Group A's candidates are 99, of which 89 are not filed, 59 of them in
+the first row of the table above.
+
 The next filing takes up `bitset.h` and `diag.h`.
+
+### G4 — the proved-goal argument, group B: `bitset.h`, `diag.h`
+
+**Candidates.** The decision's larger list has 65 properties in these
+headers: 12 in `bitset.h` (`bitset_clear_all` 2, `bitset_init` 3,
+`bitset_set_all` 7) and 53 in `diag.h` (`diag_init` 2, `diag_push` 39,
+`diag_render` 5, `diag_render_frame` 7). Reading the headers adds 40 the
+search did not list, of four kinds:
+
+- goals after a store through `char`, which is not a call: `diag_render`'s
+  and `diag_render_frame`'s `buf[0] = '\0'`, each ahead of a guard and a
+  `snprintf`;
+- goals inside or after a loop whose body writes through `char`. In such a
+  goal the earlier iterations' writes are the loop's `assigns`, taken at the
+  head, not a call, so the search cannot see them. The decision did not name
+  this kind. `diag_render`'s loop calls `snprintf` once per frame, so every
+  goal in its body, and after it, reads memory that earlier iterations may
+  have written;
+- `assigns_exit` goals that check a writer's own effect at its exit, which
+  the print marks `(* Exit '...' *)`, a marker the search did not match;
+- goals WP prints without a path, as `Prove: true`, that follow a write in
+  the code.
+
+They are 23 in `diag_render` (its goals after the store that the list does
+not have), 12 in `diag_render_frame` (its seven field reads, its two
+`snprintf` preconditions and its three `assigns_exit`), three at a writer's
+exit (`diag_init`'s `assigns_exit`, and `bitset_clear_all`'s
+`live_assigns_exit` and `null_assigns_exit`), and two printed without a
+path, after `diag_push`'s shift (its `loop_assigns`, and
+`assert_rte_mem_access_5`, the dead clamp's store). That makes 105
+candidates. With exit markers matched too, the search lists 483 properties
+in 46 functions. The 54 it adds are all `assigns_exit`: 23 in group A's
+headers, 9 here and 22 in `stringbuf.h` and `priority_queue.h`.
+
+Neither of the decision's last two kinds gives a candidate. `diag.h` reads
+through a character type only bytes it wrote that way, or `msg`, which
+`push_no_alias` keeps off `*d`. `bitset.h` stores `u64` words; on LP64 that
+is the C type of `capacity` and `word_count`, so WP sees such a store
+through either field (G6's residuals), and on ILP32 the sizes differ, so
+there is no counterpart.
+
+**Filed: 38**, the block's rows 5 to 11.
+
+- `bitset.h`, rows 5 to 7: `bitset_clear_all`'s `bitset_mut` and
+  `bitset_set_all`'s precondition at its call to `bitset_clear_padding`,
+  entry 3's; `bitset_set_all`'s two `assigns` properties, whose parts for
+  that call (not the `mem_set` call's, pinned) read `bs->words` and
+  `bs->word_count` there; and `bitset_init`'s first two postconditions,
+  which read the fields it stored before its `mem_zero`.
+- `diag_push`, rows 8 and 9: on the overflow path every goal after the shift
+  that depends on `depth`, read by `d->depth--` after the `memmove`: the
+  dead clamp's assertion, the checks on the stores into the pushed frame,
+  the copy's preconditions on its destination and the `assigns` parts for
+  those stores (not the shift's, pinned); and every postcondition that reads
+  `depth` or a frame's typed members after the message copy.
+- `diag_render`, rows 10 and 11: `nothing_to_render`'s four, whose proofs
+  need the guard after `buf[0] = '\0'` to read `depth` as 0, as at entry;
+  the loop invariant `render_i_bounds` and the variant's decrease, entry 4's
+  and the one the review of the group A filing found; and the seven checks
+  that frame `i`'s members are readable, whose proofs bound `i` by `depth`,
+  read at the head and taken to be the one at entry, and by
+  `DIAG_MAX_FRAMES`.
+
+**Not filed: 67.**
+
+| Why not | Properties |
+|---|---|
+| validity, of an address computed from parameters and locals or of the allocation, or no memory at all | `bitset_init`'s call to `bitset_lifetime_open_`; `diag_push`'s `mem_access_2` to `_8` (`d->depth`'s address) and `_13` (`msg + len`), and `memcpy`'s `valid_src`; `diag_render`'s `mem_access_2` and `_3` (`d->depth`'s address) and `snprintf`'s two preconditions; `diag_render_frame`'s seven field reads (`f`, a parameter, valid by `rf_frame`) and `snprintf`'s two preconditions (23) |
+| locals only | `diag_push`'s `index_bound` (`len`), `copy_len_bounds` established and preserved, its variant's two goals and its `loop_assigns` (`len`); `diag_render`'s `loop_assigns` (`dst` and `rem`) (7) |
+| `assigns`, whose effects after the write are at addresses from parameters and locals, or on a local | `bitset_clear_all`'s `live_assigns_exit` (the `mem_zero`'s own effect); `diag_init`'s two (a local `Diag`); `diag_render`'s two for `rendered`; `diag_render_frame`'s four for `null_frame` and `rendered` (9) |
+| bytes read through the write's own type, which WP sees written | `diag_push`'s `copy_scanned` established and preserved (`msg`, which `push_no_alias` keeps off `*d`, a separation WP uses); `diag_render`'s `render_terminated` established and preserved and `r_terminated`; `diag_render_frame`'s `rf_nf_cleared` and `rf_terminated` (7) |
+| a value: `\result`, or a location stored after the write | `diag_init`'s `init_empty` (`depth` stored after the `memset`); `diag_push`'s `push_overflow_flag` (`\result`, a local, and `\old(d->depth)`); `diag_render_frame`'s `rf_nf_zero` (3) |
+| a behaviour under whose assumption no write happens | the `null` behaviours' `assigns` in `bitset_clear_all` (2) and `bitset_set_all` (2); `diag_push`'s `null_diag` three; `diag_render`'s and `diag_render_frame`'s `no_buffer` three each (13) |
+| true whatever the write leaves in the location | `diag_render`'s `render_i_bounds` established (`0 <= 0 <= d->depth` for any `depth`) and its variant's positivity: the variant is read at the head, where the loop condition holds. WP reaches the second through the loop's frame, but the C property compares no two states (2) |
+| a residual where the write matters | `diag_push`'s `push_shift_semantics`: past the clamp, its overflow-path parts are VERIFY-017's residuals; in the clamp's dead branch they follow from its filed assertion; on the other paths its premise is false (1) |
+| dependents, through `bitset_clear_padding`'s postconditions | `bitset_set_all`'s `bitset_pad` and `bitset_mut` (`live_ensures`, `live_ensures_2`) (2) |
+
+**Readings taken up.** VERIFY-017 read the depth-tracking goals through the
+shift as WP framing `d->depth` correctly past the byte-level write, and
+MCDC-009 read the clamp's assertion the same way, adding in parentheses that
+the `memmove`'s footprint covers `frames` bytes only. WP's typed model never
+lets a `char` write reach `depth`, so these proofs would stand even if the
+footprint covered it. The parenthesis is the evidence, F5, and the goals are
+filed under it. `push_overflow_flag`, also in VERIFY-017's list, reads no
+memory after the shift. Both records carry a reading note to this effect.
+
+**Checked against the placements the repairs excluded.** Rows 6, 8 and 9
+rest on facts that always held, `bitset_init`'s own precondition and
+`Diag`'s layout, so no admitted call made them false. Of rows 5, 7, 10 and
+11, whose facts came with entries 3 and 4, five goals were false:
+
+- entry 3's two, `bitset_clear_all`'s `bitset_mut` and `bitset_set_all`'s
+  precondition at its call to `bitset_clear_padding`;
+- entry 4's `render_i_bounds`, and the variant's decrease, which the review
+  of the group A filing found;
+- `diag_render`'s check that frame `i`'s `message[0]` is readable
+  (`assert_rte_mem_access_4`), the first access to the frame on the path,
+  which no entry named. With `buf` the 4 bytes before `depth` and its first
+  two (`buf_size` 6), and frame 0's file name beginning with a tab,
+  `snprintf` writes the tab, 0x09, on `depth`'s low byte and its `'\0'` on
+  the next: `depth` goes from 2 to 9. Frames 1 to 7 render with nothing left
+  to write, and at the next head `i` is 8 and `depth` 9, so the body would
+  read `frames[8].message[0]`, past the end of the `Diag`
+  (`tools/probes/verify-039/p_diag_render_past.c`, which stops before that
+  read). The six later checks at `i = 8` assume it, as WP's goals assume the
+  assertions before them, so they are not false there.
+
+The rest were not shown false. `bitset_set_all`'s `assigns` parts: a word
+that lands on `bs->words` or `word_count` turns it into all ones, and
+`bitset_clear_padding` writes through it only when `capacity % 64` is not 0,
+which is then undefined; one that lands on `capacity` leaves the write in
+the clause. `nothing_to_render`'s four: the store writes `'\0'` into a byte
+of `depth`, which the assumption makes 0. Of the two dependents,
+`bitset_mut` was false (entry 3), and `bitset_pad` was not shown false.
+
+**Outside the filing.** `diag_render_frame` does not separate `buf` from
+`*f`. With `buf[0]` on a byte of `f->file`, the store changes the pointer
+before `snprintf` reads it. No goal states the `%s` arguments' validity, so
+nothing proved is false, but the trusted axiom's comment in `diag.h`, that
+argument validity is carried by `frame_strings_ok` on the calling functions,
+holds for `diag_render_frame` only when its `buf` is off `*f`. A
+precondition like `diag_render`'s `r_sep` would close that; it is a contract
+change, for a prediction of its own.
+
+**The count.** The library goals G4 has found proved and false are therefore
+28: 25 under the block's rules, 14 of them filed (groups A and B), and the
+same 3 dependents.
+
+**Record coverage** reports 11 write sites, 48 properties and 7 facts,
+nothing pinned and no problem.
+
+The next filing takes up `stringbuf.h` and `priority_queue.h`.
