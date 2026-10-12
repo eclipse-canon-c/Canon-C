@@ -10447,7 +10447,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -13159,6 +13159,14 @@ four `Rec` frames across the counterpart pair. The 23rd, `bitset_set_all`'s
 `ensures bitset_mut(bs)`, was false only because the precondition at its
 call to `bitset_clear_padding` was, and rests on that filed goal.
 
+**Note (2026-10-12, at the `priority_queue.h` filing).** The rule for
+dependents is extended there to goals that follow from a loop invariant at
+the head: goals that read memory in the state of a loop's head, with no
+write between, and need of it only what the invariant states there, while
+the invariant's establishment and preservation are each proved without
+crossing a write, filed, or themselves dependents ("Dependents through a
+loop invariant", group D).
+
 ### G4 — the proved-goal argument
 
 **Proved-goal argument**: WP's typed model keeps one memory array per
@@ -13212,6 +13220,16 @@ The facts that keep a write off what a property reads:
   the arena's free tail at entry.
 - **F10** — `stringbuf_init_buffer`'s precondition `sep`, since f6e54ca:
   `\separated(sb, buffer + (0 .. cap - 1))`.
+- **F11** —
+  `\separated(pq, (char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1))`,
+  in `pq_wf` and in `pq_init`'s matching precondition since VERIFY-022's run
+  4 (b79a51f), and in `pq_wf_buf`, which `pq_wf` includes and `pq_heapify`'s
+  `live` behaviour requires, since run 5 (5173cd2). A write inside the
+  buffer leaves `*pq` alone.
+- **F12** — `pq_pop_raw`'s `nonempty_out` precondition, since VERIFY-022's
+  run 5 (5173cd2):
+  `\separated((char*)out + (0 .. pq->elem_size - 1), pq, (char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1))`.
+  The copy into `out` leaves `*pq` alone.
 
 | # | Function | Write, and why its range is inside the fact's | Units | Properties | Read after the write | Kept off by |
 |---|---|---|---|---|---|---|
@@ -13234,14 +13252,21 @@ The facts that keep a write off what a property reads:
 | 17 | `stringbuf_append_char` | `data[len] = c`, the store `sb->len++`, then `data[len] = '\0'`: inside the buffer, as `len + 2 <= capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_append_char_append_ensures_grown`, `typed_cast_stringbuf_append_char_append_ensures_content`, `typed_cast_stringbuf_append_char_append_ensures_wf_ok`, `typed_cast_stringbuf_append_char_append_ensures_prefix`, `typed_cast_stringbuf_append_char_assigns_normal`, `typed_cast_stringbuf_append_char_assert_rte_mem_access_9` | `*sb`'s members after each `char` store, `len` among them, which the increment reads; the string's bytes, through `char`, after the store to `len` | F8 |
 | 18 | `stringbuf_clear` | `data[0] = '\0'`, then the store `sb->len = 0`: inside the buffer, as `len < capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_clear_live_ensures_wf_ok` | `sb->data` and `sb->capacity` after the `char` store; `data[0]`, through `char`, after the store to `len` | F8 |
 | 19 | `stringbuf_truncate` | the store `sb->len = new_len`, then `data[new_len] = '\0'`: inside the buffer, as `new_len < len < capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_truncate_shorten_ensures_shortened`, `typed_cast_stringbuf_truncate_shorten_ensures_wf_ok`, `typed_cast_stringbuf_truncate_shorten_ensures_prefix` | `*sb`'s members after the `char` store; the bytes before `new_len`, through `char`, after the store to `len` | F8 |
+| 20 | `pq_swap_` | `mem_swap(pa, pb, es)`, or, for elements over `CANON_MEM_SWAP_MAX`, the fallback's stores through `unsigned char` into `pa[0 .. es - 1]` and `pb[0 .. es - 1]`: slots `a` and `b`, inside the buffer as `pq_in_use` gives `a, b < len <= capacity` | `frama-c-priority-queue` | `typed_cast_pq_swap_ensures` | `*pq`, in `pq_wf` | F11 |
+| 21 | `pq_sift_up_` | each iteration's `pq_swap_(pq, p, idx)`, whose `assigns` is F11's range; at the later heads the loop's `assigns` stands for it | `frama-c-priority-queue` | `typed_cast_pq_sift_up_loop_invariant_2_preserved`, `typed_cast_pq_sift_up_loop_assigns`, `typed_cast_pq_sift_up_assigns_exit` | `pq->len` after the swap; `data`, `capacity` and `elem_size` at the swap, in its effect, taken to be those at the loop's entry and the function's | F11 |
+| 22 | `pq_sift_down_` | each iteration's `pq_swap_(pq, idx, smallest)`, the same | `frama-c-priority-queue` | `typed_cast_pq_sift_down_loop_invariant_2_preserved`, `typed_cast_pq_sift_down_loop_variant_decrease`, `typed_cast_pq_sift_down_loop_assigns`, `typed_cast_pq_sift_down_assigns_exit` | `pq->len` after the swap, alone and in the variant `pq->len - idx`; `data`, `capacity` and `elem_size` at the swap, in its effect, taken to be those at the loop's entry and the function's | F11 |
+| 23 | `pq_heapify` | each iteration's `pq_sift_down_(pq, i)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_heapify_loop_invariant_2_preserved`, `typed_cast_pq_heapify_loop_assigns`, `typed_cast_pq_heapify_live_assigns_exit`, `typed_cast_pq_heapify_live_ensures` | `pq->len` after the call; `data`, `capacity` and `elem_size` at the call, in its effect, taken to be those at the loop's entry and the function's; `capacity` after the loop, in `min(len, capacity)` | F11 |
+| 24 | `pq_push_result` | `mem_copy` into slot `len`, inside the buffer as `len < capacity`; then `pq_sift_up_(pq, len - 1)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_push_result_call_pq_sift_up__pq_sift_up_requires`, `typed_cast_pq_push_result_call_pq_sift_up__pq_sift_up_requires_2`, `typed_cast_pq_push_result_accepted_ensures`, `typed_cast_pq_push_result_accepted_assigns_exit`, `typed_cast_pq_push_result_accepted_assigns_normal` | `pq->len`, which the increment reads after the copy, and so the index passed to `pq_sift_up_`; `*pq` at that call, in `pq_wf` and in its effect; `pq->len` after it | F11 |
+| 25 | `pq_pop_raw` | `mem_copy(out, slot 0, es)` when `out` is not null, on F12's range for `out`; then, while `len` stays positive, `mem_copy` from slot `len` into slot 0, inside the buffer, and `pq_sift_down_(pq, 0)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_pop_raw_call_ptr_elem_2_requires`, `typed_cast_pq_pop_raw_call_ptr_elem_2_requires_2`, `typed_cast_pq_pop_raw_call_ptr_elem_2_requires_3`, `typed_cast_pq_pop_raw_call_ptr_elem_3_requires`, `typed_cast_pq_pop_raw_call_ptr_elem_3_requires_2`, `typed_cast_pq_pop_raw_call_ptr_elem_3_requires_3`, `typed_cast_pq_pop_raw_call_mem_copy_2_requires`, `typed_cast_pq_pop_raw_call_mem_copy_2_requires_2`, `typed_cast_pq_pop_raw_call_mem_copy_2_requires_3`, `typed_cast_pq_pop_raw_call_pq_sift_down__pq_sift_down_requires`, `typed_cast_pq_pop_raw_call_pq_sift_down__pq_sift_down_requires_2`, `typed_cast_pq_pop_raw_nonempty_discard_ensures_2`, `typed_cast_pq_pop_raw_nonempty_discard_assigns_exit`, `typed_cast_pq_pop_raw_nonempty_discard_assigns_normal`, `typed_cast_pq_pop_raw_nonempty_out_ensures_2`, `typed_cast_pq_pop_raw_nonempty_out_ensures_3`, `typed_cast_pq_pop_raw_nonempty_out_assigns_exit`, `typed_cast_pq_pop_raw_nonempty_out_assigns_normal` | after the copy to `out`, `*pq`: `data`, `len` and `elem_size` for the second copy, `len` for its decrement and all of `pq_wf` when the queue empties; after the second copy and the sift, `*pq` at the call, in `pq_wf` and the sift's effect, and `pq->len` | F12 for the copy to `out`, F11 for the rest |
+| 26 | `pq_remove_at_result` | `mem_copy` from slot `len` into slot `i`, inside the buffer as `i < len`; then `pq_sift_up_(pq, i)` and `pq_sift_down_(pq, i)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_remove_at_result_call_pq_sift_up__pq_sift_up_requires`, `typed_cast_pq_remove_at_result_call_pq_sift_up__pq_sift_up_requires_2`, `typed_cast_pq_remove_at_result_call_pq_sift_down__pq_sift_down_requires_2`, `typed_cast_pq_remove_at_result_removed_ensures`, `typed_cast_pq_remove_at_result_removed_assigns_exit`, `typed_cast_pq_remove_at_result_removed_assigns_normal` | `*pq` at the two calls, in `pq_sift_up_`'s precondition and both effects, and `pq->len` there and after them | F11 |
 
 Properties are named as the decision names them, by WP's property prefix
 without `_partk`. A property with a part among the residuals is filed for
 its other parts, and its row names that part as "(not `_partk`)".
 `arena.h`'s eight units are `frama-c-arena`, `frama-c-arena-32`,
 `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`,
-`cc-vec` and `cc-vec_struct`. Filed: 71 properties at 19 write sites, kept
-off by 10 facts (groups A to C).
+`cc-vec` and `cc-vec_struct`. Filed: 112 properties at 26 write sites,
+kept off by 12 facts (groups A to D).
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -13635,3 +13660,142 @@ names, without leading, trailing or repeated underscores:
 keep the name as declared.
 
 The next filing takes up `priority_queue.h`.
+
+### G4 — the proved-goal argument, group D: `priority_queue.h`
+
+**Candidates.** The decision's larger list has 115 properties in
+`priority_queue.h`: 33 in `pq_pop_raw`, 16 in `pq_push_result`, 15 in
+`pq_remove_at_result`, 10 in `pq_pop`, 9 in `pq_push`, 8 in `pq_remove_at`,
+6 each in `pq_heapify`, `pq_sift_down_` and `pq_sift_up_`, 4 in `pq_peek`
+and 2 in `pq_swap_`. With exit markers matched, the search adds 10
+`assigns_exit`, the other 10 of the 22 the group B filing counted in
+`stringbuf.h` and `priority_queue.h`: 3 in `pq_pop`, 2 each in `pq_heapify`
+and `pq_peek`, and one each in `pq_sift_down_`, `pq_sift_up_` and
+`pq_swap_`. Reading the header adds 78 the search did not list, all goals
+inside or after a loop whose body writes through a character type, where the
+earlier iterations' writes are the loop's `assigns`, not a call:
+
+- `pq_swap_`'s 8 in its fallback loop, whose stores go through
+  `unsigned char`: the body's four `mem_access` checks, the loop invariant's
+  preservation, the loop `assigns` and the variant's two goals;
+- `pq_sift_up_`'s 23 and `pq_sift_down_`'s 41 in and after their loops,
+  which call `pq_swap_`: the preconditions of the calls in the body
+  (`pq_parent_`, `pq_left_child_`, `pq_right_child_`, `ptr_elem`, `pq_cmp_`
+  and `pq_swap_`), the body's `mem_access` checks, and each function's
+  `assigns_normal` and postcondition;
+- `pq_heapify`'s 6 in and after its loop, which calls `pq_sift_down_`: the
+  call's two preconditions, the `live` behaviour's two postconditions and
+  the two behaviours' `assigns_normal`.
+
+That makes 203 candidates. The decision's last two kinds add none: no goal
+in the header reads an element's bytes, and the queue's integer members are
+`usize`, each stored and read through its declared type. Of the goals
+printed without a path in the functions that write, none follows a write but
+parts of properties counted above.
+
+**Filed: 41**, the block's rows 20 to 26.
+
+- `pq_swap_`, row 20: its postcondition `pq_wf(pq)`, after either swap.
+- the loops, rows 21 to 23. In each, the invariant `idx < pq->len` (in
+  `pq_heapify`, `pq->len == n`) preserved across the call in the body, which
+  takes `len` to be unchanged by it; the loop `assigns` and the function's
+  `assigns_exit`, which compare regions computed from `data`, `capacity` and
+  `elem_size` at the loop's entry or the function's with regions computed
+  from them at the call, and so take those fields to be unchanged by the
+  earlier iterations; `pq_sift_down_`'s variant decrease, which reads
+  `pq->len` after the swap; and `pq_heapify`'s first postcondition, which
+  reads `capacity` after the loop. The decision's example, `pq_sift_up_`'s
+  invariant `idx < pq->len` across `pq_swap_`, is among them. These three
+  `assigns_exit` are among the ten the exit markers added here: in a loop,
+  the call whose exit they check comes after the earlier iterations' writes.
+- the three mutators, rows 24 to 26: each goal whose proof takes `*pq`
+  across a copy into the buffer or into `out`, or across a call to a sift,
+  where no callee's postcondition gives it: the sifts' preconditions, among
+  them `pq_push_result`'s `len - 1 < len`, whose `len` the increment read
+  after the copy, the length postconditions, and the `assigns` parts for the
+  sifts' effects; in `pq_pop_raw`, also the second copy's preconditions and
+  those of the two `ptr_elem` calls that compute its slots, after the copy
+  to `out`, and `pq_wf` when the pop leaves the queue empty. The decision's
+  example of a goal Qed reduces to true, `pq_remove_at_result`'s
+  `i < pq->len` at its call to `pq_sift_down_`, is among them.
+
+**Not filed: 162.**
+
+| Why not | Properties |
+|---|---|
+| validity, of an address computed from parameters and locals | the addresses of `*pq`'s members: `pq_sift_up_`'s four `mem_access` checks and `pq_sift_down_`'s ten, `pq_push_result`'s `mem_access_7` to `_9` and `pq_pop_raw`'s `mem_access_5` to `_13`; `pq_swap_`'s fallback's four, at `ba + k` and `bb + k` (30) |
+| locals only | `pq_swap_`'s fallback's loop invariant, loop `assigns` and variant's two goals; `pq_sift_up_`'s `idx <= i`, its variant's two goals and `pq_parent_`'s two preconditions; `pq_sift_down_`'s `i <= idx`; `pq_heapify`'s `0 <= i <= n` and its variant's two goals (13) |
+| `assigns`, whose effects after the write are the writer's own, taken before it, or a loop's own, taken at its entry | `pq_swap_`'s two; `pq_sift_up_`'s, `pq_sift_down_`'s and `pq_heapify`'s `assigns_normal`; `pq_peek`'s two for the `some` behaviour; in the wrappers, the call's own effect: `pq_push`'s four, `pq_pop`'s six and `pq_remove_at`'s four (21) |
+| a value, `\result`; in a wrapper, through the callee's postcondition | `pq_push_result`'s `accepted_ensures_3`; `pq_pop_raw`'s two `\result` postconditions; `pq_remove_at_result`'s `removed_ensures_3`; the `\result` postconditions of `pq_push` (3), `pq_pop` (3), `pq_remove_at` (2) and `pq_peek` (2) (14) |
+| a behaviour under whose assumption no write happens | `pq_push_result`'s `full` and `rejected` three each; `pq_pop_raw`'s `empty` three; `pq_remove_at_result`'s `out_of_range` and `rejected` three each; `pq_heapify`'s `null` two; `pq_peek`'s `none` two (19) |
+| dependents, through a callee's postconditions | `pq_wf` preserved in `pq_sift_up_` and `pq_sift_down_`, through `pq_swap_`'s, and in `pq_heapify`, through `pq_sift_down_`'s; through the sifts', `pq_push_result`'s `accepted_ensures_2`, `pq_pop_raw`'s `nonempty_discard_ensures_3`, and `pq_remove_at_result`'s precondition `pq_wf` at its call to `pq_sift_down_` and `removed_ensures_2`; through the functions they call, the wrappers' `len` and `pq_wf` postconditions, `pq_push`'s two, `pq_pop`'s four and `pq_remove_at`'s two (15) |
+| dependents, through a loop invariant at the head | in `pq_sift_up_` (16) and `pq_sift_down_` (31), the preconditions of the calls in the body but `pq_parent_`'s, `pq_sift_down_`'s variant positivity, and each postcondition `pq_wf`; in `pq_heapify` (3), the call's two preconditions and `live_ensures_2` (50) |
+
+**Dependents through a loop invariant.** The decision does not file again a
+property proved from a filed one through a callee's contract, since WP's
+modular proof carries the filed property's truth to it. A loop invariant
+does the same within a function: WP proves it established and preserved, and
+assumes it at each head. In these loops, the goals in the body before the
+call that read `*pq`, the postcondition at the exit, and `pq_sift_down_`'s
+variant positivity, which WP checks at the end of an iteration on the value
+at its head, read `*pq` in the state of a head, with no write between, and
+need of it only what the invariants state there: `pq_wf(pq)` and
+`idx < pq->len`, or in `pq_heapify` `pq->len == n`. WP's model also lets
+such a goal use the precondition, taking the fields at the head to be those
+at entry, but the goal is true wherever the invariants are, and their
+preservation is filed (`idx < pq->len` in rows 21 and 22, `pq->len == n` in
+row 23) or a dependent (`pq_wf`, through `pq_swap_`'s and `pq_sift_down_`'s
+postconditions). These goals are dependents too. A goal that needs a field
+the invariants do not restate is filed, as `pq_heapify`'s first
+postcondition needs `capacity`.
+
+**Readings taken up.** The header's comment on `pq_wf_buf`'s separation says
+that without it WP read every callee frame over the buffer as possibly
+writing `*pq`, so that `len`, `capacity` and `elem_size` were unknown after
+the swaps and sifts and the callers' postconditions and frames failed. G4's
+probe showed the opposite: WP's typed model keeps a location of another type
+across a write through `char` with no separation at all ("G4 — probe
+scored"). VERIFY-022's run 4, which added the separation, closed nothing,
+but it could not test the comment: each goal registered for it failed for
+another reason, `pq_push_result`'s postconditions at the result
+constructors, which had no `assigns` ("Result constructors assign
+everything"), the sifts' `assigns` behind the comparator call, which WP took
+to assign everything until run 5, and `pq_pop_raw`'s at the copy to `out`,
+not yet in its frame. The separation's role is F11, the fact rows 20 to 26
+rest on. The comment is to be corrected with the header's next change.
+VERIFY-022 also records that WP 29 frames a call with the union of the
+callee's behaviours ("Call-site frames are the callee's union"), and the
+probe's log shows the step ("No default assigns clause, using complete
+behaviors assigns"), as the group C filing inferred from CI's proofs. As
+there, WP 25's prints keep nothing across `mem_swap` and `mem_copy`, and
+what rows 20 and 24 to 26 take across them is read from the callees' clauses
+and the code.
+
+**Checked against the placements the repairs excluded.** No G4 repair
+touched `priority_queue.h`. F11 entered `pq_wf` and `pq_init`'s precondition
+in VERIFY-022's run 4 and `pq_heapify`'s, through `pq_wf_buf`, in run 5, and
+F12 entered `pq_pop_raw`'s in run 5, all before the unit was enforced at run
+8 (CI #1290). No enforced state lacked them, so no call the enforced
+contracts admitted made a filed goal false, nor a dependent.
+
+**Outside the filing.** `pq_swap_`'s fallback moves through `unsigned char`
+bytes that `mem_copy` wrote through `char`, two arrays in WP's typed model,
+so the model does not see the swap move them. No goal reads an element's
+bytes, since the header claims nothing of the contents, so no proved goal
+rests on that. `pq_swap_`'s `assigns` is stated through `char`, so its
+callers' models do not see those stores either. `pq_peek` requires `out` to
+be separated from the buffer, not from `*pq`, and its frame admits an `out`
+over `*pq`; no goal after its copy reads `*pq`, and no verified function
+calls it, but a verified caller that read `*pq` after it could be proved and
+false there. `pq_push_result`'s `elem` is not separated from `*pq` either,
+but it is only read, by the copy into the buffer, before any write to `*pq`.
+
+**The count.** This filing found no goal proved and false. The library goals
+G4 has found proved and false stay 28: 25 under the block's rules, 15 of
+them filed (groups A to D; none is in this header), and 3 dependents.
+
+**Record coverage** reports 26 write sites, 112 properties and 12 facts,
+nothing pinned and no problem.
+
+The next filing takes up vec, at `int` and at `Rec`, with the counterpart
+pair.
