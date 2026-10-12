@@ -10447,9 +10447,9 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
-| **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
+| **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
 **Why this record exists.** At CI #1337 the record files 59 of the 402
 residual obligations under a counted block by goal name. The rest are filed by
@@ -14074,3 +14074,160 @@ and 16 facts.
 
 **Record coverage** reports 38 write sites, 147 properties and 16 facts,
 nothing pinned and no problem, as before this filing.
+
+### The main pass — the residual set at 9660e0e, and each obligation filed by name (decision and method)
+
+With the proved-goal filing complete, the audit turns to its scope: the
+obligations the record files otherwise than in a goal table, and the
+container filings among them, read against the code.
+
+**The residual set now.** The scope counted 402 distinct residual
+obligations at CI #1337, the union of the main CI's roll-calls modulo the
+`typed_`/`typed_cast_` prefix, as the paper's §6.3 counts them; 59 stood in
+goal tables under counted blocks and 343 did not. At 9660e0e that union is
+355. The -CC units add 82 that no main-CI unit pins, all in `cc-vec_struct`:
+vec's own at `Rec` and option instantiated at `Rec`. The scope, counted as
+the paper counts, left them out; the main pass takes them in, so that the
+record files every obligation a gate pins. `tools/record_coverage.py` reads
+the -CC roll-calls too and prints 439: these 437, and two names in bits.h's
+sample roll-call, `bits_next_power_of_two_normal_ensures` and
+`bits_rotl_nonzero_shift_ensures`, whole goals that bitset pins split, as
+`_part3` and `_part2`; the paper's union takes them in bitset's form. Where
+each obligation is filed now:
+
+| Filing | CI #1337 | 9660e0e, main CI | with the -CC units |
+|---|---:|---:|---:|
+| in a goal table under counted blocks (VERIFY-008 to VERIFY-011) | 59 | 45 | 45 |
+| under the four counted blocks with no goal table: option 32 and result 28 by function and count, borrow 2 and diag 8 by name in their prose (VERIFY-014 to VERIFY-017) | 70 | 70 | 70 |
+| by family convention, fresh instantiations: option at `usize` 32 (bitset) and at `isize` 32 (range), result at (`bool`, `Error`) 30 (vec, deque, priority queue) | 94 | 94 | 126, with option at `Rec` 32 |
+| by category in the container records: vec 53, now 50; deque 5; bitset 71, now 41; priority queue 6 | 135 | 102 | 152, with vec at `Rec` 50 |
+| in the primitives' module prose: contract.h 2, checked.h 2, bits.h 15, ptr.h 12, slice.h 13 | 44 | 44 | 44 |
+| Σ | 402 | 355 | 437 |
+
+The 47 closed since CI #1337: 14 in goal tables, G2's 6 in arena Cat 2c and
+G5's 7 and G7's 1 in pool Cat 2a and Cat 2d; and 33 in the containers, G1's
+3 in vec and, in bitset, the 19 of entry 3's repair and G6, the 10 of the
+two loops bounded by `word_count`, and G8's. So 392 obligations are in no
+goal table: 310 of the main CI's and the 82 at `Rec`. The Scope row's 343
+and 135 are CI #1337's; 310 and 102 of them remain.
+
+Two filings say more than the table does. Six of ptr.h's twelve, the
+`part2`s of `ptr_align_up`'s and `ptr_align_down`'s three `nonnull`
+postconditions, which VERIFY-027 scores, are filed not in VERIFY-006's prose
+but in VERIFY-027's, as instances of memory.h's Category 2 (VERIFY-008), a
+counted block, and `ptr_align_up`'s three twice, also under VERIFY-009's
+arithmetic argument, Category 2b's, retired since (VERIFY-036 F4). And arena
+Cat 2c's two goals stand in its table, but G3 found that its argument, as
+written, does not cover them, and left to this pass whether Cat 2c is
+rewritten to state the byte-type bridge or the two go under an existing
+byte-view block.
+
+**Decision (recommended).** Each obligation is filed by name under the one
+argument that covers it, read against its code.
+
+- The filing is a goal table in this record: a line
+  `**Filed by name**: VERIFY-nnn, <heading>`, citing a counted block in
+  force by its record and the start of its heading, up to the colon or the
+  count (`VERIFY-008, Category 1`), and under it a table, with nothing but
+  blank lines between, each row numbered and giving one goal as pinned, the
+  units that pin it, and what reading it against the code found. A batch
+  writes a table for each block it files under, so a block may collect
+  tables from several batches. The cited block's argument then covers the
+  goal as it covers its own table's.
+- An obligation no counted block's argument covers gets a block of its own,
+  a `**Manual proof argument**` with its goal table, and *A* counts it,
+  cumulative and in force; any batch may so move *A*. The paper's claim that
+  the budget saturated, Δ*A* = 0 over its last seven units, is then tested
+  by explicit filings, not assumed.
+- An obligation found false for an admitted call becomes a gap of this
+  record, predicted and repaired as G1 was.
+- 38 of the primitives' 44 are argued in the module-level prose of
+  VERIFY-002 to VERIFY-007, which the paper's operational count leaves out
+  (§2; Table 1's note), and ptr.h's six in VERIFY-027's, as above. Filed by
+  name, each goes under a counted block whose argument covers it, or its
+  prose becomes a block: the batch says which, and what that does to *A*.
+- A goal is filed once, and filing it under a block reads that block's
+  argument against the goal's code.
+
+**Method.** Six batches, each a commit that accounts for its obligations,
+filed or found false:
+
+1. vec, 50 at `int` (`frama-c-vec`, `cc-vec`) and 50 at `Rec`
+   (`cc-vec_struct`), VERIFY-018 and VERIFY-037/038;
+2. deque's 5 and the priority queue's 6, VERIFY-019 and VERIFY-022;
+3. bitset's 41, VERIFY-020 and, for the four padding postconditions among
+   them, G6;
+4. option and result, their own 32 and 28 (VERIFY-014, VERIFY-015) and the
+   fresh instantiations, 126, which the records of the modules that
+   instantiate them file by family convention (VERIFY-018, VERIFY-019,
+   VERIFY-020, VERIFY-022, VERIFY-030, VERIFY-037/038);
+5. borrow's 2 and diag's 8, VERIFY-016 and VERIFY-017; and arena Cat 2c's
+   two goals, by one of the routes G3 left to this pass: Cat 2c rewritten to
+   state the byte-type bridge; the two filed under diag's byte-view block,
+   the one in force, their rows leaving Cat 2c's table and Cat 2c retired;
+   or the two postconditions stated through `char *`, a contract change with
+   its own prediction;
+6. the primitives' 44: contract.h, checked.h, bits.h with its sample's two
+   names, ptr.h and slice.h, VERIFY-002 to VERIFY-007, and for ptr.h's six
+   VERIFY-027 and memory.h's Category 2, each of the six filed once. The ptr
+   job's failure text sends a reader to VERIFY-006 for the full list, which
+   lacks the six; it is corrected with the workflow's next change.
+
+The containers come first, as the scope has it: the paper's §8 says
+stretching would hide there, and G1 was found there. The families their
+arguments cite follow. The primitives come last: their prose is outside *A*,
+so their filing is where *A* is likeliest to move.
+
+Of the scope's open items, arena Cat 2c is batch 5's and pool Cat 2d retired
+with G7; two no batch reaches, and the pass settles them after the batches:
+
+- `pool_alloc_zero` has no postcondition, where `arena_alloc_zero` states
+  the invariant, the result's validity and address, and the zeroed bytes. No
+  goal is generated for what a contract does not state, so no residual names
+  the gap. A postcondition is a contract change, predicted before it is
+  made, as the record's repairs are.
+- Four of the ten blocks the scope found never read against their code have
+  all their goals in their own tables: memory.h's Category 1 and Category 3
+  (VERIFY-008) and region.h's Category 1 and Category 2 (VERIFY-011). No
+  batch's obligations are theirs, and a batch that files under one reads it
+  only against the goals it files, as batch 6 may file slice.h's `memcmp`
+  goals under Category 3. Each is read against its own goals' code. Of the
+  other six, arena Cat 2d covers nothing (VERIFY-023), pool Cat 2a was read
+  by G4 and G5, and batches 4 and 5 read the blocks of option, result,
+  borrow and diag.
+
+**Record coverage** reads the tables. Each goal filed by name counts for the
+cited block as its own table's goals do: it must be pinned somewhere, it is
+reported stale if not, and it leaves the count of pinned names in no goal
+table. A block's heading count is checked against the distinct goals of its
+own table, or, for one with none, against those filed by name under it; a
+batch that files under such a block restates the count in its heading, as
+batch 4 will for option's and result's if the fresh instantiations go under
+them. A block's own table is read from its heading to its argument, the
+filing tables there left out, so a block written below a filing table under
+the same heading does not take in its rows. A retired block covers nothing:
+it keeps rows only for goals that closed, and a goal still pinned in its
+table counts as in no goal table. The Units cell is checked against the
+units that pin the goal as the gates pin it, `frama-c-checked`'s two named
+goals and the priority queue's run-time pin of memory.h's names included;
+`frama-c-arena-32`, whose copy of arena's list the script does not read, may
+be named beside `frama-c-arena`. Filing problems are a line that starts
+`**Filed by name`, indented or not, but does not read as one from its first
+column; a citation that matches no block, several or a retired one; a line
+with no table after it, or a table with no row read; a row not read, as one
+not numbered or whose goal cell holds other than one goal in backticks; a
+Units cell that differs from the pins; a goal filed twice; and a goal still
+pinned in a retired block's table. `--strict` fails on them, and the summary
+line counts them. A new option, `--complete`, fails while a pinned name is
+in no goal table. The job runs advisory; its comment, which says to promote
+it to `--strict` once option, result, borrow and diag list their goals by
+name, is corrected when it is promoted to `--strict --complete` at the
+pass's end: a change to a workflow file runs the whole CI matrix, which a
+comment alone does not warrant. No table is written yet, so the report is as
+before but for its wording, the summary's count of filing problems, and its
+counts by unit, which now include those two pins: 394 pinned names in no
+goal table, the 392 obligations and bits.h's two sample names. The main pass
+ends when that count is 0 and the open items are settled. Every residual
+obligation pinned is then filed by name under exactly one block in force,
+which the script checks; whether each filing is sound remains a human
+judgment, as the paper's §2 says.
