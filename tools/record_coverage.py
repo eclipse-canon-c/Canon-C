@@ -24,9 +24,11 @@ properties and facts (the **Fk** labels), a property filed twice, a fact a
 row cites in its "Kept off by" cell that the block does not state or one no
 row cites, an excluded part that is no longer pinned, and any problem reading
 the block: a row it cannot read, a property whose name does not contain its
-row's function, a fact cited but not stated, or counts that differ from the
-block's closing line. A name misspelled after its function's part is not
-caught: the script has the pinned names, not WP's full list of goals.
+row's function (as declared, or without the leading, trailing and repeated
+underscores the kernel drops from most goal names), a fact cited but not
+stated, or counts that differ from the block's closing line. A name
+misspelled after its function's part is not caught: the script has the pinned
+names, not WP's full list of goals.
 
 Advisory: prints a report and exits 0, unless --strict, in which case any
 stale listed goal, empty block, pinned filed part or problem reading the
@@ -104,10 +106,10 @@ def proved_goal_blocks():
     read, and a problem is reported, if its cells differ in number from the
     header's, it is not numbered, it comes before any header, or it names no
     property or no fact. A name in the Properties cell outside backticks, and a
-    property whose name does not contain "_<the row's Function cell>_", are
-    problems too. The block's last closing line, "Filed:
-    N properties at M write sites, kept off by K facts", is checked against
-    what was read."""
+    property whose name does not contain "_<the row's Function cell>_", the
+    cell as declared or as the kernel's sanitizer writes it, are problems too.
+    The block's last closing line, "Filed: N properties at M write sites,
+    kept off by K facts", is checked against what was read."""
     lines = open(REC, encoding='utf-8').read().split('\n')
     rec = None; blocks = []
     for i, l in enumerate(lines):
@@ -146,8 +148,14 @@ def proved_goal_blocks():
             for q in re.findall(r'\btyped\w*', re.sub(r'`[^`]*`', '', c[col[0]])):
                 problems.append(f"row {c[0]}: {q} is not in backticks, so not read")
             fn = re.fullmatch(r'`(\w+)`', c[col[3]]) if col[3] is not None else None
+            # WP writes a function's name as declared in a call-site goal's
+            # name, and in the others through the kernel's sanitizer, which
+            # drops leading, trailing and repeated underscores:
+            # _stringbuf_append_bytes's postconditions are
+            # typed_cast_stringbuf_append_bytes_ensures_...
+            forms = {fn.group(1), re.sub(r'_+', '_', fn.group(1)).strip('_')} if fn else set()
             for q, _ in props:
-                if fn and f"_{fn.group(1)}_" not in q:
+                if fn and not any(f"_{f}_" in q for f in forms):
                     problems.append(f"row {c[0]}: {q} does not name the row's function {fn.group(1)}")
             rows.append((int(c[0]), props, cited))
         n_props = sum(len(ps) for _, ps, _ in rows)

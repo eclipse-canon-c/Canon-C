@@ -10447,7 +10447,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -13201,6 +13201,17 @@ The facts that keep a write off what a property reads:
   `depth`, that frame's other members and the other frames lie outside it.
 - **F7** — `diag_render`'s `r_sep`, since G4 entry 4's repair (838a204):
   `\separated(buf + (0 .. buf_size - 1), d)`.
+- **F8** — `stringbuf_wf(sb)`, since `stringbuf.h`'s first contracts
+  (f6e54ca, VERIFY-031):
+  `\separated(sb, sb->data + (0 .. sb->capacity - 1))`. A write inside the
+  buffer leaves `*sb` alone, and a store to `*sb` leaves the buffer's bytes
+  alone.
+- **F9** — `stringbuf_init_arena`'s precondition `sep_storage`, since
+  f6e54ca:
+  `\separated(sb, ((char *)arena->buffer) + (arena->offset .. arena->capacity - 1))`,
+  the arena's free tail at entry.
+- **F10** — `stringbuf_init_buffer`'s precondition `sep`, since f6e54ca:
+  `\separated(sb, buffer + (0 .. cap - 1))`.
 
 | # | Function | Write, and why its range is inside the fact's | Units | Properties | Read after the write | Kept off by |
 |---|---|---|---|---|---|---|
@@ -13215,14 +13226,22 @@ The facts that keep a write off what a property reads:
 | 9 | `diag_push` | the message copy, `memcpy(f->message, msg, len)` then `f->message[len] = '\0'`, or `f->message[0] = '\0'`: the pushed frame's `message[0 .. len]` | `frama-c-diag` | `typed_cast_diag_push_valid_diag_ensures_push_depth_bounds`, `typed_cast_diag_push_valid_diag_ensures_push_depth_step`, `typed_cast_diag_push_valid_diag_ensures_push_frame_code`, `typed_cast_diag_push_valid_diag_ensures_push_frame_file`, `typed_cast_diag_push_valid_diag_ensures_push_frame_func`, `typed_cast_diag_push_valid_diag_ensures_push_frame_line`, `typed_cast_diag_push_valid_diag_ensures_push_frames_preserved`, `typed_cast_diag_push_valid_diag_ensures_push_msg_terminated` | `depth`; the pushed frame's `file`, `func`, `line` and `code`; the other frames' `code` | F6, and on the overflow path F5 |
 | 10 | `diag_render` | `buf[0] = '\0'`, before the guard that reads `d->depth` | `frama-c-diag` | `typed_cast_diag_render_nothing_to_render_ensures_r_ntr_zero`, `typed_cast_diag_render_nothing_to_render_ensures_r_ntr_cleared`, `typed_cast_diag_render_nothing_to_render_assigns_exit`, `typed_cast_diag_render_nothing_to_render_assigns_normal` | `depth`, in the guard, 0 by the behaviour's assumption, which keeps the loop off | F7 |
 | 11 | `diag_render` | each iteration's `snprintf(dst, rem, ...)`: `dst + (0 .. rem - 1)`, inside `buf + (0 .. buf_size - 1)`; at the next head the loop's `assigns` stands for it | `frama-c-diag` | `typed_cast_diag_render_loop_invariant_render_i_bounds_preserved`, `typed_cast_diag_render_loop_variant_decrease`, `typed_cast_diag_render_assert_rte_mem_access_4`, `typed_cast_diag_render_assert_rte_mem_access_5`, `typed_cast_diag_render_assert_rte_mem_access_6`, `typed_cast_diag_render_assert_rte_mem_access_7`, `typed_cast_diag_render_assert_rte_mem_access_8`, `typed_cast_diag_render_assert_rte_mem_access_9`, `typed_cast_diag_render_assert_rte_mem_access_10` | `depth`, at each head and after each call, and so which frames the body reads | F7 |
+| 12 | `stringbuf_init_arena` | `buf[0] = '\0'`, into the block `arena_alloc` returned: `buffer + (offset - initial_cap .. offset - 1)` by its `address` postcondition, inside the buffer as its postconditions give `initial_cap <= offset <= capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_init_arena_ensures_arena_kept` | `*arena`, in `arena_invariant` | F1 |
+| 13 | `stringbuf_init_arena` | the stores to `sb->arena`, `sb->data`, `sb->len` and `sb->capacity`, after `buf[0] = '\0'`: on `*sb`, while `buf[0]` lies in the free tail at entry: `arena_alloc`'s postconditions place the block at or past the old `offset` and before `capacity`, and its frame keeps `buffer` and `capacity` as at entry (VERIFY-033) | `frama-c-stringbuf` | `typed_cast_stringbuf_init_arena_ensures_init_ok` | `buf[0]`, through `char`, in `stringbuf_wf` | F9 |
+| 14 | `stringbuf_init_buffer` | the stores to `*sb`'s members, after `buffer[0] = '\0'`: on `*sb`, while `buffer[0]` lies in `buffer + (0 .. cap - 1)` | `frama-c-stringbuf` | `typed_cast_stringbuf_init_buffer_ensures_wf` | `buffer[0]`, through `char`, in `stringbuf_wf` | F10 |
+| 15 | `_stringbuf_append_bytes` | `mem_move` into `data + (len .. end - 1)`, the store `sb->len = end`, then `data[end] = '\0'`: inside the buffer, as `end + 1 <= capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_append_bytes_ensures_grown`, `typed_cast_stringbuf_append_bytes_ensures_wf_ok`, `typed_cast_stringbuf_append_bytes_ensures_prefix`, `typed_cast_stringbuf_append_bytes_assigns_normal`, `typed_cast_stringbuf_append_bytes_assert_rte_mem_access_6` | `*sb`'s members after the copy and after the `'\0'`; the string's bytes, through `char`, after the store to `len` | F8 |
+| 16 | `stringbuf_append_fmt_va` | the write pass, `vsnprintf` into `data + (len .. with_nul - 1)`, then on failure `data[len] = '\0'` and on success the store `sb->len = end`: inside the buffer, as `with_nul <= capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_append_fmt_va_format_ensures_wf_ok`, `typed_cast_stringbuf_append_fmt_va_format_ensures_failure_unchanged`, `typed_cast_stringbuf_append_fmt_va_format_ensures_prefix`, `typed_cast_stringbuf_append_fmt_va_assigns_normal`, `typed_cast_stringbuf_append_fmt_va_assert_rte_mem_access_7` | `*sb`'s members after the write pass and after the `'\0'`; the string's bytes, through `char`, after the store to `len` | F8 |
+| 17 | `stringbuf_append_char` | `data[len] = c`, the store `sb->len++`, then `data[len] = '\0'`: inside the buffer, as `len + 2 <= capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_append_char_append_ensures_grown`, `typed_cast_stringbuf_append_char_append_ensures_content`, `typed_cast_stringbuf_append_char_append_ensures_wf_ok`, `typed_cast_stringbuf_append_char_append_ensures_prefix`, `typed_cast_stringbuf_append_char_assigns_normal`, `typed_cast_stringbuf_append_char_assert_rte_mem_access_9` | `*sb`'s members after each `char` store, `len` among them, which the increment reads; the string's bytes, through `char`, after the store to `len` | F8 |
+| 18 | `stringbuf_clear` | `data[0] = '\0'`, then the store `sb->len = 0`: inside the buffer, as `len < capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_clear_live_ensures_wf_ok` | `sb->data` and `sb->capacity` after the `char` store; `data[0]`, through `char`, after the store to `len` | F8 |
+| 19 | `stringbuf_truncate` | the store `sb->len = new_len`, then `data[new_len] = '\0'`: inside the buffer, as `new_len < len < capacity` | `frama-c-stringbuf` | `typed_cast_stringbuf_truncate_shorten_ensures_shortened`, `typed_cast_stringbuf_truncate_shorten_ensures_wf_ok`, `typed_cast_stringbuf_truncate_shorten_ensures_prefix` | `*sb`'s members after the `char` store; the bytes before `new_len`, through `char`, after the store to `len` | F8 |
 
 Properties are named as the decision names them, by WP's property prefix
 without `_partk`. A property with a part among the residuals is filed for
 its other parts, and its row names that part as "(not `_partk`)".
 `arena.h`'s eight units are `frama-c-arena`, `frama-c-arena-32`,
 `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`,
-`cc-vec` and `cc-vec_struct`. Filed: 48 properties at 11 write sites, kept
-off by 7 facts (groups A and B).
+`cc-vec` and `cc-vec_struct`. Filed: 71 properties at 19 write sites, kept
+off by 10 facts (groups A to C).
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -13504,3 +13523,115 @@ same 3 dependents.
 nothing pinned and no problem.
 
 The next filing takes up `stringbuf.h` and `priority_queue.h`.
+
+### G4 — the proved-goal argument, group C: `stringbuf.h`
+
+This filing takes up `stringbuf.h` alone. `priority_queue.h`, which the
+group B filing named with it, comes next.
+
+**Candidates.** The decision's larger list has 69 properties in
+`stringbuf.h`: 10 in the helper `_stringbuf_append_bytes`, 10 each in
+`stringbuf_append` and `stringbuf_append_str` and 9 in `stringbuf_append_n`,
+which call it, and 7 in `stringbuf_append_fmt` and 23 in
+`stringbuf_append_fmt_va`. With exit markers matched, the search adds 12
+`assigns_exit`, 12 of the 22 the group B filing counted in `stringbuf.h` and
+`priority_queue.h`: the helper's one, three each in `stringbuf_append`,
+`stringbuf_append_str` and `stringbuf_append_n`, and two in
+`stringbuf_append_fmt`. Reading the header adds 38 the search did not list,
+all goals after a store through `char`, which is not a call:
+
+- `stringbuf_append_char`'s 14 after `data[len] = c`;
+- `stringbuf_init_arena`'s 8 and `stringbuf_init_buffer`'s 8 after the
+  `'\0'` each stores into its new buffer before the stores to `*sb`;
+- `stringbuf_clear`'s 5 after `data[0] = '\0'`, two of them found by a
+  review of this filing, the check that `sb->len` is writable and the
+  `no_buffer` behaviour's `assigns`: WP 25's prints of the two leave the
+  store out, so only their lines place them after it;
+- `stringbuf_truncate`'s 3 after `data[new_len] = '\0'`, among them
+  `prefix`, which also reads the string's bytes through `char` after the
+  store to `len`, the decision's example of its fourth kind.
+
+That makes 119 candidates. The decision's last two kinds add none: every
+goal that reads bytes through `char` after a store of another type also
+follows a `char` store or a writer, so it is counted above, and
+`StringBuf`'s integer members are `usize`, each stored and read through its
+declared type, so no counterpart pair arises. Nor do the loop kind the group
+B filing added and the goals printed without a path: the header's one loop,
+`stringbuf_append_n`'s, writes no memory, and in the functions that write,
+the goals printed without a path either come before every write (the
+measuring pass's two preconditions and `stringbuf_append_n`'s loop
+`assigns`) or are parts of properties counted above.
+
+**Filed: 23**, the block's rows 12 to 19.
+
+- `stringbuf_init_arena` and `stringbuf_init_buffer`, rows 12 to 14:
+  `arena_kept`, entry 1's goal, which reads `*arena` after `buf[0] = '\0'`;
+  and `init_ok` and `wf`, whose `stringbuf_wf` reads the new buffer's first
+  byte through `char` after the stores to `*sb`.
+- the appenders, rows 15 to 17: each property whose proof takes `*sb`'s
+  members across a write into the buffer, or the string's bytes, through
+  `char`, across the store to `len`. In the helper, `grown`, `wf_ok`,
+  `prefix`, `assigns_normal` and the check that `data + end` is writable,
+  before the `'\0'`; in `stringbuf_append_fmt_va`, `wf_ok`,
+  `failure_unchanged`, `prefix`, `assigns_normal` and the check before the
+  failure path's `'\0'`; in `stringbuf_append_char`, `grown`, `content`,
+  `wf_ok`, `prefix`, `assigns_normal` and the check before its `'\0'`, whose
+  address takes `data`, and `len` as the increment read it, after
+  `data[len] = c`.
+- `stringbuf_clear` and `stringbuf_truncate`, rows 18 and 19:
+  `stringbuf_clear`'s `wf_ok`, and `stringbuf_truncate`'s `shortened`,
+  `wf_ok` and `prefix`.
+
+**Not filed: 96.**
+
+| Why not | Properties |
+|---|---|
+| validity, of an address computed from parameters and locals | the addresses of `sb`'s members: the helper's `mem_access_5`, `_7` and `_8`; `stringbuf_append_fmt_va`'s `mem_access_8` to `_10`; `stringbuf_append_char`'s `mem_access_7`, `_8`, `_10` and `_11`; `stringbuf_init_arena`'s and `stringbuf_init_buffer`'s `mem_access_2` to `_5`; `stringbuf_clear`'s `mem_access_4` (19) |
+| after the measuring pass only, `vsnprintf(NULL, 0, ...)`, which writes nothing: the axiom's `assigns s[0 .. n - 1]` is empty for `n` 0 | `stringbuf_append_fmt_va`'s `mem_access_2` to `_6`, its two `checked_add` preconditions and the write pass's three preconditions (10) |
+| `assigns`, whose effects after the write are at addresses from parameters and locals, or are the writer's own, taken before it | the helper's and `stringbuf_append_fmt_va`'s `assigns_exit` (the copy's and the passes' own effects, at their exits); the two `assigns` properties of `stringbuf_append`, `stringbuf_append_str`, `stringbuf_append_n` and `stringbuf_append_fmt` (the call's own effect); `stringbuf_clear`'s `live_assigns` (`sb->len`); `stringbuf_init_arena`'s and `stringbuf_init_buffer`'s two (`*sb`'s members) (15) |
+| a value: `\result`, the state at entry, or a location stored after the write; in a caller, through the callee's postcondition of the same name | `fits` in the helper and in `stringbuf_append_char`, and through the helper's in `stringbuf_append` and `stringbuf_append_str`; `stringbuf_append_fmt_va`'s `grown` (`len`, stored after the write pass), and through it `stringbuf_append_fmt`'s; `stringbuf_clear`'s `emptied`; `stringbuf_init_buffer`'s `fields` (8) |
+| `failure_unchanged` where no write precedes a failure | the helper's and `stringbuf_append_char`'s, whose failure paths return before the write, while on the other paths the premise is false; and through the helper's, `stringbuf_append`'s, `stringbuf_append_str`'s and `stringbuf_append_n`'s (5) |
+| a behaviour under whose assumption no write happens | the `no_buffer` behaviours' three in `stringbuf_append_fmt_va` and in `stringbuf_append_fmt`, two in `stringbuf_append_char` and one in `stringbuf_clear`; the `no_buffer` and `no_source` behaviours' three each in `stringbuf_append`, `stringbuf_append_str` and `stringbuf_append_n` (27) |
+| dependents, through the helper's and `stringbuf_append_fmt_va`'s filed postconditions | `grown`, `wf_ok` and `prefix` in `stringbuf_append`, `stringbuf_append_str` and `stringbuf_append_n`; `wf_ok`, `failure_unchanged` and `prefix` in `stringbuf_append_fmt` (12) |
+
+**Checked against the placements the repairs excluded.** Row 12 rests on F1,
+which came with entry 1's repair, and its goal, `arena_kept`, is entry 1's
+own: false for the `Arena` that entry placed in its own buffer
+(`tools/probes/verify-039/p_arena_self.c`), and already counted. Rows 13 to
+19 rest on F8 to F10, which `stringbuf.h` has stated since its first
+contracts and no repair changed, so no call those contracts admitted made
+their goals false, nor the 12 dependents, which rest on rows 15 and 16.
+
+**Readings taken up.** No earlier record reads these proofs as showing where
+a write lands. The G4 survey ("G4 — listing, the rest of the survey") names
+`stringbuf_wf` and `stringbuf_init_buffer`'s `sep` as what separates
+`stringbuf`'s writes, and omits `stringbuf_init_arena`'s `sep_storage`, F9,
+on which row 13 rests.
+
+**What the prints show at a call.** WP 25 takes a call's frame from the
+callee's default behaviour, and `memory.h`'s byte writers state their
+`assigns` only inside their behaviours. So after a call to one of them, as
+in rows 1 to 7 and 15, WP 25's print keeps nothing across the call: the
+memory after it is unrelated to the memory before, and the parts that check
+such a call's own effect print as `Prove: false`, WP 25 taking that effect
+to be everything, among them parts of the `assigns` properties filed in rows
+4 and 15. CI's WP 29 proves the filed properties, all but the parts the rows
+exclude, and after such a call it can do so only by framing the call with
+the behaviours' clauses, writes through `char`. The prints place each goal
+on its path and name it; what a property takes across such a call is read
+from the callee's clauses and the code, as the rows give it, in groups A and
+B as here.
+
+**The count.** This filing found no goal proved and false that the entries
+missed. The library goals G4 has found proved and false stay 28: 25 under
+the block's rules, 15 of them filed (groups A to C), and 3 dependents.
+
+**Record coverage** reports 19 write sites, 71 properties and 10 facts,
+nothing pinned and no problem. Its check that a property names its row's
+function now also takes the name as Frama-C's kernel writes it in most goal
+names, without leading, trailing or repeated underscores:
+`_stringbuf_append_bytes`'s postconditions are
+`typed_cast_stringbuf_append_bytes_ensures_…`, while its call-site goals
+keep the name as declared.
+
+The next filing takes up `priority_queue.h`.
