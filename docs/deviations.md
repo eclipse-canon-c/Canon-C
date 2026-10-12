@@ -10447,7 +10447,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done |
 
@@ -13230,6 +13230,25 @@ The facts that keep a write off what a property reads:
   run 5 (5173cd2):
   `\separated((char*)out + (0 .. pq->elem_size - 1), pq, (char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1))`.
   The copy into `out` leaves `*pq` alone.
+- **F13** — the vec's mutable form, since G4 entry 5's repair (66b54e0):
+  `\separated(v, v->items + (0 .. v->capacity - 1))`, in `vec_int_mut`
+  (`frama-c-vec`) and in the first `requires` of the fourteen macro-body
+  contracts (`cc-vec`, `cc-vec_struct`). A write inside the buffer leaves
+  `*v` alone, and a store to `*v` leaves the elements alone.
+- **F14** — the precondition G1's repair (40cccd9) gave `get`, `pop` and
+  `remove`:
+  `(v != \null && out != \null) ==> \separated(out, v->items + (0 .. v->capacity - 1))`,
+  and `iter_next` over `it->vec`. A write inside the buffer leaves `*out`
+  alone.
+- **F15** — the conjuncts G4 entry 6's repair (f74e95a) added to the same
+  clause: `\separated(out, v)`, and in `iter_next`
+  `\separated(out, it) && \separated(out, it->vec)`. The store through `out`
+  leaves `*v` and `*it` alone, and their stores leave `*out` alone.
+- **F16** — the ranges of vec's byte-level writes, by the code:
+  `append_array`'s copy writes `items + (len .. len + count - 1)`,
+  `insert`'s move `items + (i + 1 .. len)` and `remove`'s
+  `items + (i .. len - 2)`. None reaches an element below `len` at the copy
+  or below `i` at a move, the elements the frames keep.
 
 | # | Function | Write, and why its range is inside the fact's | Units | Properties | Read after the write | Kept off by |
 |---|---|---|---|---|---|---|
@@ -13259,14 +13278,26 @@ The facts that keep a write off what a property reads:
 | 24 | `pq_push_result` | `mem_copy` into slot `len`, inside the buffer as `len < capacity`; then `pq_sift_up_(pq, len - 1)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_push_result_call_pq_sift_up__pq_sift_up_requires`, `typed_cast_pq_push_result_call_pq_sift_up__pq_sift_up_requires_2`, `typed_cast_pq_push_result_accepted_ensures`, `typed_cast_pq_push_result_accepted_assigns_exit`, `typed_cast_pq_push_result_accepted_assigns_normal` | `pq->len`, which the increment reads after the copy, and so the index passed to `pq_sift_up_`; `*pq` at that call, in `pq_wf` and in its effect; `pq->len` after it | F11 |
 | 25 | `pq_pop_raw` | `mem_copy(out, slot 0, es)` when `out` is not null, on F12's range for `out`; then, while `len` stays positive, `mem_copy` from slot `len` into slot 0, inside the buffer, and `pq_sift_down_(pq, 0)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_pop_raw_call_ptr_elem_2_requires`, `typed_cast_pq_pop_raw_call_ptr_elem_2_requires_2`, `typed_cast_pq_pop_raw_call_ptr_elem_2_requires_3`, `typed_cast_pq_pop_raw_call_ptr_elem_3_requires`, `typed_cast_pq_pop_raw_call_ptr_elem_3_requires_2`, `typed_cast_pq_pop_raw_call_ptr_elem_3_requires_3`, `typed_cast_pq_pop_raw_call_mem_copy_2_requires`, `typed_cast_pq_pop_raw_call_mem_copy_2_requires_2`, `typed_cast_pq_pop_raw_call_mem_copy_2_requires_3`, `typed_cast_pq_pop_raw_call_pq_sift_down__pq_sift_down_requires`, `typed_cast_pq_pop_raw_call_pq_sift_down__pq_sift_down_requires_2`, `typed_cast_pq_pop_raw_nonempty_discard_ensures_2`, `typed_cast_pq_pop_raw_nonempty_discard_assigns_exit`, `typed_cast_pq_pop_raw_nonempty_discard_assigns_normal`, `typed_cast_pq_pop_raw_nonempty_out_ensures_2`, `typed_cast_pq_pop_raw_nonempty_out_ensures_3`, `typed_cast_pq_pop_raw_nonempty_out_assigns_exit`, `typed_cast_pq_pop_raw_nonempty_out_assigns_normal` | after the copy to `out`, `*pq`: `data`, `len` and `elem_size` for the second copy, `len` for its decrement and all of `pq_wf` when the queue empties; after the second copy and the sift, `*pq` at the call, in `pq_wf` and the sift's effect, and `pq->len` | F12 for the copy to `out`, F11 for the rest |
 | 26 | `pq_remove_at_result` | `mem_copy` from slot `len` into slot `i`, inside the buffer as `i < len`; then `pq_sift_up_(pq, i)` and `pq_sift_down_(pq, i)`, whose `assigns` is F11's range | `frama-c-priority-queue` | `typed_cast_pq_remove_at_result_call_pq_sift_up__pq_sift_up_requires`, `typed_cast_pq_remove_at_result_call_pq_sift_up__pq_sift_up_requires_2`, `typed_cast_pq_remove_at_result_call_pq_sift_down__pq_sift_down_requires_2`, `typed_cast_pq_remove_at_result_removed_ensures`, `typed_cast_pq_remove_at_result_removed_assigns_exit`, `typed_cast_pq_remove_at_result_removed_assigns_normal` | `*pq` at the two calls, in `pq_sift_up_`'s precondition and both effects, and `pq->len` there and after them | F11 |
+| 27 | `vec_int_append_array` | `mem_copy(&v->items[v->len], src, count * sizeof(int))`: `items + (len .. len + count - 1)`, inside the buffer as `len + count <= capacity` | `frama-c-vec`, `cc-vec` | `typed_cast_vec_int_append_array_ok_ensures_3` | `v->items`, and through it the elements below `\old(v->len)`, which the copy does not reach | F13 for `v->items`, F16 for the elements |
+| 28 | `vec_int_insert` | when `i < len`, `mem_move(&v->items[i + 1], &v->items[i], (len - i) * sizeof(int))`: `items + (i + 1 .. len)`, inside the buffer as `len < capacity` | `frama-c-vec`, `cc-vec` | `typed_cast_vec_int_insert_assert_rte_mem_access_9`, `typed_cast_vec_int_insert_assigns_exit` (not `_part2`), `typed_cast_vec_int_insert_assigns_normal` (not `_part10`), `typed_cast_vec_int_insert_ok_assigns_exit` (not `_part2`), `typed_cast_vec_int_insert_ok_assigns_normal` (not `_part10`), `typed_cast_vec_int_insert_ok_ensures_2`, `typed_cast_vec_int_insert_ok_ensures_3`, `typed_cast_vec_int_insert_ok_ensures_4` | `v->items`, read for the element store, in its check, in its `assigns` parts and in the postconditions, and through it the elements below `i`, which the move does not reach; `v->len`, read by the increment | F13 for `v->items` and `v->len`, F16 for the elements |
+| 29 | `vec_int_remove` | `*out = v->items[i]`, then, when `i < len - 1`, `mem_move(&v->items[i], &v->items[i + 1], (len - i - 1) * sizeof(int))`: `items + (i .. len - 2)`, inside the buffer as `i < len` | `frama-c-vec`, `cc-vec` | `typed_cast_vec_int_remove_ok_ensures_2`, `typed_cast_vec_int_remove_ok_ensures_3`, `typed_cast_vec_int_remove_ok_ensures_4` | `*out`; `v->len`, read by the decrement; `v->items`, and through it the elements below `i` | F14 for `*out`, F16 for the elements, F13 for the rest |
+| 30 | `vec_Rec_append_array` | the copy, as in row 27 with `sizeof(Rec)`, then `v->len = total`, through `usize`, on `*v` | `cc-vec_struct` | `typed_cast_vec_Rec_append_array_ok_ensures_3` | `v->items` after the copy; the elements below `\old(v->len)` after the copy, and after the store to `len`, their `due` through `i64` | F16 for the elements across the copy, F13 for the rest |
+| 31 | `vec_Rec_insert` | the move, as in row 28 with `sizeof(Rec)`; `v->items[i] = item`, through `u32` and `i64`, at `items + i`; then the increment's store to `len`, through `usize` | `cc-vec_struct` | `typed_cast_vec_Rec_insert_assert_rte_mem_access_9`, `typed_cast_vec_Rec_insert_assigns_exit` (not `_part2`), `typed_cast_vec_Rec_insert_assigns_normal` (not `_part10`), `typed_cast_vec_Rec_insert_ok_assigns_exit` (not `_part2`), `typed_cast_vec_Rec_insert_ok_assigns_normal` (not `_part10`), `typed_cast_vec_Rec_insert_ok_ensures_2`, `typed_cast_vec_Rec_insert_ok_ensures_3`, `typed_cast_vec_Rec_insert_ok_ensures_4` | as in row 28; `v->len` after the element store too; after the store to `len`, the elements, `items[i]` among them | F16 for the elements across the move, F13 for the rest |
+| 32 | `vec_Rec_remove` | `*out = v->items[i]`, through `u32` and `i64`, on `*out`; the move, as in row 29 with `sizeof(Rec)`; then the decrement's store to `len`, through `usize` | `cc-vec_struct` | `typed_cast_vec_Rec_remove_ok_ensures_2`, `typed_cast_vec_Rec_remove_ok_ensures_3`, `typed_cast_vec_Rec_remove_ok_ensures_4` | after the store through `out`, `v->len`, in the branch, the move's size and the decrement; `*out` after the move and after the store to `len`; `v->items` after the move, and the elements below `i` after the move and after the store to `len` | F14 and F15 for `*out`, F15 for `len` after the store through `out`, F16 for the elements across the move, F13 for the rest |
+| 33 | `vec_Rec_push` | `v->items[v->len++] = item`: the store to `len`, through `usize`, and the element's, through `u32` and `i64`, at `items + \old(len)`, inside the buffer as `len < capacity` | `cc-vec_struct` | `typed_cast_vec_Rec_push_ok_ensures_2`, `typed_cast_vec_Rec_push_ok_ensures_4` | `v->len` after the element store; the elements below `\old(v->len)` after the store to `len` | F13 |
+| 34 | `vec_Rec_try_push` | the same | `cc-vec_struct` | `typed_cast_vec_Rec_try_push_ok_ensures_2`, `typed_cast_vec_Rec_try_push_ok_ensures_4` | the same | F13 |
+| 35 | `vec_Rec_push_unchecked` | the same | `cc-vec_struct` | `typed_cast_vec_Rec_push_unchecked_ensures`, `typed_cast_vec_Rec_push_unchecked_ensures_3` | the same | F13 |
+| 36 | `vec_Rec_pop` | `*out = v->items[--v->len]`: the store to `len`, through `usize`, then the element's copy through `out` | `cc-vec_struct` | `typed_cast_vec_Rec_pop_ok_ensures_2`, `typed_cast_vec_Rec_pop_ok_ensures_3`, `typed_cast_vec_Rec_pop_ok_ensures_4` | `v->len` after the store through `out`; the popped element, read for the copy after the store to `len`, and the elements below the new `len` | F15 for the store through `out`, F13 for the store to `len` |
+| 37 | `vec_Rec_iter_next` | `*out = it->vec->items[it->index++]`: the store to `it->index`, through `usize`, then the element's copy through `out` | `cc-vec_struct` | `typed_cast_vec_Rec_iter_next_yield_ensures_2` | `it->index` after the store through `out` | F15 |
+| 38 | `vec_Rec_set` | `v->items[i] = val`, through `u32` and `i64`, at `items + i`, inside the buffer as `i < len <= capacity` | `cc-vec_struct` | `typed_cast_vec_Rec_set_hit_ensures_3` | `v->len`, the frame's bound, after the store | F13 |
 
 Properties are named as the decision names them, by WP's property prefix
 without `_partk`. A property with a part among the residuals is filed for
 its other parts, and its row names that part as "(not `_partk`)".
 `arena.h`'s eight units are `frama-c-arena`, `frama-c-arena-32`,
 `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`,
-`cc-vec` and `cc-vec_struct`. Filed: 112 properties at 26 write sites,
-kept off by 12 facts (groups A to D).
+`cc-vec` and `cc-vec_struct`. Filed: 147 properties at 38 write sites,
+kept off by 16 facts (groups A to E).
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -13799,3 +13830,197 @@ nothing pinned and no problem.
 
 The next filing takes up vec, at `int` and at `Rec`, with the counterpart
 pair.
+
+### G4 — the proved-goal argument, group E: vec
+
+**Candidates.** vec is verified in three units: `frama-c-vec` reads the
+contracted prototypes in `vmacros/vdrivers/vec_verify.h`, and `cc-vec` and
+`cc-vec_struct` the macro-body contracts in `data/vec/vec_impl.h`, at `int`
+in the first two and in the third at `Rec`, `struct { u32 id; i64 due; }`.
+The decision's larger list has 57 properties in each unit, under the same
+names in the two `int` units: 17 in `append_array`, after its `mem_copy`,
+and 21 in `insert` and 19 in `remove`, after their `mem_move`. Matching exit
+markers adds none, and on the write's path WP 25 prints the same conclusion
+for each part in the two `int` units, but for the names of let-bound terms.
+No vec function stores or reads through a character type itself. At `int` no
+counterpart pair arises, as `int` and `usize` are not counterparts. At `Rec`
+the pair is `usize` and `i64`, on LP64, and reading the functions adds 17
+candidates, goals that read, after a store through one of the two, a
+location of the other: the elements' `due` after a store to `len` or to
+`it->index`, or `len` or `it->index` after an element's store or the store
+through `out`:
+
+- `push`'s, `try_push`'s and `push_unchecked`'s three each, across
+  `v->items[v->len++] = item`, and `pop`'s three, across
+  `*out = v->items[--v->len]`;
+- `iter_next`'s two, across `*out = it->vec->items[it->index++]`;
+- `set`'s frame, whose bound `v->len` it reads after the element's store;
+- `insert`'s and `remove`'s shift postconditions on the paths without the
+  move, across the store to `len`.
+
+That makes 57 candidates at `int` and 74 at `Rec`. `fill`'s loop stores
+elements and reads `len` at each iteration; it has no annotations, and every
+goal in or after it that reads memory is a residual (class (g)). Stores to a
+function's own locals are not counted: `append_array`'s `total`, which
+`checked_add` writes, and the option wrappers' `out`, whose initialiser WP
+states at its block's entry. A local's storage is new at that entry (C11
+6.2.4), apart from every object the function was passed, and WP's model
+allocates it so, at a fresh base. Nor are the wrappers' goals after their
+calls, in `extend`, `pop_option` and `remove_option`: the callees' `assigns`
+name `len`, the elements and `*out` through their own types, so the model
+takes none of them across the call, and the wrappers read after it only what
+the callees' postconditions give.
+
+**Filed: 35**, the block's rows 27 to 38: 12 at `int`, in both units under
+the same names, and 23 at `Rec`.
+
+- the writers at `int`, rows 27 to 29: `append_array`'s frame, entry 5's
+  goal; in `insert`, each goal that reads `v->items` or `v->len` after the
+  move: the check that the element store's target is writable, the four
+  `assigns` properties' parts for that store (not the move's, which are
+  residuals), and the length, element and frame postconditions; in `remove`,
+  `*out` and `len` after the move, and the frame. What keeps the move and
+  the copy off the elements the frames read is their range, F16.
+- the same properties at `Rec`, rows 30 to 32, where they also cross the
+  counterpart pair: the elements after the store to `len`, `len` after the
+  element's store in `insert` and after the store through `out` in `remove`,
+  and `*out` after the store to `len` in `remove`. `remove`'s ensures 2 and
+  3 are entry 6's goals.
+- the stores to `len` and to `it->index`, the element stores and the stores
+  through `out` at `Rec`, rows 33 to 38: the length postconditions and
+  frames of `push`, `try_push` and `push_unchecked`, and `pop`'s three,
+  entry 5's four frames among them; `iter_next`'s index postcondition;
+  `set`'s frame.
+
+**Not filed: 96**, 45 at `int` and 51 at `Rec`.
+
+| Why not | Properties |
+|---|---|
+| validity, of an address computed from parameters | `&v->items` and `&v->len` after the move or the copy: `insert`'s `mem_access_10` to `_12`, `remove`'s `_11` and `_12`, `append_array`'s `_6` (6 at each type) |
+| `assigns`, whose effects after the write are at addresses from parameters, or are the writer's own, in residual parts | `remove`'s and `append_array`'s four each: after the move or the copy, only the store to `len` (8 at each type) |
+| a value: `\result`, or a location stored after the write | the three `ok_ensures` (`\result`); `append_array`'s `ok_ensures_2`, `len`, stored after the copy from the local `total`; at `Rec`, `push`'s and `try_push`'s `ok_ensures_3` and `push_unchecked`'s `ensures_2`, the element, stored after the store to `len` (4 at `int`, 7 at `Rec`) |
+| true whatever the write leaves in the location | at `Rec`, `iter_next`'s `yield_ensures_3`: `*out` is copied from the element after the store to `it->index`, and the postcondition reads the element after it too (1) |
+| a residual where the write matters | at `Rec`, `insert`'s and `remove`'s `ok_ensures_5`, the shift: its parts on the move's path are residuals (class (d)); on the path without the move its range is empty (2) |
+| a behaviour under whose assumption no write happens | `insert`'s `full`, `invalid` and `out_of_range`, `remove`'s `empty`, `invalid` and `out_of_range`, and `append_array`'s `invalid`, `overflow` and `too_big`, three each (27 at each type) |
+
+**Dependents.** No candidate is one, but wrapper postconditions rest on
+filed goals: `remove_option`'s `some_ensures_2` and `some_ensures_3`, at
+both types, on `remove`'s ensures 2 and 3 (rows 29 and 32), and at `Rec`
+`pop_option`'s `some_ensures_2` and `some_ensures_3` on `pop`'s ensures 3
+and 2 (row 36). By the decision they are not filed again. `extend`'s
+postconditions rest on `append_array`'s length and contents postconditions,
+neither of them filed.
+
+**Readings taken up.**
+
+- Entry 5 read `insert` with a `vec_int` at `items[len]` as undefined: the
+  move copies the last element over the vec's `items` field, which the
+  element store then reads. So it is: the move shifts by four bytes, half a
+  pointer, so a field it reaches holds the bytes of two objects. At `Rec`
+  the move shifts by sixteen bytes, an element, and carries the 8-byte
+  objects an element holds whole to 8-aligned places, where the vec's fields
+  can read them: a pointer through its own type, an `i64` through `usize`,
+  its counterpart. The call is defined there, and four of `insert`'s goals
+  are false for it that entry 5 did not name (below). Entry 5 placed the vec
+  at `Rec` only at `items[0]`, and called `insert` there at `len`, which
+  moves nothing and stores the element away from the vec. With `i` 0 the
+  element store lands on the vec, its `due` on `len`, which the next
+  statement reads, so one of the four, ensures 2, is false at entry 5's own
+  placement too. Where the element store of `push`, `try_push` or
+  `push_unchecked` would land on the vec, they store the element and `len`
+  in one expression, unsequenced, and the call is undefined (C11 6.5p2); at
+  entry 5's `len` 2 they store the element away from the vec, as `insert` at
+  `len` does.
+- G1's score said the frames it closed proved with no argument once the
+  contract was true, and entry 6 that this stood for those frames. At `Rec`
+  the frames of `pop` and `remove` stayed false until entry 5's repair, as
+  entry 5 found; and `remove`'s frame crosses the move, at both types, and
+  `pop`'s, at `Rec`, the store to `len`, so their evidence there is an
+  argument, filed in rows 29, 32 and 36. G1 named the frames an `out` in the
+  buffer falsified, residuals then; `remove`'s ensures 2, proved, was false
+  too, for an `out` in the move's destination (below).
+- VERIFY-038's settlement, that vec at a struct type adds no argument block
+  (G1's score), concerns the blocks that cover residuals, which *A* counts;
+  the rows filed here are outside *A*, as the decision has it.
+- As in groups C and D, WP 25's prints keep nothing across `mem_copy` and
+  `mem_move`, and what rows 27 to 32 take across them is read from the
+  callees' clauses and the code.
+
+**Checked against the placements the repairs excluded.** F13 came with entry
+5's repair (66b54e0), F14 with G1's (40cccd9) and F15 with entry 6's
+(f74e95a), all after the three units were first verified, so each filed goal
+is checked against the placements each repair excluded; F16 holds by the
+code. Entry 5's eight goals and entry 6's two were false, as those entries
+record. Five more were false that no record named, and one dependent:
+
+- `remove`'s ensures 2 at `int`, in both units, until G1's repair, for an
+  `out` in the move's destination: `remove(&v, 1, &v.items[1])` on [10, 20,
+  30, 40] copies 20 into `*out`, and the move writes 30 there
+  (`tools/probes/verify-039/p_vec_remove_out_moved.c`). At `Rec` the same
+  goal is entry 6's.
+- four of `insert`'s at `Rec`, until entry 5's repair. For a vec at
+  `items[len]` whose last element holds, in its `id` and padding, a pointer
+  `q` to another block, stored through `Rec *`, and in its `due` an `i64`
+  `d`, the move copies that element onto the vec, so `v->items` reads `q`
+  and `len` reads `d`. With `q` four elements long and `d` 7,
+  `insert(v, 1, item)` at `len` 3 stores the item in `q[1]`, where ensures 3
+  holds, and leaves `len` 8: ensures 2 and both `assigns_normal` properties
+  are false, and so is the frame, entry 5's. With `q` one element long,
+  `v->items + 1` lies past `q`'s block after the move, and the check that
+  the element store's target is writable (`assert_rte_mem_access_9`) is
+  false; the probe's `mem_move`, which replaces the library's in the
+  expansion, stops the call there, before the store. At entry 5's placement,
+  `insert(v, 0, item)` at `len` 2 leaves `len` 78, the item's `due` and one,
+  and ensures 2 is false there too (`p_vec_rec_insert.c`, all three).
+- the dependent, `remove_option`'s `some_ensures_3` at `Rec`, until entry
+  5's repair, through `remove`'s ensures 3: for a vec placed 8 bytes into
+  `items[1]`, its `len` on `items[2]`'s `id` and padding, the move gives
+  `len` the bytes of `items[3]`'s, here a `usize` 9, and the decrement
+  leaves 8 where 3 was due (`p_vec_rec_remove_option.c`). `remove`'s ensures
+  3, entry 6's goal, is false there too; `remove_option`'s `out` is a local,
+  out of entry 6's reach.
+
+The rest were not shown false. At `int` every placement that reaches what
+they read makes the call undefined: a move that reaches `v->items` or
+`v->len` leaves the field, read next, holding the bytes of two objects; an
+`int` stored over `len`, by the element store or through an `out` on the
+vec, is G5's case (entry 6); and an `int` element over which `len` was
+stored is read through its own type (entry 5). The placements of `out` in
+the buffer that G1 excluded falsify the frames only in the parts that were
+residuals then. At `Rec`, `insert`'s ensures 3 reads `v->items`, which an
+element whose `due` lies on `len` overwrites with its `id`, the undefined
+step of G4's scope; the two `assigns_exit`, as in the proof configuration
+nothing on their paths exits; the stores to `len` of `push`, `try_push`,
+`push_unchecked` and `pop`, and `iter_next`'s to `it->index`, are
+unsequenced with the element's store or read and with the store through
+`out` (C11 6.5p2), so a placement where they meet is undefined, as entry 6
+reads `pop`; and `set`'s store reaches `len` only with its `id` on
+`v->items` or on `len` itself, both of which its frame reads.
+
+**Outside the filing.** `iter_next` requires nothing of where the iterator
+lies. At `Rec` its store to `it->index` comes before the copy's read of the
+element, a counterpart pair that nothing in its contract keeps apart. Where
+they meet the store and the read are unsequenced (C11 6.5p2), and the
+iterator's `vec` field lies on the element's `id`, so such a call is
+undefined; and the one postcondition that reads the element reads it on both
+sides after the store, so it is not filed. An iterator on another element,
+though, changes that element's `due` through `it->index`, which its
+`assigns` names, and a caller's model sees no element change: no verified
+function calls `iter_next`, but a verified caller that read that element's
+`due` after it could be proved and false there. At `int` an `out` on the
+vec's fields stores an `int` over a pointer or a `usize`, and an iterator on
+the elements a `usize` over `int`s, G5's case.
+
+**The count.** The library goals G4 has found proved and false are therefore
+34, not 28: 30 under the block's rules, all of them filed (groups A to E),
+and 4 dependents, `remove_option`'s `some_ensures_3` with the three recorded
+before. All 34 are true now by an argument.
+
+**Record coverage** reports 38 write sites, 147 properties and 16 facts,
+nothing pinned and no problem.
+
+With vec the filing has read every header the decision's lists name. The
+survey found character-type stores in one more place in a verified unit,
+`checked.h`'s `u8` functions, after which no goal names another object ("G4
+— listing, the rest of the survey"); the next filing accounts for them, and
+closes the filing.
