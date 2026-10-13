@@ -1340,6 +1340,10 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  * ```
  *
  * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ * @pre if v, v->items and src are non-NULL and v->len + count, computed
+ *      without overflow, is at most v->capacity, src's count elements
+ *      overlap neither v's buffer (VERIFY-018 F1) nor the vector
+ *      (VERIFY-039 G9)
  *
  * @post Returns Err(ERR_INVALID_ARG)       if v, v->items, or src is NULL
  * @post Returns Err(ERR_OVERFLOW)          if v->len + count overflows usize
@@ -1359,7 +1363,8 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
     requires (v != \null && v->items != \null && src != \null                    \
     && v->len + count <= v->capacity) ==>                                        \
     \separated(src + (0 .. count - 1),                                           \
-    v->items + (0 .. v->capacity - 1));                                          \
+    v->items + (0 .. v->capacity - 1))                                           \
+    && \separated(src + (0 .. count - 1), v);                                    \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior invalid:                                                            \
     assumes v == \null || src == \null || (v != \null && v->items == \null);     \
@@ -1409,6 +1414,10 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
  * ```
  *
  * @pre the vector, if v is non-NULL, does not overlap its own buffer (VERIFY-039 G4)
+ * @pre if v, v->items and src are non-NULL and v->len + count, computed
+ *      without overflow, is at most v->capacity, src's count elements
+ *      overlap neither v's buffer (VERIFY-018 F1) nor the vector
+ *      (VERIFY-039 G9)
  *
  * @sa IMPL_VEC_APPEND_ARRAY — identical semantics
  *
@@ -1425,7 +1434,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
     requires (v != \null && v->items != \null && src != \null                    \
     && v->len + count <= v->capacity) ==>                                        \
     \separated(src + (0 .. count - 1),                                           \
-    v->items + (0 .. v->capacity - 1));                                          \
+    v->items + (0 .. v->capacity - 1))                                           \
+    && \separated(src + (0 .. count - 1), v);                                    \
     assigns v->len, v->items[0 .. v->capacity - 1];                              \
     behavior invalid:                                                            \
     assumes v == \null || src == \null || (v != \null && v->items == \null);     \

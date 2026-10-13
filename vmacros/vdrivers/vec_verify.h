@@ -220,10 +220,11 @@
  * VERIFY-018.
  *
  * ── Findings already on record from the pre-run read (docs follow-ups) ─────
- *   F1. append_array/extend: shipped doc does not forbid src overlapping
+ *   F1. append_array/extend: shipped doc did not forbid src overlapping
  *       the vec's own buffer; mem_copy (memcpy semantics) makes self-append
- *       UB. The \separated requires below is therefore a CONTRACT ADDITION
- *       — back-propagate to the IMPL_VEC_APPEND_ARRAY doc comment.
+ *       UB. The \separated requires below was therefore a CONTRACT ADDITION;
+ *       the IMPL_VEC_APPEND_ARRAY and IMPL_VEC_EXTEND doc comments state it
+ *       since VERIFY-039 G9.
  *   F2. slice_init on an items==NULL vec (e.g. from empty()) with
  *       start == end == 0 passes the guard and computes &v->items[0] ==
  *       NULL + 0 — pedantic UB (C99 6.5.6), harmless at runtime, but WP's
@@ -829,8 +830,11 @@ static inline option_int vec_int_remove_option(borrowed(vec_int*) v, usize i);
 
 /* ── Bulk operations ───────────────────────────────────────────────────────── */
 
-/* The \separated requires is finding F1 — a contract ADDITION over the
- * shipped doc, mandated by mem_copy's memcpy semantics. Back-propagate. */
+/* The \separated requires: its first conjunct, src off the buffer, is
+ * finding F1, mandated by mem_copy's memcpy semantics; its second, src off
+ * the vec itself, is VERIFY-039 G9: ensures 4 reads src after the store to
+ * len, and on ILP32 an int over len is a counterpart read. The macro's doc
+ * comment states both since G9. */
 /*@ requires v == \null || vec_int_mut(v);
     requires (v != \null && v->items != \null && src != \null
               && v->len + count <= v->capacity) ==>
@@ -838,7 +842,8 @@ static inline option_int vec_int_remove_option(borrowed(vec_int*) v, usize i);
     requires (v != \null && v->items != \null && src != \null
               && v->len + count <= v->capacity) ==>
                \separated(src + (0 .. count - 1),
-                          v->items + (0 .. v->capacity - 1));
+                          v->items + (0 .. v->capacity - 1))
+               && \separated(src + (0 .. count - 1), v);
     assigns v->len, v->items[0 .. v->capacity - 1];
     behavior invalid:
       assumes v == \null || src == \null || (v != \null && v->items == \null);
@@ -872,7 +877,9 @@ static inline result__Bool_Error vec_int_append_array(borrowed(vec_int*) v,
                                                       borrowed(const int*) src,
                                                       usize count);
 
-/* Pure delegate to append_array — identical contract (incl. F1). */
+/* Pure delegate to append_array. Its preconditions are append_array's, F1
+ * and G9 included; its postconditions are too, less the error behaviours'
+ * assigns \nothing and the ok behaviour's clause on the old elements. */
 /*@ requires v == \null || vec_int_mut(v);
     requires (v != \null && v->items != \null && src != \null
               && v->len + count <= v->capacity) ==>
@@ -880,7 +887,8 @@ static inline result__Bool_Error vec_int_append_array(borrowed(vec_int*) v,
     requires (v != \null && v->items != \null && src != \null
               && v->len + count <= v->capacity) ==>
                \separated(src + (0 .. count - 1),
-                          v->items + (0 .. v->capacity - 1));
+                          v->items + (0 .. v->capacity - 1))
+               && \separated(src + (0 .. count - 1), v);
     assigns v->len, v->items[0 .. v->capacity - 1];
     behavior invalid:
       assumes v == \null || src == \null || (v != \null && v->items == \null);

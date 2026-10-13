@@ -15,20 +15,24 @@
 
 /* VERIFY-039 G9 -- docs/deviations.md: append_array's src over the vec.
  *
- * append_array requires of src that its count elements be readable and
- * separated from the buffer; nothing keeps them off *v. Its ensures 4,
- * \forall k < count: v->items[\old(v->len) + k] == src[k], reads src after
- * the store to len. On ILP32 usize is unsigned int, so an int read of len
- * is a counterpart read (C11 6.5p7), and a src over len makes a defined
- * call that falsifies ensures 4. On LP64 usize is unsigned long, an int
- * read of its bytes is undefined, and the probe says "not applicable".
+ * Until G9's repair append_array required of src only that its count
+ * elements be readable and separated from the buffer; nothing kept them
+ * off *v. Its ensures 4, \forall k < count: v->items[\old(v->len) + k] ==
+ * src[k], reads src after the store to len. On ILP32 usize is unsigned
+ * int, so an int read of len is a counterpart read (C11 6.5p7), and a call
+ * with src over len, defined in the proof configuration, met every
+ * precondition and falsified ensures 4. On LP64 usize is unsigned long, an
+ * int read of its bytes is undefined, and the probe says "not applicable".
  *
  * The vec and its buffer are separate heap blocks, so the vec lies outside
  * its buffer as the contract requires; len 0, capacity 4, and
  * append_array(v, (const int *)&v->len, 1). The copy puts len's bytes, 0,
  * in items[0], which takes len's effective type (6.5p6) and is read back
  * through int, a counterpart; len becomes 1; ensures 4 compares 0 with 1.
- * Every precondition holds, and ensures 1 and 2 hold.
+ * Ensures 1 and 2 hold. Every precondition held until G9's repair; since
+ * it, append_array requires src's elements to be separated from the vec
+ * too, and the call below is outside its contract. Its run-time behaviour
+ * is unchanged.
  *
  * From the repository root:
  *   gcc -m32 -std=c99 -Wall -Wextra -DCANON_NO_REQUIRE -DNDEBUG -I. \
