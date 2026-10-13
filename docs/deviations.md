@@ -3343,8 +3343,8 @@ exchange whose operands the model lets overlap) and
 `extend_ok_assigns_normal_part1` (a call framed by its callee's default
 `assigns`). The last three were filed in (h) and are not byte views. None is
 false on LP64; on ILP32 the fourth postcondition of `append_array` at `int`
-is, for a `src` over `len` (VERIFY-039 G9). The headings' 5 and 22 are 3 and
-21.
+was, for a `src` over `len`, until VERIFY-039 G9's repair (1d725ef). The
+headings' 5 and 22 are 3 and 21.
 
 ### Fresh-instantiation residuals (22) — result(Bool, Error)
 
@@ -3376,11 +3376,15 @@ frozen CI #1154):
 
 ### Findings for back-propagation
 
-- **F1 (open)**: the driver's `\separated(src, v->items)` requires on
-  `append_array`/`extend` makes self-append a contract violation, but
-  `IMPL_VEC_APPEND_ARRAY`'s shipped doc comment carries no overlap
-  prohibition — the shipped doc and the verified contract disagree.
-  Doc patch owed upstream (comment-only, no verification impact).
+- **F1 (CLOSED 2026-10-13 — VERIFY-039 G9, 1d725ef)**: the driver's
+  `\separated(src, v->items)` requires on `append_array`/`extend` made
+  self-append a contract violation, but `IMPL_VEC_APPEND_ARRAY`'s
+  shipped doc comment carried no overlap prohibition — the shipped doc
+  and the verified contract disagreed. A doc patch was owed upstream
+  (comment-only, no verification impact). It landed with G9's repair:
+  the doc comments of `IMPL_VEC_APPEND_ARRAY` and `IMPL_VEC_EXTEND`
+  state the prohibition as a `@pre`, beside G9's separation of `src`
+  from the vec itself.
 - **F2 (open)**: `slice_init` on an `items==NULL` vec with `[0,0)`
   computes `&(NULL)[0]` — pedantic UB. The guard fix is one token
   (`!v->items` in the early return), semantics-preserving. Until it
@@ -10488,7 +10492,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -14301,11 +14305,11 @@ postcondition at `int`, for a `src` over the vec's `len` (G9, below). The
 method's rule, that an obligation found false for an admitted call becomes a
 gap, decides the filing on the units' machdep; a contract false for a
 defined call on a platform it ships to is a gap too, and G9 is the first,
-its goal filed as true on LP64 while the gap is open. 46 of the 100 fall
-under arguments already counted: 4 under memory.h's Category 1 (VERIFY-008)
-and 42 under diag.h's block (VERIFY-017). The other 54 fall under none, and
-four blocks are written for them below: *A* goes from 17 to 21 cumulative
-and from 11 to 15 in force.
+its goal filed as true on LP64 while the gap was open (G9 is repaired and
+scored since). 46 of the 100 fall under arguments already counted: 4 under
+memory.h's Category 1 (VERIFY-008) and 42 under diag.h's block (VERIFY-017).
+The other 54 fall under none, and four blocks are written for them below:
+*A* goes from 17 to 21 cumulative and from 11 to 15 in force.
 
 **VERIFY-018's categories, read against the code.**
 
@@ -14390,7 +14394,7 @@ and one composition step for the allocation as for
 | 16 | `typed_cast_vec_int_remove_assigns_normal_part13` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
 | 17 | `typed_cast_vec_int_remove_ok_assigns_exit_part3` | `frama-c-vec`, `cc-vec` | the move's bytes in the `ok` clause's `items[i .. len - 1]` |
 | 18 | `typed_cast_vec_int_remove_ok_assigns_normal_part13` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
-| 19 | `typed_cast_vec_int_append_array_ok_ensures_4_part5` | `frama-c-vec`, `cc-vec` | the copy: `mem_copy`'s body, `memcpy` past its guards, puts `src[k]`'s bytes in `items[\old(len) + k]`; true on LP64, and on ILP32 false for a `src` over `len` (G9) |
+| 19 | `typed_cast_vec_int_append_array_ok_ensures_4_part5` | `frama-c-vec`, `cc-vec` | the copy: `mem_copy`'s body, `memcpy` past its guards, puts `src[k]`'s bytes in `items[\old(len) + k]`; true: on ILP32 a `src` over `len` falsified it until G9's repair (1d725ef) |
 | 20 | `typed_cast_vec_int_insert_ok_ensures_5_part5` | `frama-c-vec`, `cc-vec` | the move: `mem_move`'s body, `memmove` past its guards, shifts `items[i .. len - 1]` up by one element |
 | 21 | `typed_cast_vec_int_remove_ok_ensures_5_part6` | `frama-c-vec`, `cc-vec` | the move: `mem_move`'s body, `memmove` past its guards, shifts `items[i + 1 .. len - 1]` down by one element |
 | 22 | `typed_cast_vec_Rec_append_array_call_mem_copy_requires` | `cc-vec_struct` | validity of the destination's bytes: `items[len .. len + count - 1]`, in the buffer as `len + count <= capacity` |
@@ -14427,13 +14431,16 @@ element's padding, which the copy and the move carry along, and the
 postconditions compare the fields.
 
 `append_array`'s fourth postcondition reads `src[k]` after the store to
-`len`, and no clause separates `src` from `*v`. On LP64 a `src` over the
-vec's fields would read their bytes as `int`, or as a `Rec` whose `id` lies
-on a pointer or a `usize`, which C leaves undefined (C11 6.5p7): no call on
-which the postcondition's reads are defined makes it false there, and at
-`Rec` none does on ILP32 either. At `int` on ILP32, `usize` is
-`unsigned int`, an `int` read of `len` is a counterpart read, and a call
-falsifies it: G9.
+`len`, and until G9's repair no clause separated `src` from `*v`. On LP64 a
+`src` over the vec's fields would read their bytes as `int`, or as a `Rec`
+whose `id` lies on a pointer or a `usize`, which C leaves undefined (C11
+6.5p7): no call on which the postcondition's reads are defined makes it
+false there, and at `Rec` none does on ILP32 either. At `int` on ILP32,
+`usize` is `unsigned int`, an `int` read of `len` is a counterpart read, and
+a call falsified it: G9. Since the repair (1d725ef) the contract keeps `src`
+off `*v` as off the buffer, so neither the copy nor the store to `len`
+writes `src`'s elements, and the postcondition holds for every admitted
+call.
 
 #### Loop without annotations in a macro body (48)
 
@@ -14750,3 +14757,42 @@ longer admit a `src` over the vec, and `append_array`'s fourth postcondition
 and `extend`'s third, proved from it, hold on ILP32 as on LP64. The goal
 batch 1 filed at `int` under diag.h's block keeps its filing and loses its
 exception.
+
+### G9 — scored (fix 1d725ef; CI #1357, CC #44)
+
+**Result: exact. Nothing moved.** The fix commit changed no pin (prediction
+e9130c5), and CI #1357 and CC #44 were green in every job, so every unit's
+proved line, count and roll-call are as they were, by set equality:
+`frama-c-vec` at `5363 / 5515` with 152 unproved, `cc-vec` at `5420 / 5580`
+and `cc-vec_struct` at `5418 / 5578` with 160 each. Record coverage #62 was
+green. (GitHub's run pages, read 2026-10-13.)
+
+| Claim | Predicted | Observed |
+|---|---|---|
+| no goal generated or removed in CI: 5515, 5580, 5578 | (H) | held: the conjunct did not split |
+| no residual closes | (H) | held, by set equality |
+| no proved goal becomes unproved | (M) | held, by set equality |
+| no other unit moves | (H) | held |
+| `p_vec_append_src_len.c` at run time | (H) | unchanged, checked locally: `VIOLATED` and exit 1 in the twelve ILP32 configurations, sanitizers clean; "not applicable" on LP64 |
+
+**What it shows.** The repair is invisible to WP, as G4's entries' were.
+The contracts no longer admit a `src` over the vec, and `append_array`'s
+fourth postcondition and `extend`'s third, proved from it, hold for every
+admitted call on ILP32 as on LP64. The goal batch 1 filed at `int` under
+diag.h's block keeps its filing and loses its exception: its row, the
+paragraph after its table, batch 1's findings and VERIFY-018's coverage
+update now say so. WP 29 kept `extend`'s call precondition one goal, as at
+entry 6; WP 25, which splits the conjunction, counts one goal more in each
+unit. `frama-c-vec` ran in 2h 11m, against 1h 54m at CI #1356, and CC #44
+in 2h 16m, against 2h 17m at CC #43.
+
+VERIFY-018's F1 is closed: the driver has required `src` off the buffer
+since July, and the doc line it was owed now stands in both doc comments,
+with G9's. The fix also corrected the driver's comment on `extend`'s
+contract, which called it identical to `append_array`'s. It lacks the error
+behaviours' `assigns \nothing`, which the driver's v3 relaxed because WP
+takes a callee's contract whole at a call, and the `ok` behaviour's clause
+on the old elements, `append_array`'s third postcondition, which the
+retirement of the block on default `assigns` (batch 1) would have `extend`
+state. No goal is generated for a clause a contract does not state, so no
+residual named either.
