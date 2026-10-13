@@ -89,6 +89,10 @@
  * - option_usize-returning find functions return None for NULL input
  * - Out-of-bounds index on a valid (non-NULL) Bitset* is a contract violation
  *   and fires require_msg — it is a programming error, not a recoverable condition
+ * - A non-NULL Bitset* must point to a readable Bitset (VERIFY-039 G10).
+ *   Where a function checks !bs || !bs->words, itself or through the one it
+ *   calls, a zero-initialised Bitset, whose words are NULL, is handled as
+ *   NULL is; a dangling pointer is outside the contract
  *
  * Typed find functions (preferred):
  * ────────────────────────────────────────────────────────────────────────────
@@ -645,10 +649,24 @@ static inline void bitset_close(borrowed(Bitset*) bs) {
    the surviving requires must admit words == \null, so it is five lines per
    contract, not one. And the scope was five functions, not four: assign
    carries the same contract and is fixed transitively through set / clear.
-   The count was caught by an assertion, not by reading. */
+   The count was caught by an assertion, not by reading.
+
+   VERIFY-039 G10. Handling the case did not make `*bs` readable. The guard
+   reads bs->words whenever bs is non-null, and the first requires, with
+   `bs->words == \null` among its disjuncts, admits a non-null bs that
+   points to no Bitset wherever ACSL's unspecified value for its words is
+   null. Before F2 that requires had no such disjunct, and the one F2
+   dropped excluded the state too, with the zero-initialised Bitset F2 set
+   out to admit. The last requires, `bs == \null || \valid_read(bs)`, now
+   excludes that state alone. Every contract whose function guards this way
+   carries it, and so do assign's and the three _option finds', whose
+   functions hand bs to one that does. It comes last so that the callers'
+   goals for the earlier clauses keep their names. */
 /*@ requires bs == \null || bs->words == \null
              || (bitset_mut(bs) && bitset_pad(bs));
     requires bs == \null || bs->words == \null || i < bs->capacity;
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -687,6 +705,8 @@ static inline void bitset_set(borrowed(Bitset*) bs, usize i) {
 /*@ requires bs == \null || bs->words == \null
              || (bitset_mut(bs) && bitset_pad(bs));
     requires bs == \null || bs->words == \null || i < bs->capacity;
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -725,6 +745,8 @@ static inline void bitset_clear(borrowed(Bitset*) bs, usize i) {
 /*@ requires bs == \null || bs->words == \null
              || (bitset_mut(bs) && bitset_pad(bs));
     requires bs == \null || bs->words == \null || i < bs->capacity;
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -763,6 +785,8 @@ static inline void bitset_toggle(borrowed(Bitset*) bs, usize i) {
    exactly as is_empty is. Stated, not smoothed over." */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
     requires bs == \null || bs->words == \null || i < bs->capacity;
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures \result <==>
         (bs != \null && bs->words != \null && bitset_bit_set(bs, i));
@@ -790,6 +814,8 @@ static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
 /*@ requires bs == \null || bs->words == \null
              || (bitset_mut(bs) && bitset_pad(bs));
     requires bs == \null || bs->words == \null || i < bs->capacity;
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: bitset_set
+                                               // and bitset_clear require it
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -831,6 +857,8 @@ static inline void bitset_assign(borrowed(Bitset*) bs, usize i, bool value) {
    mem_zero / mem_set, so the contract's job is purely to supply the validity
    those calls need. */
 /*@ requires bs == \null || bs->words == \null || bitset_mut(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -867,6 +895,8 @@ static inline void bitset_clear_all(borrowed(Bitset*) bs) {
    invariant has to be able to say so without being required to preserve it
    throughout. */
 /*@ requires bs == \null || bs->words == \null || bitset_mut(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -936,6 +966,8 @@ static inline void bitset_set_all(borrowed(Bitset*) bs) {
    Found by scanning every contract for the signature "requires words != null
    AND a null behavior assuming words == null"; bitset_not was the only hit. */
 /*@ requires bs == \null || bs->words == \null || bitset_mut(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
 
     behavior null:
       assumes bs == \null || bs->words == \null;
@@ -1191,6 +1223,8 @@ static inline void bitset_xor(borrowed(Bitset*) bs, borrowed(const Bitset*) othe
    bits.h. `64 * word_count` is the strongest claim the substrate supports.
    Inherited specification-strength limit, not a gap in bitset. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures bs == \null || bs->words == \null ==> \result == 0;
     ensures \result <= 64 * bs->word_count || bs == \null || bs->words == \null;
@@ -1218,6 +1252,8 @@ static inline usize bitset_count(borrowed(const Bitset*) bs) {
 /* Fully specifiable -- no bits.h dependency, so no cap. Returns true for the
    NULL-ish cases, stated rather than smoothed over. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result == \true;
     ensures (bs != \null && bs->words != \null) ==>
@@ -1248,6 +1284,8 @@ static inline bool bitset_is_empty(borrowed(const Bitset*) bs) {
    is available here either. Frame and the NULL leg are all that can be
    claimed honestly. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result == \false;
 */
@@ -1347,6 +1385,8 @@ static inline usize bitset_capacity(borrowed(const Bitset*) bs) {
    after the fact.
    ──────────────────────────────────────────────────────────────────────────── */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result == BITSET_NPOS;
     ensures \result == BITSET_NPOS ||
@@ -1391,6 +1431,8 @@ static inline usize bitset_find_first(borrowed(const Bitset*) bs) {
    bounded in [0,63], the same property E1 removed from bitset_pad and had to
    put back. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result == BITSET_NPOS;
     ensures prev >= bs->capacity || bs == \null || bs->words == \null ||
@@ -1443,6 +1485,8 @@ static inline usize bitset_find_next(borrowed(const Bitset*) bs, usize prev) {
    variant does not discharge, the honest fix is a justification note, NOT
    rewriting working code to suit the prover. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result == BITSET_NPOS;
     ensures \result == BITSET_NPOS ||
@@ -1491,12 +1535,19 @@ static inline usize bitset_find_last(borrowed(const Bitset*) bs) {
 
    They also INHERIT THE MINIMALITY CAP transitively. bitset_find_first
    cannot claim its result is the least set index, so neither can
-   bitset_find_first_option. What IS claimable passes straight through:
-   None for the NULL-ish cases, and Some(v) ==> v < capacity. Third place
-   the bits.h range-only decision surfaces in this header, and the reason
-   the cap is worth naming once loudly rather than re-explaining per site.
+   bitset_find_first_option. What IS claimable passes through: None for the
+   NULL-ish cases, and Some(v) ==> v < capacity, straight through at
+   find_first and find_last. Not at find_next: its contract states the bound
+   only for prev < capacity, and for prev >= capacity the code returns
+   BITSET_NPOS at its first test without the contract saying so, so
+   bitset_find_next_option's bound is a residual (VERIFY-039, main pass
+   batch 3). Third place the bits.h range-only decision surfaces in this
+   header, and the reason the cap is worth naming once loudly rather than
+   re-explaining per site.
    ──────────────────────────────────────────────────────────────────────────── */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10:
+                                               // bitset_find_first requires it
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> !\result.has_value;
     ensures \result.has_value ==> \result.value < bs->capacity;
@@ -1527,6 +1578,8 @@ static inline option_usize bitset_find_first_option(borrowed(const Bitset*) bs) 
  * Performance: O(n/64) worst case per call
  */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10:
+                                               // bitset_find_next requires it
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> !\result.has_value;
     ensures \result.has_value ==> \result.value < bs->capacity;
@@ -1548,6 +1601,8 @@ static inline option_usize bitset_find_next_option(borrowed(const Bitset*) bs, u
  * Performance: O(n/64) worst case
  */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10:
+                                               // bitset_find_last requires it
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> !\result.has_value;
     ensures \result.has_value ==> \result.value < bs->capacity;
@@ -1611,6 +1666,8 @@ static inline option_usize bitset_find_last_option(borrowed(const Bitset*) bs) {
    wrong about the mechanism and that is worth more than the nine goals.
    ──────────────────────────────────────────────────────────────────────────── */
 /*@ requires bs == \null || bs->words == \null || bitset_mut(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result.len == 0;
     ensures (bs != \null && bs->words != \null) ==>
@@ -1627,6 +1684,8 @@ static inline bytes_t bitset_as_bytes(borrowed(Bitset*) bs) {
 /* Read-only twin of bitset_as_bytes (API-001). Same bridge, bitset_view
    rather than bitset_mut because nothing is written. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures (bs == \null || bs->words == \null) ==> \result.len == 0;
     ensures (bs != \null && bs->words != \null) ==>
@@ -1666,6 +1725,8 @@ static inline cbytes_t bitset_as_cbytes(borrowed(const Bitset*) bs) {
    describes the configuration actually being verified and does not claim
    anything about the other one. */
 /*@ requires bs == \null || bs->words == \null || bitset_view(bs);
+    requires bs == \null || \valid_read(bs);   // VERIFY-039 G10: the guard
+                                               // reads bs->words
     assigns \nothing;
     ensures \result.source == bs || bs == \null || bs->words == \null;
 */

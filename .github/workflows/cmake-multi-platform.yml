@@ -4574,8 +4574,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=138   # VERIFY-039 G8 predicted: 139 -> 138 (entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4898 / 5036"   # VERIFY-039 G8 predicted: ten goals added, all proved, and one closed (entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=122   # VERIFY-039 G10 predicted: 138 -> 122 (G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4920 / 5042"   # VERIFY-039 G10 predicted: six goals added, all proved, and sixteen closed (G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4688,8 +4688,8 @@ jobs:
             # array below was produced by script from #1259 output and its arm
             # partition verified arithmetically -- 2 + 32 + 58 + 66 = 158
             # when written; 71 own / 163 total at #1264, 41 own / 138 total
-            # since VERIFY-039 G8's repair. No
-            # duplicates, nothing unclassified -- before being written here.
+            # after VERIFY-039 G8's repair, 25 own / 122 total since G10's.
+            # No duplicates, nothing unclassified -- before being written here.
             CHECKS=(
               "typed_cast_ptr_align_down_nonnull_ensures_same_base_part2"
               "typed_cast_ptr_align_down_nonnull_ensures_not_above_part2"
@@ -4733,9 +4733,12 @@ jobs:
               "typed_cast_option_usize_eq_terminates_part4"
               "typed_cast_option_usize_eq_assert_rte_function_pointer_part2"
               "typed_cast_option_usize_eq_assigns_part5"
-              # ARM S — CORE SUBSTRATE, 58, byte-identical to each home module's
+              # ARM S — CORE SUBSTRATE, 63, byte-identical to each home module's
               #         pinned list modulo the typed_cast_ prefix: bits 15,
-              #         memory 20, slice-libc 13, ptr 6, checked 2, borrow 2.
+              #         memory 19, slice-libc 13, ptr 12, checked 2, borrow 2.
+              #         58 when written: VERIFY-026 added ptr's six listed
+              #         first, above ARM C, and VERIFY-036 F1 closed one of
+              #         memory's.
               "typed_cast_bits_clear_ensures"
               "typed_cast_bits_insert_full_width_ensures_part2"
               "typed_cast_bits_insert_normal_ensures_part3"
@@ -4793,10 +4796,13 @@ jobs:
               "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
-              # ARM D — bitset's OWN residuals, 41 since VERIFY-039 G8's
-              #         repair (42 after entry 3's loop bounds, 52 after entry
-              #         3 / G6, 71 before it; was 66, +5 at CI #1264, see the
-              #         F5 proof-cost note in that commit message).
+              # ARM D — bitset's OWN residuals, 25 since VERIFY-039 G10's
+              #         repair (41 after G8's, 42 after entry 3's loop bounds,
+              #         52 after entry 3 / G6, 71 before it; was 66, +5 at CI
+              #         #1264, where F2/F5 let the contracts of set, clear,
+              #         toggle, test and not admit a null words without
+              #         requiring *bs readable, which their guards read: G10,
+              #         not a proof cost).
               "typed_cast_bitset_clear_padding_ensures_part1"
               "typed_cast_bitset_init_assigns_exit_part5"
               "typed_cast_bitset_init_assigns_normal_part5"
@@ -4805,38 +4811,22 @@ jobs:
               "typed_cast_bitset_init_ensures_4"
               "typed_cast_bitset_init_ensures_5"
               "typed_cast_bitset_init_ensures_6"
-              "typed_cast_bitset_set_assert_rte_mem_access"
               "typed_cast_bitset_set_live_ensures_3_part3"
-              "typed_cast_bitset_clear_assert_rte_mem_access"
               "typed_cast_bitset_clear_live_ensures_3_part3"
-              "typed_cast_bitset_toggle_assert_rte_mem_access"
               "typed_cast_bitset_toggle_live_ensures_3_part3"
-              "typed_cast_bitset_test_assert_rte_mem_access"
               "typed_cast_bitset_assign_null_assigns_normal_part1"
               "typed_cast_bitset_assign_null_assigns_normal_part2"
-              "typed_cast_bitset_clear_all_assert_rte_mem_access"
               "typed_cast_bitset_clear_all_call_mem_zero_requires"
               "typed_cast_bitset_clear_all_live_assigns_normal"
               "typed_cast_bitset_clear_all_live_ensures_2_part3"
               "typed_cast_bitset_clear_all_live_ensures_part3"
-              "typed_cast_bitset_set_all_assert_rte_mem_access"
               "typed_cast_bitset_set_all_call_mem_set_requires"
               "typed_cast_bitset_set_all_live_assigns_exit_part1"
               "typed_cast_bitset_set_all_live_assigns_normal_part1"
-              "typed_cast_bitset_not_assert_rte_mem_access"
-              "typed_cast_bitset_count_assert_rte_mem_access"
-              "typed_cast_bitset_is_empty_assert_rte_mem_access"
-              "typed_cast_bitset_is_full_assert_rte_mem_access"
-              "typed_cast_bitset_find_first_assert_rte_mem_access"
-              "typed_cast_bitset_find_next_assert_rte_mem_access"
               "typed_cast_bitset_find_next_ensures_3_part7"
               "typed_cast_bitset_find_next_option_ensures_2_part2"
-              "typed_cast_bitset_find_last_assert_rte_mem_access"
-              "typed_cast_bitset_as_bytes_assert_rte_mem_access"
               "typed_cast_bitset_as_bytes_call_bytes_from_requires_2"
-              "typed_cast_bitset_as_cbytes_assert_rte_mem_access"
               "typed_cast_bitset_as_cbytes_call_cbytes_from_requires_2"
-              "typed_cast_bitset_as_borrowed_bytes_assert_rte_mem_access"
               "typed_cast_bitset_as_borrowed_bytes_call_borrowed_bytes_from_lifetime_requires_readable_region"
             )
             MISSING=0
@@ -4935,8 +4925,10 @@ jobs:
             echo "      than libc or a WP feature gap. It held."
             echo "  P4  CONFIRMED, OVER-COUNTED. The Typed+Cast bridging"
             echo "      class is real and sits exactly where predicted, but"
-            echo "      at 6 goals (2 per site), not the 9 estimated. Right"
-            echo "      mechanism, wrong size."
+            echo "      at 3 goals (1 per site), not the 9 estimated. Right"
+            echo "      mechanism, wrong size. (This verdict said 6, 2 per"
+            echo "      site, until VERIFY-039 G10 found the other three to be"
+            echo "      the null guards' reads of bs->words.)"
             echo ""
             echo "  NOT PREDICTED, and the arc's most useful finding: a"
             echo "  disjunct that is REDUNDANT FOR THE LOGIC can be"
@@ -4997,7 +4989,9 @@ jobs:
                     wp_bitset_output.txt || true)
             echo "    inherited: ${INH}   (P2 predicts 92: contract 2 + bits 15 +"
             echo "               memory 20 + slice-libc 13 + ptr 6 + checked 2 +"
-            echo "               borrow 2 + option 32)"
+            echo "               borrow 2 + option 32; 97 since VERIFY-026 added"
+            echo "               six of ptr's and VERIFY-036 F1 closed one of"
+            echo "               memory's)"
             echo "    bitset-own: ${OWN}"
             # CORRECTED after CI #1260. This NOTE said "most bitset-own
             # residuals belong to functions that are NOT YET CONTRACTED
@@ -5076,14 +5070,15 @@ jobs:
               echo "        count ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, and all"
               echo "        ${EXPECTED_UNPROVED} residuals verified BY NAME in both"
               echo "        directions (set equality). Arms: 2 handler + 32"
-              echo "        option_usize (inheritance) + 58 core substrate +"
+              echo "        option_usize (inheritance) + 63 core substrate +"
               echo "        ${OWN} bitset-own."
               echo ""
               echo "        ${OWN} own is the smallest own-residual set of any"
               echo "        driver-verified module in the project: vec 196,"
               echo "        pool 119, region 114, arena 91, deque 67."
-              echo "        (66 until F2/F5 at #1264 -- VERIFY-020 F5 records"
-              echo "        why removing a redundant precondition cost five.)"
+              echo "        (71 at #1264: F2/F5 let five contracts admit a"
+              echo "        null words without requiring *bs readable, which"
+              echo "        their guards read -- VERIFY-039 G10, repaired.)"
               echo ""
               echo "        A residual that starts PROVING turns this job RED."
               echo "        That is good news arriving as a red run, by design."
