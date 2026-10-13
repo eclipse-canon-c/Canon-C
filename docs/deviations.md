@@ -14696,3 +14696,57 @@ the guards of the existing separation, in `append_array`'s and `extend`'s
 contracts on both surfaces, as G4's entry 6 separated `out` from the vec.
 Every postcondition keeps its strength; a caller may no longer pass a `src`
 over the vec. A prediction precedes the fix.
+
+### G9 — committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-13).** The repair recommended with G9, in both contract
+surfaces. `append_array`'s and `extend`'s third precondition,
+`(v != \null && v->items != \null && src != \null && v->len + count <= v->capacity) ==> \separated(src + (0 .. count - 1), v->items + (0 .. v->capacity - 1))`,
+gains the conjunct `\separated(src + (0 .. count - 1), v)`. Both doc
+comments gain `@pre` lines for the two separations, the first being
+VERIFY-018's F1, whose doc line was owed, and the driver's comment on
+`append_array`'s contract names G9. No executable change. The units are
+`frama-c-vec`, which reads the prototypes in `vec_verify.h`, and `cc-vec`
+and `cc-vec_struct`, which read the macro bodies in `vec_impl.h`; no other
+unit instantiates vec.
+
+**Before the prediction.** No external prover has been run on the changed
+code. WP 25, run as for batch 1, printed the three units' goals by name
+before and after the change.
+
+- In each unit 25 goals gain the conjunct among their hypotheses, 18 of
+  `append_array` and 7 of `extend`. Nine of them are pinned residuals at
+  each type: `append_array`'s seven in VERIFY-018's category (h) and its
+  fourth postcondition, and `extend`'s, which WP 25 prints as
+  `extend_ok_assigns_normal_part2` (batch 1).
+- At `extend`'s call to `append_array` the precondition's goal must prove
+  the conjunct too, from `extend`'s identical precondition in the same
+  state. WP 25 splits that goal in two, each `true` after simplification, so
+  its counts rise by one in each unit: 5226, 5270 and 5268.
+
+**Predicted: nothing moves, in any unit.**
+
+- (H) No goal is generated or removed in CI: the conjunct sits inside the
+  existing clause, and WP 29's `-wp-split` does not split a conjunction, as
+  entry 6's score showed. The totals stay 5515, 5580 and 5578.
+- (H) No residual closes. `append_array`'s residuals are the byte views at
+  `mem_copy`, the precondition stated by pointer order, and the content
+  postcondition, kept unproved by the typed model's separate arrays and by
+  the predicate's order, not by where `src` lies; `extend`'s is the call
+  framed by its callee's default clause.
+- (M) No proved goal becomes unproved. The conjunct is a hypothesis
+  everywhere but at `extend`'s call, where `extend`'s own precondition gives
+  it.
+- (H) No other unit moves.
+- (H) `p_vec_append_src_len.c` behaves at run time as before; since the fix
+  its call is outside `append_array`'s contract.
+
+**Pins carried by the fix commit.** None changes: `frama-c-vec` at
+`5363 / 5515` with 152 unproved, `cc-vec` at `5420 / 5580` and
+`cc-vec_struct` at `5418 / 5578` with 160 each, and the same roll-calls.
+
+**What it settles.** If nothing moves, G9 is repaired: the contracts no
+longer admit a `src` over the vec, and `append_array`'s fourth postcondition
+and `extend`'s third, proved from it, hold on ILP32 as on LP64. The goal
+batch 1 filed at `int` under diag.h's block keeps its filing and loses its
+exception.
