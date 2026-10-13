@@ -3013,6 +3013,17 @@ data point.
 
 **Category 1 — libc byte-view through Typed+Cast (8)**
 
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_diag_init_call_memset_requires_valid_s` | `frama-c-diag` | the bytes of the local `d`, a complete `Diag`, are valid |
+| 2 | `typed_cast_diag_push_call_memmove_requires_valid_dest` | `frama-c-diag` | the destination's bytes, `frames[0 .. DIAG_MAX_FRAMES - 2]`, inside `*d`, valid by `push_valid` |
+| 3 | `typed_cast_diag_push_call_memmove_requires_valid_src` | `frama-c-diag` | the source's bytes, `frames[1 .. DIAG_MAX_FRAMES - 1]`, inside `*d` |
+| 4 | `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part05` | `frama-c-diag` | the shift: `frames[j].code` is the old `frames[j + 1].code`, on one of three paths through the rest of the push |
+| 5 | `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part06` | `frama-c-diag` | the same, on the second |
+| 6 | `typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part07` | `frama-c-diag` | the same, on the third |
+| 7 | `typed_cast_diag_push_valid_diag_assigns_exit_part02` | `frama-c-diag` | the move's bytes in `d->frames[0 .. DIAG_MAX_FRAMES - 1]` |
+| 8 | `typed_cast_diag_push_valid_diag_assigns_normal_part03` | `frama-c-diag` | the same, on the normal path |
+
 **Functions affected**: `diag_init` (1), `diag_push` (7).
 
 **Goals**:
@@ -3072,6 +3083,19 @@ lies inside the typed assigns footprint. For diag_init, `d` is a local
 of complete type `Diag`, valid over its full `sizeof` by construction.
 ASan and Valgrind execute the overflow shift on every
 `test_push_overflow*` path across the CI matrix.
+
+**Coverage update (2026-10-13, VERIFY-039, the main pass, batch 1).** The
+eight goals listed under **Goals** are given the table above, each read
+against the code and true: the bytes at the `memset` and the `memmove` lie
+in `d`'s valid object, the shift moves whole frames, and the move's bytes
+lie in the `assigns` clause's frames. vec's 42 goals of the same class, the
+byte views at `mem_copy` and `mem_move`, which the root cause above names
+among the class's sites, and the content across them, are filed under this
+argument by name (VERIFY-039, batch 1). The argument covers them as one
+written for its class: the bytes of a valid typed range are valid and lie in
+its footprint, and a byte copy of whole objects copies the objects; each
+filed row reads the premises at its site, and for the content rows the
+copy's own, as `mem_copy` and `mem_move` state only a frame.
 
 ### Mitigation
 
@@ -3304,6 +3328,23 @@ types (sint32*)↔(sint8*)` warnings in the WP log). Pinned after
 failing three consecutive runs; the recorded shrink levers (wp-cache
 replay, predicate-shape restatement) may be tried later without
 unpinning.
+
+**Coverage update (2026-10-13, VERIFY-039, the main pass, batch 1) — each
+goal filed by name.** The 50 goals at `int` and their 50 at `Rec`
+(VERIFY-037/038) are filed by name in VERIFY-039's batch 1. (e)'s 2 go under
+memory.h's Category 1; (d)'s 3 and 18 of (h)'s under diag.h's block
+(VERIFY-017), the byte views at `mem_copy` and `mem_move`, whose mechanism
+decides (d) too, with the frame-only contracts (G3); and four new blocks
+take the rest: (g)'s 24 (`fill`'s loop without annotations, VERIFY-025's
+retired argument having left them none),
+`append_array_call_mem_copy_requires_3` (memory.h's `regions_overlap`,
+stated by pointer order, VERIFY-022's mechanism), `swap_ensures` (a struct
+exchange whose operands the model lets overlap) and
+`extend_ok_assigns_normal_part1` (a call framed by its callee's default
+`assigns`). The last three were filed in (h) and are not byte views. None is
+false on LP64; on ILP32 the fourth postcondition of `append_array` at `int`
+is, for a `src` over `len` (VERIFY-039 G9). The headings' 5 and 22 are 3 and
+21.
 
 ### Fresh-instantiation residuals (22) — result(Bool, Error)
 
@@ -10447,7 +10488,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -14231,3 +14272,427 @@ ends when that count is 0 and the open items are settled. Every residual
 obligation pinned is then filed by name under exactly one block in force,
 which the script checks; whether each filing is sound remains a human
 judgment, as the paper's §2 says.
+
+### The main pass — batch 1: vec
+
+**What was read.** vec's 100 obligations in no goal table: 50 names at
+`int`, each pinned in `frama-c-vec` and `cc-vec`, and the same 50 at `Rec`,
+pinned in `cc-vec_struct`. VERIFY-018 files the 50 in its categories (d),
+(e), (g) and (h), and VERIFY-037/038 file the `Rec` names with them. Each
+was read against its function's code, against both contract surfaces (the
+driver's prototypes in `vmacros/vdrivers/vec_verify.h` and the macro-body
+contracts in `data/vec/vec_impl.h`, which state the same clauses for these
+functions, the driver's through `vec_int_mut`, but for `alloc`'s own
+postconditions, which no goal here concerns), and against WP's printed goal.
+The prints are WP 25's, run here with the units' options; the names are
+those of the CI's WP 29. Where the two differ, the reading goes by what the
+goal states, and by G3's and G4's reading of WP 29. WP 25 takes a call to
+`mem_copy` or `mem_move`, which have no default `assigns`, as writing all
+memory (G3), so in its prints the inclusion of the call's effect in an
+`assigns` clause is `false` for that reason, and a content postcondition
+compares memory the call havocked; it numbers the parts of `extend`'s clause
+in another order, splits `swap`'s first postcondition by field, generates no
+`terminates` goal, and numbers `fill`'s memory accesses `_4` to `_8` where
+the CI pins `_4` to `_7`.
+
+**Found.** None of the 100 is false on LP64, the machdep the units verify.
+On ILP32, where no unit verifies vec, one is: `append_array`'s fourth
+postcondition at `int`, for a `src` over the vec's `len` (G9, below). The
+method's rule, that an obligation found false for an admitted call becomes a
+gap, decides the filing on the units' machdep; a contract false for a
+defined call on a platform it ships to is a gap too, and G9 is the first,
+its goal filed as true on LP64 while the gap is open. 46 of the 100 fall
+under arguments already counted: 4 under memory.h's Category 1 (VERIFY-008)
+and 42 under diag.h's block (VERIFY-017). The other 54 fall under none, and
+four blocks are written for them below: *A* goes from 17 to 21 cumulative
+and from 11 to 15 in force.
+
+**VERIFY-018's categories, read against the code.**
+
+- (e), 2 at each type, is as stated: `\fresh` and `\freeable`, which WP does
+  not implement, the class of memory.h's Category 1.
+- (d), 3: the content postconditions across `mem_copy` and `mem_move`.
+  VERIFY-018 gives the two functions' frame-only contracts as the cause;
+  that is one of two causes, each enough on its own. The other, which
+  diag.h's argument addresses (its `push_shift_semantics` across `memmove`),
+  is that WP's typed model keeps the `char` cells the copy writes apart from
+  the `int` cells, or `Rec` fields, that the postconditions read (G3): under
+  WP 29 the elements are unchanged across the call in the model, and content
+  clauses on the two functions would not reach them (G3: deduced, not
+  tested). The rows meet the first by reading the content from the two
+  functions' bodies, `memcpy` and `memmove` past guards that hold at these
+  calls.
+- (h), 21 live: 18 are as stated, the byte views at the two calls: the
+  validity of the bytes the calls require, and the inclusion of the bytes
+  they write in the typed `assigns` clauses, which diag.h's own WP 25 print,
+  where libc's `memmove` writes through `char`, reduces to `false`. Three
+  are not byte views, or not only: `append_array`'s call to `mem_copy`
+  requiring the two byte ranges not to overlap, a predicate memory.h states
+  by pointer order (VERIFY-022's mechanism), the byte view entering only
+  where `src` shares the buffer's block; `extend`'s, a call framed by its
+  callee's default clause; and `swap`'s, a struct exchange whose operands
+  the model lets overlap.
+- (g), 24: `fill`'s loop has no loop annotation. VERIFY-018 argued its goals
+  unprovable by construction, no annotation surviving in a macro body;
+  VERIFY-025 found that true only under `-C`, retired the argument, and left
+  the goals with none. No counted block has covered them.
+
+The headings say 5 for (d) and 22 for (h); 3 and 21 are live.
+
+**The standard.** A goal is filed under a block when it fails for the
+mechanism the block's argument addresses, and the argument's reasoning, with
+the premises the row reads at the goal's site, shows it true. diag.h's
+argument is written for its own sites; its root cause states its class, the
+Typed+Cast gap between byte ranges and typed locations, and names memory.h's
+`mem_copy` and `mem_move` among the class's sites. Its reasoning is what
+vec's 42 need: the bytes of a valid typed range are valid and lie in its
+footprint, and a byte copy of whole objects copies the objects. Its own
+eight goals are given their table in VERIFY-017 here, read against diag.h's
+code, so that its heading counts its own goals and vec's stand beside them:
+diag.h's part of batch 5 is done here, and batch 5 keeps borrow's block and
+arena Cat 2c.
+
+**Filed by name**: VERIFY-008, Category 1
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_alloc_call_vec_int_init_requires_2` | `frama-c-vec`, `cc-vec` | `\fresh`, ignored: `mem_alloc` returns a fresh block of `capacity × sizeof` bytes, so `buf[0 .. capacity - 1]` is valid |
+| 2 | `typed_cast_vec_int_free_call_mem_free_requires` | `frama-c-vec`, `cc-vec` | `\freeable`: the function requires `\freeable(v->items)` itself, and nothing is written before the call |
+| 3 | `typed_cast_vec_Rec_alloc_call_vec_Rec_init_requires_2` | `cc-vec_struct` | `\fresh`, ignored: `mem_alloc` returns a fresh block of `capacity × sizeof` bytes, so `buf[0 .. capacity - 1]` is valid |
+| 4 | `typed_cast_vec_Rec_free_call_mem_free_requires` | `cc-vec_struct` | `\freeable`: the function requires `\freeable(v->items)` itself, and nothing is written before the call |
+
+WP ignores `mem_alloc`'s `\fresh` postcondition ("not yet implemented"), so
+it knows nothing of `buf` but that it is not null, and turns the `\freeable`
+of `mem_free`'s precondition to `false`. The block's argument, the code
+meeting the contract directly with only the predicate's discharge missing,
+and one composition step for the allocation as for
+`mem_alloc_array_checked`'s, covers both at each type.
+
+**Filed by name**: VERIFY-017, diag-own residuals
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_append_array_call_mem_copy_requires` | `frama-c-vec`, `cc-vec` | validity of the destination's bytes: `items[len .. len + count - 1]`, in the buffer as `len + count <= capacity` |
+| 2 | `typed_cast_vec_int_append_array_call_mem_copy_requires_2` | `frama-c-vec`, `cc-vec` | validity of the source's bytes: `\valid_read(src + (0 .. count - 1))`, the `ok` precondition |
+| 3 | `typed_cast_vec_int_insert_call_mem_move_requires` | `frama-c-vec`, `cc-vec` | validity of the destination's bytes: `items[i + 1 .. len]`, in the buffer as `len < capacity` |
+| 4 | `typed_cast_vec_int_insert_call_mem_move_requires_2` | `frama-c-vec`, `cc-vec` | validity of the source's bytes: `items[i .. len - 1]`, in the buffer |
+| 5 | `typed_cast_vec_int_remove_call_mem_move_requires` | `frama-c-vec`, `cc-vec` | validity of the destination's bytes: `items[i .. len - 2]`, in the buffer as `i < len - 1` |
+| 6 | `typed_cast_vec_int_remove_call_mem_move_requires_2` | `frama-c-vec`, `cc-vec` | validity of the source's bytes: `items[i + 1 .. len - 1]`, in the buffer |
+| 7 | `typed_cast_vec_int_append_array_assigns_exit_part4` | `frama-c-vec`, `cc-vec` | the copy's bytes, `items[len .. len + count - 1]`, in `items[0 .. capacity - 1]` |
+| 8 | `typed_cast_vec_int_append_array_assigns_normal_part14` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
+| 9 | `typed_cast_vec_int_append_array_ok_assigns_exit_part4` | `frama-c-vec`, `cc-vec` | the copy's bytes in the `ok` clause's `items[len .. len + count - 1]` |
+| 10 | `typed_cast_vec_int_append_array_ok_assigns_normal_part14` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
+| 11 | `typed_cast_vec_int_insert_assigns_exit_part2` | `frama-c-vec`, `cc-vec` | the move's bytes, `items[i + 1 .. len]`, in `items[0 .. capacity - 1]` |
+| 12 | `typed_cast_vec_int_insert_assigns_normal_part10` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
+| 13 | `typed_cast_vec_int_insert_ok_assigns_exit_part2` | `frama-c-vec`, `cc-vec` | the move's bytes in the `ok` clause's `items[i .. len]` |
+| 14 | `typed_cast_vec_int_insert_ok_assigns_normal_part10` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
+| 15 | `typed_cast_vec_int_remove_assigns_exit_part3` | `frama-c-vec`, `cc-vec` | the move's bytes, `items[i .. len - 2]`, in `items[0 .. capacity - 1]` |
+| 16 | `typed_cast_vec_int_remove_assigns_normal_part13` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
+| 17 | `typed_cast_vec_int_remove_ok_assigns_exit_part3` | `frama-c-vec`, `cc-vec` | the move's bytes in the `ok` clause's `items[i .. len - 1]` |
+| 18 | `typed_cast_vec_int_remove_ok_assigns_normal_part13` | `frama-c-vec`, `cc-vec` | the same, on the normal path |
+| 19 | `typed_cast_vec_int_append_array_ok_ensures_4_part5` | `frama-c-vec`, `cc-vec` | the copy: `mem_copy`'s body, `memcpy` past its guards, puts `src[k]`'s bytes in `items[\old(len) + k]`; true on LP64, and on ILP32 false for a `src` over `len` (G9) |
+| 20 | `typed_cast_vec_int_insert_ok_ensures_5_part5` | `frama-c-vec`, `cc-vec` | the move: `mem_move`'s body, `memmove` past its guards, shifts `items[i .. len - 1]` up by one element |
+| 21 | `typed_cast_vec_int_remove_ok_ensures_5_part6` | `frama-c-vec`, `cc-vec` | the move: `mem_move`'s body, `memmove` past its guards, shifts `items[i + 1 .. len - 1]` down by one element |
+| 22 | `typed_cast_vec_Rec_append_array_call_mem_copy_requires` | `cc-vec_struct` | validity of the destination's bytes: `items[len .. len + count - 1]`, in the buffer as `len + count <= capacity` |
+| 23 | `typed_cast_vec_Rec_append_array_call_mem_copy_requires_2` | `cc-vec_struct` | validity of the source's bytes: `\valid_read(src + (0 .. count - 1))`, the `ok` precondition |
+| 24 | `typed_cast_vec_Rec_insert_call_mem_move_requires` | `cc-vec_struct` | validity of the destination's bytes: `items[i + 1 .. len]`, in the buffer as `len < capacity` |
+| 25 | `typed_cast_vec_Rec_insert_call_mem_move_requires_2` | `cc-vec_struct` | validity of the source's bytes: `items[i .. len - 1]`, in the buffer |
+| 26 | `typed_cast_vec_Rec_remove_call_mem_move_requires` | `cc-vec_struct` | validity of the destination's bytes: `items[i .. len - 2]`, in the buffer as `i < len - 1` |
+| 27 | `typed_cast_vec_Rec_remove_call_mem_move_requires_2` | `cc-vec_struct` | validity of the source's bytes: `items[i + 1 .. len - 1]`, in the buffer |
+| 28 | `typed_cast_vec_Rec_append_array_assigns_exit_part4` | `cc-vec_struct` | the copy's bytes, `items[len .. len + count - 1]`, in `items[0 .. capacity - 1]` |
+| 29 | `typed_cast_vec_Rec_append_array_assigns_normal_part14` | `cc-vec_struct` | the same, on the normal path |
+| 30 | `typed_cast_vec_Rec_append_array_ok_assigns_exit_part4` | `cc-vec_struct` | the copy's bytes in the `ok` clause's `items[len .. len + count - 1]` |
+| 31 | `typed_cast_vec_Rec_append_array_ok_assigns_normal_part14` | `cc-vec_struct` | the same, on the normal path |
+| 32 | `typed_cast_vec_Rec_insert_assigns_exit_part2` | `cc-vec_struct` | the move's bytes, `items[i + 1 .. len]`, in `items[0 .. capacity - 1]` |
+| 33 | `typed_cast_vec_Rec_insert_assigns_normal_part10` | `cc-vec_struct` | the same, on the normal path |
+| 34 | `typed_cast_vec_Rec_insert_ok_assigns_exit_part2` | `cc-vec_struct` | the move's bytes in the `ok` clause's `items[i .. len]` |
+| 35 | `typed_cast_vec_Rec_insert_ok_assigns_normal_part10` | `cc-vec_struct` | the same, on the normal path |
+| 36 | `typed_cast_vec_Rec_remove_assigns_exit_part3` | `cc-vec_struct` | the move's bytes, `items[i .. len - 2]`, in `items[0 .. capacity - 1]` |
+| 37 | `typed_cast_vec_Rec_remove_assigns_normal_part13` | `cc-vec_struct` | the same, on the normal path |
+| 38 | `typed_cast_vec_Rec_remove_ok_assigns_exit_part3` | `cc-vec_struct` | the move's bytes in the `ok` clause's `items[i .. len - 1]` |
+| 39 | `typed_cast_vec_Rec_remove_ok_assigns_normal_part13` | `cc-vec_struct` | the same, on the normal path |
+| 40 | `typed_cast_vec_Rec_append_array_ok_ensures_4_part5` | `cc-vec_struct` | the copy: `mem_copy`'s body, `memcpy` past its guards, puts `src[k]`'s bytes in `items[\old(len) + k]`; true: at `Rec` no defined call falsifies it, on LP64 or ILP32 (below) |
+| 41 | `typed_cast_vec_Rec_insert_ok_ensures_5_part5` | `cc-vec_struct` | the move: `mem_move`'s body, `memmove` past its guards, shifts `items[i .. len - 1]` up by one element |
+| 42 | `typed_cast_vec_Rec_remove_ok_ensures_5_part6` | `cc-vec_struct` | the move: `mem_move`'s body, `memmove` past its guards, shifts `items[i + 1 .. len - 1]` down by one element |
+
+Each row's premises hold under the first precondition (`len <= capacity`,
+`items[0 .. capacity - 1]` valid, `*v` outside it: F13), on the branch the
+call is on and, for `append_array`, under its `ok` preconditions; the ranges
+written are F16's. At these calls the pointers are not null, and the size is
+positive but for `append_array` with `count` 0, where its rows hold
+trivially; so `mem_copy` and `mem_move` reach `memcpy` and `memmove`. The
+`assigns_exit` parts are the same effects on a path that would end in
+`exit`, and nothing on these paths exits. At `Rec` the bytes include each
+element's padding, which the copy and the move carry along, and the
+postconditions compare the fields.
+
+`append_array`'s fourth postcondition reads `src[k]` after the store to
+`len`, and no clause separates `src` from `*v`. On LP64 a `src` over the
+vec's fields would read their bytes as `int`, or as a `Rec` whose `id` lies
+on a pointer or a `usize`, which C leaves undefined (C11 6.5p7): no call on
+which the postcondition's reads are defined makes it false there, and at
+`Rec` none does on ILP32 either. At `int` on ILP32, `usize` is
+`unsigned int`, an `int` read of `len` is a counterpart read, and a call
+falsifies it: G9.
+
+#### Loop without annotations in a macro body (48)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_fill_terminates_part1` | `frama-c-vec`, `cc-vec` | termination: the loop ends after `to_fill` iterations |
+| 2 | `typed_cast_vec_int_fill_terminates_part2` | `frama-c-vec`, `cc-vec` | the same, on the other path through `to_fill`'s conditional |
+| 3 | `typed_cast_vec_int_fill_assert_rte_mem_access_4_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it, on one path through the conditional |
+| 4 | `typed_cast_vec_int_fill_assert_rte_mem_access_4_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
+| 5 | `typed_cast_vec_int_fill_assert_rte_mem_access_5_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it |
+| 6 | `typed_cast_vec_int_fill_assert_rte_mem_access_5_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
+| 7 | `typed_cast_vec_int_fill_assert_rte_mem_access_6_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it |
+| 8 | `typed_cast_vec_int_fill_assert_rte_mem_access_6_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
+| 9 | `typed_cast_vec_int_fill_assert_rte_mem_access_7_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it |
+| 10 | `typed_cast_vec_int_fill_assert_rte_mem_access_7_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
+| 11 | `typed_cast_vec_int_fill_assigns_part3` | `frama-c-vec`, `cc-vec` | the loop's store, `items[len + i]`, in the default clause's `items[0 .. capacity - 1]` |
+| 12 | `typed_cast_vec_int_fill_assigns_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 13 | `typed_cast_vec_int_fill_assigns_part5` | `frama-c-vec`, `cc-vec` | the store to `len` after the loop |
+| 14 | `typed_cast_vec_int_fill_assigns_part6` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 15 | `typed_cast_vec_int_fill_live_assigns_part3` | `frama-c-vec`, `cc-vec` | the loop's store in the `live` clause's `items[len .. capacity - 1]` |
+| 16 | `typed_cast_vec_int_fill_live_assigns_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 17 | `typed_cast_vec_int_fill_live_assigns_part5` | `frama-c-vec`, `cc-vec` | the store to `len` after the loop |
+| 18 | `typed_cast_vec_int_fill_live_assigns_part6` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 19 | `typed_cast_vec_int_fill_live_ensures_part3` | `frama-c-vec`, `cc-vec` | `len` is `\old(len) + min(count, \old(capacity) - \old(len))` |
+| 20 | `typed_cast_vec_int_fill_live_ensures_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 21 | `typed_cast_vec_int_fill_live_ensures_2_part3` | `frama-c-vec`, `cc-vec` | the new elements hold `value` |
+| 22 | `typed_cast_vec_int_fill_live_ensures_2_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 23 | `typed_cast_vec_int_fill_live_ensures_3_part3` | `frama-c-vec`, `cc-vec` | the old elements are unchanged |
+| 24 | `typed_cast_vec_int_fill_live_ensures_3_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
+| 25 | `typed_cast_vec_Rec_fill_terminates_part1` | `cc-vec_struct` | termination: the loop ends after `to_fill` iterations |
+| 26 | `typed_cast_vec_Rec_fill_terminates_part2` | `cc-vec_struct` | the same, on the other path through `to_fill`'s conditional |
+| 27 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_4_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it, on one path through the conditional |
+| 28 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_4_part2` | `cc-vec_struct` | the same access, on the other path |
+| 29 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_5_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it |
+| 30 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_5_part2` | `cc-vec_struct` | the same access, on the other path |
+| 31 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_6_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it |
+| 32 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_6_part2` | `cc-vec_struct` | the same access, on the other path |
+| 33 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_7_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it |
+| 34 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_7_part2` | `cc-vec_struct` | the same access, on the other path |
+| 35 | `typed_cast_vec_Rec_fill_assigns_part3` | `cc-vec_struct` | the loop's store, `items[len + i]`, in the default clause's `items[0 .. capacity - 1]` |
+| 36 | `typed_cast_vec_Rec_fill_assigns_part4` | `cc-vec_struct` | the same, on the other path |
+| 37 | `typed_cast_vec_Rec_fill_assigns_part5` | `cc-vec_struct` | the store to `len` after the loop |
+| 38 | `typed_cast_vec_Rec_fill_assigns_part6` | `cc-vec_struct` | the same, on the other path |
+| 39 | `typed_cast_vec_Rec_fill_live_assigns_part3` | `cc-vec_struct` | the loop's store in the `live` clause's `items[len .. capacity - 1]` |
+| 40 | `typed_cast_vec_Rec_fill_live_assigns_part4` | `cc-vec_struct` | the same, on the other path |
+| 41 | `typed_cast_vec_Rec_fill_live_assigns_part5` | `cc-vec_struct` | the store to `len` after the loop |
+| 42 | `typed_cast_vec_Rec_fill_live_assigns_part6` | `cc-vec_struct` | the same, on the other path |
+| 43 | `typed_cast_vec_Rec_fill_live_ensures_part3` | `cc-vec_struct` | `len` is `\old(len) + min(count, \old(capacity) - \old(len))` |
+| 44 | `typed_cast_vec_Rec_fill_live_ensures_part4` | `cc-vec_struct` | the same, on the other path |
+| 45 | `typed_cast_vec_Rec_fill_live_ensures_2_part3` | `cc-vec_struct` | the new elements hold `value` |
+| 46 | `typed_cast_vec_Rec_fill_live_ensures_2_part4` | `cc-vec_struct` | the same, on the other path |
+| 47 | `typed_cast_vec_Rec_fill_live_ensures_3_part3` | `cc-vec_struct` | the old elements are unchanged |
+| 48 | `typed_cast_vec_Rec_fill_live_ensures_3_part4` | `cc-vec_struct` | the same, on the other path |
+
+**Functions affected**: `vec_int_fill` (`frama-c-vec`, `cc-vec`),
+`vec_Rec_fill` (`cc-vec_struct`).
+
+**Root cause**: `IMPL_VEC_FILL`'s `for` loop carries no `loop invariant`,
+`loop assigns` or `loop variant`, so WP knows nothing of its iterations.
+Under `-C`, the preprocessing `frama-c-vec` uses, an annotation inside a
+macro body is stripped; under `-CC`, the -CC units', one would be kept, and
+none is written (VERIFY-025, Correction 2). The 24 goals at each type are
+the loop's termination, the memory accesses in it and in the update of `len`
+after it, the inclusion of its stores in the two `assigns` clauses, and the
+`live` behaviour's three postconditions, on the two paths through
+`to_fill`'s conditional. Specification-bound: annotations not written, and
+under `-C` not attachable.
+
+**Manual proof argument**: In the `live` behaviour `v` and `v->items` are
+non-null and the first precondition holds: `len <= capacity`,
+`items[0 .. capacity - 1]` is valid, and `*v` lies outside it (F13).
+`remaining = capacity - len` does not wrap, and
+`to_fill = min(count, remaining)`. The loop runs `i` from 0 to `to_fill`, so
+it terminates, `to_fill - i` decreasing. Its one store, `items[len + i]`
+with `len + i < len + to_fill <= capacity`, lies in
+`items[len .. capacity - 1]`, valid and off `*v`, so `v->items` and `v->len`
+keep their values through the loop, and its reads of them are valid, `*v`
+being valid. When it ends, `items[len .. len + to_fill - 1]` hold `value`
+and nothing else has changed; `len += to_fill` then stores the new length.
+So `len` is `\old(len) + min(count, \old(capacity) - \old(len))`, the
+elements from `\old(len)` to `len - 1` hold `value`, those below `\old(len)`
+are unchanged, and the only locations written, `len` and
+`items[\old(len) .. \old(len) + to_fill - 1]`, are in both `assigns`
+clauses. At `Rec` the store is a struct assignment, and the same holds.
+
+**Retirement.** The loop's invariant, assigns and variant, written into
+`IMPL_VEC_FILL`, would reach the -CC units, whose 48 goals WP could then
+prove; `frama-c-vec`'s 24 would stay here, with that proof as further
+evidence. A change with its own prediction.
+
+#### Byte ranges compared by pointer order across objects (2)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_append_array_call_mem_copy_requires_3` | `frama-c-vec`, `cc-vec` | the two byte ranges do not share an address: `src`'s elements are separated from the buffer (precondition), and the destination's lie in it |
+| 2 | `typed_cast_vec_Rec_append_array_call_mem_copy_requires_3` | `cc-vec_struct` | the two byte ranges do not share an address: `src`'s elements are separated from the buffer (precondition), and the destination's lie in it |
+
+**Functions affected**: `vec_int_append_array` (`frama-c-vec`, `cc-vec`),
+`vec_Rec_append_array` (`cc-vec_struct`).
+
+**Root cause**: `mem_copy` requires
+`!regions_overlap((char *)dest, (char *)src, size)`, and memory.h states the
+predicate by pointer order, `size > 0 && a < b + size && b < a + size`. WP
+orders two pointers only within one base, so when `src` lies in another
+object than the buffer, as its separation from the buffer allows, the
+precondition can be neither proved nor refuted there, and `append_array`'s
+`\separated(src + (0 .. count - 1), v->items + (0 .. v->capacity - 1))` does
+not discharge it. VERIFY-022 found the same at the priority queue's four
+calls to `mem_copy` and its call to `mem_swap`, and named memory.h the
+owner. Where `src` lies in the buffer's own block, outside
+`items[0 .. capacity - 1]`, WP does compare offsets, but takes the range's
+`count × sizeof` bytes as that many cells from an offset counted in
+elements: the byte view of diag.h's block. Specification-bound: a predicate
+stated by an order that C (6.5.8p5) and the model define only within one
+object.
+
+**Manual proof argument**: Across two objects the predicate's literal value
+is not defined, C leaving the order undefined and WP unspecified, so what
+the argument shows is the property the predicate is meant to state, which a
+restatement with `\separated` would state: that the two byte ranges share no
+address. At the call the destination is `items[len .. len + count - 1]`,
+inside the buffer, and `src`'s `count` elements are separated from the
+buffer, so no byte of one range is a byte of the other; within one object,
+where `<` orders offsets, the predicate is false as written.
+
+**Retirement.** `regions_overlap` restated with `\separated`, VERIFY-022's
+VERIFY-024 candidate, a change to memory.h with its own prediction: the case
+across objects would then follow from `append_array`'s separation, and the
+case within the buffer's block would stay, as the byte view, to be filed
+under diag.h's block, so the block retires by refiling rather than closure.
+`mem_regions_overlap`, which `mem_copy`'s `require_msg` runs in the default
+build, compares the two pointers with `<` too, which C leaves undefined
+across objects: the same issue in code. The priority queue's five are batch
+2's.
+
+#### Struct exchange whose operands may overlap (2)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_swap_ensures` | `frama-c-vec`, `cc-vec` | `*a` ends as `*b` began; true for `a == b` and for separated `a` and `b`, the only defined placements |
+| 2 | `typed_cast_vec_Rec_swap_ensures` | `cc-vec_struct` | `*a` ends as `*b` began; true for `a == b` and for separated `a` and `b`, the only defined placements |
+
+**Functions affected**: `vec_int_swap` (`frama-c-vec`, `cc-vec`),
+`vec_Rec_swap` (`cc-vec_struct`).
+
+**Root cause**: `swap` exchanges two vecs through a local,
+`tmp = *a; *a = *b; *b = tmp;`, and requires only `\valid(a)` and
+`\valid(b)`. Its first postcondition, that `*a` ends as `*b` began, holds
+when `a == b` and when the two are separated. WP's typed model also admits
+`a` and `b` in one block at offsets that overlap in part; there the last
+store rewrites part of `*a`, the postcondition is false in the model, and WP
+leaves it. The second postcondition, about `*b`, proves.
+Specification-bound: the contract admits a placement that C excludes, and
+the model has no rule against it.
+
+This is not what VERIFY-019 and the paper's §4.1 say of deque's `swap`, the
+same class as vec's: deque's contract requires `\separated(a, b)`, its five
+postconditions about `*a` prove, and its five about `*b`, which receive
+`tmp`, do not, the obstacle VERIFY-019 names being `tmp`'s preservation
+across the second store. vec's fails on the other side and for another
+reason. Batch 2 reads deque's.
+
+**Manual proof argument**: No defined call overlaps the two in part:
+`*a = *b` would store into `*a` a value read from an object overlapping it,
+which C11 6.5.16.1p3 allows only for an exact overlap, and reading `*b`
+there reads `a`'s fields through other member types or at a misaligned
+address (6.5p7, 6.3.2.3p7). For `a == b` each store writes back the value it
+read, so `*a` ends as it began, which is as `*b` began. For separated `a`
+and `b`, the last store, into `*b`, leaves `*a` as the second store made it:
+`*b` as it began. At `Rec`, the same.
+
+**Retirement.** `requires a == b || \separated(a, b);` would state the
+defined placements and remove the model's counterexample; deque's
+postconditions about `*a`, which prove under `\separated(a, b)`, suggest the
+provers would then close the goal. A change with its own prediction.
+
+#### Call framed by the callee's default assigns (2)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_extend_ok_assigns_normal_part1` | `frama-c-vec`, `cc-vec` | the call's effect on the elements, in the `ok` clause: `append_array`'s `ok` behaviour writes only `items[len .. len + count - 1]` and `len` |
+| 2 | `typed_cast_vec_Rec_extend_ok_assigns_normal_part1` | `cc-vec_struct` | the call's effect on the elements, in the `ok` clause: `append_array`'s `ok` behaviour writes only `items[len .. len + count - 1]` and `len` |
+
+**Functions affected**: `vec_int_extend` (`frama-c-vec`, `cc-vec`),
+`vec_Rec_extend` (`cc-vec_struct`).
+
+**Root cause**: `extend` returns `append_array(v, src, count)`, and its `ok`
+behaviour assigns `v->len, v->items[v->len .. v->len + count - 1]`, as
+`append_array`'s does. WP frames the call by `append_array`'s default
+clause, `v->len, v->items[0 .. v->capacity - 1]`, so the call's effect on
+the elements is not inside `extend`'s `ok` clause, and that part is left.
+VERIFY-018's driver recorded the mechanism in its v3 note (WP uses a
+callee's contract whole at a call) and relaxed the narrower clauses of
+`extend`'s other behaviours and of `pop_option` and `remove_option`;
+`extend`'s `ok` clause was kept, and its goal was filed in (h). WP 25 prints
+the elements' effect as the second of three parts, after `len`'s, which
+proves; of the three only the elements' can fail, and the CI's residual is
+the first, so WP 29 orders them otherwise. WP 25 also prints the `ok`
+clause's part on the `exit` path failing the same way, and WP 29 pins no
+such goal for `extend`, though it does for `append_array`, `insert` and
+`remove`: how WP 29 frames that path was not read here. Verifier-bound.
+
+**Manual proof argument**: Under `extend`'s `ok` assumption,
+`append_array`'s `ok` assumption holds at the call, the same conditions on
+the same arguments, and `append_array` then writes only `len` and the bytes
+of `items[\old(len) .. \old(len) + count - 1]` (its copy and its store,
+F16), which `extend`'s `ok` clause names.
+
+**Retirement.** Dropping `extend`'s `ok` clause, as v3 dropped its other
+behaviours', loses the frame above the new elements unless `append_array`
+states it as a postcondition too, its third stating the frame below them;
+with both stated, `extend` can state its frame as postconditions. A change
+with its own prediction.
+
+**What this does to *A*.** Four blocks, written for obligations VERIFY-018
+recorded in July that no counted block covered: *A* is 21 cumulative and 15
+in force, beside the proved-goal argument's 147 properties, 38 write sites
+and 16 facts, unchanged. By each block's own words, `extend`'s is
+verifier-bound and the other three specification-bound: *V* is 11, all in
+force, and *S* 10 cumulative and 4 in force. The paper's §4.1 has vec adding
+no argument, every one of its residuals "in a class an earlier module had
+already argued". By these filings 46 of vec's 100 obligations are covered by
+arguments written for memory.h and diag.h, and 54 were covered by none. At
+`Rec` nothing differs, so VERIFY-038's settlement stands: vec at a struct
+type needs no block of its own.
+
+**Record coverage** reports memory.h's Category 1 with 5 listed and 4 filed
+by name, diag.h's block with 8 listed and 42 filed, the four new blocks with
+48, 2, 2 and 2, no filing problem, and 286 pinned names in no goal table:
+the 394 less vec's 100 and diag.h's 8.
+
+### G9 — `append_array`'s `src` over the vec (opened)
+
+**Finding.** `append_array` requires of `src` that its `count` elements be
+readable and separated from the buffer, and nothing keeps them off `*v`. Its
+fourth postcondition,
+`\forall integer k; 0 <= k < count ==> v->items[\old(v->len) + k] == src[k]`,
+reads `src` after the store to `len`. On ILP32, where `usize` is
+`unsigned int`, a `src` over `len` is read through `int`, its counterpart,
+and in the proof configuration the call is defined C.
+`tools/probes/verify-039/p_vec_append_src_len.c` puts the vec and its buffer
+in separate heap blocks, `len` 0 and `capacity` 4, and calls
+`append_array(v, (const int *)&v->len, 1)`: the copy puts `len`'s bytes, 0,
+in `items[0]`, which takes their effective type and is read back through
+`int`; `len` becomes 1, and the postcondition compares 0 with 1: `VIOLATED`.
+gcc and clang at `-m32`, `-O0`, `-O2` and `-D_FORTIFY_SOURCE=3`, both build
+configurations; the sanitizers are clean. In the default build `mem_copy`'s
+`require_msg` also runs `mem_regions_overlap`, whose `<` across two objects
+C leaves undefined (6.5.8p5), memory.h's own issue beside VERIFY-024; it
+returns false, and the result is the same. `extend`'s third postcondition,
+the same clause, is proved from it, and false for the same call. On LP64,
+the machdep the units verify, `usize` is `unsigned long`, an `int` read of
+its bytes is undefined, and so are the reads of a `Rec` over the vec, whose
+`id` lies on a pointer or a `usize`; the units' goals are true for every
+call on which they are defined. The contract ships to 32-bit builds, and is
+false there for this call. Batch 1's independent review found it.
+
+**Decision (recommended).** `\separated(src + (0 .. count - 1), v)`, under
+the guards of the existing separation, in `append_array`'s and `extend`'s
+contracts on both surfaces, as G4's entry 6 separated `out` from the vec.
+Every postcondition keeps its strength; a caller may no longer pass a `src`
+over the vec. A prediction precedes the fix.

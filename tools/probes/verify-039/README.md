@@ -13,7 +13,8 @@ same `vec<int>` instantiation CI verifies; the G2 probe includes `core/arena.h`,
 the G4 probes `core/memory.h`, and for the listing `core/arena.h`,
 `core/pool.h`, `data/stringbuf.h`, `data/bitset.h`, `semantics/diag.h` and the
 bare `-CC` drivers for `vec<int>` and `vec<Rec>`; the G5 and G7 probes include
-`core/arena.h` and `core/pool.h`, and the G8 probe `data/bitset.h`.
+`core/arena.h` and `core/pool.h`, the G8 probe `data/bitset.h`, and the G9
+probe the bare `-CC` driver for `vec<int>`.
 
 | Probe | Finding | Filing | Expected today |
 |---|---|---|---|
@@ -38,11 +39,16 @@ bare `-CC` drivers for `vec<int>` and `vec<Rec>`; the G5 and G7 probes include
 | `p_vec_remove_out_moved.c` | G1: a goal it missed | `remove`'s ensures 2 (`*out` is the removed element): proved in `frama-c-vec` and `cc-vec` and filed under the proved-goal argument (group E), false for an `out` in the move's destination | `remove(&v, 1, &v.items[1])` on [10, 20, 30, 40]: the copy into `*out` writes 20 where it was, the move then 30; ensures 1, 3, 4 and 5 hold, ensures 2 `VIOLATED`; exit 1, sanitizers clean, both build configurations, LP64 and ILP32. Since G1 (40cccd9) the call is outside `remove`'s contract; run-time behaviour unchanged |
 | `p_vec_rec_insert.c` | G4, entry 5: goals it missed | `insert`'s ensures 2 (`len` one more), its two `assigns_normal` and its check that the element store's target is writable (`assert_rte_mem_access_9`): proved in `cc-vec_struct` and filed under the proved-goal argument (group E), false for a `vec_Rec` in its own buffer | A: the vec at `items[3]`, the last element a pointer `q` and 7, `insert(v, 1, item)` at `len` 3: the move copies both onto the vec's `items` and `len`; with `q` four elements long the item lands in `q[1]` and `len` is 8: ensures 1 and 3 hold, ensures 2, both `assigns` and ensures 4 (entry 5's) `VIOLATED`. B: the same with `q` one element long: after the move `v->items + 1` lies past `q`'s block, the check `VIOLATED`, the probe's `mem_move` stopping the call through `longjmp` before the store. C: entry 5's placement, the vec at `items[0]`, `insert(v, 0, item)` at `len` 2: the element store lands on the vec, its `due` on `len`, and `len` becomes 78: ensures 1 holds, ensures 2 `VIOLATED`. Exit 1, sanitizers clean, both build configurations, on LP64; on ILP32 "not applicable", exit 0. Since the G4 vec repair (66b54e0) the calls are outside `insert`'s contract; run-time behaviour unchanged |
 | `p_vec_rec_remove_option.c` | G4, entry 5: a goal it missed, resting on entry 6's | `remove_option`'s `some_ensures_3` (`len` one less), proved in `cc-vec_struct` from `remove`'s ensures 3, entry 6's goal, which is filed (group E): both false, for a placement entry 5 excluded, of a `vec_Rec` in its own live elements whose `len` lies on a `Rec`'s `id` and padding, which the move overwrites | the vec 8 bytes into `items[1]`, `items[3]`'s `id` and padding a `usize` 9: `remove(v, 0, &out)` and `remove_option(v, 0)` at `len` 4 leave `len` 8; ensures 1 and 2 hold, ensures 3 `VIOLATED`; `some_ensures` and `some_ensures_2` hold, `some_ensures_3` `VIOLATED`; exit 1, sanitizers clean, both build configurations, on LP64; on ILP32 "not applicable", exit 0. Since the G4 vec repair the calls are outside the contracts; run-time behaviour unchanged |
+| `p_vec_append_src_len.c` | G9 | `append_array`'s ensures 4 (`items[\old(len) + k] == src[k]`): a residual at `int` in `frama-c-vec` and `cc-vec`, filed under diag.h's block (the main pass, batch 1), true on LP64; and `extend`'s ensures 3, the same clause, proved from it: false on ILP32 for a `src` over the vec's `len` | the vec and its buffer in separate heap blocks, `len` 0, `capacity` 4, `append_array(v, (const int *)&v->len, 1)`: ensures 1 and 2 hold, ensures 4 `VIOLATED` (`items[0]` 0, `src[0]` 1); exit 1, sanitizers clean, both build configurations, on ILP32 (in the default build `mem_copy`'s check compares the two pointers across objects, which C leaves undefined; the proof configuration has none); on LP64 "not applicable", exit 0. The contract still admits the call |
 
-All twenty-one build with gcc and clang at `-std=c99` (`p_try_alloc_assigns.c` uses C11's `_Alignas`, accepted there as an extension; `p_pool_reset_call.c` also needs `-finstrument-functions`, which both accept); add
+All twenty-two build with gcc and clang at `-std=c99` (`p_try_alloc_assigns.c` uses C11's `_Alignas`, accepted there as an extension; `p_pool_reset_call.c` also needs `-finstrument-functions`, which both accept); add
 `-fsanitize=address,undefined -fno-sanitize-recover=all` to confirm that the
 violating calls are defined C, and `-DCANON_NO_REQUIRE -DNDEBUG` for the proof
-configuration. Since G1's fix (40cccd9) the same calls fall outside the
+configuration. In the default build `mem_copy`'s `require_msg` runs
+`mem_regions_overlap`, which compares its two pointers with `<`; where they
+point into different objects C leaves that undefined (C11 6.5.8p5), so a probe
+that copies across objects is defined C in the proof configuration, where the
+check compiles away (VERIFY-039, the main pass, batch 1). Since G1's fix (40cccd9) the same calls fall outside the
 contract, as `p_pool_null.c`'s did after VERIFY-036 F2: the run-time behaviour
 is unchanged, and what changed is that the contract no longer admits the call.
 The three frame fragments closed at CI #1341 and CC #28; the shift fragment,
