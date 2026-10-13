@@ -10561,7 +10561,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10's repair predicted (the sixteen close; six goals added, all proved); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -15409,3 +15409,105 @@ other goal of the function proved either way.
 them on the same `bs` without reading `*bs` themselves, `bitset_assign` and
 the three `_option` finds, whose calls must meet the new clause. A
 prediction precedes the fix.
+
+### G10 — committed prediction for the repair (before the fix commit)
+
+**Decision (2026-10-13).** The repair recommended with G10, in
+`data/bitset.h`. Twenty contracts gain
+`requires bs == \null || \valid_read(bs);` as their last precondition: the
+sixteen whose functions read `bs->words` in the null guard, and
+`bitset_assign`'s and the three `_option` finds', whose functions hand `bs`
+to one of them. Placed last, the clause leaves the callers' goals for the
+earlier clauses their names; its own are `_requires_3` at `bitset_assign`'s
+calls to `bitset_set` and `bitset_clear`, and `_requires_2` at the three
+finds' calls and at `bitset_is_full`'s call to `bitset_count`. The comment
+above `bitset_set`'s contract and the header's NULL contract say why. No
+executable change, and no other unit reads the contracts: the tests and
+probes that include `data/bitset.h` compile it, and to a compiler the ACSL
+is a comment.
+
+The fix commit also corrects what G10 lists in `data/bitset.h` and in the
+bitset job of `.github/workflows/cmake-multi-platform.yml`: F4's comment
+above the `_option` finds, which says that `Some(v) ==> v < capacity` passes
+straight through, where through `bitset_find_next` it does not (batch 3),
+and three of the bitset job's messages, the ARM D comment and the footer,
+which give F5's five to a redundant precondition's cost, and P4's verdict,
+which counts six goals, two per site. The footer and the ARM S comment also
+give the core substrate 58, as when written; the roll-call lists 63,
+VERIFY-026 having added six of ptr's and VERIFY-036 F1 having closed one of
+memory's, so the arms the footer prints do not sum to the pin. The fix
+commit makes both say 63.
+
+**Before the prediction.** None of CI's provers has been run on the changed
+code: WP 29 with Alt-Ergo 2.6.3, Z3 4.15.2 and CVC5 1.2.1. WP 25, run as for
+batch 3, generates 4852 goals for the unit as it stands and 4858 with the
+change: six new, the call goals named above, and none removed. Each new goal
+is `true` after WP 25's simplification: the callee's new clause is its
+caller's own. The twenty functions' goals were then run with Z3 4.8.12 and
+CVC4 1.8 at 10 s, before and after the change, with WP 29's framing emulated
+as for batch 3 (the default `assigns` of `mem_zero`, `mem_set`, `bitset_set`
+and `bitset_clear` stated in a copy of the tree):
+
+- Thirteen of the sixteen guard reads prove with the clause, each by Z3 or
+  CVC4 in 30 to 90 ms, and fail without it.
+- The three at `bitset_as_bytes`, `_as_cbytes` and `_as_borrowed_bytes` get
+  no verdict here either way: this Why3 rejects their context's record types
+  ("Not a record field"). WP 25 prints them in the thirteen's form: from
+  `valid_rd(Malloc_0, bs_0, 3)` and `null != bs_0`, prove
+  `valid_rd(Malloc_0, shiftfield_F15_words(bs_0), 1)`.
+- No other goal of the twenty functions changes status: 487 of 531 proved
+  before and 506 of 537 after, the thirteen and the six. Twelve goals get no
+  verdict either way, from the same error: the three guard reads, eight more
+  of the `as_*` functions', five of them proved in CI, and
+  `bitset_find_next_option_ensures_2_part2`, pinned.
+
+**Reading.**
+
+- The guard reads `bs->words` only when `bs` is non-null, and there the
+  clause makes `*bs` readable, `words` among its fields. WP 25's simplifier
+  leaves that step to the provers, which take it from the memory model's
+  definition of validity: the field lies within the struct.
+- Each new call goal is its caller's new clause, on the same `bs`, in a
+  state no store has changed: `bitset_assign` and the three finds make the
+  call first, and `bitset_is_full` makes it after its guard, which writes
+  nothing.
+- Elsewhere the clause is a hypothesis, and it bears on none of the 25
+  residuals left. Those at the twenty functions lie on paths where
+  `bitset_mut` or `bitset_view` already makes `*bs` readable, or, at
+  `bitset_assign`'s `null` behaviour, are the frame of a call, which the
+  clause does not change. `bitset_init`'s and `bitset_clear_padding`'s goals
+  do not change at all.
+
+**Predicted.**
+
+| Goals | n | Predicted |
+|---|---|---|
+| the guard reads at `set`, `clear`, `toggle`, `test`, `clear_all`, `set_all`, `not`, `count`, `is_empty`, `is_full`, `find_first`, `find_next` and `find_last` (`bitset_<fn>_assert_rte_mem_access`) | 13 | close (H) |
+| the guard reads at `as_bytes`, `as_cbytes` and `as_borrowed_bytes` | 3 | close (M) |
+| new: `bitset_assign_call_bitset_set_requires_3`, `_call_bitset_clear_requires_3`; `bitset_find_first_option_call_bitset_find_first_requires_2`, and its two twins at `_next_` and `_last_`; `bitset_is_full_call_bitset_count_requires_2` | 6 | proved (H) |
+
+**Also predicted.**
+
+- (H) Six goals added, none removed: 5042. Each call lies on one path and
+  the clause has no top-level conjunction, so WP 29, which splits by paths
+  and `||` guards, makes one goal of each call's instance, as WP 25 does.
+- (M) No proved goal becomes unproved: the clause is a new hypothesis in the
+  twenty functions' goals and a goal only at the six calls. Five goals
+  proved in CI, all in the `as_*` functions, have no local verdict.
+- (H) The other 25 of bitset's own residuals and every inherited goal stay.
+- (H) No other unit moves.
+
+**Pins carried by the fix commit.** `frama-c-bitset`: `4920 / 5042`, 122
+unproved, the roll-call less the sixteen.
+
+**What it settles.** If it holds, G10 is closed: none of the twenty
+contracts admits a non-null `bs` whose `*bs` is not readable, and every null
+guard's read is proved. With them, every run-time check WP generates in
+bitset's own functions is proved; the validity of the words' bytes at the
+calls to `mem_zero`, `mem_set` and the byte views stays argued, under
+diag.h's block. Bitset's own residuals are then the 25 batch 3 filed, each
+under a written argument. VERIFY-020's array framing class is proved for all
+26 of its goals, and its P4 class is the three byte views. *A* does not
+change, since G10's sixteen were in no block, and the count of pinned names
+in no goal table falls from 250 to 234, as `tools/record_coverage.py`
+reports on the changed tree.
