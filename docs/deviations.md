@@ -3704,6 +3704,19 @@ vec's two combined `ensures`. Combining would drop the residual count
 5 → 1 and look like progress while deleting the only evidence that
 localises the failure to one direction of the exchange.
 
+**Coverage update (2026-10-13, VERIFY-039 main pass, batch 2).** The five
+are filed by name under a block of their own, VERIFY-039's "Struct stored
+from an initialised local, stated field by field". They are not vec's
+class: vec's `swap` fails on its clause about `*a`, whose operands its
+contract lets overlap in part; deque's fail on the clauses about `*b`,
+because WP's hypothesis filter drops the fact that proves them. That fact,
+`*b` after the last store equal to `*a` before the first, stands in WP's
+goal as `tmp`'s initializer, and the filter keeps it only for a goal that
+names both memories the store writes; each of the five names one field.
+`tmp` is a value in the model, and no store reaches it. The split is what
+makes the five fail: by the mechanism one conjunction is expected to prove,
+as vec's does.
+
 ### Prediction scorecard (honest record)
 
 Predictions were written into the driver header **before the first
@@ -3799,7 +3812,9 @@ invoking WP** if it does not equal the total.
   (option arm, 32 goals), VERIFY-015 (result family profile for the
   fresh instantiation).
 - Memory-model invariance: **VERIFY-019-M** below.
-- Swap class: VERIFY-018 (`vec_int_swap_ensures`), widened here.
+- Swap class: VERIFY-018 (`vec_int_swap_ensures`), widened here; withdrawn
+  by VERIFY-039's batch 2, which finds deque's five another class (the
+  coverage update above).
 - MC/DC: **MCDC-011** (82/82, 100%; first cover TU with zero
   justification rows; Shape B confirmed).
 - Split patch and the one-instantiation-per-TU rule:
@@ -3872,7 +3887,9 @@ work for it.
 
 - F4 closure this control produced: VERIFY-018 F4.
 - Width-axis analogue: VERIFY-009-W / the `frama-c-arena-32` job.
-- Swap-class widening this run enabled: VERIFY-019.
+- Swap-class widening this run enabled: VERIFY-019; the widening is
+  withdrawn (VERIFY-039, batch 2: deque's five are not vec's class), and
+  what this run showed, that the five do not depend on the model, stands.
 - Control workflow: `.github/workflows/f4-control.yml`
   (`workflow_dispatch` only; gates nothing).
 - Artifact: `wp-f4-control-typedcast`.
@@ -4534,6 +4551,19 @@ its callee had gained.
 `remove_at_result`'s instance is the same-base case and additionally needs
 multiplication (slot `i` vs slot `len`, lifted through `elem_size`); it is
 listed with the other four because the predicate shape is the blocker first.
+
+**Coverage update (2026-10-13, VERIFY-039 main pass, batch 2).** The six are
+filed by name. The comparator's goal has a block of its own, VERIFY-039's
+"Call through a pointer to one of the listed comparators": `pq_cmp_builtin`
+makes `\valid_function` true, and WP cannot check it. Three of the five
+overlap goals, the copies between a caller's memory and the buffer in
+`pq_push_result`, `pq_pop_raw` and `pq_peek`, are memory.h's pointer order
+and go under batch 1's block on it. `pq_swap_`'s and `pq_remove_at_result`'s
+compare two slots of one buffer, where WP's order is defined: the blocker
+there is the product with `elem_size`, not the predicate's shape, and a
+restatement of `regions_overlap` with `\separated` would not close them
+(VERIFY-039, "Two slots of one buffer, apart by a multiple of the element
+size").
 
 ### Prediction scorecard
 
@@ -10492,7 +10522,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -14576,6 +14606,19 @@ build, compares the two pointers with `<` too, which C leaves undefined
 across objects: the same issue in code. The priority queue's five are batch
 2's.
 
+**Coverage update (batch 2).** Three of the priority queue's five are filed
+here by name. The other two, `pq_swap_`'s and `pq_remove_at_result`'s,
+compare two slots of one buffer, where the order is defined, and are filed
+under a block of their own. When this block retires by the restatement, the
+three do not refile under diag.h's block as vec's case within the buffer's
+block would, the queue's buffer being bytes throughout. What remains of
+them is the step from the buffer's extent, `capacity * elem_size` bytes, to
+the slot: at `pq_push_result`, `(len + 1) * elem_size <= capacity *
+elem_size`, two product terms, the mechanism of the block on two slots; at
+`pq_pop_raw` and `pq_peek`, slot 0, `elem_size <= capacity * elem_size`, one
+such term, which the provers are expected to find, as at `pq_pop_raw`'s
+second copy.
+
 #### Struct exchange whose operands may overlap (2)
 
 | # | Goal | Units | Reading |
@@ -14616,6 +14659,11 @@ and `b`, the last store, into `*b`, leaves `*a` as the second store made it:
 defined placements and remove the model's counterexample; deque's
 postconditions about `*a`, which prove under `\separated(a, b)`, suggest the
 provers would then close the goal. A change with its own prediction.
+
+**Coverage update (batch 2).** Batch 2 read deque's: its five clauses about
+`*b` fail for another reason, WP's hypothesis filter dropping the premise of
+a clause on one field of a struct stored from an initialised local, and are
+filed under a block of their own.
 
 #### Call framed by the callee's default assigns (2)
 
@@ -14796,3 +14844,217 @@ on the old elements, `append_array`'s third postcondition, which the
 retirement of the block on default `assigns` (batch 1) would have `extend`
 state. No goal is generated for a clause a contract does not state, so no
 residual named either.
+
+### The main pass — batch 2: deque and the priority queue
+
+**What was read.** deque's 5 obligations in no goal table, each pinned in
+`frama-c-deque` and `cc-deque`, and the priority queue's 6, pinned in
+`frama-c-priority-queue`. VERIFY-019 files deque's five as its swap cluster,
+"an inherited class, widened" from vec's, and VERIFY-022 files the queue's
+six in its table of what remains, one under the tool and five under
+memory.h. Each was read against its function's code and contracts (for
+deque both surfaces, the driver's prototypes in
+`vmacros/vdrivers/deque_verify.h` and the macro-body contracts in
+`data/deque/deque_impl.h`, which state the same clauses; the queue is
+verified in place, in `data/priority_queue.h`), and against WP 25's printed
+goal, run here with the units' options; the names are those of the CI's WP
+29. WP 25 splits a postcondition's conjunction into parts, where WP 29 keeps
+it one goal (G4, entry 6's score); the reading below goes by the goals as WP
+29 states them.
+
+**Found.** None of the 11 is false, on LP64 or on ILP32. Three fall under
+an argument already counted: the queue's three copies between a caller's
+memory and the queue's buffer, under the block on byte ranges compared by
+pointer order (batch 1). The other eight fall under none, and three blocks
+are written for them below: *A* goes from 21 to 24 cumulative and from 15
+to 18 in force. Two attributions in the record are not what the code and
+the goals show.
+
+- deque's swap cluster is not vec's class. Its five clauses about `*b` are
+  true, and WP generates the fact that proves them; its own hypothesis
+  filter then drops it, because `*b` is stored from a local whose value
+  came from its initializer and each clause names one field. vec's `swap`
+  fails on its clause about `*a`, because its contract admits operands that
+  overlap in part (batch 1). VERIFY-019's account, "The obstacle is
+  therefore preservation of `tmp` across the second struct write", does not
+  fit the model either, where `tmp`, whose address is never taken, is a
+  value that no store reaches.
+- Two of the queue's five overlap goals are not memory.h's pointer order.
+  `pq_swap_`'s call to `mem_swap` and `pq_remove_at_result`'s call to
+  `mem_copy` compare two slots of one buffer, where WP's order is defined
+  and compares offsets; what is left is products with the element size,
+  which the provers do not relate. VERIFY-022 notes `pq_remove_at_result`'s
+  case as same-base, needing multiplication "additionally", with "the
+  predicate shape ... the blocker first"; within one base the shape is no
+  blocker at all, and `pq_swap_`'s case, same-base too, is not noted. The
+  job's class list had `pq_swap_`'s under multiplication before run 5
+  ("PROVER LIMIT"), and the rename at run 5 that gave all five to the
+  predicate's pointer order fits the other three only. A restatement of
+  `regions_overlap` with `\separated` would not close these two.
+
+Both attributions also stand outside this record: in
+`vmacros/vdrivers/deque_verify.h`'s comment on `swap`, in the deque and
+priority-queue jobs' comments and messages in
+`.github/workflows/cmake-multi-platform.yml`, and in `docs/verification.md`'s
+sections on the two modules. Each is corrected with its file's next change.
+
+**Filed by name**: VERIFY-039, Byte ranges compared by pointer order across objects
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_pq_push_result_call_mem_copy_requires_3` | `frama-c-priority-queue` | the two byte ranges do not share an address: `elem`'s `elem_size` bytes are separated from the buffer (`accepted`'s precondition), and slot `len`'s lie in it, as `len < capacity` |
+| 2 | `typed_cast_pq_pop_raw_call_mem_copy_requires_3` | `frama-c-priority-queue` | the two byte ranges do not share an address: `out`'s `elem_size` bytes are separated from the buffer (`nonempty_out`'s precondition), and slot 0's lie in it |
+| 3 | `typed_cast_pq_peek_call_mem_copy_requires_3` | `frama-c-priority-queue` | the two byte ranges do not share an address: `out`'s `elem_size` bytes are separated from the buffer (`some`'s precondition), and the top's, slot 0 (`pq_peek_raw`'s `\result == (char*)pq->data`), lie in it |
+
+Each copy has one operand in the queue's buffer and the other in memory the
+caller passes, which the precondition separates from the buffer and which
+may therefore lie in another object; there the predicate's order is
+unspecified in the model, as at vec's `append_array`, and the block's
+argument reads as it does there. Where the caller's memory shares the
+buffer's block, WP compares offsets, and the step from the separation,
+stated over the buffer's `capacity * elem_size` bytes, to the slot's bytes
+takes products with the element size, `(len + 1) * elem_size <= capacity *
+elem_size` at `pq_push_result`; the argument covers both cases.
+
+#### Struct stored from an initialised local, stated field by field (5)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_deque_int_swap_ensures_6` | `frama-c-deque`, `cc-deque` | `b->buffer == \old(a->buffer)`: the last store copies `tmp`, which holds `*a`'s fields as they were before either store |
+| 2 | `typed_deque_int_swap_ensures_7` | `frama-c-deque`, `cc-deque` | `b->capacity == \old(a->capacity)`: the same |
+| 3 | `typed_deque_int_swap_ensures_8` | `frama-c-deque`, `cc-deque` | `b->head == \old(a->head)`: the same |
+| 4 | `typed_deque_int_swap_ensures_9` | `frama-c-deque`, `cc-deque` | `b->tail == \old(a->tail)`: the same |
+| 5 | `typed_deque_int_swap_ensures_10` | `frama-c-deque`, `cc-deque` | `b->size == \old(a->size)`: the same |
+
+**Functions affected**: `deque_int_swap` (`frama-c-deque`, `cc-deque`).
+
+**Root cause**: `swap` exchanges two deques through a local,
+`deque_int tmp = *a; *a = *b; *b = tmp;`, under `\separated(a, b)`, and
+states the exchange field by field: five postconditions about `*a`, which
+receives `*b`, and five about `*b`, which receives `tmp`. In WP's model
+`tmp`, whose address is never taken, is a value: its initializer gives it as
+`*a`'s contents before either store, and the last store gives `*b`'s
+contents after it as `tmp`. WP's variable elimination substitutes the one
+into the other, and the fact that remains, `*b` after the last store equal
+to `*a` before the first, stands where the initializer stood and is tagged
+as one (`(* Initializer *) Init:` in WP's print). WP's hypothesis filter,
+`-wp-filter`, on by default, keeps such a hypothesis only if every variable
+in it occurs in the goal or in an ordinary hypothesis (WP 25's
+`Conditions.Filter`: `collect_condition` takes no variable from an `Init`
+step, and `filter_steplist` keeps one only through `filter_pred`'s test).
+The fact names both memories the last store writes, the pointer chunk and
+the integer chunk; each clause about `*b` names one field and so one chunk.
+The fact is dropped, and nothing in the goal relates `*b`'s field to
+`*a`'s. The clauses about `*a` rest on the copy `*a = *b`, an ordinary
+hypothesis, and prove.
+
+Shown in WP 25: each of the five goals carries the fact with
+`-wp-no-filter` and lacks it by default; with `-wp-no-let` the store's
+equation and the initializer stay apart, and both survive the filter; and
+a reduced copy of the function, run unsplit as WP 29 states a conjunction,
+loses the fact for a clause on one field and keeps it for a clause on two
+fields in different memories. Only WP 25's filter was read: ocaml.org's
+rendering of 29.0's `Conditions.ml` ends before module `Filter`, and 29.0's
+`wpo.ml` applies the same steps in the same order, `-wp-filter` as
+`Conditions.filter` after the simplifier. The mechanism accounts for what
+both units pin. vec's clause about `*b` is one conjunction over its pointer
+field and its integer fields, which WP 29 does not split, so its goal names
+both memories; WP 25's filter keeps the fact in that goal, and WP 29 proves
+the clause. deque's five each name one field, and none proves. WP 25 keeps
+the fact in vec's goal when it is not split, and drops it from each of the
+three parts when it is. Verifier-bound: the clauses are true, and WP
+discards the premise it generated for them.
+
+**Manual proof argument**: `tmp = *a` copies `*a`'s five fields before
+either store. `tmp` is a local object, distinct from `*a` and `*b`, so the
+store `*a = *b` leaves it as it was, and `*b = tmp` then gives each of
+`b->buffer`, `b->capacity`, `b->head`, `b->tail` and `b->size` the value
+the same field of `*a` had on entry, which is what the five clauses state.
+
+**Retirement.** The five clauses as one conjunction, as vec states its
+exchange: its goal would name both memories, and by the mechanism it is
+expected to prove, as vec's does. VERIFY-019 kept the split: "Combining
+would drop the residual count 5 → 1 and look like progress while deleting
+the only evidence that localises the failure to one direction of the
+exchange." By this reading combining is expected to drop it to 0, and the
+split is what makes the five fail. A change with its own prediction.
+
+#### Two slots of one buffer, apart by a multiple of the element size (2)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_pq_swap__call_mem_swap_requires_2` | `frama-c-priority-queue` | slots `a` and `b`, both in use and `a != b` past the early return: their `elem_size` bytes start `a · elem_size` and `b · elem_size` into the buffer, at least `elem_size` apart |
+| 2 | `typed_cast_pq_remove_at_result_call_mem_copy_requires_3` | `frama-c-priority-queue` | slots `i` and `len`, after the decrement, with `i < len` past the return for `i == len`: the same, `(len − i) · elem_size ≥ elem_size` |
+
+**Functions affected**: `pq_swap_`, `pq_remove_at_result`
+(`frama-c-priority-queue`).
+
+**Root cause**: each call passes two slots of the queue's buffer, which
+`ptr_elem` states as `(u8 *)data + index * elem_size`, to a callee that
+requires `!regions_overlap(a, b, size)`, memory.h's predicate by pointer
+order. The two pointers share a base, where WP's order is defined: WP's
+memory theory, `addr_lt_def` as WP 25 ships it, compares offsets within one
+base, and WP 29's pins agree, the copy within the buffer at `pq_pop_raw`
+proving. The goal is then about integers: with `x` the element size,
+`a·x < b·x + x` and `b·x < a·x + x` do not both hold, which needs
+`|a − b|·x ≥ x` from `a ≠ b`: two terms that are products of variables,
+related only through `a·x − b·x = (a − b)·x`. The provers do not find it
+within the units' 120 s. `pq_pop_raw`'s second copy, slot `len` into slot
+0, states the same predicate with one such term, `len·x ≥ x`, and proves.
+Verifier-bound: the predicate's order is defined here and the goal is true;
+the arithmetic is nonlinear.
+
+**Manual proof argument**: For slots `j < k`, `k·x ≥ (j + 1)·x = j·x + x`,
+so `k·x < j·x + x` fails: the two ranges of `x` bytes share no byte, the
+predicate, which needs both orders, is false, and the precondition, its
+negation, holds. At `pq_swap_`'s call `a != b` holds past
+`if (a == b) { return; }`; at `pq_remove_at_result`'s, `i < len` holds
+after the decrement, past `if (i == pq->len)`, from `i < \old(len)`. Both
+slots lie in the buffer, `\valid` for `capacity * elem_size` bytes by
+`pq_wf`, as both indices are below the length on entry, at most
+`capacity`.
+
+**Retirement.** An ACSL lemma for the step, `0 <= j < k && x > 0 ==>
+j*x + x <= k*x`, which carries a goal of its own and which the provers may
+close where they do not at the calls. A change with its own prediction.
+
+#### Call through a pointer to one of the listed comparators (1)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_pq_cmp_assert_rte_function_pointer` | `frama-c-priority-queue` | `pq->cmp` is one of compare.h's 24 comparators (`pq_cmp_builtin`, a precondition), each defined with the function type `algo_cmp_fn` points to |
+
+**Functions affected**: `pq_cmp_` (`frama-c-priority-queue`).
+
+**Root cause**: at a call through a function pointer, WP's RTE pass states
+`\valid_function` of the pointer, and WP 29 does not implement the
+predicate ("`\valid_function` not yet implemented", the warning VERIFY-011
+records at `region_end`), so the goal is left whatever the precondition
+says. The `calls` clause, which names the 24 comparators, settles the
+callee's contract, and it does not discharge this check. Verifier-bound.
+
+**Manual proof argument**: `pq_cmp_` requires `pq_cmp_builtin(pq)`:
+`pq->cmp` equals one of `algo_cmp_u8` to `algo_cmp_f64_desc`, each defined
+in compare.h as `int (const void *, const void *, void *)`, the type the
+field's type `algo_cmp_fn` points to. The call through `pq->cmp` therefore
+calls a function through a pointer to its own type (C11 6.5.2.2p9), which
+is what `\valid_function` states.
+
+**Retirement.** A WP that implements `\valid_function`. Option's and
+result's combinators and `region_end` carry the same check, on pointers
+their contracts do not tie to listed functions; batch 4 and the reading of
+region.h's Category 1 take them up under their own blocks.
+
+**What this does to *A*.** Three blocks: *A* is 24 cumulative and 18 in
+force, beside the proved-goal argument's 147 properties, 38 write sites and
+16 facts, unchanged. All three are verifier-bound: *V* is 14, all in force,
+and *S* 10 cumulative and 4 in force. VERIFY-019 has deque adding no class
+of its own ("This is not a new residual class"), and the paper's §4.1 reads
+it the same way; by these filings deque adds one, and the priority queue
+two. VERIFY-022 gives the queue's six two owners, the tool and memory.h: by
+these filings the comparator's goal is the tool's, three of the five are
+memory.h's, under batch 1's block, and two are the provers'.
+
+**Record coverage** reports the block on pointer order with 2 listed and 3
+filed by name, the three new blocks with 5, 2 and 1, no filing problem, and
+275 pinned names in no goal table: the 286 less deque's 5 and the queue's 6.
