@@ -3097,6 +3097,14 @@ its footprint, and a byte copy of whole objects copies the objects; each
 filed row reads the premises at its site, and for the content rows the
 copy's own, as `mem_copy` and `mem_move` state only a frame.
 
+**Coverage update (2026-10-13, VERIFY-039, the main pass, batch 3).**
+bitset's 15 goals of the class are filed under this argument by name: the
+byte views at `mem_zero` and `mem_set` and at the byte-view constructors
+`bytes_from`, `cbytes_from` and `borrowed_bytes_from_lifetime`, and the
+content across `mem_zero`. A fill writes whole `u64` words, and a `u64`
+whose bytes are all zero is 0, an exact-width type having no padding bits
+(C11 7.20.1.1); `mem_zero` states the bytes it zeroes since G3.
+
 ### Mitigation
 
 The `frama-c-diag` CI step enforces exactly 10 unproved goals
@@ -4218,6 +4226,32 @@ the integer complement, negative for a `u64` word. The invariant's unproved
 preservation, counted above under array framing, is unproved because it is
 false, and the postcondition counted among the probe's results ("both
 postconditions proved") is proved from it. See VERIFY-039 G8.
+
+**Coverage update (2026-10-13, VERIFY-039 main pass, batch 3).** The 41
+residuals left of the 71 are read by name. 25 are filed: 15 under diag.h's
+byte-view block (the fills at `mem_zero` and `mem_set`, the byte views the
+three `as_*` functions hand on, and the content across `mem_zero`), 2 under
+VERIFY-039's block on a call framed by the callee's default `assigns`
+(`bitset_assign`'s `null` clause), and 8 under three new blocks:
+`bitset_init`'s count, computed through a wrap at the capacity bound; the
+padding word after a store, by bit-level identities; and two clauses
+`bitset_find_next`'s code establishes and its specification omits. The other
+16, the null guards' reads of `bs->words`, are a requirement the contracts
+omit (VERIFY-039 G10): eleven stood from those functions' first contracts,
+in the P4, clear_all/set_all and queries classes, and five, at `set`,
+`clear`, `toggle`, `test` and `not`, are those F5 recorded as "Correct
+specification, five timeouts". The classes in the table above are the job's
+bins; the filings follow the mechanisms, which cut across them. Three
+readings above change with them. The second result, the redundancy
+load-bearing for the prover, holds for E1 and not for F5: at `bitset_not`,
+its control, 61e1312 widened the first precondition to admit
+`bs->words == \null` as well as deleting the line, and the goal comes from
+the widening once the line was gone (G10). P4's six goals are three byte
+views and three null guards, and the contract rejected above,
+`\valid((u8*)bs->words + ...)`, would have cleared the three views only. And
+F4's "everything else about these functions is specified" leaves out
+`bitset_find_next`'s early return for `prev >= capacity`, which
+`bitset_find_next_option`'s bound needs (batch 3).
 
 ## VERIFY-021: An Instrument Verified, and a Frame Clause That Cannot Be Written (lifetime.h, ladder level 4 only)
 
@@ -7935,6 +7969,11 @@ This inverts VERIFY-020 E1/F5, where a clause redundant for the LOGIC was
 load-bearing for the PROVER. Here a branch dead in EXECUTION on the measuring
 host is load-bearing for the PROOF.
 
+**Reading note (2026-10-13, VERIFY-039 G10).** F5's half of the inversion is
+withdrawn: its edit widened `bitset_not`'s precondition as well as deleting a
+clause, and the goal it cost is a requirement the widened precondition
+omits, not a prover's need for a redundant clause. E1's half stands.
+
 
 ## MCDC-014: Twelve Test Gaps, a Zero-Execution Swap Path Misread as a Justification, and Six Public Symbols That Should Never Have Been (priority_queue.h)
 
@@ -10522,7 +10561,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -14703,6 +14742,13 @@ states it as a postcondition too, its third stating the frame below them;
 with both stated, `extend` can state its frame as postconditions. A change
 with its own prediction.
 
+**Coverage update (batch 3).** `bitset_assign`'s two goals are filed here by
+name: `bitset_set` and `bitset_clear` have no default `assigns`, and WP 29
+frames a call to them by the union of their behaviours' clauses, which is
+their `live` clause. The retirement above is `extend`'s; theirs would be a
+default `assigns` atop `bitset_assign` that its `null` behaviour inherits,
+which gives up that frame (batch 3).
+
 **What this does to *A*.** Four blocks, written for obligations VERIFY-018
 recorded in July that no counted block covered: *A* is 21 cumulative and 15
 in force, beside the proved-goal argument's 147 properties, 38 write sites
@@ -15058,3 +15104,308 @@ memory.h's, under batch 1's block, and two are the provers'.
 **Record coverage** reports the block on pointer order with 2 listed and 3
 filed by name, the three new blocks with 5, 2 and 1, no filing problem, and
 275 pinned names in no goal table: the 286 less deque's 5 and the queue's 6.
+
+### The main pass — batch 3: bitset
+
+**What was read.** bitset's 41 obligations in no goal table, each pinned in
+`frama-c-bitset`: the residuals left of VERIFY-020's 71 after G4's entry 3,
+G6, the two loops bounded by `word_count` and G8 closed 30. VERIFY-020 sorts
+the 71 into the job's five classes; G4's entry-3 prediction listed the 41 as
+the four padding postconditions, three of which G6 had found false until the
+repair, and 37 the separation does not bear on. Each was read against its
+function's code and in-place contract in `data/bitset.h`, and against WP 25's
+printed goal, run with the unit's options; the names are those of the CI's WP
+29. WP 25 takes a call to a function with no default `assigns` as writing all
+memory, where WP 29 takes the union of its behaviours' clauses (G3; VERIFY-019
+at deque's run 0). For the goals after such a call, `mem_zero`, `mem_set`,
+`bitset_set` and `bitset_clear`, the reading went by a copy of the tree in
+which those clauses are stated as each function's default, so that WP 25
+frames the calls as WP 29 does. The local Z3 4.8.12 and CVC4 1.8, run on that
+copy on the clauses the blocks below concern, prove every part of them but the
+pinned ones. Where a block's retirement names a change, it says whether the
+change was tried there and what it showed.
+
+**Found.** None of the 41 is false for a call whose `bs` is null or points to
+a `Bitset`. Sixteen are false in a state the contracts admit: the null
+guards read `bs->words` where the contracts do not require `*bs` readable
+(G10, below). Of the other 25, 17 fall under arguments already counted: 15
+under diag.h's block on byte views, and 2 under batch 1's block on a call
+framed by the callee's default `assigns`. The remaining 8 fall under none,
+and three blocks are written for them below: *A* goes from 24 to 27
+cumulative and from 18 to 21 in force. VERIFY-020's classes are the job's
+bins, and the mechanisms cut across them:
+
+- "P4 Typed+Cast bridge at the three as_bytes sites", 6: three byte views,
+  diag.h's class, and the three null guards, G10.
+- "clear_all / set_all frames over symbolic mem_zero / mem_set", 9: seven
+  byte views and fills, and the two null guards.
+- "Group 1 single-bit family + init", of which 17 remain: `bitset_init`'s
+  three byte views and two contents, its count computed through a wrap
+  (VERIFY-020 refuted its first hypothesis with this goal, "whose code line
+  is literally its own assignment", and left the cause open), the padding
+  word after a store at `set`, `clear`, `toggle` and `clear_padding`,
+  `bitset_assign`'s call framing, and the null guards of `set`, `clear`,
+  `toggle` and `test`.
+- "queries and finds", 8: two clauses `bitset_find_next`'s code establishes
+  and its specification omits, and six null guards.
+- "array framing on and / or / xor / not": all closed, by G4's entry 3, the
+  loops bounded by `word_count` and G8, but for `bitset_not`'s null guard.
+
+**Filed by name**: VERIFY-017, diag-own residuals
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bitset_init_call_mem_zero_requires` | `frama-c-bitset` | validity of the words' bytes: `words[0 .. bitset_words_for(capacity) - 1]`, valid by the precondition, and the size is that many words, the stored count being `bitset_words_for(capacity)` (the block on the wrap, below) |
+| 2 | `typed_cast_bitset_init_assigns_exit_part5` | `frama-c-bitset` | the fill's bytes in the `assigns` clause's `words[0 .. bitset_words_for(capacity) - 1]`, the count as in row 1 |
+| 3 | `typed_cast_bitset_init_assigns_normal_part5` | `frama-c-bitset` | the same, on the normal path |
+| 4 | `typed_cast_bitset_init_ensures_4` | `frama-c-bitset` | the fill: `mem_zero`'s `zeroed` makes every byte of `words[0 .. word_count - 1]` zero, and a `u64` whose bytes are all zero is 0 |
+| 5 | `typed_cast_bitset_init_ensures_6` | `frama-c-bitset` | `bitset_pad`: `words[word_count - 1]` is among the zeroed words, and `0 >> (capacity % 64)` is 0 |
+| 6 | `typed_cast_bitset_clear_all_call_mem_zero_requires` | `frama-c-bitset` | validity of the words' bytes: `words[0 .. word_count - 1]`, valid by `bitset_mut` |
+| 7 | `typed_cast_bitset_clear_all_live_assigns_normal` | `frama-c-bitset` | the fill's bytes in the `live` clause's `words[0 .. word_count - 1]` |
+| 8 | `typed_cast_bitset_clear_all_live_ensures_part3` | `frama-c-bitset` | the fill, as at `bitset_init`: every word is 0 |
+| 9 | `typed_cast_bitset_clear_all_live_ensures_2_part3` | `frama-c-bitset` | `bitset_pad`: the last word is 0 |
+| 10 | `typed_cast_bitset_set_all_call_mem_set_requires` | `frama-c-bitset` | validity of the words' bytes: `words[0 .. word_count - 1]`, valid by `bitset_mut` |
+| 11 | `typed_cast_bitset_set_all_live_assigns_exit_part1` | `frama-c-bitset` | the fill's bytes in the `live` clause's `words[0 .. word_count - 1]` |
+| 12 | `typed_cast_bitset_set_all_live_assigns_normal_part1` | `frama-c-bitset` | the same, on the normal path |
+| 13 | `typed_cast_bitset_as_bytes_call_bytes_from_requires_2` | `frama-c-bitset` | validity of the words' bytes for `bytes_from`: `words[0 .. word_count - 1]`, valid by `bitset_mut` |
+| 14 | `typed_cast_bitset_as_cbytes_call_cbytes_from_requires_2` | `frama-c-bitset` | readability of the words' bytes for `cbytes_from`: the words, readable by `bitset_view` |
+| 15 | `typed_cast_bitset_as_borrowed_bytes_call_borrowed_bytes_from_lifetime_requires_readable_region` | `frama-c-bitset` | the same for `borrowed_bytes_from_lifetime`'s `readable_region` |
+
+The fills and the views are bitset's instances of the class the block
+argues: the bytes of a valid typed range are valid and lie in its footprint,
+and for the content rows, 4, 5, 8 and 9, the fill's own clause gives the
+bytes, `mem_zero`'s `zeroed`, stated since G3. A `u64` is an exact-width
+type and has no padding bits (C11 7.20.1.1), so a word whose bytes are all
+zero is 0. In WP's typed model the `char` writes never reach the `u64`
+words, so the content rows cannot be proved there; the validity and
+inclusion rows count `8 * word_count` bytes as as many cells from an offset
+counted in words, the inclusion reducing to `8 * word_count <= word_count`
+in WP 25's print, as at vec (batch 1). WP 25, with the emulation, also leaves
+`bitset_clear_all`'s `live` clause unproved on the exit path, which WP 29
+does not pin; how WP 29 frames that path was not read here.
+
+**Filed by name**: VERIFY-039, Call framed by the callee's default assigns
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bitset_assign_null_assigns_normal_part1` | `frama-c-bitset` | the call to `bitset_set` under `null`'s assumption: `bitset_set`'s own `null` behaviour applies, the same condition on the same argument, and it assigns nothing |
+| 2 | `typed_cast_bitset_assign_null_assigns_normal_part2` | `frama-c-bitset` | the same for the call to `bitset_clear` |
+
+`bitset_set` and `bitset_clear` have no default `assigns`, and WP 29 frames a
+call to either by the union of its behaviours' clauses, which is its `live`
+clause, `bs->words[bitset_word_l(i)]`. Under `bitset_assign`'s `null`
+assumption WP must then show that location outside every valid block
+(`invalid(...)` in WP 25's print), and with `bs` null its address is a read
+through null in the model. The block's argument reads as at `extend`: under
+the caller's assumption the callee's matching behaviour applies at the call
+and writes only what the caller's clause names, here nothing. The block's
+retirement does not reach these two: `bitset_assign`'s would be VERIFY-019's
+run-0 shape, a default `assigns` atop `bitset_assign` that its `null`
+behaviour inherits, which gives up `bitset_assign`'s `null` frame (on the
+emulated copy the two goals give way to the default clause's own, all proved,
+and nothing else in the function changes). WP 25, with the emulation, also
+leaves the clause's parts on the exit path unproved, which WP 29 does not pin,
+as at `extend`.
+
+#### Word count through a wrap at the capacity bound (2)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bitset_init_ensures_3` | `frama-c-bitset` | `word_count == bitset_words_for(capacity)`: the stored count, `(capacity + 64 - 1) / 64` in `usize`, is `(capacity + 63) / 64` for every admitted capacity, the two wraps at the bound cancelling |
+| 2 | `typed_cast_bitset_init_ensures_5` | `frama-c-bitset` | `bitset_mut(bs)`: its `bitset_view` needs the same equation; the rest is the precondition's validity and separation over `bitset_words_for(capacity)` words, which the `char` fill does not touch |
+
+**Functions affected**: `bitset_init` (`frama-c-bitset`).
+
+**Root cause**: `bitset_init` stores `BITSET_WORD_COUNT(capacity)`,
+`((usize)n + 64 - 1) / 64`. `usize` arithmetic wraps, and WP states the sum
+and the difference with `to_uint64` (as WP 25 prints the goal). The
+precondition admits `capacity` up to `CANON_USIZE_MAX - 63`, VERIFY-020 F1's
+bound, and at that bound `capacity + 64` is 2^64, which wraps to 0, and
+`0 - 1` wraps to `CANON_USIZE_MAX`, which is `capacity + 63`: the stored count
+is right, and the provers must see it through two wraps and a division. They
+do not. Shown in WP 25 with WP 29's framing of `mem_zero` emulated: with the
+bound one lower, `CANON_USIZE_MAX - 64`, where nothing wraps, both goals prove
+at once (under 0.2 s each, by Z3 4.8.12 or CVC4 1.8); with the shipped bound
+neither does. Verifier-bound: the arithmetic is right, and the provers do not
+reach it through the wrap.
+
+**Manual proof argument**: For `capacity <= CANON_USIZE_MAX - 64`, neither
+`capacity + 64` nor `capacity + 63` reaches 2^64, nothing wraps, and the
+count is `(capacity + 63) / 64`. At `capacity = CANON_USIZE_MAX - 63`,
+2^64 − 64, `capacity + 64` wraps to 0 and `0 - 1` to 2^64 − 1, which is
+`capacity + 63`, so the count is `(capacity + 63) / 64` again. Unsigned
+arithmetic wraps by definition (C11 6.2.5p9), so no step is undefined.
+`bitset_mut` then holds: `capacity` and `word_count` are as stored, the
+words are valid over `bitset_words_for(capacity)` and separated from `*bs`
+by the precondition, and the fill writes only the words' bytes.
+
+**Retirement.** The count computed without the intermediate wrap,
+`n / 64 + (n % 64 != 0)`, or the capacity bounded at
+`CANON_USIZE_MAX - 64`; on the emulated copy each closes both goals, in
+under 0.2 s. Either is a change with its own prediction.
+
+#### Bit-level identities on the padding word (4)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bitset_set_live_ensures_3_part3` | `frama-c-bitset` | `bitset_pad` after `words[i / 64] |= 1 << (i % 64)`: a store into another word leaves the last as it was; into the last, `i % 64 < capacity % 64`, and the new word stays below `2^(capacity % 64)` |
+| 2 | `typed_cast_bitset_clear_live_ensures_3_part3` | `frama-c-bitset` | the same after `&= ~(1 << (i % 64))`: clearing a bit sets none |
+| 3 | `typed_cast_bitset_toggle_live_ensures_3_part3` | `frama-c-bitset` | the same after `^= 1 << (i % 64)`: in the last word the bit lies below `capacity % 64` |
+| 4 | `typed_cast_bitset_clear_padding_ensures_part1` | `frama-c-bitset` | `bitset_pad` after `words[word_count - 1] &= (1 << r) - 1`, `r = capacity % 64` not 0: the word is below `2^r`, so its shift by `r` is 0 |
+
+**Functions affected**: `bitset_set`, `bitset_clear`, `bitset_toggle`,
+`bitset_clear_padding` (`frama-c-bitset`).
+
+**Root cause**: `bitset_pad` states the padding by a shift,
+`(words[word_count - 1] >> (capacity % 64)) == 0`, and each store changes
+one word with `|`, `&` or `^` and a mask built by `<<`. From the
+precondition's `bitset_pad`, or from the mask, to the shift of the new word
+is a bit-level step, and for the single-bit stores it also needs the word's
+index, `i / 64 == word_count - 1`, to bound `i % 64` below `capacity % 64`.
+WP gives the provers `lsl`, `lsr`, `lor`, `land` and `lxor` through axioms
+over integers (as WP 25 prints the goals and ships its theory), and they do
+not take the step within 120 s. VERIFY-008's Category 2, on WP's integer
+theory and bitwise alignment, argues the mask identity behind `align_up` and
+the predicate behind `ptr_is_aligned`, not these; bits.h's own residuals
+(VERIFY-003), batch 6's, may share the mechanism. Shown locally,
+with WP 29's framing emulated: Z3 4.8.12 and CVC4 1.8 prove every other part
+of the same postconditions, and none of these four. Until G6's repair
+(27e24f9) the three single-bit goals were false for an admitted call, a word
+store reaching `capacity` or `word_count`; `bitset_mut`'s separation now
+keeps the stores off the fields, and what is left is the bit-level step,
+which G4's entry-3 prediction expected to stay ("bit-level reasoning about
+shifts by `capacity % 64`"). Verifier-bound.
+
+**Manual proof argument**: Write `w` for the last word before the store,
+`r = capacity % 64` and `k = i % 64`. If `r = 0`, `bitset_pad` holds by its
+first disjunct. Otherwise, for `bitset_set`, `bitset_clear` and
+`bitset_toggle`, `w < 2^r` by the precondition's `bitset_pad`. A store into
+another word leaves `w`, `capacity` and `word_count` as they were, the
+separation in `bitset_mut` keeping the words off the fields. A store into
+the last word has `i / 64 = word_count - 1 = (capacity - 1) / 64`, so
+`k = i - 64 * (word_count - 1) < capacity - 64 * (word_count - 1) = r`, and
+`w | 2^k`, `w & ~2^k` and `w ^ 2^k` are each below `2^r`, as `w` and `2^k`
+are: the new word's shift by `r` is 0. For `bitset_clear_padding`, the new
+word is `w & (2^r - 1)`, below `2^r` whatever `w` was, and its shift by `r`
+is 0.
+
+**Retirement.** ACSL lemmas for the identities, each with a goal of its own,
+or a prover that reasons on bit vectors. Neither was tried for the three
+single-bit goals. For `bitset_clear_padding`'s, one lemma was tried, stating
+that a `u64` masked by `2^r - 1`, for `0 < r < 64`, shifts right by `r` to
+0: no local prover proved it in 30 s, and with it the goal did not close. A
+change with its own prediction.
+
+#### A clause the code establishes and the specification omits (2)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bitset_find_next_ensures_3_part7` | `frama-c-bitset` | `\result == BITSET_NPOS \|\| \result > prev` at the scan's return: the scan starts at the word after `start`'s, `start = prev + 1`, and only advances, so the found index is at least `64 * (start / 64 + 1) > prev`; the loop invariant states only `w <= word_count` |
+| 2 | `typed_cast_bitset_find_next_option_ensures_2_part2` | `frama-c-bitset` | `value < capacity` when a value is returned: for `prev >= capacity`, `bitset_find_next` returns `BITSET_NPOS` at its first test, which its contract does not state |
+
+**Functions affected**: `bitset_find_next`, `bitset_find_next_option`
+(`frama-c-bitset`).
+
+**Root cause**: each goal needs a fact the code establishes and the
+specification omits. `bitset_find_next`'s scan,
+`for (w = w + 1u; w < bs->word_count; w++)`, has the invariant
+`w <= bs->word_count` and nothing about where `w` started, so in the loop's
+havocked state WP knows no lower bound for `w`, and the found index may lie
+below `prev` in the model. `bitset_find_next`'s postcondition on the
+capacity holds only for `prev < capacity` (it begins
+`prev >= bs->capacity ||`), so for `prev >= capacity` the contract allows a
+result above `prev`, and `bitset_find_next_option`, which returns `some`
+whenever the result is not `BITSET_NPOS`, cannot show the value below
+`capacity`. Shown locally, with WP 29's framing emulated: with
+`loop invariant w > start / 64;` the first goal proves (Z3 4.8.12, 120 ms),
+and with `(bs != \null && bs->words != \null && prev >= bs->capacity) ==>
+\result == BITSET_NPOS` among `bitset_find_next`'s postconditions the second
+proves (Qed). Specification-bound: the clauses are true, and the
+specifications do not carry them.
+
+**Manual proof argument**: Past the early returns `start = prev + 1 <
+capacity`. The scan's `w` starts at `start / 64 + 1` and only increases, so
+at its return `found = 64 * w + ctz(words[w]) >= 64 * (start / 64 + 1) >
+start > prev`, and `found < capacity` by the return's test; nothing wraps,
+as `w < word_count <= 2^58`. For `prev >= capacity`, `bitset_find_next`'s
+first test returns `BITSET_NPOS`, and `bitset_find_next_option` returns
+`none`; for `prev < capacity` its second postcondition gives the bound.
+
+**Retirement.** The invariant and the postcondition above, each shown
+locally to close its goal, the postcondition appended after
+`bitset_find_next`'s third so that the pinned names keep their numbers. A
+change with its own prediction.
+
+**What this does to *A*.** Three blocks: *A* is 27 cumulative and 21 in
+force, beside the proved-goal argument's 147 properties, 38 write sites and
+16 facts, unchanged. The count's and the padding word's are verifier-bound,
+the clause the specification omits specification-bound: *V* is 16, all in
+force, and *S* 11 cumulative and 5 in force. The paper's §4.1 has bitset
+adding no argument, its new family, VERIFY-020 F4, argued under an existing
+one; by these filings 17 of its 41 fall under arguments counted before it,
+eight need three new blocks, and sixteen are a gap.
+
+**Record coverage** reports diag.h's block with 8 listed and 57 filed by
+name, the block on a call framed by the callee's default `assigns` with 2
+listed and 2 filed, the three new blocks with 2, 4 and 2, no filing problem,
+and 250 pinned names in no goal table: the 275 less the 25 filed. G10's
+sixteen stay unlisted while the gap is open.
+
+### G10 — the null guards read `*bs`, which sixteen contracts do not require readable (opened)
+
+**Finding.** Sixteen of bitset's functions open with `if (!bs || !bs->words)`,
+and their contracts handle `bs->words == \null` as a case, not a caller's
+obligation (VERIFY-020 F2), through a first precondition of the form
+`bs == \null || bs->words == \null || bitset_view(bs)` (or `bitset_mut`, with
+`bitset_pad` at `set`, `clear` and `toggle`). Only the last disjunct requires
+`*bs` readable, and the second reads it. For a non-null `bs` that points to no
+`Bitset`, past the end of an array, say, ACSL gives `bs->words` no specified
+value; where it is null, the precondition holds, and the code's read of
+`bs->words` is undefined. Each function's check that the read is valid, its
+`assert_rte_mem_access` without a suffix, is false in that state, and WP is
+right not to prove it: these are the sixteen residuals of that name, in
+`bitset_set`, `bitset_clear`, `bitset_toggle`, `bitset_test`,
+`bitset_clear_all`, `bitset_set_all`, `bitset_not`, `bitset_count`,
+`bitset_is_empty`, `bitset_is_full`, `bitset_find_first`, `bitset_find_next`,
+`bitset_find_last`, `bitset_as_bytes`, `bitset_as_cbytes` and
+`bitset_as_borrowed_bytes`. Eleven stood from those functions' first
+contracts, in VERIFY-020's P4, clear_all/set_all and queries classes. Five, at
+`set`, `clear`, `toggle`, `test` and `not`, came with F2 and F5 (61e1312),
+which widened those preconditions to admit `bs->words == \null` and deleted
+the clause, `bs == \null || bs->words != \null`, that had excluded the case;
+F5 recorded them as "Correct specification, five timeouts", and named the
+deletion "the ONLY edit" at `bitset_not`. The specification omits a
+requirement, and the goals are not timeouts of a true claim. G4's entry-3
+prediction gave all sixteen to F5. VERIFY-022 closed the same omission at the
+priority queue, "`pop_raw` read `pq->len` before requiring readability", one
+of its three small omissions, with `requires pq == \null || \valid_read(pq)`;
+the clause's comment in `data/priority_queue.h` says why, "commit 6: the code
+reads pq->len whenever pq != NULL". A run-time probe does not apply: the state
+is one the precondition admits in ACSL's logic, and the read in it is itself
+the undefined step. Batch 1 filed vec's `swap`, whose contract also admits a
+placement C leaves undefined, under a block: there the failing goal is a
+postcondition, and its argument may take the execution as defined. Here the
+failing goal is the check that the execution is defined, and an argument that
+took it so would assume the goal.
+
+F5's lesson, that "a clause redundant for the LOGIC can be load-bearing for
+the PROVER", rests on its edit being that deletion alone. It stands in
+VERIFY-020 and MCDC-013, which now carry notes, and outside this record in
+`docs/verification.md`, `docs/traceability.md`, `docs/vmacros.md`,
+`docs/decision-families.md` and the bitset job's messages in
+`.github/workflows/cmake-multi-platform.yml`. P4's count of six, "6 goals (2
+per site)" in that job's verdict, stands there and in `docs/traceability.md`,
+and F4's reading of the `_option` finds, that `Some(v) ==> v < capacity`
+"passes straight through", in the comment above them in `data/bitset.h`. Each
+is corrected with its file's next change.
+
+Shown in WP 25, with WP 29's framing emulated: `bitset_count`'s check fails
+with its shipped contract and proves with
+`requires bs == \null || \valid_read(bs);` added (CVC4 1.8, 30 ms), every
+other goal of the function proved either way.
+
+**Decision (recommended).** The sixteen contracts gain
+`requires bs == \null || \valid_read(bs);`, and so do the four that call
+them on the same `bs` without reading `*bs` themselves, `bitset_assign` and
+the three `_option` finds, whose calls must meet the new clause. A
+prediction precedes the fix.
