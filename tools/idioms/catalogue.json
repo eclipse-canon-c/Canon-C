@@ -1,7 +1,7 @@
 {
  "meta": {
   "tool_version": "1",
-  "substrate_commit": "6290f4a",
+  "substrate_commit": "068ae6a",
   "clang": "Ubuntu clang version 18.1.3 (1ubuntu1)",
   "workflow": ".github/workflows/cmake-multi-platform.yml"
  },
@@ -123,7 +123,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 43
+   "features": 44
   },
   {
    "job": "frama-c-pool",
@@ -140,7 +140,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 44
+   "features": 45
   },
   {
    "job": "frama-c-region",
@@ -157,7 +157,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 44
+   "features": 45
   },
   {
    "job": "frama-c-arena-32",
@@ -174,7 +174,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 43
+   "features": 44
   },
   {
    "job": "frama-c-error",
@@ -212,7 +212,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 24
+   "features": 26
   },
   {
    "job": "frama-c-result",
@@ -231,7 +231,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 25
+   "features": 27
   },
   {
    "job": "frama-c-vec",
@@ -252,7 +252,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 54
+   "features": 56
   },
   {
    "job": "frama-c-deque",
@@ -273,7 +273,7 @@
     "-DCANON_NO_REQUIRE",
     "-DNDEBUG"
    ],
-   "features": 34
+   "features": 36
   },
   {
    "job": "frama-c-borrow",
@@ -644,10 +644,14 @@
    "frama-c-vec"
   ],
   "acsl-builtin:\\separated": [
+   "frama-c-arena",
+   "frama-c-arena-32",
    "frama-c-bitset",
    "frama-c-deque",
    "frama-c-diag",
+   "frama-c-pool",
    "frama-c-priority-queue",
+   "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec"
   ],
@@ -688,6 +692,12 @@
    "frama-c-result",
    "frama-c-slice",
    "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-builtin:\\valid_function": [
+   "frama-c-deque",
+   "frama-c-option",
+   "frama-c-result",
    "frama-c-vec"
   ],
   "acsl-builtin:\\valid_read": [
@@ -954,6 +964,12 @@
    "frama-c-result",
    "frama-c-slice",
    "frama-c-stringbuf",
+   "frama-c-vec"
+  ],
+  "acsl-clause:terminates": [
+   "frama-c-deque",
+   "frama-c-option",
+   "frama-c-result",
    "frama-c-vec"
   ],
   "acsl-logic:pointer-to-integer cast": [

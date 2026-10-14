@@ -29,8 +29,10 @@ instances of known ones.
 builds `catalogue.json` from **every Frama-C job in the CI workflow**, each with
 its own translation unit and preprocessor flags, so the catalogue covers exactly
 what CI verifies (22 jobs, 21 units). Each entry lists the jobs it comes from.
-At 6290f4a (CI #1337): 37 ACSL features, 22 C features and 8 family features,
-over the 41 repository files the verified units include.
+At 068ae6a (CI #1361): 39 ACSL features, 22 C features and 8 family features,
+over the 41 repository files the verified units include. The first build, at
+6290f4a (CI #1337), had 37 ACSL features; VERIFY-039 G11's repair of option's
+and result's drivers wrote `\valid_function` and the `terminates` clause.
 
     python3 tools/idioms/extract.py crosscheck
 
@@ -85,4 +87,17 @@ n(*P*). Use the preprocessor flags *P* will be verified with.
    catalogue legitimately and is a small prospective test in itself.
 3. **Freezing.** Commit `catalogue.json` and this tool with the prediction hash,
    compute n(*P*) once before the first WP run and once on the final sources, and
-   decide the test on the final value.
+   decide the test on the final value. A repair of the substrate's contracts can
+   add kinds, as VERIFY-039 G11's added two, so the catalogue frozen has to be
+   built from the substrate commit *P* is verified against.
+4. **Kinds the verifier never proves on a feasible path.** G11's repair wrote
+   `\valid_function`, which WP 29 does not implement: it turns the assertion
+   into `false`, proved only where the path's hypotheses are inconsistent. Under
+   the repaired contracts, so far the home drivers' (the macro bodies and the
+   `DECLARE_*` declarations still require nothing of the pointer), a program
+   that writes it, or calls one of option's or result's combinators on its
+   calling branch, gets goals no prover discharges where the path is feasible;
+   the record's arguments, once VERIFY-014's and VERIFY-015's blocks are
+   restated, cover only the substrate's own run-time checks. The rebuilt
+   catalogue counts the kind as inside; the pre-registration decides whether it
+   is, and excludes it explicitly if not.
