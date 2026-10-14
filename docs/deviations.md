@@ -2464,6 +2464,16 @@ residual. The functional shape is exercised exhaustively by
 (CMakeLists.txt enables sanitizers only for Debug, and skips ASan under
 MSVC), verifying absence of UB on every combinator path.
 
+**Reading note (2026-10-14, VERIFY-039 main pass, batch 4).** The argument
+conditions every goal on a callback contract no clause states, and the goals
+are false for admitted calls: the contracts require nothing of the pointer,
+and claim an empty frame, termination and no exit, the last two by WP 29's
+defaults, for every callback (VERIFY-039 G11). Not repointing the option is
+not the condition: `o` is passed by value, and the frame needs a callback
+that writes nothing. The same holds at every instantiation filed under this
+block by family convention, option at `usize`, `isize` and `Rec`. G11's
+repair is recommended; until it, no goal is filed under this block.
+
 Every non-combinator function proved fully: `some`, `none`, `is_some`,
 `is_none`, `get`, `unwrap`, `unwrap_or`, `replace`, `take`, and
 `expect`'s reachable surface carry no residuals.
@@ -2618,6 +2628,15 @@ residual. The functional shape is exercised exhaustively by
 16 CI configs, with ASan + UBSan on the Linux and macOS debug builds
 (CMakeLists.txt enables sanitizers only for Debug, and skips ASan under
 MSVC), verifying absence of UB on every combinator path.
+
+**Reading note (2026-10-14, VERIFY-039 main pass, batch 4).** As at
+VERIFY-014, the goals are false for admitted calls (VERIFY-039 G11), so the
+class is not "a verifier feature gap": no verifier proves a claim an
+admitted call falsifies. Result's fresh instantiation at (`Bool`, `Error`)
+carries the same 28. In `vec_verify.h` and `priority_queue.h` its
+combinators have no contract, and their 20 goals there are the six run-time
+checks on the pointers and fourteen checks of WP 29's default termination
+and exit clauses; no frame goal, since nothing states a frame.
 
 Every non-dispatching function proved fully: `ok`, `err`, `is_ok`,
 `is_err`, `get_ok`, `get_err`, `unwrap_or`, `unwrap`, `unwrap_err`,
@@ -3484,6 +3503,10 @@ frozen CI #1154):
   property of `result(Bool, Error)`, and never a WP union-model
   artifact. It is a precondition vec's driver could have stated and
   did not — **removable**, not residual.
+
+  **Note (2026-10-14, VERIFY-039 main pass, batch 4).** The queue's own
+  instantiation (VERIFY-022) still carries the pair: G12 recommends the same
+  contracts there.
 
 ### Prediction scorecard (honest record)
 
@@ -4604,6 +4627,12 @@ there is the product with `elem_size`, not the predicate's shape, and a
 restatement of `regions_overlap` with `\separated` would not close them
 (VERIFY-039, "Two slots of one buffer, apart by a multiple of the element
 size").
+
+**Coverage update (2026-10-14, VERIFY-039 main pass, batch 4).** The fresh
+result arm's 22 are read by name. Its 20 combinator goals are G11's, false
+for some admitted callback, and the `get_ok`/`get_err` pair is G12's: the
+precondition VERIFY-018's F4 found missing at vec, missing in this header's
+instantiation too.
 
 ### Prediction scorecard
 
@@ -10567,7 +10596,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10 repaired and scored exact (fix ec56091, CI #1358 / CC #45: the sixteen closed, six goals added and proved, nothing else moved, as predicted); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10 repaired and scored exact (fix ec56091, CI #1358 / CC #45: the sixteen closed, six goals added and proved, nothing else moved, as predicted); batch 4, option and result, read by name (186 obligations, none filed: 184 are G11's and 2 G12's; *A* unchanged); G11 opened (the combinators require nothing of the callback's pointer, and WP 29's default clauses claim termination and no exit, and the contracts an empty frame, for every callback: 184 goals false for admitted calls, and a caller's proof made false by the frame; contracts that claim only what every callback gives recommended); G12 opened (the queue's result instantiation leaves `get_ok`'s and `get_err`'s `out` unrequired, VERIFY-018 F4's pair; vec's contracts recommended); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -15553,3 +15582,242 @@ core substrate besides. F5's lesson still stands in `docs/verification.md`,
 `docs/traceability.md`, `docs/vmacros.md` and `docs/decision-families.md`,
 and P4's six in `docs/traceability.md`; each is corrected with its file's
 next change.
+
+### The main pass — batch 4: option and result
+
+**What was read.** The 186 obligations of option and result in no goal
+table: option's 32 at `int` (VERIFY-014) and result's 28 at (`int`, `VErr`)
+(VERIFY-015), which those records list by function and count, and the 126 of
+the fresh instantiations, which the records of the units that instantiate
+them file by family convention: option at `usize` 32 (`frama-c-bitset`,
+VERIFY-020), at `isize` 32 (`frama-c-range`, VERIFY-030) and at `Rec` 32
+(`cc-vec_struct`, VERIFY-037/038), and result at (`Bool`, `Error`) 30
+(VERIFY-018, VERIFY-019, VERIFY-022). Option's 32 at `int` are pinned in
+`frama-c-option` and `cc-option`, and in `frama-c-vec`, `frama-c-deque`,
+`cc-vec` and `cc-deque`, which include `option_verify.h` or expand the same
+macro bodies. Of result's 30 at (`Bool`, `Error`), 20 are pinned in
+`frama-c-vec`, `frama-c-deque`, `frama-c-priority-queue` and the three -CC
+units that instantiate the pair, 8 `assigns` goals in `frama-c-deque` and
+those -CC units only, and 2 in `frama-c-priority-queue` only. Each was read
+against its function's body, the `IMPL_OPTION_*` and `IMPL_RESULT_*` macros,
+the same at every type, and against the contract it is checked under: the
+drivers' prototypes (`option_verify.h`, `result_verify.h`,
+`bitset_verify.h`, `range_verify.h`, `deque_verify.h`), the macro bodies'
+own contracts in `option_defn.h` and `result_defn.h` under `-CC`, and, for
+the combinators at (`Bool`, `Error`) in `vec_verify.h` and
+`priority_queue.h`, none. WP 25 prints the frame goals and the run-time
+checks; it generates no termination or exit goal for a function that states
+no such clause, and WP 29 does. For those the reading went by WP 29's manual
+and its source on ocaml.org. WP asks the kernel for the clauses a function
+lacks, and "in the default Frama-C configuration, terminates is true, exits
+is false" (the WP manual for 29.0, §2.1; `wpTarget.ml` adds them to every
+function with a body). A call through a pointer with no `calls` clause is
+taken as non-terminating ("Unknown callee, considering non-terminating
+call", `cfgCalculus.ml`) and, since the pointed function might call the
+function under verification, as part of a recursive cluster that needs a
+`decreases` clause (§2.4.4): two termination goals at each such call. It is
+taken to write anything, and the exit obligations are built only in a
+function that calls some function WP knows.
+
+**Found.** None of the 186 is true for every admitted call. 184 are the
+combinators' goals at the call through the caller's pointer: 36 run-time
+checks that the pointer is a valid function (`assert_rte_function_pointer`),
+72 termination goals, two at each of the 36 calls, 20 exit goals and 56
+parts of the frame `assigns \nothing`, which every contract of a combinator
+states. No contract requires anything of the pointer, so a call with a null
+pointer, or with a callback that loops, calls `exit` or writes a global,
+meets every precondition and falsifies the goal; the frame's falsity carries
+into a caller's proof. They are G11, below. The other 2, the queue's
+`get_ok` and `get_err` stores through `out`, need the precondition
+VERIFY-018's F4 found missing at vec, and the queue's instantiation still
+omits it: G12, below. No obligation is filed: none is true under the
+argument it is listed under.
+
+**VERIFY-014's and VERIFY-015's arguments** show the combinators' goals true
+"under the contract that the supplied callback is a valid function that
+terminates and does not repoint the option" (the result, for VERIFY-015), a
+contract they say no ACSL mechanism encodes. Not repointing a parameter
+passed by value is not what `assigns \nothing` needs: the callback must
+write nothing. VERIFY-015 calls the class "a verifier feature gap, not a
+prover-strength residual", and the paper's §4.1 counts its arguments among
+the verifier-bound ones ("an arbitrary function pointer with no `calls`
+clause"). A WP that implemented `\valid_function` and the callee's contracts
+would not prove these goals either, since some admitted callbacks falsify
+them. Both records get a note. The blocks stay in force until G11's repair,
+under which they would cover the run-time checks, true then and still
+unproved.
+
+**What this does to *A*.** No block is written and none retires: *A* stays
+27 cumulative and 21 in force, *V* 16, all in force, and *S* 11 cumulative
+and 5 in force, beside the proved-goal argument's 147 properties, 38 write
+sites and 16 facts, unchanged. Two blocks in force, option's and result's,
+cover goals false for admitted calls, as VERIFY-036 found of four others.
+The paper counts both among its ten verifier-bound arguments; as written
+they are not about the verifier, and G11's repair would make them so,
+covering only the run-time checks.
+
+**Record coverage** reports what it did after G10's score: no filing problem
+and 234 pinned names in no goal table, the 186 among them. G11's and G12's
+goals stay unlisted while the gaps are open.
+
+### G11 — the combinators' contracts claim, for every callback, what only some callbacks give (opened)
+
+**Finding.** Option's six combinators, `map`, `and_then`, `or_else`,
+`filter`, `combine_with` and `eq`, and result's five that call a pointer,
+`map`, `map_err`, `and_then`, `or_else` and `eq`, which calls one of two,
+call a function pointer their caller passes, on one branch. Their contracts
+require nothing of the pointer; the only text the library ships that does is
+a comment on result's `eq`, "Contract: eq_ok and eq_err must not be NULL",
+in `result_decl.h` and `result_defn.h`, which no clause states. Every
+contract written for them states `assigns \nothing`, and none states
+`terminates` or `exits`, so WP 29 checks the defaults, `terminates \true`
+and `exits \false`; at (`Bool`, `Error`), `vec_verify.h` and
+`priority_queue.h` write no contract for them, and the defaults are all
+there is. Each claim is false for a call that meets every precondition:
+
+- a null pointer on the calling branch: the call is undefined, and the
+  run-time check `\valid_function` of the pointer is false;
+- a callback that loops: the call does not terminate;
+- a callback that calls `exit`: the call exits;
+- a callback that writes a global: the call writes it.
+
+The 184 goals are these claims at the eleven combinators' calls, in every
+instantiation the units pin, with the same suffixes at every type:
+
+| Combinators | Goals at each of option's `int`, `usize`, `isize` and `Rec` (32 each) |
+|---|---|
+| `map`, `and_then`, `filter`, `combine_with` | `_assert_rte_function_pointer`, `_terminates_part2`, `_terminates_part3`, `_exits_part1`, `_assigns_exit_part2`, `_assigns_normal_part2` |
+| `or_else` | `_assert_rte_function_pointer`, `_terminates_part1`, `_terminates_part2`, `_assigns_part2` |
+| `eq` | `_assert_rte_function_pointer_part2`, `_terminates_part2`, `_terminates_part4`, `_assigns_part5` |
+
+| Combinators | Goals at each of result's (`int`, `VErr`) and (`Bool`, `Error`) (28 each) |
+|---|---|
+| `map` | `_assert_rte_function_pointer`, `_terminates_part2`, `_terminates_part3`, `_exits`, `_assigns_exit_part2`, `_assigns_normal_part2` |
+| `map_err` | the same, with `_assigns_normal_part3` |
+| `and_then` | `_assert_rte_function_pointer`, `_terminates_part1`, `_terminates_part2`, `_assigns_part1` |
+| `or_else` | `_assert_rte_function_pointer`, `_terminates_part1`, `_terminates_part2`, `_assigns_part2` |
+| `eq` | `_assert_rte_function_pointer`, `_assert_rte_function_pointer_2`, `_terminates_part1` to `_part4`, `_assigns_part2`, `_assigns_part4` |
+
+The names begin `typed_option_<T>_`, `typed_result_int_VErr_` or
+`typed_result_Bool_Error_`, with `typed_cast_` in the Typed+Cast units. At
+(`Bool`, `Error`) the 8 `assigns` goals are pinned only where a contract
+states the frame, `frama-c-deque` and the -CC units. The units are
+`frama-c-option`, `frama-c-result`, `frama-c-vec`, `frama-c-deque`,
+`frama-c-priority-queue`, `frama-c-bitset`, `frama-c-range`, `cc-option`,
+`cc-result`, `cc-vec`, `cc-deque` and `cc-vec_struct`. Option's `or_else`
+and `eq` and result's `and_then`, `or_else` and `eq` call no function WP
+knows, so WP 29 builds no exit obligation in them: there the default
+`exits \false` is as false, and no goal checks it.
+
+The frame's falsity carries into a caller's proof. At a call WP takes the
+callee's contract, so a function that calls `option_int_map` with a callback
+writing a global is proved to leave the global unchanged.
+`tools/probes/verify-039/p_combinator_callback.c` has such a function,
+`client()`: WP 25 proves its `ensures g == 0` (Qed) from `map`'s
+`assigns \nothing`, and at run time `g` is 1. The probe also calls
+`option_int_map` and `result_int_VErr_map` with that callback, and the
+global has changed after each; `option_int_map` with a callback calling
+`exit(3)`, and the process ends with status 3 inside the call; and
+`option_int_map` with a callback looping on a volatile counter, and the call
+has not returned when `SIGALRM` stops it after 1 s. All five `VIOLATED`; gcc
+and clang, `-O0` and `-O2`, both build configurations, LP64 and ILP32; the
+sanitizers are clean. A call through a null pointer is not run: the call is
+itself the undefined step, as at G10.
+
+VERIFY-014 and VERIFY-015 condition every goal on a callback contract no
+clause states, and the paper counts their arguments as verifier-bound; its
+§6.1 says Frama-C 29 "cannot constrain an indirect call through an arbitrary
+function pointer". What fails is the contracts' claims, and no verifier
+proves a claim that an admitted call falsifies. The same reading stands
+outside this record: in `docs/verification.md`, three times,
+`docs/traceability.md`, twice, and `docs/vmacros.md`, which call the class a
+verifier feature gap; in `docs/decision-families.md`, which calls it
+"intrinsic to what a combinator *is*" and files VERIFY-014 under the shape
+whose "defining feature is that strengthening the contract does *not* help";
+in the comments of the `frama-c-option` and `frama-c-result` jobs, which
+take a future `\valid_function` as the signal to revisit; and in the four
+drivers' comment that a `requires \valid_function(f)` "would not help", and
+their header comments. Each is corrected with its file's next change, the
+drivers' with the repair. region.h's Category 1, `region_end`'s calls to the
+hooks a caller registers, may be the same class; it is read with that block
+after the batches.
+
+**Decision (recommended).** Each contract claims only what holds for every
+callback its preconditions admit:
+
+- each combinator requires the pointer to be a valid function where it calls
+  it: `requires o.has_value ==> \valid_function(f);` at `option_int_map`,
+  and each other combinator with its own calling condition. WP 29 does not
+  implement the predicate, so the run-time check stays unproved; but it is
+  then true for every admitted call, which is what lets it be filed, a
+  verifier-bound residual under VERIFY-014's and VERIFY-015's blocks
+  restated;
+- termination and no exit are claimed where the body calls no pointer:
+  `terminates` with the negation of the calling condition and `exits` with
+  the condition (`terminates !o.has_value; exits o.has_value;` at `map`),
+  and no `decreases` clause. §2.4.4 asks for one only of a function that
+  "shall terminate", and at a call WP proves the caller's termination
+  condition implies the callee's, so with `terminates !o.has_value` both
+  goals at the call through the pointer have a condition false on that
+  branch; a `decreases` clause would bring a check of the pointer call's
+  decrease, which no callback's contract gives. The WP 29 probe run is to
+  confirm it;
+- the empty frame is stated in the behaviours that call no pointer, and no
+  frame in those that do;
+- where no contract is written, the combinators at (`Bool`, `Error`) in
+  `vec_verify.h` and `priority_queue.h`, they get these contracts, retyped
+  from `deque_verify.h`'s once it is repaired.
+
+The surfaces are the five drivers above, `vec_verify.h`, `priority_queue.h`,
+and the shipped macro bodies of `option_defn.h` and `result_defn.h`. The
+declarations shipped for separate compilation, the `DECLARE_*` macros in
+`option_decl.h` and `result_decl.h`, carry no contract, and a client that
+sees only them gets the kernel's generated defaults for a prototype, a frame
+from its parameters and, in Frama-C 29, termination and no exit (the WP
+manual for 29.0, §2.1; the Frama-C 28 user manual's Table 5.1), false the
+same way. Against `DECLARE_OPTION_ALL(extern, int)` alone, run as the
+probe's header runs it, WP 25 proves the `ensures g == 0` of the probe's
+`client()` by Qed, with 6 of the function's 8 goals: its two frame parts at
+the call fail, as the generated frame names `*f`, which `client()`'s
+`assigns g` does not. The warnings say only that the `assigns` of
+`option_int_map` and `option_int_some` were generated from their prototypes.
+The repair states the contracts there too, or the record states the limit. A
+caller loses a frame it could not rely on, and the probe's `client()` is no
+longer proved. A caller also takes on goals it cannot discharge:
+`\valid_function` of the pointer it passes, which WP 29 cannot prove even
+for a named function, and, if it claims termination, the termination of each
+call that may take the calling branch. No verified unit calls a combinator,
+so no gate moves for that. Recording the callback's discipline as a standing
+hypothesis, as VERIFY-015 records the union model's, was considered and is
+not recommended: a client's proof reads the contract, and the client above
+is proved wrong with no warning. WP 29 has not been run on the repaired
+shapes, and WP 25 cannot stand in for it: given the clauses, it takes a call
+through an unspecified pointer as a recursive call with an unconditional
+`false`, and a constructor without a terminates clause as not terminating.
+So the first prediction rests on a WP 29 run of them in a probe workflow, as
+`g4-probe.yml` ran G4's probe, and the surfaces are repaired one at a time,
+each predicted.
+
+### G12 — the queue's result instantiation does not require `out` valid at `get_ok` and `get_err` (opened)
+
+**Finding.** Under `__FRAMAC__`, `data/priority_queue.h` instantiates result
+at (`Bool`, `Error`) with contracts on `result__Bool_Error_ok`, `_err` and
+`_is_ok` only (VERIFY-022, commit 5); the macro bodies' own contracts are
+comments without `-CC`. `get_ok` and `get_err` store the active member
+through `out`, `*out = r.val.ok` and `*out = r.val.err`, and nothing
+requires `out` valid: their `require_msg` compiles away under
+`-DCANON_NO_REQUIRE`, and they have no contract. Their checks that the store
+is valid, `typed_cast_result_Bool_Error_get_ok_assert_rte_mem_access` and
+`_get_err_`, are false for a null `out` with the matching tag, and WP is
+right not to prove them. VERIFY-018's F4 found the pair at vec and closed it
+by contracting the two functions with `deque_verify.h`'s shapes: measured at
+CI #1246 and ratcheted at CI #1247, the pair closed and the two contracts'
+own 38 goals proved. VERIFY-022 recorded the pair at the queue in its fresh
+result arm ("22, get_ok/get_err 1/1"; "22 = vec's pre-F4 count, second
+reproduction") and pinned it.
+
+**Decision (recommended).** The queue's `__FRAMAC__` branch gains
+`vec_verify.h`'s contracts for `get_ok` and `get_err`, shapes copied; the
+shipped branch is unchanged. A prediction precedes the fix: from F4's result
+at vec, under the same model, the pair closes and the new contracts' goals
+prove.
