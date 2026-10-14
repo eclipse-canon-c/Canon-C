@@ -60,13 +60,15 @@
  *       this pair.
  *
  *   (b) Function-pointer dispatch (OWN). map / and_then / or_else / filter /
- *       combine_with / eq each call a caller-supplied function pointer. WP has
- *       no `calls` clause for an arbitrary pointer and `\valid_function` is
- *       unimplemented in Frama-C 29 — the SAME limitation as region_end
- *       (OWN-003 / VERIFY-011 cat 1), here recurring across six combinators.
- *       For each, the branch that does NOT call the pointer is specified and
- *       provable; the calling branch is left to the documented residual
- *       (rte_function_pointer + assigns-frame + termination cluster).
+ *       combine_with / eq each call a caller-supplied function pointer.
+ *       Since VERIFY-039 G11 each contract claims only what holds for every
+ *       callback it admits (see the combinators below), and the class is one
+ *       goal per combinator: the run-time check that the pointer is a valid
+ *       function, true for every admitted call and unproved because WP 29
+ *       does not implement `\valid_function`. Before G11 the class also held
+ *       the termination, exit and frame goals at the call through the
+ *       pointer, which the default `terminates \true` and `exits \false` and
+ *       the stated `assigns \nothing` made false for some admitted callbacks.
  *
  * The non-combinator surface (some, none, is_some, is_none, get, unwrap_or,
  * unwrap, expect-under-precondition, replace, take) is expected to prove
@@ -166,14 +168,32 @@ static inline int option_int_unwrap(option_int o);
 static inline int option_int_expect(option_int o, const char *msg);
 
 /* ── Combinators (function-pointer dispatch) ───────────────────────────────────
-   Structural specs: the non-calling branch is proved; the calling branch is
-   the documented fn-pointer residual (class (b)). No `requires
-   \valid_function(f)` — it is unimplemented in Frama-C 29 and would not help.
+   VERIFY-039 G11. Each contract claims only what holds for every callback
+   its preconditions admit. With C the condition on which the body calls the
+   pointer: the pointer must be a valid function where it is called
+   (`requires C ==> \valid_function(f)`); termination and no exit are
+   claimed only where nothing is called (`terminates !C; exits C;`, and no
+   `decreases` clause); and the empty frame is stated only in the behaviours
+   that call nothing. The defaults claimed termination and no exit for every
+   call, and `assigns \nothing` claimed the frame, which a callback that
+   loops, exits or writes a global falsifies
+   (tools/probes/verify-039/p_combinator_callback.c).
+
+   WP 29 does not implement `\valid_function`: the precondition gives the
+   proof no hypothesis, and the run-time check on the pointer stays
+   unproved, true for every admitted call. A caller proves the precondition
+   where its arguments make C false, and gets no frame from any call: WP
+   frames a call by a default `assigns`, an unguarded behaviour's or a
+   complete set's, and the calling behaviour states none (VERIFY-039 G11,
+   the probe: tools/probes/verify-039/p_combinator_contracts.c).
    ────────────────────────────────────────────────────────────────────────────*/
 
-/*@ assigns \nothing;
+/*@ requires o.has_value ==> \valid_function(f);
+    terminates !o.has_value;
+    exits o.has_value;
     behavior none:
       assumes !o.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior some:
       assumes o.has_value;
@@ -183,54 +203,66 @@ static inline int option_int_expect(option_int o, const char *msg);
 */
 static inline option_int option_int_map(option_int o, int (*f)(int));
 
-/*@ assigns \nothing;
+/*@ requires o.has_value ==> \valid_function(f);
+    terminates !o.has_value;
+    exits o.has_value;
     behavior none:
       assumes !o.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior some:
       assumes o.has_value;
-      // result == f(o.value); f returns option_int — fn-pointer residual
+      // result == f(o.value): not stated, it is the callback's value
     complete behaviors;
     disjoint behaviors;
 */
 static inline option_int option_int_and_then(option_int o, option_int (*f)(int));
 
-/*@ assigns \nothing;
+/*@ requires !o.has_value ==> \valid_function(fallback);
+    terminates o.has_value;
+    exits !o.has_value;
     behavior some:
       assumes o.has_value;
+      assigns \nothing;
       ensures \result.has_value == o.has_value;
       ensures \result.value == o.value;
     behavior none:
       assumes !o.has_value;
-      // result == fallback(); fn-pointer residual
+      // result == fallback(): not stated, it is the callback's value
     complete behaviors;
     disjoint behaviors;
 */
 static inline option_int option_int_or_else(option_int o, option_int (*fallback)(void));
 
 /* filter's guard is `(o.has_value && pred(o.value))`. The has_value==false
- * branch short-circuits before calling pred and returns None — provable. The
- * has_value==true branch calls pred — fn-pointer residual. */
-/*@ assigns \nothing;
+ * branch short-circuits before calling pred and returns None; the
+ * has_value==true branch calls pred. */
+/*@ requires o.has_value ==> \valid_function(pred);
+    terminates !o.has_value;
+    exits o.has_value;
     behavior none:
       assumes !o.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior some:
       assumes o.has_value;
-      // result is o or None depending on pred(o.value) — fn-pointer residual
+      // result is o or None depending on pred(o.value): not stated
     complete behaviors;
     disjoint behaviors;
 */
 static inline option_int option_int_filter(option_int o, bool (*pred)(int));
 
-/*@ assigns \nothing;
+/*@ requires (o1.has_value && o2.has_value) ==> \valid_function(combine);
+    terminates !(o1.has_value && o2.has_value);
+    exits o1.has_value && o2.has_value;
     behavior any_none:
       assumes !o1.has_value || !o2.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior both_some:
       assumes o1.has_value && o2.has_value;
       ensures \result.has_value;
-      // result.value == combine(o1.value, o2.value) — fn-pointer residual
+      // result.value == combine(o1.value, o2.value): not stated
     complete behaviors;
     disjoint behaviors;
 */
@@ -257,18 +289,24 @@ static inline option_int option_int_replace(option_int *o, int new_value);
 */
 static inline option_int option_int_take(option_int *o);
 
-/* ── Comparison (function-pointer dispatch on the Some/Some branch) ─────────── */
+/* ── Comparison (function-pointer dispatch on the Some/Some branch) ───────────
+   The combinators' shape (VERIFY-039 G11), with two behaviours that call
+   nothing, each stating the empty frame. */
 
-/*@ assigns \nothing;
+/*@ requires (o1.has_value && o2.has_value) ==> \valid_function(eq);
+    terminates !(o1.has_value && o2.has_value);
+    exits o1.has_value && o2.has_value;
     behavior both_none:
       assumes !o1.has_value && !o2.has_value;
+      assigns \nothing;
       ensures \result == \true;
     behavior mismatch:
       assumes o1.has_value != o2.has_value;
+      assigns \nothing;
       ensures \result == \false;
     behavior both_some:
       assumes o1.has_value && o2.has_value;
-      // result == eq(o1.value, o2.value) — fn-pointer residual
+      // result == eq(o1.value, o2.value): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */

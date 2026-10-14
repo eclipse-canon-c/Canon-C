@@ -2656,29 +2656,33 @@ jobs:
   # error.h, so this job omits the CVC5-presence check the core/ headers carry.
   #
   # Promoted from report-only to enforced as of CI #1065 (VERIFY-014):
-  # 189 / 223 proved, exactly 34 unproved. Two categories:
+  # 189 / 223 proved, exactly 34 unproved. Since VERIFY-039 G11: 222 / 230
+  # proved, exactly 8 unproved. Two categories:
   #   (a) INHERITED (2) — contract.h handler non-termination. option_impl.h
   #       includes contract.h; error.h avoided this pair by including only
   #       types.h, but option cannot (expect/get/unwrap/replace/take route
   #       through it). The VERIFY-006 cat-4 pair, re-emitted. option is the
   #       first semantics/ header to inherit them.
-  #   (b) OWN (32) — function-pointer dispatch across the six combinators
-  #       (map / and_then / or_else / filter / combine_with / eq). WP has no
-  #       `calls` clause for an arbitrary pointer, \valid_function is
-  #       unimplemented in Frama-C 29, and the unknown callee is treated as
-  #       possibly non-terminating / memory-clobbering. Same limitation as
-  #       region_end (OWN-003 / VERIFY-011 cat 1) — its first recurrence
-  #       outside region_end. Every non-combinator function proves fully;
-  #       for each combinator the non-calling branch is proved and the
-  #       calling branch is the residual.
+  #   (b) OWN (6; 32 before VERIFY-039 G11) — function-pointer dispatch
+  #       across the six combinators (map / and_then / or_else / filter /
+  #       combine_with / eq): the run-time check that the called pointer is
+  #       a valid function, one per combinator. Each is true for every call
+  #       the contract admits, which requires the pointer valid where it is
+  #       called, and unproved because WP 29 does not implement
+  #       \valid_function. Until G11 the contracts, with the clauses WP 29
+  #       supplies by default, also claimed termination, no exit and an
+  #       empty frame for every callback, and the 26 other goals at the
+  #       calls through the pointer were false for some admitted callbacks
+  #       (tools/probes/verify-039/p_combinator_callback.c); under the new
+  #       contracts they close (g11-probe.yml run #1). Every non-combinator
+  #       function proves fully.
   #
-  # The residual set is name-stable: category (b) is deterministic (each goal
-  # resolves in <5ms then buckets as unprovable — \valid_function will not
-  # prove in FC29), not solver-capacity-bound. Only the 2 category-(a) goals
-  # are genuine full timeouts, identical to the pair pinned in six other
-  # headers. The by-name roll-call below pins all 34: if a future Frama-C
-  # implements \valid_function, the count stays 34 but a name check fails,
-  # which is the signal to revisit rather than silently absorb.
+  # The residual set is name-stable: the 6 category-(b) goals are the
+  # run-time checks on the pointer, and the 2 category-(a) goals are
+  # genuine full timeouts, identical to the pair pinned in six other
+  # headers. The by-name roll-call below pins all 8. A WP that implemented
+  # \valid_function would prove the 6, true under the contracts: a ratchet,
+  # not a regression.
   # -------------------------------------------------------------------------
   frama-c-option:
     needs: build
@@ -2689,13 +2693,12 @@ jobs:
       - name: "WP: vmacros/vdrivers/option_verify.h"
         # option — first Shape-B macro-module driver, default Typed model
         # (by-value tagged struct, no void* casts — like error.h, so no
-        # CVC5-presence check). Expected: 189 / 223 proved, exactly 34
-        # unproved (VERIFY-014): 2 inherited (contract.h handler
-        # non-termination, the VERIFY-006 cat-4 pair) + 32 own across the
-        # six combinators (function-pointer dispatch — \valid_function
-        # unimplemented in FC29 + unknown-callee non-termination/assigns;
-        # the region_end / OWN-003 limitation, first recurrence outside
-        # region_end). Any deviation is a regression and fails the job.
+        # CVC5-presence check). Expected: 222 / 230 proved, exactly 8
+        # unproved (VERIFY-014, VERIFY-039 G11): 2 inherited (contract.h
+        # handler non-termination, the VERIFY-006 cat-4 pair) + 6 own, the
+        # run-time check on the pointer at each of the six combinators
+        # (\valid_function, which WP 29 does not implement). Any deviation
+        # is a regression and fails the job.
         # (2026-07-16 retrofit): Failed gated at zero and excluded from
         # the pooled count; Proved-line warning promoted to a hard pin.
         run: |
@@ -2740,7 +2743,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_option_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_option_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=34
+          EXPECTED_UNPROVED=8   # VERIFY-039 G11 predicted: 34 -> 8
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -2771,8 +2774,10 @@ jobs:
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
-          if [ "${PROVED_COUNT}" != "189 / 223" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 189 / 223)."
+          # VERIFY-039 G11 predicted: 26 closed and 7 goals added, all proved
+          # (189 / 223 before).
+          if [ "${PROVED_COUNT}" != "222 / 230" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 222 / 230)."
             echo "      The goal surface drifted — reclassify in VERIFY-014,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2793,39 +2798,14 @@ jobs:
             # (a) inherited — contract.h handler non-termination (VERIFY-006 cat 4)
             "typed_contract_default_handler_terminates"
             "typed_contract_default_handler_loop_invariant_established"
-            # (b) own — function-pointer dispatch (OWN-003 class), 6 combinators
-            "typed_option_int_map_terminates_part2"
-            "typed_option_int_map_terminates_part3"
-            "typed_option_int_map_exits_part1"
+            # (b) own — function-pointer dispatch, 6 combinators: the run-time
+            # check on the pointer at each (VERIFY-039 G11; 32 before)
             "typed_option_int_map_assert_rte_function_pointer"
-            "typed_option_int_map_assigns_exit_part2"
-            "typed_option_int_map_assigns_normal_part2"
-            "typed_option_int_and_then_terminates_part2"
-            "typed_option_int_and_then_terminates_part3"
-            "typed_option_int_and_then_exits_part1"
             "typed_option_int_and_then_assert_rte_function_pointer"
-            "typed_option_int_and_then_assigns_exit_part2"
-            "typed_option_int_and_then_assigns_normal_part2"
-            "typed_option_int_or_else_terminates_part1"
-            "typed_option_int_or_else_terminates_part2"
             "typed_option_int_or_else_assert_rte_function_pointer"
-            "typed_option_int_or_else_assigns_part2"
-            "typed_option_int_filter_terminates_part2"
-            "typed_option_int_filter_terminates_part3"
-            "typed_option_int_filter_exits_part1"
             "typed_option_int_filter_assert_rte_function_pointer"
-            "typed_option_int_filter_assigns_exit_part2"
-            "typed_option_int_filter_assigns_normal_part2"
-            "typed_option_int_combine_with_terminates_part2"
-            "typed_option_int_combine_with_terminates_part3"
-            "typed_option_int_combine_with_exits_part1"
             "typed_option_int_combine_with_assert_rte_function_pointer"
-            "typed_option_int_combine_with_assigns_exit_part2"
-            "typed_option_int_combine_with_assigns_normal_part2"
-            "typed_option_int_eq_terminates_part2"
-            "typed_option_int_eq_terminates_part4"
             "typed_option_int_eq_assert_rte_function_pointer_part2"
-            "typed_option_int_eq_assigns_part5"
           )
           for goal in "${CHECKS[@]}"; do
             if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_option_output.txt; then
@@ -2833,11 +2813,12 @@ jobs:
               exit 1
             fi
           done
-          echo "PASS: option verified — 189/223 proved, 34 documented"
-          echo "      residuals all observed (VERIFY-014): 2 inherited"
-          echo "      (contract.h handler) + 32 own (six combinators,"
-          echo "      function-pointer dispatch). First Shape-B module;"
-          echo "      every non-combinator function proved fully."
+          echo "PASS: option verified — 222/230 proved, 8 documented"
+          echo "      residuals all observed (VERIFY-014, VERIFY-039 G11):"
+          echo "      2 inherited (contract.h handler) + 6 own (the run-time"
+          echo "      check on the pointer at each combinator). First"
+          echo "      Shape-B module; every non-combinator function proved"
+          echo "      fully."
           echo "==============================================="
       - name: Upload WP proof output (option)
         if: always()
@@ -3104,6 +3085,10 @@ jobs:
   #    with the SAME 196 names — no gate or count changed. Those are the
   #    #1154 figures and are left as recorded; API-001 later took the set
   #    to 198 = 123 + 75 at #1202.)
+  #   VERIFY-039 G11: the option arm is 6 since option_verify.h's
+  #     combinators state only what holds for every callback, the run-time
+  #     check on the pointer at each; the other 26 close, and option's eq
+  #     gains 7 frame goals, all proved (5396 / 5522, 126 unproved).
   # Gates: pinned Proved line, 0 Failed ever, exact count, by-name roll-call
   # (= set equality). ANY change to the residual set, either direction,
   # fails CI; the fix is the acknowledged ratchet — update the pinned
@@ -3142,7 +3127,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-039 G3 ratchet: 5363/5515, 152 unproved (G2: 5360/5512, 152; G3 predicted 5365/5515, 150)"
+          echo "  baseline: VERIFY-039 G11 predicted: 5396/5522, 126 unproved (G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3181,8 +3166,10 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
-          if [ "${PROVED_COUNT}" != "5363 / 5515" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5363 / 5515)."
+          # VERIFY-039 G11 predicted: the option arm's 26 closed and option's
+          # eq gains 7 frame goals, all proved (5363 / 5515 before).
+          if [ "${PROVED_COUNT}" != "5396 / 5522" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5396 / 5522)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3198,7 +3185,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=152   # VERIFY-039 G3 ratchet (CI #1344): 152 as at G2; G3 predicted 150 (G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
+          EXPECTED_UNPROVED=126   # VERIFY-039 G11 predicted: 152 -> 126 (G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
@@ -3260,38 +3247,12 @@ jobs:
             "typed_cast_ptr_align_up_nonnull_ensures_bounded_part2"
             "typed_cast_contract_default_handler_loop_invariant_established"
             "typed_cast_contract_default_handler_terminates"
-            "typed_cast_option_int_map_terminates_part2"
-            "typed_cast_option_int_map_terminates_part3"
-            "typed_cast_option_int_map_exits_part1"
             "typed_cast_option_int_map_assert_rte_function_pointer"
-            "typed_cast_option_int_map_assigns_exit_part2"
-            "typed_cast_option_int_map_assigns_normal_part2"
-            "typed_cast_option_int_and_then_terminates_part2"
-            "typed_cast_option_int_and_then_terminates_part3"
-            "typed_cast_option_int_and_then_exits_part1"
             "typed_cast_option_int_and_then_assert_rte_function_pointer"
-            "typed_cast_option_int_and_then_assigns_exit_part2"
-            "typed_cast_option_int_and_then_assigns_normal_part2"
-            "typed_cast_option_int_or_else_terminates_part1"
-            "typed_cast_option_int_or_else_terminates_part2"
             "typed_cast_option_int_or_else_assert_rte_function_pointer"
-            "typed_cast_option_int_or_else_assigns_part2"
-            "typed_cast_option_int_filter_terminates_part2"
-            "typed_cast_option_int_filter_terminates_part3"
-            "typed_cast_option_int_filter_exits_part1"
             "typed_cast_option_int_filter_assert_rte_function_pointer"
-            "typed_cast_option_int_filter_assigns_exit_part2"
-            "typed_cast_option_int_filter_assigns_normal_part2"
-            "typed_cast_option_int_combine_with_terminates_part2"
-            "typed_cast_option_int_combine_with_terminates_part3"
-            "typed_cast_option_int_combine_with_exits_part1"
             "typed_cast_option_int_combine_with_assert_rte_function_pointer"
-            "typed_cast_option_int_combine_with_assigns_exit_part2"
-            "typed_cast_option_int_combine_with_assigns_normal_part2"
-            "typed_cast_option_int_eq_terminates_part2"
-            "typed_cast_option_int_eq_terminates_part4"
             "typed_cast_option_int_eq_assert_rte_function_pointer_part2"
-            "typed_cast_option_int_eq_assigns_part5"
             "typed_cast_result_Bool_Error_map_terminates_part2"
             "typed_cast_result_Bool_Error_map_terminates_part3"
             "typed_cast_result_Bool_Error_map_exits"
@@ -3463,6 +3424,9 @@ jobs:
   #   ARM A  option_int_*, INHERITANCE .................  32
   #          (option's job pins 34 = these 32 + the shared handler pair;
   #           the pair is counted once here, under ARM C)
+  #          VERIFY-039 G11: 6 since option_verify.h's repair, the run-time
+  #          check on the pointer at each combinator (option's job pins 8);
+  #          PREDICT_OPTION in the WP step.
   #   ARM B  result_Bool_Error_*, FRESH INSTANTIATION ..  30
   #          result's home unit residual is 30 = 2 handler + 28 own. vec's
   #          instance showed 22 = 20 profile-matching + 2 get_* − the 8
@@ -3520,12 +3484,16 @@ jobs:
           # proved (1601) and all 67 residual names unchanged; only the line
           # references in WP's warnings moved (526 -> 533, the added comments).
           ENFORCE=1
-          EXPECTED_UNPROVED=67
-          EXPECTED_PROVED="1601 / 1668"
+          # VERIFY-039 G11 predicted: the option arm's 26 closed and option's
+          # eq gains 7 frame goals, all proved (67 and 1601 / 1668 before).
+          EXPECTED_UNPROVED=41
+          EXPECTED_PROVED="1634 / 1675"
           # Pre-registered arm counts (see banner). Printed against observed
           # in every run; they do not gate until ENFORCE=1.
           PREDICT_HANDLER=2
-          PREDICT_OPTION=32
+          # 6 since VERIFY-039 G11, the run-time check on the pointer at each
+          # combinator (32 before; option_verify.h is option's home driver).
+          PREDICT_OPTION=6
           # 28, NOT 30. The pre-run-1 arithmetic was 20 (family profile) + 8
           # (home assigns clauses this driver attaches and vec's reduced
           # surface omitted) + 2 (the F4 get_ok/get_err pair) = 30. Runs
@@ -3547,7 +3515,7 @@ jobs:
           # return — if they do, the framing problem is deeper than a
           # missing clause and the fix was wrong.
           PREDICT_OWN=5
-          PREDICT_TOTAL=67
+          PREDICT_TOTAL=41
           # Self-check: the arms partition the residual set, so their
           # predictions must sum to the total prediction. #1234 shipped with
           # a sum of 69 against a total of 67 and nobody noticed, because the
@@ -3781,41 +3749,17 @@ jobs:
               #         has zero direct CANON_INVOKE_HANDLER_ calls.
               "typed_contract_default_handler_terminates"
               "typed_contract_default_handler_loop_invariant_established"
-              # ARM A — option arm, INHERITANCE. These 32 are option's own roll-call
-              #         MINUS the 2 handler goals it counts inside its 34. No
-              #         typed_cast_ prefix: same Typed model as option's home unit.
-              "typed_option_int_map_terminates_part2"
-              "typed_option_int_map_terminates_part3"
-              "typed_option_int_map_exits_part1"
+              # ARM A — option arm, INHERITANCE. These 6 are option's own roll-call
+              #         MINUS the 2 handler goals it counts inside its 8: the
+              #         run-time check on the pointer at each combinator since
+              #         VERIFY-039 G11 (32 before). No typed_cast_ prefix: same
+              #         Typed model as option's home unit.
               "typed_option_int_map_assert_rte_function_pointer"
-              "typed_option_int_map_assigns_exit_part2"
-              "typed_option_int_map_assigns_normal_part2"
-              "typed_option_int_and_then_terminates_part2"
-              "typed_option_int_and_then_terminates_part3"
-              "typed_option_int_and_then_exits_part1"
               "typed_option_int_and_then_assert_rte_function_pointer"
-              "typed_option_int_and_then_assigns_exit_part2"
-              "typed_option_int_and_then_assigns_normal_part2"
-              "typed_option_int_or_else_terminates_part1"
-              "typed_option_int_or_else_terminates_part2"
               "typed_option_int_or_else_assert_rte_function_pointer"
-              "typed_option_int_or_else_assigns_part2"
-              "typed_option_int_filter_terminates_part2"
-              "typed_option_int_filter_terminates_part3"
-              "typed_option_int_filter_exits_part1"
               "typed_option_int_filter_assert_rte_function_pointer"
-              "typed_option_int_filter_assigns_exit_part2"
-              "typed_option_int_filter_assigns_normal_part2"
-              "typed_option_int_combine_with_terminates_part2"
-              "typed_option_int_combine_with_terminates_part3"
-              "typed_option_int_combine_with_exits_part1"
               "typed_option_int_combine_with_assert_rte_function_pointer"
-              "typed_option_int_combine_with_assigns_exit_part2"
-              "typed_option_int_combine_with_assigns_normal_part2"
-              "typed_option_int_eq_terminates_part2"
-              "typed_option_int_eq_terminates_part4"
               "typed_option_int_eq_assert_rte_function_pointer_part2"
-              "typed_option_int_eq_assigns_part5"
               # ARM B — result(Bool, Error), FRESH INSTANTIATION, full home contract
               #         set: 20 family-profile + 8 assigns that vec's reduced
               #         surface never emitted. The get_ok/get_err pair
@@ -3914,9 +3858,9 @@ jobs:
           echo ""
           echo "==============================================="
           if [ "${FAILURES}" -eq 0 ] && [ "${ENFORCE}" -eq 1 ]; then
-            echo "VERIFY-019 ENFORCED PASS: 1601/1668 proved, 0 Failed, count"
+            echo "VERIFY-019 ENFORCED PASS: 1634/1675 proved, 0 Failed, count"
             echo "      ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, all ${EXPECTED_UNPROVED} classified residuals verified"
-            echo "      by name (set equality). Arms: 2 handler + 32 option"
+            echo "      by name (set equality). Arms: 2 handler + 6 option"
             echo "      (inheritance) + 28 result(Bool,Error) (fresh) + 5 swap."
             echo "      ZERO core-substrate residuals — deque's closure excludes"
             echo "      every header vec inherited its 89 from, so this is the"
