@@ -2474,6 +2474,16 @@ that writes nothing. The same holds at every instantiation filed under this
 block by family convention, option at `usize`, `isize` and `Rec`. G11's
 repair is recommended; until it, no goal is filed under this block.
 
+**Repair note (2026-10-15, VERIFY-039 G11).** `option_verify.h` states the
+repaired contracts since CI #1361, and `frama-c-option` pins `222 / 230` and
+8, the handler pair and six checks. In `frama-c-option`, `frama-c-vec` and
+`frama-c-deque` this block's residuals are the six run-time checks on the
+pointer, each true for every admitted call and unproved because WP 29 does
+not implement `\valid_function`. `cc-option`, `cc-vec` and `cc-deque` pin
+the same names under the macro bodies' contracts, which still admit an
+invalid pointer; the block is restated, and the six filed by name, with the
+macro bodies' repair.
+
 Every non-combinator function proved fully: `some`, `none`, `is_some`,
 `is_none`, `get`, `unwrap`, `unwrap_or`, `replace`, `take`, and
 `expect`'s reachable surface carry no residuals.
@@ -2637,6 +2647,18 @@ carries the same 28. In `vec_verify.h` and `priority_queue.h` its
 combinators have no contract, and their 20 goals there are the six run-time
 checks on the pointers and fourteen checks of WP 29's default termination
 and exit clauses; no frame goal, since nothing states a frame.
+
+**Repair note (2026-10-15, VERIFY-039 G11).** `result_verify.h` states the
+repaired contracts since CI #1361, and `frama-c-result` pins `207 / 215` and
+8, the handler pair and six checks. In `frama-c-result` this block's
+residuals are the six run-time checks on the pointers, each true for every
+admitted call and unproved because WP 29 does not implement
+`\valid_function`. `cc-result` pins the same names under the macro bodies'
+contracts, which still admit an invalid pointer; the block is restated, and
+the six filed by name, with the macro bodies' repair. The instantiation at
+(`Bool`, `Error`) is repaired in no unit yet: deque's transcription keeps
+its 28, and vec's and the queue's combinators, which have no contract, their
+20.
 
 Every non-dispatching function proved fully: `ok`, `err`, `is_ok`,
 `is_err`, `get_ok`, `get_err`, `unwrap_or`, `unwrap`, `unwrap_err`,
@@ -10596,7 +10618,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10 repaired and scored exact (fix ec56091, CI #1358 / CC #45: the sixteen closed, six goals added and proved, nothing else moved, as predicted); batch 4, option and result, read by name (186 obligations, none filed: 184 are G11's and 2 G12's; *A* unchanged); G11 opened (the combinators require nothing of the callback's pointer, and WP 29's default clauses claim termination and no exit, and the contracts an empty frame, for every callback: 184 goals false for admitted calls, and a caller's proof made false by the frame; contracts that claim only what every callback gives recommended); G12 opened (the queue's result instantiation leaves `get_ok`'s and `get_err`'s `out` unrequired, VERIFY-018 F4's pair; vec's contracts recommended); G12 repaired and scored exact (fix 77cc69c, CI #1359 / CC #46: the pair closed, 38 goals added and proved, nothing else moved, as predicted); G11's probe scored as predicted in every part (`g11-probe.yml` run #1: under the recommended contracts only the 18 run-time checks on the pointer stay unproved; a caller on the calling branch takes on goals WP 29 does not prove, and no caller gets a frame; today's goals counted per combinator, unit by unit); G11's repair of the home drivers predicted (`option_verify.h` and `result_verify.h`: option's 26 goals close in each of its three units and result's 22, each family's 6 run-time checks left; the two ACSL kinds the repair is the first to write fail `tools/idioms`' self-test until its catalogue is rebuilt at the score); the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10 repaired and scored exact (fix ec56091, CI #1358 / CC #45: the sixteen closed, six goals added and proved, nothing else moved, as predicted); batch 4, option and result, read by name (186 obligations, none filed: 184 are G11's and 2 G12's; *A* unchanged); G11 opened (the combinators require nothing of the callback's pointer, and WP 29's default clauses claim termination and no exit, and the contracts an empty frame, for every callback: 184 goals false for admitted calls, and a caller's proof made false by the frame; contracts that claim only what every callback gives recommended); G12 opened (the queue's result instantiation leaves `get_ok`'s and `get_err`'s `out` unrequired, VERIFY-018 F4's pair; vec's contracts recommended); G12 repaired and scored exact (fix 77cc69c, CI #1359 / CC #46: the pair closed, 38 goals added and proved, nothing else moved, as predicted); G11's probe scored as predicted in every part (`g11-probe.yml` run #1: under the recommended contracts only the 18 run-time checks on the pointer stay unproved; a caller on the calling branch takes on goals WP 29 does not prove, and no caller gets a frame; today's goals counted per combinator, unit by unit); G11's repair of the home drivers scored as predicted (fixes a4f8f5f and 068ae6a, CI #1361: option's 26 goals closed in each of its three units and result's 22, each family's 6 run-time checks left, to be filed by name with the macro bodies' repair, as the -CC units pin the same names), and `tools/idioms`' catalogue rebuilt under 068ae6a for the two ACSL kinds the repair was the first to write; the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -16268,3 +16290,91 @@ surfaces follow, each predicted before its repair, from A and B where B
 counted it: deque's, vec's and the queue's (`Bool`, `Error`); bitset's and
 range's copies of option; the macro bodies' contracts for the -CC units; and
 the `DECLARE_*` declarations.
+
+### G11 — repair, the home drivers: scored (fixes a4f8f5f and 068ae6a; CI #1361)
+
+**Result: as predicted, in every part the run decides.** CI #1361, at
+068ae6a, was green in every job, Record coverage #69 was green, and neither
+the -CC workflow nor the G11 probe ran (GitHub's run pages, read 2026-10-14
+and 2026-10-15). Each of the four units passed its gates at the predicted
+pins: its proved-goal line, its count of unproved goals, and its roll-call
+by name.
+
+| Unit | Before | Predicted | Observed |
+|---|---|---|---|
+| `frama-c-option` | `189 / 223`, 34 | `222 / 230`, 8 | `222 / 230`, 8 |
+| `frama-c-result` | `185 / 215`, 30 | `207 / 215`, 8 | `207 / 215`, 8 |
+| `frama-c-vec` | `5363 / 5515`, 152 | `5396 / 5522`, 126 | `5396 / 5522`, 126 |
+| `frama-c-deque` | `1601 / 1668`, 67 | `1634 / 1675`, 41 | `1634 / 1675`, 41 |
+
+**Also predicted.**
+
+- (H) Each unit's residual set by name, today's roll-call less the closed
+  names: held. In `frama-c-vec` and `frama-c-deque` the roll-call's match is
+  anchored, so with the exact count it is set equality. In `frama-c-option`
+  and `frama-c-result` it is not, and in result's
+  `typed_result_int_VErr_eq_assert_rte_function_pointer` would also match
+  the line of its `_2`. There the set is decided otherwise: each unit's 8
+  pinned goals are its six run-time checks, each a `\valid_function`
+  assertion on a branch its preconditions admit, which WP 29 turns into
+  `false` in a consistent context (on an infeasible path it proves one, as
+  option's `expect` check and `eq`'s `_part1` show), and the handler pair,
+  unprovable by construction (VERIFY-006), so all 8 are unproved and the
+  count of 8 leaves room for no other. Option's 26 termination, exit and
+  frame goals closed in each of its three units, and result's 22; in
+  `frama-c-deque` the option arm is 6, the roll-call's six
+  `typed_option_int_` names. Anchoring the two jobs' match, as vec's and
+  deque's is, waits for the workflow's next change.
+- (H) The goals WP 29 counts proved without proving them do not change in
+  number: consistent with the run, not decided by it. The totals are as
+  predicted, which rules out that WP 29 dropped the stated exit clauses of
+  the five combinators that call no function it knows; whether it counted
+  them without scheduling them, as it did the populated clauses, each job's
+  "goals scheduled" line says, and the logs need a sign-in. Run #1 showed WP
+  29 counting exactly these clauses without scheduling them, under the same
+  contracts in another unit.
+- (H) No other unit moves: held, every other job at its pins. The -CC
+  workflow and the G11 probe did not run.
+- (H) The count of pinned names in no goal table stays 232: held.
+  `tools/record_coverage.py` prints 232 at 068ae6a, the four units' own
+  counts moving as their names closed (`frama-c-option` 34 to 8,
+  `frama-c-result` 30 to 8, `frama-c-vec` 81 to 55, `frama-c-deque` 62 to
+  36); Record coverage #69, which runs it advisory, was green.
+
+**The catalogue, as recorded.** At 068ae6a `tools/idioms`' self-test failed
+its tests 3 and 4, as the prediction said: `option_verify.h` and
+`result_verify.h` measured n = 2, and the committed catalogue no longer
+rebuilt identically. The previous commit rebuilt it under 068ae6a. The ACSL
+layer gains `\valid_function` and the `terminates` clause, from the four
+units, 37 kinds to 39; the C and family layers and the closure, 41 files,
+are unchanged; the units listed for `\separated` take in arena's, pool's and
+region's, and eight units' counts of kinds move. The self-test then passes,
+and the README states the counts. Of its decisions left to the §4.3
+pre-registration, the third now notes that a repair can add kinds, and a
+fourth asks whether a kind the substrate writes and its verifier never
+proves on a feasible path, as `\valid_function`, is inside the vocabulary.
+
+**What it shows.** The home drivers state contracts true for every callback
+they admit, in the three units that read option's and the one that reads
+result's: each combinator requires its pointer valid where it calls it,
+claims termination and no exit only where it calls none, and states its
+empty frame only there. Their combinator residuals are the run-time checks
+on the pointer, six a family, each true for every admitted call and unproved
+because WP 29 does not implement `\valid_function`. G11 stays open on the
+other surfaces: deque's transcription of result's contracts at (`Bool`,
+`Error`); vec's and the queue's instances of result, which state none for
+its combinators; bitset's and range's copies of option; the macro bodies'
+contracts, which the -CC units read; and the `DECLARE_*` declarations.
+
+**The filing, deferred.** The prediction said VERIFY-014's and VERIFY-015's
+blocks are restated at the score, the twelve checks filed by name. They are
+not yet. The same twelve names are pinned in `cc-option`, `cc-result`,
+`cc-vec` and `cc-deque`, which read the macro bodies' contracts; these still
+admit an invalid pointer, so there each check is false for an admitted call,
+G11's finding. A name is filed once, with every unit that pins it, so filing
+the twelve now would file false goals under a true argument. The macro
+bodies are therefore the next surface: once their contracts are repaired,
+every unit that pins the twelve states the same contracts, the two blocks
+are restated, and the twelve are filed by name. Each of the two records
+carries a dated note saying so. The G11 probe, whose B1 to B4 and comparison
+count the repaired drivers, is updated before it runs again, as recorded.
