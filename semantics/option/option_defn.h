@@ -331,6 +331,20 @@
    TRANSFORMATION FUNCTION DEFINITIONS (COMBINATORS)
    ════════════════════════════════════════════════════════════════════════════ */
 
+/* The combinators' contracts (VERIFY-039 G11). With C the condition on
+ * which the body calls the caller's pointer, each contract requires the
+ * pointer to be a valid function where it is called
+ * (C ==> \valid_function(f)), claims termination and no exit only where
+ * nothing is called (terminates !C; exits C; no decreases clause), and
+ * states the empty frame only in the behaviours that call nothing: a
+ * callback may loop, exit or write a global, so no more holds for every
+ * callback the precondition admits. WP 29 does not implement
+ * \valid_function, so the run-time check on the pointer stays unproved,
+ * true for every admitted call. These are the clauses of the prototypes in
+ * vmacros/vdrivers/option_verify.h, whose comment says what a caller gets;
+ * here they are read only under -CC (VERIFY-025).
+ */
+
 /**
  * @brief Define map() transformation function
  *
@@ -350,9 +364,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_MAP(_linkage, _t) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires o.has_value ==> \valid_function(f);                       \
+        terminates !o.has_value;                                           \
+        exits o.has_value;                                                 \
         behavior none:                                                     \
           assumes !o.has_value;                                            \
+          assigns \nothing;                                                \
           ensures !\result.has_value;                                      \
         behavior some:                                                     \
           assumes o.has_value;                                             \
@@ -380,9 +397,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_AND_THEN(_linkage, _t) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires o.has_value ==> \valid_function(f);                       \
+        terminates !o.has_value;                                           \
+        exits o.has_value;                                                 \
         behavior none:                                                     \
           assumes !o.has_value;                                            \
+          assigns \nothing;                                                \
           ensures !\result.has_value;                                      \
         behavior some:                                                     \
           assumes o.has_value;                                             \
@@ -410,9 +430,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_OR_ELSE(_linkage, _t) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires !o.has_value ==> \valid_function(fallback);               \
+        terminates o.has_value;                                            \
+        exits !o.has_value;                                                \
         behavior some:                                                     \
           assumes o.has_value;                                             \
+          assigns \nothing;                                                \
           ensures \result.has_value == o.has_value;                        \
           ensures \result.value == o.value;                                \
         behavior none:                                                     \
@@ -440,9 +463,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_FILTER(_linkage, _t) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires o.has_value ==> \valid_function(pred);                    \
+        terminates !o.has_value;                                           \
+        exits o.has_value;                                                 \
         behavior none:                                                     \
           assumes !o.has_value;                                            \
+          assigns \nothing;                                                \
           ensures !\result.has_value;                                      \
         behavior some:                                                     \
           assumes o.has_value;                                             \
@@ -483,9 +509,13 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_COMBINE_WITH(_linkage, _t) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires (o1.has_value && o2.has_value) ==>                       \
+          \valid_function(combine);                                        \
+        terminates !(o1.has_value && o2.has_value);                        \
+        exits o1.has_value && o2.has_value;                                \
         behavior any_none:                                                 \
           assumes !o1.has_value || !o2.has_value;                          \
+          assigns \nothing;                                                \
           ensures !\result.has_value;                                      \
         behavior both_some:                                                \
           assumes o1.has_value && o2.has_value;                            \
@@ -598,12 +628,16 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_OPTION_EQ(_linkage, _t) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires (o1.has_value && o2.has_value) ==> \valid_function(eq);   \
+        terminates !(o1.has_value && o2.has_value);                        \
+        exits o1.has_value && o2.has_value;                                \
         behavior both_none:                                                \
           assumes !o1.has_value && !o2.has_value;                          \
+          assigns \nothing;                                                \
           ensures \result == \true;                                        \
         behavior mismatch:                                                 \
           assumes o1.has_value != o2.has_value;                            \
+          assigns \nothing;                                                \
           ensures \result == \false;                                       \
         behavior both_some:                                                \
           assumes o1.has_value && o2.has_value;                            \

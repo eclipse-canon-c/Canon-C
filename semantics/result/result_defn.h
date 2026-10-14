@@ -396,6 +396,16 @@
    TRANSFORMATION FUNCTION DEFINITIONS (COMBINATORS)
    ════════════════════════════════════════════════════════════════════════════ */
 
+/* The combinators' contracts (VERIFY-039 G11), as option_defn.h's: with C
+ * the condition on which the body calls a pointer, each requires it to be
+ * a valid function where it is called, claims termination and no exit only
+ * where nothing is called, and states the empty frame only in the
+ * behaviours that call nothing; eq requires each of its two pointers valid
+ * on its own branch. These are the clauses of the prototypes in
+ * vmacros/vdrivers/result_verify.h; here they are read only under -CC
+ * (VERIFY-025).
+ */
+
 /**
  * @brief Define map() same-type transformation function
  *
@@ -414,9 +424,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_MAP(_linkage, _t, _e) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires r.is_ok ==> \valid_function(f);                           \
+        terminates !r.is_ok;                                               \
+        exits r.is_ok;                                                     \
         behavior err:                                                      \
           assumes !r.is_ok;                                                \
+          assigns \nothing;                                                \
           ensures \result.is_ok == \false;                                 \
           ensures \result.val.err == r.val.err;                            \
         behavior ok:                                                       \
@@ -443,9 +456,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_MAP_ERR(_linkage, _t, _e) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires !r.is_ok ==> \valid_function(f);                          \
+        terminates r.is_ok;                                                \
+        exits !r.is_ok;                                                    \
         behavior ok:                                                       \
           assumes r.is_ok;                                                 \
+          assigns \nothing;                                                \
           ensures \result.is_ok == \true;                                  \
           ensures \result.val.ok == r.val.ok;                              \
         behavior err:                                                      \
@@ -473,9 +489,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_AND_THEN(_linkage, _t, _e) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires r.is_ok ==> \valid_function(f);                           \
+        terminates !r.is_ok;                                               \
+        exits r.is_ok;                                                     \
         behavior err:                                                      \
           assumes !r.is_ok;                                                \
+          assigns \nothing;                                                \
           ensures \result.is_ok == \false;                                 \
           ensures \result.val.err == r.val.err;                            \
         behavior ok:                                                       \
@@ -502,9 +521,12 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_OR_ELSE(_linkage, _t, _e) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires !r.is_ok ==> \valid_function(f);                          \
+        terminates r.is_ok;                                                \
+        exits !r.is_ok;                                                    \
         behavior ok:                                                       \
           assumes r.is_ok;                                                 \
+          assigns \nothing;                                                \
           ensures \result.is_ok == \true;                                  \
           ensures \result.val.ok == r.val.ok;                              \
         behavior err:                                                      \
@@ -600,7 +622,8 @@
  * An Ok and an Err are never equal.
  *
  * Performance: O(1) for Ok-Err, O(eq_ok) for Ok-Ok, O(eq_err) for Err-Err
- * Contract: eq_ok and eq_err must not be NULL.
+ * Contract: eq_ok must be a valid function when both are Ok, and eq_err
+ * when both are Err; the other is not called (VERIFY-039 G11).
  *
  * @param _linkage Linkage specifier
  * @param _t       The value type
@@ -608,9 +631,13 @@
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_RESULT_EQ(_linkage, _t, _e) \
-    /*@ assigns \nothing;                                                  \
+    /*@ requires (r1.is_ok && r2.is_ok) ==> \valid_function(eq_ok);        \
+        requires (!r1.is_ok && !r2.is_ok) ==> \valid_function(eq_err);     \
+        terminates r1.is_ok != r2.is_ok;                                   \
+        exits r1.is_ok == r2.is_ok;                                        \
         behavior mismatch:                                                 \
           assumes r1.is_ok != r2.is_ok;                                    \
+          assigns \nothing;                                                \
           ensures \result == \false;                                       \
         behavior both_ok:                                                  \
           assumes r1.is_ok && r2.is_ok;                                    \

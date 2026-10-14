@@ -42,15 +42,14 @@
  *                   tools/probes/verify-039/p_combinator_callback.c
  *               proved all six of client's goals by Qed alone.
  *
- * Since G11's repair of option_verify.h and result_verify.h their
- * contracts make none of these claims: each requires the pointer valid
- * where it is called, claims termination and no exit only where nothing is
- * called, and states the empty frame only there. The run-time behaviour is
- * unchanged, and the same WP 25 command proves 4 of client's 8 goals: not
- * its `ensures g == 0`, nor its frame at the call (normal and exit path),
- * nor the call's new precondition. DEFINE_OPTION_MAP's and
- * DEFINE_RESULT_MAP's own contracts, read under -CC, make the claims until
- * their repair.
+ * Since G11's repair of option_verify.h and result_verify.h, and then of
+ * DEFINE_OPTION_MAP's and DEFINE_RESULT_MAP's macro bodies, read under -CC,
+ * their contracts make none of these claims: each requires the pointer
+ * valid where it is called, claims termination and no exit only where
+ * nothing is called, and states the empty frame only there. The run-time
+ * behaviour is unchanged, and the same WP 25 command proves 4 of client's 8
+ * goals: not its `ensures g == 0`, nor its frame at the call (normal and
+ * exit path), nor the call's new precondition.
  *
  * The run-time check WP states at the call, \valid_function(f), has no
  * probe here: a call through a null pointer met every precondition until

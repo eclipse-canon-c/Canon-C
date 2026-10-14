@@ -527,7 +527,8 @@
  *   - Both are Err and eq_err(r1.val.err, r2.val.err) returns true.
  * An Ok and an Err are never equal.
  *
- * Contract: eq_ok and eq_err must not be NULL.
+ * Contract: eq_ok must be a valid function when both are Ok, and eq_err
+ * when both are Err; the other is not called (VERIFY-039 G11).
  *
  * Performance: O(1) for Ok-Err, O(eq_ok) for Ok-Ok, O(eq_err) for Err-Err
  *

@@ -14,7 +14,11 @@ name: Canon-C CC (VERIFY-025)
 # workflow verifies the NEW macro-body contracts through the bare
 # *_cc_experiment.h drivers (struct + functions, no prototypes, no contracts)
 # under `-CC`, and diffs the residual set by name against the enforced
-# driver pin.
+# driver pin. (VERIFY-039 G11: option's six combinators and result's five
+# state the same contracts in the macro bodies and in the home drivers,
+# option_verify.h and result_verify.h, which were repaired first; deque's
+# transcription of result's at (Bool, Error), and vec's and the queue's
+# instances, which state none for its combinators, are repaired later.)
 #
 # MODE: ENFORCED since the run after three set-identical report-only runs
 # (CC #1, #2, #3 — 2026-09-20/21). Gates, per family: (0) the pinned
@@ -71,8 +75,16 @@ jobs:
       matrix:
         include:
           - { family: slice,  model: "Typed+Cast", budget: 120, driver_job: frama-c-slice,  proved: "572 / 587",   unproved: 15  }
-          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "185 / 215",   unproved: 30  }
-          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "189 / 223",   unproved: 34  }
+          # result, option, vec, deque, vec_struct: VERIFY-039 G11 predicted
+          # pins. The combinators' macro bodies state the home drivers'
+          # contracts: each family's termination, exit and frame goals close
+          # (option's 26, result's 22, at every instantiation), only the
+          # run-time checks on the pointer stay, and option's eq gains 7
+          # frame goals. Before: result 185 / 215 and 30, option 189 / 223
+          # and 34, vec 5420 / 5580 and 160, deque 1601 / 1668 and 67,
+          # vec_struct 5418 / 5578 and 160.
+          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "207 / 215",   unproved: 8   }
+          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "222 / 230",   unproved: 8   }
           - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2777 / 2796", unproved: 19  }
           # vec: +20 at VERIFY-033/034 (arena_alloc{,_aligned} frame clauses,
           # 2 clauses x 2 functions x 5 split parts; CC #13 measured 5394/5586,
@@ -84,14 +96,14 @@ jobs:
           # VERIFY-039 G3 (CC #31): mem_zero states its zeros; +3 goals, all
           # proved. Arena's two zero-content goals stayed, against the
           # prediction: the byte-type bridge (VERIFY-039 G3, scored).
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5420 / 5580", unproved: 160 }
-          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1601 / 1668", unproved: 67  }
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5475 / 5587", unproved: 112 }
+          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1656 / 1675", unproved: 19  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
           # with VERIFY-039 G1 at CC #28, which also corrected one
           # mis-transcribed name in cc_pins/vec_struct.txt.
           # VERIFY-039 G2: predicted pin, as cc-vec's; G3 ratcheted at CC #31.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5418 / 5578", unproved: 160 }
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5473 / 5585", unproved: 112 }
     steps:
       - uses: actions/checkout@v6
 
