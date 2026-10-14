@@ -88,17 +88,18 @@
  *       handler-call or unreachable-recursion goals of their own.
  *
  *   (b) Function-pointer dispatch (OWN). map / map_err / and_then /
- *       or_else / eq each call caller-supplied function pointers. WP has no
- *       `calls` clause for an arbitrary pointer and `\valid_function` is
- *       unimplemented in Frama-C 29 — the same limitation as option's six
- *       combinators (VERIFY-014) and region_end (OWN-003 / VERIFY-011
- *       cat 1). For each, the branch that does NOT call the pointer is
- *       specified and provable; the calling branch is left to the
- *       documented residual (rte_function_pointer + assigns-frame +
- *       termination cluster). eq dispatches TWO pointers across two
- *       calling branches (both_ok -> eq_ok, both_err -> eq_err), so its
- *       residual cluster is expected to be the largest — larger than
- *       option_int_eq's 4. Confirm the split on the run.
+ *       or_else / eq each call caller-supplied function pointers. Since
+ *       VERIFY-039 G11 each contract claims only what holds for every
+ *       callback it admits (see the combinators below), and the class is the
+ *       run-time check that a called pointer is a valid function: one per
+ *       combinator, two at eq, which dispatches TWO pointers across two
+ *       calling branches (both_ok -> eq_ok, both_err -> eq_err). Each is
+ *       true for every admitted call and unproved because WP 29 does not
+ *       implement `\valid_function`. Before G11 the class also held the
+ *       termination, exit and frame goals at the calls through the
+ *       pointers, which the default `terminates \true` and `exits \false`
+ *       and the stated `assigns \nothing` made false for some admitted
+ *       callbacks.
  *
  *   (c) Possible union-model residuals (OWN, count unknown — see the open
  *       question above). Candidate sites: the constructors' nested
@@ -239,9 +240,12 @@ static inline VErr result_int_VErr_unwrap_err(result_int_VErr r);
 static inline int result_int_VErr_expect(result_int_VErr r, const char *msg);
 
 /* ── Combinators (function-pointer dispatch) ───────────────────────────────────
-   Structural specs: the non-calling branch is proved; the calling branch is
-   the documented fn-pointer residual (class (b)). No `requires
-   \valid_function(f)` — it is unimplemented in Frama-C 29 and would not help.
+   VERIFY-039 G11, option_verify.h's shape. With C the condition on which the
+   body calls the pointer: `requires C ==> \valid_function(f)`;
+   `terminates !C; exits C;` and no `decreases` clause; the empty frame only
+   in the behaviours that call nothing. WP 29 does not implement
+   `\valid_function`, so the run-time check on the pointer stays unproved,
+   true for every admitted call; see option_verify.h for what a caller gets.
    On the calling branches, the ensures kept are the ones option's run proved
    through the unknown callee (the is_ok shape of a result rebuilt via the
    known ok/err constructor); ensures that would need the callee's VALUE are
@@ -249,15 +253,18 @@ static inline int result_int_VErr_expect(result_int_VErr r, const char *msg);
 
 /* map: Err passes through untouched (provable, including the union member);
  * Ok rewraps f's return via the known ok constructor. */
-/*@ assigns \nothing;
+/*@ requires r.is_ok ==> \valid_function(f);
+    terminates !r.is_ok;
+    exits r.is_ok;
     behavior err:
       assumes !r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \false;
       ensures \result.val.err == r.val.err;
     behavior ok:
       assumes r.is_ok;
       ensures \result.is_ok == \true;
-      // \result.val.ok == f(r.val.ok) — fn-pointer residual
+      // \result.val.ok == f(r.val.ok): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
@@ -265,15 +272,18 @@ static inline result_int_VErr result_int_VErr_map(result_int_VErr r,
                                                   int (*f)(int));
 
 /* map_err: mirror image — Ok passes through, Err rewraps via err ctor. */
-/*@ assigns \nothing;
+/*@ requires !r.is_ok ==> \valid_function(f);
+    terminates r.is_ok;
+    exits !r.is_ok;
     behavior ok:
       assumes r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \true;
       ensures \result.val.ok == r.val.ok;
     behavior err:
       assumes !r.is_ok;
       ensures \result.is_ok == \false;
-      // \result.val.err == f(r.val.err) — fn-pointer residual
+      // \result.val.err == f(r.val.err): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
@@ -282,14 +292,17 @@ static inline result_int_VErr result_int_VErr_map_err(result_int_VErr r,
 
 /* and_then: Err passes through (provable); Ok branch returns f's whole
  * Result — nothing structural survives the unknown callee, so no ensures. */
-/*@ assigns \nothing;
+/*@ requires r.is_ok ==> \valid_function(f);
+    terminates !r.is_ok;
+    exits r.is_ok;
     behavior err:
       assumes !r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \false;
       ensures \result.val.err == r.val.err;
     behavior ok:
       assumes r.is_ok;
-      // \result == f(r.val.ok) — fn-pointer residual
+      // \result == f(r.val.ok): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
@@ -297,14 +310,17 @@ static inline result_int_VErr result_int_VErr_and_then(
     result_int_VErr r, result_int_VErr (*f)(int));
 
 /* or_else: Ok passes through (provable); Err branch returns f's Result. */
-/*@ assigns \nothing;
+/*@ requires !r.is_ok ==> \valid_function(f);
+    terminates r.is_ok;
+    exits !r.is_ok;
     behavior ok:
       assumes r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \true;
       ensures \result.val.ok == r.val.ok;
     behavior err:
       assumes !r.is_ok;
-      // \result == f(r.val.err) — fn-pointer residual
+      // \result == f(r.val.err): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
@@ -349,20 +365,24 @@ static inline result_int_VErr result_int_VErr_or(result_int_VErr r,
                                                  result_int_VErr other);
 
 /* ── Comparison (TWO function pointers, TWO calling branches) ─────────────────
-   The mismatch branch calls neither pointer and is provable. both_ok calls
-   eq_ok; both_err calls eq_err — each is its own fn-pointer residual
-   cluster, which is why eq is expected to carry result's largest own
-   residual count (cf. option_int_eq's 4, with ONE calling branch). */
-/*@ assigns \nothing;
+   The mismatch branch calls neither pointer and states the empty frame.
+   both_ok calls eq_ok and both_err calls eq_err, so each pointer is
+   required valid on its own branch, and eq keeps two run-time checks,
+   one per pointer (VERIFY-039 G11). */
+/*@ requires (r1.is_ok && r2.is_ok) ==> \valid_function(eq_ok);
+    requires (!r1.is_ok && !r2.is_ok) ==> \valid_function(eq_err);
+    terminates r1.is_ok != r2.is_ok;
+    exits r1.is_ok == r2.is_ok;
     behavior mismatch:
       assumes r1.is_ok != r2.is_ok;
+      assigns \nothing;
       ensures \result == \false;
     behavior both_ok:
       assumes r1.is_ok && r2.is_ok;
-      // \result == eq_ok(r1.val.ok, r2.val.ok) — fn-pointer residual
+      // \result == eq_ok(r1.val.ok, r2.val.ok): not stated
     behavior both_err:
       assumes !r1.is_ok && !r2.is_ok;
-      // \result == eq_err(r1.val.err, r2.val.err) — fn-pointer residual
+      // \result == eq_err(r1.val.err, r2.val.err): not stated
     complete behaviors;
     disjoint behaviors;
 */

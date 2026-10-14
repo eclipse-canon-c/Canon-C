@@ -6458,13 +6458,13 @@ header.** The 28 outcomes split across two files:
 gcov attributes a macro expansion to the file containing the expansion
 site, and result_cover.c takes its instantiation from the **driver
 include** — `DEFINE_RESULT_FUNCTIONS(static inline, int, VErr)` sits at
-`result_verify.h:380` — so the generated conditions are stamped to the
-driver header, not to the including `.c`. Both paths live under
-`vmacros/` and survive the `*/test/*` filter, so the measurement is
-unaffected; but the per-file coverage table's row for the module's
-generated conditions is **`result_verify.h`**, and regression diagnosis
-must read `result_verify.h.gcov`, not `result_cover.c.gcov` (the CI
-per-line debug step dumps both). This is the literal form of
+`result_verify.h:380` (400 since VERIFY-039 G11) — so the generated
+conditions are stamped to the driver header, not to the including `.c`.
+Both paths live under `vmacros/` and survive the `*/test/*` filter, so the
+measurement is unaffected; but the per-file coverage table's row for the
+module's generated conditions is **`result_verify.h`**, and regression
+diagnosis must read `result_verify.h.gcov`, not `result_cover.c.gcov` (the
+CI per-line debug step dumps both). This is the literal form of
 `docs/vmacros.md`'s one-instantiation-two-consumers rule: the cover TU
 adds only call sites; even the expansion site belongs to the driver.
 
