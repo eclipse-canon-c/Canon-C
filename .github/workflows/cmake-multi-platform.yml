@@ -5770,7 +5770,7 @@ jobs:
           echo "  substrate goals EXTRA:    ${EXTRA_N}   (predicted 0 -- soundness of context)"
           [ "${EXTRA_N}" -gt 0 ] && sed 's/^/      /' /tmp/armb_extra.txt | head -60
           echo ""
-          echo "  --- ARM C: fresh result(bool, Error) arm, UNcontracted ---"
+          echo "  --- ARM C: fresh result(bool, Error) arm ---"
           # Pre-registered as a CLASS, not a count: the instantiation is the
           # shipped CANON_RESULT(bool, Error) with no ACSL attached, so only
           # -wp-rte goals exist for it. Firm sub-prediction: get_ok and
@@ -5781,11 +5781,15 @@ jobs:
           # goals, get_ok/get_err 1/1. And 22 is EXACTLY vec's pre-F4 count
           # for the same fresh instantiation under the same model with no
           # driver contracts -- the second reproduction of that profile.
+          # Since VERIFY-022 commit 5 the __FRAMAC__ branch contracts _ok,
+          # _err and _is_ok, and since VERIFY-039 G12 get_ok and get_err
+          # too, with vec_verify.h's shapes (VERIFY-018 F4's fix): the arm
+          # is 20.
           RES_N=$(grep -cE '^typed_cast_result_Bool_Error_' /tmp/pq_resid.txt || true)
           GET_OK=$(grep -cE  '^typed_cast_result_Bool_Error_get_ok_assert_rte_mem_access( |$)'  /tmp/pq_resid.txt || true)
           GET_ERR=$(grep -cE '^typed_cast_result_Bool_Error_get_err_assert_rte_mem_access( |$)' /tmp/pq_resid.txt || true)
-          echo "  result arm residuals:     ${RES_N}   (run 1: 22; vec pre-F4: 22)"
-          echo "  get_ok/get_err mem_access: ${GET_OK}/${GET_ERR}   (predicted 1/1)"
+          echo "  result arm residuals:     ${RES_N}   (run 1: 22; vec pre-F4: 22; 20 since VERIFY-039 G12)"
+          echo "  get_ok/get_err mem_access: ${GET_OK}/${GET_ERR}   (predicted 1/1 at run 1; 0/0 since G12)"
           grep -E '^typed_cast_result_Bool_Error_' /tmp/pq_resid.txt | sed 's/^/      /' || true
           echo ""
           echo "  --- ARM D: priority_queue's own residuals ---"
@@ -5930,9 +5934,10 @@ jobs:
             # Three count predictions refuted (< 60, < 90, < 130); the
             # comparator-boundary and separation-class predictions held.
             #
-            # The 76-name residual set = 48 inherited from memory.h (taken
+            # The 74-name residual set = 48 inherited from memory.h (taken
             # from the memory job's own list at run time, so the two pins
-            # cannot drift apart silently) + 22 result(bool, Error) + 6 own:
+            # cannot drift apart silently) + 20 result(bool, Error) (22 until
+            # VERIFY-039 G12 contracted get_ok and get_err) + 6 own:
             #   1  \\valid_function(pq->cmp)             -- Frama-C 29 limit
             #   5  !regions_overlap at mem_copy x4 / mem_swap x1 -- memory.h
             #      states the predicate by pointer ORDERING, which \\separated
@@ -5942,8 +5947,8 @@ jobs:
             # the second. If it goes red with no header change, the pin is
             # flaky and that is the finding -- deque's run-2 shape.
             # ===============================================================
-            EXPECTED_PROVED="4526 / 4602"   # VERIFY-039 G3 predicted pin: +3 goals (F4: 4523 / 4599; F1: 4521 / 4597)
-            EXPECTED_UNPROVED=76   # VERIFY-036 F1 ratchet (CI #1326): was 77
+            EXPECTED_PROVED="4566 / 4640"   # VERIFY-039 G12 predicted: 38 goals added, all proved, and two closed (G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
+            EXPECTED_UNPROVED=74   # VERIFY-039 G12 predicted: 76 -> 74 (VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
             PIN_NAMES=(
             "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_and_then_terminates_part1"
@@ -5954,8 +5959,6 @@ jobs:
             "typed_cast_result_Bool_Error_eq_terminates_part2"
             "typed_cast_result_Bool_Error_eq_terminates_part3"
             "typed_cast_result_Bool_Error_eq_terminates_part4"
-            "typed_cast_result_Bool_Error_get_err_assert_rte_mem_access"
-            "typed_cast_result_Bool_Error_get_ok_assert_rte_mem_access"
             "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_map_err_exits"
@@ -5991,7 +5994,7 @@ jobs:
             PIN_N=$(wc -l < /tmp/pq_pin_all.txt)
             comm -23 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_missing.txt
             comm -13 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_unpinned.txt
-            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 48 memory + 22 result + 6 own) ---"
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 48 memory + 20 result + 6 own) ---"
             echo "    missing (pinned, now proved):    $(wc -l < /tmp/pq_missing.txt)"; sed 's/^/      /' /tmp/pq_missing.txt
             echo "    unpinned (new, unproved):        $(wc -l < /tmp/pq_unpinned.txt)"; sed 's/^/      /' /tmp/pq_unpinned.txt
             if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then

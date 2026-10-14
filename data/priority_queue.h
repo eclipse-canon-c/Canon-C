@@ -72,6 +72,43 @@
             ensures \result <==> r.is_ok;
         */
         static inline bool result__Bool_Error_is_ok(result__Bool_Error r);
+        /* VERIFY-039 G12. get_ok and get_err store through out, and without
+         * a contract nothing required out valid: their two run-time checks
+         * were false for a null out with the matching tag, the pair
+         * VERIFY-018 F4 closed at vec. Shapes copied from
+         * vmacros/vdrivers/vec_verify.h. */
+        /*@ requires \valid(out);
+            assigns *out;
+            behavior ok:
+              assumes r.is_ok;
+              assigns *out;
+              ensures \result == \true;
+              ensures *out == r.val.ok;
+            behavior err:
+              assumes !r.is_ok;
+              assigns \nothing;
+              ensures \result == \false;
+              ensures *out == \old(*out);
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline bool result__Bool_Error_get_ok(result__Bool_Error r, bool *out);
+        /*@ requires \valid(out);
+            assigns *out;
+            behavior err:
+              assumes !r.is_ok;
+              assigns *out;
+              ensures \result == \true;
+              ensures *out == r.val.err;
+            behavior ok:
+              assumes r.is_ok;
+              assigns \nothing;
+              ensures \result == \false;
+              ensures *out == \old(*out);
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline bool result__Bool_Error_get_err(result__Bool_Error r, Error *out);
         DEFINE_RESULT_FUNCTIONS(static inline, bool, Error)
     #else
         /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
