@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 g11_probe.py — the WP runs of .github/workflows/g11-probe.yml (VERIFY-039 G11)
-and their reading against the committed prediction in docs/deviations.md,
-VERIFY-039, "G11 — committed prediction for the probe".
+and their reading against the committed predictions in docs/deviations.md,
+VERIFY-039: "G11 — committed prediction for the probe" for run #1, and "G11 —
+the declarations and the probe: committed prediction" since.
 
     python3 tools/probes/verify-039/g11_probe.py run
         A1 and A2 prove the recommended contracts of p_combinator_contracts.c,
@@ -18,14 +19,18 @@ VERIFY-039, "G11 — committed prediction for the probe".
 
     python3 tools/probes/verify-039/g11_probe.py report A|B|compare
         reads that output and prints MATCH or MISS, with its confidence, for
-        each predicted part. The log needs a sign-in, so it also posts the
-        verdicts, and each run's goals function by function, as notices on
-        the run page (each under the runner's 4096-character cut), an error
-        annotation for each MISS (up to nine, and a count of the rest), and
-        everything to the step summary. Exits 1 on a MISS. A client's goal
-        predicted proved must have been generated: the per-goal report, or
-        without it the statistics, must show one. B's counts are measured,
-        not predicted.
+        each predicted part. Since G11's repairs every unit B counts states
+        the recommended contracts, and compare checks that each unit's
+        combinators have the probe's goals, property by property; run #1,
+        before the repairs, checked the deltas instead (docs/deviations.md,
+        VERIFY-039, "G11 — probe scored"). The log needs a sign-in, so it
+        also posts the verdicts, and each run's goals function by function,
+        as notices on the run page (each under the runner's 4096-character
+        cut), an error annotation for each MISS (up to nine, and a count of
+        the rest), and everything to the step summary. Exits 1 on a MISS. A
+        client's goal predicted proved must have been generated: the
+        per-goal report, or without it the statistics, must show one. B's
+        counts are measured, not predicted.
 
 Run from the repository root, with frama-c on PATH.
 """
@@ -457,70 +462,53 @@ def report_B():
               ", ".join(missing))
 
 
-# ── compare: today against the recommended contracts ─────────────────────────
+# ── compare: each unit's combinators against the recommended contracts ─────
 
-KINDS = ("assert_rte_", "terminates", "exits")
-# The behaviours that call no pointer: one per combinator, two at option's eq.
-NONCALLING = {("option", "eq"): 2}
-# (today, recommended, instantiation today, in the probe, today's contract
-# written). A written contract keeps every clause but the frame.
-PAIRS = [("B1", "A1", "option_int", "option_int", True),
-         ("B3", "A1", "option_int", "option_int", True),
-         ("B4", "A2", "option_int", "option_int", True),
-         ("B5", "A2", "option_usize", "option_int", True),
-         ("B6", "A1", "option_isize", "option_int", True),
-         ("B2", "A1", "result_int_VErr", "result_int_VErr", True),
-         ("B3", "A1", "result_Bool_Error", "result_Bool_Error", True),
-         ("B4", "A2", "result_Bool_Error", "result_Bool_Error", False),
-         ("B7", "A2", "result_Bool_Error", "result_Bool_Error", False)]
-
-
-def is_frame(k):
-    return k == "assigns" or k.endswith("_assigns")
+# Since G11's repairs (VERIFY-039, a4f8f5f to ec6a30b) every unit B counts
+# states the recommended contracts, so each combinator's goals today equal
+# the probe's, property by property. Run #1 checked, before the repairs, as
+# many run-time checks, termination and exit goals as today, and the frame
+# moved into the behaviours that call no pointer.
+# (today, recommended, instantiation today, in the probe)
+PAIRS = [("B1", "A1", "option_int", "option_int"),
+         ("B3", "A1", "option_int", "option_int"),
+         ("B4", "A2", "option_int", "option_int"),
+         ("B5", "A2", "option_usize", "option_int"),
+         ("B6", "A1", "option_isize", "option_int"),
+         ("B2", "A1", "result_int_VErr", "result_int_VErr"),
+         ("B3", "A1", "result_Bool_Error", "result_Bool_Error"),
+         ("B4", "A2", "result_Bool_Error", "result_Bool_Error"),
+         ("B7", "A2", "result_Bool_Error", "result_Bool_Error")]
 
 
 def report_compare():
     pf = {r: per_function(r, read_run(r)) for r in RUNS}
-    lines, kinds, frames = [], [], []
-    for b, a, tb, ta, written in PAIRS:
+    lines, diffs = [], []
+    for b, a, tb, ta in PAIRS:
         family = "option" if tb.startswith("option") else "result"
-        row, dsum = [], 0
+        row = []
         for c in (OPT if family == "option" else RES):
             fb, fa = pf[b].get(tb + "_" + c), pf[a].get(ta + "_" + c)
             if fb is None or fa is None:
                 row.append("%s ?" % c)
-                kinds.append("%s/%s %s: not counted" % (b, a, c))
-                if written:
-                    frames.append("%s/%s %s: not counted" % (b, a, c))
+                diffs.append("%s/%s %s: not counted" % (b, a, c))
                 continue
-            dsum += fa[1] - fb[1]
-            row.append("%s %d->%d" % (c, fb[1], fa[1]))
+            row.append("%s %d" % (c, fb[1]) if fb[1] == fa[1]
+                       else "%s %d, recommended %d" % (c, fb[1], fa[1]))
             for k in sorted(set(fb[2]) | set(fa[2])):
                 nb, na = fb[2].get(k, (0, 0))[1], fa[2].get(k, (0, 0))[1]
-                if k.startswith(KINDS):
-                    if nb != na:
-                        kinds.append("%s/%s %s %s %d->%d" % (b, a, c, k, nb, na))
-                elif written and not is_frame(k) and nb != na:
-                    frames.append("%s/%s %s %s %d->%d" % (b, a, c, k, nb, na))
-            if written:
-                n = NONCALLING.get((family, c), 1)
-                f_b = sum(t for k, (_, t) in fb[2].items() if is_frame(k))
-                f_a = sum(t for k, (_, t) in fa[2].items() if is_frame(k))
-                if f_a != n * f_b:
-                    frames.append("%s/%s %s frame %d->%d, predicted %d"
-                                  % (b, a, c, f_b, f_a, n * f_b))
-        lines.append("%s %s -> %s %s: %s; total %+d" % (b, tb, a, ta, ", ".join(row), dsum))
-    print("=== goals per combinator, today (B) -> recommended (A)")
+                if nb != na:
+                    diffs.append("%s/%s %s %s %d, recommended %d" % (b, a, c, k, nb, na))
+        lines.append("%s %s against %s %s: %s" % (b, tb, a, ta, ", ".join(row)))
+    print("=== goals per combinator, each unit (B) against the recommended contracts (A)")
     for line in lines:
         print("  " + line)
-    annotate("notice", "G11 goals per combinator, today (B) -> recommended (A)", lines)
-    summary(["### Goals per combinator, today (B) -> recommended (A)"]
+    annotate("notice", "G11 goals per combinator, each unit (B) against the recommended (A)",
+             lines)
+    summary(["### Goals per combinator, each unit (B) against the recommended contracts (A)"]
             + ["- " + line for line in lines])
-    check("M", "run-time checks, termination goals and exit goals: as many under the "
-          "recommended contract as today, at every combinator", not kinds, "; ".join(kinds))
-    check("M", "where today's contract is written, the frame's goals move into each "
-          "behaviour that calls no pointer and every other clause keeps its goals",
-          not frames, "; ".join(frames))
+    check("H", "at every combinator of every unit, today's goals equal the recommended "
+          "contracts', property by property", not diffs, "; ".join(diffs))
 
 
 def main():

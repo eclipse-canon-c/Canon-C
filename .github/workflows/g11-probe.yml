@@ -29,9 +29,14 @@ name: G11 probe (VERIFY-039, the recommended combinator contracts under WP 29)
 # with its confidence, for each part. The log needs a sign-in, so each step
 # also posts its verdicts, then each run's goals function by function, as
 # notices on the run page, and an error annotation for each MISS, up to
-# nine and a count of the rest; each exits 1 on a MISS. B and the
-# comparison describe the surfaces before G11's repair: once a surface is
-# repaired they no longer do, and this file is updated.
+# nine and a count of the rest; each exits 1 on a MISS.
+#
+# SINCE G11'S REPAIRS (a4f8f5f to ec6a30b) every unit B counts states the
+# recommended contracts. The comparison now checks that each unit's
+# combinators have the probe's goals, property by property; run #1, before
+# the repairs, checked the deltas (VERIFY-039, "G11 — probe scored"). Run
+# #2's prediction: "G11 — the declarations and the probe: committed
+# prediction".
 # ---------------------------------------------------------------------------
 
 on:
@@ -76,7 +81,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/probes/verify-039/g11_probe.py report B
 
-      - name: "Report: today against the recommended contracts"
+      - name: "Report: each unit against the recommended contracts"
         if: ${{ !cancelled() }}
         run: python3 tools/probes/verify-039/g11_probe.py report compare
 
