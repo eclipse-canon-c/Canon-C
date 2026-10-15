@@ -26,7 +26,9 @@
  * sameness is load-bearing: VERIFY-028 P2 predicts option's 32 inherited
  * residuals re-emit byte-identical modulo the type prefix. If this file
  * diverges from bitset_verify.h beyond the rename, P2 is no longer testing
- * what it says.
+ * what it says. VERIFY-039 G11 repaired the combinators of both files
+ * together, from option_verify.h's repaired contracts, so the sameness
+ * holds; option's residuals here are its six run-time checks since.
  *
  * It depends on VERIFY-028 F3: range.h's CANON_OPTION(isize) is now behind
  * CANON_OPTION_ISIZE_DEFINED. Before F3, interposition was impossible — the
@@ -42,7 +44,8 @@
  * Exactly deque_verify.h's move with CANON_RESULT_BOOL_ERROR_DEFINED. If this
  * define is ever removed, the build still succeeds and the proof silently
  * degrades to spec-less option — which is why the job's roll-call checks for
- * option's 32 by name rather than trusting the count. */
+ * option's arm by name rather than trusting the count (32 goals until
+ * VERIFY-039 G11, the six run-time checks on the pointers since). */
 #define CANON_OPTION_ISIZE_DEFINED
 
 /* Real, unmodified module header. option_defn.h pulls in option_mangle.h and
@@ -133,14 +136,32 @@ static inline isize option_isize_unwrap(option_isize o);
 static inline isize option_isize_expect(option_isize o, const char *msg);
 
 /* ── Combinators (function-pointer dispatch) ───────────────────────────────────
-   Structural specs: the non-calling branch is proved; the calling branch is
-   the documented fn-pointer residual (class (b)). No `requires
-   \valid_function(f)` — it is unimplemented in Frama-C 29 and would not help.
+   VERIFY-039 G11. Each contract claims only what holds for every callback
+   its preconditions admit. With C the condition on which the body calls the
+   pointer: the pointer must be a valid function where it is called
+   (`requires C ==> \valid_function(f)`); termination and no exit are
+   claimed only where nothing is called (`terminates !C; exits C;`, and no
+   `decreases` clause); and the empty frame is stated only in the behaviours
+   that call nothing. The defaults claimed termination and no exit for every
+   call, and `assigns \nothing` claimed the frame, which a callback that
+   loops, exits or writes a global falsifies
+   (tools/probes/verify-039/p_combinator_callback.c).
+
+   WP 29 does not implement `\valid_function`: the precondition gives the
+   proof no hypothesis, and the run-time check on the pointer stays
+   unproved, true for every admitted call. A caller proves the precondition
+   where its arguments make C false, and gets no frame from any call: WP
+   frames a call by a default `assigns`, an unguarded behaviour's or a
+   complete set's, and the calling behaviour states none (VERIFY-039 G11,
+   the probe: tools/probes/verify-039/p_combinator_contracts.c).
    ────────────────────────────────────────────────────────────────────────────*/
 
-/*@ assigns \nothing;
+/*@ requires o.has_value ==> \valid_function(f);
+    terminates !o.has_value;
+    exits o.has_value;
     behavior none:
       assumes !o.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior some:
       assumes o.has_value;
@@ -150,27 +171,33 @@ static inline isize option_isize_expect(option_isize o, const char *msg);
 */
 static inline option_isize option_isize_map(option_isize o, isize (*f)(isize));
 
-/*@ assigns \nothing;
+/*@ requires o.has_value ==> \valid_function(f);
+    terminates !o.has_value;
+    exits o.has_value;
     behavior none:
       assumes !o.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior some:
       assumes o.has_value;
-      // result == f(o.value); f returns option_isize — fn-pointer residual
+      // result == f(o.value): not stated, it is the callback's value
     complete behaviors;
     disjoint behaviors;
 */
 static inline option_isize option_isize_and_then(option_isize o,
                                                  option_isize (*f)(isize));
 
-/*@ assigns \nothing;
+/*@ requires !o.has_value ==> \valid_function(fallback);
+    terminates o.has_value;
+    exits !o.has_value;
     behavior some:
       assumes o.has_value;
+      assigns \nothing;
       ensures \result.has_value == o.has_value;
       ensures \result.value == o.value;
     behavior none:
       assumes !o.has_value;
-      // result == fallback(); fn-pointer residual
+      // result == fallback(): not stated, it is the callback's value
     complete behaviors;
     disjoint behaviors;
 */
@@ -178,29 +205,35 @@ static inline option_isize option_isize_or_else(option_isize o,
                                                 option_isize (*fallback)(void));
 
 /* filter's guard is `(o.has_value && pred(o.value))`. The has_value==false
- * branch short-circuits before calling pred and returns None — provable. The
- * has_value==true branch calls pred — fn-pointer residual. */
-/*@ assigns \nothing;
+ * branch short-circuits before calling pred and returns None; the
+ * has_value==true branch calls pred. */
+/*@ requires o.has_value ==> \valid_function(pred);
+    terminates !o.has_value;
+    exits o.has_value;
     behavior none:
       assumes !o.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior some:
       assumes o.has_value;
-      // result is o or None depending on pred(o.value) — fn-pointer residual
+      // result is o or None depending on pred(o.value): not stated
     complete behaviors;
     disjoint behaviors;
 */
 static inline option_isize option_isize_filter(option_isize o,
                                                bool (*pred)(isize));
 
-/*@ assigns \nothing;
+/*@ requires (o1.has_value && o2.has_value) ==> \valid_function(combine);
+    terminates !(o1.has_value && o2.has_value);
+    exits o1.has_value && o2.has_value;
     behavior any_none:
       assumes !o1.has_value || !o2.has_value;
+      assigns \nothing;
       ensures !\result.has_value;
     behavior both_some:
       assumes o1.has_value && o2.has_value;
       ensures \result.has_value;
-      // result.value == combine(o1.value, o2.value) — fn-pointer residual
+      // result.value == combine(o1.value, o2.value): not stated
     complete behaviors;
     disjoint behaviors;
 */
@@ -228,18 +261,24 @@ static inline option_isize option_isize_replace(option_isize *o, isize new_value
 */
 static inline option_isize option_isize_take(option_isize *o);
 
-/* ── Comparison (function-pointer dispatch on the Some/Some branch) ─────────── */
+/* ── Comparison (function-pointer dispatch on the Some/Some branch) ───────────
+   The combinators' shape (VERIFY-039 G11), with two behaviours that call
+   nothing, each stating the empty frame. */
 
-/*@ assigns \nothing;
+/*@ requires (o1.has_value && o2.has_value) ==> \valid_function(eq);
+    terminates !(o1.has_value && o2.has_value);
+    exits o1.has_value && o2.has_value;
     behavior both_none:
       assumes !o1.has_value && !o2.has_value;
+      assigns \nothing;
       ensures \result == \true;
     behavior mismatch:
       assumes o1.has_value != o2.has_value;
+      assigns \nothing;
       ensures \result == \false;
     behavior both_some:
       assumes o1.has_value && o2.has_value;
-      // result == eq(o1.value, o2.value) — fn-pointer residual
+      // result == eq(o1.value, o2.value): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */

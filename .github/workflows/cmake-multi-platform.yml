@@ -4481,8 +4481,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=122   # VERIFY-039 G10 predicted: 138 -> 122 (G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4920 / 5042"   # VERIFY-039 G10 predicted: six goals added, all proved, and sixteen closed (G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=96   # VERIFY-039 G11 predicted: 122 -> 96 (G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4953 / 5049"   # VERIFY-039 G11 predicted: seven goals added, all proved, and 26 closed (G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4595,7 +4595,8 @@ jobs:
             # array below was produced by script from #1259 output and its arm
             # partition verified arithmetically -- 2 + 32 + 58 + 66 = 158
             # when written; 71 own / 163 total at #1264, 41 own / 138 total
-            # after VERIFY-039 G8's repair, 25 own / 122 total since G10's.
+            # after VERIFY-039 G8's repair, 25 own / 122 total after G10's,
+            # and 96 total since G11's repair of option_usize, whose arm is 6.
             # No duplicates, nothing unclassified -- before being written here.
             CHECKS=(
               "typed_cast_ptr_align_down_nonnull_ensures_same_base_part2"
@@ -4607,39 +4608,15 @@ jobs:
               # ARM C — contract.h handler pair. Definition-presence only.
               "typed_cast_contract_default_handler_loop_invariant_established"
               "typed_cast_contract_default_handler_terminates"
-              # ARM A — option_usize, INHERITANCE via the interposition driver (32).
-              "typed_cast_option_usize_map_terminates_part2"
-              "typed_cast_option_usize_map_terminates_part3"
-              "typed_cast_option_usize_map_exits_part1"
+              # ARM A — option_usize, INHERITANCE via the interposition driver:
+              #         the run-time check on the pointer at each combinator
+              #         since VERIFY-039 G11 (32 before).
               "typed_cast_option_usize_map_assert_rte_function_pointer"
-              "typed_cast_option_usize_map_assigns_exit_part2"
-              "typed_cast_option_usize_map_assigns_normal_part2"
-              "typed_cast_option_usize_and_then_terminates_part2"
-              "typed_cast_option_usize_and_then_terminates_part3"
-              "typed_cast_option_usize_and_then_exits_part1"
               "typed_cast_option_usize_and_then_assert_rte_function_pointer"
-              "typed_cast_option_usize_and_then_assigns_exit_part2"
-              "typed_cast_option_usize_and_then_assigns_normal_part2"
-              "typed_cast_option_usize_or_else_terminates_part1"
-              "typed_cast_option_usize_or_else_terminates_part2"
               "typed_cast_option_usize_or_else_assert_rte_function_pointer"
-              "typed_cast_option_usize_or_else_assigns_part2"
-              "typed_cast_option_usize_filter_terminates_part2"
-              "typed_cast_option_usize_filter_terminates_part3"
-              "typed_cast_option_usize_filter_exits_part1"
               "typed_cast_option_usize_filter_assert_rte_function_pointer"
-              "typed_cast_option_usize_filter_assigns_exit_part2"
-              "typed_cast_option_usize_filter_assigns_normal_part2"
-              "typed_cast_option_usize_combine_with_terminates_part2"
-              "typed_cast_option_usize_combine_with_terminates_part3"
-              "typed_cast_option_usize_combine_with_exits_part1"
               "typed_cast_option_usize_combine_with_assert_rte_function_pointer"
-              "typed_cast_option_usize_combine_with_assigns_exit_part2"
-              "typed_cast_option_usize_combine_with_assigns_normal_part2"
-              "typed_cast_option_usize_eq_terminates_part2"
-              "typed_cast_option_usize_eq_terminates_part4"
               "typed_cast_option_usize_eq_assert_rte_function_pointer_part2"
-              "typed_cast_option_usize_eq_assigns_part5"
               # ARM S — CORE SUBSTRATE, 63, byte-identical to each home module's
               #         pinned list modulo the typed_cast_ prefix: bits 15,
               #         memory 19, slice-libc 13, ptr 12, checked 2, borrow 2.
@@ -4898,7 +4875,8 @@ jobs:
             echo "               memory 20 + slice-libc 13 + ptr 6 + checked 2 +"
             echo "               borrow 2 + option 32; 97 since VERIFY-026 added"
             echo "               six of ptr's and VERIFY-036 F1 closed one of"
-            echo "               memory's)"
+            echo "               memory's; 71 since VERIFY-039 G11 closed 26 of"
+            echo "               option's)"
             echo "    bitset-own: ${OWN}"
             # CORRECTED after CI #1260. This NOTE said "most bitset-own
             # residuals belong to functions that are NOT YET CONTRACTED
@@ -4976,7 +4954,7 @@ jobs:
               echo "  VERIFY-020 ENFORCED PASS: ${EXPECTED_PROVED} proved, 0 Failed,"
               echo "        count ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, and all"
               echo "        ${EXPECTED_UNPROVED} residuals verified BY NAME in both"
-              echo "        directions (set equality). Arms: 2 handler + 32"
+              echo "        directions (set equality). Arms: 2 handler + 6"
               echo "        option_usize (inheritance) + 63 core substrate +"
               echo "        ${OWN} bitset-own."
               echo ""
@@ -5957,7 +5935,8 @@ jobs:
   # in comments), so it is also the last name-stability check.
   #
   # MODEL: Typed. range.h has no pointer<->integer casts. Goal names carry the
-  # typed_ prefix, so option's 32 compare with bitset's modulo BOTH the type
+  # typed_ prefix, so option's residuals (32 until VERIFY-039 G11, its six
+  # run-time checks since) compare with bitset's modulo BOTH the type
   # (usize -> isize) and the model prefix (typed_cast_ -> typed_).
   #
   # Nothing is gated on the predictions. The block at the end PRINTS the
@@ -6040,10 +6019,10 @@ jobs:
             grep -vE 'option_isize_|contract_default_handler|_checked_' /tmp/rg_all.txt > /tmp/rg_own.txt || true
             echo ""
             echo "  ============ VERIFY-029 RUN-3 EVIDENCE (not gating) ============"
-            echo "  Q1  inherited: option $(wc -l < /tmp/rg_opt.txt) (pred 32)" \
+            echo "  Q1  inherited: option $(wc -l < /tmp/rg_opt.txt) (pred 32; 6 since VERIFY-039 G11)" \
                  " + handler $(wc -l < /tmp/rg_ctr.txt) (pred 2)" \
                  " + checked $(wc -l < /tmp/rg_chk.txt) (pred 2)" \
-                 " = $(cat /tmp/rg_opt.txt /tmp/rg_ctr.txt /tmp/rg_chk.txt | wc -l) (pred 36, names as runs 1-2)"
+                 " = $(cat /tmp/rg_opt.txt /tmp/rg_ctr.txt /tmp/rg_chk.txt | wc -l) (pred 36, names as runs 1-2; 10 since VERIFY-039 G11)"
             show /tmp/rg_chk.txt
             echo "  own: $(wc -l < /tmp/rg_own.txt)   (run 1: 12, run 2: 11, run-3 pred: 0)"
             show /tmp/rg_own.txt
@@ -6070,48 +6049,27 @@ jobs:
             #       same 32 bitset pins as option_usize (VERIFY-020)
             #    2  contract_default_handler (abort path, VERIFY-002 class)
             #    2  checked_add / checked_add_u64 overflow_ensures (VERIFY-002)
+            # VERIFY-039 G11 predicted: option_isize's combinators carry
+            # option_verify.h's repaired contracts, 26 of the 32 close and
+            # option's eq gains 7 frame goals, all proved, leaving 10: the
+            # six run-time checks on the pointers, the same six bitset pins,
+            # and the four above.
             # A pinned name that starts proving is a RATCHET; a new name is a
             # finding. Neither is ever absorbed silently.
             # ===============================================================
-            EXPECTED_PROVED="2611 / 2647"
-            EXPECTED_UNPROVED=36
+            EXPECTED_PROVED="2644 / 2654"   # VERIFY-039 G11 predicted (VERIFY-030: 2611 / 2647)
+            EXPECTED_UNPROVED=10   # VERIFY-039 G11 predicted: 36 -> 10
             PIN_NAMES=(
             "typed_checked_add_overflow_ensures"
             "typed_checked_add_u64_overflow_ensures"
             "typed_contract_default_handler_loop_invariant_established"
             "typed_contract_default_handler_terminates"
             "typed_option_isize_and_then_assert_rte_function_pointer"
-            "typed_option_isize_and_then_assigns_exit_part2"
-            "typed_option_isize_and_then_assigns_normal_part2"
-            "typed_option_isize_and_then_exits_part1"
-            "typed_option_isize_and_then_terminates_part2"
-            "typed_option_isize_and_then_terminates_part3"
             "typed_option_isize_combine_with_assert_rte_function_pointer"
-            "typed_option_isize_combine_with_assigns_exit_part2"
-            "typed_option_isize_combine_with_assigns_normal_part2"
-            "typed_option_isize_combine_with_exits_part1"
-            "typed_option_isize_combine_with_terminates_part2"
-            "typed_option_isize_combine_with_terminates_part3"
             "typed_option_isize_eq_assert_rte_function_pointer_part2"
-            "typed_option_isize_eq_assigns_part5"
-            "typed_option_isize_eq_terminates_part2"
-            "typed_option_isize_eq_terminates_part4"
             "typed_option_isize_filter_assert_rte_function_pointer"
-            "typed_option_isize_filter_assigns_exit_part2"
-            "typed_option_isize_filter_assigns_normal_part2"
-            "typed_option_isize_filter_exits_part1"
-            "typed_option_isize_filter_terminates_part2"
-            "typed_option_isize_filter_terminates_part3"
             "typed_option_isize_map_assert_rte_function_pointer"
-            "typed_option_isize_map_assigns_exit_part2"
-            "typed_option_isize_map_assigns_normal_part2"
-            "typed_option_isize_map_exits_part1"
-            "typed_option_isize_map_terminates_part2"
-            "typed_option_isize_map_terminates_part3"
             "typed_option_isize_or_else_assert_rte_function_pointer"
-            "typed_option_isize_or_else_assigns_part2"
-            "typed_option_isize_or_else_terminates_part1"
-            "typed_option_isize_or_else_terminates_part2"
             )
             echo ""
             echo "==============================================="
@@ -6128,7 +6086,7 @@ jobs:
             PIN_N=$(wc -l < /tmp/rg_pin.txt)
             comm -23 /tmp/rg_pin.txt /tmp/rg_all.txt > /tmp/rg_missing.txt
             comm -13 /tmp/rg_pin.txt /tmp/rg_all.txt > /tmp/rg_unpinned.txt
-            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 32 option + 2 handler + 2 checked + 0 own) ---"
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 6 option + 2 handler + 2 checked + 0 own) ---"
             echo "    missing (pinned, now proved):    $(wc -l < /tmp/rg_missing.txt)"; show /tmp/rg_missing.txt
             echo "    unpinned (new, unproved):        $(wc -l < /tmp/rg_unpinned.txt)"; show /tmp/rg_unpinned.txt
             if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then

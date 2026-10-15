@@ -75,10 +75,11 @@ n(*P*). Use the preprocessor flags *P* will be verified with.
 - **Macro text.** The extractor reads the annotations in the text of the
   macros a unit's sources define, whether or not the unit's preprocessing keeps
   them: under the default `-C` WP never sees them. Since VERIFY-039 G11's repair
-  of the macro bodies, bitset's and range's units are listed for
-  `\valid_function` and `terminates`, though no clause WP verifies there
-  writes them. The queue's unit, listed the same way at 37ad1f2, writes them
-  itself since G11's repair at (`Bool`, `Error`).
+  of the macro bodies (37ad1f2), bitset's, range's and the queue's units were
+  listed for `\valid_function` and `terminates` before any clause WP verifies
+  there wrote them. Each unit writes them itself since G11's later repairs:
+  the queue's at result (`Bool`, `Error`), bitset's and range's at their
+  copies of option.
 - Built with clang 18; the features are coarse enough that other recent clang
   versions should agree, and test 4 checks it.
 
