@@ -2807,8 +2807,11 @@ jobs:
             "typed_option_int_combine_with_assert_rte_function_pointer"
             "typed_option_int_eq_assert_rte_function_pointer_part2"
           )
+          # ANCHORED with a trailing ( |$), as vec's and deque's roll-calls
+          # are (VERIFY-039 G11): with the exact count above, presence of
+          # every name is then set equality.
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_option_output.txt; then
+            if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_option_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
@@ -2993,8 +2996,12 @@ jobs:
             "typed_result_int_VErr_eq_assert_rte_function_pointer"
             "typed_result_int_VErr_eq_assert_rte_function_pointer_2"
           )
+          # ANCHORED with a trailing ( |$), as vec's and deque's roll-calls
+          # are (VERIFY-039 G11): eq's first check is a prefix of its _2, so
+          # an unanchored match let one line stand for both names. With the
+          # exact count above, presence of every name is then set equality.
           for goal in "${CHECKS[@]}"; do
-            if ! grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_result_output.txt; then
+            if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_result_output.txt; then
               echo "FAIL: expected unproved goal ${goal} not observed."
               exit 1
             fi
