@@ -16,9 +16,11 @@ name: Canon-C CC (VERIFY-025)
 # under `-CC`, and diffs the residual set by name against the enforced
 # driver pin. (VERIFY-039 G11: option's six combinators and result's five
 # state the same contracts in the macro bodies and in the home drivers,
-# option_verify.h and result_verify.h, which were repaired first; deque's
-# transcription of result's at (Bool, Error), and vec's and the queue's
-# instances, which state none for its combinators, are repaired later.)
+# option_verify.h and result_verify.h, which were repaired first. Since
+# G11's repair at (Bool, Error), deque_verify.h's transcription and
+# vec_verify.h's and the queue's copies state them too, and frama-c-deque
+# and frama-c-vec pin the residual names cc_pins/deque.txt and
+# cc_pins/vec.txt list.)
 #
 # MODE: ENFORCED since the run after three set-identical report-only runs
 # (CC #1, #2, #3 — 2026-09-20/21). Gates, per family: (0) the pinned

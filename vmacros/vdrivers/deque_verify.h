@@ -414,64 +414,80 @@ static inline bool result__Bool_Error_expect(result__Bool_Error r,
                                              const char *msg);
 
 /* ── Combinators (function-pointer dispatch) ──────────────────────────────────
-   Structural specs; the calling branch is the documented fn-pointer
-   residual, inherited from the family profile. deque calls NONE of these —
-   they are emitted because DEFINE_RESULT_FUNCTIONS emits the whole family,
-   and contracted because the rule's first option requires the full home
-   set. Their goals are ARM B, not ARM D. */
+   VERIFY-039 G11: result_verify.h's repaired contracts, transcribed. With C
+   the condition on which the body calls the pointer: `requires C ==>
+   \valid_function(f)`; `terminates !C; exits C;` and no `decreases` clause;
+   the empty frame only in the behaviours that call nothing. WP 29 does not
+   implement `\valid_function`, so the run-time check on each pointer stays
+   unproved. deque calls NONE of these — they are emitted because
+   DEFINE_RESULT_FUNCTIONS emits the whole family, and contracted because
+   the rule's first option requires the full home set. Their goals are
+   ARM B, not ARM D. */
 
-/*@ assigns \nothing;
+/*@ requires r.is_ok ==> \valid_function(f);
+    terminates !r.is_ok;
+    exits r.is_ok;
     behavior err:
       assumes !r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \false;
       ensures \result.val.err == r.val.err;
     behavior ok:
       assumes r.is_ok;
       ensures \result.is_ok == \true;
-      // \result.val.ok == f(r.val.ok) — fn-pointer residual
+      // \result.val.ok == f(r.val.ok): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
 static inline result__Bool_Error result__Bool_Error_map(result__Bool_Error r,
                                                         bool (*f)(bool));
 
-/*@ assigns \nothing;
+/*@ requires !r.is_ok ==> \valid_function(f);
+    terminates r.is_ok;
+    exits !r.is_ok;
     behavior ok:
       assumes r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \true;
       ensures \result.val.ok == r.val.ok;
     behavior err:
       assumes !r.is_ok;
       ensures \result.is_ok == \false;
-      // \result.val.err == f(r.val.err) — fn-pointer residual
+      // \result.val.err == f(r.val.err): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
 static inline result__Bool_Error result__Bool_Error_map_err(
     result__Bool_Error r, Error (*f)(Error));
 
-/*@ assigns \nothing;
+/*@ requires r.is_ok ==> \valid_function(f);
+    terminates !r.is_ok;
+    exits r.is_ok;
     behavior err:
       assumes !r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \false;
       ensures \result.val.err == r.val.err;
     behavior ok:
       assumes r.is_ok;
-      // \result == f(r.val.ok) — fn-pointer residual
+      // \result == f(r.val.ok): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
 static inline result__Bool_Error result__Bool_Error_and_then(
     result__Bool_Error r, result__Bool_Error (*f)(bool));
 
-/*@ assigns \nothing;
+/*@ requires !r.is_ok ==> \valid_function(f);
+    terminates r.is_ok;
+    exits !r.is_ok;
     behavior ok:
       assumes r.is_ok;
+      assigns \nothing;
       ensures \result.is_ok == \true;
       ensures \result.val.ok == r.val.ok;
     behavior err:
       assumes !r.is_ok;
-      // \result == f(r.val.err) — fn-pointer residual
+      // \result == f(r.val.err): not stated, the callback's value
     complete behaviors;
     disjoint behaviors;
 */
@@ -512,16 +528,20 @@ static inline result__Bool_Error result__Bool_Error_and(
 static inline result__Bool_Error result__Bool_Error_or(
     result__Bool_Error r, result__Bool_Error other);
 
-/*@ assigns \nothing;
+/*@ requires (r1.is_ok && r2.is_ok) ==> \valid_function(eq_ok);
+    requires (!r1.is_ok && !r2.is_ok) ==> \valid_function(eq_err);
+    terminates r1.is_ok != r2.is_ok;
+    exits r1.is_ok == r2.is_ok;
     behavior mismatch:
       assumes r1.is_ok != r2.is_ok;
+      assigns \nothing;
       ensures \result == \false;
     behavior both_ok:
       assumes r1.is_ok && r2.is_ok;
-      // \result == eq_ok(r1.val.ok, r2.val.ok) — fn-pointer residual
+      // \result == eq_ok(r1.val.ok, r2.val.ok): not stated
     behavior both_err:
       assumes !r1.is_ok && !r2.is_ok;
-      // \result == eq_err(r1.val.err, r2.val.err) — fn-pointer residual
+      // \result == eq_err(r1.val.err, r2.val.err): not stated
     complete behaviors;
     disjoint behaviors;
 */

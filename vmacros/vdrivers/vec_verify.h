@@ -277,11 +277,13 @@
  * vec bodies call (_ok / _err / _is_ok) — shapes copied verbatim from
  * result_verify.h, retyped. The guard define below makes vec_impl.h skip
  * its own file-scope emission (same guard convention, one instantiation).
- * The remaining result functions (combinators) are emitted uncontracted;
- * their fn-pointer/termination cluster re-emits with the same goal names
- * as run 1. Class (b) analog of result's own dispatch residuals, but
+ * Until VERIFY-039 G11 the combinators were emitted uncontracted; their
+ * fn-pointer/termination cluster re-emitted with the same goal names as
+ * run 1. Class (b) analog of result's own dispatch residuals, but
  * SUBJECT-side under VERIFY-018's Correction note — the family is
- * instantiated at a type pair result's home unit never verified.
+ * instantiated at a type pair result's home unit never verified. They now
+ * carry result_verify.h's repaired contracts (below); the other remaining
+ * result functions are still emitted uncontracted.
  *
  * ── get_ok / get_err: added 2026-08, testing F4's closure ────────────────
  * These two were previously among the uncontracted remainder, and that is
@@ -358,6 +360,105 @@ static inline bool result__Bool_Error_get_ok(result__Bool_Error r, bool *out);
     disjoint behaviors;
 */
 static inline bool result__Bool_Error_get_err(result__Bool_Error r, Error *out);
+
+/* ── Combinators: VERIFY-039 G11 ──────────────────────────────────────────────
+ * result_verify.h's repaired contracts, copied. With C the condition on
+ * which the body calls the pointer: `requires C ==> \valid_function(f)`;
+ * `terminates !C; exits C;` and no `decreases` clause; the empty frame only
+ * in the behaviours that call nothing. vec calls none of them. WP 29 does
+ * not implement `\valid_function`, so the run-time check on each pointer
+ * stays unproved. */
+/*@ requires r.is_ok ==> \valid_function(f);
+    terminates !r.is_ok;
+    exits r.is_ok;
+    behavior err:
+      assumes !r.is_ok;
+      assigns \nothing;
+      ensures \result.is_ok == \false;
+      ensures \result.val.err == r.val.err;
+    behavior ok:
+      assumes r.is_ok;
+      ensures \result.is_ok == \true;
+      // \result.val.ok == f(r.val.ok): not stated, the callback's value
+    complete behaviors;
+    disjoint behaviors;
+*/
+static inline result__Bool_Error result__Bool_Error_map(result__Bool_Error r,
+                                                        bool (*f)(bool));
+
+/*@ requires !r.is_ok ==> \valid_function(f);
+    terminates r.is_ok;
+    exits !r.is_ok;
+    behavior ok:
+      assumes r.is_ok;
+      assigns \nothing;
+      ensures \result.is_ok == \true;
+      ensures \result.val.ok == r.val.ok;
+    behavior err:
+      assumes !r.is_ok;
+      ensures \result.is_ok == \false;
+      // \result.val.err == f(r.val.err): not stated, the callback's value
+    complete behaviors;
+    disjoint behaviors;
+*/
+static inline result__Bool_Error result__Bool_Error_map_err(
+    result__Bool_Error r, Error (*f)(Error));
+
+/*@ requires r.is_ok ==> \valid_function(f);
+    terminates !r.is_ok;
+    exits r.is_ok;
+    behavior err:
+      assumes !r.is_ok;
+      assigns \nothing;
+      ensures \result.is_ok == \false;
+      ensures \result.val.err == r.val.err;
+    behavior ok:
+      assumes r.is_ok;
+      // \result == f(r.val.ok): not stated, the callback's value
+    complete behaviors;
+    disjoint behaviors;
+*/
+static inline result__Bool_Error result__Bool_Error_and_then(
+    result__Bool_Error r, result__Bool_Error (*f)(bool));
+
+/*@ requires !r.is_ok ==> \valid_function(f);
+    terminates r.is_ok;
+    exits !r.is_ok;
+    behavior ok:
+      assumes r.is_ok;
+      assigns \nothing;
+      ensures \result.is_ok == \true;
+      ensures \result.val.ok == r.val.ok;
+    behavior err:
+      assumes !r.is_ok;
+      // \result == f(r.val.err): not stated, the callback's value
+    complete behaviors;
+    disjoint behaviors;
+*/
+static inline result__Bool_Error result__Bool_Error_or_else(
+    result__Bool_Error r, result__Bool_Error (*f)(Error));
+
+/*@ requires (r1.is_ok && r2.is_ok) ==> \valid_function(eq_ok);
+    requires (!r1.is_ok && !r2.is_ok) ==> \valid_function(eq_err);
+    terminates r1.is_ok != r2.is_ok;
+    exits r1.is_ok == r2.is_ok;
+    behavior mismatch:
+      assumes r1.is_ok != r2.is_ok;
+      assigns \nothing;
+      ensures \result == \false;
+    behavior both_ok:
+      assumes r1.is_ok && r2.is_ok;
+      // \result == eq_ok(r1.val.ok, r2.val.ok): not stated
+    behavior both_err:
+      assumes !r1.is_ok && !r2.is_ok;
+      // \result == eq_err(r1.val.err, r2.val.err): not stated
+    complete behaviors;
+    disjoint behaviors;
+*/
+static inline bool result__Bool_Error_eq(result__Bool_Error r1,
+                                         result__Bool_Error r2,
+                                         bool (*eq_ok)(bool, bool),
+                                         bool (*eq_err)(Error, Error));
 
 DEFINE_RESULT_FUNCTIONS(static inline, bool, Error)
 

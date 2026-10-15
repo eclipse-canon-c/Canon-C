@@ -2873,9 +2873,9 @@ jobs:
   # instantiation, a new verification subject, NOT covered by this job's
   # evidence (VERIFY-018 Correction note; instantiation-identity rule in
   # docs/vmacros.md). This job's residual profile is the comparison
-  # baseline for that fresh instance's 22 goals. (Since VERIFY-039 G11 the
-  # two differ: this driver's combinators state the repaired contracts, and
-  # vec's instance, whose combinators have none, keeps its 20 G11 goals.)
+  # baseline for that fresh instance's 22 goals. (VERIFY-039 G11: vec_verify.h
+  # copies this driver's repaired combinator contracts, and vec's result arm
+  # is predicted to fall to the same 6 run-time checks, at (Bool, Error).)
   # -------------------------------------------------------------------------
   frama-c-result:
     needs: build
@@ -3068,6 +3068,10 @@ jobs:
   #     combinators state only what holds for every callback, the run-time
   #     check on the pointer at each; the other 26 close, and option's eq
   #     gains 7 frame goals, all proved (5396 / 5522, 126 unproved).
+  #   VERIFY-039 G11, result at (Bool, Error): the five combinators carry
+  #     result_verify.h's repaired contracts, copied. Predicted: the result
+  #     arm falls from 20 to its 6 run-time checks, and the contracts add
+  #     56 goals, all proved (5466 / 5578, 112 unproved).
   # Gates: pinned Proved line, 0 Failed ever, exact count, by-name roll-call
   # (= set equality). ANY change to the residual set, either direction,
   # fails CI; the fix is the acknowledged ratchet — update the pinned
@@ -3106,7 +3110,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-039 G11 predicted: 5396/5522, 126 unproved (G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
+          echo "  baseline: VERIFY-039 G11 (Bool, Error) predicted: 5466/5578, 112 unproved (G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3147,8 +3151,11 @@ jobs:
           # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
           # VERIFY-039 G11 predicted: the option arm's 26 closed and option's
           # eq gains 7 frame goals, all proved (5363 / 5515 before).
-          if [ "${PROVED_COUNT}" != "5396 / 5522" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5396 / 5522)."
+          # VERIFY-039 G11, result at (Bool, Error), predicted: the result
+          # arm's 14 termination and exit goals closed, and 56 goals added,
+          # all proved (5396 / 5522 before).
+          if [ "${PROVED_COUNT}" != "5466 / 5578" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5466 / 5578)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3164,7 +3171,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=126   # VERIFY-039 G11 predicted: 152 -> 126 (G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
+          EXPECTED_UNPROVED=112   # VERIFY-039 G11 (Bool, Error) predicted: 126 -> 112 (G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
@@ -3232,24 +3239,10 @@ jobs:
             "typed_cast_option_int_filter_assert_rte_function_pointer"
             "typed_cast_option_int_combine_with_assert_rte_function_pointer"
             "typed_cast_option_int_eq_assert_rte_function_pointer_part2"
-            "typed_cast_result_Bool_Error_map_terminates_part2"
-            "typed_cast_result_Bool_Error_map_terminates_part3"
-            "typed_cast_result_Bool_Error_map_exits"
             "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_map_err_terminates_part2"
-            "typed_cast_result_Bool_Error_map_err_terminates_part3"
-            "typed_cast_result_Bool_Error_map_err_exits"
             "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_and_then_terminates_part1"
-            "typed_cast_result_Bool_Error_and_then_terminates_part2"
             "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_or_else_terminates_part1"
-            "typed_cast_result_Bool_Error_or_else_terminates_part2"
             "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_eq_terminates_part1"
-            "typed_cast_result_Bool_Error_eq_terminates_part2"
-            "typed_cast_result_Bool_Error_eq_terminates_part3"
-            "typed_cast_result_Bool_Error_eq_terminates_part4"
             "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
             "typed_cast_checked_add_overflow_ensures"
@@ -3415,8 +3408,9 @@ jobs:
   #          those 8 SHOULD come back: 20 + 8 + 2 = 30. Their absence means
   #          the retyping dropped a clause.
   #          VERIFY-039 G11: result's home unit is 8 = 2 handler + 6 own
-  #          since result_verify.h's repair. This arm is deque_verify.h's
-  #          transcription of the contracts, not repaired, and stays 28
+  #          since result_verify.h's repair, and deque_verify.h now
+  #          transcribes the repaired contracts: predicted 6, the run-time
+  #          check on the pointer at each combinator, two at eq
   #          (PREDICT_RESULT in the WP step).
   #   ARM D  deque_int_* own residuals .................  0
   #          No allocation (vec's class (e)), no mem_copy/mem_move (class
@@ -3469,8 +3463,10 @@ jobs:
           ENFORCE=1
           # VERIFY-039 G11 predicted: the option arm's 26 closed and option's
           # eq gains 7 frame goals, all proved (67 and 1601 / 1668 before).
-          EXPECTED_UNPROVED=41
-          EXPECTED_PROVED="1634 / 1675"
+          # VERIFY-039 G11, result at (Bool, Error), predicted: the result
+          # arm's 22 closed, no goal added (41 and 1634 / 1675 before).
+          EXPECTED_UNPROVED=19
+          EXPECTED_PROVED="1656 / 1675"
           # Pre-registered arm counts (see banner). Printed against observed
           # in every run; they do not gate until ENFORCE=1.
           PREDICT_HANDLER=2
@@ -3487,8 +3483,12 @@ jobs:
           # rather than by being right. Corrected here, and the self-check
           # below now makes that class of drift impossible to repeat.
           # If the Typed+Cast control brings the pair back, ARM B under
-          # THAT model is 30 and this line does not change.
-          PREDICT_RESULT=28
+          # THAT model is two more (30 then, 8 since VERIFY-039 G11) and
+          # this line does not change.
+          # VERIFY-039 G11: 6 since deque_verify.h transcribes the repaired
+          # contracts, the run-time check on the pointer at each combinator,
+          # two at eq (28 before).
+          PREDICT_RESULT=6
           # RUN-2 VALUES. Run 1 (CI #1231) observed ARM D = 9 against a
           # predicted 0. Four of the nine were a missing default `assigns`
           # on the pop_*/peek_* callees (my drafting error, now fixed the
@@ -3498,7 +3498,7 @@ jobs:
           # return — if they do, the framing problem is deeper than a
           # missing clause and the fix was wrong.
           PREDICT_OWN=5
-          PREDICT_TOTAL=41
+          PREDICT_TOTAL=19
           # Self-check: the arms partition the residual set, so their
           # predictions must sum to the total prediction. #1234 shipped with
           # a sum of 69 against a total of 67 and nobody noticed, because the
@@ -3628,11 +3628,11 @@ jobs:
             RESULT_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*result_Bool_Error_" wp_deque_output.txt || true)
             RESULT_ASSIGNS=$(grep -cE "\[(Timeout|Unknown)\].*result_Bool_Error_.*assigns" wp_deque_output.txt || true)
             echo "  result_Bool_Error_*  observed ${RESULT_SEEN} / predicted ${PREDICT_RESULT}"
-            echo "  of which assigns:    observed ${RESULT_ASSIGNS} / predicted 8"
-            echo "  vec's reduced surface emitted ZERO assigns goals here. This"
-            echo "  driver attaches result's full home contract set, so 8 is the"
-            echo "  PREDICTED outcome, not a regression. Zero would mean the"
-            echo "  int->bool / VErr->Error retyping dropped a clause."
+            echo "  of which assigns:    observed ${RESULT_ASSIGNS} / predicted 0"
+            echo "  8 until VERIFY-039 G11: the transcribed home set stated the"
+            echo "  empty frame on the calling branches too, where an unknown"
+            echo "  callee need not keep it. The repaired contracts state it"
+            echo "  only in the behaviours that call nothing, where it proves."
 
             # ── VERIFY-018 F4 separating experiment ───────────────────────
             echo ""
@@ -3744,39 +3744,19 @@ jobs:
               "typed_option_int_combine_with_assert_rte_function_pointer"
               "typed_option_int_eq_assert_rte_function_pointer_part2"
               # ARM B — result(Bool, Error), FRESH INSTANTIATION, full home contract
-              #         set: 20 family-profile + 8 assigns that vec's reduced
-              #         surface never emitted. The get_ok/get_err pair
+              #         set: the run-time check on the pointer at each
+              #         combinator, two at eq, since VERIFY-039 G11 (28
+              #         before: 20 family-profile + 8 assigns that vec's
+              #         reduced surface never emitted). The get_ok/get_err pair
               #         (VERIFY-018 F4) is ABSENT under this configuration — see
               #         the F4 note above; do not add it here on the strength of
               #         vec's roll-call.
-              "typed_result_Bool_Error_map_terminates_part2"
-              "typed_result_Bool_Error_map_terminates_part3"
-              "typed_result_Bool_Error_map_exits"
               "typed_result_Bool_Error_map_assert_rte_function_pointer"
-              "typed_result_Bool_Error_map_assigns_exit_part2"
-              "typed_result_Bool_Error_map_assigns_normal_part2"
-              "typed_result_Bool_Error_map_err_terminates_part2"
-              "typed_result_Bool_Error_map_err_terminates_part3"
-              "typed_result_Bool_Error_map_err_exits"
               "typed_result_Bool_Error_map_err_assert_rte_function_pointer"
-              "typed_result_Bool_Error_map_err_assigns_exit_part2"
-              "typed_result_Bool_Error_map_err_assigns_normal_part3"
-              "typed_result_Bool_Error_and_then_terminates_part1"
-              "typed_result_Bool_Error_and_then_terminates_part2"
               "typed_result_Bool_Error_and_then_assert_rte_function_pointer"
-              "typed_result_Bool_Error_and_then_assigns_part1"
-              "typed_result_Bool_Error_or_else_terminates_part1"
-              "typed_result_Bool_Error_or_else_terminates_part2"
               "typed_result_Bool_Error_or_else_assert_rte_function_pointer"
-              "typed_result_Bool_Error_or_else_assigns_part2"
-              "typed_result_Bool_Error_eq_terminates_part1"
-              "typed_result_Bool_Error_eq_terminates_part2"
-              "typed_result_Bool_Error_eq_terminates_part3"
-              "typed_result_Bool_Error_eq_terminates_part4"
               "typed_result_Bool_Error_eq_assert_rte_function_pointer"
               "typed_result_Bool_Error_eq_assert_rte_function_pointer_2"
-              "typed_result_Bool_Error_eq_assigns_part2"
-              "typed_result_Bool_Error_eq_assigns_part4"
               # ARM D — deque's own: the swap cluster ONLY. vec pins the same class as
               #         typed_cast_vec_int_swap_ensures; deque reproduces it under
               #         plain Typed, widening that classification beyond the cast
@@ -3841,10 +3821,10 @@ jobs:
           echo ""
           echo "==============================================="
           if [ "${FAILURES}" -eq 0 ] && [ "${ENFORCE}" -eq 1 ]; then
-            echo "VERIFY-019 ENFORCED PASS: 1634/1675 proved, 0 Failed, count"
+            echo "VERIFY-019 ENFORCED PASS: 1656/1675 proved, 0 Failed, count"
             echo "      ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, all ${EXPECTED_UNPROVED} classified residuals verified"
             echo "      by name (set equality). Arms: 2 handler + 6 option"
-            echo "      (inheritance) + 28 result(Bool,Error) (fresh) + 5 swap."
+            echo "      (inheritance) + 6 result(Bool,Error) (fresh) + 5 swap."
             echo "      ZERO core-substrate residuals — deque's closure excludes"
             echo "      every header vec inherited its 89 from, so this is the"
             echo "      first module whose inherited surface is SMALLER than its"
@@ -5474,18 +5454,21 @@ jobs:
   #
   # HEAP ORDER IS NOT CLAIMED AND CANNOT BE. pq_sift_up_ and pq_sift_down_
   # decide every swap by calling pq->cmp(a, b, ctx), an indirect call through
-  # a caller-supplied function pointer. Frama-C 29 has no `calls` clause and
-  # \valid_function is unimplemented, so "parent <= child" would be a
-  # statement about an uninterpreted function. Not a timeout; no budget
-  # touches it. option's and result's combinators meet the same limit: their
-  # contracts cannot state the callback's value either. (Their dispatch
-  # residuals, 32 and 28 when this was written, were taken for it; VERIFY-039
-  # G11 found them to be run-time checks on the pointer, unproved for want
-  # of \valid_function, and claims false for some callbacks.) The limit is
-  # met here for the first time in a container whose CORRECTNESS ARGUMENT
-  # depends on it, since vec and deque are ordered by insertion and never
-  # needed the comparator. A priority queue's whole point is the ordering,
-  # and the ordering is the part that cannot be specified.
+  # a caller-supplied function pointer. WP follows an indirect call only
+  # through a `calls` clause listing its targets, a caller-supplied comparator
+  # has no finite list to write, and \valid_function is unimplemented, so
+  # "parent <= child" would be a statement about an uninterpreted function.
+  # (The verified configuration's `calls` clause over compare.h's 24
+  # comparators, VERIFY-022 commit 5, gives the call's frame, not the order.)
+  # Not a timeout; no budget touches it. option's and result's combinators
+  # meet the same limit: their contracts cannot state the callback's value
+  # either. (Their dispatch residuals, 32 and 28 when this was written, were
+  # taken for it; VERIFY-039 G11 found them to be run-time checks on the
+  # pointer, unproved for want of \valid_function, and claims false for some
+  # callbacks.) The limit is met here for the first time in a container whose
+  # CORRECTNESS ARGUMENT depends on it, since vec and deque are ordered by
+  # insertion and never needed the comparator. A priority queue's whole point
+  # is the ordering, and the ordering is the part that cannot be specified.
   # Heap order is covered by the runtime suite instead: every pop sequence in
   # priority_queue_test.c asserts ascending order, including through the
   # byte-wise swap path for elements over CANON_MEM_SWAP_MAX.
@@ -5715,11 +5698,13 @@ jobs:
           # Since VERIFY-022 commit 5 the __FRAMAC__ branch contracts _ok,
           # _err and _is_ok, and since VERIFY-039 G12 get_ok and get_err
           # too, with vec_verify.h's shapes (VERIFY-018 F4's fix): the arm
-          # is 20.
+          # is 20. Since VERIFY-039 G11 the five combinators carry
+          # result_verify.h's repaired contracts: predicted 6, the run-time
+          # check on the pointer at each, two at eq.
           RES_N=$(grep -cE '^typed_cast_result_Bool_Error_' /tmp/pq_resid.txt || true)
           GET_OK=$(grep -cE  '^typed_cast_result_Bool_Error_get_ok_assert_rte_mem_access( |$)'  /tmp/pq_resid.txt || true)
           GET_ERR=$(grep -cE '^typed_cast_result_Bool_Error_get_err_assert_rte_mem_access( |$)' /tmp/pq_resid.txt || true)
-          echo "  result arm residuals:     ${RES_N}   (run 1: 22; vec pre-F4: 22; 20 since VERIFY-039 G12)"
+          echo "  result arm residuals:     ${RES_N}   (run 1: 22; vec pre-F4: 22; 20 at VERIFY-039 G12; 6 since G11)"
           echo "  get_ok/get_err mem_access: ${GET_OK}/${GET_ERR}   (predicted 1/1 at run 1; 0/0 since G12)"
           grep -E '^typed_cast_result_Bool_Error_' /tmp/pq_resid.txt | sed 's/^/      /' || true
           echo ""
@@ -5865,10 +5850,12 @@ jobs:
             # Three count predictions refuted (< 60, < 90, < 130); the
             # comparator-boundary and separation-class predictions held.
             #
-            # The 74-name residual set = 48 inherited from memory.h (taken
+            # The 60-name residual set = 48 inherited from memory.h (taken
             # from the memory job's own list at run time, so the two pins
-            # cannot drift apart silently) + 20 result(bool, Error) (22 until
-            # VERIFY-039 G12 contracted get_ok and get_err) + 6 own:
+            # cannot drift apart silently) + 6 result(bool, Error), the
+            # run-time checks on the combinators' pointers (20 until
+            # VERIFY-039 G11 repaired their contracts; 22 until VERIFY-039
+            # G12 contracted get_ok and get_err) + 6 own:
             #   1  \\valid_function(pq->cmp)             -- Frama-C 29 limit
             #   5  !regions_overlap at mem_copy x4 / mem_swap x1 -- memory.h
             #      states the predicate by pointer ORDERING, which \\separated
@@ -5878,29 +5865,15 @@ jobs:
             # the second. If it goes red with no header change, the pin is
             # flaky and that is the finding -- deque's run-2 shape.
             # ===============================================================
-            EXPECTED_PROVED="4566 / 4640"   # VERIFY-039 G12 predicted: 38 goals added, all proved, and two closed (G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
-            EXPECTED_UNPROVED=74   # VERIFY-039 G12 predicted: 76 -> 74 (VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
+            EXPECTED_PROVED="4636 / 4696"   # VERIFY-039 G11 (Bool, Error) predicted: 56 goals added, all proved, and 14 closed (G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
+            EXPECTED_UNPROVED=60   # VERIFY-039 G11 (Bool, Error) predicted: 74 -> 60 (G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
             PIN_NAMES=(
             "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_and_then_terminates_part1"
-            "typed_cast_result_Bool_Error_and_then_terminates_part2"
             "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
-            "typed_cast_result_Bool_Error_eq_terminates_part1"
-            "typed_cast_result_Bool_Error_eq_terminates_part2"
-            "typed_cast_result_Bool_Error_eq_terminates_part3"
-            "typed_cast_result_Bool_Error_eq_terminates_part4"
             "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_map_err_exits"
-            "typed_cast_result_Bool_Error_map_err_terminates_part2"
-            "typed_cast_result_Bool_Error_map_err_terminates_part3"
-            "typed_cast_result_Bool_Error_map_exits"
-            "typed_cast_result_Bool_Error_map_terminates_part2"
-            "typed_cast_result_Bool_Error_map_terminates_part3"
             "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
-            "typed_cast_result_Bool_Error_or_else_terminates_part1"
-            "typed_cast_result_Bool_Error_or_else_terminates_part2"
             "typed_cast_pq_cmp_assert_rte_function_pointer"
             "typed_cast_pq_swap__call_mem_swap_requires_2"
             "typed_cast_pq_push_result_call_mem_copy_requires_3"
@@ -5925,7 +5898,7 @@ jobs:
             PIN_N=$(wc -l < /tmp/pq_pin_all.txt)
             comm -23 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_missing.txt
             comm -13 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_unpinned.txt
-            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 48 memory + 20 result + 6 own) ---"
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 48 memory + 6 result + 6 own) ---"
             echo "    missing (pinned, now proved):    $(wc -l < /tmp/pq_missing.txt)"; sed 's/^/      /' /tmp/pq_missing.txt
             echo "    unpinned (new, unproved):        $(wc -l < /tmp/pq_unpinned.txt)"; sed 's/^/      /' /tmp/pq_unpinned.txt
             if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then

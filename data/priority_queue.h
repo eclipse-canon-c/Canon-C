@@ -109,6 +109,101 @@
             disjoint behaviors;
         */
         static inline bool result__Bool_Error_get_err(result__Bool_Error r, Error *out);
+        /* VERIFY-039 G11. The five combinators had no contract. With C
+         * the condition on which the body calls the pointer, each now
+         * requires `C ==> \valid_function(f)`, claims `terminates !C;
+         * exits C;`, and states the empty frame only in the behaviours
+         * that call nothing. The queue calls none of them. WP 29 does not
+         * implement `\valid_function`, so the run-time check on each
+         * pointer stays unproved. Shapes copied from
+         * vmacros/vdrivers/result_verify.h. */
+        /*@ requires r.is_ok ==> \valid_function(f);
+            terminates !r.is_ok;
+            exits r.is_ok;
+            behavior err:
+              assumes !r.is_ok;
+              assigns \nothing;
+              ensures \result.is_ok == \false;
+              ensures \result.val.err == r.val.err;
+            behavior ok:
+              assumes r.is_ok;
+              ensures \result.is_ok == \true;
+              // \result.val.ok == f(r.val.ok): not stated, the callback's value
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline result__Bool_Error result__Bool_Error_map(result__Bool_Error r,
+                                                                bool (*f)(bool));
+        /*@ requires !r.is_ok ==> \valid_function(f);
+            terminates r.is_ok;
+            exits !r.is_ok;
+            behavior ok:
+              assumes r.is_ok;
+              assigns \nothing;
+              ensures \result.is_ok == \true;
+              ensures \result.val.ok == r.val.ok;
+            behavior err:
+              assumes !r.is_ok;
+              ensures \result.is_ok == \false;
+              // \result.val.err == f(r.val.err): not stated, the callback's value
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline result__Bool_Error result__Bool_Error_map_err(
+            result__Bool_Error r, Error (*f)(Error));
+        /*@ requires r.is_ok ==> \valid_function(f);
+            terminates !r.is_ok;
+            exits r.is_ok;
+            behavior err:
+              assumes !r.is_ok;
+              assigns \nothing;
+              ensures \result.is_ok == \false;
+              ensures \result.val.err == r.val.err;
+            behavior ok:
+              assumes r.is_ok;
+              // \result == f(r.val.ok): not stated, the callback's value
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline result__Bool_Error result__Bool_Error_and_then(
+            result__Bool_Error r, result__Bool_Error (*f)(bool));
+        /*@ requires !r.is_ok ==> \valid_function(f);
+            terminates r.is_ok;
+            exits !r.is_ok;
+            behavior ok:
+              assumes r.is_ok;
+              assigns \nothing;
+              ensures \result.is_ok == \true;
+              ensures \result.val.ok == r.val.ok;
+            behavior err:
+              assumes !r.is_ok;
+              // \result == f(r.val.err): not stated, the callback's value
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline result__Bool_Error result__Bool_Error_or_else(
+            result__Bool_Error r, result__Bool_Error (*f)(Error));
+        /*@ requires (r1.is_ok && r2.is_ok) ==> \valid_function(eq_ok);
+            requires (!r1.is_ok && !r2.is_ok) ==> \valid_function(eq_err);
+            terminates r1.is_ok != r2.is_ok;
+            exits r1.is_ok == r2.is_ok;
+            behavior mismatch:
+              assumes r1.is_ok != r2.is_ok;
+              assigns \nothing;
+              ensures \result == \false;
+            behavior both_ok:
+              assumes r1.is_ok && r2.is_ok;
+              // \result == eq_ok(r1.val.ok, r2.val.ok): not stated
+            behavior both_err:
+              assumes !r1.is_ok && !r2.is_ok;
+              // \result == eq_err(r1.val.err, r2.val.err): not stated
+            complete behaviors;
+            disjoint behaviors;
+        */
+        static inline bool result__Bool_Error_eq(result__Bool_Error r1,
+                                                 result__Bool_Error r2,
+                                                 bool (*eq_ok)(bool, bool),
+                                                 bool (*eq_err)(Error, Error));
         DEFINE_RESULT_FUNCTIONS(static inline, bool, Error)
     #else
         /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
@@ -360,9 +455,13 @@ typedef struct {
  * and does not lift the ceiling on the base layer.)
  *
  * This is not a timeout and no budget touches it. It is the same ceiling that
- * produced option's 32 and result's 28 dispatch residuals, met here for the
- * first time in a container whose CORRECTNESS ARGUMENT depends on it — vec and
- * deque are ordered by insertion, so their specs never needed the comparator.
+ * leaves the run-time checks on option's and result's combinator pointers
+ * unproved (6 per instantiation at their home units since VERIFY-039 G11;
+ * before it their dispatch residuals were 32 and 28, the rest coming from
+ * contracts that claimed, where the pointer is called, what an unknown
+ * callee need not satisfy), met here for the first time in a container
+ * whose CORRECTNESS ARGUMENT depends on it — vec and deque are ordered by
+ * insertion, so their specs never needed the comparator.
  * A priority queue's whole point is the ordering, and the ordering is the part
  * that cannot be specified.
  *
