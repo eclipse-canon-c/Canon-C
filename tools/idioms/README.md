@@ -29,7 +29,7 @@ instances of known ones.
 builds `catalogue.json` from **every Frama-C job in the CI workflow**, each with
 its own translation unit and preprocessor flags, so the catalogue covers exactly
 what CI verifies (22 jobs, 21 units). Each entry lists the jobs it comes from.
-At 068ae6a (CI #1361): 39 ACSL features, 22 C features and 8 family features,
+At 37ad1f2 (CI #1362): 39 ACSL features, 22 C features and 8 family features,
 over the 41 repository files the verified units include. The first build, at
 6290f4a (CI #1337), had 37 ACSL features; VERIFY-039 G11's repair of option's
 and result's drivers wrote `\valid_function` and the `terminates` clause.
@@ -72,6 +72,12 @@ n(*P*). Use the preprocessor flags *P* will be verified with.
   example, `pool_alloc_zero`'s contract constrains no result, so the
   opaque-result shape is "inside". That matches how the record files such
   residuals (under the existing class-(e) argument).
+- **Macro text.** The extractor reads the annotations in the text of the
+  macros a unit's sources define, whether or not the unit's preprocessing keeps
+  them: under the default `-C` WP never sees them. Since VERIFY-039 G11's repair
+  of the macro bodies, bitset's, range's and the queue's units are listed for
+  `\valid_function` and `terminates`, though no clause WP verifies there
+  writes them.
 - Built with clang 18; the features are coarse enough that other recent clang
   versions should agree, and test 4 checks it.
 
