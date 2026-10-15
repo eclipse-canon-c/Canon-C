@@ -107,6 +107,19 @@
  * 3. Forward declarations: Declare types before full definition
  * 4. Custom linkage: Apply extern, static, or __declspec attributes
  *
+ * Verification (Frama-C WP), VERIFY-039 G11:
+ * ────────────────────────────────────────────────────────────────────────────
+ * These declarations carry no ACSL contract. A client verified against them
+ * alone gets the Frama-C kernel's generated defaults: a frame guessed from
+ * the parameters and, in Frama-C 29, termination and no exit. For a
+ * combinator called with a callback that writes, loops or exits, those
+ * defaults are false, and a client's postconditions can be proved from them,
+ * with only the kernel's warning that the declaration has no specification.
+ * The contracts live in result_defn.h's macro bodies, read under
+ * `-cpp-extra-args="-CC"`: verify a client against the definitions, in its
+ * own translation unit under -CC, or interpose a driver as
+ * vmacros/vdrivers/result_verify.h does (docs/vmacros.md).
+ *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
  * - Declarations: O(1) compile time (no code generation)

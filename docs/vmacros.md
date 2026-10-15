@@ -447,6 +447,19 @@ This creates a hard problem for formal verification:
    > macros; the bare `*_cc_experiment.h` drivers instantiate them with no
    > prototypes. Under `-C` nothing here changes.
 
+   > **Note (2026-10-16, VERIFY-039 G11).** The `DECLARE_*` macros, for
+   > separate compilation, carry no contract in any family (option, result,
+   > vec, deque, and `queue.h`'s and `stack.h`'s), under `-C` or `-CC`. A
+   > client verified against the declarations alone gets the Frama-C
+   > kernel's generated defaults: a frame guessed from the parameters and, in
+   > Frama-C 29, termination and no exit. For option's and result's
+   > combinators, called with a callback that writes, loops or exits, those
+   > defaults are false, and a client's postconditions can be proved from
+   > them, with only the kernel's warning that the declaration has no
+   > specification. A client that needs proofs verifies against the
+   > definitions, in its own translation unit under `-CC`, or interposes a
+   > driver as below.
+
 The verification driver resolves both problems without modifying a single line
 of shipped code. The *same* "no analyzable lines until instantiation" property
 is what blinds MC/DC for Shape-B modules — which is why the cover TU exists.
