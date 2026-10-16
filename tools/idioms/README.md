@@ -29,10 +29,11 @@ instances of known ones.
 builds `catalogue.json` from **every Frama-C job in the CI workflow**, each with
 its own translation unit and preprocessor flags, so the catalogue covers exactly
 what CI verifies (22 jobs, 21 units). Each entry lists the jobs it comes from.
-At 37ad1f2 (CI #1362): 39 ACSL features, 22 C features and 8 family features,
+At 7624d8c (CI #1367): 40 ACSL features, 22 C features and 8 family features,
 over the 41 repository files the verified units include. The first build, at
 6290f4a (CI #1337), had 37 ACSL features; VERIFY-039 G11's repair of option's
-and result's drivers wrote `\valid_function` and the `terminates` clause.
+and result's drivers wrote `\valid_function` and the `terminates` clause (39
+at 37ad1f2, CI #1362), and G13's repair of memcmp's callers wrote `\dangling`.
 
     python3 tools/idioms/extract.py crosscheck
 
