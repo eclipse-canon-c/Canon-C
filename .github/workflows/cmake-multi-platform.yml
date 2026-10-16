@@ -1017,11 +1017,13 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/primitives/ptr.h"
         # ptr.h uses Typed+Cast memory model for the same reason as
-        # compare.h. Expected result: 1959 / 1975 proved (VERIFY-036 F4), exactly 10
-        # unproved (VERIFY-006). Four categories: transitive checked.h
+        # compare.h. Expected result: 1959 / 1975 proved (VERIFY-036 F4), exactly 16
+        # unproved: VERIFY-006's ten in four categories, transitive checked.h
         # overflow (2), align formula ensures (3), ptr_align_* call-chain
-        # (3), contract handler non-termination (2). Any deviation is a
-        # regression and fails the job.
+        # (3), contract handler non-termination (2), and the six part2s of
+        # ptr_align_up's and ptr_align_down's nonnull ensures (VERIFY-026,
+        # scored in VERIFY-027). Any deviation is a regression and fails
+        # the job.
         # PIN NOTE (2026-07-16): the pin is the FULL-RUN figure 1943/1953,
         # per the documented dual accounting (VERIFY-006 "CI run note";
         # verification.md ptr.h Baseline note; changelog 2026-04-27):
@@ -1096,16 +1098,17 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           if [ "${PROVED_COUNT}" != "1959 / 1975" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 1959 / 1975)."
-            echo "      The goal surface drifted — reclassify in VERIFY-006,"
-            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
-            echo "      together in one acknowledged commit."
+            echo "      The goal surface drifted — reclassify in VERIFY-006"
+            echo "      (VERIFY-027 for the six nonnull parts), then ratchet"
+            echo "      this pin, EXPECTED_UNPROVED, and CHECKS together in"
+            echo "      one acknowledged commit."
             exit 1
           fi
           if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
             echo "FAIL: unexpected number of unproved goals."
             echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
-            echo "      See docs/verification.md (ptr.h section) and"
-            echo "      docs/deviations.md (VERIFY-006) for the full list."
+            echo "      See docs/deviations.md: VERIFY-006 for ten and"
+            echo "      VERIFY-027 for the six ptr_align_*_nonnull parts."
             echo ""
             echo "Observed unproved goals:"
             grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_ptr_output.txt || true
@@ -1146,8 +1149,9 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: WP discharged all goals automatically except the 10"
-          echo "      documented unproved goals in VERIFY-006."
+          echo "PASS: WP discharged all goals automatically except the 16"
+          echo "      documented unproved goals: VERIFY-006's ten and"
+          echo "      VERIFY-027's six."
           echo "==============================================="
       - name: Upload WP proof output (ptr.h)
         if: always()
@@ -3554,8 +3558,10 @@ jobs:
           # RUN-2 VALUES. Run 1 (CI #1231) observed ARM D = 9 against a
           # predicted 0. Four of the nine were a missing default `assigns`
           # on the pop_*/peek_* callees (my drafting error, now fixed the
-          # vec_int_pop way); five are the swap ensures cluster, which vec
-          # pins too and which deque shows is not cast-model-specific.
+          # vec_int_pop way); five are the swap ensures cluster, true
+          # clauses whose proving fact WP's hypothesis filter drops -- not
+          # vec's swap residual, which is another class (VERIFY-039, batch 2;
+          # this comment said vec pinned the same class).
           # So: 5 expected, all swap, and the four wrapper goals must NOT
           # return — if they do, the framing problem is deeper than a
           # missing clause and the fix was wrong.
@@ -3770,8 +3776,8 @@ jobs:
               echo "  failure — report-only mode is exactly for this."
             else
               echo "  ARM D matches the revised prediction: the swap cluster"
-              echo "  only, which vec pins too (typed_cast_vec_int_swap_ensures)"
-              echo "  and which deque shows is not cast-model-specific."
+              echo "  only, five true clauses whose proving fact WP's"
+              echo "  hypothesis filter drops (VERIFY-039, batch 2)."
             fi
             # Loop goals should not exist at all: deque has no loops. Their
             # appearance means a body is not what the source reads as, and
@@ -3819,12 +3825,19 @@ jobs:
               "typed_result_Bool_Error_or_else_assert_rte_function_pointer"
               "typed_result_Bool_Error_eq_assert_rte_function_pointer"
               "typed_result_Bool_Error_eq_assert_rte_function_pointer_2"
-              # ARM D — deque's own: the swap cluster ONLY. vec pins the same class as
-              #         typed_cast_vec_int_swap_ensures; deque reproduces it under
-              #         plain Typed, widening that classification beyond the cast
-              #         model. ensures 1-5 (a receives b) prove; 6-10 (b receives
-              #         \old(a) via the local temporary) do not — the obstacle is
-              #         tmp preservation across the second struct write.
+              # ARM D — deque's own: the swap cluster ONLY. ensures 1-5 (a
+              #         receives b) prove; 6-10 (b receives \old(a) via the
+              #         local temporary) do not. The clauses are true: WP
+              #         generates the fact that proves them, *b after the last
+              #         store equal to *a before the first, as tmp's
+              #         initializer, and its hypothesis filter drops it from a
+              #         goal that names one field (VERIFY-039, batch 2, "Struct
+              #         stored from an initialised local, stated field by
+              #         field"). This comment called it vec's class
+              #         (typed_cast_vec_int_swap_ensures, which fails on *a,
+              #         whose operands vec's contract lets overlap in part)
+              #         and the obstacle tmp's preservation, which no store
+              #         reaches: tmp is a value in WP's model.
               "typed_deque_int_swap_ensures_6"
               "typed_deque_int_swap_ensures_7"
               "typed_deque_int_swap_ensures_8"
@@ -3839,7 +3852,7 @@ jobs:
               fi
             done
             if [ "${MISSING}" -ne 0 ]; then
-              note_fail "FAIL: ${MISSING} CHECKS goal(s) absent while the count still matched — a swap occurred. Diff the roll-call above against CHECKS and reclassify in VERIFY-019 before ratcheting."
+              note_fail "FAIL: ${MISSING} CHECKS goal(s) absent while the count still matched — a swap occurred. Diff the roll-call above against CHECKS and reclassify in VERIFY-019 (VERIFY-039 for the swap five) before ratcheting."
             else
               echo "  Roll-call: all ${EXPECTED_UNPROVED} classified residuals present by name."
             fi
@@ -5020,12 +5033,19 @@ jobs:
               echo "        option_usize (inheritance) + 63 core substrate +"
               echo "        ${OWN} bitset-own."
               echo ""
-              echo "        ${OWN} own is the smallest own-residual set of any"
-              echo "        driver-verified module in the project: vec 196,"
-              echo "        pool 119, region 114, arena 91, deque 67."
-              echo "        (71 at #1264: F2/F5 let five contracts admit a"
-              echo "        null words without requiring *bs readable, which"
-              echo "        their guards read -- VERIFY-039 G10, repaired.)"
+              # CORRECTED at VERIFY-039 G13's round. These lines said
+              # "${OWN} own is the smallest own-residual set of any
+              # driver-verified module in the project: vec 196, pool 119,
+              # region 114, arena 91, deque 67" -- other units' totals of
+              # unproved goals, not their own sets, and pool, region and
+              # arena are verified in place. Deque's own set is 5, and
+              # bitset's 71 at #1264 was the largest own set of any
+              # driver-verified module (VERIFY-020's reading note).
+              echo "        Bitset-own was 71 at #1264, the largest own set"
+              echo "        of any driver-verified module then: F2/F5 let"
+              echo "        five contracts admit a null words without"
+              echo "        requiring *bs readable, which their guards read"
+              echo "        (VERIFY-039 G10, repaired)."
               echo ""
               echo "        A residual that starts PROVING turns this job RED."
               echo "        That is good news arriving as a red run, by design."
@@ -5816,23 +5836,27 @@ jobs:
           # the prefix/underscore class in this workflow. Anchored on the
           # single form now; nothing else in the header starts pq_cmp_.
           CEIL_N=$(grep -cE '^typed_cast_pq_cmp_' /tmp/pq_resid.txt || true)
-          # Bin 2 RENAMED at run 5. It was "multiplication / range disjointness";
-          # the log says otherwise. mem_copy's 3rd and mem_swap's 2nd requires
-          # are !regions_overlap(a, b, size), and memory.h DEFINES that
-          # predicate by POINTER ORDERING: a < b + size && b < a + size. Under
-          # WP, ordering two pointers into different bases is meaningless, so
-          # \\separated(elem, buffer) -- which pq_wf and the contracts give --
-          # cannot discharge it. Four mem_copy sites and one mem_swap site.
-          # remove_at's is the same-base case and additionally needs
-          # multiplication. This is a memory.h CONTRACT-SHAPE finding of the
-          # VERIFY-023 kind, not a pq residual: the fix is to state
-          # regions_overlap with \\separated, which is a substrate arc
-          # (VERIFY-024 candidate) with its own ratchet. Named here, not fixed
-          # here.
+          # Bin 2 RENAMED at run 5, and CORRECTED by VERIFY-039's batch 2.
+          # mem_copy's 3rd and mem_swap's 2nd requires are
+          # !regions_overlap(a, b, size), which memory.h DEFINES by POINTER
+          # ORDERING: a < b + size && b < a + size. Three of the five sites,
+          # push_result's, pop_raw's and peek's copies between a caller's
+          # element and the buffer, order pointers into different bases,
+          # which WP leaves unrelated, so \\separated(elem, buffer) -- which
+          # pq_wf and the contracts give -- cannot discharge them (batch 1's
+          # block, "Byte ranges compared by pointer order across objects").
+          # The other two, pq_swap_'s mem_swap (slots a and b) and
+          # remove_at_result's mem_copy (slots i and len), share the
+          # buffer's base, where WP compares offsets: what is left is
+          # |a - b| * elem_size >= elem_size, products the provers do not
+          # relate -- the "multiplication" reading this bin had before the
+          # rename at run 5. A restatement of regions_overlap with \\separated
+          # would not close these two (batch 2's block, "Two slots of one
+          # buffer, apart by a multiple of the element size").
           MULT_N=$(grep -cE '^typed_cast_pq_(swap__call_mem_swap_requires|remove_at_result_call_mem_copy_requires|push_result_call_mem_copy_requires|pop_raw_call_mem_copy_requires|peek_call_mem_copy_requires)' /tmp/pq_resid.txt || true)
           REST_N=$((OWN_N - CEIL_N - MULT_N))
           echo "    comparator boundary (pq_cmp_):     ${CEIL_N}   (expected 1: \\valid_function only -- calls clause over the 24 built-ins)"
-          echo "    regions_overlap by pointer order:  ${MULT_N}   (expected 5: memory.h contract shape, VERIFY-024 candidate)"
+          echo "    regions_overlap at the copies:     ${MULT_N}   (expected 5: 3 pointer order across bases, 2 products with elem_size; VERIFY-039 batch 2)"
           echo "    everything else:                   ${REST_N}   (expected 0 -- anything here is a contract to read)"
           if [ "${REST_N}" -eq 0 ]; then
             echo "  run-7 class prediction:   CONFIRMED -- every residual is in a named class"
@@ -5898,8 +5922,15 @@ jobs:
             # G12 contracted get_ok and get_err) + 6 own:
             #   1  \\valid_function(pq->cmp)             -- Frama-C 29 limit
             #   5  !regions_overlap at mem_copy x4 / mem_swap x1 -- memory.h
-            #      states the predicate by pointer ORDERING, which \\separated
-            #      cannot discharge across bases: VERIFY-024 candidate.
+            #      states the predicate by pointer ORDERING: 3 order pointers
+            #      into different bases, which \\separated cannot discharge,
+            #      the VERIFY-024 candidate (regions_overlap restated with
+            #      \\separated) being their block's retirement, after which
+            #      push_result's still rests on two product terms (batch 1's
+            #      coverage note); 2 share the buffer's base and need
+            #      products with elem_size, which that restatement would not
+            #      close (VERIFY-039 batch 2; this line gave the candidate
+            #      for all five).
             # THIS is the name-stability run: CI #1289 is the first
             # measurement at this contract state, and the enforcing run is
             # the second. If it goes red with no header change, the pin is
