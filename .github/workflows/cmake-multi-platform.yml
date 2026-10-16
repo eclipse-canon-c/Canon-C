@@ -309,9 +309,64 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang-tidy cppcheck
-      - name: Install Cppcheck (macOS)
+      - name: Restore Cppcheck build (macOS)
         if: matrix.os == 'macos-latest'
-        run: brew install cppcheck
+        id: cppcheck-macos-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/cppcheck-pinned
+          # Key tracks the PINNED version and commit in the next step.
+          # Bump all three together, deliberately.
+          key: cppcheck-${{ runner.os }}-${{ runner.arch }}-2.19.0-9730a448fb7e9c205b7ec47b7ba88c5406954538-v1
+      - name: Install Cppcheck (macOS)
+        # PINNED to 2.19.0, the Windows leg's version. The step used to
+        # run `brew install cppcheck`, which takes whatever Homebrew ships.
+        # At CI #1366 the leg failed on ten warnings in test/ that
+        # Homebrew's current 2.22.0 gives and 2.19.0, 2.20.0 and 2.21.0 do
+        # not (VERIFY-039, CI #1366 read). Homebrew keeps no versioned
+        # cppcheck formula, so the release is built from source: the
+        # commit the 2.19.0 tag names is fetched by hash from the
+        # project's repository (cppcheck-opensource/cppcheck, formerly
+        # danmar/cppcheck), checked, built with CMake and cached. The
+        # cache is saved only when the job passes. Bump version, commit
+        # and cache key together, deliberately, and re-check the
+        # suppressions when bumping (the Windows $Version policy).
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          CPPCHECK_VERSION: "2.19.0"
+          CPPCHECK_COMMIT: "9730a448fb7e9c205b7ec47b7ba88c5406954538"
+          CACHE_HIT: ${{ steps.cppcheck-macos-cache.outputs.cache-hit }}
+        run: |
+          PREFIX="${HOME}/cppcheck-pinned"
+          if [ "${CACHE_HIT}" != "true" ]; then
+            SRC="${RUNNER_TEMP}/cppcheck-src"
+            BUILD="${RUNNER_TEMP}/cppcheck-build"
+            git init -q "${SRC}"
+            git -C "${SRC}" fetch -q --depth 1 \
+              https://github.com/cppcheck-opensource/cppcheck.git "${CPPCHECK_COMMIT}"
+            git -C "${SRC}" checkout -q FETCH_HEAD
+            ACTUAL=$(git -C "${SRC}" rev-parse HEAD)
+            if [ "${ACTUAL}" != "${CPPCHECK_COMMIT}" ]; then
+              echo "cppcheck commit mismatch. Expected ${CPPCHECK_COMMIT}, got ${ACTUAL}"
+              exit 1
+            fi
+            cmake -S "${SRC}" -B "${BUILD}" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+              -DUSE_MATCHCOMPILER=Off \
+              -DBUILD_GUI=Off \
+              -DBUILD_TESTS=Off
+            cmake --build "${BUILD}" -j "$(sysctl -n hw.ncpu)"
+            cmake --install "${BUILD}"
+          fi
+          VERSION_LINE=$("${PREFIX}/bin/cppcheck" --version)
+          echo "${VERSION_LINE}"
+          if [ "${VERSION_LINE}" != "Cppcheck ${CPPCHECK_VERSION}" ]; then
+            echo "cppcheck version mismatch. Expected ${CPPCHECK_VERSION}"
+            exit 1
+          fi
+          echo "${PREFIX}/bin" >> "${GITHUB_PATH}"
       - name: Install Cppcheck (Windows)
         # Pinned direct download from the official GitHub release —
         # same pattern as the CVC5 install in framac-setup, for the
