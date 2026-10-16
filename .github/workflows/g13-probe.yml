@@ -2,9 +2,10 @@ name: G13 probe (VERIFY-039, memcmp's danglingness precondition under Eva and WP
 
 # ---------------------------------------------------------------------------
 # VERIFY-039 G13 — an experiment, not a gate. It runs when the probe, its
-# script, this file or the toolchain pins change, and on demand; it never
-# touches the enforced jobs, and its result is scored in docs/deviations.md,
-# VERIFY-039 G13.
+# script, this file, the toolchain pins or the three headers whose contracts
+# report E reads (core/memory.h, core/slice.h, semantics/borrow.h) change,
+# and on demand; it never touches the enforced jobs, and its result is
+# scored in docs/deviations.md, VERIFY-039 G13.
 #
 # QUESTION: memcmp's libc contract requires that no byte it compares hold
 # (bits of) a dangling address (danglingness:s1/s2, non_escaping). Do the
@@ -17,16 +18,21 @@ name: G13 probe (VERIFY-039, memcmp's danglingness precondition under Eva and WP
 # each comparing the bytes of two pointers to a freed block through one of
 # mem_compare, mem_equal, mem_equal_bytes, bytes_equal, str_equal,
 # str_starts_with, str_ends_with, borrowed_bytes_eq and borrowed_str_eq;
-# Eva runs from each. tools/probes/verify-039/p_dangling_forms.c has six
-# functions that state the requirement each way; WP runs on it as the
-# Typed+Cast units run their headers. tools/probes/verify-039/g13_probe.py
-# runs both and reads them.
+# Eva runs from each. tools/probes/verify-039/p_dangling_forms.c has seven
+# functions that state the requirement each way, and two entry points for
+# Eva; WP runs on the seven as the Typed+Cast units run their headers.
+# tools/probes/verify-039/g13_probe.py runs both and reads them.
 #
 # PREDICTED before it ran (docs/deviations.md, VERIFY-039, "G13 — committed
-# prediction for the probe"). The two report steps print MATCH or MISS,
-# with its confidence, for each part. The log needs a sign-in, so each step
-# also posts its verdicts, and what each run found, as notices on the run
-# page, and an error annotation for each MISS; each exits 1 on a MISS.
+# prediction for the probe"); run #1 held in every part. G13's repair has
+# the nine functions require the quantifier written out, so since then the
+# probe expects Eva to reject each call at the function's own first such
+# clause, not at memcmp inside ("G13 — repair, with the macOS cppcheck pin:
+# committed prediction"); p_dangling_forms.c and its predictions are
+# unchanged. The two report steps print MATCH or MISS, with its confidence,
+# for each part. The log needs a sign-in, so each step also posts its
+# verdicts, and what each run found, as notices on the run page, and an
+# error annotation for each MISS; each exits 1 on a MISS.
 # ---------------------------------------------------------------------------
 
 on:
@@ -38,6 +44,9 @@ on:
       - 'tools/probes/verify-039/g13_probe.py'
       - '.github/workflows/g13-probe.yml'
       - '.github/actions/framac-setup/**'
+      - 'core/memory.h'
+      - 'core/slice.h'
+      - 'semantics/borrow.h'
   workflow_dispatch:
 
 jobs:

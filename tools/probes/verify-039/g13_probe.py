@@ -40,16 +40,31 @@ CPP = ("-cpp-extra-args=-I core/primitives -I core -I semantics -I . "
 # danglingness:s1 invalid at the call in that header; ("callee", f, name, pair)
 # for f's precondition name invalid at the call, pair the clause Eva need not
 # reach; ("clean",) for every precondition valid.
+#
+# Run #1 read the contracts before G13's repair: each of the nine calls met
+# every precondition of the function it called, and memcmp's danglingness:s1
+# was invalid inside, ("memcmp", header) for each. Since the repair each of
+# the nine functions requires the quantifier written out, so Eva is expected
+# to reject the call at the function's own first such clause.
 ENTRIES = [
-    (CALLS, "via_mem_compare", ("memcmp", "core/memory.h")),
-    (CALLS, "via_mem_equal", ("memcmp", "core/memory.h")),
-    (CALLS, "via_mem_equal_bytes", ("memcmp", "core/memory.h")),
-    (CALLS, "via_bytes_equal", ("memcmp", "core/slice.h")),
-    (CALLS, "via_str_equal", ("memcmp", "core/slice.h")),
-    (CALLS, "via_str_starts_with", ("memcmp", "core/slice.h")),
-    (CALLS, "via_str_ends_with", ("memcmp", "core/slice.h")),
-    (CALLS, "via_borrowed_bytes_eq", ("memcmp", "semantics/borrow.h")),
-    (CALLS, "via_borrowed_str_eq", ("memcmp", "core/slice.h")),
+    (CALLS, "via_mem_compare",
+     ("callee", "mem_compare", "no_dangling_a", "no_dangling_b")),
+    (CALLS, "via_mem_equal",
+     ("callee", "mem_equal", "no_dangling_a", "no_dangling_b")),
+    (CALLS, "via_mem_equal_bytes",
+     ("callee", "mem_equal_bytes", "no_dangling_a", "no_dangling_b")),
+    (CALLS, "via_bytes_equal",
+     ("callee", "bytes_equal", "no_dangling_a", "no_dangling_b")),
+    (CALLS, "via_str_equal",
+     ("callee", "str_equal", "no_dangling_a", "no_dangling_b")),
+    (CALLS, "via_str_starts_with",
+     ("callee", "str_starts_with", "no_dangling_s", "no_dangling_prefix")),
+    (CALLS, "via_str_ends_with",
+     ("callee", "str_ends_with", "no_dangling_s", "no_dangling_suffix")),
+    (CALLS, "via_borrowed_bytes_eq",
+     ("callee", "borrowed_bytes_eq", "no_dangling_a", "no_dangling_b")),
+    (CALLS, "via_borrowed_str_eq",
+     ("callee", "borrowed_str_eq", "no_dangling_a", "no_dangling_b")),
     (FORMS, "eva_freed", ("callee", "recommended", "da", "db")),
     (FORMS, "eva_live", ("clean",)),
 ]

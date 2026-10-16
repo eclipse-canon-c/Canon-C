@@ -10,20 +10,25 @@
  * !\dangling((char *)s + i). ACSL's \dangling(p) is about the content of *p:
  * "its value is (or contains bits of) a dangling address" (the ACSL
  * reference manual, "Dangling pointers"). The bytes of a pointer object
- * whose block has been freed are such bytes. No contract of the eight
- * functions called below that call memcmp, nor of borrowed_str_eq, which
- * calls str_equal, requires the bytes it compares to hold no dangling address;
- * each requires them readable and, on the comparing path, initialized, and
- * the bytes of a pointer object are both.
+ * whose block has been freed are such bytes. Until VERIFY-039 G13's repair
+ * no contract of the eight functions called below that call memcmp, nor of
+ * borrowed_str_eq, which calls str_equal, required the bytes it compares to
+ * hold no dangling address; each required them readable and, on the
+ * comparing path, initialized, and the bytes of a pointer object are both.
+ * Since the repair each requires it, as the quantifier written out
+ * (no_dangling_a and no_dangling_b, or no_dangling_s and the other view's).
  *
  * Each entry point frees a block, keeps its address in two pointer
  * objects, p and q, and compares their bytes. Run with Eva, one entry point
- * at a time (-main), as .github/workflows/g13-probe.yml does. The probe
- * predicts, for each, that memcmp's danglingness:s1 is invalid, that every
- * other precondition Eva evaluates is valid, danglingness:s2 aside, and that
- * the analysis counts no alarm. Frama-C 25's Eva stops the path at the
- * invalid precondition, so it does not reach s2; reached, s2 would be invalid
- * too.
+ * at a time (-main), as .github/workflows/g13-probe.yml does. On the
+ * contracts before the repair the probe predicted, and run #1 found, for
+ * each, that memcmp's danglingness:s1 is invalid, that every other
+ * precondition Eva evaluates is valid, danglingness:s2 aside, and that the
+ * analysis counts no alarm. On the repaired contracts it predicts the same
+ * of the called function's own first such clause, at the call below: Eva
+ * rejects the call at the function's boundary. Eva stops the path at the
+ * invalid precondition, so it does not reach the second clause; reached,
+ * that would be invalid too.
  *
  * From the repository root, for one entry point:
  *     frama-c -eva -main via_mem_equal \
