@@ -85,6 +85,14 @@ addition of the division and modulo functions: the new functions
 introduced 214 proof obligations, all auto-discharged, with no new
 timeouts.
 
+**Reading note (2026-10-16, VERIFY-039, batch 6).** The manual proof holds, N
+being the type's width, 64, or 32 for `checked_add`'s `usize` in
+`frama-c-arena-32`: in `overflow` the sum `a + b` is at least 2^N and below
+2^(N+1), the store keeps `a + b - 2^N`, and that is below `a` because `b` is
+below 2^N. The two goals are listed in a counted block of VERIFY-039's batch
+6, "Fixed-width arithmetic stated over unbounded integers", whose argument
+states this proof.
+
 ---
 
 ## VERIFY-003: WP Timeout Goals (bits.h)
@@ -140,6 +148,22 @@ transcript is the name-stability record); no residual entered or left
 the categories above, so the classification tables in this record
 remain valid as written. Ratcheted with the acknowledged commit the
 enforcement gate prescribes.
+
+**Reading note (2026-10-16, VERIFY-039, batch 6).** Eleven of the fifteen are
+true, and four are false for an admitted call: `bits_insert`'s `full_width`
+and `normal` postconditions and `bits_rotl`'s and `bits_rotr`'s
+`nonzero_shift` ones state their result with shifts that ACSL does not wrap,
+as C's do, so that `bits_rotl(0x8000000000000001, 1)`, the header's example,
+returns 3 where the postcondition asks for 2^64 + 3 (VERIFY-039 G15). Category
+1 holds `bits_clear`'s goal, true, and the two false `bits_insert` ones,
+`full_width`'s with no complement in it; Category 3 two true run-time checks
+and two false postconditions; and Category 4's four are all four
+postconditions of `normal` on the smearing path, the minimality among them.
+The eleven true are listed in three counted blocks of VERIFY-039's batch 6, on
+fixed-width arithmetic, the SWAR count's range and the smear. The bits job's
+sample names `typed_bits_next_power_of_two_normal_ensures` and
+`typed_bits_rotl_nonzero_shift_ensures` stand for split goals, the first true
+and the second false.
 
 ## VERIFY-004: Weakened Specs (bits.h — CLZ, CTZ, popcount)
 
@@ -328,6 +352,35 @@ address they return, +6 goals in every TU that includes ptr.h, all proved. The
 re-measured; the change is +6 goals, all proved, so its residual set is
 unaffected.
 
+**Reading note (2026-10-16, VERIFY-039, batch 6).** Of the ten, six are true
+and four false for an admitted call, and the six `part2`s VERIFY-027 added do
+not hold for every admitted call.
+
+- Category 1's two are VERIFY-002's, and true.
+- Category 2's three are true. What stops the provers is C's complement and
+  wrap in the width, not a bridge to multiples of `align`, which the three
+  formulas do not state. `align_up`'s and `align_down`'s are listed in
+  VERIFY-039's block on fixed-width arithmetic, and `align_padding`'s is filed
+  by name under VERIFY-008's Category 2.
+- Category 3's two calls fail for an address within `align - 1` bytes of the
+  top of the address space, which nothing in the contracts excludes: on a
+  32-bit build `ptr_align_up` returns NULL for such a non-null `p` (VERIFY-039
+  G16). Nothing bounds the address for the cast to lose. The category's third
+  goal, `ptr_align_padding`'s `\result < align`, is true and is filed with
+  `align_padding`'s.
+- Category 4's two are false for every call: the handler's invariant is
+  `\false`, and its loop never ends (VERIFY-039 G14).
+- `ptr_align_up`'s and `ptr_align_down`'s six pointer postconditions read the
+  rounded pointer as one into `p`'s block, and the rounded address can lie
+  outside `p`'s object: `same_base` is then false where it lies in another
+  object, and the four that order or subtract the two pointers have no defined
+  value (VERIFY-039 G16).
+
+This record and `docs/verification.md` each send the reader to the other for
+the per-category manual proof arguments; neither states one for Categories 2
+to 4. The `nonnull` behaviours the forward-implication note calls empty are
+not, since VERIFY-027.
+
 ## VERIFY-007: WP Limitations on libc Boundary (slice.h)
 
 | Field          | Value |
@@ -430,6 +483,24 @@ stdlib dependency for one function.
 Category 3 is the deliberate ACSL idiom for non-returning functions
 (see VERIFY-006 category 4) — the goals are the mathematical
 statement of the handler's contract and are correct by construction.
+
+**Reading note (2026-10-16, VERIFY-039, batch 6).** The rationale holds for
+none of the five goals left in Categories 1 and 2, nor for Category 3's two.
+
+- Category 1's four `valid_*` goals, `bytes_equal`'s and `str_equal`'s, are
+  false for an admitted call: at a zero length each function reaches memcmp
+  with pointers its contract leaves unconstrained, and libc's
+  `valid_read_or_empty` asks each to point into a block. `str_equal`'s two are
+  pinned: `str_valid` does not close them.
+- Category 2's goal is false for an admitted call: `str_from_cstr` requires
+  nothing, and a call over an array with no null character runs strlen past
+  it. The dependency weighed above is already taken: every unit that verifies
+  slice.h checks the strlen call against Frama-C's libc contract,
+  `valid_read_string` included, as it checks memcmp's.
+- Category 3's two are false for every call, as VERIFY-006's reading note
+  says.
+
+See VERIFY-039 G14 and G17.
 
 **Spec scope**: Equality functions (`bytes_equal`, `str_equal`,
 `str_starts_with`, `str_ends_with`) carry partial functional
@@ -628,7 +699,7 @@ detection, NULL handling, zero-size handling, and round-trip
 allocation-and-free are all exercised. ASan and UBSan verify
 absence of leaks, double-free, and use-after-free.
 
-#### Category 2: WP integer theory / bitwise alignment (8 — was 9)
+#### Category 2: WP integer theory / bitwise alignment (8 — was 9; two filed by name at VERIFY-039, batch 6)
 
 | # | Goal                                                          |
 |---|----------------------------------------------------------------|
@@ -672,15 +743,28 @@ extracts the lowest set bit. WP cannot prove the negation does not
 overflow under the `Typed+Cast` model because the cast round-trip
 loses the integer-bound information.
 
-**Manual proof argument**: For `mem_align_normal_ensures_part3`, the
-obligation is "if `size > 0` and `size <= USIZE_MAX - (CANON_DEFAULT_ALIGN - 1)`,
-then `\result % CANON_DEFAULT_ALIGN == 0`". The implementation calls
+**Manual proof argument**: restated in part by VERIFY-039, batch 6
+(2026-10-16). For a power of two `a` and an integer `x >= 0`, `x & ~(a - 1)`
+is `x - x % a`: the mask clears exactly the bits below `a`. So
+`align_up(n, a)`, which is `(n + a - 1) & ~(a - 1)` by its postcondition, is
+the multiple of `a` in `[n, n + a - 1]`. `mem_align` and `mem_align_to` return
+it on their `normal` path: it is at least `size`, their first postcondition
+(the goals named `normal_ensures_part3`), and divisible by `a`, their second
+(`normal_ensures_2_part3`). The two goals filed by name under this block use
+the same bounds: `align_padding`'s `align_up(n, a) - n` does not wrap, and
+`ptr_align_padding`'s value is below `a`. The argument for `mem_is_aligned` is
+kept as first written, and `mem_get_alignment`'s two goals have none; the
+reading after the batches takes both (VERIFY-039, batch 6).
+
+*As first written (2026-05-09), its first paragraph restated above:* For
+`mem_align_normal_ensures_part3`, the obligation is "if `size > 0` and
+`size <= USIZE_MAX - (CANON_DEFAULT_ALIGN - 1)`, then
+`\result % CANON_DEFAULT_ALIGN == 0`". The implementation calls
 `align_up(size, CANON_DEFAULT_ALIGN)` whose definition is
-`(size + (a - 1)) & ~(a - 1)` for power-of-2 `a`. By the
-power-of-2 mask identity, the result is divisible by `a`. The
-implementation is correct; the proof obstacle is WP's inability to
-discharge the bitwise→modular bridge, which is exactly VERIFY-006's
-documented limitation for `align_up_ensures`.
+`(size + (a - 1)) & ~(a - 1)` for power-of-2 `a`. By the power-of-2 mask
+identity, the result is divisible by `a`. The implementation is correct; the
+proof obstacle is WP's inability to discharge the bitwise→modular bridge,
+which is exactly VERIFY-006's documented limitation for `align_up_ensures`.
 
 For `mem_is_aligned_nonnull_aligned_ensures`, the obligation is "if
 `ptr != \null` and `is_aligned_addr(ptr, alignment)`, then
@@ -5477,6 +5561,18 @@ arithmetic argument in VERIFY-009, not a new one. Δ*A* = 0 for this change.
 memory.h category 2 (bitwise alignment through casts, VERIFY-008) at a new
 site; that block's argument covers them. Coverage recorded here so the next
 audit can check it.
+
+**Coverage update (2026-10-16, VERIFY-039, batch 6) — the three, and row 3's
+three, do not hold for every admitted call.** `ptr_align_up` and
+`ptr_align_down` round `p`'s address as an integer and convert it back, and
+the rounded address can lie outside `p`'s object: where it lies in another
+object, `same_base` is false, and wherever it leaves `p`'s object C defines
+neither the order nor the difference of the two pointers, so the other two
+have no defined value. `ptr_align_down(p, 4096)`, ptr.h's own example of a
+page base, lies below `p`'s block for a `p` in the block's first page, unless
+the block begins on a page. The round trip keeps the address, not the object.
+Arena's `ptr_span` calls, whose preconditions the three closed, went with
+VERIFY-036 F3, so no proved goal rests on them now. See VERIFY-039 G16.
 
 ### What this does to the paper
 
@@ -10820,7 +10916,7 @@ VERIFY-039 G1's fix; the pin correction goes in with that ratchet.
 |----------------|-------|
 | **ID**         | VERIFY-039 |
 | **Date**       | 2026-10-08 |
-| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10 repaired and scored exact (fix ec56091, CI #1358 / CC #45: the sixteen closed, six goals added and proved, nothing else moved, as predicted); batch 4, option and result, read by name (186 obligations, none filed: 184 are G11's and 2 G12's; *A* unchanged); G11 opened (the combinators require nothing of the callback's pointer, and WP 29's default clauses claim termination and no exit, and the contracts an empty frame, for every callback: 184 goals false for admitted calls, and a caller's proof made false by the frame; contracts that claim only what every callback gives recommended); G12 opened (the queue's result instantiation leaves `get_ok`'s and `get_err`'s `out` unrequired, VERIFY-018 F4's pair; vec's contracts recommended); G12 repaired and scored exact (fix 77cc69c, CI #1359 / CC #46: the pair closed, 38 goals added and proved, nothing else moved, as predicted); G11's probe scored as predicted in every part (`g11-probe.yml` run #1: under the recommended contracts only the 18 run-time checks on the pointer stay unproved; a caller on the calling branch takes on goals WP 29 does not prove, and no caller gets a frame; today's goals counted per combinator, unit by unit); G11's repair of the home drivers scored as predicted (fixes a4f8f5f and 068ae6a, CI #1361: option's 26 goals closed in each of its three units and result's 22, each family's 6 run-time checks left, to be filed by name with the macro bodies' repair, as the -CC units pin the same names), and `tools/idioms`' catalogue rebuilt under 068ae6a for the two ACSL kinds the repair was the first to write; G11's repair of the macro bodies scored as predicted (fix 37ad1f2, CC #47, its deque job re-run after the runner was lost, and CI #1362: option's 26 goals closed at `int` and at `Rec` and result's 22 at (`int`, `VErr`) and at (`Bool`, `Error`) in the five -CC units, each instance's 6 run-time checks left); option's and result's run-time checks filed by name, VERIFY-014's and VERIFY-015's blocks restated (18 obligations: option's 6 at `int` and 6 at `Rec` under VERIFY-014, result's 6 at (`int`, `VErr`) under VERIFY-015; *A* unchanged; 140 pinned names in no goal table); G11's repair at result (`Bool`, `Error`) in the main CI's units scored as predicted (fix b52bba6, CI #1363 / CC #48: `deque_verify.h`'s transcription replaced and `vec_verify.h`'s and the queue's combinators contracted; deque's 22 goals closed, and in vec's and the queue's units 14 closed and 56 were added, all proved, each unit's 6 run-time checks left; the `misra` job's count, 54, read afterwards from its log by the maintainer); result's run-time checks at (`Bool`, `Error`) filed by name, VERIFY-015's block restated again (6 obligations, in the three main-CI units and the three -CC units that pin them; *A* unchanged; 112 pinned names in no goal table); G11's repair at option's copies in bitset and range scored as predicted (fix ec6a30b, CI #1364, its macOS static-analysis leg re-run after a first-attempt failure whose log needs a sign-in: `bitset_verify.h`'s at `usize` and `range_verify.h`'s at `isize` copied from `option_verify.h`; 26 goals closed in each unit and option's `eq` gained 7, all proved, each instance's 6 run-time checks left); option's run-time checks at `usize` and `isize` filed by name, VERIFY-014's block restated again (12 obligations, in `frama-c-bitset` and `frama-c-range`; *A* unchanged; 48 pinned names in no goal table); G11 closed, as predicted (fixes 022fdca, 665e786 and 648cc09, CI #1365 / CC #49 / G11 probe run #2: the `DECLARE_*` declarations, which carry no contract in any family, have the limit stated in the record, the two decl headers and `docs/vmacros.md`; the probe's comparison found the seven main-CI units' combinators with the recommended contracts' goals; `frama-c-option`'s and `frama-c-result`'s roll-calls anchored; nothing moved; of the 184 goals G11 found false, the 148 termination, exit and frame goals closed and the 36 run-time checks filed by name), and the corrections owed in the repository outside this record listed in one place, `docs/vmacros.md`'s made; VERIFY-020's comparison of bitset's own set with other units' totals corrected (its 71 was the largest own set of any driver-verified module); batch 5, borrow, diag and arena Cat 2c, read by name (borrow's 2 not filed, being G13's; diag's 8 given their table in batch 1; arena Cat 2c's 2 filed under VERIFY-017's block and Cat 2c retired, the last in force of the paper's specification-bound blocks; *A* 27 cumulative, 20 in force); G13 opened (memcmp's danglingness precondition is about the bytes compared, which no contract of the eight functions that call memcmp requires free of dangling addresses: 16 goals false for admitted calls, as Eva 25 shows on the shipped headers, and VERIFY-008's and VERIFY-016's arguments read `\dangling` as the pointer's; WP compiles libc's `non_escaping` as `n <= 0`, so a precondition in libc's words would be unsound; the quantifier written out as a precondition recommended, after a probe); G13's probe predicted (Eva from nine calls through the shipped headers, memcmp's danglingness precondition invalid at each and every other precondition valid, and from two calls to a function that requires the quantifier written out, the call over freed bytes rejected at its boundary and the call over two `int`s admitted; WP 29 translating libc's `non_escaping(s, n)` as `n <= 0`, whatever `s`, and ignoring the quantifier written out as a hypothesis); G13's probe scored as predicted in every part of its two reports (`g13-probe.yml` run #1: Frama-C 29's Eva rejects each of the nine calls at memcmp's `danglingness,s1`, every precondition of the shipped functions met, and WP 29 reads `non_escaping` as `n <= 0` and ignores the quantifier written out as a hypothesis), and CI #1366 read (every job the push could move held; `static-analysis (macos-latest)` failed in both attempts, its log showing ten warnings in `test/`, none a defect, that Homebrew's current cppcheck, 2.22.0, gives and 2.19.0 to 2.21.0 do not, so the part that no job moves missed as written); G13's repair predicted, with the macOS cppcheck pin (the eight functions and `borrowed_str_eq` require the quantifier written out; in the four units that verify borrow.h, two goals added at `borrowed_str_eq`'s call to `str_equal`, both unproved, and nothing else moving; the macOS leg built from 2.19.0's tagged commit and cached), and the workflow's share of the corrections owed; G13's repair and the macOS pin scored as predicted in every part (fixes 039192a, 7fed1f3, 7624d8c and 45d064c; CI #1367 / CC #50 / G4 probe #4 / G13 probe run #2: two goals added and unproved at `borrowed_str_eq`'s call in each unit that verifies borrow.h, and nothing else moved; Eva rejects each of the nine calls at the called function's own clause; the macOS leg green on cppcheck 2.19.0; `misra` at 54, read from its log by the maintainer); the eighteen filed by name under VERIFY-008's Category 3, restated, and VERIFY-016's borrow-own block retired (*A* 27 cumulative, 19 in force); G13 closed; `tools/idioms`' catalogue rebuilt under 7624d8c for `\dangling`; the rest of the audit in progress |
+| **Status**     | OPEN — G1 and G2 closed, both scored exact (G1: fix 40cccd9, CI #1341 / CC #28; G2: fix f4a846a, CI #1343 / CC #30); G3 closed (fix 76a1f94, CI #1344 / CC #31: the new postcondition held, the two Cat 2c closures missed, the mechanism identified; ratchet confirmed at CI #1345 / CC #32); G4: the probe scored (run #1: both false frames proved, the count missed by one), listing entries 1 (arena) and 2 (pool) repaired and scored exact (fixes 7e5757f and f3d9520, CI #1346 / CC #33 and CI #1347 / CC #34: nothing moved, as predicted); G5 opened (VERIFY-033 F4's aliasing hypothesis taken up: a `Pool` may overlap its `Arena`, `pool_init`'s first postcondition is then not true for an admitted call, and four goals filed under arithmetic or delegation state no arithmetic); G4 listing entries 3 to 5 found (a `Bitset` in its own words, `diag_render` into a buffer over the `Diag`, a vec in its own free tail or live elements: twelve more goals proved and false in defined C, one of them in two units); G6 opened (bitset's single-bit residuals false on LP64 for the same `Bitset`, filed as prover weakness, and one proved goal that rests on them); the Linux runner pin scored exact (pin 25133fe, CI #1348 / CC #35, G4 probe run #3: nothing moved); G5 repaired and scored exact (fix 528bfa1, CI #1349 / CC #36: seven goals closed, two stayed, as predicted); G7 opened, repaired and scored exact (`pool_reset` after its arena is reset; fix f5c616c, CI #1350 / CC #37: pool Cat 2d's last goal closed, and the block retired); G8 opened (`bitset_not`'s postcondition and loop invariant are false as written; the invariant's unproved preservation is filed as array framing, and the postcondition is proved from it); G4 listing entry 4 repaired and scored exact (fix 838a204, CI #1351 / CC #38: nothing moved, as predicted); G6 extended (the single-bit `bitset_pad` postconditions are false for an admitted call too); the bitset repair for G4 entry 3 and G6 scored exact (fix 27e24f9, CI #1352 / CC #39: 19 goals closed, 52 stayed, as predicted); the two loops bounded by `word_count` repaired and scored exact (fix ecb3c0d, CI #1353 / CC #40: ten goals closed, nothing else moved, as predicted); G8 repaired and scored exact (fix e732bd1, CI #1354 / CC #41: G8's residual closed, ten goals added and proved, nothing else moved, as predicted); G4 listing entry 6 found (`remove`'s `out` over a `vec_Rec`: two more goals proved and false in defined C, by a route the survey missed); G4 listing entry 5 repaired and scored exact (fix 66b54e0, CI #1355 / CC #42: nothing moved, as predicted); G4 listing entry 6 repaired and scored exact (fix f74e95a, CI #1356 / CC #43: nothing moved, as predicted), the listing's repairs complete; the filing of the proved goals whose evidence is an argument recommended (one block, outside *A*), with a first candidate list (157 properties in 28 functions after the named calls; not the scope); the filing begun: `memory.h`, `arena.h` and `pool.h` read (99 candidates; 10 properties filed at 4 write sites under 2 facts); four goals the entries missed found, three of `pool_reset_secure`'s (its precondition at its call to `pool_reset`, its `ensures pool->used == 0` and its `assigns_normal`; entries 1 and 2) and `diag_render`'s loop variant (entry 4), so the goals G4 has found proved and false are 27 (24 under the block's rules, 9 of them filed, and 3 dependents); `bitset.h` and `diag.h` read (105 candidates; 38 properties filed at 7 write sites under 5 facts), with a fifth goal the entries missed, `diag_render`'s check that a frame's message is readable, so the goals G4 has found proved and false are 28 (25 under the block's rules, 14 of them filed, and 3 dependents); `stringbuf.h` read (119 candidates; 23 properties filed at 8 write sites under 4 facts, 3 of them new), entry 1's `arena_kept` among them, so 15 of the 25 are filed; `priority_queue.h` read (203 candidates; 41 properties filed at 7 write sites under 2 new facts, and 65 dependents, 50 of them through a loop invariant), with no goal proved and false; vec read at `int` and at `Rec` (131 candidates; 35 properties filed at 12 write sites under 4 new facts), with five goals proved and false that the entries and G1 missed, `remove`'s ensures 2 at `int` (G1) and four of `insert`'s at `Rec` (entry 5), and a dependent, `remove_option`'s `some_ensures_3` at `Rec` (entry 5), so the goals G4 has found proved and false are 34 (30 under the block's rules, all filed, and 4 dependents); `checked.h`'s `u8` functions read (20 candidates, none filed), with no goal proved and false, which completes the filing: 677 candidates, 147 properties filed at 38 write sites under 16 facts, reported beside *A* (17 cumulative, 11 in force); the main pass begun: the residual set at 9660e0e taken (437 distinct obligations, the -CC units' included; 45 in goal tables, 392 not) and the method recommended: each obligation filed by name under one argument in six batches, the containers first, and the open items no batch reaches settled after them; batch 1, vec, filed by name (100 obligations: 4 under memory.h's Category 1, 42 under diag.h's block, whose own 8 got their table, and 54 under four new blocks: `fill`'s loop without annotations, byte ranges compared by pointer order across objects, a struct exchange whose operands may overlap, and a call framed by its callee's default `assigns`; *A* 21 cumulative, 15 in force; none false on LP64); G9 opened (`append_array`'s content postcondition false on ILP32 for a `src` over the vec's `len`; separating `src` from the vec recommended); G9 repaired and scored exact (fix 1d725ef, CI #1357 / CC #44: nothing moved, as predicted), VERIFY-018's F1 closed with it; batch 2, deque and the priority queue, filed by name (11 obligations: 3 under the block on pointer order and 8 under three new blocks: a struct stored from an initialised local stated field by field, two slots of one buffer apart by a multiple of the element size, and a call through a pointer to one of the listed comparators; *A* 24 cumulative, 18 in force; none false; VERIFY-019's swap cluster and two of VERIFY-022's five reattributed); batch 3, bitset, filed by name (25 of its 41: 15 under diag.h's block, 2 under the block on a call framed by the callee's default `assigns`, and 8 under three new blocks: a word count through a wrap at the capacity bound, bit-level identities on the padding word, and a clause the code establishes and the specification omits; *A* 27 cumulative, 21 in force); G10 opened (sixteen null guards read `*bs`, which their contracts do not require readable; the readability VERIFY-022 added to the queue recommended); G10 repaired and scored exact (fix ec56091, CI #1358 / CC #45: the sixteen closed, six goals added and proved, nothing else moved, as predicted); batch 4, option and result, read by name (186 obligations, none filed: 184 are G11's and 2 G12's; *A* unchanged); G11 opened (the combinators require nothing of the callback's pointer, and WP 29's default clauses claim termination and no exit, and the contracts an empty frame, for every callback: 184 goals false for admitted calls, and a caller's proof made false by the frame; contracts that claim only what every callback gives recommended); G12 opened (the queue's result instantiation leaves `get_ok`'s and `get_err`'s `out` unrequired, VERIFY-018 F4's pair; vec's contracts recommended); G12 repaired and scored exact (fix 77cc69c, CI #1359 / CC #46: the pair closed, 38 goals added and proved, nothing else moved, as predicted); G11's probe scored as predicted in every part (`g11-probe.yml` run #1: under the recommended contracts only the 18 run-time checks on the pointer stay unproved; a caller on the calling branch takes on goals WP 29 does not prove, and no caller gets a frame; today's goals counted per combinator, unit by unit); G11's repair of the home drivers scored as predicted (fixes a4f8f5f and 068ae6a, CI #1361: option's 26 goals closed in each of its three units and result's 22, each family's 6 run-time checks left, to be filed by name with the macro bodies' repair, as the -CC units pin the same names), and `tools/idioms`' catalogue rebuilt under 068ae6a for the two ACSL kinds the repair was the first to write; G11's repair of the macro bodies scored as predicted (fix 37ad1f2, CC #47, its deque job re-run after the runner was lost, and CI #1362: option's 26 goals closed at `int` and at `Rec` and result's 22 at (`int`, `VErr`) and at (`Bool`, `Error`) in the five -CC units, each instance's 6 run-time checks left); option's and result's run-time checks filed by name, VERIFY-014's and VERIFY-015's blocks restated (18 obligations: option's 6 at `int` and 6 at `Rec` under VERIFY-014, result's 6 at (`int`, `VErr`) under VERIFY-015; *A* unchanged; 140 pinned names in no goal table); G11's repair at result (`Bool`, `Error`) in the main CI's units scored as predicted (fix b52bba6, CI #1363 / CC #48: `deque_verify.h`'s transcription replaced and `vec_verify.h`'s and the queue's combinators contracted; deque's 22 goals closed, and in vec's and the queue's units 14 closed and 56 were added, all proved, each unit's 6 run-time checks left; the `misra` job's count, 54, read afterwards from its log by the maintainer); result's run-time checks at (`Bool`, `Error`) filed by name, VERIFY-015's block restated again (6 obligations, in the three main-CI units and the three -CC units that pin them; *A* unchanged; 112 pinned names in no goal table); G11's repair at option's copies in bitset and range scored as predicted (fix ec6a30b, CI #1364, its macOS static-analysis leg re-run after a first-attempt failure whose log needs a sign-in: `bitset_verify.h`'s at `usize` and `range_verify.h`'s at `isize` copied from `option_verify.h`; 26 goals closed in each unit and option's `eq` gained 7, all proved, each instance's 6 run-time checks left); option's run-time checks at `usize` and `isize` filed by name, VERIFY-014's block restated again (12 obligations, in `frama-c-bitset` and `frama-c-range`; *A* unchanged; 48 pinned names in no goal table); G11 closed, as predicted (fixes 022fdca, 665e786 and 648cc09, CI #1365 / CC #49 / G11 probe run #2: the `DECLARE_*` declarations, which carry no contract in any family, have the limit stated in the record, the two decl headers and `docs/vmacros.md`; the probe's comparison found the seven main-CI units' combinators with the recommended contracts' goals; `frama-c-option`'s and `frama-c-result`'s roll-calls anchored; nothing moved; of the 184 goals G11 found false, the 148 termination, exit and frame goals closed and the 36 run-time checks filed by name), and the corrections owed in the repository outside this record listed in one place, `docs/vmacros.md`'s made; VERIFY-020's comparison of bitset's own set with other units' totals corrected (its 71 was the largest own set of any driver-verified module); batch 5, borrow, diag and arena Cat 2c, read by name (borrow's 2 not filed, being G13's; diag's 8 given their table in batch 1; arena Cat 2c's 2 filed under VERIFY-017's block and Cat 2c retired, the last in force of the paper's specification-bound blocks; *A* 27 cumulative, 20 in force); G13 opened (memcmp's danglingness precondition is about the bytes compared, which no contract of the eight functions that call memcmp requires free of dangling addresses: 16 goals false for admitted calls, as Eva 25 shows on the shipped headers, and VERIFY-008's and VERIFY-016's arguments read `\dangling` as the pointer's; WP compiles libc's `non_escaping` as `n <= 0`, so a precondition in libc's words would be unsound; the quantifier written out as a precondition recommended, after a probe); G13's probe predicted (Eva from nine calls through the shipped headers, memcmp's danglingness precondition invalid at each and every other precondition valid, and from two calls to a function that requires the quantifier written out, the call over freed bytes rejected at its boundary and the call over two `int`s admitted; WP 29 translating libc's `non_escaping(s, n)` as `n <= 0`, whatever `s`, and ignoring the quantifier written out as a hypothesis); G13's probe scored as predicted in every part of its two reports (`g13-probe.yml` run #1: Frama-C 29's Eva rejects each of the nine calls at memcmp's `danglingness,s1`, every precondition of the shipped functions met, and WP 29 reads `non_escaping` as `n <= 0` and ignores the quantifier written out as a hypothesis), and CI #1366 read (every job the push could move held; `static-analysis (macos-latest)` failed in both attempts, its log showing ten warnings in `test/`, none a defect, that Homebrew's current cppcheck, 2.22.0, gives and 2.19.0 to 2.21.0 do not, so the part that no job moves missed as written); G13's repair predicted, with the macOS cppcheck pin (the eight functions and `borrowed_str_eq` require the quantifier written out; in the four units that verify borrow.h, two goals added at `borrowed_str_eq`'s call to `str_equal`, both unproved, and nothing else moving; the macOS leg built from 2.19.0's tagged commit and cached), and the workflow's share of the corrections owed; G13's repair and the macOS pin scored as predicted in every part (fixes 039192a, 7fed1f3, 7624d8c and 45d064c; CI #1367 / CC #50 / G4 probe #4 / G13 probe run #2: two goals added and unproved at `borrowed_str_eq`'s call in each unit that verifies borrow.h, and nothing else moved; Eva rejects each of the nine calls at the called function's own clause; the macOS leg green on cppcheck 2.19.0; `misra` at 54, read from its log by the maintainer); the eighteen filed by name under VERIFY-008's Category 3, restated, and VERIFY-016's borrow-own block retired (*A* 27 cumulative, 19 in force); G13 closed; `tools/idioms`' catalogue rebuilt under 7624d8c for `\dangling`; batch 6 read the primitives' 38 names: eighteen true, filed by name (two under VERIFY-008's Category 2, restated in part, and sixteen in three new blocks: *A* 30 cumulative, 22 in force), and twenty that do not hold for every admitted call, opened as G14 (the contract handler's invariant and termination), G15 (four of bits.h's postconditions shift past 64 bits), G16 (ptr.h's alignment near the top of the address space and outside the object) and G17 (slice.h's memcmp at a zero length and strlen on any pointer); the rest of the audit in progress |
 | **Baseline**   | 98b5283 (CI #1340, CC #27) |
 | **Scope**      | (1) the 343 obligations the record files by function, family convention, category or module prose, each to be filed under one named argument, goal by goal; (2) the 135 container filings (vec, deque, bitset, priority queue) read against the code — the flat-segment audit the paper's §8 says has not been done. Both counted at CI #1337, over the main CI's units; the main pass adds the -CC units' 82 at `Rec`, which no main-CI unit pins, to (1), and vec's 50 among them to (2) |
 
@@ -18023,3 +18119,564 @@ them unproved.
 all live, no filing problem, and 38 pinned names in no goal table, from 50.
 VERIFY-016's block named its goals in prose, so the tool did not join it
 before it retired and does not now.
+
+### The main pass — batch 6: the primitives
+
+**What was read.** The method's last batch: the 38 names that, at 1bc839c,
+stood in no goal table, all of them the primitives': contract.h's 2,
+checked.h's 2, bits.h's 15 and the two names of its sample that bitset pins
+split, ptr.h's 12, and slice.h's 5, the four `valid_*` goals at memcmp and the
+one at strlen; G13 filed slice.h's eight at memcmp's danglingness. Each goal
+was read against its function's code and contract in `core/primitives/` or
+`core/slice.h`, against libc's contract where it is a call's precondition
+(Frama-C's `string.h`), and against its form as WP 25 prints it with
+`-wp-split`, as the units run. The goals found not to hold were shown so
+besides, G14's by WP's print and source, the others at run time or under Eva,
+from new probes in `tools/probes/verify-039/`.
+
+**Found.** Eighteen are true. Twenty do not hold for every admitted call:
+sixteen are false for some admitted call, and four, which order or subtract
+two pointers, have no defined value once the rounded pointer leaves `p`'s
+object, as it can.
+
+- contract.h's two are false for every call: the default handler's loop
+  invariant is `\false`, and its termination goal asks a `while (1)` loop to
+  end. G14, below.
+- checked.h's two are true, as VERIFY-002's manual proof argues.
+- Of bits.h's seventeen names, twelve are true. Four of bitset's, and the
+  sample's `typed_bits_rotl_nonzero_shift_ensures`, which the bits job matches
+  against one of them, are postconditions that shift past 64 bits where the
+  code's shift wraps. G15, below.
+- Of ptr.h's twelve, four are true. Two are calls whose precondition fails for
+  an address within `align - 1` bytes of the top of the address space. Six are
+  postconditions that read the rounded pointer as one into `p`'s block, where
+  it need not lie: the two `same_base` are false where it lies in another
+  object, and the four that order or subtract the two pointers have no defined
+  value once it leaves `p`'s object. G16, below.
+- slice.h's five are false: memcmp's validity of each pointer, which
+  `bytes_equal` and `str_equal` do not establish at a zero length, and
+  strlen's string requirement, which `str_from_cstr` does not state. G17,
+  below.
+
+The eighteen true are filed by name. ptr.h's `align_padding_ensures` and
+`ptr_align_padding_nonnull_ensures_part2` need the bound that rounding by a
+mask keeps, an identity VERIFY-008's Category 2 names; they go under that
+block, whose argument is restated in part to state the bound, which its own
+first goal needs too. The other sixteen need arguments no counted block makes,
+and three blocks are written below:
+
+- *Fixed-width arithmetic stated over unbounded integers* (10): checked.h's
+  two, bits.h's complement, two rotation checks and three byte swaps, and
+  ptr.h's `align_up` and `align_down` formulas;
+- *The SWAR population count's range* (1);
+- *Bit smearing to the next power of two* (5): the four postconditions of
+  `bits_next_power_of_two` on its smearing path, and the bits job's sample
+  name for them.
+
+**Filed by name**: VERIFY-008, Category 2
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_align_padding_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `align_padding` returns `align_up(n, align) - n`, and by the identity `align_up`'s formula is the multiple of `align` in `[n, n + align - 1]`: the subtraction does not wrap, and its value is the formula's |
+| 2 | `typed_cast_ptr_align_padding_nonnull_ensures_part2` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `\result < align`: the value is `align_padding`'s at `p`'s address, below `align` by the identity; at an address that breaks `align_padding`'s precondition (G16) the wrap in its body cancels in `usize`, and the value is the same |
+
+#### Fixed-width arithmetic stated over unbounded integers (10)
+
+Rows 1 and 2 name the goals as `frama-c-checked` pins them, and rows 3 to 8 as
+`frama-c-bitset` does; the other units named pin the same goals modulo the
+prefix.
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_checked_add_overflow_ensures` | `frama-c-checked`, `frama-c-range`; with `typed_cast_`, `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-borrow`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | `overflow`: `a + b` reaches 2^N, N the width of `usize`, so the stored sum is `a + b - 2^N`, below `a`, and `*result >= a` is false |
+| 2 | `typed_checked_add_u64_overflow_ensures` | as row 1 | the same, at `u64`, N being 64 |
+| 3 | `typed_cast_bits_clear_ensures` | `frama-c-bitset`; `frama-c-bits` with `typed_` | `~(1ULL << bit)` is `2^64 - 1 - 2^bit`, which is `0xFFFFFFFFFFFFFFFF ^ 2^bit`, the spec's mask |
+| 4 | `typed_cast_bits_rotl_assert_rte_shift_2` | `frama-c-bitset` | `64u - sh` past `sh == 0u`, with `sh = shift & 63`: 1 to 63, a valid count |
+| 5 | `typed_cast_bits_rotr_assert_rte_shift_2` | `frama-c-bitset` | the same in `bits_rotr` |
+| 6 | `typed_cast_bits_bswap16_assert_rte_signed_overflow` | `frama-c-bitset`; `frama-c-bits` with `typed_` | `value << 8`, the `u16` promoted to `int`: at most 65535 × 256 = 16776960, below 2^31 |
+| 7 | `typed_cast_bits_bswap32_ensures` | `frama-c-bitset` | each term shifts one masked byte to another byte's place and stays below 2^32, so the C terms are the spec's, with disjoint bits |
+| 8 | `typed_cast_bits_bswap64_ensures` | `frama-c-bitset`; `frama-c-bits` with `typed_` | the same below 2^64 |
+| 9 | `typed_cast_align_up_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `n + align - 1u` is the formula's sum, wrapping twice to it at `n + align = 2^N`, and `~(align - 1u)` keeps the bits of a value below 2^N that ACSL's `~(align - 1)` keeps |
+| 10 | `typed_cast_align_down_ensures` | as row 9 | `~(align - 1u)` as in row 9, on `n` |
+
+**Functions affected**: `checked_add`, `checked_add_u64` (checked.h);
+`bits_clear`, `bits_rotl`, `bits_rotr`, `bits_bswap16`, `bits_bswap32`,
+`bits_bswap64` (bits.h, the fallback bodies WP verifies); `align_up`,
+`align_down` (ptr.h).
+
+**Root cause**: C computes these in a fixed width: unsigned arithmetic wraps
+modulo 2^N, N the type's width (C11 6.2.5p9), `~` complements within the
+promoted type, and a left shift of an unsigned value keeps its low N bits. N
+is 64 for `u64`, and for `usize` 64, or 32 in `frama-c-arena-32`, which pins
+the same names at a 32-bit `usize`. ACSL states the same values over unbounded
+integers. WP writes each C operation over integers with `to_uint64`,
+`to_uint32`, `lnot`, `lsl`, `lsr` and `land`, and each goal asks that a
+wrapped term equal an unbounded one, or that a term built from these be
+bounded, as WP 25 prints them for 64 bits: `bits_clear`'s is
+`land(value, to_uint64(lnot(x)))` against
+`land(value, lxor(18446744073709551615, x))`, `checked_add`'s
+`to_uint64(a + b) < a` under `18446744073709551616 <= a + b`, and the rotation
+checks' `to_uint64(64 - x) <= 63` with `x = land(63, shift)`. The provers do
+not take these steps within 120 s. Verifier-bound: every value is the stated
+one.
+
+**Manual proof argument**: N is the width of the type an operation runs in, as
+above. In `checked_add`'s and `checked_add_u64`'s `overflow`, `a > MAX - b`
+with `MAX = 2^N - 1`, so `a + b` is at least 2^N and, both being below 2^N,
+below 2^(N+1); the store keeps `a + b - 2^N`, which is below `a` because
+`b < 2^N`, so `*result >= a` is false and the function returns false
+(VERIFY-002's proof, in `docs/verification.md`). For an unsigned `x` of width
+N, `~x` is `2^N - 1 - x`, the all-ones value XOR `x`: with `x = 1ULL << bit`,
+`bit < 64`, that is `bits_clear`'s mask, `0xFFFFFFFFFFFFFFFF ^ x`. With
+`x = align - 1u` it is the mask of `align_up` and `align_down`, whose `&` with
+a value below 2^N keeps the bits that ACSL's `~(align - 1)`, the integer
+`-align`, keeps there: in two's complement over unbounded integers `-align`
+has every bit from `log2(align)` up set, and the N-bit mask every such bit
+below N. `align_up`'s sum: its third precondition gives `n + align <= 2^N`;
+below 2^N nothing wraps, and at 2^N the sum `n + align` wraps to 0 and
+`0 - 1u` to `2^N - 1`, which is `n + align - 1`; the masked value is the
+formula's either way. In `bits_rotl` and `bits_rotr`, `sh = shift & 63` lies
+in 0 to 63, and past `sh == 0u` it is not 0, so `64u - sh` lies in 1 to 63, a
+valid count for a 64-bit shift. In `bits_bswap16`, `value` is promoted to
+`int`, and `value << 8` is at most 65535 × 256 = 16776960, below 2^31. In
+`bits_bswap32` and `bits_bswap64`, each term masks one byte and shifts it to
+another byte's place, so no term reaches 2^32, or 2^64: each C term equals the
+spec's, the terms have disjoint bits, and `|` is associative and commutative,
+so the two values are equal.
+
+**Retirement.** ACSL lemmas for the identities, each with a goal of its own,
+or a prover that reasons on bit vectors; neither was tried. A change with its
+own prediction.
+
+#### The SWAR population count's range (1)
+
+The row names the goal as `frama-c-bitset` pins it; `frama-c-bits` pins it
+with `typed_`.
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bits_popcount_ensures` | `frama-c-bitset`; `frama-c-bits` with `typed_` | `0 <= \result <= 64`: the fallback leaves each byte's count in that byte, and the multiply's top byte, which it returns, is their sum |
+
+**Functions affected**: `bits_popcount` (the fallback body WP verifies).
+
+**Root cause**: the fallback counts bits by the SWAR method, three masked
+steps and a multiply by `0x0101010101010101`, and returns the product's top
+byte. The bound is a sum of eight byte counts, and each step that keeps a
+count in its field is bit-level, through `land`, `lsr` and the multiply's
+wrap; WP 25 prints its upper bound as
+`to_uint64(72340172838076673 * x_2) <= 4683743612465315839`, the bound 65 ×
+2^56 − 1 (WP 25 splits the goal, its first part trivially true; WP 29 pins it
+whole). The provers do not take it. VERIFY-004 leaves the full specification,
+the count itself, to tests; this is its range. Verifier-bound.
+
+**Manual proof argument**: Take the value's bits in pairs.
+`v1 = value - ((value >> 1) & 0x5555555555555555)` replaces each pair
+`2*b1 + b0` by `b1 + b0`, its count, 0 to 2; no pair is less than what it
+loses, so no borrow crosses pairs.
+`v2 = (v1 & 0x3333333333333333) + ((v1 >> 2) & 0x3333333333333333)` adds
+neighbouring pair counts in each nibble, at most 4, with no carry.
+`v3 = (v2 + (v2 >> 4)) & 0x0F0F0F0F0F0F0F0F` adds neighbouring nibbles in each
+byte's low nibble, at most 8, and clears the high one: each byte of `v3` holds
+its byte's count, 0 to 8. In `v3 * 0x0101010101010101`, byte k of the product
+is the sum of `v3`'s bytes 0 to k, at most 64, so no byte carries into the
+next, and the reduction modulo 2^64 drops only the bytes above byte 7. Byte 7
+is the sum of all eight counts, at most 64, and `>> 56` returns it.
+
+**Retirement.** A lemma for each step, or a bit-vector prover; neither was
+tried. A change with its own prediction.
+
+#### Bit smearing to the next power of two (5)
+
+Rows 1 to 4 name the goals as `frama-c-bitset` pins them.
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_bits_next_power_of_two_normal_ensures_part3` | `frama-c-bitset` | `\result >= value` on the smearing path |
+| 2 | `typed_cast_bits_next_power_of_two_normal_ensures_2_part3` | `frama-c-bitset` | `\result != 0` there |
+| 3 | `typed_cast_bits_next_power_of_two_normal_ensures_3_part3` | `frama-c-bitset` | `(\result & (\result - 1)) == 0` there |
+| 4 | `typed_cast_bits_next_power_of_two_normal_ensures_4_part3` | `frama-c-bitset` | `\result / 2 < value` there |
+| 5 | `typed_bits_next_power_of_two_normal_ensures` | `frama-c-bits` | the bits job's sample name; its roll-call matches it unanchored, so it stands for the four above, which WP splits the same way there (WP 25, run locally) |
+
+**Functions affected**: `bits_next_power_of_two`.
+
+**Root cause**: past its two early returns the function decrements the value,
+ORs six right shifts of it into it, the smear, and adds 1. Each postcondition
+of `normal` needs the smeared value to be all ones up to its top bit, a
+bit-level fact through six `lor` and `lsr` steps, over which WP 25 prints all
+four goals. The provers do not take it. VERIFY-003 files the four as
+"Minimality", "the `result / 2 < value` property through bit-smearing"; they
+are all four of `normal`'s postconditions, the minimality being the fourth.
+Verifier-bound.
+
+**Manual proof argument**: In `normal`, `0 < value <= 2^63`. Let
+`v = value - 1`, below 2^63. If `v` is 0, every step keeps it 0 and the result
+is 1: at least `value`, not 0, `1 & 0` is 0, and `1 / 2 = 0 < value`.
+Otherwise let `k` be the index of `v`'s highest set bit, at most 62. Each
+`v |= v >> s`, for `s` = 1, 2, 4, 8, 16, 32, sets no bit above `k` and doubles
+the run of ones down from it, so after the six steps bits 0 to `k` are set and
+no other: `v = 2^(k+1) - 1`, and `v + 1u` is 2^(k+1), at most 2^63, with no
+wrap. From `2^k <= value - 1 < 2^(k+1)`: the result is at least `value`, it is
+not 0, it is a power of two, so `\result & (\result - 1)` is 0, and
+`\result / 2 = 2^k <= value - 1 < value`.
+
+**Retirement.** A lemma for the smear, or a bit-vector prover; neither was
+tried. A change with its own prediction.
+
+**VERIFY-008's Category 2, restated in part.** Its argument names "the
+power-of-2 mask identity" and draws divisibility from it, for the goal it
+calls `mem_align_normal_ensures_part3`. That goal is `mem_align`'s first
+postcondition, `\result >= size`, and divisibility is the second's,
+`_2_part3`, so the argument as written covers its own first goal by name only.
+Restated, it states the identity and both of its consequences, which the two
+goals filed above use too, and keeps its text as first written; its heading
+counts its table, 8, and says that two more are filed by name. Two other parts
+of the block are not this batch's reading, which reads a block only against
+the goals it files: `ptr_is_aligned`'s `nonnull` behaviour states no result,
+so `mem_is_aligned`'s two goals want a clause the specification omits, not a
+bridge through the cast; and `mem_get_alignment`'s two, the lowest set bit's
+identity, have no argument in the block. They join the open items the pass
+settles after the batches.
+
+**What the record says.** The module prose is right about checked.h. Elsewhere
+it gives true goals the wrong obstacle and calls false ones limits of the
+verifier.
+
+- VERIFY-003 calls its fifteen "WP model limitations on bitwise reasoning, not
+  code defects". Four are false postconditions (G15): its complement category
+  holds two of them, `full_width`'s with no complement in it, and its rotation
+  category the other two. Its four "minimality" goals are all four of
+  `normal`'s postconditions.
+- VERIFY-006's Category 2 names a bridge to multiples of `align`, which the
+  formulas it covers do not state; the obstacle is the complement and the wrap
+  in the width. Its Category 3 says that "WP under Typed+Cast cannot prove the
+  uintptr_t round-trip preserves integer bounds": nothing bounds the address,
+  and two of its three goals are false (G16). VERIFY-006 and
+  `docs/verification.md` each send the reader to the other for the manual
+  proof arguments, and neither states one for Categories 2 to 4.
+- VERIFY-006's Category 4 and VERIFY-007's Category 3 call the handler's two
+  goals correct by construction; both are false (G14).
+- VERIFY-007's Category 1 counts the four `valid_*` goals with memcmp's
+  danglingness as a limit of the verifier, and its Category 2 weighs the
+  strlen goal against a dependency every unit already takes; all five are
+  false (G17).
+- VERIFY-027 filed ptr.h's six pointer postconditions under VERIFY-008's
+  Category 2 as true, "the pointer round-trip preserves the object"; they do
+  not hold for every admitted call (G16).
+
+VERIFY-002, VERIFY-003, VERIFY-006, VERIFY-007 and VERIFY-027 get notes. The
+same claims stand in `docs/verification.md`'s sections for checked.h, bits.h,
+ptr.h (the handler's goals among them) and slice.h, in the comments of the
+`frama-c-bits` and `frama-c-ptr` jobs in
+`.github/workflows/cmake-multi-platform.yml`, and in `contract.h`'s comment on
+the handler's loop; each is corrected with its file's next change.
+
+**What this does to *A*.** Three blocks are written and none retires: *A* is
+30 cumulative and 22 in force, *V* 19 cumulative and 18 in force, the three
+being verifier-bound, and *S* 11 cumulative and 4 in force, beside the
+proved-goal argument's 147 properties, 38 write sites and 16 facts, unchanged.
+The method expected the primitives to move *A*, their prose being outside it;
+three of their arguments are now counted. Of the primitives' 44 obligations
+and the sample's two names, 8 were filed at G13, 18 are filed here, and 20 do
+not hold for every admitted call, which G14 to G17 take up.
+
+**Record coverage** reports VERIFY-008's Category 2 with 8 listed and 2 filed
+by name, the three new blocks with 10, 1 and 5 listed, all live, no filing
+problem, and 20 pinned names in no goal table, from 38: the twenty that do not
+hold, unlisted while G14 to G17 are open.
+
+### G14 — the contract handler's loop invariant and its termination are false as written (opened)
+
+**Finding.** Under `__FRAMAC__`, `contract_default_handler`'s body is a loop
+that never ends,
+
+```c
+/*@ loop invariant \false;
+    loop assigns \nothing;
+ */
+while (1) { }
+```
+
+and its contract is `assigns \nothing; ensures \false; exits \false;`. The two
+goals below are pinned in every unit whose headers include `contract.h`,
+twenty-three units and `frama-c-arena-32`, with the `typed_` prefix in the
+seven Typed units and `typed_cast_` in the rest.
+
+| Goal | What it asks | Why it is false |
+|---|---|---|
+| `typed_cast_contract_default_handler_loop_invariant_established` | the invariant, on entering the loop | the invariant is `\false`, and every call enters the loop; WP 25 prints the goal as `Prove: false` |
+| `typed_cast_contract_default_handler_terminates` | that the handler terminates | it never does. The contract writes no `terminates` clause that would excuse it, so the default stands, and for a loop with no variant WP 29 states the loop's termination as `\false` and asks `terminates ==> \false` (`cfgAnnot.ml`, as 29.0's source reads on ocaml.org; only a variant without a relation clears the `\false`) |
+
+Neither is needed for what the contract states. WP proves `ensures \false`,
+`exits \false` and `assigns \nothing` because the loop has no exit: WP 25
+reports all three "Valid (Unreachable)" before any prover runs, and the
+invariant plays no part.
+
+**What the record says.** VERIFY-006's Category 4 calls the two
+"intended-unprovable: they are the mathematical statement of the handler's
+non-returning contract", and VERIFY-007's Category 3 "correct by
+construction". `docs/verification.md` lists `terminates \false` among the
+handler's clauses, which the contract does not state. `contract.h`'s comment
+says that "WP treats the unestablishable invariant as proof that the loop is
+never exited, and therefore the function never reaches any post-state. This
+discharges ensures \false and exits \false cleanly." A goal that is `false`
+holds in no state. These are not limits of the verifier but two false claims:
+one written, the invariant, and one left to the default, that the handler
+terminates, when it exists never to return.
+
+**Decision (recommended).** The handler's contract states
+`terminates \false;`, and its loop keeps `loop assigns \nothing;` and loses
+the invariant. Its postconditions are unchanged and prove as now. No verified
+unit calls the handler: `require`, `require_msg`, `ensure`, `ensure_msg`,
+`unreachable` and `unreachable_msg` compile away under
+`-DCANON_NO_REQUIRE -DNDEBUG`, every WP job's configuration, and `panic`,
+which does not, has no caller in a verified header; so no caller's termination
+meets the new clause. The comments in `contract.h` say what the clauses do. A
+prediction precedes the fix: both goals leave every unit that pins them, the
+invariant's two goals going with it, as WP 25 can measure locally, and the
+termination goal proved or no longer generated, which WP 29's run shows.
+
+### G15 — four of bits.h's postconditions shift past 64 bits (opened)
+
+**Finding.** ACSL reads a C integer as its mathematical value, and its
+operators do not wrap: `value << s` is `value * 2^s`, which can reach 2^64 and
+beyond, where C's `<<` on a `u64` keeps the low 64 bits. G8 found the same of
+`~`. Four postconditions state their result with such shifts and no cast to
+`u64`, and each is false for an admitted call:
+
+| Goal (`frama-c-bitset`) | Postcondition | Admitted call | Returns | ACSL's value |
+|---|---|---|---|---|
+| `typed_cast_bits_rotl_nonzero_shift_ensures_part2` | `\result == ((value << s) \| (value >> (64 - s)))`, `s = shift & 63` | `bits_rotl(0x8000000000000001, 1)`, the header's example | 3 | 2^64 + 3 |
+| `typed_cast_bits_rotr_nonzero_shift_ensures_part2` | `\result == ((value >> s) \| (value << (64 - s)))` | `bits_rotr(0x8000000000000001, 1)`, the header's example | `0xC000000000000000` | `0x4000000000000000C000000000000000` |
+| `typed_cast_bits_insert_full_width_ensures_part2` | `\result == (src << start)` | `bits_insert(0, 1ULL << 63, 1, 64)` | 0 | 2^64 |
+| `typed_cast_bits_insert_normal_ensures_part3` | `((dst & (0xFFFFFFFFFFFFFFFFULL ^ shifted_mask)) \| ((src << start) & shifted_mask))`, `shifted_mask = m << start` | `bits_insert(0, 1ULL << 62, 2, 63)` | 0 | 2^64 |
+
+The bits job's sample name `typed_bits_rotl_nonzero_shift_ensures` matches the
+first's counterpart in `frama-c-bits`. `bits_rotr`'s is false for every
+`value` of 2^s or more, nearly every call; `bits_rotl`'s whenever one of
+`value`'s top `s` bits is set; `full_width`'s whenever `src * 2^start` reaches
+2^64; and `normal`'s when `count + start > 64` and a bit of `src` below bit
+`count` lands at bit 64 or above. `tools/probes/verify-039/p_bits_shifts.c`
+evaluates each right-hand side over 128 bits for these calls: the four
+`VIOLATED`, and four controls, where no term reaches bit 64, holding; gcc and
+clang, `-O0` and `-O2`, both build configurations, LP64 and ILP32, sanitizers
+clean. Frama-C's E-ACSL, run locally, which checks a contract at run time with
+unbounded integers, reports the same four postconditions failed and the
+controls' held. WP 25 prints each goal as the wrapped term against the
+unbounded one: `full_width`'s is `to_uint64(x) = x` with
+`x = lsl(src_0, start_0)`. No verified unit calls the three functions, bitset
+calling only `bits_popcount`, `bits_ctz` and `bits_clz`, so no proved goal
+rests on the four.
+
+**What the record says.** VERIFY-003 files the two `bits_insert` goals under
+"Bitwise complement", "WP cannot connect C's `~x` operator to the XOR-based
+ACSL spec", though `full_width`'s has no complement and `normal`'s complement
+is sound; and the two rotation postconditions under "Rotation", "RTE shift
+checks and bitwise OR in spec", with the two checks, which are true. It calls
+all fifteen "WP model limitations on bitwise reasoning, not code defects". The
+code is right and the four specifications are not: G8's shape, a C operator
+read in ACSL as its unbounded counterpart, at four postconditions WP was right
+not to prove.
+
+One behaviour is left as it is. For `count >= 64` `bits_insert` returns
+`src << start`, so for `start > 0` none of `dst`'s bits below `start` survive,
+where the function's comment says "Other bits in `dst` are preserved" and the
+`normal` path, for `count + start > 64`, keeps them. The comment in the body
+says what the code does, "dst is fully overwritten", and no test or verified
+unit calls `full_width` with `start > 0`. The repair states what the code
+does; keeping `dst`'s low bits there would change behaviour, and is not this
+repair's.
+
+**Decision (recommended).** Each of the four states its value in `u64`, as the
+code computes it, and `bits_insert`'s comment says what `full_width` keeps of
+`dst`:
+
+```
+bits_rotl, nonzero_shift:
+    \result == ((u64)(value << s) | (value >> (64 - s)))
+bits_rotr, nonzero_shift:
+    \result == ((value >> s) | (u64)(value << (64 - s)))
+bits_insert, full_width:
+    \result == (u64)(src << start)
+bits_insert, normal:
+    \let shifted_mask = (u64)(m << start);
+    ... | ((u64)(src << start) & shifted_mask)
+```
+
+WP reads the cast as `to_uint64`, the code's own wrap. A contract change: a
+prediction precedes it, with WP 25's local reading of the new goals.
+
+### G16 — ptr.h's alignment: an address near the top of the address space, and a result outside the object (opened)
+
+**Finding.** Eight goals of ptr.h do not hold for every admitted call, in two
+ways. All are pinned in eleven units and `frama-c-arena-32`: `frama-c-ptr`,
+`frama-c-memory`, `frama-c-arena`, `frama-c-pool`, `frama-c-region`,
+`frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`,
+`frama-c-stringbuf`, `cc-vec` and `cc-vec_struct`.
+
+*The address near the top.* `ptr_align_up` and `ptr_align_padding` pass `p`'s
+address, `(usize)(uintptr_t)p`, to `align_up` and `align_padding`, which
+require `n <= CANON_USIZE_MAX - (align - 1)`. Neither requires anything that
+bounds the address, and C bounds it by nothing but its type; WP prints both
+goals as `align_0 + int_of_addr(p) <= 18446744073709551616`, with no
+hypothesis on `int_of_addr(p)`. For an address within `align - 1` bytes of the
+top the precondition fails, and the sum wraps.
+`tools/probes/verify-039/p_align_wrap32.c` maps a page at `0xFFFF0000` in a
+32-bit process and asks for the next 128 KiB boundary above `0xFFFF0001`: both
+preconditions `VIOLATED`, and `ptr_align_up` returns NULL for the non-null
+pointer, which its comment, "Aligned pointer >= p, or NULL if p == NULL",
+excludes. `ptr_align_padding` returns `0xFFFF`, the padding its postconditions
+state: the wrap in `align_padding`'s body cancels in `usize`, and only the
+call's precondition is broken. gcc and clang, `-O0` and `-O2`, both build
+configurations, sanitizers clean.
+
+| Goal | The call |
+|---|---|
+| `typed_cast_ptr_align_up_call_align_up_requires_3` | `align_up((usize)(uintptr_t)p, align)` in `ptr_align_up` |
+| `typed_cast_ptr_align_padding_call_align_padding_requires_3` | `align_padding((usize)(uintptr_t)p, align)` in `ptr_align_padding` |
+
+*The result outside the object.* `ptr_align_up`'s and `ptr_align_down`'s
+`nonnull` behaviours say that the result has `p`'s base address (`same_base`),
+lies on the stated side of `p` (`not_below`, `not_above`) and within
+`align - 1` bytes of it (`bounded`): claims about the result as a pointer into
+`p`'s block. The result is `p`'s address rounded as an integer and converted
+back, and the rounded address can lie outside `p`'s object.
+`ptr_align_down(p, 4096)`, the header's own example of a page base, lies below
+`p`'s block for a `p` in the block's first page, unless the block begins on a
+page; rounding up a pointer near an object's end passes the end. Where the
+address lies in another object it has that object's base, and `same_base` is
+false. Wherever it leaves `p`'s object the other four have no defined value: C
+defines neither the order nor the difference of pointers into different
+objects (C11 6.5.8p5, 6.5.6p9), and WP's model orders two addresses only
+within one base (`addr_le` and `addr_lt` in its `memory.mlw`); as addresses
+the side and the distance hold, short of the wrap at the top of the address
+space (above), where `ptr_align_up` returns NULL.
+`tools/probes/verify-039/p_align_object.c` rounds `p + 3` down to 4096 for a
+64-byte heap block, the last byte of a 10-byte array aligned to 16 up to 64,
+and a pointer into the third of three heap blocks, allocated in turn, down to
+the least power of two that lands it inside the second, where one does: each
+result outside `p`'s object, `same_base` `VIOLATED` wherever the result lands
+inside another object, in 30 of the probe's 32 builds, the side and the
+distance holding as integers in every case, and two controls inside a
+64-aligned array holding. E-ACSL, run locally, reports `same_base` failed for
+the rounding up, the result's base being the next object's, and for the
+rounding down into the second block, its base being that block's. WP prints
+each goal as a claim about the base, order or offset of `addr_of_int(...)`,
+which its model leaves unrelated to the integer. The six are the `part2`s, on
+the path past the null check:
+
+| Goal | Postcondition |
+|---|---|
+| `typed_cast_ptr_align_up_nonnull_ensures_same_base_part2` | `\base_addr((char*)\result) == \base_addr((char*)p)` |
+| `typed_cast_ptr_align_up_nonnull_ensures_not_below_part2` | `(char*)\result >= (char*)p` |
+| `typed_cast_ptr_align_up_nonnull_ensures_bounded_part2` | `(char*)\result - (char*)p <= (align - 1)` |
+| `typed_cast_ptr_align_down_nonnull_ensures_same_base_part2` | `\base_addr((char*)\result) == \base_addr((char*)p)` |
+| `typed_cast_ptr_align_down_nonnull_ensures_not_above_part2` | `(char*)\result <= (char*)p` |
+| `typed_cast_ptr_align_down_nonnull_ensures_bounded_part2` | `(char*)p - (char*)\result <= (align - 1)` |
+
+**What the record says.** VERIFY-006's Category 3 gives the two calls to the
+cast model: "WP under Typed+Cast cannot prove the uintptr_t round-trip
+preserves integer bounds". There are no bounds to preserve. Its third goal,
+`ptr_align_padding`'s `\result < align`, is true and is filed above.
+VERIFY-027 filed `ptr_align_up`'s three, and in its row 3 `ptr_align_down`'s,
+under VERIFY-008's Category 2, "the pointer round-trip preserves the object":
+the round trip keeps the address, and the address need not be in the object.
+`ptr_align_down`'s comment makes the same claim, that it "always stays within
+the original allocation if p was inside one". Arena's `ptr_span` calls, whose
+preconditions VERIFY-027 closed with `ptr_align_up`'s three, went with
+VERIFY-036 F3, which computes the padding from the address so that "no pointer
+past the buffer is formed"; no verified unit calls `ptr_align_up` or
+`ptr_align_down` now, so no proved goal rests on the six.
+
+**Decision (recommended).**
+
+- `ptr_align_up` requires, of a non-null `p`, what `align_up` requires of its
+  address, `(usize)(uintptr_t)p <= CANON_USIZE_MAX - (align - 1)`. It has no
+  verified caller.
+- `align_padding` computes `(0 - n) & (align - 1)` in `usize` and drops its
+  third precondition. The value is the same wherever that precondition held,
+  and is the one its formula states for every `n`; `ptr_align_padding`'s call
+  then meets its contract, and arena's calls to `ptr_align_padding` are
+  unchanged.
+- The six pointer postconditions give way to the result's address, stated as
+  the rounded integer, which holds for every admitted call, and the comments
+  say that the result may lie outside `p`'s object.
+
+A prediction precedes the fix, with WP 25's local reading of the changed
+goals.
+
+### G17 — slice.h's libc calls: memcmp at a zero length, and strlen on any pointer (opened)
+
+**Finding.** Five goals are libc preconditions at slice.h's calls that the
+calling function's contract does not establish. All are pinned in fourteen
+units and `frama-c-arena-32`: `frama-c-slice`, `frama-c-memory`,
+`frama-c-arena`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`,
+`frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`,
+`frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec` and `cc-vec_struct`.
+
+*memcmp at a zero length.* libc's `valid_read_or_empty(s, n)`, memcmp's
+`valid_s1` and `valid_s2`, asks each pointer to point into a block, readable
+or empty, even when `n` is 0. `bytes_equal` and `str_equal` reach memcmp when
+the two lengths are equal and the pointers distinct and non-null, and at
+length 0 their contracts, `bytes_valid_write` and `str_valid`, ask nothing
+more of the pointers. `tools/probes/verify-039/p_slice_libc.c` gives Eva two
+empty views into one array, one at its end and one at its start: memcmp's
+`valid_s1` invalid in each function, every other precondition Eva evaluates
+valid, the called function's included, and no alarm; over two readable bytes
+the control is valid. A pointer one past an array's end is a valid value in C
+(6.5.6p8), so that call breaks libc's contract and not C's. The contracts also
+admit an empty view over freed storage, and that breaks C too: its pointer is
+indeterminate (6.2.4p2), and C11 7.24.1p2 asks a zero-length call's pointer
+arguments for valid values (7.1.4). `mem_compare`, `mem_equal` and
+`mem_equal_bytes` return before memcmp at size 0; G13's score noted the
+difference.
+
+| Goal | |
+|---|---|
+| `typed_cast_bytes_equal_call_memcmp_requires_valid_s1` | `a.ptr`, at `a.len == 0` |
+| `typed_cast_bytes_equal_call_memcmp_requires_valid_s2` | `b.ptr`, at `b.len == 0` |
+| `typed_cast_str_equal_call_memcmp_requires_valid_s1` | the same for two `str_t` views |
+| `typed_cast_str_equal_call_memcmp_requires_valid_s2` | the same |
+
+*strlen on any pointer.* strlen requires `valid_read_string(s)`, a string
+readable through its terminator. `str_from_cstr` calls it on any non-null
+argument and has no precondition; its comment asks for a "Null-terminated C
+string, or NULL", and `borrowed_str_from_cstr` passes its argument on, with no
+precondition either. Eva, from `p_slice_libc.c`: for a three-byte array with
+no null character, strlen's `valid_string_s` invalid, and for a terminated one
+valid. Built with `-fsanitize=address` at `-O0`, the same call reads past the
+array in strlen, called from `str_from_cstr`, with gcc and clang, LP64 and
+ILP32; at `-O2` gcc warns of the call at compile time (`-Wstringop-overread`,
+"argument missing terminating nul") and stops at the same read, and clang
+folds the call to a constant.
+
+| Goal | |
+|---|---|
+| `typed_cast_str_from_cstr_call_strlen_requires_valid_string_s` | `cstr`, any non-null pointer |
+
+**What the record says.** VERIFY-007's Category 1 counts the four with
+memcmp's danglingness as a limit of WP at the libc boundary, and says that the
+`str_t` variants' validity closes through `str_valid`, though `str_equal`'s
+two are pinned. Its Category 2 calls the strlen goal "a deliberate
+spec-strength tradeoff": requiring `valid_read_string` would introduce "a
+soundness dependency on Frama-C's `-frama-c-stdlib` configuration that no
+other Canon-C header requires". Every unit that verifies slice.h already
+checks the strlen call against that library's contract, `valid_read_string`
+included, as it checks memcmp's; the dependency is taken, and what the trade
+keeps is a call the contract admits and C does not.
+
+**Decision (recommended).**
+
+- `bytes_equal` and `str_equal` return true for two non-null views of length 0
+  before memcmp, as `mem_equal_bytes` does after its null check. The result is
+  the same, memcmp of no bytes comparing equal, and a null view against an
+  empty non-null one stays unequal, as `test/core/slice_test.c` tests. A test
+  of `str_equal` on two distinct non-null empty views, like `bytes_equal`'s
+  `test_bytes_equal_zero_len_distinct_ptrs`, covers the new branch.
+- `str_from_cstr` and `borrowed_str_from_cstr` require
+  `cstr == \null || valid_read_string(cstr)`, the comment's requirement
+  written in the contract.
+
+A prediction precedes the fix: memcmp's four goals proved, as at memory.h's
+calls, which are reached only with a positive size; strlen's from the new
+precondition; and `borrowed_str_from_cstr`'s call meeting `str_from_cstr`'s.
+The G13 probe runs, its paths including both headers.
