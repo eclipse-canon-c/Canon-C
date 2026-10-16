@@ -3967,6 +3967,11 @@ jobs:
   # \valid_read/\initialized requires. Zero function-pointer residuals:
   # borrow.h has no combinators or hooks — the first downstream header
   # since error.h to add no new residual class at all.
+  # (VERIFY-039 G13: 4 own since its repair. borrowed_str_eq requires,
+  # as str_equal now does, that no byte compared holds a dangling
+  # address; WP does not implement \dangling, so the two goals at its
+  # call for str_equal's no_dangling_a and no_dangling_b stay unproved,
+  # the class of the memcmp pair.)
   #
   # Cross-stream tie-in: gcov reports borrow.h at 38/40 MC/DC (95.0%,
   # CI #1106) with exactly 2 outcomes open — the NULL-true sides of the
@@ -3998,11 +4003,13 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: semantics/borrow.h"
-        # borrow.h — Typed+Cast. Expected: 2439 / 2458 proved, exactly 19
+        # borrow.h — Typed+Cast. Expected: 2439 / 2460 proved, exactly 21
         # unproved (VERIFY-016): 17 inherited (slice.h's full 15-goal
         # surface incl. the contract.h handler pair, + checked.h's 2 with
-        # the typed_ -> typed_cast_ prefix flip) + 2 borrow-own (memcmp
-        # danglingness at borrowed_bytes_eq, the header's only libc call).
+        # the typed_ -> typed_cast_ prefix flip) + 4 borrow-own (memcmp
+        # danglingness at borrowed_bytes_eq, the header's only libc call,
+        # and since VERIFY-039 G13's repair the two no_dangling goals at
+        # borrowed_str_eq's call to str_equal, 2 until then).
         # Also enforces the MCDC-008 closure: the named in-body assert
         # dead_by_invariant must remain in the proved set. Any deviation
         # is a regression.
@@ -4025,8 +4032,8 @@ jobs:
         run: |
           eval $(opam env --switch=frama-c)
           ENFORCE=1
-          EXPECTED_UNPROVED=19
-          EXPECTED_PROVED="2439 / 2458"
+          EXPECTED_UNPROVED=21   # VERIFY-039 G13 predicted: 19 -> 21
+          EXPECTED_PROVED="2439 / 2460"   # VERIFY-039 G13 predicted: two goals added, both unproved (was 2439 / 2458)
           FAILURES=0
           note_fail() {
             echo "$1"
@@ -4149,10 +4156,12 @@ jobs:
               note_fail "FAIL: inherited set differs from the composability prediction."
             fi
             echo ""
-            echo "  --- Own-residual roll-call (borrowed_bytes_eq memcmp) ---"
+            echo "  --- Own-residual roll-call (borrowed_bytes_eq memcmp, borrowed_str_eq's call) ---"
             OWN_CHECKS=(
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
             )
             OWN_SEEN=0
             for goal in "${OWN_CHECKS[@]}"; do
@@ -4162,7 +4171,7 @@ jobs:
                 note_fail "FAIL: expected unproved goal ${goal} not observed."
               fi
             done
-            echo "  Own residuals observed: ${OWN_SEEN}/2 (expected 2)"
+            echo "  Own residuals observed: ${OWN_SEEN}/4 (expected 4)"
             OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
             echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
             if [ "${OTHER_UNPROVED}" -ne 0 ]; then
@@ -4189,9 +4198,9 @@ jobs:
           echo ""
           echo "==============================================="
           if [ "${FAILURES}" -eq 0 ]; then
-            echo "PASS: borrow.h verified — 2439/2458 proved, 19 documented"
+            echo "PASS: borrow.h verified — 2439/2460 proved, 21 documented"
             echo "      residuals all observed (VERIFY-016): 17 inherited +"
-            echo "      2 own, zero new residual classes; dead_by_invariant"
+            echo "      4 own, zero new residual classes; dead_by_invariant"
             echo "      proved (MCDC-008 closure intact). Composability"
             echo "      confirmation #6."
           else
@@ -4556,8 +4565,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=96   # VERIFY-039 G11 predicted: 122 -> 96 (G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4953 / 5049"   # VERIFY-039 G11 predicted: seven goals added, all proved, and 26 closed (G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=98   # VERIFY-039 G13 predicted: 96 -> 98 (G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4953 / 5051"   # VERIFY-039 G13 predicted: two goals added, both unproved (G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4671,7 +4680,8 @@ jobs:
             # partition verified arithmetically -- 2 + 32 + 58 + 66 = 158
             # when written; 71 own / 163 total at #1264, 41 own / 138 total
             # after VERIFY-039 G8's repair, 25 own / 122 total after G10's,
-            # and 96 total since G11's repair of option_usize, whose arm is 6.
+            # and 96 total since G11's repair of option_usize, whose arm is 6;
+            # 98 since G13's repair, borrow's two at borrowed_str_eq's call.
             # No duplicates, nothing unclassified -- before being written here.
             CHECKS=(
               "typed_cast_ptr_align_down_nonnull_ensures_same_base_part2"
@@ -4692,12 +4702,13 @@ jobs:
               "typed_cast_option_usize_filter_assert_rte_function_pointer"
               "typed_cast_option_usize_combine_with_assert_rte_function_pointer"
               "typed_cast_option_usize_eq_assert_rte_function_pointer_part2"
-              # ARM S — CORE SUBSTRATE, 63, byte-identical to each home module's
+              # ARM S — CORE SUBSTRATE, 65, byte-identical to each home module's
               #         pinned list modulo the typed_cast_ prefix: bits 15,
-              #         memory 19, slice-libc 13, ptr 12, checked 2, borrow 2.
+              #         memory 19, slice-libc 13, ptr 12, checked 2, borrow 4.
               #         58 when written: VERIFY-026 added ptr's six listed
               #         first, above ARM C, and VERIFY-036 F1 closed one of
-              #         memory's.
+              #         memory's; 63 until VERIFY-039 G13 added borrow's two
+              #         at borrowed_str_eq's call to str_equal.
               "typed_cast_bits_clear_ensures"
               "typed_cast_bits_insert_full_width_ensures_part2"
               "typed_cast_bits_insert_normal_ensures_part3"
@@ -4755,6 +4766,8 @@ jobs:
               "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
               # ARM D — bitset's OWN residuals, 25 since VERIFY-039 G10's
               #         repair (41 after G8's, 42 after entry 3's loop bounds,
               #         52 after entry 3 / G6, 71 before it; was 66, +5 at CI
@@ -4942,7 +4955,7 @@ jobs:
             done
             echo ""
             echo "  --- Residual split: inherited vs bitset-own ---"
-            INH=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_(contract_|option_usize_|bits_|checked_|align_(up|down|padding)_|ptr_|bytes_|str_|mem_|borrowed_bytes_)" \
+            INH=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_(contract_|option_usize_|bits_|checked_|align_(up|down|padding)_|ptr_|bytes_|str_|mem_|borrowed_(bytes|str)_)" \
                     wp_bitset_output.txt || true)
             OWN=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_bitset_" \
                     wp_bitset_output.txt || true)
@@ -4951,7 +4964,8 @@ jobs:
             echo "               borrow 2 + option 32; 97 since VERIFY-026 added"
             echo "               six of ptr's and VERIFY-036 F1 closed one of"
             echo "               memory's; 71 since VERIFY-039 G11 closed 26 of"
-            echo "               option's)"
+            echo "               option's; 73 since G13 added borrow's two at"
+            echo "               borrowed_str_eq's call to str_equal)"
             echo "    bitset-own: ${OWN}"
             # CORRECTED after CI #1260. This NOTE said "most bitset-own
             # residuals belong to functions that are NOT YET CONTRACTED
@@ -5030,7 +5044,7 @@ jobs:
               echo "        count ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, and all"
               echo "        ${EXPECTED_UNPROVED} residuals verified BY NAME in both"
               echo "        directions (set equality). Arms: 2 handler + 6"
-              echo "        option_usize (inheritance) + 63 core substrate +"
+              echo "        option_usize (inheritance) + 65 core substrate +"
               echo "        ${OWN} bitset-own."
               echo ""
               # CORRECTED at VERIFY-039 G13's round. These lines said
@@ -6243,9 +6257,9 @@ jobs:
         # ENFORCED from VERIFY-035. Gates, all exact:
         #   (0) a summary exists
         #   (1) zero Failed / Invalid / Stepout
-        #   (2) proved line == 4788 / 4840   (VERIFY-039 G3 ratchet; G2: 4785 / 4837; G3 predicted 4790 / 4840)
-        #   (3) Timeout + Unknown == 52   (VERIFY-039 G2; unchanged at G3, which predicted 50; F4: 58)
-        #   (4) roll-call: the unproved names == the 52 pinned below, by
+        #   (2) proved line == 4788 / 4842   (VERIFY-039 G13 predicted: two goals added, both unproved; G3 ratchet: 4788 / 4840; G2: 4785 / 4837; G3 predicted 4790 / 4840)
+        #   (3) Timeout + Unknown == 54   (VERIFY-039 G13 predicted: 52 -> 54; G2: 52, unchanged at G3, which predicted 50; F4: 58)
+        #   (4) roll-call: the unproved names == the 54 pinned below, by
         #       set equality (nothing missing, nothing extra; own == 0)
         # A ratchet edits (2), (3) and the INHERITED roll-call together.
         run: |
@@ -6277,7 +6291,7 @@ jobs:
           echo "==============================================="
           echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
-          echo "  pinned: 4788 / 4840, 52 unproved, all inherited (VERIFY-035; VERIFY-036 F1, F3, F4, F5; VERIFY-039 G2; G3 added three proved goals)"
+          echo "  pinned: 4788 / 4842, 54 unproved, all inherited (VERIFY-035; VERIFY-036 F1, F3, F4, F5; VERIFY-039 G2; G3 added three proved goals; G13 two unproved)"
           echo "==============================================="
           echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
           grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
@@ -6308,7 +6322,10 @@ jobs:
             grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
             grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/sb_all.txt
             # P2's predicted inherited set, by name: frama-c-arena's 79 pinned
-            # names verbatim + borrow.h's 2 own memcmp-danglingness goals.
+            # names verbatim + borrow.h's 2 own memcmp-danglingness goals,
+            # 81 when written and 52 after the closures the echo below lists;
+            # 54 since VERIFY-039 G13's repair added borrow.h's 2 at
+            # borrowed_str_eq's call to str_equal.
             INHERITED=(
             "typed_cast_align_down_ensures"
             "typed_cast_align_padding_ensures"
@@ -6317,6 +6334,8 @@ jobs:
             "typed_cast_arena_alloc_zero_ensures_3_part1"
             "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
             "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
             "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
             "typed_cast_bytes_equal_call_memcmp_requires_valid_s1"
@@ -6378,9 +6397,9 @@ jobs:
             comm -23 /tmp/sb_own.txt /tmp/sb_grouped.txt > /tmp/sb_other.txt
             echo ""
             echo "  ================ EVIDENCE (families from the arc, VERIFY-031..035) ================"
-            echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 52 pinned (run 1's 81, less VERIFY-036 F1, F3, F4, F5 and VERIFY-039 G2)"
+            echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 54 pinned (run 1's 81, less VERIFY-036 F1, F3, F4, F5 and VERIFY-039 G2, plus G13's 2)"
             echo "      predicted but not observed: $(wc -l < /tmp/sb_inh_missing.txt)"; show /tmp/sb_inh_missing.txt
-            echo "  own (everything outside the 52): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run 3: 3, VERIFY-033 pred: 0)"
+            echo "  own (everything outside the 54): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run 3: 3, VERIFY-033 pred: 0)"
             echo "  A2  init_arena (VERIFY-033 F3 pred: none — run 3 had 3):"
             show /tmp/sb_ia.txt
             echo "  G1/G6 helper seam: no_overlap, add_pos, mem_copy (pred: none):"
@@ -6401,14 +6420,14 @@ jobs:
               echo "  ================ VERIFY-035 GATES (ENFORCED) ================"
               BAD=$((F + I + S))
               if [ "${BAD}" -ne 0 ]; then note_fail "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."; else echo "  (1) Failed/Invalid/Stepout: 0  OK"; fi
-              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4788 / 4840"; then
-                note_fail "FAIL (2): proved-goal summary changed (pinned: 4788 / 4840). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
-              else echo "  (2) proved: 4788 / 4840  OK"; fi
-              if [ "$((T + U))" -ne 52 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 52."; else echo "  (3) unproved count: 52  OK"; fi
+              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4788 / 4842"; then
+                note_fail "FAIL (2): proved-goal summary changed (pinned: 4788 / 4842). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
+              else echo "  (2) proved: 4788 / 4842  OK"; fi
+              if [ "$((T + U))" -ne 54 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 54."; else echo "  (3) unproved count: 54  OK"; fi
               NMISS=$(wc -l < /tmp/sb_inh_missing.txt); NOWN=$(wc -l < /tmp/sb_own.txt)
               if [ "${NMISS}" -ne 0 ] || [ "${NOWN}" -ne 0 ]; then
-                note_fail "FAIL (4): roll-call — pinned 52, missing ${NMISS}, unpinned ${NOWN} (lists above)."
-              else echo "  (4) roll-call: pinned 52, missing 0, unpinned 0  OK"; fi
+                note_fail "FAIL (4): roll-call — pinned 54, missing ${NMISS}, unpinned ${NOWN} (lists above)."
+              else echo "  (4) roll-call: pinned 54, missing 0, unpinned 0  OK"; fi
               echo "  ============================================================="
             fi
           fi

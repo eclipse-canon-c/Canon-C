@@ -406,6 +406,10 @@ static inline u8* bytes_at(bytes_t b, usize i) {
  * @note On the compare path both views must contain initialized bytes
  *       (ACSL \initialized precondition; the Valgrind CI job enforces
  *       the same property at runtime).
+ * @note On the compare path no byte of either view may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  *
  * @sa str_equal()
  */
@@ -416,6 +420,12 @@ static inline u8* bytes_at(bytes_t b, usize i) {
                        a.ptr != \null && b.ptr != \null && a.len > 0) ==>
              (\initialized((char*)a.ptr + (0 .. (integer)a.len - 1)) &&
               \initialized((char*)b.ptr + (0 .. (integer)b.len - 1)));
+    requires no_dangling_a: (a.len == b.len && a.ptr != b.ptr &&
+                             a.ptr != \null && b.ptr != \null && a.len > 0) ==>
+             \forall integer i; 0 <= i < a.len ==> !\dangling((char*)a.ptr + i);
+    requires no_dangling_b: (a.len == b.len && a.ptr != b.ptr &&
+                             a.ptr != \null && b.ptr != \null && a.len > 0) ==>
+             \forall integer i; 0 <= i < b.len ==> !\dangling((char*)b.ptr + i);
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  a.len != b.len ==> \result == \false;
@@ -617,6 +627,10 @@ static inline bool str_is_empty(str_t s) {
  * @note On the compare path both views must contain initialized bytes
  *       (ACSL \initialized precondition; the Valgrind CI job enforces
  *       the same property at runtime).
+ * @note On the compare path no byte of either view may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  *
  * @sa bytes_equal()
  */
@@ -627,6 +641,12 @@ static inline bool str_is_empty(str_t s) {
                        a.ptr != \null && b.ptr != \null && a.len > 0) ==>
              (\initialized((char*)a.ptr + (0 .. (integer)a.len - 1)) &&
               \initialized((char*)b.ptr + (0 .. (integer)b.len - 1)));
+    requires no_dangling_a: (a.len == b.len && a.ptr != b.ptr &&
+                             a.ptr != \null && b.ptr != \null && a.len > 0) ==>
+             \forall integer i; 0 <= i < a.len ==> !\dangling((char*)a.ptr + i);
+    requires no_dangling_b: (a.len == b.len && a.ptr != b.ptr &&
+                             a.ptr != \null && b.ptr != \null && a.len > 0) ==>
+             \forall integer i; 0 <= i < b.len ==> !\dangling((char*)b.ptr + i);
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  a.len != b.len ==> \result == \false;
@@ -646,6 +666,10 @@ static inline bool str_equal(str_t a, str_t b) {
  * @note On the compare path the first prefix.len bytes of both views must
  *       contain initialized bytes (ACSL \initialized precondition; the
  *       Valgrind CI job enforces the same property at runtime).
+ * @note On the compare path none of those bytes may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@
     requires str_valid(s);
@@ -654,6 +678,13 @@ static inline bool str_equal(str_t a, str_t b) {
                        prefix.len > 0) ==>
              (\initialized((char*)s.ptr + (0 .. (integer)prefix.len - 1)) &&
               \initialized((char*)prefix.ptr + (0 .. (integer)prefix.len - 1)));
+    requires no_dangling_s: (prefix.len <= s.len && prefix.ptr != \null &&
+                             prefix.len > 0) ==>
+             \forall integer i; 0 <= i < prefix.len ==> !\dangling((char*)s.ptr + i);
+    requires no_dangling_prefix: (prefix.len <= s.len && prefix.ptr != \null &&
+                                  prefix.len > 0) ==>
+             \forall integer i; 0 <= i < prefix.len ==>
+               !\dangling((char*)prefix.ptr + i);
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  prefix.len > s.len ==> \result == \false;
@@ -673,6 +704,10 @@ static inline bool str_starts_with(str_t s, str_t prefix) {
  *       suffix must contain initialized bytes (ACSL \initialized
  *       precondition; the Valgrind CI job enforces the same property at
  *       runtime). Only the compared window of s carries the obligation.
+ * @note On the compare path none of those bytes may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@
     requires str_valid(s);
@@ -682,6 +717,14 @@ static inline bool str_starts_with(str_t s, str_t prefix) {
              (\initialized((char*)s.ptr + ((integer)s.len - (integer)suffix.len ..
                                             (integer)s.len - 1)) &&
               \initialized((char*)suffix.ptr + (0 .. (integer)suffix.len - 1)));
+    requires no_dangling_s: (suffix.len <= s.len && suffix.ptr != \null &&
+                             suffix.len > 0) ==>
+             \forall integer i; s.len - suffix.len <= i < s.len ==>
+               !\dangling((char*)s.ptr + i);
+    requires no_dangling_suffix: (suffix.len <= s.len && suffix.ptr != \null &&
+                                  suffix.len > 0) ==>
+             \forall integer i; 0 <= i < suffix.len ==>
+               !\dangling((char*)suffix.ptr + i);
     assigns  \nothing;
     ensures  \result == \true || \result == \false;
     ensures  suffix.len > s.len ==> \result == \false;

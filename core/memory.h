@@ -629,6 +629,10 @@ static inline void mem_set(void* ptr, int value, usize size) {
  * @note On the compare path both regions must contain initialized bytes
  *       (ACSL \initialized precondition; the Valgrind CI job enforces
  *       the same property at runtime).
+ * @note On the compare path no byte of either region may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@
   requires a == \null || b == \null || size == 0 || a == b ||
@@ -656,6 +660,10 @@ static inline void mem_set(void* ptr, int value, usize size) {
     assumes a != b && a != \null && b != \null && size > 0;
     requires init_a: \initialized((char*)a + (0 .. (integer)size - 1));
     requires init_b: \initialized((char*)b + (0 .. (integer)size - 1));
+    requires no_dangling_a:
+      \forall integer i; 0 <= i < size ==> !\dangling((char*)a + i);
+    requires no_dangling_b:
+      \forall integer i; 0 <= i < size ==> !\dangling((char*)b + i);
 
   complete behaviors;
   disjoint behaviors;
@@ -675,6 +683,10 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
  * @note On the compare path both regions must contain initialized bytes
  *       (ACSL \initialized precondition; the Valgrind CI job enforces
  *       the same property at runtime).
+ * @note On the compare path no byte of either region may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@
   requires a == \null || b == \null || size == 0 || a == b ||
@@ -698,6 +710,10 @@ static inline int mem_compare(const void* a, const void* b, usize size) {
     assumes a != b && a != \null && b != \null && size > 0;
     requires init_a: \initialized((char*)a + (0 .. (integer)size - 1));
     requires init_b: \initialized((char*)b + (0 .. (integer)size - 1));
+    requires no_dangling_a:
+      \forall integer i; 0 <= i < size ==> !\dangling((char*)a + i);
+    requires no_dangling_b:
+      \forall integer i; 0 <= i < size ==> !\dangling((char*)b + i);
 
   complete behaviors;
   disjoint behaviors;
@@ -989,6 +1005,10 @@ static inline void mem_set_bytes(bytes_t b, int value) {
  * @note On the compare path both regions must contain initialized bytes
  *       (ACSL \initialized precondition; the Valgrind CI job enforces
  *       the same property at runtime).
+ * @note On the compare path no byte of either region may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@
   requires a.ptr == \null || b.ptr == \null || a.len == 0 || b.len == 0 ||
@@ -1020,6 +1040,10 @@ static inline void mem_set_bytes(bytes_t b, int value) {
             a.ptr != \null && b.ptr != \null && a.len > 0;
     requires init_a: \initialized((char*)a.ptr + (0 .. (integer)a.len - 1));
     requires init_b: \initialized((char*)b.ptr + (0 .. (integer)b.len - 1));
+    requires no_dangling_a:
+      \forall integer i; 0 <= i < a.len ==> !\dangling((char*)a.ptr + i);
+    requires no_dangling_b:
+      \forall integer i; 0 <= i < b.len ==> !\dangling((char*)b.ptr + i);
 
   complete behaviors;
   disjoint behaviors;

@@ -87,7 +87,12 @@ jobs:
           # vec_struct 5418 / 5578 and 160.
           - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "207 / 215",   unproved: 8   }
           - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "222 / 230",   unproved: 8   }
-          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2777 / 2796", unproved: 19  }
+          # borrow: VERIFY-039 G13 predicted pin. borrowed_str_eq requires, as
+          # str_equal now does, that no byte compared holds a dangling
+          # address; WP does not implement \dangling, so the two goals at its
+          # call for str_equal's no_dangling_a and no_dangling_b are added,
+          # unproved. Before: 2777 / 2796 and 19.
+          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2777 / 2798", unproved: 21  }
           # vec: +20 at VERIFY-033/034 (arena_alloc{,_aligned} frame clauses,
           # 2 clauses x 2 functions x 5 split parts; CC #13 measured 5394/5586,
           # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
@@ -176,7 +181,7 @@ jobs:
           echo "  Total unproved (T+U): $(wc -l < /tmp/cc_resid.txt)"
 
           # baseline: every roll-call array in the driver job. Most jobs keep one
-          # CHECKS=( ... ); borrow keeps INHERITED=( 17 ) and OWN_CHECKS=( 2 ).
+          # CHECKS=( ... ); borrow keeps INHERITED=( 17 ) and OWN_CHECKS=( 4 ).
           # Union them all, bounded to the job's own section of the workflow.
           START=$(grep -n "^  ${JOB}:" "${WF}" | head -1 | cut -d: -f1)
           END=$(awk -v s="${START}" 'NR>s && /^  [a-z0-9-]+:$/ {print NR; exit}' "${WF}")

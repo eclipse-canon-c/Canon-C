@@ -683,6 +683,12 @@ static inline usize borrowed_str_len(const borrowed_str *b)
  * @param a First borrowed_str (by value).
  * @param b Second borrowed_str (by value).
  * @return  1 if str_equal(a.str, b.str), 0 otherwise.
+ *
+ * @note On the path where str_equal compares, both views must contain
+ *       initialized bytes and no byte of either may hold a dangling
+ *       address, such as the bytes of a pointer to a freed block (ACSL
+ *       \initialized and \dangling preconditions, as str_equal's; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@ requires ok_a: str_valid(a.str);
     requires ok_b: str_valid(b.str);
@@ -691,6 +697,16 @@ static inline usize borrowed_str_len(const borrowed_str *b)
        a.str.ptr != \null && b.str.ptr != \null && a.str.len > 0) ==>
         (\initialized((char*)a.str.ptr + (0 .. (integer)a.str.len - 1)) &&
          \initialized((char*)b.str.ptr + (0 .. (integer)b.str.len - 1)));
+    requires no_dangling_a:
+      (a.str.len == b.str.len && a.str.ptr != b.str.ptr &&
+       a.str.ptr != \null && b.str.ptr != \null && a.str.len > 0) ==>
+        \forall integer i; 0 <= i < a.str.len ==>
+          !\dangling((char*)a.str.ptr + i);
+    requires no_dangling_b:
+      (a.str.len == b.str.len && a.str.ptr != b.str.ptr &&
+       a.str.ptr != \null && b.str.ptr != \null && a.str.len > 0) ==>
+        \forall integer i; 0 <= i < b.str.len ==>
+          !\dangling((char*)b.str.ptr + i);
     assigns \nothing;
     ensures bool_result:  \result == \true || \result == \false;
     ensures len_mismatch: a.str.len != b.str.len ==> \result == \false;
@@ -960,6 +976,12 @@ static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
  * @param b Second borrowed_bytes (by value).
  * @return  1 if regions have equal length and identical byte content,
  *          0 otherwise.
+ *
+ * @note On the compare path both regions must contain initialized bytes
+ *       and no byte of either may hold a dangling address, such as the
+ *       bytes of a pointer to a freed block (ACSL \initialized and
+ *       \dangling preconditions, as memcmp's in Frama-C's libc; WP does
+ *       not implement \dangling, see VERIFY-039 G13).
  */
 /*@ requires ok_a: cbytes_invariant(a.bytes);
     requires ok_b: cbytes_invariant(b.bytes);
@@ -975,6 +997,14 @@ static inline bool borrowed_bytes_is_valid(const borrowed_bytes *b)
     requires init_b:
       b.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
         \initialized(b.bytes.ptr + (0 .. b.bytes.len - 1));
+    requires no_dangling_a:
+      a.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
+        \forall integer i; 0 <= i < a.bytes.len ==>
+          !\dangling((char*)a.bytes.ptr + i);
+    requires no_dangling_b:
+      b.bytes.len > 0 && a.bytes.ptr != b.bytes.ptr ==>
+        \forall integer i; 0 <= i < b.bytes.len ==>
+          !\dangling((char*)b.bytes.ptr + i);
     assigns \nothing;
     ensures content_eq_def:
       (\result != 0) <==>
