@@ -7,7 +7,9 @@ explicit targets) and the main CI ignores `tools/**`. Each becomes a
 regression test when its fix lands. The G4 probe is also run under WP, by its
 own workflow, `.github/workflows/g4-probe.yml`, and the second G11 probe by
 `.github/workflows/g11-probe.yml`, through `g11_probe.py`, which runs WP and
-reads its output against the prediction.
+reads its output against the prediction, and the G13 probe by
+`.github/workflows/g13-probe.yml`, through `g13_probe.py`, which runs Eva and
+WP and reads them the same way.
 
 Run from the repository root. Exact commands are in each file's header. The
 G1 probes use the bare `-CC` driver `vmacros/vdrivers/vec_cc_experiment.h`, the
@@ -19,7 +21,8 @@ bare `-CC` drivers for `vec<int>` and `vec<Rec>`; the G5 and G7 probes include
 probe the bare `-CC` driver for `vec<int>`, and the G11 probes the drivers
 `vmacros/vdrivers/option_verify.h` and `result_verify.h`, and
 `semantics/option/option_defn.h`, `semantics/result/result_defn.h` and
-`semantics/error.h`.
+`semantics/error.h`; the G13 probe includes `core/memory.h`, `core/slice.h`
+and `semantics/borrow.h`.
 
 | Probe | Finding | Filing | Expected today |
 |---|---|---|---|
@@ -47,8 +50,9 @@ probe the bare `-CC` driver for `vec<int>`, and the G11 probes the drivers
 | `p_vec_append_src_len.c` | G9 | `append_array`'s ensures 4 (`items[\old(len) + k] == src[k]`): a residual at `int` in `frama-c-vec` and `cc-vec`, filed under diag.h's block (the main pass, batch 1), true on LP64; and `extend`'s ensures 3, the same clause, proved from it: false on ILP32 for a `src` over the vec's `len` | the vec and its buffer in separate heap blocks, `len` 0, `capacity` 4, `append_array(v, (const int *)&v->len, 1)`: ensures 1 and 2 hold, ensures 4 `VIOLATED` (`items[0]` 0, `src[0]` 1); exit 1, sanitizers clean, both build configurations, on ILP32 (in the default build `mem_copy`'s check compares the two pointers across objects, which C leaves undefined; the proof configuration has none); on LP64 "not applicable", exit 0. Since G9's repair the call is outside `append_array`'s contract, which requires `src` to be separated from the vec; run-time behaviour unchanged |
 | `p_combinator_callback.c` | G11 | VERIFY-014 and VERIFY-015, Category 1, and the fresh instantiations filed under them: the combinators' frame, termination and exit goals and their run-time checks on the pointer (184 goals in twelve units), false for some admitted callback | `option_int_map` and `result_int_VErr_map` with a callback writing a global: the global changed, `assigns \nothing` `VIOLATED`; `option_int_map` with a callback calling `exit(3)`, in a child: status 3 from inside the call, the default `exits \false` `VIOLATED`; with a callback looping on a volatile counter, in a child: not returned when `SIGALRM` stops it after 1 s, the default `terminates \true` `VIOLATED`; `client()`, whose `ensures g == 0` WP 25 proved from `map`'s frame: `g` is 1, `VIOLATED`; exit 1, sanitizers clean, gcc and clang, `-O0` and `-O2`, both build configurations, LP64 and ILP32. Since G11's repair of `option_verify.h` and `result_verify.h`, and then of the macro bodies read under `-CC`, no contract a verified unit reads makes these claims (the `DECLARE_*` declarations carry none, a limit the record states and their headers say); run-time behaviour unchanged, and WP 25 proves 4 of `client()`'s 8 goals, not its `ensures g == 0` |
 | `p_combinator_contracts.c` | G11 | the contracts G11's decision recommends for the eleven combinators, before any surface is repaired: each requires its pointer valid where it calls it, claims termination and no exit only where it calls none, and states its empty frame only in the behaviours that call none | at run time, every combinator on its non-calling branch with null pointers, which the new preconditions admit, and on each calling branch with a callback writing a global, at `option<int>` and `result<int, VErr>`, and on the non-calling branches at `result<bool, Error>`: the behaviours' postconditions, the frame where one is stated, and the calling conditions hold in all 32 checks; exit 0, sanitizers clean, gcc and clang, `-O0` and `-O2`, both build configurations, LP64 and ILP32. Under WP (`g11-probe.yml`), predicted before it ran: only the 18 run-time checks on the pointer stay unproved in the combinators, and a client calling on the calling branch keeps five kinds of goal unproved, on the other branch two (VERIFY-039 G11). Since every surface is repaired, the workflow's comparison checks that each unit's combinators have these contracts' goals, property by property |
+| `p_dangling_calls.c`, `p_dangling_forms.c` | G13 | VERIFY-008 Category 3, VERIFY-007 Category 1 and VERIFY-016 Category 1: the danglingness preconditions at memcmp's calls (16 goals in fourteen units and `frama-c-arena-32`), false for a call over bytes that hold a freed address | for Frama-C, not run: both build with gcc and clang at `-std=c99 -c` and have no `main()`. Under Eva (`g13-probe.yml`), predicted before it ran: from each of `p_dangling_calls.c`'s nine entry points, which free a block and compare the bytes of two pointers to it through `mem_compare`, `mem_equal`, `mem_equal_bytes`, `bytes_equal`, `str_equal`, `str_starts_with`, `str_ends_with`, `borrowed_bytes_eq` or `borrowed_str_eq`, memcmp's `danglingness,s1` invalid and every other precondition valid. Under WP, on `p_dangling_forms.c`'s seven functions: libc's `non_escaping` required with a positive length proves `\false`, required of one pointer proves it of another, and follows from a zero length, so WP reads it as `n <= 0`; the quantifier written out proves nothing, and the memcmp goals stay unproved either way; under Eva, from its two entry points, the quantifier written out rejects the call over freed bytes at `recommended`'s boundary and admits the call over two `int`s (VERIFY-039 G13) |
 
-All twenty-four build with gcc and clang at `-std=c99`
+The twenty-four with a `main()` build with gcc and clang at `-std=c99`
 (`p_try_alloc_assigns.c` uses C11's `_Alignas`, accepted there as an
 extension; `p_pool_reset_call.c` also needs `-finstrument-functions`, which
 both accept; `p_combinator_callback.c` uses POSIX's `fork`, `waitpid` and

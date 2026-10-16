@@ -1,0 +1,74 @@
+name: G13 probe (VERIFY-039, memcmp's danglingness precondition under Eva and WP 29)
+
+# ---------------------------------------------------------------------------
+# VERIFY-039 G13 — an experiment, not a gate. It runs when the probe, its
+# script, this file or the toolchain pins change, and on demand; it never
+# touches the enforced jobs, and its result is scored in docs/deviations.md,
+# VERIFY-039 G13.
+#
+# QUESTION: memcmp's libc contract requires that no byte it compares hold
+# (bits of) a dangling address (danglingness:s1/s2, non_escaping). Do the
+# shipped contracts of the eight functions that call memcmp admit a call
+# that makes it false? And how does WP 29 translate the requirement, as
+# libc's predicate and as the quantifier written out, where a contract
+# states it?
+#
+# PROBE: tools/probes/verify-039/p_dangling_calls.c has nine entry points,
+# each comparing the bytes of two pointers to a freed block through one of
+# mem_compare, mem_equal, mem_equal_bytes, bytes_equal, str_equal,
+# str_starts_with, str_ends_with, borrowed_bytes_eq and borrowed_str_eq;
+# Eva runs from each. tools/probes/verify-039/p_dangling_forms.c has six
+# functions that state the requirement each way; WP runs on it as the
+# Typed+Cast units run their headers. tools/probes/verify-039/g13_probe.py
+# runs both and reads them.
+#
+# PREDICTED before it ran (docs/deviations.md, VERIFY-039, "G13 — committed
+# prediction for the probe"). The two report steps print MATCH or MISS,
+# with its confidence, for each part. The log needs a sign-in, so each step
+# also posts its verdicts, and what each run found, as notices on the run
+# page, and an error annotation for each MISS; each exits 1 on a MISS.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'tools/probes/verify-039/p_dangling_calls.c'
+      - 'tools/probes/verify-039/p_dangling_forms.c'
+      - 'tools/probes/verify-039/g13_probe.py'
+      - '.github/workflows/g13-probe.yml'
+      - '.github/actions/framac-setup/**'
+  workflow_dispatch:
+
+jobs:
+  g13-probe:
+    # Pinned, not ubuntu-latest: see the runner note in
+    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "Eva from the nine calls; WP on the two forms"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-039/g13_probe.py run
+
+      - name: "Report E: the calls under Eva"
+        if: ${{ !cancelled() }}
+        run: python3 tools/probes/verify-039/g13_probe.py report E
+
+      - name: "Report W: the two forms under WP 29"
+        if: ${{ !cancelled() }}
+        run: python3 tools/probes/verify-039/g13_probe.py report W
+
+      - name: Upload Eva and WP output (G13 probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: g13-probe
+          path: |
+            eva_*.txt
+            wp_forms*
+          retention-days: 90
