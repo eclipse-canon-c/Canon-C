@@ -30,7 +30,9 @@
  * - NULL discipline: Every function documents its NULL behavior - null-tolerant
  *   or null-intolerant (see "NULL handling" below)
  * - Overflow safety: Arithmetic is overflow-checked before it happens - no
- *   silent wraparound on offsets
+ *   silent wraparound on offsets (align_padding's 0 - n wraps by design:
+ *   the wrap leaves the value modulo align unchanged, and the mask keeps
+ *   only that; VERIFY-039 G16)
  * - Type neutrality: All operations work on void* or u8* - no type puns needed
  *
  * NULL handling:
@@ -104,7 +106,7 @@
  *
  * Typical use cases:
  * ----------------------------------------------------------------------------
- * - Arena bump allocation: ptr_align_up + ptr_offset
+ * - Arena bump allocation: ptr_align_padding + ptr_offset
  * - Pool block indexing:   ptr_elem(buffer, i, block_size)
  * - Slice construction:    ptr_span(end, start)
  * - Bounds checking:       ptr_in_range(p, buf, buf + sz)
@@ -394,11 +396,13 @@ static inline usize align_down(usize n, usize align) {
  * @return Padding bytes such that (n + result) is a multiple of align
  *
  * @pre is_power_of_two(align)
- * @pre n <= CANON_USIZE_MAX - (align - 1) inherited from align_up
  *
  * @remark Always returns a value in [0, align - 1]
  * @remark Returns 0 when n is already aligned
- * @remark Equivalent to align_up(n, align) - n
+ * @remark Equivalent to align_up(n, align) - n wherever align_up is
+ *         defined; computed as (0 - n) & (align - 1), which needs no
+ *         bound on n, so an n within align - 1 of CANON_USIZE_MAX is
+ *         admitted too (VERIFY-039 G16)
  *
  * @note The ensures clause specifies the formula only. See align_up for
  *       rationale. VERIFY-006 in docs/deviations.md.
@@ -415,12 +419,11 @@ static inline usize align_down(usize n, usize align) {
 /*@
     requires align > 0;
     requires (align & (align - 1)) == 0;
-    requires n <= CANON_USIZE_MAX - (align - 1);
     assigns  \nothing;
     ensures  \result == ((n + align - 1) & ~(align - 1)) - n;
  */
 static inline usize align_padding(usize n, usize align) {
-    return align_up(n, align) - n;
+    return (0u - n) & (align - 1u);
 }
 
 /* ============================================================================
@@ -436,13 +439,23 @@ static inline usize align_padding(usize n, usize align) {
  * @param p     Pointer to align (may be NULL)
  * @param align Alignment requirement (must be a nonzero power of two)
  *
- * @return Aligned pointer >= p, or NULL if p == NULL
+ * @return p's address rounded up to a multiple of align, as a pointer, or
+ *         NULL if p == NULL
  *
  * @pre is_power_of_two(align)
+ * @pre p == NULL, or p's address is at most CANON_USIZE_MAX - (align - 1):
+ *      above it the rounding wraps past the top of the address space, to 0
  *
  * @remark Null-tolerant: NULL in -> NULL out
- * @remark Useful for arena bump allocation: align the cursor before stamping
- *         an object with nontrivial alignment
+ * @remark For arena bump allocation use ptr_align_padding, as arena.h
+ *         does: check the padding and the size against the space left
+ *         before forming the pointer (VERIFY-036 F3). A result rounded past
+ *         a buffer's end can be compared with it only as an integer
+ *         address: C orders two pointers only within one object
+ * @remark The result is an address, not a pointer into p's object: rounding
+ *         up may pass the end of p's object, and the result then points
+ *         into whatever follows, or nowhere. The postcondition states the
+ *         address (VERIFY-039 G16).
  *
  * @note The nonnull behavior does not prove the result is non-NULL because
  *       WP cannot track non-null through the uintptr_t round-trip. This is
@@ -451,9 +464,9 @@ static inline usize align_padding(usize n, usize align) {
  *
  * Example:
  * @code
- *   void *raw     = arena_cur;
- *   void *aligned = ptr_align_up(raw, 16);
- *   arena_cur     = ptr_offset(aligned, sizeof(MyStruct));
+ *   unsigned char buf[64 + 15];  // 15 spare bytes for the rounding
+ *   void *aligned = ptr_align_up(buf, 16);
+ *   // aligned is 16-aligned, with at least 64 bytes of buf from it
  * @endcode
  *
  * @sa ptr_align_down(), ptr_is_aligned(), align_up()
@@ -461,15 +474,16 @@ static inline usize align_padding(usize n, usize align) {
 /*@
     requires align > 0;
     requires (align & (align - 1)) == 0;
+    requires fits: p == \null ||
+                   (usize)(uintptr_t)p <= CANON_USIZE_MAX - (align - 1);
     assigns  \nothing;
     behavior null:
         assumes p == \null;
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures  same_base: \base_addr((char*)\result) == \base_addr((char*)p);
-        ensures  not_below: (char*)\result >= (char*)p;
-        ensures  bounded:   (char*)\result - (char*)p <= (align - 1);
+        ensures  address: (usize)(uintptr_t)\result ==
+                          (((usize)(uintptr_t)p + align - 1) & ~(align - 1));
     complete behaviors;
     disjoint behaviors;
  */
@@ -485,13 +499,18 @@ static inline void* ptr_align_up(void* p, usize align) {
  * @param p     Pointer to align (may be NULL)
  * @param align Alignment requirement (must be a nonzero power of two)
  *
- * @return Aligned pointer <= p, or NULL if p == NULL
+ * @return p's address rounded down to a multiple of align, as a pointer,
+ *         or NULL if p == NULL
  *
  * @pre is_power_of_two(align)
  *
  * @remark Null-tolerant: NULL in -> NULL out
- * @remark Cannot underflow past NULL - always stays within the original
- *         allocation if p was inside one
+ * @remark The result's address is at most p's and does not wrap, but it need
+ *         not lie in p's allocation: rounding down may cross the start of
+ *         p's object, as ptr_align_down(p, 4096) does for a p in a heap
+ *         block's first page unless the block begins on a page, and the
+ *         result then points into whatever precedes, or nowhere. The
+ *         postcondition states the address (VERIFY-039 G16).
  *
  * @note See ptr_align_up for WP limitation note. VERIFY-006.
  *
@@ -512,9 +531,8 @@ static inline void* ptr_align_up(void* p, usize align) {
         ensures \result == \null;
     behavior nonnull:
         assumes p != \null;
-        ensures  same_base: \base_addr((char*)\result) == \base_addr((char*)p);
-        ensures  not_above: (char*)\result <= (char*)p;
-        ensures  bounded:   (char*)p - (char*)\result <= (align - 1);
+        ensures  address: (usize)(uintptr_t)\result ==
+                          ((usize)(uintptr_t)p & ~(align - 1));
     complete behaviors;
     disjoint behaviors;
  */
