@@ -561,11 +561,14 @@ static inline borrowed_str borrowed_str_from_lifetime(
  * @param cstr   Null-terminated string (may be NULL, yielding empty view).
  * @param source Address of the owning object (debug tag; may be NULL).
  * @return       A borrowed_str wrapping cstr via str_from_cstr.
+ * @pre          cstr is NULL or a readable null-terminated string, as
+ *               str_from_cstr requires (VERIFY-039 G17).
  *
  * String literals have static lifetime; this constructor produces an
  * untracked borrow appropriate for that case.
  */
-/*@ assigns \nothing;
+/*@ requires null_or_string: cstr == \null || valid_read_string(cstr);
+    assigns \nothing;
     ensures source_stored: \result.source == source;
     ensures null_cstr_empty:
       cstr == \null ==> \result.str.ptr == \null && \result.str.len == 0;

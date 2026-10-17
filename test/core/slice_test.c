@@ -201,7 +201,7 @@ static void test_bytes_equal_zero_len_distinct_ptrs(void)
      * Same-pointer fast path does not fire (different ptrs).
      * Length-mismatch path does not fire (both 0).
      * `!a.ptr || !b.ptr` is false (both non-NULL).
-     * Reaches memcmp with n==0, which is defined to return 0. */
+     * Returns at the zero-length check, before memcmp (VERIFY-039 G17). */
     u8      buf_a[1] = {0};
     u8      buf_b[1] = {0};
     bytes_t a        = bytes_from(buf_a, 0);
@@ -415,6 +415,20 @@ static void test_str_equal_both_empty(void)
      * for the corresponding bytes_t case. */
     str_t a = str_empty();
     str_t b = str_empty();
+    EXPECT(str_equal(a, b));
+}
+
+static void test_str_equal_zero_len_distinct_ptrs(void)
+{
+    /* Two zero-length views over different non-NULL buffers: equal
+     * lengths, distinct non-NULL pointers, so str_equal returns at its
+     * zero-length check, before memcmp (VERIFY-039 G17). The str_t
+     * counterpart of test_bytes_equal_zero_len_distinct_ptrs. */
+    static const char buf_a[] = "a";
+    static const char buf_b[] = "b";
+    str_t a = str_from(buf_a, 0);
+    str_t b = str_from(buf_b, 0);
+    EXPECT(a.ptr != b.ptr);   /* precondition of the test */
     EXPECT(str_equal(a, b));
 }
 
@@ -896,6 +910,7 @@ int main(void)
     test_str_equal_different();
     test_str_equal_different_lengths();
     test_str_equal_both_empty();
+    test_str_equal_zero_len_distinct_ptrs();
     test_str_equal_one_null();
     test_str_starts_with_true();
     test_str_starts_with_false();

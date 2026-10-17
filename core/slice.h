@@ -410,6 +410,9 @@ static inline u8* bytes_at(bytes_t b, usize i) {
  *       address, such as the bytes of a pointer to a freed block (ACSL
  *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
  *       not implement \dangling, see VERIFY-039 G13).
+ * @note At a zero length with two distinct non-null pointers the function
+ *       returns true before memcmp, which libc's contract asks, even for
+ *       zero bytes, to be given pointers into blocks (VERIFY-039 G17).
  *
  * @sa str_equal()
  */
@@ -435,6 +438,7 @@ static inline bool bytes_equal(bytes_t a, bytes_t b) {
     if (a.len != b.len) { return false; }
     if (a.ptr == b.ptr) { return true; }  /* same pointer — covers two bytes_empty() */
     if (!a.ptr || !b.ptr) { return false; }
+    if (a.len == 0u) { return true; }     /* no bytes to compare (VERIFY-039 G17) */
     return memcmp(a.ptr, b.ptr, a.len) == 0;
 }
 
@@ -566,6 +570,10 @@ static inline str_t str_from(const char* ptr, usize len) {
  * @return str_t covering cstr through (but not including) the null
  *         terminator, or empty str_t if cstr is NULL
  *
+ * @pre cstr is NULL or a readable null-terminated string: the contract
+ *      states it as Frama-C's libc predicate valid_read_string, which
+ *      strlen requires (VERIFY-039 G17)
+ *
  * @remark The contract specifies pointer and length-equality but does
  *         not constrain `\result.len` to `strlen(cstr)` because the
  *         project's WP setup has not validated the strlen logic
@@ -573,6 +581,7 @@ static inline str_t str_from(const char* ptr, usize len) {
  *         VERIFY-007.
  */
 /*@
+    requires null_or_string: cstr == \null || valid_read_string(cstr);
     assigns  \nothing;
     ensures  str_invariant(\result);
     behavior null_input:
@@ -631,6 +640,9 @@ static inline bool str_is_empty(str_t s) {
  *       address, such as the bytes of a pointer to a freed block (ACSL
  *       \dangling precondition, as memcmp's in Frama-C's libc; WP does
  *       not implement \dangling, see VERIFY-039 G13).
+ * @note At a zero length with two distinct non-null pointers the function
+ *       returns true before memcmp, which libc's contract asks, even for
+ *       zero bytes, to be given pointers into blocks (VERIFY-039 G17).
  *
  * @sa bytes_equal()
  */
@@ -656,6 +668,7 @@ static inline bool str_equal(str_t a, str_t b) {
     if (a.len != b.len) { return false; }
     if (a.ptr == b.ptr) { return true; }
     if (!a.ptr || !b.ptr) { return false; }
+    if (a.len == 0u) { return true; }     /* no bytes to compare (VERIFY-039 G17) */
     return memcmp(a.ptr, b.ptr, a.len) == 0;
 }
 
