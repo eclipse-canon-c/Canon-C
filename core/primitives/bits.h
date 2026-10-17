@@ -304,14 +304,21 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
  * @brief Insert bits into a value at a specific position
  *
  * Inserts the low `count` bits of `src` into `dst` at position `start`.
- * Other bits in `dst` are preserved.
+ * Other bits in `dst` are preserved, except when `count` >= 64 (below).
+ *
+ * Bits that would land past bit 63 are dropped: the field is bits `start`
+ * to min(`start` + `count`, 64) - 1. When `count` >= 64 the result is
+ * `src << start`, and no bit of `dst` is kept, not even those below
+ * `start`. The postconditions state each shift as C computes it, cast to
+ * u64, since ACSL's `<<` does not wrap (VERIFY-039 G15).
  *
  * @param dst Destination value
  * @param src Source bits (only low `count` bits are used)
  * @param start Starting bit position in dst
  * @param count Number of bits to insert
  *
- * @return dst with the specified bits replaced by the low `count` bits of src
+ * @return dst with the specified bits replaced by the low `count` bits of
+ *         src; for `count` >= 64, `src << start` (above)
  *
  * @pre start must be < 64
  *
@@ -332,13 +339,13 @@ static inline u64 bits_extract(u64 value, u32 start, u32 count) {
         ensures \result == dst;
     behavior full_width:
         assumes count >= 64;
-        ensures \result == (src << start);
+        ensures \result == (u64)(src << start);
     behavior normal:
         assumes 0 < count < 64;
         ensures \let m = ((u64)1 << count) - 1;
-                \let shifted_mask = m << start;
+                \let shifted_mask = (u64)(m << start);
                 \result == ((dst & (0xFFFFFFFFFFFFFFFFULL ^ shifted_mask)) |
-                           ((src << start) & shifted_mask));
+                           ((u64)(src << start) & shifted_mask));
     complete behaviors;
     disjoint behaviors;
  */
@@ -625,11 +632,12 @@ static inline u32 bits_fls(u64 value) {
  * // → 0x0000000000000003ULL  (MSB wraps to bit 0, bit 0 shifts to bit 1)
  * ```
  *
- * Example (illustrative 8-bit behavior — mask result yourself):
+ * Example (illustrative: masking is not an 8-bit rotation):
  * ```c
  * u64 val = 0b10110001;
- * u64 rot = bits_rotl(val, 2) & 0xFF;  // → 0b11000110
- * //   high bits 10 wrap to low end → 0b11000110
+ * u64 rot = bits_rotl(val, 2) & 0xFF;  // → 0b11000100
+ * //   the high bits 10 move to bits 8-9, outside the mask, and nothing
+ * //   wraps to the low end; an 8-bit rotation would give 0b11000110
  * ```
  *
  * @sa bits_rotr()
@@ -642,7 +650,7 @@ static inline u32 bits_fls(u64 value) {
     behavior nonzero_shift:
         assumes (shift & 63) != 0;
         ensures \let s = shift & 63;
-                \result == ((value << s) | (value >> (64 - s)));
+                \result == ((u64)(value << s) | (value >> (u64)(64 - s)));
     complete behaviors;
     disjoint behaviors;
  */
@@ -692,7 +700,7 @@ static inline u64 bits_rotl(u64 value, u32 shift) {
     behavior nonzero_shift:
         assumes (shift & 63) != 0;
         ensures \let s = shift & 63;
-                \result == ((value >> s) | (value << (64 - s)));
+                \result == ((value >> s) | (u64)(value << (u64)(64 - s)));
     complete behaviors;
     disjoint behaviors;
  */
