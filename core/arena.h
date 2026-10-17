@@ -505,9 +505,10 @@ static inline void* arena_alloc_aligned_zero(Arena* arena, usize size, usize ali
      Both functions store the allocation into *out whenever out is
      non-NULL, so the default behaviour's assigns lists *out as well as
      *arena. It listed only *arena, which was false for every non-NULL out
-     outside the arena. out must also not point into *arena: C's aliasing
-     rules already keep a void** off Arena's fields, but WP needs the
-     separation to carry arena_invariant across the store.
+     outside the arena. out must also not point into *arena: in allocated
+     storage C lets the store reach Arena's fields, which arena_invariant
+     reads after it, and WP needs the separation to carry the invariant
+     across the store (VERIFY-039 G18 corrected this note).
    ============================================================================ */
 
 /*@

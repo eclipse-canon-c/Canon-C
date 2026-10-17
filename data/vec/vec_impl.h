@@ -395,7 +395,8 @@ linkage VecType fn(void) { \
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_ALLOC(linkage, VecType, fn_alloc, fn_empty, fn_init, type) \
-/*@ assigns \nothing;                                                            \
+/*@ allocates \result.items;                                                     \
+    assigns __fc_heap_status;                                                    \
     ensures \result.len == 0;                                                    \
     ensures capacity == 0 ==> \result.items == \null;                            \
     ensures capacity > CANON_VEC_MAX_CAPACITY / sizeof(*\result.items) ==> \result.items == \null; \
@@ -451,13 +452,15 @@ linkage VecType fn_alloc(usize capacity) { \
 #define IMPL_VEC_FREE(linkage, VecType, fn, fn_lt_close) \
 /*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
     requires (v != \null && v->items != \null) ==> \freeable(v->items);          \
-    assigns *v;                                                                  \
+    frees v->items;                                                              \
+    assigns *v, __fc_heap_status;                                                \
     behavior null:                                                               \
     assumes v == \null;                                                          \
     assigns \nothing;                                                            \
+    frees \nothing;                                                              \
     behavior live:                                                               \
     assumes v != \null;                                                          \
-    assigns *v;                                                                  \
+    assigns *v, __fc_heap_status;                                                \
     ensures v->items == \null && v->len == 0 && v->capacity == 0;                \
     complete behaviors;                                                          \
     disjoint behaviors; */                                                       \

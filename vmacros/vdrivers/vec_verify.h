@@ -104,6 +104,12 @@
  *       this driver follows precedent — free() keeps the \freeable
  *       requires (needed to discharge mem_free's) and states no frees.
  *       Expect only \freeable plumbing, no allocation-model residuals.
+ *       VERIFY-039 G18: superseded. That `assigns \nothing` omitted the
+ *       heap's state, `__fc_heap_status`, which libc lets free change,
+ *       and with no frees clause claimed that nothing is freed (ACSL's
+ *       default). mem_free now states `frees ptr;` and
+ *       `assigns __fc_heap_status;`, and free() below `frees v->items;`
+ *       with the ghost in its frame (its null behaviour frees nothing).
  *
  *   (f) NO function-pointer residual. vec core has zero fn-pointer
  *       parameters — the first macro module without option's class (b).
@@ -153,6 +159,10 @@
  *   vec_int_free_call_mem_free_requires (\freeable likewise) + free's
  *   live ensures/assigns parts — the exact analogs of memory.h's own
  *   mem_free residual pair, visible in this run's inherited list.
+ *   VERIFY-039 G18: of memory.h's pair only free's \freeable precondition
+ *   is an allocation-model residual. mem_free's frame was false for a call
+ *   whose free changes the heap's state, as libc lets it; since G18 it
+ *   names that state, __fc_heap_status, and is proved.
  *
  * WATCH-ITEM for run 2: insert/remove/append's call_mem_move/mem_copy
  *   _requires goals (int-element \separated bridging to char-level
@@ -549,11 +559,13 @@ static inline vec_int vec_int_init(borrowed(int*) buffer, usize capacity);
 */
 static inline vec_int vec_int_empty(void);
 
-/* Allocation effects live in mem_alloc's own contract (allocates clause);
- * at this level nothing pre-existing is written. The OOM and success
- * outcomes are folded into one attempt behavior because WP cannot case-
- * split on mem_alloc's result from outside. */
-/*@ assigns \nothing;
+/* The allocation is stated here as mem_alloc states it (VERIFY-039 G18):
+ * the buffer, and the heap's state, `__fc_heap_status`, which libc lets
+ * malloc change; nothing else pre-existing is written. The OOM and
+ * success outcomes are folded into one attempt behavior because WP cannot
+ * case-split on mem_alloc's result from outside. */
+/*@ allocates \result.items;
+    assigns __fc_heap_status;
     behavior degenerate:
       assumes capacity == 0 || capacity > CANON_VEC_MAX_CAPACITY / sizeof(int);
       ensures \result.items == \null && \result.len == 0 && \result.capacity == 0;
@@ -591,13 +603,15 @@ static inline vec_int vec_int_arena_alloc(borrowed(Arena*) arena, usize capacity
 
 /*@ requires v == \null || vec_int_mut(v);
     requires (v != \null && v->items != \null) ==> \freeable(v->items);
-    assigns *v;
+    frees v->items;
+    assigns *v, __fc_heap_status;
     behavior null:
       assumes v == \null;
       assigns \nothing;
+      frees \nothing;
     behavior live:
       assumes v != \null;
-      assigns *v;
+      assigns *v, __fc_heap_status;
       ensures v->items == \null && v->len == 0 && v->capacity == 0;
     complete behaviors;
     disjoint behaviors;

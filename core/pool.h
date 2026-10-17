@@ -416,6 +416,19 @@ static inline void* pool_alloc(Pool* pool) {
   requires pool_invariant(pool);
   assigns  pool->used,
            ((char *)pool->arena->buffer)[pool->base_mark .. pool->end_mark - 1];
+  behavior full:
+    assumes pool != \null && pool->used >= pool->capacity;
+    ensures \result == \null;
+  behavior alloc:
+    assumes pool != \null && pool->used < pool->capacity;
+    ensures pool->used == \old(pool->used) + 1;
+    ensures pool_invariant(pool);
+    ensures address: (u8*)\result == pool->arena->buffer + pool->base_mark
+                                     + \old(pool->used) * pool->object_size;
+    ensures zeroed: \forall integer i; 0 <= i < pool->object_size ==>
+                        ((char *)\result)[i] == 0;
+  complete behaviors;
+  disjoint behaviors;
 */
 static inline void* pool_alloc_zero(Pool* pool) {
     void* p;
@@ -424,11 +437,33 @@ static inline void* pool_alloc_zero(Pool* pool) {
     return p;
 }
 
-/** @brief Allocates and writes result to *out; returns false if full; pool must not be NULL */
+/**
+ * @brief Allocates and writes result to *out; returns false if full; pool must not be NULL
+ * @pre  out, if not NULL, does not point into the Pool or its Arena (VERIFY-039)
+ */
 /*@
   requires pool_invariant(pool);
   requires out == \null || \valid(out);
+  // VERIFY-039: the postconditions read the Pool and its Arena after
+  // the store to *out, so out lies apart from both: WP needs it, and
+  // in allocated storage C lets the store reach either.
+  requires out == \null || \separated(out, pool);
+  requires out == \null || \separated(out, pool->arena);
   assigns  pool->used, *out;
+  behavior full:
+    assumes pool != \null && pool->used >= pool->capacity;
+    ensures \result == \false;
+    ensures out != \null ==> *out == \null;
+  behavior alloc:
+    assumes pool != \null && pool->used < pool->capacity;
+    ensures \result == \true;
+    ensures pool->used == \old(pool->used) + 1;
+    ensures pool_invariant(pool);
+    ensures address: out != \null ==>
+        (u8*)*out == pool->arena->buffer + pool->base_mark
+                     + \old(pool->used) * pool->object_size;
+  complete behaviors;
+  disjoint behaviors;
 */
 static inline bool pool_try_alloc(Pool* pool, void** out) {
     void* p;
@@ -438,12 +473,41 @@ static inline bool pool_try_alloc(Pool* pool, void** out) {
     return p != NULL;
 }
 
-/** @brief Allocates, zeroes, and writes result to *out; returns false if full; pool must not be NULL */
+/**
+ * @brief Allocates, zeroes, and writes result to *out; returns false if full; pool must not be NULL
+ * @pre  out, if not NULL, does not point into the Pool, its Arena or the
+ *       slot this call hands out (VERIFY-039)
+ */
 /*@
   requires pool_invariant(pool);
   requires out == \null || \valid(out);
+  // VERIFY-039: as pool_try_alloc's, and apart from the slot handed
+  // out, whose bytes the postcondition states zero after the store.
+  requires out == \null || \separated(out, pool);
+  requires out == \null || \separated(out, pool->arena);
+  requires out != \null && pool->used < pool->capacity ==>
+           \separated(out, pool->arena->buffer
+               + (pool->base_mark + pool->used * pool->object_size ..
+                  pool->base_mark + (pool->used + 1) * pool->object_size - 1));
   assigns  pool->used, *out,
            ((char *)pool->arena->buffer)[pool->base_mark .. pool->end_mark - 1];
+  behavior full:
+    assumes pool != \null && pool->used >= pool->capacity;
+    ensures \result == \false;
+    ensures out != \null ==> *out == \null;
+  behavior alloc:
+    assumes pool != \null && pool->used < pool->capacity;
+    ensures \result == \true;
+    ensures pool->used == \old(pool->used) + 1;
+    ensures pool_invariant(pool);
+    ensures address: out != \null ==>
+        (u8*)*out == pool->arena->buffer + pool->base_mark
+                     + \old(pool->used) * pool->object_size;
+    ensures zeroed: out != \null ==>
+        \forall integer i; 0 <= i < pool->object_size ==>
+            ((char *)*out)[i] == 0;
+  complete behaviors;
+  disjoint behaviors;
 */
 static inline bool pool_try_alloc_zero(Pool* pool, void** out) {
     void* p;

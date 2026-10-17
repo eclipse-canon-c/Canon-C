@@ -201,7 +201,8 @@ static inline bool mem_regions_overlap(const void* a, const void* b, usize size)
  * @param size Bytes to allocate (0 → NULL)
  */
 /*@
-  assigns \nothing;
+  allocates \result;
+  assigns   __fc_heap_status;
 
   behavior zero_size:
     assumes size == 0;
@@ -229,7 +230,8 @@ static inline void* mem_alloc(usize size) {
  */
 /*@
   requires ptr == \null || \freeable(ptr);
-  assigns  \nothing;
+  frees    ptr;
+  assigns  __fc_heap_status;
   ensures  \true;
 */
 static inline void mem_free(void* ptr) {
@@ -278,7 +280,8 @@ static inline void mem_free(void* ptr) {
  * @sa mem_alloc(), mem_alloc_array (macro), checked_mul()
  */
 /*@
-  assigns \nothing;
+  allocates \result;
+  assigns   __fc_heap_status;
 
   behavior zero_element_size:
     assumes element_size == 0;
