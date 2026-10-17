@@ -76,7 +76,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { family: slice,  model: "Typed+Cast", budget: 120, driver_job: frama-c-slice,  proved: "572 / 587",   unproved: 15  }
+          # VERIFY-039 G14 to G17 predicted pins, every family: the contract
+          # handler's pair closes (G14); ptr.h's eight close in vec and
+          # vec_struct (G16); slice.h's five at memcmp and strlen close, and
+          # bytes_equal and str_equal gain six proved parts, in slice, borrow,
+          # vec and vec_struct (G17), where borrow also gains a proved goal at
+          # borrowed_str_from_cstr's call. Before: slice 572 / 587 and 15,
+          # result 207 / 215 and 8, option 222 / 230 and 8, borrow
+          # 2777 / 2798 and 21, vec 5475 / 5587 and 112, deque 1656 / 1675
+          # and 19, vec_struct 5473 / 5585 and 112.
+          - { family: slice,  model: "Typed+Cast", budget: 120, driver_job: frama-c-slice,  proved: "583 / 591",   unproved: 8   }
           # result, option, vec, deque, vec_struct: VERIFY-039 G11 predicted
           # pins. The combinators' macro bodies state the home drivers'
           # contracts: each family's termination, exit and frame goals close
@@ -85,14 +94,14 @@ jobs:
           # frame goals. Before: result 185 / 215 and 30, option 189 / 223
           # and 34, vec 5420 / 5580 and 160, deque 1601 / 1668 and 67,
           # vec_struct 5418 / 5578 and 160.
-          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "207 / 215",   unproved: 8   }
-          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "222 / 230",   unproved: 8   }
+          - { family: result, model: "Typed",      budget: 120, driver_job: frama-c-result, proved: "207 / 213",   unproved: 6   }
+          - { family: option, model: "Typed",      budget: 120, driver_job: frama-c-option, proved: "222 / 228",   unproved: 6   }
           # borrow: VERIFY-039 G13 predicted pin. borrowed_str_eq requires, as
           # str_equal now does, that no byte compared holds a dangling
           # address; WP does not implement \dangling, so the two goals at its
           # call for str_equal's no_dangling_a and no_dangling_b are added,
           # unproved. Before: 2777 / 2796 and 19.
-          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2777 / 2798", unproved: 21  }
+          - { family: borrow, model: "Typed+Cast", budget: 120, driver_job: frama-c-borrow, proved: "2789 / 2803", unproved: 14  }
           # vec: +20 at VERIFY-033/034 (arena_alloc{,_aligned} frame clauses,
           # 2 clauses x 2 functions x 5 split parts; CC #13 measured 5394/5586,
           # 192 unproved, roll-call unchanged). Ratcheted by VERIFY-034 addendum.
@@ -103,14 +112,14 @@ jobs:
           # VERIFY-039 G3 (CC #31): mem_zero states its zeros; +3 goals, all
           # proved. Arena's two zero-content goals stayed, against the
           # prediction: the byte-type bridge (VERIFY-039 G3, scored).
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5475 / 5587", unproved: 112 }
-          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1656 / 1675", unproved: 19  }
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5479 / 5576", unproved: 97  }
+          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1656 / 1673", unproved: 17  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
           # with VERIFY-039 G1 at CC #28, which also corrected one
           # mis-transcribed name in cc_pins/vec_struct.txt.
           # VERIFY-039 G2: predicted pin, as cc-vec's; G3 ratcheted at CC #31.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5473 / 5585", unproved: 112 }
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5477 / 5574", unproved: 97  }
     steps:
       - uses: actions/checkout@v6
 
@@ -181,7 +190,7 @@ jobs:
           echo "  Total unproved (T+U): $(wc -l < /tmp/cc_resid.txt)"
 
           # baseline: every roll-call array in the driver job. Most jobs keep one
-          # CHECKS=( ... ); borrow keeps INHERITED=( 17 ) and OWN_CHECKS=( 4 ).
+          # CHECKS=( ... ); borrow keeps INHERITED=( 10 ) and OWN_CHECKS=( 4 ).
           # Union them all, bounded to the job's own section of the workflow.
           START=$(grep -n "^  ${JOB}:" "${WF}" | head -1 | cut -d: -f1)
           END=$(awk -v s="${START}" 'NR>s && /^  [a-z0-9-]+:$/ {print NR; exit}' "${WF}")

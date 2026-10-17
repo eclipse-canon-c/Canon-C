@@ -1,5 +1,3 @@
-typed_contract_default_handler_loop_invariant_established
-typed_contract_default_handler_terminates
 typed_deque_int_swap_ensures_10
 typed_deque_int_swap_ensures_6
 typed_deque_int_swap_ensures_7
