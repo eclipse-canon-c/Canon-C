@@ -1,27 +1,31 @@
 /*
  * VERIFY-039 G16 probe, the top of the address space: ptr_align_up and
- * ptr_align_padding at an address within align - 1 bytes of its end.
+ * ptr_align_padding at an address within align - 1 bytes of its end, read
+ * against the repaired contracts.
  *
- * Both functions pass p's address, as a usize, to a helper whose contract
- * requires n <= CANON_USIZE_MAX - (align - 1) (align_up's third
- * precondition, and align_padding's), and neither requires anything of p
- * but that it be non-null. Above that bound n + align - 1 wraps. This file
- * maps a page near the top of a 32-bit address space, at 0xFFFF0000, and
- * asks both functions for the next 128 KiB boundary above 0xFFFF0001,
- * which is 2^32, one past the last address:
+ * Until G16 both functions passed p's address, as a usize, to a helper
+ * whose contract required n <= CANON_USIZE_MAX - (align - 1) (align_up's
+ * third precondition, and align_padding's), and neither required anything
+ * of p but that it be non-null. Above that bound n + align - 1 wraps. This
+ * file maps a page near the top of a 32-bit address space, at 0xFFFF0000,
+ * and asks both functions for the next 128 KiB boundary above 0xFFFF0001,
+ * which is 2^32, one past the last address. Before G16 the two calls met
+ * every precondition the functions stated and broke their helpers'.
+ * Since the repair:
  *
- *   - align_up's precondition at ptr_align_up's call, and align_padding's
- *     at ptr_align_padding's: VIOLATED;
- *   - ptr_align_up's result, which its comment gives as "Aligned pointer
- *     >= p, or NULL if p == NULL": the wrapped sum is masked to 0, so the
- *     result is NULL, VIOLATED;
- *   - ptr_align_padding's result, 0xFFFF, the distance to 2^32 that its
- *     postconditions state, `< align` and `exact` read over integers:
- *     holds, the wrap in align_padding's body cancelling in usize.
+ *   - ptr_align_up requires fits, the same bound on a non-null p, so this
+ *     call is outside its contract: fits is reported "excluded". It
+ *     returns NULL, as before; its comment no longer promises a result
+ *     at or above p for such a p;
+ *   - align_padding computes (0 - n) & (align - 1) and requires no bound,
+ *     so ptr_align_padding's call meets every precondition. Its result,
+ *     0xFFFF, is the distance to 2^32 that its postconditions state,
+ *     `< align` and `exact` read over integers: holds.
  *
- * The exit status is 1 if any check is VIOLATED. On LP64 the address space
- * ends far above any address a user process is given: "not applicable",
- * exit 0; also if the page cannot be mapped at that address.
+ * The exit status is 1 if fits holds at this address, or if the padding's
+ * postconditions fail. On LP64 the address space ends far above any
+ * address a user process is given: "not applicable", exit 0; also if the
+ * page cannot be mapped at that address.
  *
  * From the repository root (ILP32, Linux):
  *     cc -m32 -std=c99 -I . tools/probes/verify-039/p_align_wrap32.c \
@@ -65,21 +69,24 @@ int main(void)
     n = (usize)(uintptr_t)p;
     printf("p = %p, align = %#lx\n", (void *)p, (unsigned long)align);
 
-    check("align_up's requires_3 at ptr_align_up's call",
-          n <= CANON_USIZE_MAX - (align - 1u));
+    if (n <= CANON_USIZE_MAX - (align - 1u)) {
+        printf("%-58s %s\n", "ptr_align_up's fits at this call", "holds");
+        violated = 1;
+    } else {
+        printf("%-58s %s\n", "ptr_align_up's fits at this call",
+               "excluded");
+    }
     up = ptr_align_up(p, align);
-    printf("ptr_align_up(p, align) = %p\n", up);
-    check("ptr_align_up: result >= p, as its comment says",
-          (uintptr_t)up >= (uintptr_t)p);
+    printf("ptr_align_up(p, align) = %p, a call outside the contract\n", up);
 
-    check("align_padding's requires_3 at ptr_align_padding's call",
-          n <= CANON_USIZE_MAX - (align - 1u));
     pad = ptr_align_padding(p, align);
     printf("ptr_align_padding(p, align) = %#lx\n", (unsigned long)pad);
     /* Over integers: the next multiple of align at or above n is 2^32
      * (n > 2^32 - align), so `exact` gives 2^32 - n, below align. */
     check("ptr_align_padding: \\result == 2^32 - n and \\result < align",
           pad == (usize)(0u - n) && pad < align);
+    check("align_padding(n, align), its only postcondition",
+          align_padding(n, align) == (usize)(0u - n));
 
     (void)munmap(page, 4096u);
     return violated;

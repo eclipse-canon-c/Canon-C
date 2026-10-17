@@ -1,21 +1,22 @@
 /*
  * VERIFY-039 G16 probe, the object: where ptr_align_up's and
- * ptr_align_down's results lie.
+ * ptr_align_down's results lie, read against the repaired contracts.
  *
- * Both functions' nonnull behaviours say that the result has p's base
- * address (same_base), lies on the stated side of p (not_below,
+ * Until G16 both functions' nonnull behaviours said that the result has
+ * p's base address (same_base), lies on the stated side of p (not_below,
  * not_above) and within align - 1 bytes of it (bounded): claims about the
  * result as a pointer into p's block. The result is p's address rounded as
  * an integer and converted back, and the rounded address can lie outside
- * p's object. Where it lies in another object it has that object's base,
- * and same_base is false. Wherever it leaves p's object, C defines neither
- * the order nor the difference of the two pointers (C11 6.5.8p5, 6.5.6p9),
- * and WP orders two addresses only within one base, so the other four
- * claims have no defined value there; as addresses the side and the
- * distance hold, short of the wrap at the top of the address space that
- * p_align_wrap32.c shows. This file rounds five pointers and reports, for
- * each, where the result lies and whether the side and the distance hold
- * as integers:
+ * p's object. Where it lay in another object, same_base was false;
+ * wherever it left p's object the other four had no defined value, C
+ * defining neither the order nor the difference of the two pointers (C11
+ * 6.5.8p5, 6.5.6p9). Since the repair each function states one
+ * postcondition, address: (usize)(uintptr_t)\result is p's address rounded,
+ * as an integer. ptr_align_up also requires fits: p's address at most
+ * CANON_USIZE_MAX - (align - 1), short of the wrap at the top of the
+ * address space that p_align_wrap32.c shows. This file rounds five pointers
+ * and reports, for each, where the result lies, which the contracts no
+ * longer claim, and whether address holds:
  *
  *   A  ptr_align_down(p + 3, 4096), p from calloc(64, 1): the header's own
  *      example, the start of p's page, below p's block unless the block
@@ -34,9 +35,10 @@
  * Addresses are compared as uintptr_t, as the functions compute them: a
  * pointer comparison across objects would be undefined. Each case prints
  * where the result lies: inside p's object (one past its end counting as
- * in it), inside another object the probe owns, which prints "same_base
- * VIOLATED", or outside every object the probe owns. The exit status is 1
- * if same_base is VIOLATED in some case, or if a side or a distance fails.
+ * in it), inside another object the probe owns, where same_base was false
+ * before G16, or outside every object the probe owns. The exit status is 1
+ * if address fails in some case, or if fits does not hold for a pointer
+ * rounded up.
  *
  * From the repository root:
  *     cc -std=c99 -I . tools/probes/verify-039/p_align_object.c \
@@ -68,29 +70,34 @@ static int in(const object *o, uintptr_t a, int own)
 static void report(const char *call, int own, const void *p, const void *res,
                    usize align, int up)
 {
-    const uintptr_t pa = (uintptr_t)p, ra = (uintptr_t)res;
-    const int side = up ? (ra >= pa) : (ra <= pa);
-    const int dist = up ? (ra - pa <= align - 1u) : (pa - ra <= align - 1u);
+    const usize pa = (usize)(uintptr_t)p, ra = (usize)(uintptr_t)res;
+    const int fits = !up || pa <= CANON_USIZE_MAX - (align - 1u);
+    const usize want = up ? ((pa + align - 1u) & ~(align - 1u))
+                          : (pa & ~(align - 1u));
     int k, other = -1;
     printf("%s: p %p, result %p\n", call, p, res);
-    if (in(&objs[own], ra, 1)) {
+    if (in(&objs[own], (uintptr_t)ra, 1)) {
         printf("    inside %s, p's object\n", objs[own].name);
     } else {
         for (k = 0; k < 5; k++) {
-            if (k != own && in(&objs[k], ra, 0)) { other = k; break; }
+            if (k != own && in(&objs[k], (uintptr_t)ra, 0)) {
+                other = k;
+                break;
+            }
         }
         if (other >= 0) {
-            printf("    inside %s, another object: same_base VIOLATED\n",
-                   objs[other].name);
-            violated = 1;
+            printf("    inside %s, another object (same_base, before G16: "
+                   "false)\n", objs[other].name);
         } else {
             printf("    outside %s and every other object of the probe's\n",
                    objs[own].name);
         }
     }
-    printf("    as integers: side %s, distance %s\n",
-           side ? "holds" : "VIOLATED", dist ? "holds" : "VIOLATED");
-    if (!side || !dist) { violated = 1; }
+    if (up) {
+        printf("    fits: %s\n", fits ? "holds" : "VIOLATED");
+    }
+    printf("    address: %s\n", fits && ra == want ? "holds" : "VIOLATED");
+    if (!fits || ra != want) { violated = 1; }
 }
 
 int main(void)

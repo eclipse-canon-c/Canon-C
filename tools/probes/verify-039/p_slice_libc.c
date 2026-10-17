@@ -1,29 +1,36 @@
 /*
- * VERIFY-039 G17 probe: two calls that meet every precondition slice.h
- * states and break one that the libc function it calls states.
+ * VERIFY-039 G17 probe: slice.h's calls into libc, read against the
+ * repaired contracts.
  *
  * Frama-C's libc gives memcmp
  *     requires valid_s1: valid_read_or_empty(s1, n);
  *     requires valid_s2: valid_read_or_empty(s2, n);
  * with valid_read_or_empty(s, n) = (empty_block(s) || \valid_read((char *)s))
  * && \valid_read(((char *)s) + (1 .. n - 1)): even for n == 0 each pointer
- * must point into a block, readable or empty. bytes_equal and str_equal
- * reach memcmp with a zero length when both views are empty, non-null and
- * distinct, and their contracts (bytes_valid_write, str_valid) constrain
- * the pointers of an empty view in nothing but that pair. It gives strlen
+ * must point into a block, readable or empty. It gives strlen
  *     requires valid_string_s: valid_read_string(s);
- * and str_from_cstr, which calls strlen on any non-null argument, has no
- * precondition at all; its comment asks for a null-terminated string.
+ *
+ * Until G17 bytes_equal and str_equal reached memcmp with a zero length
+ * when both views were empty, non-null and distinct, and their contracts
+ * (bytes_valid_write, str_valid) constrain the pointers of an empty view
+ * in nothing but that pair: memcmp's valid_s1 was invalid from zero_bytes
+ * and zero_str below. str_from_cstr, with no precondition, called strlen on
+ * any non-null argument: strlen's valid_string_s was invalid from
+ * cstr_unterminated. Since the repair both equality functions return at a
+ * zero length before memcmp, and str_from_cstr requires null_or_string,
+ * cstr == \null || valid_read_string(cstr).
  *
  * Entry points, for Eva, one at a time (-main):
  *   zero_bytes, zero_str  two empty views into one array, one at its end
- *                         and one at its start: memcmp's valid_s1 invalid
- *   zero_bytes_ok         a control, two empty views over readable bytes
- *   cstr_unterminated     an array with no null character: strlen's
- *                         valid_string_s invalid
- *   cstr_ok               a control, a terminated array
- * Every other precondition Eva evaluates on these paths, slice.h's
- * included, is valid, and no alarm is raised (VERIFY-039 G17).
+ *                         and one at its start: every precondition valid,
+ *                         memcmp not reached
+ *   zero_bytes_ok         a control, two empty views over readable bytes:
+ *                         every precondition valid
+ *   cstr_unterminated     an array with no null character: str_from_cstr's
+ *                         null_or_string invalid at the call, which the
+ *                         contract now excludes; strlen not reached
+ *   cstr_ok               a control, a terminated array: both valid
+ * No alarm is raised from any of them (VERIFY-039 G17).
  *
  * From the repository root, for one entry point:
  *     frama-c -c11 -eva -main zero_bytes \
@@ -31,14 +38,13 @@
  *                        -DCANON_NO_REQUIRE -DNDEBUG" \
  *       tools/probes/verify-039/p_slice_libc.c
  *
- * main() runs cstr_unterminated. Built with -fsanitize=address at -O0, by
- * gcc or clang, it stops in strlen, called from str_from_cstr, on the read
- * past the array. At -O2 gcc warns of the call at compile time
- * (-Wstringop-overread, "argument missing terminating nul") and stops at
- * the same read, and clang folds the call to a constant. Without a
- * sanitizer, or where the call is folded, the output means nothing: the
- * read is undefined. No run-time check applies to the zero-length memcmp,
- * which reads nothing.
+ * main() runs cstr_unterminated, a call outside str_from_cstr's contract
+ * since G17. Built with -fsanitize=address at -O0, by gcc or clang, it
+ * stops in strlen, called from str_from_cstr, on the read past the array.
+ * At -O2 gcc warns of the call at compile time (-Wstringop-overread,
+ * "argument missing terminating nul") and stops at the same read, and
+ * clang folds the call to a constant. Without a sanitizer, or where the
+ * call is folded, the output means nothing: the read is undefined.
  */
 #define CANON_CONTRACT_IMPL
 #include <stdbool.h>
