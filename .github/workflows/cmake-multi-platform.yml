@@ -5776,7 +5776,7 @@ jobs:
           #     now carries a contract. A residual outside the two classes
           #     above is a contract error to read, not a number to record.
           OWN_N=$(grep -cE '^typed_cast_pq_' /tmp/pq_resid.txt || true)
-          echo "  pq_* residuals:           ${OWN_N}   (run 1: 199; run 2: 170; run 3: 143; run 4: 144; run 5: 18; run 6: 7)"
+          echo "  pq_* residuals:           ${OWN_N}   (run 1: 199; run 2: 170; run 3: 143; run 4: 144; run 5: 18; run 6: 7; run 7: 6; 4 since VERIFY-039 G21)"
           # RUN 5 (CI #1287): 144 -> 18. The calls clause TOOK: pq_cmp_ carries
           # exactly one goal, \\valid_function -- but this regex said 0, because
           # WP names RTE goals with a SINGLE underscore (pq_cmp_assert_...) and
@@ -5800,11 +5800,15 @@ jobs:
           # relate -- the "multiplication" reading this bin had before the
           # rename at run 5. A restatement of regions_overlap with \\separated
           # would not close these two (batch 2's block, "Two slots of one
-          # buffer, apart by a multiple of the element size").
+          # buffer, apart by a multiple of the element size"). Since
+          # VERIFY-039 G21 an assertion before each of the two calls states
+          # that step, and the bin holds the three across bases. CI #1369
+          # proved pq_swap_'s goal in one attempt and not in its re-run, a
+          # goal at the 120 s limit, and remove_at_result's in neither.
           MULT_N=$(grep -cE '^typed_cast_pq_(swap__call_mem_swap_requires|remove_at_result_call_mem_copy_requires|push_result_call_mem_copy_requires|pop_raw_call_mem_copy_requires|peek_call_mem_copy_requires)' /tmp/pq_resid.txt || true)
           REST_N=$((OWN_N - CEIL_N - MULT_N))
           echo "    comparator boundary (pq_cmp_):     ${CEIL_N}   (expected 1: \\valid_function only -- calls clause over the 24 built-ins)"
-          echo "    regions_overlap at the copies:     ${MULT_N}   (expected 5: 3 pointer order across bases, 2 products with elem_size; VERIFY-039 batch 2)"
+          echo "    regions_overlap at the copies:     ${MULT_N}   (expected 3: pointer order across bases, VERIFY-039 batch 2; the 2 products with elem_size closed by G21's assertions)"
           echo "    everything else:                   ${REST_N}   (expected 0 -- anything here is a contract to read)"
           if [ "${REST_N}" -eq 0 ]; then
             echo "  run-7 class prediction:   CONFIRMED -- every residual is in a named class"
@@ -5824,7 +5828,10 @@ jobs:
             return 0
           }
           tally pq_cmp_            '^typed_cast_pq_cmp_'                  ''
-          tally pq_swap_           '^typed_cast_pq_swap__'                ''
+          # pq_swap_'s row takes one underscore, so that its assertions,
+          # typed_cast_pq_swap_assert_* (VERIFY-039 G21), count with its
+          # calls; no function is named pq_swap since PQ-A (MCDC-014).
+          tally pq_swap_           '^typed_cast_pq_swap_'                 ''
           tally pq_sift_up_        '^typed_cast_pq_sift_up_'              ''
           tally pq_sift_down_      '^typed_cast_pq_sift_down_'            ''
           tally pq_init            '^typed_cast_pq_init_'                 ''
@@ -5862,30 +5869,37 @@ jobs:
             # Three count predictions refuted (< 60, < 90, < 130); the
             # comparator-boundary and separation-class predictions held.
             #
-            # The 43-name residual set = 31 inherited from memory.h (taken
+            # The 41-name residual set = 31 inherited from memory.h (taken
             # from the memory job's own list at run time, so the two pins
             # cannot drift apart silently) + 6 result(bool, Error), the
             # run-time checks on the combinators' pointers (20 until
             # VERIFY-039 G11 repaired their contracts; 22 until VERIFY-039
-            # G12 contracted get_ok and get_err) + 6 own:
+            # G12 contracted get_ok and get_err) + 4 own:
             #   1  \\valid_function(pq->cmp)             -- Frama-C 29 limit
-            #   5  !regions_overlap at mem_copy x4 / mem_swap x1 -- memory.h
-            #      states the predicate by pointer ORDERING: 3 order pointers
+            #   3  !regions_overlap at mem_copy x3 -- memory.h states the
+            #      predicate by pointer ORDERING, and these order pointers
             #      into different bases, which \\separated cannot discharge,
             #      the VERIFY-024 candidate (regions_overlap restated with
             #      \\separated) being their block's retirement, after which
             #      push_result's still rests on two product terms (batch 1's
-            #      coverage note); 2 share the buffer's base and need
+            #      coverage note). The two that shared the buffer's base,
+            #      pq_swap_'s mem_swap and remove_at_result's mem_copy, need
             #      products with elem_size, which that restatement would not
-            #      close (VERIFY-039 batch 2; this line gave the candidate
-            #      for all five).
+            #      close (VERIFY-039 batch 2); since VERIFY-039 G21 an
+            #      assertion before each call states the step, and both
+            #      prove (5 until then; this line gave the candidate for all
+            #      five).
             # THIS is the name-stability run: CI #1289 is the first
             # measurement at this contract state, and the enforcing run is
             # the second. If it goes red with no header change, the pin is
-            # flaky and that is the finding -- deque's run-2 shape.
+            # flaky and that is the finding -- deque's run-2 shape. (#1290
+            # was green. The shape came at CI #1369's first attempt:
+            # pq_swap_'s mem_swap goal, which no change reached, proved in
+            # that attempt and not in the re-run, a goal at the 120 s
+            # limit. VERIFY-039 G21.)
             # ===============================================================
-            EXPECTED_PROVED="4642 / 4685"   # VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit (G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
-            EXPECTED_UNPROVED=43   # VERIFY-039 G18 predicted: 45 -> 43 (G14 to G17 predicted: 60 -> 45; G11 (Bool, Error) predicted: 74 -> 60; G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
+            EXPECTED_PROVED="4647 / 4688"   # VERIFY-039 G21 predicted: three assertions added and proved, and the two slot goals prove (G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit: 4642 / 4685; G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
+            EXPECTED_UNPROVED=41   # VERIFY-039 G21 predicted: 43 -> 41 (G18 predicted: 45 -> 43; G14 to G17 predicted: 60 -> 45; G11 (Bool, Error) predicted: 74 -> 60; G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
             PIN_NAMES=(
             "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
@@ -5894,10 +5908,8 @@ jobs:
             "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
             "typed_cast_pq_cmp_assert_rte_function_pointer"
-            "typed_cast_pq_swap__call_mem_swap_requires_2"
             "typed_cast_pq_push_result_call_mem_copy_requires_3"
             "typed_cast_pq_pop_raw_call_mem_copy_requires_3"
-            "typed_cast_pq_remove_at_result_call_mem_copy_requires_3"
             "typed_cast_pq_peek_call_mem_copy_requires_3"
             )
             FAILURES=0
@@ -5917,7 +5929,7 @@ jobs:
             PIN_N=$(wc -l < /tmp/pq_pin_all.txt)
             comm -23 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_missing.txt
             comm -13 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_unpinned.txt
-            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 31 memory + 6 result + 6 own) ---"
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 31 memory + 6 result + 4 own) ---"
             echo "    missing (pinned, now proved):    $(wc -l < /tmp/pq_missing.txt)"; sed 's/^/      /' /tmp/pq_missing.txt
             echo "    unpinned (new, unproved):        $(wc -l < /tmp/pq_unpinned.txt)"; sed 's/^/      /' /tmp/pq_unpinned.txt
             if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
