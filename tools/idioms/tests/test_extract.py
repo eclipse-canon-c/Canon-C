@@ -30,7 +30,7 @@ r = measure(os.path.join(HERE, "in_vocab.c"))
 check(r["n"] == 0, "in_vocab.c: n = %d %s" % (r["n"], r["outside_catalogue"]))
 
 print("2. an out-of-vocabulary program reports exactly the planted shapes")
-expected = {"acsl-builtin:\\offset", "acsl-clause:allocates", "c:bit-field", "c:goto", "c:recursion",
+expected = {"acsl-builtin:\\offset", "acsl-clause:decreases", "c:bit-field", "c:goto", "c:recursion",
             "c:setjmp/longjmp", "unverified header:util/str/intern.h", "unverified header:util/str/str.h",
             "unverified header:util/str/str_view.h"}
 r = measure(os.path.join(HERE, "out_of_vocab.c"))

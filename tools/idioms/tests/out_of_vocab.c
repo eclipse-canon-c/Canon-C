@@ -14,7 +14,7 @@ static jmp_buf env;
 /*@ requires \valid(c);
     requires \offset(c) >= 0;
     assigns *c;
-    allocates \nothing;
+    decreases n;
 */
 static long depth(Cell* c, int n) {
     if (n <= 0) { goto done; }
