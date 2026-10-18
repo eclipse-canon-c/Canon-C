@@ -734,6 +734,12 @@ static inline void pq_swap_(borrowed(PriorityQueue*) pq, usize a, usize b) {
     void* pa = ptr_elem(pq->data, a, es);
     void* pb = ptr_elem(pq->data, b, es);
     if (es <= CANON_MEM_SWAP_MAX) {
+        /* VERIFY-039 G21: the two slots lie es bytes or more apart. That
+         * is the step mem_swap's no-overlap precondition needs, a product
+         * with es that the provers did not find reliably within the job's
+         * 120 s; WP proves each assertion as a goal of its own. */
+        /*@ assert slots_apart_ab: a < b ==> a * es + es <= b * es; */
+        /*@ assert slots_apart_ba: b < a ==> b * es + es <= a * es; */
         mem_swap(pa, pb, es);
     } else {
         /* Fallback for elements larger than mem_swap's stack buffer */
@@ -1237,6 +1243,8 @@ static inline const void* pq_peek_raw(borrowed(const PriorityQueue*) pq) {
   // mem_copy from slot len to slot i needs the two slots not to overlap,
   // which is i != len -- true on that path -- lifted through elem_size.
   // Whether the provers do that multiplication is a question for the run.
+  // The runs answered no; an assertion before the call now states it
+  // (VERIFY-039 G21).
 */
 #endif
 static inline result__Bool_Error pq_remove_at_result(
@@ -1252,6 +1260,10 @@ static inline result__Bool_Error pq_remove_at_result(
         pq_lifetime_restamp_(pq);
         return result__Bool_Error_ok(true);
     }
+    /* VERIFY-039 G21: slot i lies elem_size bytes or more before slot len,
+     * the step mem_copy's no-overlap precondition needs (see pq_swap_). */
+    /*@ assert slots_apart:
+          i * pq->elem_size + pq->elem_size <= pq->len * pq->elem_size; */
     mem_copy(ptr_elem(pq->data, i,       pq->elem_size),
              ptr_elem(pq->data, pq->len, pq->elem_size),
              pq->elem_size);
@@ -1535,6 +1547,8 @@ static inline bool pq_is_full(borrowed(const PriorityQueue*) pq) {
   // validity of capacity*elem_size and len <= capacity, so this is
   // len*es <= capacity*es -- monotonicity of multiplication by a positive
   // elem_size. Whether the provers close it is a question for the run.
+  // The runs answered yes: none of its goals is among the queue's
+  // residuals pinned since CI #1289 (VERIFY-022).
 */
 #endif
 static inline bytes_t pq_as_bytes(borrowed(PriorityQueue*) pq) {
@@ -1563,6 +1577,8 @@ static inline bytes_t pq_as_bytes(borrowed(PriorityQueue*) pq) {
   // validity of capacity*elem_size and len <= capacity, so this is
   // len*es <= capacity*es -- monotonicity of multiplication by a positive
   // elem_size. Whether the provers close it is a question for the run.
+  // The runs answered yes: none of its goals is among the queue's
+  // residuals pinned since CI #1289 (VERIFY-022).
 */
 #endif
 static inline cbytes_t pq_as_cbytes(borrowed(const PriorityQueue*) pq) {
