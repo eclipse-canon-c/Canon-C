@@ -1929,12 +1929,17 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/region.h"
         # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
-        # Expected: 3671 / 3727 proved, exactly 56 unproved (VERIFY-011,
-        # VERIFY-039 G14 to G18): 33 inherited (arena.h's full surface,
-        # two-hop transitive) + 23 region.h-own (region_begin / region_end
-        # loop+terminates+assigns / attach_arena / register / set_parent).
-        # At VERIFY-011: 3644 / 3746 and 106, 91 inherited. Any deviation
-        # is a regression.
+        # Expected: 3691 / 3730 proved, exactly 39 unproved (VERIFY-011,
+        # VERIFY-039 G14 to G20): 33 inherited (arena.h's full surface,
+        # two-hop transitive) + 6 region.h-own: region_begin's invariant,
+        # and in region_end the check that a hook is a valid function, the
+        # slot's two stores after a hook, and its loop's invariant and
+        # variant after a hook, each true for every admitted call. Where a
+        # hook is called, WP proves some of region_end's other goals from
+        # its loop's frame, stated for the executions that call no hook,
+        # or from its model of the call, which frees nothing (VERIFY-039
+        # G19). At VERIFY-011: 3644 / 3746 and 106, 91 inherited. Any
+        # deviation is a regression.
         #
         # Promoted from report-only to enforced as of CI #1022 (VERIFY-012):
         # the residual set is name-stable across runs — the 14 initialization
@@ -1987,7 +1992,7 @@ jobs:
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_region_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_region_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
-          EXPECTED_UNPROVED=56   # VERIFY-039 G18 predicted: 58 -> 56 (G14 to G17 predicted: 73 -> 58; G3 ratchet, CI #1344: 73 as at G2; G3 predicted 71; G2: 79, F4: 95, F3: 99, F5: 101, F1: 102)
+          EXPECTED_UNPROVED=39   # VERIFY-039 G19 and G20 predicted: 56 -> 39 (G18 predicted: 58 -> 56; G14 to G17 predicted: 73 -> 58; G3 ratchet, CI #1344: 73 as at G2; G3 predicted 71; G2: 79, F4: 95, F3: 99, F5: 101, F1: 102)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
           echo "  Unknown:  ${UNKNOWN_COUNT}"
           echo "  Failed:   ${FAILED_COUNT}"
@@ -2024,8 +2029,12 @@ jobs:
           # (3665 / 3738 before).
           # VERIFY-039 G18 predicted: memory.h's two frames prove, no goal
           # added or removed (3669 / 3727 before).
-          if [ "${PROVED_COUNT}" != "3671 / 3727" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3671 / 3727)."
+          # VERIFY-039 G19 and G20 predicted: region.h's five functions go
+          # from 92 / 115 to 112 / 118, as the G19 probe's run R measured;
+          # of the 17 names that leave the roll-call, 13 name goals that
+          # prove and 4 name none (3671 / 3727 before).
+          if [ "${PROVED_COUNT}" != "3691 / 3730" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3691 / 3730)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2077,28 +2086,11 @@ jobs:
             "typed_cast_arena_alloc_zero_ensures_3_part1"
             "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
             "typed_cast_region_begin_ensures_5"
-            "typed_cast_region_end_terminates_part2"
-            "typed_cast_region_end_terminates_part3"
-            "typed_cast_region_end_ensures_2_part1"
-            "typed_cast_region_end_ensures_4_part1"
-            "typed_cast_region_end_exits_part1"
             "typed_cast_region_end_loop_invariant_preserved_part1"
             "typed_cast_region_end_assert_rte_function_pointer"
             "typed_cast_region_end_assert_rte_mem_access_6"
             "typed_cast_region_end_assert_rte_mem_access_7"
-            "typed_cast_region_end_loop_assigns_part2"
-            "typed_cast_region_end_loop_assigns_part4"
-            "typed_cast_region_end_loop_assigns_part5"
-            "typed_cast_region_end_loop_assigns_part6"
-            "typed_cast_region_end_loop_assigns_part7"
-            "typed_cast_region_end_loop_assigns_part8"
-            "typed_cast_region_end_assigns_exit_part5"
-            "typed_cast_region_end_assigns_normal_part5"
             "typed_cast_region_end_loop_variant_decrease_part1"
-            "typed_cast_region_end_call_arena_reset_requires"
-            "typed_cast_region_attach_arena_ensures_2"
-            "typed_cast_region_register_ensures_part2"
-            "typed_cast_region_set_parent_ensures_2"
           )
           MISSING=0
           for goal in "${CHECKS[@]}"; do
@@ -2124,9 +2116,9 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: region.h verified — 3671/3727 proved, 56 documented"
+          echo "PASS: region.h verified — 3691/3730 proved, 39 documented"
           echo "      residuals all observed by name (VERIFY-011): 33"
-          echo "      inherited (arena.h's full surface, verbatim) + 23"
+          echo "      inherited (arena.h's full surface, verbatim) + 6"
           echo "      region.h-own. Full set equality enforced. Composable"
           echo "      verification holds across a two-hop transitive"
           echo "      include: zero new substrate residuals."
