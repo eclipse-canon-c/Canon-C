@@ -9,9 +9,17 @@ name: Record coverage (argument blocks vs roll-calls)
 # 2026-09-06, the day VERIFY-023 closed its two goals; it was found by hand on
 # 2026-09-21.
 #
-# MODE: ADVISORY. Prints the report; never fails the build. Promote to
-# --strict once the four prose-listed records (option, result, borrow, diag)
-# list their goals by name, so the join is total.
+# MODE: STRICT (--strict --complete). The job ran advisory until VERIFY-039's
+# main pass filed every pinned residual by name, so that the join is total.
+# It fails on a listed goal no longer pinned, a block that covers nothing or
+# names no goal, a heading count that is not its block's live count, a proved
+# goal filed and pinned, a block or filing the script cannot read, a filing
+# that cites no block in force, a goal filed twice, a Units cell that differs
+# from the pins, a pinned goal in a retired block's table, and a pinned name
+# in no goal table. A name whose pins the push itself changes is reported as
+# pending and does not fail it (--pending-from, the push's base): a repair's
+# ratchet is pushed before the score that restates the record, and at the
+# next push the names it changed are no longer pending.
 # ---------------------------------------------------------------------------
 
 on:
@@ -35,5 +43,20 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: "Join docs/deviations.md to the roll-calls (advisory)"
-        run: python3 tools/record_coverage.py
+      - name: "Join docs/deviations.md to the roll-calls (strict)"
+        # The base is the pull request's, or the commit the push moved the
+        # branch from; a manual run has none. The checkout holds one commit,
+        # so the base is fetched for the script to read its pins.
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          ARGS=(--strict --complete)
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            if git fetch -q --no-tags --depth=1 origin "$BASE"; then
+              ARGS+=(--pending-from "$BASE")
+            else
+              echo "::notice::the base $BASE could not be fetched: no name is taken as pending"
+            fi
+          fi
+          echo "python3 tools/record_coverage.py ${ARGS[*]}"
+          python3 tools/record_coverage.py "${ARGS[@]}"
