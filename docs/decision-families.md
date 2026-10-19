@@ -64,6 +64,17 @@ residuals) and **MCDC-006** (the `expect` panic-on-absent branch,
 unreachable) at once, the first VERIFY-/MCDC- pair on a driver-verified
 Shape-B macro module rather than an in-place header.
 
+> **Correction (2026-10-20, VERIFY-039).** Two examples above have moved. Of
+> the fifteen goals VERIFY-007 recorded for slice.h, seven did not hold for
+> every admitted call and closed, the handler's two (G14) and five libc
+> preconditions its contracts did not establish (G17); the eight danglingness
+> goals were false for admitted calls until G13's repair, and since it they
+> hold and wait on WP's `\dangling`. MCDC-002's four are measured at 54/58
+> since G17's zero-length returns added four covered outcomes. option's
+> VERIFY-014 run pins 222/228 with 6 since G11 and G14, its residuals the
+> run-time checks on its callbacks' pointers. The compositions the section
+> describes stand.
+
 ---
 
 ## OWN-NNN — Ownership and lifetime substrate
@@ -206,6 +217,21 @@ path-not-taken to record, so it carries a VERIFY- entry and no OWN-
 one. Category D applies when there was an architectural choice about
 the boundary, not merely a residual at it.)
 
+> **Correction (2026-10-20, VERIFY-039 G11, G19 and G20).** OWN-003 still
+> exemplifies the category, a call about what to prove at the seam, but the
+> residuals it accepted were not all a boundary of the verifier. Of the 19,
+> three were the goals of two frames that omitted what `region_end` writes,
+> false for every call of a kind, and eleven claimed for every hook what only
+> some hooks give. G19's repair kept the opaque hook and made the boundary a
+> stated one: `region_end` requires each hook to keep `region_hook_rule`, a
+> predicate with no definition whose meaning is its comment, and claims
+> termination, no exit and its frame only where no hook is called; the three
+> goals that need the rule are filed under a specification-bound block. The
+> parenthesis on option's combinators does not hold either: their residuals
+> were claims the contracts made for every callback, false for some, and
+> nothing intrinsic to a combinator; G11 repaired them but for the run-time
+> checks on the pointers. That option carries no OWN- entry is unchanged.
+
 ### Worked example: OWN-001
 
 OWN-001 (Runtime lifetime substrate) is the worked example for the
@@ -305,6 +331,26 @@ it once stated as a precondition — which is why VERIFY- entries quote
 the verifier's own warning rather than asserting a feature gap from
 inference.
 
+> **Correction (2026-10-20, VERIFY-039 G11, G13, G18 and G19).** Of the
+> instances above, only part is a gap of the verifier. VERIFY-007's
+> `\dangling` preconditions were false for admitted calls, the bytes of a
+> pointer to a freed block compared, until G13's repair made each caller
+> require what memcmp requires; only since then is the missing `\dangling` the
+> obstacle. Two of VERIFY-008 category 1's five were `mem_alloc`'s and
+> `mem_free`'s frames, false where libc lets malloc and free change the heap's
+> state; G18 states the heap's state in the frames, and both are proved.
+> VERIFY-014's combinator goals and `region_end`'s hook goals were claims made
+> for every callback or hook, false for some, and strengthening the contract
+> did help: G11 and G19 claim termination, no exit and their frames only where
+> nothing is called, and require a valid function where one is. What is left
+> of the combinators' is the run-time check that the pointer is a valid
+> function, which WP 29 does not implement; what is left of `region_end`'s is
+> three goals that need the hook rule, which no clause can state of code
+> behind a pointer, filed under a specification-bound block, and two that read
+> the loop counter, which WP loses across the call. VERIFY-012's counter-case
+> recurred: obligations read as the verifier's gap were claims the
+> specification should not have made.
+
 **Shape 3 — Inherited residuals.** Goals that re-emerge unchanged in a
 downstream header's proof run because it includes an already-verified
 header transitively. VERIFY-008 (memory.h inherits 23 from the
@@ -321,6 +367,13 @@ layers and now at the semantics/ boundary. An inherited-residual
 section in a VERIFY- entry is a table mapping each goal back to its
 originating VERIFY- entry by name.
 
+> **Correction (2026-10-20, VERIFY-039 G14).** The handler's two goals, the
+> instance option carried, were false as written, the loop invariant `\false`
+> and a termination left to the default, and closed at G14 (c9ac146): option
+> inherits no residual now. The shape stands on the substrate-stack instances,
+> whose inherited counts have moved with the substrate's repairs and still
+> equal the upstream's pinned totals.
+
 **Shape 4 — Deliberate spec-strength tradeoffs.** A residual kept open
 on purpose because closing it would cost more than the residual does.
 VERIFY-007 category 2 (slice.h's `str_from_cstr` omitting
@@ -330,6 +383,16 @@ behaviors, kept empty so the residual cascade lands downstream rather
 than minting new ptr.h goals) are the instances. The defining feature
 is an explicit cost comparison: the entry argues why the residual is
 cheaper than the closure.
+
+> **Correction (2026-10-20, VERIFY-039 batch 6 and G17).** Neither instance is
+> current. VERIFY-007 category 2's trade weighed a dependency that every unit
+> verifying slice.h already takes, its libc's contracts checked at each call,
+> and kept a call that the contract admitted and C does not; since G17
+> `str_from_cstr` requires `cstr == \null || valid_read_string(cstr)`, and the
+> goal is proved. The `nonnull` behaviours VERIFY-006's note kept empty state
+> their results since VERIFY-023 and VERIFY-026, the rounding functions' as
+> the result's address since G16. A trade that keeps a call the contract
+> admits and C forbids does not fit the shape.
 
 **Shape 5 — Specification-strength inheritance.** A residual that no
 amount of prover effort can close, because the property cannot be
@@ -360,6 +423,15 @@ IS proved. An unqualified "capped by bits.h" would understate what the
 contracts do deliver, which is why the width is stated rather than the
 dependency.
 
+> **Correction (2026-10-20, VERIFY-039 batch 3).** The cap's width,
+> "minimality", stands, but "everything else about `find_*` is specified" does
+> not: `bitset_find_next`'s contract omits its early return for
+> `prev >= capacity`, which `bitset_find_next_option`'s bound needs, and its
+> scan's loop invariant omits where the scan starts, which its own
+> `\result > prev` needs. Both are clauses the code establishes and the
+> specification omits, and the two goals that want them are filed by name
+> under VERIFY-039's block for that mechanism.
+
 **Shape 6 (one instance — recorded, not yet a family) —
 Execution-dead, proof-load-bearing.** A branch unreachable on the host
 that MEASURES it, live on the host that RUNS it, and required by the
@@ -379,6 +451,12 @@ feature, and the reason it is not folded into the invariant-dead
 disposition, is that the branch is **not dead in the shipped
 configuration**; it is dead only where it is observed. One instance is
 not a family, and this stays a note until a second appears.
+
+> **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** Of VERIFY-020's
+> two, only E1 is such a clause. At `bitset_not`, F5's control, the same
+> commit widened the precondition to admit `bs->words == \null`, and the five
+> goals were checks of a read from a `bs` the contracts then did not require
+> readable, false in a state they admitted; G10 required it, and they closed.
 
 The canonical references for VERIFY- entry *structure* (status box,
 per-category goal lists, manual proof arguments, CI wrapper
@@ -435,6 +513,13 @@ VERIFY- entry on a **driver-verified Shape-B module** (VERIFY-014)
 rather than an in-place header — the cover TU exists precisely because
 the Shape-B conditions are otherwise attributed to the excluded
 `_test.c` and filtered out (see `docs/vmacros.md`).
+
+> **Correction (2026-10-20, VERIFY-039 G20).** MCDC-005's outcome is not dead
+> by `region_register`'s discipline: no clause states that every slot below
+> the count holds a hook, and a hook may leave a slot below its own with a
+> null `fn`, as one that re-opens its `Region` does. Calls that each meet
+> their contracts reach the guard's false side, and no proof stream closes it:
+> MCDC-005 is a ceiling of the tests, not an instance of the complement.
 
 **The methodology artifact.** MCDC-001 is a different shape — not a
 per-header gap but the project-wide flags (`CANON_NO_REQUIRE`,

@@ -2,10 +2,10 @@
 
 > **Status: in progress — two modules landed.** The `vmacros/` mechanism is
 > **live**. `option` was the first macro module verified through it (WP driver
-> enforced 189/223, VERIFY-014, CI #1067, now 222/230; cover TU 96.7%, 29/30,
+> enforced 189/223, VERIFY-014, CI #1067, now 222/228; cover TU 96.7%, 29/30,
 > MCDC-006, CI #1072). `result` is the second: its WP driver
-> (`vmacros/vdrivers/result_verify.h` — enforced 185/215, VERIFY-015, CI
-> #1090, now 207/215; report-only first at #1089) and its MC/DC cover TU
+> (`vmacros/vdrivers/result_verify.h` — enforced 185/215, VERIFY-015,
+> CI #1090, now 207/213; report-only first at #1089) and its MC/DC cover TU
 > (`vmacros/coverage/result_cover.c` — 100%, 28/28, MCDC-007, CI #1089)
 > are shipped and green; result is also the first union-typed module verified
 > and the first clean Shape-B MC/DC audit. The Shape-B attribution question has
@@ -515,6 +515,15 @@ arbitrary callee; `\valid_function` unimplemented in Frama-C 29).
 > implement `\valid_function`. `result_verify.h`'s 28 were the same, and it
 > proves 207/215.
 
+> **Correction (2026-10-20, VERIFY-039 G14).** The handler pair among the 8
+> was false as written: the default handler's loop invariant was `\false`, and
+> its contract stated no `terminates` clause, so WP 29 checked the default,
+> that it terminates, for a loop that never ends. Since c9ac146 the contract
+> states `terminates \false;` and the loop carries no invariant, so no unit
+> pins a handler goal. `option_verify.h` proves 222/228 and `result_verify.h`
+> 207/213, each with 6 unproved, the run-time checks alone (CI #1368, held at
+> CI #1373).
+
 ## The integrity property this preserves (read this before adding a driver)
 
 A verification driver **instantiates the real shipped macros**. It must **never**
@@ -565,8 +574,9 @@ copy. The cover TU obeys the same rule: it `#include`s the driver and is a secon
   over its driver with a zero-residual (or documented-residual) enforcement
   gate, mirroring the existing per-header WP jobs. (`frama-c-option` enforces
   189/223 with 34 named residuals, as of CI #1067; `frama-c-result` enforces
-  185/215 with 30, as of CI #1090. Since VERIFY-039 G11 they pin 222/230 and
-  207/215, with 8 unproved each.)
+  185/215 with 30, as of CI #1090. Since VERIFY-039 G11 they pinned 222/230
+  and 207/215, with 8 unproved each, and since G14 they pin 222/228 and
+  207/213, with 6 each.)
 - **Shape-B modules only:** a cover TU `vmacros/coverage/<module>_cover.c` that
   `#include`s the driver and drives every generated function once — compiled
   **only** in the coverage job, with the same `-DCANON_NO_REQUIRE -DNDEBUG` the
@@ -703,11 +713,11 @@ routing alone.
 
 | Module   | Driver             | Layer      | WP status    | Cover TU (MC/DC)                    | Notes                          |
 |----------|--------------------|------------|--------------|-------------------------------------|--------------------------------|
-| option   | `option_verify.h`  | semantics/ | ✅ Verified 222/230 at CI #1365, since VERIFY-039 G11; 189/223 when enforced (VERIFY-014, CI #1067; report-only #1065) | ✅ `option_cover.c` — landed, 96.7% (29/30), MCDC-006 (CI #1072) | First driver; pattern baseline confirmed; Shape B (confirmed) |
-| result   | `result_verify.h`  | semantics/ | ✅ Verified 207/215 at CI #1365, since VERIFY-039 G11; 185/215 when enforced (VERIFY-015, CI #1090; report-only #1089) | ✅ `result_cover.c` — landed, 100% (28/28), MCDC-007 (CI #1089); attribution confirmed | Second driver; first union-typed module (union-model hypothesis, VERIFY-015); first clean Shape-B audit; Shape B (confirmed) |
-| vec      | `vec_verify.h`     | data/      | ✅ Verified 5466/5578 at CI #1365; earlier 5285/5473 — 5271/5467 before VERIFY-023 (VERIFY-018, enforced CI #1154; ratcheted CI #1187 Commit 9/9b, CI #1202 API-001, and CI #1247/43a46b1 for the F4 closure measured at CI #1246/c427548; baseline CI #1152; report-only #1150–#1151) | ✅ `vec_cover.c` — landed, 98.1% (155/158), MCDC-010 (CI #1146); attribution confirmed (third variant: direct instantiation, conditions on the cover TU) | Third driver; first data/-layer module; first Typed+Cast driver; STRUCTS/FUNCTIONS split (F3) landed first; new macro-body-loop residual class (g) forward-flagged for deque; F4 closed by contract at CI #1247 (198 → 196, fresh-result arm 22 → 20); Shape B (confirmed) |
-| deque    | `deque_verify.h`   | data/      | ✅ Verified 1656/1675 at CI #1365, since VERIFY-039 G11; 1601/1668 when enforced (VERIFY-019, CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240) | ✅ `deque_cover.c` — landed, 100% (82/82), MCDC-011 (CI #1234); attribution confirmed (third variant: direct instantiation) | Fourth driver; second data/-layer module; first data/-layer driver on plain Typed; STRUCTS/FUNCTIONS split (F3 checklist) landed first at CI #1225; **zero core-substrate inheritance** — first inherited surface smaller than its predecessor's; class (g) withdrawn (a ring shifts nothing); memory-model invariant (VERIFY-019-M); closed VERIFY-018 F4 by elimination — confirming fix landed in `vec_verify.h`, measured CI #1246 (c427548) and ratcheted CI #1247 (43a46b1), vec 198 → 196; Shape B (confirmed) |
-| bitset   | `bitset_verify.h`  | data/      | ✅ Verified 4953/5049 at CI #1365; earlier 4845/5008 — 4839/5002 before VERIFY-023; gate wired at CI #1285, see VERIFY-020 reading note (VERIFY-020, enforced CI #1260 at 158; ratcheted CI #1265 to 163 after F2/F5; re-confirmed CI #1266; report-only #1249–#1259) | — not a cover TU; `data/bitset.h` measured directly, 97.0% (130/134), MCDC-012 | Fifth driver, third data/-layer module; **interposition driver, not Shape B** — contracts none of bitset's functions, exists only to supply a contracted `option_usize`; contracts live in `data/bitset.h` in place; 71 own residuals at CI #1266, the most of any driver-verified module, not the fewest (VERIFY-020's note of 2026-10-16); F4 specification-strength inheritance (new residual shape); E1/F5 both instances of a logically-redundant clause being load-bearing for the prover |
+| option   | `option_verify.h`  | semantics/ | ✅ Verified 222/228 at CI #1373, since VERIFY-039 G14; 222/230 at CI #1365, after G11; 189/223 when enforced (VERIFY-014, CI #1067; report-only #1065) | ✅ `option_cover.c` — landed, 96.7% (29/30), MCDC-006 (CI #1072) | First driver; pattern baseline confirmed; Shape B (confirmed) |
+| result   | `result_verify.h`  | semantics/ | ✅ Verified 207/213 at CI #1373, since VERIFY-039 G14; 207/215 at CI #1365, after G11; 185/215 when enforced (VERIFY-015, CI #1090; report-only #1089) | ✅ `result_cover.c` — landed, 100% (28/28), MCDC-007 (CI #1089); attribution confirmed | Second driver; first union-typed module (union-model hypothesis, VERIFY-015); first clean Shape-B audit; Shape B (confirmed) |
+| vec      | `vec_verify.h`     | data/      | ✅ Verified 5474/5569 at CI #1373, since VERIFY-039 G18; 5466/5578 at CI #1365; earlier 5285/5473 — 5271/5467 before VERIFY-023 (VERIFY-018, enforced CI #1154; ratcheted CI #1187 Commit 9/9b, CI #1202 API-001, and CI #1247/43a46b1 for the F4 closure measured at CI #1246/c427548; baseline CI #1152; report-only #1150–#1151) | ✅ `vec_cover.c` — landed, 98.1% (155/158), MCDC-010 (CI #1146); attribution confirmed (third variant: direct instantiation, conditions on the cover TU) | Third driver; first data/-layer module; first Typed+Cast driver; STRUCTS/FUNCTIONS split (F3) landed first; new macro-body-loop residual class (g) forward-flagged for deque; F4 closed by contract at CI #1247 (198 → 196, fresh-result arm 22 → 20); Shape B (confirmed) |
+| deque    | `deque_verify.h`   | data/      | ✅ Verified 1656/1673 at CI #1373, since VERIFY-039 G14; 1656/1675 at CI #1365, after G11; 1601/1668 when enforced (VERIFY-019, CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240) | ✅ `deque_cover.c` — landed, 100% (82/82), MCDC-011 (CI #1234); attribution confirmed (third variant: direct instantiation) | Fourth driver; second data/-layer module; first data/-layer driver on plain Typed; STRUCTS/FUNCTIONS split (F3 checklist) landed first at CI #1225; **zero core-substrate inheritance** — first inherited surface smaller than its predecessor's; class (g) withdrawn (a ring shifts nothing); memory-model invariant (VERIFY-019-M); closed VERIFY-018 F4 by elimination — confirming fix landed in `vec_verify.h`, measured CI #1246 (c427548) and ratcheted CI #1247 (43a46b1), vec 198 → 196; Shape B (confirmed) |
+| bitset   | `bitset_verify.h`  | data/      | ✅ Verified 4963/5041 at CI #1373, since VERIFY-039 G18; 4953/5049 at CI #1365; earlier 4845/5008 — 4839/5002 before VERIFY-023; gate wired at CI #1285, see VERIFY-020 reading note (VERIFY-020, enforced CI #1260 at 158; ratcheted CI #1265 to 163 after F2/F5; re-confirmed CI #1266; report-only #1249–#1259) | — not a cover TU; `data/bitset.h` measured directly, 97.0% (130/134), MCDC-012 | Fifth driver, third data/-layer module; **interposition driver, not Shape B** — contracts none of bitset's functions, exists only to supply a contracted `option_usize`; contracts live in `data/bitset.h` in place; 71 own residuals at CI #1266, the most of any driver-verified module, not the fewest (VERIFY-020's note of 2026-10-16); F4 specification-strength inheritance (new residual shape); E1/F5 both instances of a logically-redundant clause being load-bearing for the prover |
 | hashmap  | `hashmap_verify.h` | data/      | Not started  | — (Shape A; via `_impl.h`)          | Already in MC/DC table         |
 | map      | `map_verify.h`     | algo/      | Not started  | — (Shape A; via `_impl.h`)          | Distinct in/out types          |
 | filter   | `filter_verify.h`  | algo/      | Not started  | — (Shape A; via `_impl.h`)          |                                |

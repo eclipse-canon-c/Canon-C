@@ -147,10 +147,10 @@ happen to its proof obligations:
    postconditions specific to the caller's logic still need proofs of
    their own. So does a small, named class of obligations that inherits
    WP integer-theory or memory-model limitations from the substrate
-   (modular arithmetic, bitwise reasoning, uintptr_t round-trips). These
-   replays appear at higher layers under different goal names but use
-   the same manual arguments as the substrate, so the proof effort
-   reuses across the codebase rather than being duplicated.
+   (fixed-width arithmetic, bitwise reasoning, ACSL predicates WP does
+   not implement). These replays appear at higher layers under different
+   goal names but use the same manual arguments as the substrate, so the
+   proof effort reuses across the codebase rather than being duplicated.
 
 This is not a claim that calling code becomes verified for free. The
 honest version of the bet is: verified primitives discharge the
@@ -188,12 +188,25 @@ For current numbers, see:
   most of the number, and states which of the remaining findings are worth
   acting on and which are not.
 
-All currently unproved goals are demonstrated triple-prover-resistant
-under Alt-Ergo + Z3 + CVC5 with a 120-second timeout, and fall into a
-small number of named categories (modular arithmetic, bitwise complement
-in specs, SWAR patterns, uintptr_t round-trips, alignment formulas, the
-ACSL non-termination idiom for panic handlers) that are characteristic
-of WP's encoding rather than weaknesses in the code.
+All currently unproved goals resist Alt-Ergo, Z3 and CVC5 at a 120-second
+timeout and are pinned in their CI jobs, and each is listed in
+`docs/deviations.md` under a block that argues it holds for every call the
+contracts admit. Among them are five clauses whose value C leaves undefined at
+some of those calls, four stated by pointer order across objects and one about
+a struct exchange whose operands may overlap in part; their blocks argue them
+wherever C defines them, and the four, across objects, for the property the
+order is meant to state. The record coverage job fails a push that leaves a
+pinned goal unlisted. Most blocks name the verifier's obstacle, among them
+fixed-width arithmetic that ACSL states over unbounded integers, bit-level
+identities, ACSL predicates WP does not implement (`\dangling`, `\fresh`,
+`\freeable`, `\valid_function`), and bytes written through one type and read
+through another. Five blocks name the specification's: a clause the code
+establishes and the contract omits, a loop in a macro body that carries no
+annotations, a predicate stated by pointer order across objects, a struct
+exchange whose operands may overlap, and what a cleanup hook behind a pointer
+must keep, which no ACSL clause can state. Goals found false for some call the
+contracts admitted were specification defects, not residuals, and were
+repaired (VERIFY-039 in `docs/deviations.md`).
 
 The same code that WP proves is the code that runs in production. The
 CI build uses `-DCANON_CHECKED_FORCE_FALLBACK` and

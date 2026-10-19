@@ -472,8 +472,11 @@ sits alongside formal proof for the non-macro headers once they land.
 - **`docs/deviations.md`** — canonical home for documented unproved
   goals with their manual proof arguments. Substrate residuals live
   under the same IDs; borrow.h's are VERIFY-016 (2 memcmp-danglingness
-  goals + 17 inherited) and MCDC-008 (the `borrowed_bytes_eq` one-NULL
-  guard, proved dead via the named `dead_by_invariant` assertion).
+  goals + 17 inherited, as enforced; since VERIFY-039 G13 borrow.h's own
+  goals are 4, true for every admitted call and filed under VERIFY-008's
+  Category 3, and VERIFY-016's own block is retired) and MCDC-008 (the
+  `borrowed_bytes_eq` one-NULL guard, proved dead via the named
+  `dead_by_invariant` assertion).
 - **`docs/traceability.md`** — MC/DC coverage record. borrow.h sits at
   its documented 36/38 = 94.7% ceiling (MCDC-008); the three
   `_get(NULL)` defensive outcomes are closed by
@@ -755,6 +758,44 @@ region_end on this region or repoint r's fields*. Under that contract
 the modelled recursion is vacuous and the `assigns *r` frame holds; WP
 simply has no ACSL mechanism to encode the contract.
 
+> **Correction (2026-10-20, VERIFY-039 G19 and G20).** The decision to keep
+> the opaque hook stands; the reading of its residuals does not. No clause
+> stated the hook contract, `region_register` requiring only `fn != \null`,
+> and the `assigns *r` frame did not hold under it: a hook that keeps the
+> contract may write another object, as the header's `release_lock` writes its
+> mutex, and `arena_reset` writes the saved `Arena` whatever the hooks do. Of
+> the 19 goals, three came from two plain omissions, false for every call of a
+> kind, the frame without the `Arena` and the loop's frame without `h`; eleven
+> claimed, for every hook, what only some hooks give: termination, no exit,
+> the hook's writes within the frame, a valid function pointer, and facts the
+> code needs after a hook that one which frees the `Region`'s storage or the
+> `Arena` breaks; five were true. Nor do the saved local and the writes after
+> the loop keep what the bullets say: a hook can free the `Arena` or write its
+> members out of `arena_invariant`, and with no hook called, a `Region` that
+> overlaps its `Arena`, which nothing excluded, makes the store to the count
+> reach it.
+>
+> Since 642ad8a `region_end` requires each hook below the count to be a valid
+> function and to keep `region_hook_rule`, a predicate with no definition
+> whose meaning is its comment in `core/region.h`: a hook leaves the
+> `Region`'s storage in place and the attached `Arena` meeting
+> `arena_invariant`, leaves the slots below its own as they were or with a
+> null `fn`, and does not call `region_end` on its `Region`. `region_end`
+> claims termination, no exit and its frame, which names the saved `Arena`,
+> only where no hook is called, and `region_invariant` separates a `Region`
+> from its `Arena`. Seventeen of the 23 own goals closed. region.h's own
+> residuals are six, each true for every admitted call: the three that need
+> the rule, filed under VERIFY-039's block on what a hook keeps,
+> specification-bound; two where WP loses the loop counter across the call;
+> and `region_begin`'s invariant. The postconditions after the loop are
+> proved, and where a hook is called they rest on the rule, as VERIFY-039's
+> proved-goal block on the goals a hook's writes could reach files them. The
+> block retires by either of two changes, as the record states: a clause that
+> can state, of the function behind a pointer, what it writes and frees, which
+> ACSL has not; or a closed mechanism of the kind the first alternative below
+> weighs, hooks listed, as the priority queue's comparators are, so that a
+> `calls` clause names them and the rule becomes their contracts.
+
 ### 3. Alternatives considered
 
 **Redesign hooks as a closed enum of cleanup kinds.** Rejected. Replacing
@@ -787,6 +828,11 @@ arena auto-reset after hooks, and the hook-table-full path) plus ASan +
 UBSan across all 16 CI configs. When VERIFY-011's count stabilizes and
 its CI step flips to enforced, this decision's residuals are pinned by
 the named-goal enforcement.
+
+> **Note (2026-10-20, VERIFY-039).** Enforced since CI #1022 (VERIFY-011).
+> Since 9d35881, the ratchet for G19's and G20's repair (642ad8a), the job
+> pins 3691 / 3730 with 39 unproved, region.h's six own among them, each named
+> in its roll-call; see the correction under §2.
 
 ### 5. Cross-references
 

@@ -12,9 +12,31 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 20 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h) — lifetime.h is a 21st unit of narrower scope, see VERIFY-021 |
 | **Functions**        | 456 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29; lifetime.h's 1 counted separately) |
-| **Total obligations**| 49680 (summed over the 20 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 48604 (97.83%)                                                                 |
-| **Unproved**         | 1076 (all documented; see per-header sections)                                 |
+| **Total obligations**| 49801 (summed over the 20 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 49326 (99.05%)                                                                 |
+| **Unproved**         | 475 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-10-20 (VERIFY-039, the main pass's docs-only sweep).* This
+card previously read 20 / 456 / 49680 / 48604 / 1076, as recomputed at
+VERIFY-035. It is summed again from the twenty enforced CI pins, as CI #1373
+held them: +121 obligations, +722 proved, −601 unproved. The movements are
+VERIFY-036's and VERIFY-039's, each step in its job's pin comment in
+`.github/workflows/cmake-multi-platform.yml` and scored in
+`docs/deviations.md`. The per-unit figures are in the roadmap tables below and
+in `docs/traceability.md`'s proof table, brought to the same pins in the same
+commit; the headers and functions rows do not move. Each of the 475 is pinned
+in its job, by count and by name, but for `frama-c-bits`, which pins its
+twelve by count and a sample of six names, all twelve named in
+`frama-c-bitset`. Each is listed in `docs/deviations.md` under a block that
+argues it true for every call the contracts admit, but for five clauses whose
+value C leaves undefined at some of those calls, four stated by pointer order
+across objects and one on a struct exchange whose operands may overlap: their
+blocks argue them wherever C defines them, and the four, across objects, for
+the property the order is meant to state. Since 140a6ac the record coverage
+job fails a push that leaves a pinned name in no block. The per-header
+sections keep the figures and readings of their own rounds; where VERIFY-039
+found a reading wrong, a dated note beside it says so, and under the summary
+of each unit whose pin has moved a note gives its pin at CI #1373.
 
 *Recomputed 2026-10-03 (VERIFY-035).* This card previously read 19 / 427 /
 44580 / 43593 / 987. It is now **summed directly from the twenty enforced CI
@@ -163,6 +185,25 @@ ptr_elem, so it has no per-allocation alignment-pad arithmetic and arena.h's
 26-goal cat 2b arithmetic-chain residual class does not recur in pool.h's own
 surface. See VERIFY-010 in `docs/deviations.md` for the full classification.
 
+> **Correction (2026-10-20, VERIFY-039).** The four baseline paragraphs above
+> are as first written, each at its header's baseline. Their readings of the
+> residuals as the cost of the verifier's feature gaps do not all hold. Of
+> slice.h's fifteen, seven were false for calls the contracts admitted,
+> memcmp's four `valid_*` preconditions at a zero length and strlen's string
+> requirement (G17) and contract.h's handler pair (G14), and all seven closed
+> at CI #1368. slice.h's eight danglingness goals, and memory.h's six, were
+> false for admitted calls too until G13's repair (7624d8c), since which each
+> caller requires that no byte it compares hold a dangling address; they hold
+> for every admitted call and wait on WP's `\dangling`. Of memory.h's twenty
+> own, the two allocation frames were false, `assigns \nothing` where libc
+> lets malloc and free change the heap's state, and closed at G18 (806bdeb);
+> `mem_is_aligned`'s two need a clause that `ptr_is_aligned`'s contract omits;
+> and one integer-theory goal, an overflow at an address with only its top bit
+> set, was false and closed at VERIFY-036 F1. arena.h's own categories, and
+> pool.h's 2b, 2c and 2d, were read again and closed by VERIFY-023, VERIFY-036
+> and VERIFY-039; pool.h's 2a keeps one goal, `pool_init`'s division bound, as
+> their sections' notes say. The ratios stand as measured.
+
 A note on totals: the 44580 obligation count is the row-sum of
 each header's own WP-relevant goals — checked.h's 1755, bits.h's
 757, compare.h's 208, ptr.h's 1959, slice.h's 394, memory.h's 2872,
@@ -177,6 +218,17 @@ substrate via `#include` — for instance, ptr.h's CI step reports
 1949/1959 (1943/1953 before VERIFY-023) due to checked.h growth at c3df659. Those +214 obligations
 are checked.h's, not ptr.h's, and are counted in checked.h's row
 above; double-counting them would inflate the aggregate.
+
+> **Correction (2026-10-20, VERIFY-039).** This note describes the card as it
+> stood at 44580, and reads each row as its header's own goals. Since
+> VERIFY-035 the card sums the enforced pins, each its unit's full-run figure
+> with the substrate goals the unit re-emits, as the card's obligations row
+> says. At CI #1373 the twenty pins count checked.h's 1755, bits.h's 757,
+> compare.h's 208, ptr.h's 1958, slice.h's 398, memory.h's 2879, arena.h's
+> 3556, pool.h's 4076, region.h's 3730, error.h's 65, option's 228, result's
+> 213, borrow.h's 2465, diag.h's 3058, vec's 5569, deque's 1673, bitset's
+> 5041, priority_queue.h's 4688, range.h's 2652 and stringbuf.h's 4832
+> goals: 49801.
 
 ---
 
@@ -314,6 +366,13 @@ two goals time out and no others. Any additional timeout is a regression
 and fails the build. The full WP output is uploaded as the
 `wp-proof-checked` CI artifact for auditor inspection.
 
+> **Note (2026-10-20, VERIFY-039, batch 6).** The proof holds with N the width
+> of the type: 64, or 32 for `checked_add`'s `usize` in `frama-c-arena-32`.
+> The two goals are filed by name in VERIFY-039's block "Fixed-width
+> arithmetic stated over unbounded integers", whose argument states this
+> proof, with the fifteen other units that pin them. The pin is unchanged:
+> 1753 / 1755 at CI #1373.
+
 ### Preprocessing flags
 
 - **`-DCANON_NO_REQUIRE`**: Compiles `CHECKED_ASSERT_RESULT(result)` to
@@ -361,6 +420,23 @@ Expected output: `Proved goals: 1753 / 1755` with exactly 2 timeouts.
 | **CI enforcement**     | Yes — exactly 15 named unproved goals expected  |
 | **MC/DC coverage**     | 100% (52/52 condition outcomes)                 |
 | **CI artifact**        | `wp-proof-bits` (full per-goal breakdown)       |
+
+> **Correction (2026-10-20, VERIFY-039 batch 6 and G15).** The table gives the
+> baseline's figures. Since 767a151 the job pins 745 / 757 with 12 unproved
+> (first run CI #1368, held at CI #1373). Four of the fifteen were not WP
+> model limitations but false postconditions: `bits_insert`'s `full_width` and
+> `normal` ones and `bits_rotl`'s and `bits_rotr`'s `nonzero_shift` ones
+> stated their results with shifts that ACSL reads over unbounded integers,
+> where C's `<<` on a `u64` keeps the low 64 bits, so that
+> `bits_rotl(0x8000000000000001, 1)`, the header's example, returns 3 where
+> the postcondition asked for 2^64 + 3. G15 (9a6e1aa) casts each shift to
+> `u64`, as C computes it. Three closed; `normal`'s holds for every admitted
+> call since the cast and stays unproved. The twelve are true and filed by
+> name in VERIFY-039's blocks, with manual proof arguments: fixed-width
+> arithmetic stated over unbounded integers (seven: `bits_clear`'s complement,
+> `bits_insert`'s `normal`, the two rotations' shift checks and the three byte
+> swaps), the SWAR population count's range (one) and bit smearing to the next
+> power of two (four). The job's roll-call is a sample of six names.
 
 ### What is proved
 
@@ -417,6 +493,17 @@ on `64 - shift` and bitwise OR in spec.
 **Byte swap (3):** `bits_bswap16` signed overflow RTE (u16→int promotion),
 `bits_bswap32`/`bits_bswap64` multi-term OR spec timeout.
 
+> **Correction (2026-10-20, VERIFY-039 batch 6 and G15).** The grouping is the
+> baseline's. Of the complement group's three, `bits_clear`'s is true;
+> `bits_insert`'s `full_width` postcondition has no complement in it and was
+> false; and its `normal` one, whose complement is sound, was false through
+> its shifts and is true since G15's cast. Of the rotation group's four, the
+> two shift checks are true and the two postconditions were false.
+> `full_width`'s and the two rotation postconditions closed at CI #1368. The
+> four "minimality" goals are all four postconditions of
+> `bits_next_power_of_two`'s `normal` behaviour on its smearing path, the
+> minimality being the fourth.
+
 Note: Some goals may appear as `[Unknown]` instead of `[Timeout]` across
 runs — WP solver heuristics are nondeterministic. The CI enforcement
 counts both combined.
@@ -437,7 +524,8 @@ frama-c -wp -wp-rte \
   core/primitives/bits.h
 ```
 
-Expected output: `Proved goals: 742 / 757` with 15 unproved goals.
+Expected output: `Proved goals: 745 / 757` with 12 unproved goals, the pin
+since VERIFY-039 G15 (`742 / 757` with 15 before it).
 
 ---
 
@@ -571,6 +659,24 @@ Expected output: `Proved goals: 208 / 208` with 0 timeouts.
 | **MC/DC coverage**     | 100% (42/42 condition outcomes)                 |
 | **CI artifact**        | `wp-proof-ptr` (full per-goal breakdown)        |
 
+> **Correction (2026-10-20, VERIFY-039 batch 6, G14 and G16).** The table and
+> the sections below give the baseline's figures and readings. Since 767a151
+> the job pins 1952 / 1958 with 6 unproved, all true (first run CI #1368, held
+> at CI #1373). Before G14 to G17 it pinned 1959 / 1975 with 16: the ten
+> below, and six pointer postconditions given to `ptr_align_up`'s and
+> `ptr_align_down`'s `nonnull` behaviours at VERIFY-026. Ten of the sixteen
+> did not hold for every admitted call, and all ten are gone: the handler's
+> two (G14), category 3's two calls and the six pointer postconditions (G16),
+> as the notes below say. The six left are checked.h's two and `align_up`'s
+> and `align_down`'s formulas, filed by name in VERIFY-039's block on
+> fixed-width arithmetic, and `align_padding`'s formula and
+> `ptr_align_padding`'s `\result < align`, filed by name under VERIFY-008's
+> Category 2. The Baseline note's "ptr.h's source has not materially changed"
+> no longer holds: VERIFY-023 and VERIFY-026 gave five `nonnull` behaviours
+> their results, and G16 restated `align_padding` and the two rounding
+> functions. The ptr.h-own figure of 1729 / 1739 was not re-measured after
+> VERIFY-023.
+
 ### Baseline note
 
 ptr.h's own verification baseline is **1729 / 1739** — the proof
@@ -672,6 +778,27 @@ identifies the function as non-terminating; the `terminates` goal and
 the loop-invariant establishment goal are unprovable by construction,
 which is the intended semantics of a panic handler.
 
+> **Correction (2026-10-20, VERIFY-039 batch 6, G14 and G16).** Only the first
+> two categories stand, and both are true. Category 2's obstacle is not a
+> bridge to multiples of `align`, which the three formulas do not state:
+> `align_up`'s and `align_down`'s is C's complement and wrap in the width, and
+> `align_padding`'s the bound that rounding by a mask keeps, an identity
+> VERIFY-008's Category 2 names, under which it is filed. Category 3's two
+> calls were false for an address within `align - 1` bytes of the top of the
+> address space, which nothing in the contracts excluded: on a 32-bit build
+> `ptr_align_up` returned NULL for a non-null pointer. No bound was lost in
+> the round trip; nothing bounded the address. Since f83ad1c `align_padding`
+> computes `(0 - n) & (align - 1)` and requires no bound on `n`, and
+> `ptr_align_up` requires that `p`'s address fit; both calls' goals are gone
+> or proved, and the category's third goal, `ptr_align_padding`'s bound, is
+> true and filed with `align_padding`'s. Category 4's two were false for every
+> call, not unprovable by construction: the invariant was `\false`, which
+> holds in no state, and the handler's contract stated no `terminates` clause,
+> so WP 29 checked the default, that it terminates, for a loop that never
+> ends. Since c9ac146 the handler states `terminates \false;` and its loop
+> carries no invariant: the invariant's goals are gone and the termination is
+> proved, in every unit that includes contract.h.
+
 Full goal list and manual proof arguments: see VERIFY-006 in
 docs/deviations.md.
 
@@ -712,6 +839,16 @@ preserve the referenced byte range.
   manifestation of the non-termination contract and are correct by
   construction.
 
+> **Correction (2026-10-20, VERIFY-039).** Two bullets above no longer hold.
+> The `nonnull` behaviours they call empty state their results: VERIFY-023
+> gave `ptr_offset`'s and `ptr_offset_const`'s, VERIFY-026 `ptr_align_up`'s,
+> `ptr_align_down`'s and `ptr_retreat`'s, and G16 restated the two rounding
+> functions' as the result's address, which need not lie in `p`'s object.
+> `ptr_is_aligned`'s states none, the clause `mem_is_aligned`'s two goals
+> want. And the handler's contract did not state `terminates \false` until G14
+> (c9ac146), which also removed its `loop invariant \false`: the two goals
+> were false, not correct by construction, and are gone.
+
 ### Preprocessing flags
 
 - **`-DCANON_NO_REQUIRE`**: Same as checked.h — compiles runtime NULL
@@ -736,8 +873,10 @@ frama-c -wp -wp-rte \
   core/primitives/ptr.h
 ```
 
-Expected output: `Proved goals: 1949 / 1959` with 10 timeouts (1943 / 1953 before VERIFY-023). (The
-1953 reflects the full WP run on ptr.h's translation unit, including
+Expected output: `Proved goals: 1952 / 1958` with 6 unproved goals, the pin
+since VERIFY-039 G14 and G16 (`1959 / 1975` with 16 before them;
+`1949 / 1959` with 10 at VERIFY-023, `1943 / 1953` before it). (Each total
+reflects the full WP run on ptr.h's translation unit, including
 checked.h. ptr.h's own contribution is 1729 / 1739; the +214 are
 checked.h's div/mod goals — see Baseline note above.)
 
@@ -758,8 +897,26 @@ checked.h's div/mod goals — see Baseline note above.)
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-model Typed+Cast -wp-split -wp-timeout 120` |
 | **CI enforcement**     | Yes — 379/394 with 15 named goals expected      |
-| **MC/DC coverage**     | 92.6% (50/54 condition outcomes — see MCDC-002) |
+| **MC/DC coverage**     | 93.1% (54/58 condition outcomes since VERIFY-039 G17; 92.6%, 50/54, before — see MCDC-002) |
 | **CI artifact**        | `wp-proof-slice` (full per-goal breakdown)      |
+
+> **Correction (2026-10-20, VERIFY-039 batch 6, G13, G14 and G17).** The
+> table's proof figures are the baseline's. Since 767a151 the job pins
+> 390 / 398 with 8 unproved (first run CI #1368, held at CI #1373). Seven of
+> the fifteen below were false for calls the contracts admitted, and closed at
+> CI #1368: the handler's two (G14, as in ptr.h's section); memcmp's validity
+> of each pointer at `bytes_equal` and `str_equal`, which their contracts did
+> not establish at a zero length; and strlen's string requirement, which
+> `str_from_cstr` did not state (G17). Since 64f4bd1 the two equality
+> functions return true at a zero length before memcmp, and `str_from_cstr`
+> and `borrowed_str_from_cstr` require
+> `cstr == \null || valid_read_string(cstr)`. The eight left are memcmp's
+> danglingness preconditions at the four functions that call it. They were
+> false for admitted calls too, the bytes of a pointer to a freed block
+> compared, until G13's repair (7624d8c): each function now requires that no
+> byte it compares hold a dangling address. They hold for every admitted call,
+> wait on WP's `\dangling`, and are filed by name under VERIFY-008's
+> Category 3. The zero-length returns add four MC/DC outcomes, all covered.
 
 ### Function inventory
 
@@ -787,7 +944,8 @@ the macro body as human-readable comments — superseded by VERIFY-025,
 which turns them into live ACSL contracts under `-CC` (115/115 proved,
 zero residuals, and one latent defect found: F1). These functions are
 validated by unit testing (90 tests in `test/core/slice_test.c`),
-fuzzing, and 92.6% MC/DC coverage on the i32 instantiation. Full
+fuzzing, and 93.1% MC/DC coverage on the i32 instantiation (92.6% before
+VERIFY-039 G17). Full
 WP verification of the macro family will require a separate
 `slice_verify.h` driver instantiating `DEFINE_SLICE(i32)` outside
 the macro context — planned for a future commit if the certification
@@ -917,6 +1075,18 @@ constructor functions, so the unprovable-by-construction goals are
 re-emitted in the slice.h proof run. These are not new slice.h
 residuals; they are the same goals counted in VERIFY-006 reappearing.
 
+> **Correction (2026-10-20, VERIFY-039 batch 6, G13, G14 and G17).** The three
+> categories' readings above do not hold as written. The `valid_*` goals were
+> pinned at `str_equal` as at `bytes_equal`, and at both they were false at a
+> zero length, where libc's `valid_read_or_empty` asks each pointer for a
+> block and the contracts asked nothing (G17). The danglingness goals were not
+> the verifier's alone: `\dangling` is a property of the bytes compared, which
+> no contract required free of dangling addresses (G13). The strlen trade
+> weighed a dependency every unit that verifies slice.h already takes, libc's
+> contracts being checked at each call, and kept a call that the contract
+> admitted and C does not (G17). The handler's pair was false, not unprovable
+> by construction (G14). See the note under the summary for the repairs.
+
 Full goal list and per-goal Qed-and-prover timing: see VERIFY-007 in
 `docs/deviations.md`. The CI artifact `wp-proof-slice` contains the
 verbatim WP output for auditor inspection.
@@ -931,9 +1101,11 @@ of the four functions appears in the unproved goal list. The slice.h
 CI wrapper explicitly verifies this with the diagnostic line `MCDC-002
 functions with WP residuals: 0/4`. See the MCDC-002 status update in
 `docs/deviations.md` for the formal closure record. gcov measurement
-reads 50/54 (92.6%) on the post-Commit-9 surface (see the 2026-07-24
-MCDC-002 note in docs/deviations.md) because gcov instruments the source rather
-than the proof; the two evidence streams complement rather than
+reads 54/58 (93.1%) since VERIFY-039 G17, whose zero-length returns in
+`bytes_equal` and `str_equal` add four outcomes, all covered (50/54,
+92.6%, on the post-Commit-9 surface before it; see the 2026-07-24
+MCDC-002 note in docs/deviations.md), because gcov instruments the source
+rather than the proof; the two evidence streams complement rather than
 converge.
 
 ### WP memory model note
@@ -1007,7 +1179,8 @@ frama-c -wp -wp-rte \
   core/slice.h
 ```
 
-Expected output: `Proved goals: 379 / 394` with 15 timeouts.
+Expected output: `Proved goals: 390 / 398` with 8 unproved goals, the pin
+since VERIFY-039 G14 and G17 (`379 / 394` with 15 before them).
 
 ---
 
@@ -1028,6 +1201,20 @@ Expected output: `Proved goals: 379 / 394` with 15 timeouts.
 | **CI enforcement**     | Yes — 2829/2872 with 43 named goals expected (2823/2866 before VERIFY-023; set unchanged) |
 | **MC/DC coverage**     | 88.3% (113/128 condition outcomes)              |
 | **CI artifact**        | `wp-proof-memory` (full per-goal breakdown)     |
+
+> **Correction (2026-10-20, VERIFY-039).** The table and the sections below
+> give the baseline's figures, brought up to date at VERIFY-023. Since a79b69d
+> the job pins 2848 / 2879 with 31 unproved (first run CI #1369, held at
+> CI #1373), each true for every admitted call. They are 14 inherited,
+> checked.h's 2, ptr.h's 4 and slice.h's 8, and 17 own: three \fresh /
+> \freeable goals, VERIFY-008's Category 1; six of integer theory,
+> `mem_align`'s and `mem_align_to`'s four and `mem_get_alignment`'s two, its
+> Category 2; six memcmp danglingness goals, its Category 3; and
+> `mem_is_aligned`'s two, filed under VERIFY-039's block on a clause the code
+> establishes and the specification omits. The inherited part moved with the
+> substrate's repairs, G14's, G16's and G17's among them, and the own part as
+> the notes on categories 2a, 2b and 2c below say; each step is in the job's
+> pin comment.
 
 ### Function inventory
 
@@ -1197,6 +1384,17 @@ This is the same root cause as VERIFY-007 category 1
 (`\dangling{L}` and `\initialization`) — different ACSL primitives,
 same verifier-side feature gap.
 
+> **Correction (2026-10-20, VERIFY-039 G18).** Two of the five were not a
+> feature gap. `mem_alloc_assigns_normal_part2` and `mem_free_assigns_normal`
+> are `mem_alloc`'s and `mem_free`'s frames, `assigns \nothing`, and libc's
+> contracts let malloc and free change the heap's state, the ghost
+> `__fc_heap_status`: each frame was false for a call that allocates or frees.
+> WP implements frames, and the inclusion it checked was false. Since 806bdeb
+> the wrappers state `allocates \result;` or `frees ptr;` and
+> `assigns __fc_heap_status;`, as libc states them, and both frames are proved
+> in every unit that includes memory.h. The other three are true and wait on
+> WP's `\fresh` and `\freeable`, as above; VERIFY-008's Category 1 lists them.
+
 **memory.h-own category 2b — WP integer theory / bitwise alignment
 (9):** `mem_align_normal_ensures_part3`,
 `mem_align_normal_ensures_2_part3`, `mem_align_to_normal_ensures_part3`,
@@ -1215,6 +1413,18 @@ re-emits the limitation at its own call sites because it specifies
 alignment ensures clauses in the modular form (the natural
 mathematical formulation in an `ensures` clause).
 
+> **Correction (2026-10-20, VERIFY-036 F1 and VERIFY-039).** Of the nine, one
+> was false and closed at VERIFY-036 F1:
+> `mem_get_alignment_assert_rte_signed_overflow`, an overflow of
+> `-(intptr_t)addr` at an address with only its top bit set, `0x80000000` on a
+> 32-bit target; the negation is unsigned since f1ba2de. `mem_is_aligned`'s
+> two do not belong to integer theory: `ptr_is_aligned`'s `nonnull` behaviour
+> states no result, so WP has no fact about the value `mem_is_aligned`
+> returns. They are filed under VERIFY-039's block on a clause the code
+> establishes and the specification omits, whose retirement is that clause.
+> The six left are VERIFY-008's Category 2, whose argument states the mask
+> identity and the lowest set bit's.
+
 **memory.h-own category 2c — memcmp call-site danglingness (6):**
 2 each on `mem_compare`, `mem_equal`, `mem_equal_bytes` —
 `requires_danglingness_s1/s2`. (Down from 12: the
@@ -1226,6 +1436,16 @@ unimplemented.)
 Identical root cause to VERIFY-007's danglingness residual. memory.h
 directly calls `memcmp` from these three functions, so the same
 residual class re-emerges at memory.h's call sites.
+
+> **Correction (2026-10-20, VERIFY-039 G13).** These six, and slice.h's eight,
+> were false for calls the contracts admitted: `\dangling` is a property of
+> the bytes compared, not of the pointer passed, and comparing the bytes of a
+> pointer to a freed block met every precondition of the three functions and
+> made memcmp's false. Since 7624d8c each function requires, on its path to
+> memcmp, that no byte it compares hold a dangling address. The goals hold for
+> every admitted call and wait on WP's `\dangling`, which WP 29 does not
+> implement. VERIFY-008's Category 3 lists the six and files slice.h's eight
+> and borrow.h's four by name.
 
 Full goal list and per-category manual proof arguments: see
 VERIFY-008 in `docs/deviations.md`.
@@ -1342,7 +1562,9 @@ frama-c -wp -wp-rte \
   core/memory.h
 ```
 
-Expected output: `Proved goals: 2829 / 2872` with 43 unproved goals (2823 / 2866 before VERIFY-023).
+Expected output: `Proved goals: 2848 / 2879` with 31 unproved goals, the pin
+since VERIFY-039 G18 (`2829 / 2872` with 43 at VERIFY-023, `2823 / 2866`
+before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 
 ---
@@ -1365,6 +1587,18 @@ Expected output: `Proved goals: 2829 / 2872` with 43 unproved goals (2823 / 2866
 | **MC/DC coverage**     | 89.4% (59/66 condition outcomes — see MCDC-003, 2026-07-30 note) |
 | **Line coverage**      | 100% (97/97)                                    |
 | **CI artifact**        | `wp-proof-arena` (full per-goal breakdown)      |
+
+> **Note (2026-10-20, VERIFY-039).** The table and the sections below give the
+> baseline's figures and categories, brought up to date at VERIFY-023. Since
+> a79b69d the job pins 3523 / 3556 with 33 unproved (first run CI #1369, held
+> at CI #1373): memory.h's 31, inherited, and 2 own, `arena_alloc_zero`'s and
+> `arena_alloc_aligned_zero`'s zero-content postconditions. Those two are
+> true, filed by name under VERIFY-017's byte-view block: `mem_zero` states
+> the bytes it zeroes through `char *`, the postconditions read them through
+> `u8 *`, and WP's typed model keeps the two in separate arrays. The four own
+> categories below are retired, 2d at VERIFY-023, 2a and 2b at VERIFY-036 F3
+> and F4, and 2c at VERIFY-039's batch 5; VERIFY-009's notes say how each
+> closed, and the job's pin comment gives each step.
 
 ### Function inventory
 
@@ -1660,7 +1894,9 @@ frama-c -wp -wp-rte \
   core/arena.h
 ```
 
-Expected output: `Proved goals: 3444 / 3527` with 83 unproved goals (3430 / 3521 and 91 before VERIFY-023).
+Expected output: `Proved goals: 3523 / 3556` with 33 unproved goals, the pin
+since VERIFY-039 G18 (`3444 / 3527` with 83 at VERIFY-023, `3430 / 3521`
+and 91 before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 The 43 inherited goals are byte-identical
 to memory.h's full residual surface (see VERIFY-009 inherited
@@ -1687,6 +1923,22 @@ residuals table); the 48 own goals split across cats 2a (8) / 2b (26)
 | **MC/DC coverage**     | 87.2% (68/78 condition outcomes — see MCDC-004, 2026-07-30 note) |
 | **Line coverage**      | 100% (74/74)                                    |
 | **CI artifact**        | `wp-proof-pool` (full per-goal breakdown)       |
+
+> **Correction (2026-10-20, VERIFY-039).** The table and the sections below
+> give the baseline's figures and categories, brought up to date at
+> VERIFY-023. Since a79b69d the job pins 4042 / 4076 with 34 unproved (first
+> run CI #1369, held at CI #1373): arena.h's 33, inherited, and 1 own,
+> `pool_init_ensures_part4`, VERIFY-010's Category 2a, whose argument covers
+> every conjunct of `pool_invariant`, the division bound
+> `capacity <= CANON_USIZE_MAX / object_size` among them. Four of 2a's five
+> closed at G5 (528bfa1), which separated a `Pool` from its `Arena`: they
+> asked that a field survive stores into the other struct, not arithmetic.
+> Categories 2b, 2c and 2d are retired, at VERIFY-036 F2 and F6 and at
+> VERIFY-039 G7; three of 2d's four closed with G5's separation, and its last,
+> false for an admitted call, at G7. Since G18 (806bdeb) `pool_alloc_zero`,
+> `pool_try_alloc` and `pool_try_alloc_zero` state `pool_alloc`'s behaviours,
+> the zero variants the slot's bytes, and the 42 goals they add are proved.
+> The job's pin comment gives each step.
 
 ### Function inventory
 
@@ -1943,7 +2195,9 @@ frama-c -wp -wp-rte \
   core/pool.h
 ```
 
-Expected output: `Proved goals: 3914 / 4009` with 95 unproved goals (3884 / 4003 and 119 before VERIFY-023).
+Expected output: `Proved goals: 4042 / 4076` with 34 unproved goals, the pin
+since VERIFY-039 G18 (`3914 / 4009` with 95 at VERIFY-023, `3884 / 4003`
+and 119 before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 pool.h is the first header whose WP run processes a
 two-hop transitive include (pool.h → arena.h → memory.h → ptr/slice/checked/
@@ -1971,6 +2225,43 @@ inherited-residuals table); the 24 own goals split across cats 2a (5) / 2b (6)
 | **MC/DC coverage**     | 95.5% (21/22 condition outcomes — see MCDC-005) |
 | **Line coverage**      | 100% (45/45)                                    |
 | **CI artifact**        | `wp-proof-region` (full per-goal breakdown)     |
+
+> **Correction (2026-10-20, VERIFY-039 G19 and G20).** The table and the
+> sections below give the baseline's figures and readings, brought up to date
+> at VERIFY-023. Since 9d35881 the job pins 3691 / 3730 with 39 unproved, each
+> named in its roll-call (first run CI #1372, held at CI #1373, the job in
+> 36m 34s): arena.h's 33, inherited, and 6 own, each true for every admitted
+> call. Of the 23 own below, 17 closed at G19's and G20's repair (642ad8a),
+> and fourteen of those had not held for every admitted call.
+>
+> - Category 1: `region_end`'s frame omitted the `Arena` it resets, and its
+>   loop's frame the store to `h`, each false for every call of a kind; and
+>   eleven goals claimed, for every hook, what only some hooks give:
+>   termination, no exit, the hook's writes within the frame, a valid function
+>   pointer, and facts the code needs after a hook that one which loops,
+>   exits, writes another object or frees the `Region`'s storage breaks.
+> - Category 2: nothing separated a `Region` from its `Arena`, so three
+>   mutators' stores could reach the `Arena` and falsify the invariant.
+>
+> Since 642ad8a `region_invariant` separates the two, and
+> `region_attach_arena` requires it. `region_end` claims termination, no exit
+> and its frame, which names the saved `Arena`, only where no hook is called,
+> and requires each hook below the count to be a valid function and to keep
+> `region_hook_rule`, a predicate with no definition whose meaning is its
+> comment in `core/region.h`: a hook leaves the `Region`'s storage in place
+> and the attached `Arena` meeting `arena_invariant`, leaves the slots below
+> its own as they were or with a null `fn`, and does not call `region_end` on
+> its `Region`. The six left are filed by name: the check that a hook is a
+> valid function and the slot's two stores after a hook, which no verifier
+> proves without the rule, under VERIFY-039's block on what a hook keeps,
+> specification-bound; the loop's first invariant and its variant after a
+> hook, which read `i`, which WP loses across the call, VERIFY-011's
+> Category 1; and `region_begin`'s invariant after its store of a compound
+> literal, its Category 2. Ten goals WP proves read, after a hook, storage a
+> hook could reach, and are proved on WP's assumption that the hook's writes
+> and frees do not reach it; the rule and the separation are what keep them
+> off, as VERIFY-039's proved-goal block on the goals a hook's writes could
+> reach files them.
 
 ### Enforcement status
 
@@ -2016,6 +2307,12 @@ plus the 3 assertion functions). The remaining 5 (`region_begin`,
 `region_end`, `region_attach_arena`, `region_register`,
 `region_set_parent`) carry the 23 own residuals.
 
+> **Correction (2026-10-20, VERIFY-039 G19 and G20).** Since 642ad8a
+> `region_end` carries five of the six own residuals and `region_begin` one.
+> `region_attach_arena`, `region_register` and `region_set_parent` are proved,
+> their invariants from G20's separation: ten of the twelve functions carry
+> none.
+
 ### What is proved
 
 - **ACSL predicate**: region.h defines `region_invariant(r)` —
@@ -2037,6 +2334,18 @@ plus the 3 assertion functions). The remaining 5 (`region_begin`,
   structural postconditions are re-established by unconditional writes
   after the hook loop (see OWN-003). Read-only functions specify
   `assigns \nothing`.
+
+> **Correction (2026-10-20, VERIFY-039 G19 and G20).** The category 2 goals
+> were not the weight of composing `arena_invariant`: nothing separated a
+> `Region` from its `Arena`, so a mutator's store could reach the `Arena` and
+> the invariant be false after it. `region_end`'s `assigns *r` was false for
+> every call with an `Arena` attached that does not lie wholly within the
+> `Region`, as `arena_reset` writes it, and the writes after the loop
+> re-establish the postconditions only for a hook that leaves the `Region`'s
+> storage in place, which no clause required. See the note under the summary
+> for what `region_end` states since 642ad8a; its run-time checks are proved
+> but the check that a hook is a valid function and the slot's two stores
+> after a hook.
 
 ### Prover breakdown
 
@@ -2072,12 +2381,26 @@ goal list, inheritance table, manual proof arguments, and the WP warning
 text quoted as evidence: see VERIFY-011 in `docs/deviations.md`. The
 architectural decision behind category 1 is OWN-003.
 
+> **Correction (2026-10-20, VERIFY-039 G19 and G20).** 39 since 642ad8a:
+> arena.h's 33 and 6 own, two of them in category 1, one in category 2 and
+> three under VERIFY-039's block on what a hook keeps. See the note under the
+> summary.
+
 ### MCDC-005 cross-reference
 
 region.h's single uncovered condition outcome is the `if (h->fn != NULL)` FALSE
 branch in region_end (line 496), API-unreachable because
 region_register enforces `fn != NULL` and the dispatch loop visits only
 filled slots. 95.5% (21/22) is the achievable ceiling. See MCDC-005.
+
+> **Correction (2026-10-20, VERIFY-039 G20).** The false side is not
+> unreachable through the API. No clause states that every slot below the
+> count holds a hook, and a hook may leave a slot below its own with a null
+> `fn`, as one that re-opens its own `Region` with `region_begin` does; calls
+> that each meet their contracts reach the guard's false side by either route
+> (`tools/probes/verify-039/p_region_arena.c`, its fifth and sixth cases), and
+> both stay within the contracts since 642ad8a. No goal states the outcome
+> dead. 21/22 is the tests' ceiling, not the API's.
 
 ### WP memory model note
 
@@ -2109,7 +2432,9 @@ frama-c -wp -wp-rte \
   core/region.h
 ```
 
-Expected output: `Proved goals: 3592 / 3698` with 106 unproved goals (3578 / 3692 and 114 before VERIFY-023).
+Expected output: `Proved goals: 3691 / 3730` with 39 unproved goals, the pin
+since VERIFY-039 G19 and G20 (`3592 / 3698` with 106 at VERIFY-023,
+`3578 / 3692` and 114 before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 region.h's WP run processes a two-hop
 transitive include (region.h → arena.h → memory.h → ...); the 91
@@ -2251,7 +2576,9 @@ establishes the layer's zero baseline against which the next semantics/
 headers (option, then Result, borrow, diag) are measured for
 inherited-vs-own residuals. option (the next module, VERIFY-014) inherits
 exactly 2 residuals from contract.h and adds 32 of its own — the first
-non-trivial data point in the semantics/ layer.
+non-trivial data point in the semantics/ layer. (So when enforced; since
+VERIFY-039 G11 and G14 option inherits none and pins 6 of its own, the
+run-time checks on its callbacks' pointers.)
 
 ### Preprocessing flags
 
@@ -2299,6 +2626,25 @@ Expected output: `Proved goals: 65 / 65` with 0 unproved goals.
 | **CI enforcement**     | Yes — 189/223 with 34 named goals expected (enforced as of CI #1067) |
 | **MC/DC coverage**     | 96.7% (29/30 condition outcomes — see MCDC-006) |
 | **CI artifact**        | `wp-proof-option` (full per-goal breakdown)     |
+
+> **Correction (2026-10-20, VERIFY-039 G11 and G14).** The table and the
+> sections below give the figures and readings of enforcement. Since 767a151
+> the job pins 222 / 228 with 6 unproved (first run CI #1368, held at
+> CI #1373); from G11's repair of the driver (a4f8f5f, CI #1361) it pinned
+> 222 / 230 with 8. The 32 own residuals were not a verifier feature gap. The
+> combinators' contracts required nothing of the callback's pointer, and
+> claimed, by an empty frame and by WP 29's default clauses, that every call
+> terminates, does not exit and writes nothing; a callback that is not a valid
+> function, loops, exits or writes falsifies each claim
+> (`tools/probes/verify-039/p_combinator_callback.c`), and no verifier proves
+> a claim that an admitted call falsifies. Since a4f8f5f each combinator
+> requires a valid function where it calls one, and claims termination, no
+> exit and an empty frame only where it calls none: 26 goals closed, and 7
+> were added, all proved. The six left are the run-time checks that the
+> pointer is a valid function, true for every admitted call and unproved
+> because WP 29 does not implement `\valid_function`, filed by name under
+> VERIFY-014's block. The inherited handler pair was false as written and
+> closed at G14 (c9ac146).
 
 option is the **first driver-verified** Canon-C module and the first
 **Shape-B** (expression-macro-bodied) module verified. Its functions
@@ -2396,6 +2742,16 @@ surface (six combinators vs one teardown loop), identical limitation: no
 unimplemented in Frama-C 29. It is a verifier feature gap, not a
 prover-strength residual — additional solver power would not close it.
 
+> **Correction (2026-10-20, VERIFY-039 G11, G14 and G19).** The reading above
+> does not hold. What failed was the contracts' claims, not the verifier: a
+> contract that claims termination, no exit and an empty frame for every
+> callback is false for a callback that loops, exits or writes, and its
+> `\valid_function` check for a pointer that is not a valid function, whatever
+> a verifier implements. `region_end`'s hooks were the same class, and G19
+> repaired them alike. The handler's pair was false too, its invariant
+> `\false` and its termination left to the default (G14). The note under the
+> summary gives the repair and the six goals left.
+
 Full goal list and per-combinator manual-proof arguments: see VERIFY-014
 in `docs/deviations.md`.
 
@@ -2455,9 +2811,10 @@ frama-c -wp -wp-rte \
   vmacros/vdrivers/option_verify.h
 ```
 
-Expected output: `Proved goals: 189 / 223` with 34 unproved goals (the 2
-contract.h handler goals + 32 combinator function-pointer-dispatch
-goals).
+Expected output: `Proved goals: 222 / 228` with 6 unproved goals, the pin
+since VERIFY-039 G14: the run-time checks that a callback is a valid
+function (`189 / 223` with 34 when enforced: the 2 contract.h handler
+goals + 32 combinator function-pointer-dispatch goals).
 
 ---
 
@@ -2478,6 +2835,21 @@ goals).
 | **CI enforcement**     | Yes — 185/215 with 30 named goals expected (enforced as of CI #1090) |
 | **MC/DC coverage**     | 100% (28/28 condition outcomes — see MCDC-007) |
 | **CI artifact**        | `wp-proof-result` (full per-goal breakdown)     |
+
+> **Correction (2026-10-20, VERIFY-039 G11 and G14).** The table and the
+> sections below give the figures and readings of enforcement. Since 767a151
+> the job pins 207 / 213 with 6 unproved (first run CI #1368, held at
+> CI #1373); from G11's repair of the driver (068ae6a, CI #1361) it pinned
+> 207 / 215 with 8. The 28 own residuals were option's case: the dispatching
+> combinators claimed termination, no exit and an empty frame for every
+> callback, and required nothing of the pointers, so a callback that loops,
+> exits or writes, or a pointer that is not a valid function, falsified them.
+> Since 068ae6a each requires a valid function where it calls one and makes
+> the three claims only where it calls none: 22 goals closed. The six left are
+> the run-time checks on the pointers, `eq`'s two among them, true for every
+> admitted call and unproved because WP 29 does not implement
+> `\valid_function`, filed by name under VERIFY-015's block. The handler's
+> pair closed at G14 (c9ac146).
 
 result is the **second driver-verified** Canon-C module and the second
 Shape-B module verified. WP is pointed at
@@ -2572,6 +2944,11 @@ Frama-C 29. Cluster sizes are structural — `map`/`map_err` 6 each
 branches). Full goal list, split-numbering notes, and per-combinator
 manual-proof arguments: see VERIFY-015 in `docs/deviations.md`.
 
+> **Correction (2026-10-20, VERIFY-039 G11 and G14).** Not a verifier feature
+> gap: the contracts' claims for every callback were false for some callbacks
+> they admitted, as in option's section, and the handler's pair was false as
+> written. See the note under the summary.
+
 ### MCDC-007 cross-reference
 
 result's MC/DC audit is **clean**: 28/28 condition outcomes covered,
@@ -2626,10 +3003,12 @@ frama-c -wp -wp-rte \
   vmacros/vdrivers/result_verify.h
 ```
 
-Expected output: `Proved goals: 185 / 215` with 30 unproved goals (the 2
-contract.h handler goals + 28 combinator function-pointer-dispatch
-goals), and 14+ expected `[wp:union]` warnings (VERIFY-015's union-model
-hypothesis — not failures).
+Expected output: `Proved goals: 207 / 213` with 6 unproved goals, the pin
+since VERIFY-039 G14: the run-time checks that a callback is a valid
+function (`185 / 215` with 30 when enforced: the 2 contract.h handler
+goals + 28 combinator function-pointer-dispatch goals), and 14+ expected
+`[wp:union]` warnings (VERIFY-015's union-model hypothesis — not
+failures).
 
 ---
 
@@ -2650,6 +3029,23 @@ hypothesis — not failures).
 | **CI enforcement**     | Yes — 2439/2458 with 19 named goals expected    |
 | **MC/DC coverage**     | 94.7% (36/38 condition outcomes — see MCDC-008) |
 | **CI artifact**        | `wp-proof-borrow` (full per-goal breakdown)     |
+
+> **Correction (2026-10-20, VERIFY-039 G13, G14 and G17).** The table and the
+> sections below give the figures and readings of enforcement. Since 767a151
+> the job pins 2451 / 2465 with 14 unproved (first run CI #1368, held at
+> CI #1373); G13 had moved it to 2439 / 2460 with 21 (7624d8c, CI #1367). The
+> 14 are slice.h's eight memcmp danglingness goals and checked.h's two,
+> inherited, and 4 own: `borrowed_bytes_eq`'s two at memcmp, and two at
+> `borrowed_str_eq`'s call to `str_equal`. The own pair below was not a
+> feature gap but false for calls the contract admitted: `\dangling` is a
+> property of the bytes compared, and comparing the bytes of a pointer to a
+> freed block met every precondition. Since 7624d8c `borrowed_bytes_eq`, and
+> `str_equal`, require that no compared byte hold a dangling address, and
+> `borrowed_str_eq` requires the same of its views: the four hold for every
+> admitted call, wait on WP's `\dangling`, and are filed by name under
+> VERIFY-008's Category 3, and VERIFY-016's own block is retired. Of the 17
+> inherited below, the seven of slice.h's that G14 and G17 closed had not held
+> for every admitted call (see slice.h's section).
 
 borrow.h is the fourth semantics/ module verified and the second
 semantics/ header verified **in place** (after error.h): its 24
@@ -2796,8 +3192,9 @@ frama-c -wp -wp-rte \
   semantics/borrow.h
 ```
 
-Expected output: `Proved goals: 2439 / 2458` with the 19 documented
-unproved goals (VERIFY-016).
+Expected output: `Proved goals: 2451 / 2465` with the 14 documented
+unproved goals, the pin since VERIFY-039 G14 and G17 (`2439 / 2458` with
+19 when enforced, VERIFY-016).
 
 
 ---
@@ -2819,6 +3216,16 @@ unproved goals (VERIFY-016).
 | **CI enforcement**     | Yes — 3050/3060 with 10 named goals expected    |
 | **MC/DC coverage**     | 97.67% (84/86 condition outcomes — see MCDC-009) |
 | **CI artifact**        | `wp-proof-diag` (full per-goal breakdown)       |
+
+> **Correction (2026-10-20, VERIFY-039 G14).** Since 767a151 the job pins
+> 3050 / 3058 with 8 unproved, all diag.h's own (first run CI #1368, held at
+> CI #1373). The inherited pair below, contract.h's handler goals, was false
+> as written, not unprovable by construction: the invariant was `\false`, and
+> the handler's contract stated no `terminates` clause, so WP 29 checked the
+> default, that it terminates. Since c9ac146 the handler states
+> `terminates \false;` and its loop carries no invariant: the invariant's two
+> goals are gone and the termination is proved. diag.h inherits no residual
+> now; its eight are VERIFY-017's block, unchanged.
 
 diag.h is the fifth semantics/ module verified and the third verified
 **in place** (after error.h and borrow.h) — completing the semantics/
@@ -2984,8 +3391,9 @@ frama-c \
   semantics/diag.h
 ```
 
-Expected output: `Proved goals: 3050 / 3060` with the 10 documented
-unproved goals (VERIFY-017).
+Expected output: `Proved goals: 3050 / 3058` with the 8 documented
+unproved goals, the pin since VERIFY-039 G14 (`3050 / 3060` with 10 when
+enforced, VERIFY-017).
 
 
 ---
@@ -3007,6 +3415,22 @@ unproved goals (VERIFY-017).
 | **CI enforcement**     | Yes — pinned `5285 / 5473` (5271 / 5467 before VERIFY-023) + zero-Failed + exact count 188 + by-name roll-call (set equality); ratcheted at CI #1247 (43a46b1) |
 | **MC/DC coverage**     | 98.10% (155/158 condition outcomes — see MCDC-010) |
 | **CI artifact**        | `wp-proof-vec` (full per-goal breakdown)        |
+
+> **Correction (2026-10-20, VERIFY-039).** The table and the sections below
+> give the figures of enforcement, brought up to date at VERIFY-023. Since
+> a79b69d the job pins 5474 / 5569 with 95 unproved (first run CI #1369, held
+> at CI #1373): memory.h's 31 and arena.h's 2, inherited; option's six and
+> result's six at (`Bool`, `Error`), the run-time checks on the callbacks'
+> pointers since G11; and 50 own, each filed by name (VERIFY-039's batch 1):
+> 24 under the block on a loop without annotations in a macro body, 21 under
+> VERIFY-017's byte-view block, 2 under VERIFY-008's Category 1, and one each
+> under the blocks on byte ranges compared by pointer order, on a call framed
+> by the callee's default `assigns`, and on a struct exchange whose operands
+> may overlap. G11 closed the option arm's 26 termination, exit and frame
+> goals and the result arm's 14, which did not hold for every callback the
+> contracts admitted (a4f8f5f, b52bba6), and G18 made vec's alloc and free
+> state the heap's state, so that their frames, proved from the allocators',
+> rest on true ones (806bdeb). The job's pin comment gives each step.
 
 vec is the **third driver-verified Shape-B module** (after option and
 result) and the **first data/-layer module verified** — verification's
@@ -3126,6 +3550,13 @@ goals (assigns-framing and transfer call-requires at the typed/void*
 boundary). Zero `rte_function_pointer` goals on vec functions — the
 first module without the OWN-003 dispatch class of its own.
 
+> **Correction (2026-10-20, VERIFY-039 batch 1).** Category (g) is not
+> unprovable by construction: the loop carries no annotation, which under
+> `-C`, the preprocessing `frama-c-vec` uses, could not attach, and under
+> `-CC` could (VERIFY-025). Its 24 goals are true, filed by name under
+> VERIFY-039's block on a loop without annotations in a macro body,
+> specification-bound.
+
 ### MCDC-010 cross-reference
 
 vec's cover TU measures 155/158 = 98.10%, its documented ceiling from
@@ -3170,8 +3601,9 @@ frama-c \
   vmacros/vdrivers/vec_verify.h
 ```
 
-Expected output: `Proved goals: 5285 / 5473` with the 188 documented (196 before VERIFY-023)
-unproved goals (VERIFY-018), 0 Failed. Wall time ~3h05m (CI #1247;
+Expected output: `Proved goals: 5474 / 5569` with the 95 documented
+unproved goals, the pin since VERIFY-039 G18 (`5285 / 5473` with 188 at
+VERIFY-023, 196 before it; VERIFY-018), 0 Failed. Wall time ~3h05m (CI #1247;
 ~2h50m before the F4 contracts added their 38 goals)
 (timeout-dominated; see VERIFY-018's runtime record).
 
@@ -3196,6 +3628,23 @@ unproved goals (VERIFY-018), 0 Failed. Wall time ~3h05m (CI #1247;
 | **MC/DC coverage**     | 100.00% (82/82 condition outcomes — see MCDC-011) |
 | **CI artifact**        | `wp-proof-deque` (full per-goal breakdown)      |
 | **Job runtime**        | ~52 min (vs vec's ~2h50m; deque is not the workflow's long pole) |
+
+> **Correction (2026-10-20, VERIFY-039 batch 2, G11 and G14).** The table and
+> the sections below give the figures and readings of enforcement. Since
+> 767a151 the job pins 1656 / 1673 with 17 unproved (first run CI #1368, held
+> at CI #1373): option's six and result's six at (`Bool`, `Error`), the
+> run-time checks on the callbacks' pointers, and the 5 own, `swap`'s. G11
+> closed the option arm's 26 and the result arm's 22 termination, exit and
+> frame goals, which did not hold for every callback the contracts admitted
+> (a4f8f5f, b52bba6), and G14 the handler's pair, false as written (c9ac146).
+> The swap cluster is not vec's class widened: its five clauses about `*b` are
+> true, and WP generates the fact that proves them, then drops it in its own
+> hypothesis filter, because `*b` is stored from a local whose value came from
+> its initializer and each clause names one field. `tmp`, whose address is
+> never taken, is a value no store reaches, so the account of the obstacle as
+> `tmp`'s preservation across the second struct write does not fit the model.
+> The five are filed by name under VERIFY-039's block on a struct stored from
+> an initialised local, stated field by field.
 
 deque is the **fourth driver-verified Shape-B module** (after option,
 result and vec) and the **second data/-layer module**. WP runs over
@@ -3334,6 +3783,23 @@ it is wired as `.github/workflows/f4-control.yml`
 | **CI artifact**        | `wp-proof-bitset` (full per-goal breakdown)     |
 | **Job runtime**        | ~2h50m                                          |
 
+> **Correction (2026-10-20, VERIFY-039).** The table and the sections below
+> give the figures of enforcement. Since a79b69d the job pins 4963 / 5041 with
+> 78 unproved (first run CI #1369, held at CI #1373): memory.h's 31, bits.h's
+> 12, borrow.h's 4, and option's six at `usize`, the run-time checks on the
+> callbacks' pointers since G11 (ec6a30b), inherited; and 25 own. Of the 71
+> own below, 30 closed with VERIFY-039's G4 entry 3, G6, the bounds of two
+> loops by `word_count`, and G8, which found `bitset_not`'s loop invariant and
+> postcondition false as written, the postcondition proved from the invariant,
+> and 16 at G10 (ec56091): the null guards read `bs->words` where sixteen
+> contracts did not require `*bs` readable. The 25 are filed by name: 15 under
+> VERIFY-017's byte-view block, 2 under the block on a call framed by the
+> callee's default `assigns`, and 8 under three blocks of VERIFY-039's batch
+> 3, on the word count through a wrap at the capacity bound, on bit-level
+> identities on the padding word, and on two clauses `bitset_find_next`'s code
+> establishes and its specification omits. The job's pin comment gives each
+> step.
+
 bitset is the **fifth driver-verified module** and the **third
 data/-layer module**, and it is the first that is not Shape B.
 
@@ -3372,6 +3838,14 @@ Derived by the job rather than hardcoded, and summing exactly:
 | 6 | P4 Typed+Cast bridge at the three as_bytes sites |
 | 8 | queries and finds |
 | **71** | smallest own-residual set of any driver-verified module (vec 196, pool 119, region 114, arena 91, deque 67) |
+
+> **Correction (2026-10-20, VERIFY-039).** The comparison in the last row is
+> not one: 71 is bitset's own set, and the figures beside it are other units'
+> totals of unproved goals, three of them units verified in place, not through
+> a driver. Among the driver-verified modules at this baseline every other own
+> set was smaller, option's 32, result's 28, vec's 53 and deque's 5: bitset's
+> 71 was the largest. At CI #1373 bitset's own set is 25, against vec's 50,
+> deque's 5, option's and result's 6 and range.h's 0.
 
 The job prints an `UNCLASSIFIED` line naming any stray if the class list
 ever stops partitioning — added after the first derived version summed
@@ -3413,6 +3887,17 @@ The same lesson recurred on a **precondition** at F5: deleting
 beforehand, cost five `assert_rte_mem_access` goals. Full account in
 VERIFY-020.
 
+> **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** E1's lesson holds;
+> F5 is not a second instance. At `bitset_not`, F5's control, the same commit
+> (61e1312) widened the first precondition to admit `bs->words == \null` as
+> well as deleting the clause, and after the widening the clause was no longer
+> redundant: it had excluded a non-null `bs` that points to no readable
+> `Bitset` and whose `words` reads null, the state in which each function's
+> null guard reads `bs->words` undefined. The five goals were that read's
+> checks, false in a state the contracts then admitted, not timeouts of a
+> correct specification. G10 (ec56091) requires `*bs` readable, and they
+> closed at CI #1358.
+
 ### Reproduction
 
 ```
@@ -3448,6 +3933,18 @@ coverage-stream record.
 | **CI artifact**        | `wp-proof-priority-queue`                       |
 | **Job runtime**        | ~2h45m                                          |
 
+> **Correction (2026-10-20, VERIFY-039).** The table and the paragraphs below
+> give the figures and readings of enforcement. Since de5a8d1 the job pins
+> 4647 / 4688 with 41 unproved (first run CI #1370, held at CI #1373):
+> memory.h's 31, inherited; result's six at (`Bool`, `Error`), a fresh
+> instantiation (VERIFY-022); and 4 own. G12 (77cc69c) gave the queue's result
+> instantiation `get_ok`'s and `get_err`'s contracts, removing the pair
+> VERIFY-018's F4 called removable; G11 (b52bba6) closed the result arm's 14
+> termination, exit and frame goals, which did not hold for every callback the
+> contracts admitted, leaving the arm its six run-time checks; and G21
+> (da2fce6) closed two of the six own, as below. The job's pin comment gives
+> each step.
+
 priority_queue.h is the **first in-place (Shape A) data/-layer module**. Its
 central operation calls a **caller-supplied function pointer** from inside
 its loops — region.h and the option/result combinators call function
@@ -3456,6 +3953,14 @@ what the call might have changed. That call was, until commit 5, an
 information horizon: WP has no contract for an unknown callee, so everything
 after `pq->cmp(...)` began with the queue's fields unknown, and ~99 of the
 run-4 residuals were downstream of it.
+
+> **Correction (2026-10-20, VERIFY-039 G19).** region.h does not call its
+> hooks as its last act: `region_end` calls them in a loop, clears each slot
+> after its call, and after the loop resets the arena and closes the region,
+> all in state a hook can change. G19 found its goals after the call false for
+> some admitted hooks, and its repair requires each hook to keep
+> `region_hook_rule`, a predicate with no definition whose meaning is its
+> comment, as no clause can state it of code behind a pointer.
 
 The comparator is proved as a **verified configuration**, not by a trusted
 axiom. `pq_cmp_` is the single call point; it carries a `calls` clause naming
@@ -3479,6 +3984,18 @@ Frama-C 29; five `!regions_overlap` obligations at four `mem_copy` sites and
 one `mem_swap` site, which memory.h states by pointer ordering and which
 `\separated` therefore cannot discharge across bases — a memory.h
 contract-shape finding and the **VERIFY-024 candidate**.
+
+> **Correction (2026-10-20, VERIFY-039 batch 2 and G21).** Two of the five are
+> not memory.h's pointer order. `pq_swap_`'s call to `mem_swap` and
+> `pq_remove_at_result`'s call to `mem_copy` compare two slots of one buffer,
+> where WP's order is defined and compares offsets; what the provers did not
+> find was the step `a·x + x <= b·x` for slots `a < b` and the element size
+> `x`. Since da2fce6 the queue states it as assertions before the two calls,
+> proved, and both goals are proved (CI #1370). The four own left are the
+> comparator's `\valid_function` check, under VERIFY-039's block on a call
+> through a pointer to one of the listed comparators, and three copies between
+> a caller's memory and the buffer, under its block on byte ranges compared by
+> pointer order across objects.
 
 The arc took eight commits and refuted three consecutive count predictions
 before switching to named residual classes; the full history, the F-WRAP
@@ -3504,6 +4021,15 @@ MCDC-014.
 | **MC/DC coverage**     | 98.39% (61/62 condition outcomes, 1 justified — see MCDC-015) |
 | **CI artifact**        | `wp-proof-range`                                |
 | **Job runtime**        | ~30 min                                          |
+
+> **Correction (2026-10-20, VERIFY-039 G11 and G14).** Since 767a151 the job
+> pins 2644 / 2652 with 8 unproved, all inherited (first run CI #1368, held at
+> CI #1373): option's six at `isize`, the run-time checks on the callbacks'
+> pointers, and checked.h's two. G11 (ec6a30b) gave `range_verify.h`'s copy of
+> option's combinators the repaired contracts, closing 26 termination, exit
+> and frame goals that did not hold for every callback the contracts admitted
+> (2644 / 2654 with 10), and G14 (c9ac146) the handler's pair, false as
+> written. range.h still has no own residual.
 
 range.h is **module 18** and the **first module verified after the
 argument-base saturation claim was written down** — the first prospective
@@ -3557,6 +4083,14 @@ unaided; VERIFY-029/030 say so and Table 5 carries the footnote.
 | **MC/DC coverage**     | 98.55% (136/138 condition outcomes, 2 justified — see MCDC-016) |
 | **CI artifact**        | `wp-proof-stringbuf`                            |
 | **Job runtime**        | ~70 min                                          |
+
+> **Note (2026-10-20, VERIFY-039).** Since a79b69d the job pins 4795 / 4832
+> with 37 unproved, all inherited (first run CI #1369, held at CI #1373):
+> arena.h's 33 and borrow.h's 4, `borrowed_bytes_eq`'s two memcmp danglingness
+> goals and the two at `borrowed_str_eq`'s call to `str_equal` that G13 added
+> (7624d8c), true for every admitted call since that repair. The movements
+> since VERIFY-035 are the substrate's, each step in the job's pin comment;
+> stringbuf.h still has no own residual.
 
 stringbuf.h is **module 19** and the **second prospective test of the
 argument-base saturation claim**. VERIFY-031 pre-registered the predictions
@@ -3638,6 +4172,23 @@ certification-evidence statement than dual-prover resistance — the goals
 are genuinely limited by WP's encoding, integer theory, or stdlib
 feature gaps, not by prover strength.
 
+> **Correction (2026-10-20, VERIFY-039).** The counts above are the
+> baselines'; at CI #1373 those units pin 2, 12, 6, 8, 31, 33, 34 and 39. And
+> not every goal among them was limited by WP's encoding, theory or feature
+> gaps: VERIFY-039 found some false for calls the contracts admitted, bits.h's
+> four shifted postconditions (G15), ptr.h's two calls and six pointer
+> postconditions (G16), slice.h's five libc preconditions (G17), memcmp's
+> danglingness at its callers (G13), the handler's pair (G14), the allocators'
+> two frames (G18) and seventeen of region.h's own (G19, G20). Each was
+> repaired, and every goal pinned unproved now is argued true for every
+> admitted call under a block that names its obstacle, the verifier's or a
+> clause the specification does not or cannot state; in vec's and the queue's
+> units, five clauses whose value C leaves undefined at some admitted calls
+> are argued wherever C defines them (see the note under the summary card).
+> Resistance is also a per-run observation: at CI #1369's first attempt a
+> prover proved within the limit a pinned goal of the queue's that the re-run
+> did not (G21).
+
 option's 34 residuals are a distinct class and are deliberately *not*
 lumped into the triple-prover-resistant set above:
 function-pointer-dispatch feature-gap goals (no `calls` clause for an
@@ -3648,6 +4199,21 @@ would not close them — but the limiting factor is WP's missing
 indirect-call support rather than its integer or stdlib theory, so they
 are characterized as a verifier feature gap rather than as
 triple-prover-resistant. error.h carries no residuals at all.
+
+> **Correction (2026-10-20, VERIFY-039 G11, G14 and G19).** Option's own 32,
+> like result's 28 and `region_end`'s hook goals, were not a verifier feature
+> gap; the other two of option's 34 were the handler's pair, false as written
+> (G14). The contracts claimed, for every callback or hook they admitted,
+> termination, no exit, writes within their frames and a valid function
+> pointer, and a callback that loops, exits, writes outside the frame or is
+> not a valid function falsifies each claim, whatever a verifier implements.
+> Since G11's and G19's repairs the contracts require a valid function where
+> they call one, and make the other claims only where nothing is called. What
+> is left of the combinators' is the run-time check that a pointer is a valid
+> function, true for every admitted call and unproved because WP 29 does not
+> implement `\valid_function`; what is left of `region_end`'s is three goals
+> that need the hook rule, which no clause can state of code behind a pointer,
+> and two that read the loop counter, which WP loses across the call.
 
 ### CVC5 installation note
 
@@ -3669,35 +4235,35 @@ the complete installation and registration procedure.
 | Header       | Status           | Proved    | Notes                              |
 |--------------|------------------|-----------|------------------------------------|
 | checked.h    | ✅ Verified       | 1753/1755 | 2 manual discharges                |
-| bits.h       | ✅ Verified       | 742/757   | 15 documented timeouts             |
+| bits.h       | ✅ Verified       | 745/757   | 12 documented residuals at CI #1373, all true (VERIFY-003, VERIFY-039 batch 6); 15 before VERIFY-039 G15 closed three false postconditions |
 | compare.h    | ✅ Fully verified | 208/208   | 100% automatic, 0 timeouts         |
-| ptr.h        | ✅ Verified       | 1729/1739 | 10 documented timeouts (VERIFY-006); CI run reports 1949/1959 due to checked.h #include (1943/1953 before VERIFY-023 added four result-address `ensures`) |
+| ptr.h        | ✅ Verified       | 1952/1958 | CI #1373's pin, the full run with checked.h's goals; 6 documented residuals, all true: checked.h's 2 and `align_up`'s and `align_down`'s formulas (VERIFY-039's fixed-width block), and `align_padding`'s formula and `ptr_align_padding`'s bound (VERIFY-008 Category 2); 16 before VERIFY-039 G14 and G16 closed the handler's pair, two calls and six pointer postconditions, none of which held for every admitted call; own baseline 1729/1739 with 10 (VERIFY-006), not re-measured after VERIFY-023 |
 | types.h      | N/A              |           | Type definitions only              |
 | limits.h     | N/A              |           | Constant definitions only          |
 | lifetime.h   | ✅ Verified at level 4 only | 4/4 | **Enforced at CI #1275** (VERIFY-021; name-identical #1271/#1273/#1274, pinned 4/4 with 0 unproved). Layout convention plus one `CANON_LIFETIME_DEBUG`-gated function, `canon_lifetime_next_id_`, the single token generator consolidated from eleven private copies at CI #1243–#1245 (5b45aeb → ca909c7). The former N/A disposition — "one function, excluded from every verified configuration" — was retired on 2026-09-02 not by weakening the argument but by satisfying it: rather than annotate an untranslated block, a configuration that TRANSLATES it was added (`frama-c-lifetime`, `CANON_LIFETIME_DEBUG` + `CANON_LIFETIME_NO_ATOMICS`, ladder level 4). **Levels 1–3 remain excluded permanently** — WP has no concurrency model for `atomic_fetch_add_explicit`, `__atomic_fetch_add` or `_InterlockedIncrement64` — and the contract is `#if`-gated on level 4 so it cannot acquire authority over them. Note the asymmetry: the verified path is the only one that is NOT race-free; verification followed the tool's reach, not the risk. Claim is `ensures \result != REGION_ID_STATIC` only. **No `assigns` clause: it cannot be written.** `counter_` is a function-local static and so is not in scope where a function contract is parsed; `assigns \nothing` would be FALSE (the historical defect, two of the eleven superseded copies) and hoisting the variable would verify a different program, so no frame is claimed and WP assumes `\everything` (VERIFY-021 F1, a specification-strength ceiling in the VERIFY-020 F4 family). Instrument integrity only — says nothing about whether callers obey the borrow discipline (issue #7). Zero inherited residuals (closure is `<stdbool.h>` + types.h), so nothing here bears on the composition result. Atomic-ladder deviation: MISRA-DEV-018; concurrency contract: docs/thread-safety.md. MCDC-013 (1/2 outcomes, one platform-dead justification row). Exercised through `lifetime_test.c`, `lifetime_token_test.c`, borrow_test.c and per-container tests. |
-| contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h     |
+| contract.h   | ✅ Annotated      |           | Handler contract used by ptr.h; since VERIFY-039 G14 it states `terminates \false;` and its loop carries no invariant, so no unit pins a handler goal |
 
 ### core/ (complete)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| slice.h      | ✅ Verified       | 379/394   | 15 documented timeouts (VERIFY-007/-012); MCDC-002 closed              |
-| memory.h     | ✅ Verified       | 2829/2872 | 43 documented timeouts (VERIFY-008/-012); 23 inherited + 20 own; +6 goals at VERIFY-023, set unchanged |
-| arena.h      | ✅ Verified       | 3517/3567 | 50 documented residuals at CI #1350: 48 inherited + 2 own, VERIFY-009 Cat 2c (the zero-content `ensures` of `arena_alloc_zero` and `arena_alloc_aligned_zero`); formerly 79 (VERIFY-033/034), 83 (VERIFY-009/-012/-023); VERIFY-036 and VERIFY-039 G2 closed the rest, each step in the job's pin comment; MCDC-003 |
-| pool.h       | ✅ Verified       | 3994/4045 | 51 documented residuals at CI #1350: arena.h's 50, inherited, + 1 own, VERIFY-010 Cat 2a's division bound; formerly 91 (VERIFY-033/034), 95 (VERIFY-010/-012/-023); VERIFY-036 and VERIFY-039 (G2, G5, G7) closed the rest, each step in the job's pin comment; MCDC-004 |
-| region.h     | ✅ Verified       | 3665/3738 | 73 documented residuals at CI #1350: arena.h's 50, inherited, + 23 own; formerly 102 (VERIFY-033/034), 106 (VERIFY-011/-012/-023); every movement since was in the inherited part; MCDC-005 |
+| slice.h      | ✅ Verified       | 390/398   | 8 documented residuals at CI #1373, memcmp's danglingness at the four functions that call it, true since VERIFY-039 G13 (VERIFY-008 Category 3); 15 before VERIFY-039 G14 and G17 closed seven that did not hold for every admitted call (VERIFY-007/-012); MCDC-002 closed, MC/DC 54/58 |
+| memory.h     | ✅ Verified       | 2848/2879 | 31 documented residuals at CI #1373: 14 inherited (checked.h 2, ptr.h 4, slice.h 8) + 17 own (VERIFY-008 Categories 1 to 3, and `mem_is_aligned`'s two under VERIFY-039's block on a clause the specification omits); 43 at VERIFY-023 (VERIFY-008/-012), each step since in the job's pin comment |
+| arena.h      | ✅ Verified       | 3523/3556 | 33 documented residuals at CI #1373: memory.h's 31, inherited, + 2 own, the zero-content `ensures` of `arena_alloc_zero` and `arena_alloc_aligned_zero`, filed under VERIFY-017's byte-view block since VERIFY-039's batch 5 retired VERIFY-009 Cat 2c; formerly 50 (CI #1350), 79 (VERIFY-033/034), 83 (VERIFY-009/-012/-023); VERIFY-036 and VERIFY-039 closed the rest, each step in the job's pin comment; MCDC-003 |
+| pool.h       | ✅ Verified       | 4042/4076 | 34 documented residuals at CI #1373: arena.h's 33, inherited, + 1 own, VERIFY-010 Cat 2a's division bound; formerly 51 (CI #1350), 91 (VERIFY-033/034), 95 (VERIFY-010/-012/-023); VERIFY-036 and VERIFY-039 closed the rest, each step in the job's pin comment; MCDC-004 |
+| region.h     | ✅ Verified       | 3691/3730 | 39 documented residuals at CI #1373: arena.h's 33, inherited, + 6 own, each true for every admitted call (VERIFY-011 Categories 1 and 2, and VERIFY-039's block on what a hook keeps); formerly 73 (CI #1350) with 23 own, 17 of which VERIFY-039 G19 and G20 closed, fourteen of them not holding for every admitted call; 102 (VERIFY-033/034), 106 (VERIFY-011/-012/-023); MCDC-005, whose outcome is reachable through the API (VERIFY-039 G20) |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
-*Rows for arena.h, pool.h and region.h brought to the pins CI #1350
-confirmed (2026-10-10, VERIFY-039 G7 scored). Stale: ptr.h and memory.h, as
-recomputed at VERIFY-023 (2026-09-07) and moved at VERIFY-026 and since;
-vec, priority_queue.h and stringbuf.h, as recomputed at VERIFY-035
-(2026-10-03) and moved since. The other rows match their pins, and bitset
-has no row in the data/ table. The summary card at the top stands as
-recomputed at VERIFY-035, and the per-header Summary cards of memory.h,
-arena.h, pool.h, region.h, vec, bitset, priority_queue.h and stringbuf.h
-carry older figures. Until they are recomputed, the pins in
+*Every row of the four tables brought to the pins CI #1373 confirmed
+(2026-10-20, VERIFY-039, the main pass's docs-only sweep), and bitset given
+its row in the data/ table. This note read, from 2026-10-10, that the rows for
+arena.h, pool.h and region.h were at CI #1350's pins and the rows for ptr.h,
+memory.h, vec, priority_queue.h and stringbuf.h stale; since then every row's
+pin has moved but checked.h's, compare.h's, error.h's and lifetime.h's. The
+summary card at the top is recomputed from the same pins. The per-header
+Summary cards keep their baselines' figures; under the card of each unit whose
+pin has moved, a dated note gives its pin at CI #1373. The pins in
 `.github/workflows/cmake-multi-platform.yml` are the authority.*
 
 ### semantics/ (complete)
@@ -3705,10 +4271,10 @@ carry older figures. Until they are recomputed, the pins in
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
 | error.h          | ✅ Verified  | 65/65   | 100% automatic, 0 residuals; default Typed model; calibration baseline for the layer |
-| option (driver)  | ✅ Verified  | 189/223 | First driver-verified Shape-B module (VERIFY-014); 2 inherited + 32 own function-pointer-dispatch residuals; default Typed model; MCDC-006; cover TU `option_cover.c` |
-| result (driver)  | ✅ Verified  | 185/215 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 2 inherited + 28 own function-pointer-dispatch residuals; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
-| borrow.h         | ✅ Verified  | 2439/2458 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 17 inherited + 2 own memcmp-danglingness residuals — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (36/38 ceiling post-Commit-9 surface, first named-assert closure) |
-| diag.h           | ✅ Verified  | 3050/3060 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 2 inherited (contract.h handler pair — smallest inherited surface of any residual-carrying header) + 8 own libc byte-view residuals — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
+| option (driver)  | ✅ Verified  | 222/228 | First driver-verified Shape-B module (VERIFY-014); 6 residuals at CI #1373, the run-time checks that a callback is a valid function, unproved because WP 29 does not implement `\valid_function`; 189/223 with 34 when enforced (2 inherited + 32 own), of which VERIFY-039 G11 and G14 closed 28 that did not hold for every admitted callback or were false as written; default Typed model; MCDC-006; cover TU `option_cover.c` |
+| result (driver)  | ✅ Verified  | 207/213 | Second driver-verified Shape-B module and first union-typed module (VERIFY-015); 6 residuals at CI #1373, the run-time checks that a callback is a valid function; 185/215 with 30 when enforced (2 inherited + 28 own), of which VERIFY-039 G11 and G14 closed 24 that did not hold for every admitted callback or were false as written; union-model standing hypothesis (all union goals proved); default Typed model; MCDC-007 (clean 28/28); cover TU `result_cover.c` |
+| borrow.h         | ✅ Verified  | 2451/2465 | Fourth semantics/ module, second verified in place (VERIFY-016): 24 non-macro functions annotated in place, `DEFINE_BORROWED_SLICE` parked per `docs/vmacros.md` (the slice.h/DEFINE_SLICE structure, first in semantics/); 14 residuals at CI #1373: 10 inherited (slice.h's 8 memcmp-danglingness goals and checked.h's 2) + 4 own (memcmp danglingness at `borrowed_bytes_eq` and at `borrowed_str_eq`'s call to `str_equal`); the 12 danglingness goals true since VERIFY-039 G13's repair and filed under VERIFY-008 Category 3, checked.h's 2 under VERIFY-039's block on fixed-width arithmetic; 19 when enforced (17 inherited + 2 own memcmp-danglingness residuals) — no new residual class; Typed+Cast; verified config `CANON_LIFETIME` off (OWN-001 §7); MCDC-008 (36/38 ceiling post-Commit-9 surface, first named-assert closure) |
+| diag.h           | ✅ Verified  | 3050/3058 | Fifth semantics/ module, third verified in place — layer complete (VERIFY-017): 13 functions annotated in place, the four `DIAG_*` call-site macros parked per `docs/vmacros.md`; 8 own libc byte-view residuals at CI #1373 and none inherited, the contract.h handler pair, false as written, having closed at VERIFY-039 G14; 10 when enforced (2 inherited, the handler pair — smallest inherited surface of any residual-carrying header — + 8 own) — no new residual class; Typed+Cast originated by diag.h's own casts; two documented trusted stdio axioms (`-variadic-no-translation`); MCDC-009 (84/86 ceiling, second named-assert closure + first libc-environmental permanent outcome) |
 
 **The semantics/ layer is complete.** diag.h shipped as the fifth and
 final semantics/ module (see its section above, VERIFY-017): 13
@@ -3741,15 +4307,22 @@ their audit expectations and VERIFY-018's method lessons (split patch
 first; composition before contract-weakening; three-run pinning
 discipline) recorded for deque.
 
+> **Correction (2026-10-20).** The 10-goal set was not predicted by name:
+> `docs/traceability.md`'s correction of 2026-08-09 records that the committed
+> pre-run artifact predicted its shape, and that of the 10 only the 2
+> inherited were named in advance. Those 2 were contract.h's handler pair,
+> which VERIFY-039 G14 found false as written; they closed at CI #1368.
+
 ### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h, stringbuf.h enforced)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| vec (driver) | ✅ Verified  | 5337/5521 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; ratcheted CI #1202 and CI #1247/43a46b1 for the F4 closure; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 123 inherited byte-identically (largest TU to date; 91 core = arena.h's set verbatim, 32 option mod prefix) + 73 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 20 fresh result(Bool, Error) instantiation, the F4 pair having been removed by contract at CI #1247 — VERIFY-018 Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
-| deque (driver) | ✅ Verified  | 1601/1668 | Fourth driver-verified Shape-B module, second data/-layer module, first data/-layer driver on plain **Typed** (VERIFY-019, enforced CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240): 24 generated functions via the DEFINE_DEQUE_STRUCTS/FUNCTIONS split (VERIFY-018 F3's checklist item, landed CI #1225 with byte-identical expansion verified first); **zero core-substrate inheritance** — the first module whose inherited surface is SMALLER than its predecessor's, composability tested in the converse direction; 2 handler + 32 option (inheritance) + 28 fresh result(Bool, Error) + 5 own (swap cluster only); class (g) macro-body-loop **withdrawn** before the run (a ring shifts nothing); **memory-model invariant** (VERIFY-019-M); closed VERIFY-018 F4; MCDC-011 (82/82, 100%, zero justification rows) |
-| priority_queue.h | ✅ Verified | 4521/4598 | First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 71 residuals: 43 inherited + 22 result + 6 own (1 `\valid_function`, 5 memory.h `regions_overlap`-by-pointer-order — VERIFY-024 candidate). Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
-| range.h      | ✅ Verified | 2611/2647 | Module 18 and the **first prospective test of the saturation claim** (VERIFY-028 pre-registered, VERIFY-029 scored runs 1–2 and pre-registered run 3, VERIFY-030 enforced at CI #1317, name-identical to #1315/#1316). Shape A in place; thin driver interposes a contracted `option_isize` (F3 guard). Exact `range_count` proved over the whole `isize` domain. 36 residuals, **all inherited** (32 option + 2 handler + 2 checked), **0 own**. F1/F2a/F2b/F3/F4 found by reading before the prover ran; **F5** a buffer overflow in `vec_range.h` downstream of F1. P1 (zero new arguments) held; P6 failed at run 2 — closed by a no-wraparound rewrite + two proved lemmas. MC/DC 61/62, 1 justified (MCDC-015). |
-| stringbuf.h  | ✅ Verified | 4767/4848 | Module 19 and the **second prospective test of the saturation claim** (VERIFY-031 pre-registered; VERIFY-032 scored run 2; VERIFY-033/034 closed A2 through arena.h's frame; VERIFY-035 enforced). 29 functions in place, Typed+Cast, no driver, first module with variadic definitions; 81 inherited (arena.h 79 + borrow.h 2), **0 own**, zero new argument blocks; third trusted axiom (`vsnprintf`). Defects G1/G2/G3/G5/G6 fixed. MCDC-016 (136/138, two environmental rows). |
+| vec (driver) | ✅ Verified  | 5474/5569 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; ratcheted CI #1202 and CI #1247/43a46b1 for the F4 closure; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 95 residuals at CI #1373: memory.h's 31 and arena.h's 2, inherited, option's 6 and result's 6 at (Bool, Error), the run-time checks on the callbacks' pointers since VERIFY-039 G11, and 50 own, each filed by name (VERIFY-039 batch 1); 184 at VERIFY-035 (5337/5521), 196 at CI #1247, each step since in the job's pin comment: 123 inherited byte-identically (largest TU to date; 91 core = arena.h's set verbatim, 32 option mod prefix) + 73 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 20 fresh result(Bool, Error) instantiation, the F4 pair having been removed by contract at CI #1247 — VERIFY-018 Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
+| deque (driver) | ✅ Verified  | 1656/1673 | Fourth driver-verified Shape-B module, second data/-layer module, first data/-layer driver on plain **Typed** (VERIFY-019, enforced CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240): 24 generated functions via the DEFINE_DEQUE_STRUCTS/FUNCTIONS split (VERIFY-018 F3's checklist item, landed CI #1225 with byte-identical expansion verified first); **zero core-substrate inheritance** — the first module whose inherited surface is SMALLER than its predecessor's, composability tested in the converse direction; 17 residuals at CI #1373: option's 6 and result's 6 at (Bool, Error), the run-time checks on the callbacks' pointers since VERIFY-039 G11, + 5 own, `swap`'s, true and filed under VERIFY-039's block on a struct stored from an initialised local; 67 when enforced: 2 handler + 32 option (inheritance) + 28 fresh result(Bool, Error) + 5 own (swap cluster only); class (g) macro-body-loop **withdrawn** before the run (a ring shifts nothing); **memory-model invariant** (VERIFY-019-M); closed VERIFY-018 F4; MCDC-011 (82/82, 100%, zero justification rows) |
+| bitset       | ✅ Verified | 4963/5041 | Fifth driver-verified module, third data/-layer module (VERIFY-020; enforced CI #1260, ratcheted CI #1265, gate wired at CI #1285): 32 functions contracted in place behind an interposition driver; 78 residuals at CI #1373: memory.h's 31, bits.h's 12, borrow.h's 4 and option's 6 at `usize`, inherited, + 25 own, each filed by name (VERIFY-039 batch 3); 163 when enforced, 71 own, the largest own set among the driver-verified modules then; F4 specification-strength inheritance; MCDC-012 (130/134) |
+| priority_queue.h | ✅ Verified | 4647/4688 | First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 41 residuals at CI #1373: memory.h's 31 + result's 6, the run-time checks on the callbacks' pointers, + 4 own, the comparator's `\valid_function` check and three copies between a caller's memory and the buffer, `regions_overlap` stated by pointer order across objects; 77 at VERIFY-035 (4521/4598); 71 when enforced (43 inherited + 22 result + 6 own), two of the six own being same-buffer slot goals, not pointer order, which VERIFY-039 G21 closed. Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
+| range.h      | ✅ Verified | 2644/2652 | Module 18 and the **first prospective test of the saturation claim** (VERIFY-028 pre-registered, VERIFY-029 scored runs 1–2 and pre-registered run 3, VERIFY-030 enforced at CI #1317, name-identical to #1315/#1316). Shape A in place; thin driver interposes a contracted `option_isize` (F3 guard). Exact `range_count` proved over the whole `isize` domain. 8 residuals at CI #1373, **all inherited** (option's 6 run-time checks + checked.h's 2), **0 own**; 36 when enforced (32 option + 2 handler + 2 checked), VERIFY-039 G11 and G14 closing 28. F1/F2a/F2b/F3/F4 found by reading before the prover ran; **F5** a buffer overflow in `vec_range.h` downstream of F1. P1 (zero new arguments) held; P6 failed at run 2 — closed by a no-wraparound rewrite + two proved lemmas. MC/DC 61/62, 1 justified (MCDC-015). |
+| stringbuf.h  | ✅ Verified | 4795/4832 | Module 19 and the **second prospective test of the saturation claim** (VERIFY-031 pre-registered; VERIFY-032 scored run 2; VERIFY-033/034 closed A2 through arena.h's frame; VERIFY-035 enforced). 29 functions in place, Typed+Cast, no driver, first module with variadic definitions; 37 inherited at CI #1373 (arena.h 33 + borrow.h 4), **0 own**; 81 when enforced (arena.h 79 + borrow.h 2); zero new argument blocks; third trusted axiom (`vsnprintf`). Defects G1/G2/G3/G5/G6 fixed. MCDC-016 (136/138, two environmental rows). |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 
 ### algo/ (longer term)

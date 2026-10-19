@@ -56,6 +56,22 @@
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | 55 instrumented (`Found 55 data files`), of which 4 are Shape-B cover TUs `option_cover`, `result_cover`, `vec_cover`, `deque_cover`; ctest registers 54 |
 
+> **Note (2026-10-20, VERIFY-039).** The card above describes CI #1317
+> (9f7a9d0, 2026-09-29). The latest measurement is CI #1373's (140a6ac,
+> 2026-10-19), whose figures are in the results table below and in the note
+> that follows; since 25133fe (2026-10-09) the coverage job runs on
+> `ubuntu-24.04`, pinned, where the card says `ubuntu-latest`. The card's
+> other fields were not read again at CI #1373.
+>
+> **Coverage moved by VERIFY-039 G17 (2026-10-20; first measured at CI #1368,
+> 2026-10-17).** MC/DC is now **1866/2026 (92.10%)**; branches 1662/1814
+> (91.6%); lines 2727/2814 (96.9%) and functions 672/675 (99.6%), as before.
+> The whole move is slice.h: 50/54 → 54/58 (+4 hit, +4 outcomes), the
+> zero-length returns G17 added to `bytes_equal` and `str_equal` before
+> memcmp, all four covered; MCDC-002's four are still the ones missed. No
+> other file moved. CI #1373 reads the same, its figures read from the
+> coverage job's log by the maintainer.
+>
 > **Coverage moved by MCDC-016 (2026-10-03).** MC/DC is now
 > **1862/2022 (92.09%)**; lines 2727/2814 (96.9%), functions 672/675
 > (99.6%), branches 1658/1810 (91.6%). The whole move is stringbuf.h:
@@ -230,11 +246,19 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 96.7%      | 2693       | 2785       |
-| Functions  | 99.6%      | 665        | 668        |
-| Branches   | 89.3%      | 1612       | 1806       |
-| MC/DC      | 89.9%      | 1815       | 2018       |
+| Lines      | 96.9%      | 2727       | 2814       |
+| Functions  | 99.6%      | 672        | 675        |
+| Branches   | 91.6%      | 1662       | 1814       |
+| MC/DC      | 92.1%      | 1866       | 2026       |
 
+> **Transcribed from CI #1373's coverage job (run 2026-10-19), 2026-10-20.**
+> All four rows are that run's own figures, read from its log by the
+> maintainer; they equal CI #1368's. Deltas from the CI #1290 transcription
+> below: lines 2693/2785 → 2727/2814, functions 665/668 → 672/675, branches
+> 1612/1806 → 1662/1814, MC/DC 1815/2018 → 1866/2026. The files that moved are
+> range.h (MCDC-015), stringbuf.h (MCDC-016) and, in MC/DC and branches,
+> slice.h (VERIFY-039 G17), as the notes above record.
+>
 > **Transcribed from CI #1290's coverage job, 2026-09-07.** All four rows are
 > that run's own figures, unchanged since CI #1280 (the pq coverage arc); the
 > intervening runs changed only proof state. Deltas from the CI #1240
@@ -474,18 +498,21 @@ exercised by the dedicated `checked_div_*_op`, `checked_mod_*_op`,
 Headers at their documented MC/DC ceiling (below 100% by design or
 by methodology):
 
-- **slice.h: 92.6% (50/54)** — the achievable ceiling under the
-  public-API constraint documented in MCDC-002. The 4 remaining
-  outcomes are the `!ptr` left-side of `||` in `bytes_slice` (line
-  117), `bytes_skip` (line 130), `str_slice` (line 194), and
-  `str_skip` (line 207). All four are unreachable in MC/DC isolation
+- **slice.h: 93.1% (54/58; 92.6%, 50/54, before VERIFY-039 G17)** — the
+  achievable ceiling under the public-API constraint documented in
+  MCDC-002. The 4 remaining outcomes are the `!ptr` left-side of `||`
+  in `bytes_slice` (line 483), `bytes_skip` (line 533), `str_slice`
+  (line 776), and `str_skip` (line 816), lines 117, 130, 194 and 207
+  when this was written. All four are unreachable in MC/DC isolation
   through the public API and are formally proved unreachable by
   Frama-C WP under the `bytes_invariant` / `str_invariant` type
   predicates (see VERIFY-007 and the MCDC-002 status update). The
-  gcov measurement reads 50/54 on the post-Commit-9 surface (see the
-  2026-07-24 note above) because gcov instruments the source
-  rather than the proof — the two evidence streams complement each
-  other rather than converge.
+  gcov measurement reads 54/58 since VERIFY-039 G17, whose zero-length
+  returns in `bytes_equal` and `str_equal` add four outcomes, all
+  covered (50/54 on the post-Commit-9 surface before it; see the
+  2026-07-24 note above), because gcov instruments the source rather
+  than the proof — the two evidence streams complement each other
+  rather than converge.
 
 - **memory.h: 88.3% (113/128)** — the ceiling under the
   `-DCANON_NO_REQUIRE` methodology documented in MCDC-001. The 15
@@ -561,6 +588,19 @@ by methodology):
   (the verification boundary documented in OWN-003), distinct from this
   guard branch. The 1 missed outcome is the documented ceiling and not
   counted as a coverage regression.
+
+  **Corrected 2026-10-20 (VERIFY-039 G19 and G20).** No clause states that
+  every slot below the count holds a hook, nor the no-NULL-hook property, so
+  WP discharges nothing here, and a hook may leave a slot below its own with a
+  null `fn`, as one that re-opens its own `Region` does. Calls that each meet
+  their contracts reach the guard's false side
+  (`tools/probes/verify-039/p_region_arena.c`, its fifth and sixth cases), and
+  both stay within the contracts since G20's repair: 21/22 is the tests'
+  ceiling, not the API's. region.h's WP run carries 39 residuals since
+  642ad8a, 6 of them its own, and its 23 own goals before it were not all a
+  verification boundary: seventeen did not hold for every admitted call,
+  fourteen of `region_end`'s 19 and three of category 2's four, as the note on
+  region.h's baseline below says.
 
 - **borrow.h: 94.7% (36/38)** — the ceiling under MCDC-008. The 2
   missed outcomes are the NULL-true sides of the one-NULL guard in
@@ -851,30 +891,50 @@ those are memory.h's `regions_overlap` predicate stated by pointer order
 argument-base saturation claim: pinned 2611 / 2647 with 36 residuals by
 name, all inherited, **none own**, and zero new argument blocks.
 
+As of 2026-10-19 (CI #1373), VERIFY-039's main pass has read every pinned
+residual against its code, as VERIFY-036 read four arguments against theirs,
+and every pinned name is filed under a block of `docs/deviations.md` that
+argues it true for every call the contracts admit, or, for five clauses whose
+value C leaves undefined at some of those calls, wherever C defines them (see
+the note under `docs/verification.md`'s summary card); the record coverage
+job, a gate since 140a6ac, checks that join on every push that changes the
+record, the pins or its script. The reading found goals false for calls the
+contracts admitted, each repaired with a committed prediction and scored by
+CI, and the rows below moved with those repairs. Dated notes after the table
+and after the paragraphs below say where a reading here no longer holds.
+
 | Header     | Functions | Proof obligations | Proved (auto)     | Unproved | Deviation    |
 |------------|-----------|-------------------|-------------------|----------|--------------|
 | checked.h  | 30        |              1755 | 1753 (99.89%) | 2        | VERIFY-002   |
-| bits.h     | 18        |               757 | 742 (98.02%) | 15       | VERIFY-003/4 |
+| bits.h     | 18        |               757 | 745 (98.41%) | 12       | VERIFY-003/4 |
 | compare.h  | 28        |               208 | 208 (100.00%) | 0        | VERIFY-005   |
-| ptr.h      | 21        |              1973 | 1957 (99.19%) | 16       | VERIFY-006/23 |
-| slice.h    | 22        |               394 | 379 (96.19%) | 15       | VERIFY-007/12 |
-| memory.h   | 27        |              2886 | 2837 (98.30%) | 49       | VERIFY-008/12/23 |
-| arena.h    | 25        |              3575 | 3496 (97.79%) | 79       | VERIFY-009/12/23/33 |
-| pool.h     | 21        |              4061 | 3970 (97.76%) | 91       | VERIFY-010/12/23/33 |
-| region.h   | 12        |              3746 | 3644 (97.28%) | 102      | VERIFY-011/12/23/33 |
+| ptr.h      | 21        |              1958 | 1952 (99.69%) | 6        | VERIFY-006/23 |
+| slice.h    | 22        |               398 | 390 (97.99%) | 8        | VERIFY-007/12 |
+| memory.h   | 27        |              2879 | 2848 (98.92%) | 31       | VERIFY-008/12/23 |
+| arena.h    | 25        |              3556 | 3523 (99.07%) | 33       | VERIFY-009/12/23/33 |
+| pool.h     | 21        |              4076 | 4042 (99.17%) | 34       | VERIFY-010/12/23/33 |
+| region.h   | 12        |              3730 | 3691 (98.95%) | 39       | VERIFY-011/12/23/33 |
 | error.h    | 4         |                65 | 65 (100.00%) | 0        | VERIFY-013   |
-| option     | 16        |               223 | 189 (84.75%) | 34       | VERIFY-014   |
-| result     | 17        |               215 | 185 (86.05%) | 30       | VERIFY-015   |
-| borrow.h   | 24        |              2458 | 2439 (99.23%) | 19       | VERIFY-016   |
-| diag.h     | 13        |              3060 | 3050 (99.67%) | 10       | VERIFY-017   |
-| vec        | 37        |              5521 | 5337 (96.67%) | 184      | VERIFY-018/23/33 |
-| deque      | 24        |              1668 | 1601 (95.98%) | 67       | VERIFY-019   |
-| bitset     | 32        |              5022 | 4853 (96.63%) | 169      | VERIFY-020/23 |
+| option     | 16        |               228 | 222 (97.37%) | 6        | VERIFY-014   |
+| result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
+| borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
+| diag.h     | 13        |              3058 | 3050 (99.74%) | 8        | VERIFY-017   |
+| vec        | 37        |              5569 | 5474 (98.29%) | 95       | VERIFY-018/23/33 |
+| deque      | 24        |              1673 | 1656 (98.98%) | 17       | VERIFY-019   |
+| bitset     | 32        |              5041 | 4963 (98.45%) | 78       | VERIFY-020/23 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
-| priority_queue.h | 41  |              4598 | 4521 (98.33%) | 77       | VERIFY-022   |
-| range.h    | 15        |              2647 | 2611 (98.64%) | 36       | VERIFY-028/29/30 |
-| stringbuf.h | 29       |              4848 | 4767 (98.33%) | 81       | VERIFY-031..35 |
-| **Total**  | **457**   | **49684**         | **48608 (97.83%)**| **1076** |              |
+| priority_queue.h | 41  |              4688 | 4647 (99.13%) | 41       | VERIFY-022   |
+| range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
+| stringbuf.h | 29       |              4832 | 4795 (99.23%) | 37       | VERIFY-031..35 |
+| **Total**  | **457**   | **49805**         | **49330 (99.05%)**| **475**  |              |
+
+*Brought to the enforced pins 2026-10-20 (VERIFY-039, the main pass's
+docs-only sweep).* Every row reads its job's pin at CI #1373, and the total is
+their sum: 49805 obligations, 49330 proved and 475 unproved, from 49684, 48608
+and 1076. The movements are VERIFY-036's and VERIFY-039's, each step in its
+job's pin comment; `docs/verification.md`'s summary card is recomputed from
+the same pins. The paragraphs below are as written at the rows' earlier pins,
+with dated notes where VERIFY-039 changed what they say.
 
 *Brought to the enforced pins 2026-10-03 (VERIFY-035).* The ptr.h, memory.h,
 arena.h, pool.h, region.h, vec, bitset and priority_queue.h rows still showed
@@ -889,6 +949,11 @@ step was arena.h's own fix (VERIFY-033), which stated the frame its three
 reset functions already state and added 20 proved goals to every unit that
 includes it.
 
+> **Note (2026-10-20, VERIFY-039).** 37 at CI #1373, all inherited: arena.h's
+> 33 and borrow.h's 4, the two at `borrowed_bytes_eq`'s memcmp and the two at
+> `borrowed_str_eq`'s call to `str_equal` that G13 added, true for every
+> admitted call since that repair. stringbuf.h still has no own residual.
+
 `range.h` is enforced as of CI #1317 (name-identical to #1315 and #1316; the
 third run changed comments only; VERIFY-030). Its 36 residuals are all
 inherited — 32 from the contracted `option_isize` instantiation (the same
@@ -896,6 +961,12 @@ function-pointer-dispatch class bitset pins for `option_usize`), 2 from the
 contract handler, 2 from checked.h (VERIFY-002). It has **no own residuals**:
 own counts ran 12 → 11 → 0 over three runs, the last after a no-wraparound
 rewrite and two lemmas WP proves as goals of their own.
+
+> **Correction (2026-10-20, VERIFY-039 G11 and G14).** 8 at CI #1373, all
+> inherited: option's six run-time checks at `isize` and checked.h's two. G11
+> closed 26 of option's that did not hold for every callback the contracts
+> admitted, and G14 the handler's pair, false as written. range.h still has no
+> own residual.
 
 `priority_queue.h` is enforced as of CI #1290 (name-identical to #1289 with no
 header change; VERIFY-022). Its 71 residuals are 43 inherited from memory.h,
@@ -905,6 +976,18 @@ memory.h's contract shape (VERIFY-024 candidate). Its comparator claim is a
 **verified configuration**, not a universal one: `pq->cmp` must be one of
 compare.h's 24 built-ins for the proof to apply. The row's 41 functions include
 `pq_cmp_`, the single point at which the queue calls the comparator.
+
+> **Correction (2026-10-20, VERIFY-039 batch 2, G11, G12 and G21).** Two of
+> the five `regions_overlap` goals are not memory.h's pointer order:
+> `pq_swap_`'s call to `mem_swap` and `pq_remove_at_result`'s to `mem_copy`
+> compare two slots of one buffer, where WP's order is defined and compares
+> offsets. What the provers did not find was the step with the element size,
+> which G21 states as assertions before the two calls; both goals are proved
+> since CI #1370. At CI #1373 the queue pins 41: memory.h's 31; result's six
+> run-time checks, G12 having removed the `get_ok`/`get_err` pair and G11 the
+> arm's 14 termination, exit and frame goals; and 4 own, the comparator's
+> check and three copies between a caller's memory and the buffer,
+> `regions_overlap` stated by pointer order across objects.
 
 Seven other rows moved at CI #1285 (VERIFY-023): every TU including `ptr.h`
 gained 6 goals, and 24 residuals that had been recorded as arithmetic or
@@ -919,8 +1002,9 @@ them: ladder **level 4 only**, one `ensures` clause, no `assigns` (VERIFY-021
 F1), and instrument integrity rather than a module. Zero residuals here means
 zero goals left over from four, not a module cleared.
 
-All figures are the enforced CI pins at HEAD (16d0f0b, CI #1266 — post the
-deque arc of CI #1225–#1240 and the vec F4 ratchet of CI #1246–#1247).
+All figures are the enforced CI pins at CI #1373 (140a6ac); this sentence
+named, before the sweep of 2026-10-20, HEAD 16d0f0b and CI #1266, post the
+deque arc of CI #1225–#1240 and the vec F4 ratchet of CI #1246–#1247.
 `ptr.h`'s row
 is its full-TU figure; its module-own baseline before checked.h gained the
 division/modulo families was 1739/1729, with the same 10 named residuals.
@@ -960,6 +1044,13 @@ obligation of VERIFY-018 finding F4 — **removable, not residual** —
 eliminated by contracting the two functions in the driver (measured
 c427548 / CI #1246, ratcheted 43a46b1 / CI #1247). See VERIFY-018 incl.
 Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17.
+
+> **Note (2026-10-20, VERIFY-039).** At CI #1373 option's row counts 228
+> obligations and result's 213, the handler's goals among them all proved
+> since G14 (c9ac146), which removed its invariant's two goals and proved its
+> termination. vec's counts 5569, and its 95 unproved are memory.h's 31 and
+> arena.h's 2, the six run-time checks of option's arm and the six of result's
+> at (`Bool`, `Error`), and 50 own, each filed by name (VERIFY-039's batch 1).
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
 `-wp-timeout 120`). Of the 765 unproved goals, the 438 in-place-header
@@ -1011,6 +1102,24 @@ the per-module entries are the authoritative record. result additionally
 carries the union-model standing hypothesis (no goals; all
 union-member postconditions proved under a WP union model the tool
 itself flags — see VERIFY-015).
+
+> **Correction (2026-10-20, VERIFY-039).** This paragraph's class account is
+> as of the rows it names, and its readings do not all hold. Option's and
+> result's combinator goals were not a feature gap: the contracts claimed
+> termination, no exit, an empty frame and a valid pointer for every callback
+> they admitted, and a callback that loops, exits, writes or is not a valid
+> function falsified them (G11). Since G11's repair each family keeps six
+> run-time checks that the pointer is a valid function, true and unproved
+> because WP 29 does not implement `\valid_function`. The handler's pair was
+> false as written (G14). borrow.h's two memcmp-danglingness goals, and
+> slice.h's and memory.h's, were false for admitted calls until G13's repair.
+> And vec's 24 fill goals are not unprovable by construction: the loop carries
+> no annotation, which under `-C` could not attach and under `-CC` could
+> (VERIFY-025); they are true, filed under VERIFY-039's block on a loop
+> without annotations in a macro body. At CI #1373 every pinned name is filed
+> under one of the record's 22 blocks in force, 17 of them verifier-bound and
+> 5 specification-bound, and the record coverage job fails a push that leaves
+> a pinned name unfiled.
 
 **Note on totals**: each per-header row reports that header's own
 obligations (substrate goals are counted under their owning header,
@@ -1071,6 +1180,20 @@ instantiation — a new verification subject whose residual profile
 matches the family's home profile at clause-family granularity (see
 VERIFY-018's byte-identity note and Correction note 2026-07-16).
 
+> **Correction (2026-10-20, VERIFY-039).** This note's first sentence no
+> longer holds: since VERIFY-035 each row is its job's full-run pin, the
+> substrate goals the unit re-emits included, so the total counts
+> goal-instances, as `docs/verification.md`'s summary card says; ptr.h's row
+> is its full run with checked.h's goals. The counts in this note are as of
+> the rows' earlier pins. At CI #1373 memory.h's 31 are 14 inherited
+> (checked.h 2, ptr.h 4, slice.h 8) and 17 own; arena.h's 33 are memory.h's 31
+> and 2 own; pool.h's 34 and region.h's 39 are arena.h's 33 and 1 and 6 own;
+> option's 6 and result's 6 are their own run-time checks, the handler pair
+> they inherited having closed at G14; borrow.h's 14 are 10 inherited (slice.h
+> 8, checked.h 2) and 4 own; diag.h's 8 are its own, and it inherits none;
+> vec's 95 are given above. Each unit's inherited goals are still the included
+> headers' pinned names, re-emitted unchanged.
+
 The slice.h baseline (367 / 390) carries a higher residual fraction
 (5.9%) than the previously verified primitives headers because slice.h
 is the first Canon-C header that crosses the C standard library
@@ -1080,6 +1203,16 @@ initialization and danglingness reasoning that Frama-C 29 has not yet
 implemented (see VERIFY-007 for the full WP warning text). The 15
 slice.h residuals are not specific to slice.h's design; future headers
 that use these libc functions will incur the same residual category.
+
+> **Correction (2026-10-20, VERIFY-039 G13, G14 and G17).** Not every one of
+> the fifteen was the verifier's. Seven did not hold for every admitted call
+> and closed at CI #1368: memcmp's four `valid_*` preconditions at a zero
+> length and strlen's string requirement, which the contracts did not
+> establish (G17), and the handler's pair (G14). The eight danglingness goals
+> were false for admitted calls until G13's repair (7624d8c), since which each
+> caller requires that no compared byte hold a dangling address; they hold for
+> every admitted call and wait on WP's `\dangling`. slice.h pins 390 / 398
+> with 8 since 767a151.
 
 The memory.h baseline (2805 / 2862) is the first Canon-C verification
 round where inherited residuals from substrate headers exceed
@@ -1094,6 +1227,17 @@ documented in VERIFY-008 with manual-proof arguments. The 23:20
 inherited:own ratio is the first quantitative data point for the
 composable-verification thesis: substrate residuals propagate without
 amplification across composition layers.
+
+> **Correction (2026-10-20, VERIFY-039 G13 and G18, and the open items).** Not
+> every one of the three categories is rooted in a feature gap. Two of the
+> allocation goals were `mem_alloc`'s and `mem_free`'s frames, false where
+> libc lets malloc and free change the heap's state, and closed at G18
+> (806bdeb); `mem_is_aligned`'s two integer-theory goals need a clause
+> `ptr_is_aligned`'s contract omits; and the memcmp danglingness goals were
+> false for admitted calls until G13's repair (7624d8c). The three left of the
+> allocation category wait on WP's `\fresh` and `\freeable`, and the
+> danglingness goals, true since the repair, on its `\dangling`. memory.h pins
+> 2848 / 2879 with 31 since a79b69d.
 
 The arena.h baseline (3369 / 3472) extends the composable-verification
 thesis to a third composition layer. arena.h includes memory.h, which
@@ -1169,6 +1313,20 @@ the verification boundary — the WP boundary landed exactly where the
 design predicted it. With region.h verified, the core/ layer is
 complete (every core/ header is verified or justified-N/A).
 
+> **Correction (2026-10-20, VERIFY-039 G19 and G20).** The two categories were
+> not the verifier's boundary and the weight of composing `arena_invariant`.
+> Of the 19 `region_end` goals, three came from two plain omissions, false for
+> every call of a kind, the frame without the `Arena` the reset writes and the
+> loop's frame without the store to `h`; and eleven claimed, for every hook,
+> what only some hooks give, G11's class. No clause stated the hook contract
+> the argument rested on, and the frame did not hold under it. Of category 2's
+> four, three were false for calls with a `Region` overlapping its `Arena`,
+> which nothing excluded. G19's and G20's repair (642ad8a) closed 17, and
+> region.h's own residuals are six since, each true for every admitted call:
+> three that need the hook rule, a predicate whose meaning is its comment, two
+> where WP loses the loop counter across the call, and `region_begin`'s
+> invariant. See `docs/verification.md`'s section on region.h.
+
 The option baseline (189 / 223) is the first **driver-verified** and
 first **Shape-B** module, and the first semantics/ header to carry
 residuals (error.h, VERIFY-013, proved 65/65 clean). WP runs over the
@@ -1188,6 +1346,15 @@ function proved fully. option uses the default `Typed` model (no void*
 casts), like error.h. All 34 are documented in VERIFY-014 with manual-
 proof arguments. option's WP run is enforced (exact-count + by-name
 roll-call) as of CI #1067.
+
+> **Correction (2026-10-20, VERIFY-039 G11 and G14).** The own residuals were
+> not a feature gap: the contracts claimed, for every callback, termination,
+> no exit and an empty frame, and required nothing of the pointer, and a
+> callback that loops, exits, writes or is not a valid function falsified
+> them. Since G11's repair (a4f8f5f) option pinned 222 / 230 with 8, and since
+> G14's (c9ac146), its pin set at 767a151, it pins 222 / 228 with 6: the
+> run-time checks that the pointer is a valid function, true for every
+> admitted call.
 
 The vec baseline (5184 / 5380 at CI #1152 — the pin has since ratcheted
 three times, to 5271 / 5467 at CI #1247; the figures in this paragraph
@@ -1222,6 +1389,12 @@ CI #1154, green on the first enforced run while prover attribution,
 source line numbers, and roll-call order all varied beneath the
 name-only gates.
 
+> **Correction (2026-10-20, VERIFY-039 batch 1).** The fill cluster is not
+> unprovable by construction: its loop carries no annotation, which under `-C`
+> could not attach and under `-CC` could (VERIFY-025). Its 24 goals are true,
+> filed under VERIFY-039's block on a loop without annotations in a macro
+> body, specification-bound. vec pins 5474 / 5569 with 95 since a79b69d.
+
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
 were discharged automatically — most by Qed, with smaller contributions
@@ -1231,7 +1404,8 @@ the previous baseline.
 
 ### Cross-stream evidence: MCDC-002 through MCDC-008 closures
 
-slice.h's MC/DC ceiling at 92.6% (50/54) and slice.h's WP discharge
+slice.h's MC/DC ceiling at 93.1% (54/58 since VERIFY-039 G17; 92.6%,
+50/54, before) and slice.h's WP discharge
 of the four MCDC-002 functions form complementary certification
 evidence. gcov reports the four `!ptr` defensive branches as uncovered
 because no test reaches them through the public API. WP proves the
@@ -1298,6 +1472,17 @@ the 19 opaque-hook-dispatch goals), but those are on the indirect-call
 obligations, a distinct concern from this guard branch — the guard
 branch is a structural defensive outcome, not a WP residual. See
 MCDC-005 in `docs/deviations.md` for the formal closure record.
+
+> **Correction (2026-10-20, VERIFY-039 G20).** The runtime invariant does not
+> hold for every admitted call: no clause states that every slot below the
+> count holds a hook, and a hook may leave a slot below its own with a null
+> `fn`, as one that re-opens its own `Region` does. Calls that each meet their
+> contracts reach the false side (`tools/probes/verify-039/p_region_arena.c`,
+> its fifth and sixth cases), and they stay within the contracts since G20's
+> repair. No stream establishes the branch dead; 21/22 is the tests' ceiling,
+> and MCDC-005 is not an instance of the complement. `region_end`'s WP
+> residuals are five since 642ad8a, not 19; region.h's sixth is
+> `region_begin`'s.
 
 option_cover.c's MC/DC ceiling at 96.7% (29/30) and the MCDC-006 closure
 are the sixth instance of the cross-stream pattern, and the first on a
@@ -1425,6 +1610,11 @@ unprovable by construction — cites the coverage stream as its
 *primary* evidence, all three fill legs exercised. See MCDC-010 in
 `docs/deviations.md` for the formal record.
 
+> **Correction (2026-10-20, VERIFY-039 batch 1).** The fill goals are true and
+> unproved because the loop carries no annotation, not unprovable by
+> construction: under `-CC` an annotation would attach (VERIFY-025). The
+> coverage stream is still the evidence that the three legs run.
+
 ### History
 
 | Date       | Commit  | CI Run | Version | Lines  | Functions | Branches | MC/DC  | Notes                                                                    |
@@ -1460,5 +1650,20 @@ unprovable by construction — cites the coverage stream as its
 | 2026-09-06 | b79a51f | #1284 → #1285 | v1.3.0  | 96.7%  | 99.6%     | 89.3%    | 89.9%  | **VERIFY-023**: `ptr_offset`/`ptr_offset_const`/`ptr_elem`/`ptr_elem_const` gain an `ensures` stating their result. +6 goals in every TU including ptr.h (not the predicted +4: two of the four have a null branch and `-wp-split` fragments them). **24 pinned residuals closed** across arena (8), pool (16 own + 8), region (8), vec (8) — every one previously classified as arithmetic or call-site limits; all were the callee's opaque return address. Eight pins ratcheted in one commit. Also found: `frama-c-bitset` had no terminal exit and could not fail the build since #1259 — **enforcement of bitset begins here**; arena-32's embedded baseline was a stale copy of arena's pin. Coverage unchanged. |
 | 2026-09-26 → 09-29 | bd1da17 → 9f7a9d0 | #1312 → #1317 | v1.3.0  | 97.0%  | 99.6%     | 89.7%    | 90.4%  | range.h — **module 18, the first prospective test of the saturation claim**; both streams in one arc (VERIFY-028/029/030, MCDC-015). Predictions pre-registered before any contract (bd1da17) and again before the remediation run (9c1cdfc). **Findings before the prover ran**: F1 (`range_len` UB for spans > ISIZE_MAX, observed returning 0), F2a/F2b (`range_skip` reversal / early exhaustion), F3 (unguarded `CANON_OPTION(isize)`), F4 (`ensure_msg` precondition); tracing F1's consumers found **F5**, a buffer overflow in `vec_extend_from_range` (ASan, public API). **WP** (Typed, 15 functions): own residuals 12 → 11 → 0; run 1 failed exactly on the goals the defects falsify; run 2 falsified P6 (a MISRA-motivated wraparound form was correct but unprovable, plus a nonlinear bound); run 3, the pre-declared last rewrite, removed the wraparound and added two WP-proved lemmas. Pinned **2611/2647, 36 by name, all inherited**, name-identical over #1315/#1316/#1317; **zero new argument blocks** (P1 held — not unaided). **Coverage**: 49/60 → 61/62, one justification row (J1); aggregate 1815/2018 → **1827/2020**. MISRA 53 unchanged. Run 2's first push (4cf7f90) failed the build on two test-portability errors (a 62-bit shift on the 32-bit job; a clang fuzz unused-function); evidence is from 5e778b7, source identical. |
 | 2026-10-02 → 10-03 | 9268da3 → (VERIFY-035) | #1319 → #1324 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | stringbuf.h — **module 19, the second prospective test of the saturation claim**; both streams in one arc (VERIFY-031..035, MCDC-016). Predictions pre-registered before any contract (9268da3), an addendum before run 1 (f6e54ca). **Findings before the prover ran**: G1 (a stale view appended back reaches `memcpy` with overlapping regions — abort in ordinary builds, UB in the verified configuration), G2 (`vsnprintf` sized to the remaining capacity — every formatted append fails on musl above 2 GiB free), G3 (failure path overwrites the terminator), G5 (unstated `restrict` precondition); writing contracts found G6. **WP** (Typed+Cast, 29 functions, first variadic definitions, third trusted axiom): own 22 → 5 → 3 → 0; run 1 reported every prover-visible defect at the named seam, and G2 stayed invisible as pre-registered. The last three goals closed through **VERIFY-033/034**: `arena_alloc{,_aligned}` gained the frame clauses the header already stated for its resets, +20 proved goals in arena, arena-32, pool, region, vec, stringbuf and the CC experiment's vec (predicted +4: five split parts per clause). Pinned **4767/4848, 81 by name, all inherited**; **zero new argument blocks**. **Coverage**: 101/136 → 136/138, two environmental rows; aggregate 1827/2020 → **1862/2022**. MISRA 53 → 54 (one 21.2 at the axiom). |
+| 2026-10-05 → 10-19 | 13d13de → 140a6ac | #1326 → #1373 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | **VERIFY-036 and VERIFY-039's main pass** — the arguments read against their code, every pinned residual filed by name under a block of `docs/deviations.md`, and the defects the reading found repaired, each with a committed prediction and scored by CI: specifications false for calls they admitted (bits.h's shifted postconditions, ptr.h's rounding, slice.h's libc calls, memcmp's danglingness at its callers, the combinators' claims for every callback, the allocators' frames, region.h's hook claims and its missing separation, among others). Unproved goals over the twenty units 1076 → 475 (`docs/verification.md`'s card, recomputed). Coverage moved once: slice.h's zero-length returns (G17) added four MC/DC outcomes, all covered (1862/2022 → 1866/2026; branches 1658/1810 → 1662/1814). The record coverage job became a gate at 140a6ac (CI #1373, Record coverage #90): a push that changes the record, the pins or its script fails if a pinned unproved goal is in no block, or a block lists one no longer pinned. |
+
+> **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** The bitset row of
+> 2026-08-27 needs three corrections. Its result (2) holds for E1 and not for
+> F5: at `bitset_not`, F5's control, the same commit (61e1312) widened the
+> first precondition to admit `bs->words == \null` as well as deleting the
+> clause, and the five goals were checks of a read from a `bs` the contracts
+> then did not require readable, false in a state they admitted; G10 (ec56091)
+> required it, and they closed. The six goals the row gives the byte-level
+> `\valid` it did not write, P4's class, were three byte views and three null
+> guards: that contract would have cleared the three views only, and the
+> guards closed with G10. And 71 was not the smallest own set of any
+> driver-verified module: the figures beside it are other units' totals, and
+> among the driver-verified modules every other own set was smaller, option's
+> 32, result's 28, vec's 53 and deque's 5.
 
 ---
