@@ -29,7 +29,7 @@ instances of known ones.
 builds `catalogue.json` from **every Frama-C job in the CI workflow**, each with
 its own translation unit and preprocessor flags, so the catalogue covers exactly
 what CI verifies (22 jobs, 21 units). Each entry lists the jobs it comes from.
-At 806bdeb (CI #1369): 41 ACSL features, 22 C features and 8 family features,
+At 642ad8a (CI #1372): 42 ACSL features, 22 C features and 8 family features,
 over the 41 repository files the verified units include. The first build, at
 6290f4a (CI #1337), had 37 ACSL features; VERIFY-039 G11's repair of option's
 and result's drivers wrote `\valid_function` and the `terminates` clause (39
@@ -39,7 +39,9 @@ loop's invariant out and wrote `terminates \false`: both clauses moved between
 units, and no kind was added (40 at 64f4bd1, CI #1368). G18's repair of the
 allocation wrappers wrote `allocates` and `frees`, and stated
 `pool_alloc_zero`'s result, the only pointer result a contract left
-unconstrained, so that shape left the catalogue.
+unconstrained, so that shape left the catalogue (41 at 806bdeb, CI #1369).
+G19's and G20's repair of `region_end` wrote its hook rule as a predicate in
+an `axiomatic` block, the first a verified unit reads.
 
     python3 tools/idioms/extract.py crosscheck
 
