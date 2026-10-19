@@ -1,28 +1,22 @@
 #!/usr/bin/env python3
 """
-g19_probe.py — the WP runs of .github/workflows/g19-probe.yml (VERIFY-039
-G19) and their reading against the committed prediction in
-docs/deviations.md, VERIFY-039: "G19 — committed prediction for the probe".
+g19_probe.py — the WP run of .github/workflows/g19-probe.yml (VERIFY-039
+G19) and its reading against the committed prediction in
+docs/deviations.md, VERIFY-039: "G19 — committed prediction for the probe",
+for the run named F, and "G19 and G20 — the repair: committed prediction".
 
     python3 tools/probes/verify-039/g19_probe.py run
-        Writes wp_R_region.h, core/region.h with the contracts G19's and
-        G20's decisions recommend (EDITS below), the loop's frame stated
-        `for no_hook:` as G19's decision writes it, and wp_U_region.h, the
-        same with that frame stated for every execution; writes each one's
-        tokens and core/region.h's after the preprocessor (cpp_<run>.txt).
-        Then WP as frama-c-region runs region.h (Typed+Cast, -wp-rte,
-        -wp-split, Alt-Ergo, Z3 and CVC5 at 120 s), with -wp-print:
-            F on tools/probes/verify-039/p_loop_frame_bhv.c, its f() and g();
-            T on core/region.h, today's contracts;
-            R on wp_R_region.h and U on wp_U_region.h;
-        each of the last three restricted with -wp-fct to the five functions
-        that read region_invariant. Output: wp_<run>.txt, the log with the
-        printed goals; wp_<run>.json, the statistics per function and
-        property (WP 29's -wp-deprecated-report-json, WP 25's
-        -wp-report-json); and on WP 29 wp_<run>_goals.json, the per-goal
-        report of -wp-report-json.
+        Runs WP as frama-c-region runs region.h (Typed+Cast, -wp-rte,
+        -wp-split, Alt-Ergo, Z3 and CVC5 at 120 s), with -wp-print, on
+        tools/probes/verify-039/p_loop_frame_bhv.c: f(), whose loop's frame
+        is stated for one behaviour and whose postcondition is false for the
+        other, and g(), the control, its frame stated for the behaviour in
+        which the loop writes. Output: wp_F.txt, the log with the printed
+        goals; wp_F.json, the statistics per function and property (WP 29's
+        -wp-deprecated-report-json, WP 25's -wp-report-json); and on WP 29
+        wp_F_goals.json, the per-goal report of -wp-report-json.
 
-    python3 tools/probes/verify-039/g19_probe.py report F|T|R|U
+    python3 tools/probes/verify-039/g19_probe.py report F
         reads that output and prints MATCH or MISS, with its confidence, for
         each predicted part. The log needs a sign-in, so it also posts the
         verdicts, each function's goals property by property, and each goal
@@ -30,8 +24,15 @@ docs/deviations.md, VERIFY-039: "G19 — committed prediction for the probe".
         conclusion, as notices on the run page (each under the runner's
         4096-character cut), an error annotation for each MISS (up to nine,
         and a count of the rest), and everything to the step summary. Exits
-        1 on a MISS. The counts are measured, not predicted: with T's, R's
-        and U's, they are what the repair is predicted from.
+        1 on a MISS.
+
+The probe's first run, at 8304c61, also ran WP on core/region.h (T) and on
+two copies of it with the contracts G19's and G20's decisions recommend, the
+loop's frame stated for the executions that call no hook (R) and for every
+execution (U); G19's repair wrote R's contracts into core/region.h, and
+frama-c-region pins their goals since. F stays: it shows how WP reads a
+loop's frame stated for one behaviour, which region_end's loop states, and a
+WP that read it otherwise would make F's report MISS.
 
 Run from the repository root, with frama-c on PATH.
 """
@@ -42,102 +43,13 @@ import subprocess
 import sys
 import time
 
-FIVE = ["region_begin", "region_end", "region_attach_arena", "region_register",
-        "region_set_parent"]
-SHIPPED = "core/region.h"
 FCT = "tools/probes/verify-039/p_loop_frame_bhv.c"
-RUNS = {"F": FCT, "T": SHIPPED, "R": "wp_R_region.h", "U": "wp_U_region.h"}
-FUNCS = {"F": ["f", "g"], "T": FIVE, "R": FIVE, "U": FIVE}
-LABEL = {"F": "a loop's frame stated for one behaviour",
-         "T": "today's contracts",
-         "R": "the recommended contracts",
-         "U": "the recommended contracts, the loop's frame for every execution"}
+RUNS = {"F": FCT}
+FUNCS = {"F": ["f", "g"]}
+LABEL = {"F": "a loop's frame stated for one behaviour"}
 CPP = "-I core/primitives -I core -I ."
 DEFS = "-DCANON_NO_REQUIRE -DNDEBUG"
 P = "typed_cast_"
-
-# The recommended contracts, as (text in core/region.h, its replacement).
-# G20: region_invariant separates the Region from its Arena, and
-# region_attach_arena requires it of the Arena it attaches, last, so that no
-# clause is renumbered. G19: region_register requires the hook it takes to be
-# a valid function; region_end requires each hook it calls to be one and to
-# keep the rule, a predicate with no definition; it claims termination, no
-# exit and its frame, which names the saved Arena, only where no hook is
-# called; its loop's frame names h, and is stated for that behaviour (R) or,
-# in U, for every execution; and its loop's second invariant gives, where no
-# hook is called, that no slot the loop visits holds one.
-FRAME = "      for no_hook: loop assigns i, h, r->cleanups[0 .. REGION_MAX_CLEANUP - 1];\n"
-EDITS = [
-    ("""      && (r->arena == \\null || arena_invariant(r->arena));
-*/
-""", """      && (r->arena == \\null || arena_invariant(r->arena))
-      && (r->arena == \\null || \\separated(r, r->arena));
-
-  predicate region_no_hook(Region *r) =
-      \\forall integer k; 0 <= k < r->num_hooks ==> r->cleanups[k].fn == \\null;
-*/
-
-/*@
-  axiomatic RegionHookRule {
-    // The rule a hook keeps (VERIFY-039 G19), which no clause can state of
-    // code behind a pointer: called by region_end() on r from slot k, it
-    // does not call region_end() on r, it leaves r's storage in place, it
-    // leaves the Arena attached to r, if any, meeting arena_invariant, and
-    // it leaves each slot below k as it was, or with a null fn. No
-    // definition and no axiom: WP cannot use it.
-    predicate region_hook_rule{L}(Region *r, integer k);
-  }
-*/
-"""),
-    ("""  requires region_invariant(r);
-  requires r->open;
-  assigns  *r;
-  ensures  r->open == \\false;
-  ensures  r->num_hooks == 0;
-  ensures  r->arena == \\null;
-  ensures  region_invariant(r);
-*/
-static inline void region_end(Region* r) {""",
-     """  requires region_invariant(r);
-  requires r->open;
-  requires \\forall integer k; 0 <= k < r->num_hooks && r->cleanups[k].fn != \\null
-             ==> \\valid_function(r->cleanups[k].fn);
-  requires \\forall integer k; 0 <= k < r->num_hooks && r->cleanups[k].fn != \\null
-             ==> region_hook_rule(r, k);
-  terminates region_no_hook(r);
-  exits      !region_no_hook{Old}(r);
-  ensures  r->open == \\false;
-  ensures  r->num_hooks == 0;
-  ensures  r->arena == \\null;
-  ensures  region_invariant(r);
-  behavior no_hook:
-    assumes region_no_hook(r);
-    assigns *r, *(r->arena);
-  behavior hooks:
-    assumes !region_no_hook(r);
-  complete behaviors;
-  disjoint behaviors;
-*/
-static inline void region_end(Region* r) {"""),
-    ("""      loop invariant 0 <= i <= REGION_MAX_CLEANUP;
-      loop assigns  i, r->cleanups[0 .. REGION_MAX_CLEANUP - 1];
-      loop variant  i;""",
-     """      loop invariant 0 <= i <= REGION_MAX_CLEANUP;
-      loop invariant region_no_hook{Pre}(\\at(r, Pre)) ==>
-        i <= \\at(r->num_hooks, Pre) &&
-        \\forall integer k; 0 <= k < \\at(r->num_hooks, Pre) ==>
-          \\at(r, Pre)->cleanups[k].fn == \\null;
-""" + FRAME + """      loop variant  i;"""),
-    ("""  requires arena_invariant(arena);
-  assigns  r->arena;""", """  requires arena_invariant(arena);
-  requires \\separated(r, arena);
-  assigns  r->arena;"""),
-    ("""  requires fn != \\null;
-  assigns  r->cleanups[0 .. REGION_MAX_CLEANUP - 1], r->num_hooks;""",
-     """  requires fn != \\null;
-  requires \\valid_function(fn);
-  assigns  r->cleanups[0 .. REGION_MAX_CLEANUP - 1], r->num_hooks;"""),
-]
 
 NOT_PROVED = "Timeout|Unknown|Failed|Failure|Invalid|Stepout|NoResult"
 BAD = {"Failed", "Failure", "Invalid", "Stepout", "NoResult"}
@@ -150,37 +62,6 @@ pending = []        # annotations, printed at the end, the verdicts first
 
 # ── run ──────────────────────────────────────────────────────────────────────
 
-def write_headers():
-    with open(SHIPPED) as fh:
-        text = fh.read()
-    for old, new in EDITS:
-        if text.count(old) != 1:
-            print("core/region.h does not hold, once, the text an edit replaces:")
-            print(old)
-            sys.exit(1)
-        text = text.replace(old, new, 1)
-    with open(RUNS["R"], "w") as fh:
-        fh.write(text)
-    with open(RUNS["U"], "w") as fh:
-        fh.write(text.replace(FRAME, FRAME.replace("for no_hook: loop", "loop"), 1))
-
-
-def tokens(path, run):
-    """The tokens of path after the preprocessor, comments and line markers
-    gone, in the proof configuration and the default build. In the default
-    build each run-time check passes its file and line to the handler, and
-    the annotations move the lines: both are written FILE and LINE."""
-    out = []
-    for defs in (DEFS, ""):
-        cmd = ["gcc", "-std=c99", "-E", "-P"] + CPP.split() + defs.split() + ["-x", "c", path]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        toks = re.sub(r'canon_contract_handler\("[^"]*", \d+,',
-                      "canon_contract_handler(FILE, LINE,", " ".join(r.stdout.split()))
-        out.append("// %s: exit %d\n%s" % (" ".join(cmd), r.returncode, toks))
-    with open("cpp_%s.txt" % run, "w") as fh:
-        fh.write("\n".join(out) + "\n")
-
-
 def run_all():
     try:
         helptext = subprocess.run(["frama-c", "-wp-help"], capture_output=True,
@@ -188,9 +69,6 @@ def run_all():
     except OSError as e:
         print("frama-c did not start: %s" % e)
         sys.exit(1)
-    write_headers()
-    for run in ("T", "R", "U"):
-        tokens(RUNS[run], run)
     # WP 29 moved the statistics report to -wp-deprecated-report-json and
     # made -wp-report-json a per-goal list; WP 25 has only the statistics.
     if "-wp-deprecated-report-json" in helptext:
@@ -200,30 +78,30 @@ def run_all():
     else:
         stats_opt, goals_opt = None, None
     print("statistics report: %s; per-goal report: %s" % (stats_opt, goals_opt))
-    for run in ("F", "T", "R", "U"):
-        cmd = ["frama-c", "-wp", "-wp-rte", "-wp-model", "Typed+Cast",
-               "-wp-prover", "alt-ergo,z3,cvc5", "-wp-timeout", "120", "-wp-split",
-               "-wp-print", "-wp-fct", ",".join(FUNCS[run])]
-        if stats_opt:
-            cmd += [stats_opt, "wp_%s.json" % run]
-        if goals_opt:
-            cmd += [goals_opt, "wp_%s_goals.json" % run]
-        cmd += ["-cpp-extra-args=%s %s" % (CPP, DEFS), RUNS[run]]
-        print("=== %s: %s, %s" % (run, RUNS[run], LABEL[run]))
-        print("    " + " ".join(cmd))
-        sys.stdout.flush()
-        start = time.time()
-        with open("wp_%s.txt" % run, "w") as out:
-            status = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT).returncode
-        print("    exit status %d, %d s" % (status, time.time() - start))
-        with open("wp_%s.txt" % run, errors="replace") as fh:
-            for line in fh:
-                if re.match(r"^\[wp\] (Proved goals:|\d+ goals scheduled|\[(%s)\])"
-                            % NOT_PROVED, line):
-                    print("    " + line.rstrip())
-        for js in ("wp_%s.json" % run, "wp_%s_goals.json" % run):
-            print("    %s: %s" % (js, "written" if os.path.exists(js) else "absent"))
-        sys.stdout.flush()
+    run = "F"
+    cmd = ["frama-c", "-wp", "-wp-rte", "-wp-model", "Typed+Cast",
+           "-wp-prover", "alt-ergo,z3,cvc5", "-wp-timeout", "120", "-wp-split",
+           "-wp-print", "-wp-fct", ",".join(FUNCS[run])]
+    if stats_opt:
+        cmd += [stats_opt, "wp_%s.json" % run]
+    if goals_opt:
+        cmd += [goals_opt, "wp_%s_goals.json" % run]
+    cmd += ["-cpp-extra-args=%s %s" % (CPP, DEFS), RUNS[run]]
+    print("=== %s: %s, %s" % (run, RUNS[run], LABEL[run]))
+    print("    " + " ".join(cmd))
+    sys.stdout.flush()
+    start = time.time()
+    with open("wp_%s.txt" % run, "w") as out:
+        status = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT).returncode
+    print("    exit status %d, %d s" % (status, time.time() - start))
+    with open("wp_%s.txt" % run, errors="replace") as fh:
+        for line in fh:
+            if re.match(r"^\[wp\] (Proved goals:|\d+ goals scheduled|\[(%s)\])"
+                        % NOT_PROVED, line):
+                print("    " + line.rstrip())
+    for js in ("wp_%s.json" % run, "wp_%s_goals.json" % run):
+        print("    %s: %s" % (js, "written" if os.path.exists(js) else "absent"))
+    sys.stdout.flush()
 
 
 # ── reading ──────────────────────────────────────────────────────────────────
@@ -434,7 +312,7 @@ def candidates(run, name, entry, printed, parts):
             if ("'rte,%s'" % rk) not in t:
                 continue
         if kind in ("Complete behaviors", "Disjoint behaviors"):
-            # complete_hooks_no_hook: "Complete behaviors 'hooks', 'no_hook'"
+            # complete_nonzero_zero: "Complete behaviors 'nonzero', 'zero'"
             if "_".join(re.findall(r"'(\w+)'", t)) != rest.split("_", 1)[1]:
                 continue
         if " in '" in t and ("in '%s'" % f) not in t:
@@ -625,100 +503,7 @@ def common(run, data):
               % (len(np), data["proved"], data["total"], others))
 
 
-def same_tokens(run):
-    got = {}
-    for r in ("T", run):
-        try:
-            with open("cpp_%s.txt" % r) as fh:
-                parts = fh.read().split("// ")[1:]
-        except OSError:
-            return False, "cpp_%s.txt absent" % r
-        if len(parts) != 2:
-            return False, "cpp_%s.txt: not two configurations" % r
-        bodies = []
-        for p in parts:
-            head, _, body = p.partition("\n")
-            if not head.endswith(": exit 0"):
-                return False, "%s: %s" % (r, head)
-            bodies.append(body.strip())
-        got[r] = bodies
-    return got["T"] == got[run], "tokens differ"
-
-
 # ── the predictions ──────────────────────────────────────────────────────────
-
-# T: today's 23 own residuals of frama-c-region, and the parts the record's
-# reading took from WP 25's split, by text WP 29's print of each holds;
-# lines of core/region.h as at the probe's commit. The exit goal is only
-# identified: WP 25 prints no line for it; its print is read at the score.
-TODAY = [
-    ("region_begin_ensures_5", "line 423"),
-    ("region_end_terminates_part2", "Effect at line 509"),
-    ("region_end_terminates_part3", "Effect at line 509"),
-    ("region_end_ensures_2_part1", "line 461"),
-    ("region_end_ensures_4_part1", "line 463"),
-    ("region_end_exits_part1", ""),
-    ("region_end_loop_invariant_preserved_part1", "line 490"),
-    ("region_end_assert_rte_function_pointer", "line 509"),
-    ("region_end_assert_rte_mem_access_6", "line 510"),
-    ("region_end_assert_rte_mem_access_7", "line 511"),
-    ("region_end_loop_assigns_part2", "Effect at line 494"),
-    ("region_end_loop_assigns_part4", "Effect at line 495"),
-    ("region_end_loop_assigns_part5", "Effect at line 495"),
-    ("region_end_loop_assigns_part6", "Effect at line 509"),
-    ("region_end_loop_assigns_part7", "Effect at line 510"),
-    ("region_end_loop_assigns_part8", "Effect at line 511"),
-    ("region_end_assigns_exit_part5", "Effect at line 509"),
-    ("region_end_assigns_normal_part5", "Effect at line 518"),
-    ("region_end_loop_variant_decrease_part1", "line 494"),
-    ("region_end_call_arena_reset_requires", "at call 'arena_reset'"),
-    ("region_attach_arena_ensures_2", "line 550"),
-    ("region_register_ensures_part2", "line 585"),
-    ("region_set_parent_ensures_2", "line 644"),
-]
-
-# R and U: (label, confidence, names) predicted not proved; (label,
-# confidence, pattern) predicted generated and proved; (label, confidence,
-# pattern) predicted not generated; and, for U, the loop's frame's goals not
-# proved, (confidence, how many).
-NOT_PROVED_RU = [
-    ("region_end's run-time check that the hook is a valid function", "H",
-     ["region_end_assert_rte_function_pointer"]),
-    ("the slot's two stores after the call, which need the rule", "H",
-     ["region_end_assert_rte_mem_access_6", "region_end_assert_rte_mem_access_7"]),
-    ("the first loop invariant's preservation after a hook", "M",
-     ["region_end_loop_invariant_preserved_part1"]),
-    ("the variant's decrease after a hook", "M",
-     ["region_end_loop_variant_decrease_part1"]),
-    ("region_begin's invariant", "M", ["region_begin_ensures_5"]),
-]
-PROVED_RU = [
-    ("the three mutators' invariants", "H",
-     r"^typed_cast_region_(attach_arena_ensures_2|register_ensures_part2|set_parent_ensures_2)$"),
-    ("region_end's behaviours, complete and disjoint", "H",
-     r"^typed_cast_region_end_(complete|disjoint)_"),
-    ("region_end's termination", "M", r"^typed_cast_region_end_terminates"),
-    ("region_end's exits clause", "M", r"^typed_cast_region_end_exits"),
-    ("no_hook's frame, on both paths", "M",
-     r"^typed_cast_region_end_no_hook_assigns_(normal|exit)"),
-    ("the loop's second invariant", "M", r"^typed_cast_region_end_loop_invariant_2_"),
-    ("region_end's postconditions", "M", r"^typed_cast_region_end_ensures"),
-    ("arena_reset's precondition at the call", "M",
-     r"^typed_cast_region_end_call_arena_reset_requires$"),
-]
-ABSENT_RU = [
-    ("a frame of region_end's for every execution, as today's", "H",
-     r"^typed_cast_region_end_assigns_(normal|exit)"),
-]
-PRED = {
-    "R": {"not_proved": NOT_PROVED_RU,
-          "proved": PROVED_RU + [("the loop's frame, for no_hook", "M",
-                                  r"^typed_cast_region_end_(\w+_)?loop_assigns")],
-          "absent": ABSENT_RU, "loop_frame": None},
-    "U": {"not_proved": NOT_PROVED_RU, "proved": PROVED_RU,
-          "absent": ABSENT_RU, "loop_frame": ("H", 4)},
-}
-
 
 def report_F(data):
     names = [n for n, _ in names_of(data)]
@@ -740,54 +525,6 @@ def report_F(data):
           "not proved: %s" % (", ".join(bad) or "none"))
 
 
-def report_T(data, mp):
-    np = set(data["not_proved"])
-    exp = {P + n for n, _ in TODAY}
-    check("H", "T: the goals not proved are frama-c-region's 23 own residuals",
-          np == exp, "proved: %s; not pinned: %s"
-          % (sorted(short(n) for n in exp - np), sorted(short(n) for n in np - exp)))
-    for name, needle in TODAY:
-        g = mp.get(P + name)
-        got = describe(g) if g else None
-        check("M", "T: %s, as printed, %s" % (name, ("names " + needle) if needle
-                                                  else "identified"),
-              got is not None and needle in got, got or "printed goal not identified")
-
-
-def report_RU(run, data):
-    pred = PRED[run]
-    np = set(data["not_proved"])
-    names = {n for n, _ in names_of(data)}
-    listed = set()
-    for label, conf, ns in pred["not_proved"]:
-        ns = [P + n for n in ns]
-        listed |= set(ns)
-        bad = [short(n) for n in ns if n not in np]
-        check(conf, "%s: %s, not proved" % (run, label), not bad,
-              "proved or not generated: %s" % ", ".join(bad))
-    rest = np - listed
-    if pred["loop_frame"] is not None:
-        conf, k = pred["loop_frame"]
-        lf = sorted(n for n in rest if re.match(r"^typed_cast_region_end_(\w+_)?loop_assigns", n))
-        check(conf, "%s: the loop's frame, %d of its goals not proved: at the call, and at "
-              "the counter's decrement and the slot's two stores after it" % (run, k),
-              len(lf) == k, "%d: %s" % (len(lf), ", ".join(short(n) for n in lf)))
-        rest -= set(lf)
-    check("M", "%s: every other goal of the five functions is proved" % run, not rest,
-          ", ".join(sorted(short(n) for n in rest)))
-    for label, conf, rx in pred["proved"]:
-        hit = [n for n in names if re.search(rx, n)]
-        bad = sorted(short(n) for n in hit if n in np)
-        check(conf, "%s: %s, generated and proved" % (run, label), bool(hit) and not bad,
-              ("not proved: " + ", ".join(bad)) if hit else "no goal generated")
-    for label, conf, rx in pred["absent"]:
-        hit = sorted(short(n) for n in names if re.search(rx, n))
-        check(conf, "%s: %s, not generated" % (run, label), not hit, ", ".join(hit))
-    ok, why = same_tokens(run)
-    check("H", "%s: %s preprocesses to core/region.h's tokens, in the proof "
-          "configuration and the default build" % (run, RUNS[run]), ok, why)
-
-
 def main():
     if sys.argv[1:] == ["run"]:
         run_all()
@@ -801,12 +538,7 @@ def main():
     mp = mapping(run, data)
     post(run, data, pf, mp)
     common(run, data)
-    if run == "F":
-        report_F(data)
-    elif run == "T":
-        report_T(data, mp)
-    else:
-        report_RU(run, data)
+    report_F(data)
     for n in notes:
         print("NOTE: " + n)
     vlines = ["%s (%s) %s" % (v, c, l) for v, c, l, _ in verdicts] + ["NOTE: " + n for n in notes]

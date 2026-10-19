@@ -1,41 +1,35 @@
-name: G19 probe (VERIFY-039, region_end's recommended contracts under WP 29)
+name: G19 probe (VERIFY-039, a loop's frame stated for one behaviour under WP 29)
 
 # ---------------------------------------------------------------------------
 # VERIFY-039 G19 — an experiment, not a gate. It runs when the probe, its
-# script, this file, the toolchain pins or the two headers it reads
-# (core/region.h, core/arena.h) change, and on demand; it never touches the
-# enforced jobs, and its result is scored in docs/deviations.md, VERIFY-039
-# G19.
+# script, this file or the toolchain pins change, and on demand; it never
+# touches the enforced jobs, and its result is scored in docs/deviations.md,
+# VERIFY-039 G19.
 #
-# QUESTION: G19's decision has region_end() claim termination, no exit and
-# its two frames only where no hook is called, require each hook it calls
-# to be a valid function and to keep a rule no clause can state, and G20's
-# separates a Region from its Arena. Under WP 29, which of the five
-# functions' goals prove with those contracts, and which with the loop's
-# frame stated for every execution instead? And does WP 29, as WP 25 does,
-# take a loop's frame stated for one behaviour as the loop's effect on
-# every path?
+# QUESTION: does WP 29 take a loop's frame stated for one behaviour,
+# `for b: loop assigns`, as the loop's effect in every behaviour's goals,
+# where it checks the frame only in b's? region_end's loop states its frame
+# so since G19's repair, and WP's proofs of region_end's goals after a hook
+# are read in the record on that answer.
 #
-# PROBE: tools/probes/verify-039/g19_probe.py writes the recommended
-# contracts into two copies of core/region.h, wp_R_region.h with the loop's
-# frame `for no_hook:` as the decision writes it and wp_U_region.h with the
-# same frame for every execution, and checks that both preprocess to
-# core/region.h's tokens. It runs WP on the five functions that read
-# region_invariant, as frama-c-region runs region.h: T on core/region.h, R
-# and U on the copies. F runs WP the same way on
-# tools/probes/verify-039/p_loop_frame_bhv.c: f(), whose loop's frame is
-# stated for one behaviour and whose postcondition is false for the other,
-# and g(), the control, its frame stated for the behaviour in which the loop
-# writes; the first step builds and runs its main(), which shows both
-# postconditions false.
+# PROBE: tools/probes/verify-039/g19_probe.py runs WP, as frama-c-region runs
+# region.h, on tools/probes/verify-039/p_loop_frame_bhv.c: f(), whose loop's
+# frame is stated for one behaviour and whose postcondition is false for the
+# other, and g(), the control, its frame stated for the behaviour in which
+# the loop writes; the first step builds and runs its main(), which shows
+# both postconditions false. The probe's first run, at 8304c61, also ran WP
+# on core/region.h and on two copies of it with the contracts G19's and
+# G20's decisions recommend; G19's repair wrote them into core/region.h,
+# and those runs left the probe with it.
 #
 # PREDICTED before it ran (docs/deviations.md, VERIFY-039, "G19 — committed
-# prediction for the probe"). The report steps print MATCH or MISS, with
-# its confidence, for each part. The log needs a sign-in, so each step also
-# posts its verdicts, each function's goals property by property, and each
-# goal not proved as WP printed it, as notices on the run page, and an error
-# annotation for each MISS, up to nine and a count of the rest; each exits
-# 1 on a MISS.
+# prediction for the probe", run F, and "G19 and G20 — the repair:
+# committed prediction"). The report step prints MATCH or MISS, with its
+# confidence, for each part. The log needs a sign-in, so the step also posts
+# its verdicts, each function's goals property by property, and each goal not
+# proved as WP printed it, as notices on the run page, and an error
+# annotation for each MISS, up to nine and a count of the rest; it exits 1 on
+# a MISS.
 # ---------------------------------------------------------------------------
 
 on:
@@ -46,8 +40,6 @@ on:
       - 'tools/probes/verify-039/g19_probe.py'
       - '.github/workflows/g19-probe.yml'
       - '.github/actions/framac-setup/**'
-      - 'core/region.h'
-      - 'core/arena.h'
   workflow_dispatch:
 
 jobs:
@@ -67,7 +59,7 @@ jobs:
             tools/probes/verify-039/p_loop_frame_bhv.c -o p_loop_frame_bhv
           ./p_loop_frame_bhv
 
-      - name: "WP: T, R and U on region.h's five functions; F on f() and g()"
+      - name: "WP: F on f() and g()"
         if: ${{ !cancelled() }}
         run: |
           eval $(opam env --switch=frama-c)
@@ -77,24 +69,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/probes/verify-039/g19_probe.py report F
 
-      - name: "Report T: today's contracts"
-        if: ${{ !cancelled() }}
-        run: python3 tools/probes/verify-039/g19_probe.py report T
-
-      - name: "Report R: the recommended contracts"
-        if: ${{ !cancelled() }}
-        run: python3 tools/probes/verify-039/g19_probe.py report R
-
-      - name: "Report U: the same, the loop's frame for every execution"
-        if: ${{ !cancelled() }}
-        run: python3 tools/probes/verify-039/g19_probe.py report U
-
       - name: Upload WP output (G19 probe)
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: g19-probe
-          path: |
-            wp_*
-            cpp_*.txt
+          path: wp_*
           retention-days: 90
