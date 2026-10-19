@@ -57,10 +57,24 @@ own table; and a goal still pinned in a retired block's table. A filing line
 starts in the first column; one that is indented is a problem too. Lines
 inside a fenced block, ``` or ~~~, are not read as filings.
 
-Advisory: prints a report and exits 0, unless --strict, in which case any
-stale listed goal, empty block, pinned filed part, problem reading the
+Prints a report and exits 0, unless --strict, in which case any stale
+listed goal, empty block, block in force that names no goal, heading count
+that is not its block's live count, pinned filed part, problem reading a
 proved-goal block or filing problem exits 1, or --complete, in which case a
-pinned name in no goal table exits 1.
+pinned name in no goal table exits 1. The record coverage job runs both
+since VERIFY-039's main pass (record-coverage.yml).
+
+--pending-from REV reads the pins as committed at REV, with git show, and
+takes as pending each name whose pins differ between REV and the working
+tree: pinned at one and not the other, or by other units. A check that reads
+a name's pins reports a pending name apart and does not fail on it: a listed
+goal no longer pinned, a block whose listed goals are all pending, a heading
+count that is the block's count at REV, a Units cell, a filed part pinned, a
+goal pinned in a retired block's table, a pinned name in no goal table. The
+job passes the push's base, so that a push that ratchets the pins passes
+while the record still names what it changed; at the next push those names
+are no longer pending, and the push that scores the change restates the
+record. A REV that git cannot read exits 2.
 
 Sources:
   - .github/workflows/cmake-multi-platform.yml   CHECKS=( / INHERITED=( / PIN_NAMES=( arrays,
@@ -73,10 +87,11 @@ Sources:
                                                   the filed-by-name tables;
                                                   the proved-goal block's rows
 
-Limits, stated: four blocks (option, result, borrow, diag) have no goal
-table: option's and result's list their residuals by function and count, and
-borrow's and diag's name theirs in prose. Until goals are filed by name
-under them they are reported as not joined. bits.h's roll-call is a
+Limits, stated: two retired blocks, VERIFY-009's Category 2c and borrow's
+own, have no goal table and no goal filed by name under them, and are
+reported as not joined; a block in force that is not joined fails --strict.
+Option's and result's blocks have no goal table of their own, their goals
+filed by name under them (VERIFY-039, the main pass). bits.h's roll-call is a
 documented 6-of-15 sample, and bitset's pins all 15; two of the sample's
 names, bits_next_power_of_two_normal_ensures and
 bits_rotl_nonzero_shift_ensures, are whole goals that bitset pins split,
@@ -84,7 +99,7 @@ as _part3 and _part2, so they count as names of their own: over the main
 CI's units the script's union is the paper's (§6.3) and these two. Goal
 names are compared modulo the typed_ / typed_cast_ prefix, as in the paper.
 """
-import re, sys, glob, argparse
+import re, sys, os, glob, argparse, subprocess
 from collections import defaultdict
 
 WF = '.github/workflows/cmake-multi-platform.yml'
@@ -93,7 +108,22 @@ CC = 'vmacros/vdrivers/cc_pins/*.txt'
 
 def norm(n): return re.sub(r'^typed_cast_', 'typed_', n)
 
-def pinned_names():
+def tree_source():
+    """The pins' sources in the working tree: (the workflow's text,
+    {pin file: its text})."""
+    return (open(WF, encoding='utf-8').read(),
+            {f: open(f, encoding='utf-8').read() for f in sorted(glob.glob(CC))})
+
+def git_source(rev):
+    """The same, as committed at REV, read with git show."""
+    def git(*args):
+        return subprocess.run(['git'] + list(args), check=True, capture_output=True,
+                              encoding='utf-8').stdout
+    files = git('ls-tree', '--name-only', rev, os.path.dirname(CC) + '/').split()
+    return (git('show', f'{rev}:{WF}'),
+            {f: git('show', f'{rev}:{f}') for f in sorted(files) if f.endswith('.txt')})
+
+def pinned_names(source=None):
     """{normalised name: set(units that pin it)}: each frama-c job's CHECKS,
     INHERITED and PIN_NAMES arrays and EXPECTED_GOAL_n names (frama-c-checked
     pins its two so); frama-c-priority-queue, which pins frama-c-memory's
@@ -101,10 +131,12 @@ def pinned_names():
     the -CC pin files. frama-c-arena-32's embedded list is not read: it is a
     copy of frama-c-arena's set, which that job's gate compares with the
     32-bit run and an advisory check with frama-c-arena's CHECKS (paper
-    §6.5). A job header that is not a frama-c job's ends the reading."""
+    §6.5). A job header that is not a frama-c job's ends the reading.
+    SOURCE is tree_source()'s or git_source()'s pair, the tree's if None."""
+    wf, cc = source if source is not None else tree_source()
     out = defaultdict(set)
     cur = None; grab = False; mem_checks = set(); mem_state = 0
-    for l in open(WF, encoding='utf-8'):
+    for l in wf.splitlines(keepends=True):
         m = re.match(r'^  ([A-Za-z0-9_-]+):\s*$', l)
         if m:
             cur = m.group(1) if m.group(1).startswith('frama-c-') else None
@@ -127,12 +159,17 @@ def pinned_names():
                 out[norm(m.group(1))].add(cur)
                 if mem_state == 1: mem_checks.add(norm(m.group(1)))
     for n in mem_checks: out[n].add('frama-c-priority-queue')
-    for f in glob.glob(CC):
+    for f, text in cc.items():
         unit = 'cc-' + f.split('/')[-1][:-4]
-        for l in open(f, encoding='utf-8'):
+        for l in text.splitlines():
             n = l.strip()
             if n.startswith('typed'): out[norm(n)].add(unit)
     return out
+
+def pending_names(now, then):
+    """The names whose pins differ between two readings: pinned in one and
+    not the other, or by other units."""
+    return {n for n in set(now) | set(then) if now.get(n, set()) != then.get(n, set())}
 
 FILED = re.compile(r'^\*\*Filed by name\*\*: (VERIFY-\d+), (.+?)\s*$')
 FENCE = re.compile(r'^\s*(`{3,}|~{3,})')
@@ -225,10 +262,10 @@ def filed_by_name_tables():
         out.append((i + 1, rec, cited, goals, problems))
     return out
 
-def resolve_filings(blocks, pins):
+def resolve_filings(blocks, pins, pending=frozenset()):
     """({block index: [goals filed by name under it]}, number of filing
-    lines, [problems])"""
-    filed = defaultdict(list); problems = []; tables = 0
+    lines, [problems], [notes on pending names])"""
+    filed = defaultdict(list); problems = []; tables = 0; held = []
     for line, rec, cited, goals, probs in filed_by_name_tables():
         tables += 1
         problems.extend(probs)
@@ -250,8 +287,9 @@ def resolve_filings(blocks, pins):
             if units is None or not want: continue
             have = units - {'frama-c-arena-32'} if 'frama-c-arena' in units else set(units)
             if have != want:
-                problems.append(f"line {n}: {g}: the Units cell names {', '.join(sorted(units)) or 'none'}; "
-                                f"pinned in {', '.join(sorted(want))}")
+                (held if norm(g) in pending else problems).append(
+                    f"line {n}: {g}: the Units cell names {', '.join(sorted(units)) or 'none'}; "
+                    f"pinned in {', '.join(sorted(want))}")
         if goals: filed[hits[0]].extend(g for _, g, _ in goals)
     seen = defaultdict(int)
     for k, b in enumerate(blocks):
@@ -260,7 +298,7 @@ def resolve_filings(blocks, pins):
         for g in gs: seen[norm(g)] += 1
     for g in sorted(n for n, c in seen.items() if c > 1):
         problems.append(f"filed twice: {g}")
-    return filed, tables, problems
+    return filed, tables, problems, held
 
 def cells(row):
     """A Markdown table row's cells, split at the pipes not escaped."""
@@ -342,12 +380,13 @@ def proved_goal_blocks():
         blocks.append((lines[h].strip(), rec, rows, facts, problems))
     return blocks
 
-def check_proved_goals(pins):
-    """Report the proved-goal blocks; return the numbers of filed parts pinned
-    and of problems reading the blocks."""
+def check_proved_goals(pins, pending=frozenset()):
+    """Report the proved-goal blocks; return the numbers of filed parts pinned,
+    of problems reading the blocks and of filed parts pinned that are
+    pending."""
     blocks = proved_goal_blocks()
     print(f"\nproved-goal argument blocks: {len(blocks)}")
-    pinned_total = 0; problem_total = 0
+    pinned_total = 0; problem_total = 0; held_total = 0
     for heading, rec, rows, facts, problems in blocks:
         props = [(p, ex) for _, ps, _ in rows for p, ex in ps]
         cited = set().union(*(c for _, _, c in rows)) if rows else set()
@@ -366,6 +405,10 @@ def check_proved_goals(pins):
                 if m != n and not re.fullmatch(re.escape(n) + r'_part\d+', m): continue
                 part = m[len(n):]
                 if part and part in ex: continue
+                if m in pending:
+                    held_total += 1
+                    print(f"      filed and pinned, pending: {m} ({', '.join(sorted(pins[m]))})")
+                    continue
                 bad += 1
                 print(f"      FILED BUT PINNED: {m} ({', '.join(sorted(pins[m]))})")
             for part in sorted(ex):
@@ -373,75 +416,135 @@ def check_proved_goals(pins):
                     print(f"      excluded part no longer pinned: {p}{part}")
         print(f"    filed parts pinned: {bad}")
         pinned_total += bad
-    return pinned_total, problem_total
+    return pinned_total, problem_total, held_total
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--strict', action='store_true',
-                    help='exit 1 on any stale listed goal, empty block, pinned filed part, '
-                         'problem reading the proved-goal block, or filing problem')
+                    help='exit 1 on any stale listed goal, empty block, block in force that '
+                         'names no goal, heading count that is not the live count, pinned '
+                         'filed part, problem reading a proved-goal block, or filing problem')
     ap.add_argument('--complete', action='store_true',
                     help='exit 1 while any pinned name is in no goal table '
                          '(VERIFY-039\'s main pass ends when none is)')
+    ap.add_argument('--pending-from', metavar='REV',
+                    help='take as pending each name whose pins differ between REV, read '
+                         'with git show, and the working tree')
     a = ap.parse_args()
     pins = pinned_names()
+    pending = set(); then = {}
+    if a.pending_from:
+        try:
+            then = pinned_names(git_source(a.pending_from))
+        except (subprocess.CalledProcessError, OSError) as e:
+            print(f"cannot read the pins at {a.pending_from}: {e}", file=sys.stderr)
+            sys.exit(2)
+        pending = pending_names(pins, then)
     blocks = record_blocks()
-    filed, tables, filing_problems = resolve_filings(blocks, pins)
+    filed, tables, filing_problems, held = resolve_filings(blocks, pins, pending)
     listed_all = set()
-    stale_total = 0; empty = []; count_drift = []
+    stale_total = 0; empty = []; count_drift = []; unjoined = []
+    pend_listed = 0; pend_blocks = []; pend_drift = []
     print(f"pinned distinct names (mod prefix): {len(pins)}")
+    if a.pending_from:
+        gone = sorted(n for n in pending if n not in pins)
+        new = sorted(n for n in pending if n in pins and n not in then)
+        moved = sorted(n for n in pending if n in pins and n in then)
+        print(f"pending from {a.pending_from}: {len(pending)} names whose pins changed "
+              f"({len(gone)} no longer pinned, {len(new)} newly pinned, {len(moved)} pinned by other units)")
+        for n in gone: print(f"      no longer pinned: {n}")
+        for n in new: print(f"      newly pinned: {n} ({', '.join(sorted(pins[n]))})")
+        for n in moved: print(f"      pinned by other units: {n} ({', '.join(sorted(then[n]))} -> {', '.join(sorted(pins[n]))})")
     print(f"argument blocks: {len(blocks)}\n")
     for k, (heading, rec, goals) in enumerate(blocks):
         m = re.search(r'\((\d+)(?:\s*—[^)]*)?\)\s*$', heading)
         declared = int(m.group(1)) if m else None
         more = filed.get(k, [])
         if not goals and not more:
-            print(f"[{rec}] {heading[:80]}\n    no goal table, and no goal filed by name under it — not joined")
+            if 'RETIRED' in heading:
+                print(f"[{rec}] {heading[:80]}\n    no goal table, and no goal filed by name under it — not joined")
+            else:
+                unjoined.append(heading)
+                print(f"[{rec}] {heading[:80]}\n    no goal table, and no goal filed by name under it — "
+                      f"not joined  <-- in force, names no goal")
             continue
         live = [g for g in goals if norm(g) in pins]
-        stale = [g for g in goals if norm(g) not in pins]
+        stale = [g for g in goals if norm(g) not in pins and norm(g) not in pending]
+        pend = [g for g in goals if norm(g) not in pins and norm(g) in pending]
         more_live = [g for g in more if norm(g) in pins]
-        more_stale = [g for g in more if norm(g) not in pins]
+        more_stale = [g for g in more if norm(g) not in pins and norm(g) not in pending]
+        more_pend = [g for g in more if norm(g) not in pins and norm(g) in pending]
         flag = ''
         if 'RETIRED' in heading:
             # A retired block covers nothing: its rows are kept for legibility,
             # for goals that closed. One still pinned is in no goal table.
             flag = '  (retired, acknowledged in the heading; rows kept for legibility)'
-            stale = []  # acknowledged retirement is not drift
-            if live:
-                flag += f'  <-- {len(live)} still pinned'
-                filing_problems.extend(f"pinned, in the table of a retired block ({rec}): {g}" for g in live)
+            stale = []; pend = []  # acknowledged retirement is not drift
+            old = [g for g in live if norm(g) not in pending]
+            if old:
+                flag += f'  <-- {len(old)} still pinned'
+                filing_problems.extend(f"pinned, in the table of a retired block ({rec}): {g}" for g in old)
+            if len(live) > len(old):
+                flag += f'  ({len(live) - len(old)} pinned, pending)'
+                held.extend(f"pinned, in the table of a retired block ({rec}): {g}"
+                            for g in live if norm(g) in pending)
         else:
             listed_all |= {norm(g) for g in goals}
-            if not live and not more_live:
+            if not live and not more_live and not pend and not more_pend:
                 flag = '  <-- EMPTY: covers nothing; retired in the §3 sense'; empty.append(heading)
-            elif stale or more_stale:
-                flag = f'  <-- {len(stale) + len(more_stale)} listed goal(s) no longer pinned'
+            else:
+                if not live and not more_live:
+                    flag = '  (no listed goal pinned)'
+                    if not stale and not more_stale: pend_blocks.append(heading)
+                if stale or more_stale:
+                    flag += f'  <-- {len(stale) + len(more_stale)} listed goal(s) no longer pinned'
+                if pend or more_pend:
+                    flag += f'  ({len(pend) + len(more_pend)} pending)'
         listed_all |= {norm(g) for g in more}
         counted = len({norm(g) for g in live}) if goals else len({norm(g) for g in more_live})
         if declared is not None and declared != counted:
-            count_drift.append((heading, declared, counted))
-            flag += f'  <-- heading says {declared}, live {counted}'
+            # Pending, a heading may still give the count at the base.
+            base = goals if goals else more
+            counted_then = len({norm(g) for g in base if norm(g) in then})
+            if any(norm(g) in pending for g in base) and declared == counted_then:
+                pend_drift.append((heading, declared, counted))
+                flag += f'  (heading says {declared}: live {counted}, {counted_then} at {a.pending_from})'
+            else:
+                count_drift.append((heading, declared, counted))
+                flag += f'  <-- heading says {declared}, live {counted}'
         extra = (f"  filed by name elsewhere {len(more)}: live {len(more_live)}, stale {len(more_stale)}"
                  if more else '')
         print(f"[{rec}] {heading[:80]}\n    listed {len(goals)}  live {len(live)}  stale {len(stale)}{extra}{flag}")
         for g in stale + more_stale: print(f"      stale: {g}")
+        for g in pend + more_pend: print(f"      pending: {g}")
         stale_total += len(stale) + len(more_stale)
+        pend_listed += len(pend) + len(more_pend)
     if tables or filing_problems:
         print(f"\nfiled-by-name tables: {tables}, {sum(len(v) for v in filed.values())} goals "
               f"under {len(filed)} block(s)")
         for pr in filing_problems: print(f"      {pr}")
-    unlisted = sorted(n for n in pins if n not in listed_all)
+    unlisted = sorted(n for n in pins if n not in listed_all and n not in pending)
+    unlisted_pending = sorted(n for n in pins if n not in listed_all and n in pending)
     by_unit = defaultdict(int)
     for n in unlisted:
         for u in pins[n]: by_unit[u] += 1
     print(f"\npinned names not listed in any goal table: {len(unlisted)} "
           f"(VERIFY-039's main pass files them by name; --complete fails until this is 0)")
     print("  per unit: " + ", ".join(f"{u}:{c}" for u, c in sorted(by_unit.items())))
-    filed_pinned, problems = check_proved_goals(pins)
+    for n in unlisted_pending: print(f"  pinned, in no goal table, pending: {n}")
+    filed_pinned, problems, filed_pending = check_proved_goals(pins, pending)
+    if a.pending_from:
+        print(f"\npending from {a.pending_from}: listed goals no longer pinned {pend_listed}, "
+              f"blocks whose listed goals are all pending {len(pend_blocks)}, heading counts "
+              f"as at the base {len(pend_drift)}, pinned names in no goal table "
+              f"{len(unlisted_pending)}, filed parts pinned {filed_pending}, "
+              f"other filing notes {len(held)}")
+        for h in held: print(f"      {h}")
     print(f"\nSUMMARY  stale listed goals: {stale_total}   empty blocks: {len(empty)}   heading/live count drift: {len(count_drift)}"
+          f"   blocks in force naming no goal: {len(unjoined)}"
           f"   filed parts pinned: {filed_pinned}   block problems: {problems}   filing problems: {len(filing_problems)}")
-    if a.strict and (stale_total or empty or filed_pinned or problems or filing_problems):
+    if a.strict and (stale_total or empty or count_drift or unjoined or filed_pinned or problems
+                     or filing_problems):
         sys.exit(1)
     if a.complete and unlisted:
         sys.exit(1)
