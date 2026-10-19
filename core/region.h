@@ -25,7 +25,7 @@
  * @file core/region.h
  * @brief Explicit lifetime region tokens — named boundaries for borrowed values
  *
- * A Region is a stack-allocated lifetime token. It answers:
+ * A Region is a lifetime token, meant to be stack-allocated. It answers:
  * "how long is this borrowed value valid?"
  *
  * Borrowed views (core/slice.h, semantics/borrow.h) carry a source tag that
@@ -38,14 +38,16 @@
  *   // ... work ...
  *   region_end(&r);
  *
- * The pointer-based API is intentional: &r is the caller's actual stack address,
- * which is used as the region's unique ID. A by-value region_begin() would
- * capture the callee's frame address — a different, immediately-dead pointer.
+ * The pointer-based API is intentional: &r is the address of the caller's
+ * own Region, which is used as the region's unique ID. A by-value
+ * region_begin() would capture the callee's frame address — a different,
+ * immediately-dead pointer.
  *
  * Core properties:
  * ────────────────────────────────────────────────────────────────────────────
- * - Stack-allocated — never heap-allocated, never dynamically sized
- * - ID derived from the Region's own stack address — no global counter,
+ * - Meant to be stack-allocated (no clause requires it), never dynamically
+ *   sized
+ * - ID derived from the Region's own address — no global counter,
  *   no shared state, fully thread-safe
  * - Optional arena attachment — arena_reset() called on region_end()
  * - Up to REGION_MAX_CLEANUP cleanup hooks per region, called LIFO
@@ -96,7 +98,7 @@
  *   r.id = (region_id_t)(uintptr_t)r   // r is the caller's Region*
  *
  * Properties:
- * - Unique across all simultaneously live regions (distinct stack frames)
+ * - Unique across all simultaneously live regions (distinct objects)
  * - Not monotonic — addresses, not sequence numbers
  * - Safe alias across sequential lifetimes: region_assert_borrow_valid()
  *   checks r->open in addition to the ID, so a reused address on a closed
@@ -132,9 +134,9 @@
  *
  * Thread safety:
  * ────────────────────────────────────────────────────────────────────────────
- * Regions are stack-local. region_begin() touches no shared state.
- * Do not share a Region* across threads. A Region must not be accessed
- * after its owner's stack frame exits.
+ * Regions are meant to be stack-local. region_begin() touches no shared
+ * state. Do not share a Region* across threads. A Region must not be
+ * accessed after its owner's stack frame exits.
  *
  * Performance:
  * ────────────────────────────────────────────────────────────────────────────
@@ -150,17 +152,25 @@
  * Verification (Frama-C WP):
  * ────────────────────────────────────────────────────────────────────────────
  * Every function in this file carries an ACSL contract. region_invariant()
- * is the central predicate (validity, hook-count bound, arena validity);
- * it composes arena_invariant() from core/arena.h. region_end() is the one
- * function whose verification has an inherent boundary: it dispatches
- * caller-supplied cleanup hooks through an opaque function pointer, which
- * WP cannot reason about without a `calls` clause that the arbitrary-hook
- * design cannot supply. region_end() declares `assigns *r`; the structural
- * postconditions are re-established by unconditional writes *after* the
- * hook loop. WP cannot prove the indirect hook call respects the `*r`
- * frame (a hook could, as far as WP knows, alias r), so that call is the
- * documented region.h-own residual (see docs/deviations.md VERIFY-011 /
- * OWN-003 and the report-only WP step in .github/workflows/cmake-multi-platform.yml).
+ * is the central predicate (validity, hook-count bound, arena validity, and
+ * the Region apart from its Arena); it composes arena_invariant() from
+ * core/arena.h. region_end() is the one function whose verification has an
+ * inherent boundary: it calls caller-supplied hooks through a function
+ * pointer with no `calls` clause, and a hook may loop, exit, write any other
+ * object or free other storage. Its contract claims termination, no exit
+ * and its frame (*r and the attached Arena) only where no slot below
+ * num_hooks holds a hook (region_no_hook, behavior no_hook), and requires
+ * each hook it calls to be a valid function and to keep a rule that no
+ * clause can state of code behind a pointer (region_hook_rule, below). WP
+ * leaves unproved the check that a hook is a valid function
+ * (\valid_function is not implemented), and, after a hook, the slot's two
+ * stores, which need the rule, and the loop's invariant and variant: WP
+ * loses i and h across the call. WP also takes the loop's frame, stated for
+ * no_hook, as the loop's effect where a hook is called, so the goals it
+ * proves after a hook from that frame, or from a model in which a hook
+ * frees nothing, are argued under the rule. See
+ * docs/deviations.md, VERIFY-011 and VERIFY-039 G19 and G20, and the
+ * frama-c-region job in .github/workflows/cmake-multi-platform.yml.
  *
  * Quick start:
  * ────────────────────────────────────────────────────────────────────────────
@@ -334,7 +344,11 @@ static inline void lifetime_assert_valid(
 /**
  * @brief A single registered cleanup hook
  *
- * fn  — cleanup function; receives ctx; must not call region_end()
+ * fn  — cleanup function; receives ctx; must keep region_end()'s hook
+ *       rule (region_hook_rule): it does not call region_end() on its
+ *       Region, and it leaves the Region's storage in place, the attached
+ *       Arena meeting arena_invariant and the slots below its own as they
+ *       were, or with a null fn
  * ctx — caller-provided context (may be NULL)
  */
 typedef struct {
@@ -347,10 +361,10 @@ typedef struct {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * @brief A named lifetime token — stack-allocated, never heap-allocated
+ * @brief A named lifetime token — meant to be stack-allocated
  *
  * Fields (do not access directly — use the provided functions):
- *   id        — stack-address-derived ID, set by region_begin()
+ *   id        — address-derived ID, set by region_begin()
  *   open      — true between region_begin() and region_end()
  *   arena     — optional attached arena, reset on region_end() (may be NULL)
  *   parent    — optional parent region (absent with CANON_NO_REGION_PARENT)
@@ -382,15 +396,35 @@ struct Region {
    a single named predicate carried as a precondition by every function that
    takes a live Region, and re-established as a postcondition by every
    mutating function. It composes arena_invariant from core/arena.h for the
-   optional attached arena. The hook count is bounded by REGION_MAX_CLEANUP
-   so the region_end() walk and region_register() store are in-bounds.
+   optional attached arena, and separates the Region from that arena
+   (VERIFY-039 G20), so that a store to the Region leaves the Arena alone.
+   The hook count is bounded by REGION_MAX_CLEANUP so the region_end() walk
+   and region_register() store are in-bounds. region_no_hook(r) holds when
+   no slot below num_hooks holds a hook: region_end() then calls none.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*@
   predicate region_invariant(Region *r) =
       \valid(r)
       && 0 <= r->num_hooks <= REGION_MAX_CLEANUP
-      && (r->arena == \null || arena_invariant(r->arena));
+      && (r->arena == \null || arena_invariant(r->arena))
+      && (r->arena == \null || \separated(r, r->arena));
+
+  predicate region_no_hook(Region *r) =
+      \forall integer k; 0 <= k < r->num_hooks ==> r->cleanups[k].fn == \null;
+*/
+
+/*@
+  axiomatic RegionHookRule {
+    // The rule a hook keeps (VERIFY-039 G19), which no clause can state of
+    // code behind a pointer: called by region_end() on r from slot k, it
+    // does not call region_end() on r, it leaves r's storage in place, it
+    // leaves the Arena attached to r when region_end() was called, if any,
+    // meeting arena_invariant, and it leaves each slot below k as it was,
+    // or with a null fn. No definition and no axiom: WP cannot use it, and
+    // its meaning is this comment.
+    predicate region_hook_rule{L}(Region *r, integer k);
+  }
 */
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -439,28 +473,44 @@ static inline void region_begin(Region* r) {
  *
  * @pre  r != NULL
  * @pre  r->open == true
+ * @pre  each hook below num_hooks a valid function that keeps the hook
+ *       rule (region_hook_rule)
  * @post r->open == false
- * @post All hooks called and cleared
+ * @post Every slot below num_hooks at the call visited, last first: each
+ *       hook found there called and its slot cleared
  * @post r->arena reset and cleared (if was non-NULL)
  * @post r->num_hooks == 0
  *
  * Complexity: O(num_hooks)
  *
  * Verification note: the attached arena pointer is captured into a local
- * BEFORE the hook loop, and r->arena is cleared unconditionally AFTER it.
- * Functionally identical to clearing inside the `if` for any conforming use
- * (hooks may allocate from the arena but must not repoint r->arena), and it
- * lets WP discharge the arena_reset call against the captured (loop-immune)
- * local rather than against a field the opaque hooks have havoc'd.
+ * BEFORE the hook loop, and r->arena is cleared unconditionally AFTER it,
+ * so the arena reset is the one attached when region_end() was called,
+ * whatever a hook stores in r->arena; hooks may allocate from it. WP checks
+ * the reset's precondition against the local, which no hook can reach,
+ * rather than against a field a hook can write; a hook may write the Arena
+ * it points to, and the rule keeps it meeting arena_invariant.
  */
 /*@
   requires region_invariant(r);
   requires r->open;
-  assigns  *r;
+  requires \forall integer k; 0 <= k < r->num_hooks && r->cleanups[k].fn != \null
+             ==> \valid_function(r->cleanups[k].fn);
+  requires \forall integer k; 0 <= k < r->num_hooks && r->cleanups[k].fn != \null
+             ==> region_hook_rule(r, k);
+  terminates region_no_hook(r);
+  exits      !region_no_hook{Old}(r);
   ensures  r->open == \false;
   ensures  r->num_hooks == 0;
   ensures  r->arena == \null;
   ensures  region_invariant(r);
+  behavior no_hook:
+    assumes region_no_hook(r);
+    assigns *r, *(r->arena);
+  behavior hooks:
+    assumes !region_no_hook(r);
+  complete behaviors;
+  disjoint behaviors;
 */
 static inline void region_end(Region* r) {
     usize          i;
@@ -476,36 +526,33 @@ static inline void region_end(Region* r) {
     saved_arena = r->arena;
 
     /* Hooks — LIFO.
-     * h->fn(h->ctx) is an indirect call through a caller-supplied pointer.
-     * WP has no `calls` clause to reason about it (hooks are arbitrary).
-     * region_end's declared frame is `assigns *r`; the indirect call may,
-     * for all WP can prove, write through a pointer aliasing r, so the
-     * call's conformance to that frame is the documented region.h-own
-     * residual (VERIFY-011 / OWN-003). The loop annotation below bounds the
-     * loop's own writes (the counter and the cleanups array) so the array-
-     * index RTE and termination discharge; the function's structural
-     * postconditions are re-established by the unconditional writes after
-     * the loop. */
+     * h->fn(h->ctx) is an indirect call through a caller-supplied pointer,
+     * with no `calls` clause: a hook is any function region_register()
+     * took. The loop's frame is stated for no_hook, where the second
+     * invariant makes the call unreachable; where a hook is called, no
+     * clause bounds what it writes, and the rule is what the code needs of
+     * it. The region closed, its count 0 and its arena null are
+     * re-established by the unconditional writes after the loop;
+     * region_invariant(r) rests on the rule too (VERIFY-039 G19). */
     /*@
       loop invariant 0 <= i <= REGION_MAX_CLEANUP;
-      loop assigns  i, r->cleanups[0 .. REGION_MAX_CLEANUP - 1];
+      loop invariant region_no_hook{Pre}(\at(r, Pre)) ==>
+        i <= \at(r->num_hooks, Pre) &&
+        \forall integer k; 0 <= k < \at(r->num_hooks, Pre) ==>
+          \at(r, Pre)->cleanups[k].fn == \null;
+      for no_hook: loop assigns i, h, r->cleanups[0 .. REGION_MAX_CLEANUP - 1];
       loop variant  i;
     */
     for (i = r->num_hooks; i > 0u; i--) {
         h = &r->cleanups[i - 1u];
         if (h->fn != NULL) {
-            /* h->fn is an opaque caller-supplied pointer with no `calls`
-             * clause. WP assumes it could call region_end itself, so it
-             * models region_end as potentially recursive (hence the
-             * Missing-decreases / non-terminating-call warnings). A
-             * statement-level `assigns` contract here is NOT honored —
-             * WP reports "Statement specifications not yet supported
-             * (skipped)". The honest boundary is documented as the
-             * region.h-own residual (VERIFY-011 / OWN-003); the
-             * report-only WP step samples it with a short per-goal
-             * timeout rather than discharging it. The hook contract
-             * (a hook must not call region_end on this region or repoint
-             * r's fields) is what makes the modelled recursion vacuous. */
+            /* WP 29 does not implement \valid_function, so the check
+             * that h->fn is one stays unproved; and WP loses i and h
+             * across a call through a pointer with no `calls` clause, so
+             * the two stores below, which need the hook rule too, and the
+             * loop's invariant and variant on this path stay unproved.
+             * Each is true under the preconditions and the hook rule
+             * (docs/deviations.md, VERIFY-011 and VERIFY-039 G19). */
             h->fn(h->ctx);
             h->fn  = NULL;
             h->ctx = NULL;
@@ -537,6 +584,8 @@ static inline void region_end(Region* r) {
  *
  * @pre  r != NULL && r->open
  * @pre  arena != NULL
+ * @pre  arena does not overlap *r: a store to the Region must leave the
+ *       Arena alone (VERIFY-039 G20)
  * @post r->arena == arena
  *
  * Complexity: O(1)
@@ -545,6 +594,7 @@ static inline void region_end(Region* r) {
   requires region_invariant(r);
   requires r->open;
   requires arena_invariant(arena);
+  requires \separated(r, arena);
   assigns  r->arena;
   ensures  r->arena == arena;
   ensures  region_invariant(r);
@@ -568,7 +618,8 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
  *
  * @param r    Open Region (must not be NULL)
  * @param fn   Cleanup function — void fn(void* ctx); must not be NULL;
- *             must not call region_end() on this region
+ *             must be a function of this type, and must keep
+ *             region_end()'s hook rule (region_hook_rule)
  * @param ctx  Context passed to fn (may be NULL)
  * @return     true on success, false if table is full
  *
@@ -581,6 +632,7 @@ static inline void region_attach_arena(Region* r, Arena* arena) {
   requires region_invariant(r);
   requires r->open;
   requires fn != \null;
+  requires \valid_function(fn);
   assigns  r->cleanups[0 .. REGION_MAX_CLEANUP - 1], r->num_hooks;
   ensures  region_invariant(r);
   behavior full:
