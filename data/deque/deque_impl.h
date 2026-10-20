@@ -1219,6 +1219,8 @@ linkage void fn(borrowed(DequeType*) d) { \
  *
  * @pre a != NULL
  * @pre b != NULL
+ * @pre a == b, or a and b do not overlap: two deques that overlap in part
+ *      cannot be exchanged by assignment (C11 6.5.16.1p3; VERIFY-040)
  *
  * Lifetime (CANON_LIFETIME_DEBUG): the struct copy exchanges the entire
  * DequeType including the embedded lt field. After swap, &a->lt still
@@ -1233,19 +1235,15 @@ linkage void fn(borrowed(DequeType*) d) { \
  */
 #define IMPL_DEQUE_SWAP(linkage, DequeType, fn) \
 /*@ requires \valid(a) && \valid(b);                                             \
-    requires \separated(a, b);                                                   \
+    requires a == b || \separated(a, b);                                         \
     requires ((\valid_read(a) && a->size <= a->capacity && a->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*a->buffer) && (a->buffer == \null ==> a->capacity == 0) && (a->capacity > 0 ==> \valid_read(a->buffer + (0 .. a->capacity - 1))) && (a->capacity > 0 ==> a->head < a->capacity && a->tail < a->capacity)) && \valid(a) && (a->capacity > 0 ==> \valid(a->buffer + (0 .. a->capacity - 1)))) && ((\valid_read(b) && b->size <= b->capacity && b->capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(*b->buffer) && (b->buffer == \null ==> b->capacity == 0) && (b->capacity > 0 ==> \valid_read(b->buffer + (0 .. b->capacity - 1))) && (b->capacity > 0 ==> b->head < b->capacity && b->tail < b->capacity)) && \valid(b) && (b->capacity > 0 ==> \valid(b->buffer + (0 .. b->capacity - 1)))); \
     assigns *a, *b;                                                              \
-    ensures a->buffer   == \old(b->buffer);                                      \
-    ensures a->capacity == \old(b->capacity);                                    \
-    ensures a->head     == \old(b->head);                                        \
-    ensures a->tail     == \old(b->tail);                                        \
-    ensures a->size     == \old(b->size);                                        \
-    ensures b->buffer   == \old(a->buffer);                                      \
-    ensures b->capacity == \old(a->capacity);                                    \
-    ensures b->head     == \old(a->head);                                        \
-    ensures b->tail     == \old(a->tail);                                        \
-    ensures b->size     == \old(a->size); */                                     \
+    ensures a->buffer == \old(b->buffer) && a->capacity == \old(b->capacity)     \
+    && a->head == \old(b->head) && a->tail == \old(b->tail)                      \
+    && a->size == \old(b->size);                                                 \
+    ensures b->buffer == \old(a->buffer) && b->capacity == \old(a->capacity)     \
+    && b->head == \old(a->head) && b->tail == \old(a->tail)                      \
+    && b->size == \old(a->size); */                                              \
 linkage void fn(borrowed(DequeType*) a, borrowed(DequeType*) b) { \
     require_msg(a != NULL, #fn ": a cannot be NULL"); \
     require_msg(b != NULL, #fn ": b cannot be NULL"); \

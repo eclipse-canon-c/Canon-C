@@ -229,6 +229,9 @@
  *       (iii) FIRED, 5 goals — an inherited class, not a new one. See the
  *             swap contract's note below: vec pins the same residual and
  *             deque widens its classification beyond the cast model.
+ *             (Corrected 2026-10-20, VERIFY-040: not vec's class, as
+ *             VERIFY-039's batch 2 found and the note on swap below says;
+ *             ARM D is predicted 0 since VERIFY-040's round 1.)
  *     REVISED PREDICTION FOR RUN 2: **0 own residuals excluding the swap
  *     cluster**, i.e. ARM D = 5, all five swap ensures. If the four
  *     wrapper goals return, the vec-shaped fix is not the explanation and
@@ -1070,45 +1073,37 @@ static inline option_int deque_int_peek_back_option(const deque_int* d);
 */
 static inline void deque_int_clear(deque_int* d);
 
-/* swap's two require_msg guards vanish; \separated is required because the
- * body is a three-assignment struct exchange through a temporary, which is
- * only an exchange when a and b do not alias. ARM D at-risk candidate (iii).
+/* swap's two require_msg guards vanish. The contract admits a == b: each
+ * of the two stores into the deque then writes the value it already holds,
+ * which C defines for an exact overlap (C11 6.5.16.1p3), and deque_test.c's
+ * test_swap_self makes that call. Two deques that overlap in part are
+ * excluded, as for vec's swap.
+ * (Until VERIFY-040 this contract required \separated(a, b), and this
+ * comment said the body is an exchange only when a and b do not alias.)
  *
- * RUN-1 RESULT (VERIFY-019): candidate (iii) FIRED — ensures 6-10 unproved,
- * ensures 1-5 proved. DELIBERATELY NOT "FIXED", for two reasons.
+ * RUN-1 RESULT (VERIFY-019): ensures 6-10 unproved, ensures 1-5 proved, and
+ * the ten field-wise clauses kept, for two reasons VERIFY-039's batch 2
+ * found wrong. They were not vec's class: vec's goal failed on *a, whose
+ * operands vec's contract let overlap in part. And the obstacle was not
+ * tmp's preservation, which no store reaches, tmp being a value in WP's
+ * model. The five clauses were true. WP generates the fact that proves
+ * them, *b after the last store equal to *a before the first, as tmp's
+ * initializer, and its hypothesis filter drops that fact from a goal that
+ * names one field, and so one of the two memories the store writes.
  *
- * (a) It is not a new residual class. vec carries the same one, pinned in
- *     its enforced roll-call as `typed_cast_vec_int_swap_ensures` and
- *     classified in vec_verify.h as "whole-struct copies under the cast
- *     model". deque reproduces it under plain Typed, which WIDENS that
- *     classification: it is not cast-model-specific. Reclassify in
- *     VERIFY-018 accordingly rather than treating deque's as novel.
- *
- * (b) The split is INFORMATIVE and combining the clauses would destroy the
- *     information. vec states the exchange as 2 combined ensures and gets 1
- *     residual, which says nothing about which half fails. These 10
- *     field-wise clauses localise it precisely: the a-side (a receives b)
- *     proves; the b-side (b receives \old(a), routed through the local
- *     temporary) does not. The obstacle is therefore preservation of `tmp`
- *     across the SECOND struct write, not the struct copy itself. Rewriting
- *     to vec's shape would drop the residual count 5 -> 1 and look like
- *     progress while deleting the only evidence that says where to look.
- *
- * Disposition: expected residual for ARM D, recorded, not suppressed. */
+ * VERIFY-040: each side of the exchange is one conjunction, as vec states
+ * it, so that each goal names both memories and the filter keeps the fact;
+ * with a == b admitted, the side about *a rests on that fact too. */
 /*@ requires \valid(a) && \valid(b);
-    requires \separated(a, b);
+    requires a == b || \separated(a, b);
     requires deque_int_mut(a) && deque_int_mut(b);
     assigns *a, *b;
-    ensures a->buffer   == \old(b->buffer);
-    ensures a->capacity == \old(b->capacity);
-    ensures a->head     == \old(b->head);
-    ensures a->tail     == \old(b->tail);
-    ensures a->size     == \old(b->size);
-    ensures b->buffer   == \old(a->buffer);
-    ensures b->capacity == \old(a->capacity);
-    ensures b->head     == \old(a->head);
-    ensures b->tail     == \old(a->tail);
-    ensures b->size     == \old(a->size);
+    ensures a->buffer == \old(b->buffer) && a->capacity == \old(b->capacity)
+         && a->head == \old(b->head) && a->tail == \old(b->tail)
+         && a->size == \old(b->size);
+    ensures b->buffer == \old(a->buffer) && b->capacity == \old(a->capacity)
+         && b->head == \old(a->head) && b->tail == \old(a->tail)
+         && b->size == \old(a->size);
 */
 static inline void deque_int_swap(deque_int* a, deque_int* b);
 
