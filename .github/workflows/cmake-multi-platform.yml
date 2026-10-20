@@ -3139,7 +3139,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-039 G18 predicted: 5474/5569, 95 unproved (G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
+          echo "  baseline: VERIFY-040 round 1 predicted: 5475/5569, 94 unproved (G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3188,8 +3188,11 @@ jobs:
           # VERIFY-039 G18 predicted: memory.h's two frames prove, and free's
           # null frame gains a part on each path, both proved
           # (5470 / 5567 before).
-          if [ "${PROVED_COUNT}" != "5474 / 5569" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5474 / 5569)."
+          # VERIFY-040 round 1 predicted: swap's first postcondition proves,
+          # its operands the same vec or separated; no goal added or removed
+          # (5474 / 5569 before).
+          if [ "${PROVED_COUNT}" != "5475 / 5569" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5475 / 5569)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3205,7 +3208,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=95   # VERIFY-039 G18 predicted: 97 -> 95 (G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
+          EXPECTED_UNPROVED=94   # VERIFY-040 round 1 predicted: 95 -> 94 (VERIFY-039 G18 predicted: 97 -> 95; G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt || true)
@@ -3353,7 +3356,6 @@ jobs:
             "typed_cast_vec_int_fill_live_assigns_part4"
             "typed_cast_vec_int_fill_live_assigns_part5"
             "typed_cast_vec_int_fill_live_assigns_part6"
-            "typed_cast_vec_int_swap_ensures"
           )
           MISSING=0
           for goal in "${CHECKS[@]}"; do
@@ -3489,8 +3491,12 @@ jobs:
           # arm's 22 closed, no goal added (41 and 1634 / 1675 before).
           # VERIFY-039 G14 predicted: the handler's invariant goals
           # removed and its termination proved (19 and 1656 / 1675 before).
-          EXPECTED_UNPROVED=17
-          EXPECTED_PROVED="1656 / 1673"
+          # VERIFY-040 round 1 predicted: swap states its exchange as two
+          # conjunctions, one for each side, and admits a == b (H1): its
+          # ten goals become two, both proved, five of the ten proved
+          # before (17 and 1656 / 1673 before).
+          EXPECTED_UNPROVED=12
+          EXPECTED_PROVED="1653 / 1665"
           # Pre-registered arm counts (see banner). Printed against observed
           # in every run; they do not gate until ENFORCE=1.
           # 0 since VERIFY-039 G14 (2 before: the invariant's establishment
@@ -3525,8 +3531,11 @@ jobs:
           # So: 5 expected, all swap, and the four wrapper goals must NOT
           # return — if they do, the framing problem is deeper than a
           # missing clause and the fix was wrong.
-          PREDICT_OWN=5
-          PREDICT_TOTAL=17
+          # 0 since VERIFY-040's round 1: each side of swap's exchange is one
+          # conjunction, whose goal names both memories the last store
+          # writes, so that the filter keeps the fact that proves it.
+          PREDICT_OWN=0
+          PREDICT_TOTAL=12
           # Self-check: the arms partition the residual set, so their
           # predictions must sum to the total prediction. #1234 shipped with
           # a sum of 69 against a total of 67 and nobody noticed, because the
@@ -3712,7 +3721,7 @@ jobs:
             WRAPPER_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*deque_int_(pop|peek)_(front|back)_option" wp_deque_output.txt || true)
             SWAP_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*deque_int_swap_" wp_deque_output.txt || true)
             OTHER_OWN=$((OWN_SEEN - WRAPPER_SEEN - SWAP_SEEN))
-            echo "    of which swap cluster:    ${SWAP_SEEN} (expected 5)"
+            echo "    of which swap cluster:    ${SWAP_SEEN} (expected 0 since VERIFY-040)"
             echo "    of which *_option frame:  ${WRAPPER_SEEN} (expected 0 after the run-1 fix)"
             echo "    of which anything else:   ${OTHER_OWN} (expected 0)"
             if [ "${WRAPPER_SEEN}" -ne 0 ]; then
@@ -3736,9 +3745,11 @@ jobs:
               echo "  prediction miss to CLASSIFY in VERIFY-019, not a build"
               echo "  failure — report-only mode is exactly for this."
             else
-              echo "  ARM D matches the revised prediction: the swap cluster"
-              echo "  only, five true clauses whose proving fact WP's"
-              echo "  hypothesis filter drops (VERIFY-039, batch 2)."
+              echo "  ARM D matches the prediction: no own residual. The"
+              echo "  swap cluster's five, true clauses whose proving fact"
+              echo "  WP's hypothesis filter dropped (VERIFY-039, batch 2),"
+              echo "  prove stated as one conjunction for each side of the"
+              echo "  exchange, since VERIFY-040's round 1."
             fi
             # Loop goals should not exist at all: deque has no loops. Their
             # appearance means a body is not what the source reads as, and
@@ -3783,24 +3794,18 @@ jobs:
               "typed_result_Bool_Error_or_else_assert_rte_function_pointer"
               "typed_result_Bool_Error_eq_assert_rte_function_pointer"
               "typed_result_Bool_Error_eq_assert_rte_function_pointer_2"
-              # ARM D — deque's own: the swap cluster ONLY. ensures 1-5 (a
-              #         receives b) prove; 6-10 (b receives \old(a) via the
-              #         local temporary) do not. The clauses are true: WP
-              #         generates the fact that proves them, *b after the last
-              #         store equal to *a before the first, as tmp's
-              #         initializer, and its hypothesis filter drops it from a
-              #         goal that names one field (VERIFY-039, batch 2, "Struct
-              #         stored from an initialised local, stated field by
-              #         field"). This comment called it vec's class
-              #         (typed_cast_vec_int_swap_ensures, which fails on *a,
-              #         whose operands vec's contract lets overlap in part)
-              #         and the obstacle tmp's preservation, which no store
-              #         reaches: tmp is a value in WP's model.
-              "typed_deque_int_swap_ensures_6"
-              "typed_deque_int_swap_ensures_7"
-              "typed_deque_int_swap_ensures_8"
-              "typed_deque_int_swap_ensures_9"
-              "typed_deque_int_swap_ensures_10"
+              # ARM D — deque's own: none since VERIFY-040's round 1. Until
+              #         then the swap cluster: ensures 1-5 (a receives b)
+              #         proved, 6-10 (b receives \old(a) via the local
+              #         temporary) did not. The clauses were true: WP
+              #         generates the fact that proves them, *b after the
+              #         last store equal to *a before the first, as tmp's
+              #         initializer, and its hypothesis filter dropped it
+              #         from a goal that names one field (VERIFY-039, batch
+              #         2, "Struct stored from an initialised local, stated
+              #         field by field"). Each side of the exchange is one
+              #         conjunction since VERIFY-040, whose goal names both
+              #         memories the last store writes, and the fact stays.
             )
             MISSING=0
             for goal in "${CHECKS[@]}"; do
@@ -3854,10 +3859,11 @@ jobs:
           echo ""
           echo "==============================================="
           if [ "${FAILURES}" -eq 0 ] && [ "${ENFORCE}" -eq 1 ]; then
-            echo "VERIFY-019 ENFORCED PASS: 1656/1673 proved, 0 Failed, count"
+            echo "VERIFY-019 ENFORCED PASS: ${EXPECTED_PROVED} proved, 0 Failed, count"
             echo "      ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, all ${EXPECTED_UNPROVED} classified residuals verified"
             echo "      by name (set equality). Arms: 0 handler + 6 option"
-            echo "      (inheritance) + 6 result(Bool,Error) (fresh) + 5 swap."
+            echo "      (inheritance) + 6 result(Bool,Error) (fresh) + 0 own"
+            echo "      (the swap cluster proved since VERIFY-040)."
             echo "      ZERO core-substrate residuals — deque's closure excludes"
             echo "      every header vec inherited its 89 from, so this is the"
             echo "      first module whose inherited surface is SMALLER than its"
@@ -4519,8 +4525,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=78   # VERIFY-039 G18 predicted: 80 -> 78 (G14 to G17 predicted: 98 -> 80; G13 predicted: 96 -> 98; G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4963 / 5041"   # VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed (G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=76   # VERIFY-040 round 1 predicted: 78 -> 76 (VERIFY-039 G18 predicted: 80 -> 78; G14 to G17 predicted: 98 -> 80; G13 predicted: 96 -> 98; G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4967 / 5043"   # VERIFY-040 round 1 predicted: two assertions on bitset_init's word count added and proved, and its two goals on the count prove (VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed: 4963 / 5041; G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4637,7 +4643,9 @@ jobs:
             # and 96 total since G11's repair of option_usize, whose arm is 6;
             # 98 since G13's repair, borrow's two at borrowed_str_eq's call;
             # 80 since G14 to G17 closed the handler pair and 16 of the
-            # core substrate's; 78 since G18 closed memory's two frames.
+            # core substrate's; 78 since G18 closed memory's two frames;
+            # 76 since VERIFY-040's round 1 closed bitset_init's two on its
+            # word count.
             # No duplicates, nothing unclassified -- before being written here.
             CHECKS=(
               # ARM C — contract.h handler pair: none since VERIFY-039 G14.
@@ -4707,8 +4715,9 @@ jobs:
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
               "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
               "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
-              # ARM D — bitset's OWN residuals, 25 since VERIFY-039 G10's
-              #         repair (41 after G8's, 42 after entry 3's loop bounds,
+              # ARM D — bitset's OWN residuals, 23 since VERIFY-040's round 1
+              #         (25 since VERIFY-039 G10's repair, 41 after G8's, 42
+              #         after entry 3's loop bounds,
               #         52 after entry 3 / G6, 71 before it; was 66, +5 at CI
               #         #1264, where F2/F5 let the contracts of set, clear,
               #         toggle, test and not admit a null words without
@@ -4718,9 +4727,7 @@ jobs:
               "typed_cast_bitset_init_assigns_exit_part5"
               "typed_cast_bitset_init_assigns_normal_part5"
               "typed_cast_bitset_init_call_mem_zero_requires"
-              "typed_cast_bitset_init_ensures_3"
               "typed_cast_bitset_init_ensures_4"
-              "typed_cast_bitset_init_ensures_5"
               "typed_cast_bitset_init_ensures_6"
               "typed_cast_bitset_set_live_ensures_3_part3"
               "typed_cast_bitset_clear_live_ensures_3_part3"

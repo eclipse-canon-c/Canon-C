@@ -116,8 +116,13 @@ jobs:
           # name the heap's state, __fc_heap_status, and close; free's null
           # frame gains a part on each path, both proved. Before: 5479 / 5576
           # and 97.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5483 / 5578", unproved: 95  }
-          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1656 / 1673", unproved: 17  }
+          # VERIFY-040 round 1 (predicted pins): vec's and vec_struct's swap
+          # requires its operands the same or separated, and its first
+          # postcondition proves; deque's swap states its exchange as
+          # two conjunctions and admits a == b. Before: vec 5483 / 5578 and 95,
+          # deque 1656 / 1673 and 17, vec_struct 5481 / 5576 and 95.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5484 / 5578", unproved: 94  }
+          - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
           # with VERIFY-039 G1 at CC #28, which also corrected one
@@ -125,7 +130,7 @@ jobs:
           # VERIFY-039 G2: predicted pin, as cc-vec's; G3 ratcheted at CC #31.
           # VERIFY-039 G18: predicted pin, as cc-vec's. Before: 5477 / 5574
           # and 97.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5481 / 5576", unproved: 95  }
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5482 / 5576", unproved: 94  }
     steps:
       - uses: actions/checkout@v6
 
