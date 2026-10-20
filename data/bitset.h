@@ -315,6 +315,9 @@ typedef struct {
    deque 67 -- residuals are normal here, and what makes them acceptable is
    that they are documented, name-pinned, and carry manual-proof arguments.
    Eighteen would be the SMALLEST own-residual set in the data/ layer.
+   (Corrected 2026-10-20, VERIFY-040, as VERIFY-039 listed at G11's close:
+   196, 91, 119 and 67 are those units' totals of unproved goals, not their
+   own sets. deque's own set was 5, so eighteen was not the smallest.)
    The real question was never "can these reach zero" but "are these
    predicates affordable inside LOOP INVARIANTS", and that is answered by
    writing one, not by theorising about postconditions. See bitset_not.
@@ -583,6 +586,21 @@ static inline void bitset_init(borrowed(Bitset*) bs, borrowed(u64*) words, usize
     bs->words      = words;
     bs->capacity   = capacity;
     bs->word_count = BITSET_WORD_COUNT(capacity);
+    /* VERIFY-040: the stored count is (capacity + 63) / 64 for every
+       capacity the contract admits; at the bound the sum wraps to 0 and the
+       difference back to capacity + 63. The provers did not take that step
+       from the expression (VERIFY-039, the block on a word count through a
+       wrap at the capacity bound). Stated below the bound, where nothing
+       wraps, and at it, each case is a goal of its own. The expression is
+       kept: past the guard above, when a contract handler returns, as the
+       F1 test's does in bitset_test.c, a capacity above the bound gives 0
+       words and mem_zero writes nothing. */
+    /*@ assert word_count_below_bound:
+          capacity < CANON_USIZE_MAX - 63 ==>
+            bs->word_count == bitset_words_for(capacity); */
+    /*@ assert word_count_at_bound:
+          capacity == CANON_USIZE_MAX - 63 ==>
+            bs->word_count == bitset_words_for(capacity); */
     mem_zero(words, bs->word_count * sizeof(u64));
     bitset_lifetime_open_(bs);
 }
