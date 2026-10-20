@@ -3858,6 +3858,13 @@ false on LP64; on ILP32 the fourth postcondition of `append_array` at `int`
 was, for a `src` over `len`, until VERIFY-039 G9's repair (1d725ef). The
 headings' 5 and 22 are 3 and 21.
 
+**Repair note (2026-10-20, VERIFY-040 round 1).** Since 49d38d7 (CI #1374,
+CC #55) `swap` requires its operands the same vec or separated, and
+`swap_ensures` is proved at `int` and at `Rec`: VERIFY-039's block on a struct
+exchange whose operands may overlap is retired. vec's own residuals are 49 at
+each type, and `frama-c-vec` pins `5475 / 5569` and 94. See VERIFY-040
+round 1.
+
 ### Fresh-instantiation residuals (22) — result(Bool, Error)
 
 vec's fallible API returns result(Bool, Error); VERIFY-015 verifies
@@ -4236,6 +4243,14 @@ names both memories the store writes; each of the five names one field.
 `tmp` is a value in the model, and no store reaches it. The split is what
 makes the five fail: by the mechanism one conjunction is expected to prove,
 as vec's does.
+
+**Repair note (2026-10-20, VERIFY-040 round 1).** Since d0dea31 (CI #1374,
+CC #55) `swap` admits `a == b`, the call `test_swap_self` makes, and states
+each side of the exchange as one conjunction, as vec states it. Both are
+proved, in `frama-c-deque` and `cc-deque`, and deque has no own residual: the
+job's ARM D is 0, and it pins `1653 / 1665` and 12. VERIFY-039's block on a
+struct stored from an initialised local, stated field by field, is retired.
+See VERIFY-040 round 1 and its H1.
 
 ### Prediction scorecard (honest record)
 
@@ -4787,6 +4802,13 @@ carry `option_verify.h`'s repaired contracts: 26 of the 32 closed, option's
 `eq` gained 7 frame goals, all proved, and the arm is the six run-time
 checks on the pointers, filed by name under VERIFY-014's block.
 `frama-c-bitset` pins `4953 / 5049` and 96.
+
+**Repair note (2026-10-20, VERIFY-040 round 1).** Since e4e2635 (CI #1374)
+`bitset_init` asserts its word count's step below the capacity bound and at
+it, and its `ensures_3` and `ensures_5` are proved: VERIFY-039's block on a
+word count through a wrap at the capacity bound is retired, and bitset's own
+residuals are 23. `frama-c-bitset` pins `4967 / 5043` and 76. See VERIFY-040
+round 1.
 
 ## VERIFY-021: An Instrument Verified, and a Frame Clause That Cannot Be Written (lifetime.h, ladder level 4 only)
 
@@ -14072,7 +14094,7 @@ The facts that keep a write off what a property reads:
 | 3 | `arena_reset_secure` | `mem_secure_zero(arena->buffer, arena->offset)`: `buffer + (0 .. offset - 1)`, inside the buffer as the precondition's `arena_invariant` gives `offset <= capacity` | `arena.h`'s eight | `typed_cast_arena_reset_secure_non_empty_ensures_3`, `typed_cast_arena_reset_secure_non_empty_ensures_4`, `typed_cast_arena_reset_secure_non_empty_ensures_5` | `buffer` and `capacity`, alone and in `arena_invariant` (`offset` and `padding_accum` are stored after the write) | F1 |
 | 4 | `pool_reset_secure` | `mem_secure_zero(base, object_size * used)` on the used slots: `buffer + (base_mark .. base_mark + object_size * used - 1)`, inside the slots as `pool_invariant` gives `used <= capacity` and `end_mark - base_mark == capacity * object_size`, and inside the buffer as it gives `end_mark <= arena->capacity` | `frama-c-pool` | `typed_cast_pool_reset_secure_call_pool_reset_2_requires`, `typed_cast_pool_reset_secure_assigns_exit`, `typed_cast_pool_reset_secure_assigns_normal` | at the second call to `pool_reset`: `*pool` and `*pool->arena`, in its precondition `pool_invariant`; `pool->arena`, in its `assigns` | F2 for `*pool`, F1 for `*pool->arena` |
 | 5 | `bitset_clear_all` | `mem_zero(bs->words, bs->word_count * sizeof(u64))`: `words + (0 .. word_count - 1)`, the words `bitset_mut` names | `frama-c-bitset` | `typed_cast_bitset_clear_all_live_ensures_3` | `*bs`, in `bitset_mut` | F3 |
-| 6 | `bitset_init` | `mem_zero(words, bs->word_count * sizeof(u64))`, after the store of `word_count` as `bitset_words_for(capacity)`: `words + (0 .. bitset_words_for(capacity) - 1)` | `frama-c-bitset` | `typed_cast_bitset_init_ensures`, `typed_cast_bitset_init_ensures_2` | `bs->words` and `bs->capacity` | F4 |
+| 6 | `bitset_init` | `mem_zero(words, bs->word_count * sizeof(u64))`, after the store of `word_count` as `bitset_words_for(capacity)`: `words + (0 .. bitset_words_for(capacity) - 1)` | `frama-c-bitset` | `typed_cast_bitset_init_ensures`, `typed_cast_bitset_init_ensures_2`, `typed_cast_bitset_init_ensures_3`, `typed_cast_bitset_init_ensures_5` | `bs->words` and `bs->capacity`; `bs->word_count`, alone and with the other two in `bitset_mut` (`ensures_3` and `ensures_5` since VERIFY-040 round 1, e4e2635) | F4 |
 | 7 | `bitset_set_all` | `mem_set(bs->words, 0xFF, bs->word_count * sizeof(u64))`: the words, as in row 5 | `frama-c-bitset` | `typed_cast_bitset_set_all_call_bitset_clear_padding_requires`, `typed_cast_bitset_set_all_live_assigns_exit` (not `_part1`), `typed_cast_bitset_set_all_live_assigns_normal` (not `_part1`) | at the call to `bitset_clear_padding`: `*bs`, in its precondition `bitset_mut`; `bs->words` and `bs->word_count`, in its `assigns` | F3 |
 | 8 | `diag_push` | on the overflow path, the shift `memmove(&d->frames[0], &d->frames[1], (DIAG_MAX_FRAMES - 1) * sizeof(DiagFrame))`: `frames[0 .. DIAG_MAX_FRAMES - 2]` | `frama-c-diag` | `typed_cast_diag_push_assert_dead_by_invariant_clamp`, `typed_cast_diag_push_assert_rte_mem_access_9`, `typed_cast_diag_push_assert_rte_mem_access_10`, `typed_cast_diag_push_assert_rte_mem_access_11`, `typed_cast_diag_push_assert_rte_mem_access_12`, `typed_cast_diag_push_assert_rte_mem_access_14`, `typed_cast_diag_push_assert_rte_mem_access_15`, `typed_cast_diag_push_call_memcpy_requires_valid_dest`, `typed_cast_diag_push_call_memcpy_requires_separation`, `typed_cast_diag_push_valid_diag_assigns_exit` (not `_part02`), `typed_cast_diag_push_valid_diag_assigns_normal` (not `_part03`) | `depth`, read by `d->depth--` after the shift, and so the pushed frame's place, `f = &d->frames[d->depth]`, its stores and the copy into it | F5 |
 | 9 | `diag_push` | the message copy, `memcpy(f->message, msg, len)` then `f->message[len] = '\0'`, or `f->message[0] = '\0'`: the pushed frame's `message[0 .. len]` | `frama-c-diag` | `typed_cast_diag_push_valid_diag_ensures_push_depth_bounds`, `typed_cast_diag_push_valid_diag_ensures_push_depth_step`, `typed_cast_diag_push_valid_diag_ensures_push_frame_code`, `typed_cast_diag_push_valid_diag_ensures_push_frame_file`, `typed_cast_diag_push_valid_diag_ensures_push_frame_func`, `typed_cast_diag_push_valid_diag_ensures_push_frame_line`, `typed_cast_diag_push_valid_diag_ensures_push_frames_preserved`, `typed_cast_diag_push_valid_diag_ensures_push_msg_terminated` | `depth`; the pushed frame's `file`, `func`, `line` and `code`; the other frames' `code` | F6, and on the overflow path F5 |
@@ -14113,9 +14135,10 @@ without `_partk`. A property with a part among the residuals is filed for its
 other parts, and its row names that part as "(not `_partk`)". `arena.h`'s
 eight units are `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`,
 `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `cc-vec` and
-`cc-vec_struct`. Filed: 152 properties at 40 write sites, kept off by 17 facts
+`cc-vec_struct`. Filed: 154 properties at 40 write sites, kept off by 17 facts
 (groups A to F, the filing complete; rows 39 and 40 and F17 since G18's score,
-147, 38 and 16 before it).
+147, 38 and 16 before it; row 6's `ensures_3` and `ensures_5` since VERIFY-040
+round 1's score, 152 before it).
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -15385,7 +15408,7 @@ elem_size`, two product terms, the mechanism of the block on two slots; at
 such term, which the provers are expected to find, as at `pq_pop_raw`'s
 second copy.
 
-#### Struct exchange whose operands may overlap (2)
+#### Struct exchange whose operands may overlap (0 — RETIRED at VERIFY-040 round 1; was 2)
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
@@ -15430,6 +15453,13 @@ provers would then close the goal. A change with its own prediction.
 `*b` fail for another reason, WP's hypothesis filter dropping the premise of
 a clause on one field of a struct stored from an initialised local, and are
 filed under a block of their own.
+
+**Coverage update (2026-10-20, VERIFY-040 round 1) — this argument is
+RETIRED.** Since 49d38d7 `swap` requires `a == b || \separated(a, b)`, in
+`vec_verify.h` and in `IMPL_VEC_SWAP`, the precondition the Retirement names,
+which excludes only the placements C leaves undefined. At CI #1374 and CC #55
+both rows' goals were proved, in the three units. It covers nothing. Rows kept
+for legibility. See VERIFY-040 round 1.
 
 #### Call framed by the callee's default assigns (2)
 
@@ -15689,7 +15719,7 @@ stated over the buffer's `capacity * elem_size` bytes, to the slot's bytes
 takes products with the element size, `(len + 1) * elem_size <= capacity *
 elem_size` at `pq_push_result`; the argument covers both cases.
 
-#### Struct stored from an initialised local, stated field by field (5)
+#### Struct stored from an initialised local, stated field by field (0 — RETIRED at VERIFY-040 round 1; was 5)
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
@@ -15751,6 +15781,16 @@ would drop the residual count 5 → 1 and look like progress while deleting
 the only evidence that localises the failure to one direction of the
 exchange." By this reading combining is expected to drop it to 0, and the
 split is what makes the five fail. A change with its own prediction.
+
+**Coverage update (2026-10-20, VERIFY-040 round 1) — this argument is
+RETIRED.** Since d0dea31 deque's `swap` states its five clauses about `*b` as
+one conjunction, the change the Retirement names, with VERIFY-040's repair of
+H1: the contract admits `a == b`, the call `deque_test.c`'s `test_swap_self`
+makes, and states the five about `*a` as one conjunction too. At CI #1374 and
+CC #55 both conjunctions were proved, in `frama-c-deque` and `cc-deque`: WP 29
+kept each one goal, which names both memories, as the mechanism above expects
+of a conjunction. It covers nothing. Rows kept for legibility. See VERIFY-040
+round 1.
 
 #### Two slots of one buffer, apart by a multiple of the element size (0 — RETIRED at VERIFY-039 G21; was 2)
 
@@ -15955,7 +15995,7 @@ and nothing else in the function changes). WP 25, with the emulation, also
 leaves the clause's parts on the exit path unproved, which WP 29 does not pin,
 as at `extend`.
 
-#### Word count through a wrap at the capacity bound (2)
+#### Word count through a wrap at the capacity bound (0 — RETIRED at VERIFY-040 round 1; was 2)
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
@@ -15991,6 +16031,18 @@ by the precondition, and the fill writes only the words' bytes.
 `n / 64 + (n % 64 != 0)`, or the capacity bounded at
 `CANON_USIZE_MAX - 64`; on the emulated copy each closes both goals, in
 under 0.2 s. Either is a change with its own prediction.
+
+**Coverage update (2026-10-20, VERIFY-040 round 1) — this argument is
+RETIRED.** Since e4e2635 `bitset_init` states the step at the store as two
+assertions, the count `bitset_words_for(capacity)` below the bound, where
+nothing wraps, and at it, each proved by WP as a goal of its own, and at
+CI #1374 both rows' goals were proved. The block retired through the
+alternative VERIFY-040's pre-registration states, and not through the
+Retirement's changes: the count computed without the wrap failed
+`bitset_test`'s F1 test, and the bound one lower excludes a call C defines.
+The two goals read `*bs` after `mem_zero`'s writes through `char`, and are
+filed in the proved-goal argument at row 6, under F4. It covers nothing. Rows
+kept for legibility. See VERIFY-040 round 1.
 
 #### Bit-level identities on the padding word (4)
 
@@ -22025,7 +22077,7 @@ and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
 |----------------|-------|
 | **ID**         | VERIFY-040 |
 | **Date**       | 2026-10-20 |
-| **Status**     | PRE-REGISTERED — the question, its rules and the nine predicted verdicts committed before the fix commits they score, and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) |
+| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; rounds 2 and 3 to come |
 | **Baseline**   | 6043e19 (CI #1373, CC #54) |
 | **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
 
@@ -22198,6 +22250,10 @@ unit's preprocessing, and bit-level steps the provers do not take. v5.4's
 "saturated at module 12" stays withdrawn, as three modules after it need a
 block. The paper's Table 1 gains the needed curve, and §4.1 says what the
 treatment was.
+
+*Correction (2026-10-20, VERIFY-040 round 1's score).* "Had from the start" is
+not exact: range.h and stringbuf.h were given those changes during their
+verification, before they were enforced, as "Why this record exists" says.
 
 **What changes in *A*.** A block that this record removes retires as the main
 pass's did, its heading at 0 and its rows kept: *A* in force falls, *A*
@@ -22469,3 +22525,160 @@ pins are brought to the pins the CI shows: `docs/verification.md`'s summary
 card, its notes giving the vec, deque and bitset jobs' pins, deque's table of
 residuals, whose swap row goes, and its data/ table's rows for the three, and
 `docs/traceability.md`'s rows for the three and its total.
+
+### VERIFY-040 round 1 — scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55)
+
+**Result: as predicted, in every part.** The push of 62ce2a0 carried
+VERIFY-025's correction, 436aea0, the prediction, 24fbd98, the three fixes,
+e4e2635 (`bitset_init`), 49d38d7 (vec's `swap`) and d0dea31 (deque's `swap`),
+and the workflows' commit, c5f9b43. It ran three workflows:
+
+- CI #1374, green in 1h 30m 14s, its run page showing no second attempt;
+- CC #55, green in 1h 27m 13s;
+- Record coverage #94, green in 8s.
+
+The annotations are CI #1374's one warning and five notices: the warning is
+the deprecation of Node.js 20 in `compcert`'s actions, and the notices are the
+macOS runners' queue notice. (GitHub's run pages, read 2026-10-20.)
+
+| Unit | Before | Predicted | Observed |
+|---|---|---|---|
+| `frama-c-bitset` | `4963 / 5041`, 78 | `4967 / 5043`, 76 | `4967 / 5043`, 76 |
+| `frama-c-vec` | `5474 / 5569`, 95 | `5475 / 5569`, 94 | `5475 / 5569`, 94 |
+| `frama-c-deque` | `1656 / 1673`, 17 | `1653 / 1665`, 12 | `1653 / 1665`, 12 |
+| `cc-vec` | `5483 / 5578`, 95 | `5484 / 5578`, 94 | `5484 / 5578`, 94 |
+| `cc-vec_struct` | `5481 / 5576`, 95 | `5482 / 5576`, 94 | `5482 / 5576`, 94 |
+| `cc-deque` | `1656 / 1673`, 17 | `1653 / 1665`, 12 | `1653 / 1665`, 12 |
+| `frama-c-lifetime` | `4 / 4`, 0, the line not pinned | `4 / 4`, 0, the line pinned | `4 / 4`, 0 |
+
+Each of the round's WP jobs in the main CI fails unless its proved line, its
+count of residuals and their names equal its pins, and each -CC family unless
+its proved line, its count and its roll-call equal its matrix line's and its
+pin file's; each fails on a goal Failed, Failure, Invalid or Stepout too. A
+pass is therefore the observation, and no WP log was read. The other WP jobs
+passed at their pins.
+
+**The parts rated (H) held.**
+
+- bitset's assertions and its two goals: the unit has two goals more, both
+  proved, and `bitset_init`'s `ensures_3` and `ensures_5` are gone from its
+  roll-call.
+- The names that leave are the nine and no other, by set equality in each of
+  the six units.
+- `bitset_init`'s two goals are filed in the proved-goal argument at row 6, as
+  the next section records.
+- `frama-c-lifetime` is at `4 / 4`, its proved line now pinned.
+
+**The two parts rated (M) held.**
+
+- vec's swap, at `int` and at `Rec`: `swap_ensures` is proved in
+  `frama-c-vec`, `cc-vec` and `cc-vec_struct`, the totals unchanged.
+- deque's swap: both conjunctions are proved, in `frama-c-deque` and
+  `cc-deque`, so WP 29 proves the side about `*a` with `a == b` admitted. The
+  totals, eight below `1673`, show what the rating rested on: WP 29 kept each
+  conjunction one goal under `-wp-split`, where WP 25 splits it into parts
+  that do not prove, and the precondition added no part.
+
+**Also predicted.**
+
+- (H) No goal Failed, Failure, Invalid or Stepout in any WP job: held. Each
+  job fails on one, by a named check or through its pinned line and count, and
+  each -CC family by its check (1).
+- (H) The main CI runs, and every job outside the WP units passes: held.
+  - The builds and tests: every leg green, on a tree that registers 54 tests.
+  - Static analysis: its three legs green.
+  - `misra`: green, at 54 real violations and the canary's 3, 57 in all, read
+    from its log, which the maintainer pasted.
+  - Coverage: green, at 92.1% MC/DC, 1866 of 2026 condition outcomes, and
+    91.6% of branches, 1662 of 1814, read from its log, which the maintainer
+    pasted.
+- (H) The -CC workflow runs: held. CC #55 passed, its seven families green,
+  slice, result, option and borrow at their pins.
+- (H) Record coverage: held. It ran, green. The tool, run here on the pushed
+  tree with the push's base, 6043e19, takes the nine names as pending and
+  passes, printing the three blocks' goals pending and each heading's count
+  the count at the base; its report is the one the prediction gives for the
+  branch's head, line for line.
+- (H) The probes do not run: held. The push ran the three workflows above.
+
+**What it shows.** The three blocks were written, at batches 1 to 3, for goals
+that closed in CI under a precondition, a restated postcondition and two
+assertions: changes of the kinds range.h, stringbuf.h and G21 used, which the
+two prospective units were given before they were enforced. Two are the
+changes the blocks' Retirement paragraphs name; block 6's is the alternative
+the pre-registration states, the Retirement's own changes failing a test or
+excluding a call C defines. For deque the CI shows what the local runs could
+not: that WP 29 keeps each conjunction one goal.
+
+### VERIFY-040 round 1 — blocks 3, 5 and 6 retired; H1 closed
+
+**The verdicts.** Blocks 3, 5 and 6 are not needed: after round 1's changes no
+obligation filed under them is pinned in any unit, each proved in CI.
+
+- Block 3, a struct exchange whose operands may overlap: through the
+  precondition its Retirement names.
+- Block 5, a struct stored from an initialised local, stated field by field:
+  through the conjunction its Retirement names, made with H1's repair.
+- Block 6, a word count through a wrap at the capacity bound: through the
+  alternative the pre-registration states, the two assertions. Its two goals
+  read `*bs` after `mem_zero`'s writes through `char`, and are filed in the
+  proved-goal argument at row 6 under F4, a fact it already held: by the rule
+  on a goal proved across a write the model does not see, the block is not
+  needed, and no argument moves.
+
+**The blocks, retired.** Each heading reads 0, "RETIRED at VERIFY-040 round 1;
+was" its count, 2, 5 and 2, and a coverage update dated today says which
+commit closed its goals and how; the rows are kept for legibility. VERIFY-018,
+VERIFY-019 and VERIFY-020 get repair notes: vec's own residuals are 49 at
+`int` and at `Rec` since 49d38d7, deque has none since d0dea31, and bitset's
+are 23 since e4e2635.
+
+**The proved-goal argument.** Row 6 files `typed_cast_bitset_init_ensures_3`
+and `typed_cast_bitset_init_ensures_5` beside `ensures` and `ensures_2`: each
+reads `*bs` after `mem_zero`'s writes, `bs->word_count` alone and with the
+other two fields in `bitset_mut`, and F4 keeps the writes off it. The argument
+holds 154 properties at 40 write sites, kept off by 17 facts, from 152; the
+second proved-goal block, region.h's, is unchanged. The two assertions are
+read before `mem_zero` writes, and are not filed.
+
+**What this does to *A*.** Three blocks retire: *A* stays 31 cumulative and
+goes to 19 in force, *V* stays 19 cumulative and goes to 15 in force, and *S*
+stays 12 cumulative and goes to 4 in force.
+
+**H1 closed.** deque's swap admits `a == b`, the call `deque_test.c`'s
+`test_swap_self` makes, and its two postconditions are proved, in both units,
+for every call the contract admits.
+
+**VERIFY-040's tally.** Four of the nine are not needed: blocks 3, 5 and 6 at
+this round, and block 9 at G21. Blocks 1 and 8 are predicted needed whatever
+the rounds show; blocks 2, 4 and 7 come in rounds 2 and 3, each with its own
+prediction.
+
+**The figures outside this record** are brought to CI #1374 in the commit that
+follows, "docs: verification, traceability and vmacros at round 1's pins". In
+`docs/verification.md`: the summary card, summed again, 49795 obligations,
+49328 proved and 467 unproved over the twenty units, from 49801, 49326 and
+475, with a dated paragraph under it; a dated note under the one that sums the
+pins' obligations; a note under each of the vec, deque and bitset summaries
+giving its pin since 62ce2a0; vec's expected output; a dated note under the
+correction on the driver-verified modules' own sets; and the three rows of its
+data/ table. In `docs/traceability.md`: the proof table's three rows and its
+total, with lifetime.h 49799, 49332 and 467, a dated paragraph under it, and
+the sentence that dates the table; dated notes where it gives vec's residuals
+and the blocks in force, a dated half-line where it gives the clauses C leaves
+undefined, and a dated note under vec's correction; and, from CI #1374's
+coverage log, a note over the coverage card's notes and a row of the coverage
+history. In `docs/vmacros.md`: the three rows. deque's table of residuals in
+`docs/verification.md` is the set at enforcement, 67, as the note over it
+says, so its swap row stays, with a dated note under the table, and does not
+go, as the prediction's list had it.
+
+**Record coverage** reports the three blocks retired, acknowledged in their
+headings, their 9 rows kept and none pinned, so its summary is back to 0 stale
+listed goals, 0 empty blocks and 0 heading drift; the proved-goal argument at
+154 properties; and 227 pinned names, none in no goal table. `--strict` and
+`--complete` pass with no name pending.
+
+**What the push runs.** Record coverage alone: the main CI's `paths-ignore`
+skips `docs/`, and the push changes no path another workflow watches. (H) It
+passes with no name pending, its report as above.
