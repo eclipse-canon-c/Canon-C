@@ -220,6 +220,10 @@
  * IDENTICAL name-for-name to run 2 (the stability subset-enforcement
  * relies on). Retry candidates failed a third consecutive run — PINNED
  * into class (h): pop_ok_ensures_4_part5, swap_ensures.
+ * (Corrected 2026-10-20, VERIFY-040: swap_ensures, read above as a
+ * whole-struct copy under the cast model, failed on a placement of a and
+ * b that overlaps in part, which the contract admitted, as VERIFY-039's
+ * batch 1 found; the contract excludes it since VERIFY-040's round 1.)
  * Final vec-own classification (53): (e)=2, (g)=24, (d)=5, (h)=22.
  * Enforcement (option/result house style): the 196 names live inline in
  * the frama-c-vec job's CHECKS array. Gates: 0 Failed verdicts, exact
@@ -1053,9 +1057,13 @@ static inline result__Bool_Error vec_int_extend(borrowed(vec_int*) v,
 static inline void vec_int_fill(borrowed(vec_int*) v, int value, usize count);
 
 /* Both require_msg guards vanish under CANON_NO_REQUIRE — the requires
- * carry them. a == b aliasing is legal and the ensures still hold. */
+ * carry them. a == b aliasing is legal and the ensures still hold. Two vecs
+ * that overlap in part are not: `*a = *b` would store into *a a value read
+ * from an object overlapping it, which C allows only for an exact overlap
+ * (C11 6.5.16.1p3), so the contract excludes them (VERIFY-040). */
 /*@ requires \valid(a);
     requires \valid(b);
+    requires a == b || \separated(a, b);
     assigns *a, *b;
     ensures a->items == \old(b->items) && a->len == \old(b->len)
          && a->capacity == \old(b->capacity);

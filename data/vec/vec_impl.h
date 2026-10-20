@@ -1522,6 +1522,8 @@ linkage void fn(borrowed(VecType*) v, type value, usize count) { \
  *
  * @pre a != NULL
  * @pre b != NULL
+ * @pre a == b, or a and b do not overlap: two vecs that overlap in part
+ *      cannot be exchanged by assignment (C11 6.5.16.1p3; VERIFY-040)
  *
  * Lifetime (CANON_LIFETIME_DEBUG): the struct copy exchanges the entire
  * VecType including the embedded lt field. After swap, &a->lt still
@@ -1537,6 +1539,7 @@ linkage void fn(borrowed(VecType*) v, type value, usize count) { \
 #define IMPL_VEC_SWAP(linkage, VecType, fn) \
 /*@ requires \valid(a);                                                          \
     requires \valid(b);                                                          \
+    requires a == b || \separated(a, b);                                         \
     assigns *a, *b;                                                              \
     ensures a->items == \old(b->items) && a->len == \old(b->len)                 \
     && a->capacity == \old(b->capacity);                                         \
