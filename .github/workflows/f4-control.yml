@@ -186,7 +186,7 @@ jobs:
 
           echo ""
           echo "  --- full unproved list (for the record) ---"
-          grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_deque_castcontrol.txt || echo "  (none)"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_deque_castcontrol.txt || echo "  (none)"
 
           echo ""
           echo "==============================================="

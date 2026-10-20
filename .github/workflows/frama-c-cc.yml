@@ -188,7 +188,7 @@ jobs:
           echo "==============================================================="
           PROVED=$(grep -E '^\[wp\] Proved goals:' "${OUT}" | tail -1)
           echo "  ${PROVED}"
-          FAILED=$(grep -cE '^\[wp\] \[(Failed|Invalid|Stepout)\]' "${OUT}" || true)
+          FAILED=$(grep -cE '^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]' "${OUT}" || true)
           echo "  Failed/Invalid/Stepout: ${FAILED}   <-- any nonzero here is a REAL finding"
 
           # observed residuals
@@ -268,8 +268,9 @@ jobs:
             echo "  (0) proved line: ${PROVED_LINE}  OK"
           fi
 
-          # (1) zero refutations / prover errors
-          BAD=$(grep -cE '^\[wp\] \[(Failed|Invalid|Stepout)\]' "${OUT}" || true)
+          # (1) zero refutations / prover errors. WP 29 prints a prover
+          #     failure as [Failure], so the check matches both (VERIFY-040).
+          BAD=$(grep -cE '^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]' "${OUT}" || true)
           if [ "${BAD}" -ne 0 ]; then
             echo "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."
             FAILURES=$((FAILURES+1))

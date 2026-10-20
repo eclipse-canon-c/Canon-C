@@ -605,6 +605,17 @@ jobs:
   #              every job, so a goal landing in any other verdict already
   #              breaks that equality and trips gate 2. The named gates
   #              turn that arithmetic detection into a diagnosis.
+  #              (VERIFY-040, 2026-10-20: WP 29 prints a prover failure as
+  #              [Failure], which a check for [Failed] does not match, as
+  #              VERIFY-039 G3 found; every verdict check matches both since
+  #              this note. frama-c-lifetime pinned its total and its count
+  #              but not its proved line, so a goal in any other verdict
+  #              passed it; it pins the line since this note, and the
+  #              equality above holds in every job. A goal with no result
+  #              matches no named gate, whatever WP 29 prints for it; the
+  #              pinned proved line and the pinned count catch it in every
+  #              job (frama-c-arena-32: its proved line and its residual
+  #              set's identity with the 64-bit run).)
   #     Gate 2 — exact residual count
   #     Gate 3 — by-name roll-call; with gate 2 and unique names this is
   #              set equality. Full roll-calls everywhere except bits
@@ -665,7 +676,7 @@ jobs:
           echo "  ${PROVED_LINE}"
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -678,7 +689,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in checked.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -789,7 +800,7 @@ jobs:
           echo "  ${PROVED_LINE}"
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bits_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_bits_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_bits_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_bits_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_bits_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_bits_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -801,7 +812,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in bits.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_bits_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_bits_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -902,7 +913,7 @@ jobs:
           echo "  ${PROVED_LINE}"
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_compare_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_compare_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_compare_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_compare_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_compare_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_compare_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -913,7 +924,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED —"
             echo "      a contract in compare.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_compare_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_compare_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -938,7 +949,7 @@ jobs:
           if [ "${UNPROVED_COUNT}" -ne 0 ]; then
             echo "FAIL: compare.h should have 0 unproved goals."
             echo "      Found ${UNPROVED_COUNT} unproved goals — this is a regression."
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_compare_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_compare_output.txt || true
             exit 1
           fi
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
@@ -1070,7 +1081,7 @@ jobs:
           echo "  ${PROVED_LINE}"
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_ptr_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_ptr_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_ptr_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_ptr_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_ptr_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_ptr_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -1082,7 +1093,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in ptr.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_ptr_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_ptr_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -1122,7 +1133,7 @@ jobs:
             echo "      batch 6 and G14 to G17."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_ptr_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_ptr_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -1217,7 +1228,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_slice_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_slice_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_slice_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_slice_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_slice_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_slice_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -1229,7 +1240,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in slice.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_slice_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_slice_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -1269,7 +1280,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-007) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_slice_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_slice_output.txt || true
             exit 1
           fi
           MCDC002_GOALS=(
@@ -1395,7 +1406,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_memory_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_memory_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_memory_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_memory_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_memory_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_memory_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -1407,7 +1418,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in memory.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_memory_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_memory_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -1449,7 +1460,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-008) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_memory_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_memory_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -1579,7 +1590,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_arena_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_arena_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_arena_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_arena_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_arena_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_arena_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -1591,7 +1602,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in arena.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_arena_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_arena_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -1635,7 +1646,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-009) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_arena_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_arena_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -1769,7 +1780,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_pool_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_pool_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_pool_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_pool_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_pool_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_pool_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -1781,7 +1792,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in pool.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_pool_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_pool_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -1826,7 +1837,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-010) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_pool_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_pool_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -1919,6 +1930,12 @@ jobs:
   # 3578/3692 proved, exactly 114 unproved (91 inherited + 23 region-own).
   # The residual set is name-stable — VERIFY-012's 14 initialization closures
   # left the inherited surface (126 -> 112) without touching the 23 own goals.
+  #
+  # Since VERIFY-039 G19 and G20's repair (642ad8a): 3691/3730 proved and 39
+  # unproved, 33 inherited and 6 region-own, each true for every admitted
+  # call; the job took 36m 34s at CI #1373. (Added 2026-10-20, VERIFY-040:
+  # the 23 own goals and the run of about 1h40m above are history, as G19
+  # and G20's close said.)
   # -------------------------------------------------------------------------
   frama-c-region:
     needs: build
@@ -1988,7 +2005,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_region_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_region_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_region_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_region_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_region_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_region_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -2000,7 +2017,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in region.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_region_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_region_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -2048,7 +2065,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-011) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_region_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_region_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -2324,7 +2341,7 @@ jobs:
 
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_arena32_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_arena32_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_arena32_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_arena32_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_arena32_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_arena32_output.txt || true)
           echo "  Timeouts: ${TIMEOUT_COUNT}"
@@ -2337,7 +2354,7 @@ jobs:
             echo "  *** A contract that HOLDS at 64-bit is FALSIFIED at 32-bit. ***"
             echo "  This is the outcome that justifies the job. Tier 1 promises"
             echo "  32-bit; classify these before anything else:"
-            grep -E "^\[wp\] \[Failed\]" wp_arena32_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_arena32_output.txt
           fi
 
           # ---- payload: diff this run's residuals against the 64-bit set ----
@@ -2574,7 +2591,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_error_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_error_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_error_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_error_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_error_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_error_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -2586,7 +2603,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED —"
             echo "      a contract in error.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_error_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_error_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -2624,7 +2641,7 @@ jobs:
             echo "      docs/deviations.md before this wrapper is updated."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_error_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_error_output.txt || true
             exit 1
           fi
           echo "PASS: error.h fully verified — all goals proved automatically,"
@@ -2741,7 +2758,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_option_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_option_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_option_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_option_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_option_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_option_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -2753,7 +2770,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in option_verify.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_option_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_option_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -2795,7 +2812,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-014) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_option_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_option_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -2932,7 +2949,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_result_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_result_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_result_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_result_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_result_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_result_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -2944,7 +2961,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
             echo "      a contract in result_verify.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_result_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_result_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -2985,7 +3002,7 @@ jobs:
             echo "      docs/deviations.md (VERIFY-015) for the full list."
             echo ""
             echo "Observed unproved goals:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_result_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_result_output.txt || true
             exit 1
           fi
           CHECKS=(
@@ -3191,7 +3208,7 @@ jobs:
           EXPECTED_UNPROVED=95   # VERIFY-039 G18 predicted: 97 -> 95 (G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_vec_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_vec_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_vec_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -3204,7 +3221,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout) —"
             echo "      a contract in vec_verify.h is falsified:"
-            grep -E "^\[wp\] \[Failed\]" wp_vec_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -3234,7 +3251,7 @@ jobs:
             echo "      newly proved — ratchet CHECKS, EXPECTED_UNPROVED and"
             echo "      the pinned Proved line down in the same PR. Diff"
             echo "      against CHECKS below:"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_vec_output.txt || true
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_vec_output.txt || true
             exit 1
           fi
           # Gate 3 — by-name roll-call: every classified residual must be
@@ -3571,7 +3588,7 @@ jobs:
           else
             TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_deque_output.txt || true)
             UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_deque_output.txt || true)
-            FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_deque_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_deque_output.txt || true)
             INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_deque_output.txt || true)
             STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_deque_output.txt || true)
             UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -3585,7 +3602,7 @@ jobs:
             # not a number to write down. House rule, gate 1.
             if [ "${FAILED_COUNT}" -ne 0 ]; then
               note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in deque_verify.h is falsified:"
-              grep -E "^\[wp\] \[Failed\]" wp_deque_output.txt || true
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_deque_output.txt || true
             fi
             if [ "${INVALID_COUNT}" -ne 0 ]; then
               note_fail "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is FALSIFIED with a counter-example. Invalid is WP's refutation verdict; Failed is a prover error. Neither can ever be pinned:"
@@ -3609,7 +3626,7 @@ jobs:
             echo "  --- All unproved goals (name-stability record) ---"
             echo "  This list IS the run-1 deliverable. Run 2 must reproduce"
             echo "  it name-identically before run 3 pins anything."
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_deque_output.txt || \
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_deque_output.txt || \
               echo "  (none)"
 
             # ── ARM C: contract handler pair ──────────────────────────────
@@ -4019,7 +4036,7 @@ jobs:
           else
             TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_borrow_output.txt || true)
             UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_borrow_output.txt || true)
-            FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_borrow_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_borrow_output.txt || true)
             INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_borrow_output.txt || true)
             STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_borrow_output.txt || true)
             UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -4029,7 +4046,7 @@ jobs:
             echo "  Total unproved (T+U): ${UNPROVED_COUNT}"
             if [ "${FAILED_COUNT}" -ne 0 ]; then
               note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in borrow.h is falsified:"
-              grep -E "^\[wp\] \[Failed\]" wp_borrow_output.txt || true
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_borrow_output.txt || true
             fi
             if [ "${INVALID_COUNT}" -ne 0 ]; then
               echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
@@ -4062,7 +4079,7 @@ jobs:
             fi
             echo ""
             echo "  --- All unproved goals (name-stability record) ---"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_borrow_output.txt || \
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_borrow_output.txt || \
               echo "  (none)"
             echo ""
             echo "  --- Inherited roll-call: 10 expected re-emissions ---"
@@ -4114,7 +4131,7 @@ jobs:
             fi
             echo ""
             echo "  --- MCDC-008 cross-stream goal ---"
-            if grep -qE "\[(Timeout|Unknown|Failed|Invalid|Stepout)\].*dead_by_invariant" wp_borrow_output.txt; then
+            if grep -qE "\[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\].*dead_by_invariant" wp_borrow_output.txt; then
               note_fail "FAIL: dead_by_invariant UNPROVED — one-NULL guard not discharged."
               echo "      This regresses the MCDC-008 cross-stream closure. Investigate"
               echo "      the cbytes_invariant preconditions on borrowed_bytes_eq."
@@ -4275,7 +4292,7 @@ jobs:
           else
             TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_diag_output.txt || true)
             UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_diag_output.txt || true)
-            FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_diag_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_diag_output.txt || true)
             INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_diag_output.txt || true)
             STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_diag_output.txt || true)
             UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -4285,7 +4302,7 @@ jobs:
             echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
             if [ "${FAILED_COUNT}" -ne 0 ]; then
               note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in diag.h is falsified:"
-              grep -E "^\[wp\] \[Failed\]" wp_diag_output.txt || true
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_diag_output.txt || true
             fi
             if [ "${INVALID_COUNT}" -ne 0 ]; then
               echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
@@ -4324,7 +4341,7 @@ jobs:
             fi
             echo ""
             echo "  --- All unproved goals (name-stability record) ---"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_diag_output.txt || \
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_diag_output.txt || \
               echo "  (none)"
             echo ""
             echo "  --- Inherited roll-call: 0 expected re-emissions ---"
@@ -4390,7 +4407,7 @@ jobs:
             # WP prints only UNPROVED goals by name; a proved goal never
             # appears in the output. Absence from the unproved list (given
             # the summary exists) IS the proof — borrow.h inverted form.
-            if grep -qE "\[(Timeout|Unknown|Failed|Invalid|Stepout)\].*dead_by_invariant_clamp" wp_diag_output.txt; then
+            if grep -qE "\[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\].*dead_by_invariant_clamp" wp_diag_output.txt; then
               note_fail "FAIL: dead_by_invariant_clamp UNPROVED — overflow clamp not discharged."
               echo "      This regresses the MCDC-009 cross-stream closure."
               echo "      Investigate the diag_invariant precondition on"
@@ -4555,7 +4572,7 @@ jobs:
           else
             TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bitset_output.txt || true)
             UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_bitset_output.txt || true)
-            FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_bitset_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_bitset_output.txt || true)
             INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_bitset_output.txt || true)
             STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_bitset_output.txt || true)
             UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -4574,7 +4591,7 @@ jobs:
               echo "      culprits, in order: bitset_pad preservation in"
               echo "      set/clear/toggle (see P1), the \\separated clause"
               echo "      in init, or bitset_mask_of's \\result != 0."
-              grep -E "^\[wp\] \[Failed\]" wp_bitset_output.txt || true
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_bitset_output.txt || true
             fi
             if [ "${INVALID_COUNT}" -ne 0 ]; then
               echo ""
@@ -4602,7 +4619,7 @@ jobs:
             fi
             echo ""
             echo "  --- All unproved goals (name-stability record) ---"
-            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]" wp_bitset_output.txt || \
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_bitset_output.txt || \
               echo "  (none)"
             # ── BY-NAME ROLL-CALL (set equality), VERIFY-020 ──────────────
             # The count gate above is necessary but NOT sufficient: a residual
@@ -4725,7 +4742,7 @@ jobs:
             )
             MISSING=0
             for g in "${CHECKS[@]}"; do
-              if ! grep -qE "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\] ${g}( |$)" \
+              if ! grep -qE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] ${g}( |$)" \
                     wp_bitset_output.txt; then
                 echo "  MISSING from residual set: ${g}"
                 MISSING=$((MISSING + 1))
@@ -4741,7 +4758,7 @@ jobs:
               echo "      by design: ratchet the pin in its own commit rather"
               echo "      than widening the gate. Do not delete names to pass."
             fi
-            grep -oE "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\] [A-Za-z0-9_]+" \
+            grep -oE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] [A-Za-z0-9_]+" \
               wp_bitset_output.txt | awk '{print $3}' | sort -u > /tmp/bitset_seen.txt
             printf '%s\n' "${CHECKS[@]}" | sort -u > /tmp/bitset_pinned.txt
             EXTRA=$(comm -23 /tmp/bitset_seen.txt /tmp/bitset_pinned.txt | wc -l)
@@ -4863,7 +4880,7 @@ jobs:
                 # bitset_clear_padding_*. CI #1252 reported set=6 and
                 # clear=8; the true counts are 2 and 2. An inverted check was
                 # replaced by a miscounting one, directly beside it.
-                N=$(grep -cE "^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\] typed_cast_${fn}_(null|live|normal|exit|terminates|exits|assigns|ensures|requires|assert|call|loop|variant)" \
+                N=$(grep -cE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] typed_cast_${fn}_(null|live|normal|exit|terminates|exits|assigns|ensures|requires|assert|call|loop|variant)" \
                       wp_bitset_output.txt || true)
                 if [ "${N}" -eq 0 ]; then
                   printf "    %-26s analysed, 0 residuals  (fully proved)\n" "${fn}"
@@ -5194,6 +5211,9 @@ jobs:
           WP_MODEL=Typed
           EXPECTED_TOTAL=4
           EXPECTED_UNPROVED=0
+          # VERIFY-040: the proved line, pinned. With the total and the count
+          # alone, a goal in a verdict other than Timeout or Unknown passed.
+          EXPECTED_PROVED="4 / 4"
           # Pre-registered, printed against observed. Not gating at ENFORCE=0.
           PREDICT_INHERITED=0
           PREDICT_OWN=0
@@ -5252,7 +5272,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_lifetime_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_lifetime_output.txt || true)
-          FAILED_COUNT=$(grep -cE "^\[wp\] \[Failed\]" wp_lifetime_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_lifetime_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\[wp\] \[Invalid\]" wp_lifetime_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\[wp\] \[Stepout\]" wp_lifetime_output.txt || true)
           UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -5269,7 +5289,7 @@ jobs:
           if [ "${FAILED_COUNT}" -ne 0 ]; then
             echo "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in"
             echo "      lifetime.h is falsified."
-            grep -E "^\[wp\] \[Failed\]" wp_lifetime_output.txt
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_lifetime_output.txt
             exit 1
           fi
           if [ "${INVALID_COUNT}" -ne 0 ]; then
@@ -5315,6 +5335,14 @@ jobs:
             if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
               echo "FAIL: unproved ${UNPROVED_COUNT}, pinned ${EXPECTED_UNPROVED}."
               grep -E "^\\[wp\\] \\[(Timeout|Unknown)\\]" wp_lifetime_output.txt || true
+              exit 1
+            fi
+            PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              echo "FAIL: proved ${PROVED_COUNT}, pinned ${EXPECTED_PROVED}."
+              echo "      A goal neither proved nor a Timeout or Unknown is in"
+              echo "      another verdict: read the log before anything else."
+              grep -E "^\\[wp\\] \\[" wp_lifetime_output.txt || true
               exit 1
             fi
             echo "ENFORCED PASS: ${TOTAL_GOALS}/${TOTAL_GOALS}, 0 unproved,"
@@ -5582,7 +5610,7 @@ jobs:
           fi
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_pq_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_pq_output.txt || true)
-          FAILED_COUNT=$(grep -cE  "^\[wp\] \[Failed\]"  wp_pq_output.txt || true)
+          FAILED_COUNT=$(grep -cE  "^\[wp\] \[(Failed|Failure)\]"  wp_pq_output.txt || true)
           INVALID_COUNT=$(grep -cE "^\[wp\] \[Invalid\]" wp_pq_output.txt || true)
           STEPOUT_COUNT=$(grep -cE "^\[wp\] \[Stepout\]" wp_pq_output.txt || true)
           UNPROVED=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
@@ -5616,7 +5644,7 @@ jobs:
             echo "      most likely means a contract is wrong rather than the"
             echo "      code -- these were written without a local Frama-C."
             echo "      Listed for triage; not gated at ENFORCE=0."
-            grep -E "^\[wp\] \[Failed\]" wp_pq_output.txt | head -30
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_pq_output.txt | head -30
           fi
           echo ""
           echo "  --- ARM A: positive control -- did -wp-model Typed+Cast take effect? ---"
@@ -6041,7 +6069,7 @@ jobs:
             UNPROVED_RE='^\[wp\] \[(Timeout|Unknown)\]'
             T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
             U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
-            F=$(grep -cE '^\[wp\] \[Failed\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
             I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
             S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
             echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
@@ -6050,11 +6078,11 @@ jobs:
               echo ""
               echo "  !!! Failed/Invalid present — a contract is FALSE or a"
               echo "      prover errored. Read these before anything else:"
-              grep -E '^\[wp\] \[(Failed|Invalid)\]' ${OUT} || true
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid)\]' ${OUT} || true
             fi
             echo ""
             echo "  --- All unproved goals (name-stability record) ---"
-            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
             grep -E "${UNPROVED_RE}" ${OUT} | awk '{print $3}' | sort -u > /tmp/rg_all.txt
             # Partition by owner. Anything not matched by the three inherited
             # patterns is range.h-own — including anything unexpected.
@@ -6244,7 +6272,7 @@ jobs:
           else
             T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
             U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
-            F=$(grep -cE '^\[wp\] \[Failed\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
             I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
             S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
             echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
@@ -6252,11 +6280,11 @@ jobs:
             if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ] || [ "${S}" -ne 0 ]; then
               echo ""
               echo "  !!! Failed/Invalid/Stepout present — read these first:"
-              grep -E '^\[wp\] \[(Failed|Invalid|Stepout)\]' ${OUT} || true
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]' ${OUT} || true
             fi
             echo ""
             echo "  --- All unproved goals (name-stability record) ---"
-            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
             grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/sb_all.txt
             # P2's predicted inherited set, by name: frama-c-arena's 79 pinned
             # names verbatim + borrow.h's 2 own memcmp-danglingness goals,
