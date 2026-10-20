@@ -22018,3 +22018,454 @@ with no name pending, the report unchanged.
 
 **What this does to *A*.** Nothing: *A* 31 cumulative and 22 in force, *V* 19
 and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
+
+## VERIFY-040: Needed or Only Written — the Nine Blocks First Needed After Module 12, Each Put to the Change Its Retirement Names
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-040 |
+| **Date**       | 2026-10-20 |
+| **Status**     | PRE-REGISTERED — the question, its rules and the nine predicted verdicts committed before the fix commits they score, and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) |
+| **Baseline**   | 6043e19 (CI #1373, CC #54) |
+| **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
+
+**Why this record exists.** By name the argument budget did not saturate at
+module 12. VERIFY-039's main pass wrote nine blocks first needed at modules 13
+to 17, and the paper's draft v6 withdraws v5.4's claim on that count. The
+count is of blocks written. The two units verified after the claim was written
+were not filed as they stood: each was worked to zero own residuals before it
+was enforced, range.h by a body rewrite without unsigned wraparound and two
+lemmas that WP proves as goals of their own (VERIFY-030), stringbuf.h by a
+frame stated in arena.h's allocators (VERIFY-033/034). Modules 13 to 17 were
+enforced with their own residuals filed, not worked to zero: deque's swap
+cluster was kept on purpose, its split thought informative (VERIFY-019), and
+`data/bitset.h`'s comment on its first experiments held residuals "normal
+here", acceptable when they are documented, pinned and argued. The main pass,
+whose rule wrote a block for any obligation that no counted block covered,
+wrote nine for them. Six of the nine name in their Retirement paragraphs a
+change that might remove them, and a seventh, the queue's block on two slots
+of one buffer, was removed at G21 by assertions. The paper's Table 1 therefore
+compares units that had the treatment with units that did not. VERIFY-040
+gives the nine the treatment and asks of each whether it is *needed*, an
+obligation it covers staying a residual after the changes the rules below
+admit, or only written.
+
+**What it cannot show.** Two of the nine stay whatever this record does, and
+are predicted so here, before any round. The queue's comparator check is
+proved only by a WP that implements `\valid_function`: a contract that
+required the predicate would put a goal WP 29 cannot prove at every call of
+`pq_cmp_`. `fill`'s loop in `frama-c-vec` keeps its goals because that unit's
+`-C` preprocessing strips any annotation written in a macro body. By need,
+then, the curve grows at module 13 and at module 17 whatever the rounds show,
+and saturation at module 12 is not restored in any form. What the record
+measures is how many of the nine were needed: a third curve, which the paper's
+Table 1 can carry beside its two. The blocks first needed at modules 1 to 12
+are not put to the same test, so before module 13 the curve of needed blocks
+is bounded above by the curve of blocks written, and is not measured.
+
+### VERIFY-040 — pre-registration (committed before the fix commits it scores)
+
+**When it was written.** After round 1's local runs, which round 1's
+prediction reports under "Before the prediction". The verdicts predicted for
+blocks 3, 5 and 6 rest on them, and two of the rules below answer what they
+showed: that a change keep the tests passing (block 6's count computed without
+the wrap failed `bitset_test`'s F1 test), and the rule on a goal proved across
+a write the model does not see (`bitset_init`'s two goals read `*bs` after
+`mem_zero`'s writes). Neither eases a verdict of not needed, and neither moves
+block 6's: the count without the wrap closed both goals, as the assertions do,
+and the second rule adds a condition to a verdict of not needed and removes
+none. Blocks 1 and 8 are predicted from what the tools do, block 9 from G21's
+score, and blocks 2, 4 and 7 before any run of the changes rounds 2 and 3 try,
+but for one lemma that batch 3 tried for `bitset_clear_padding`'s goal, which
+no local prover proved in 30 s and with which the goal did not close (block
+7's Retirement).
+
+**Admissible changes.** The kinds range.h, stringbuf.h and G21 used, and no
+other:
+
+- a body rewrite that gives every call the contract admits the same result and
+  the same writes, and does no more work than the code it replaces, beyond a
+  constant few operations;
+- an annotation that WP proves as a goal of its own: an assertion, a loop
+  invariant, `loop assigns` or `loop variant`, or a lemma;
+- a contract change that admits every call the contract admits whose behaviour
+  C defines, and promises each of them at least what it promised: a
+  precondition that excludes only calls C leaves undefined, a clause restated
+  as an equivalent one, a frame restated as postconditions that state the same
+  with a default clause, or a postcondition the code establishes.
+
+Each change keeps the builds and tests passing, adds no finding to static
+analysis or to `misra`, and leaves covered every MC/DC outcome and branch that
+the coverage job covers; a decision it adds comes with the tests that cover
+it, as range.h's run 3 came with `test_len_sign_cases`, and its prediction
+says what moves in coverage's figures.
+
+Not admissible: a change to Frama-C, to its options or the units', to the
+provers, their versions or their time limits, or to the memory model; a weaker
+postcondition or frame; a precondition that excludes a call C defines; an
+axiom, or any annotation that WP assumes without proving it; a change that
+removes an obligation without proving its property; and a body rewrite that
+trades work for a proof. Dispatching the queue's comparator by testing
+`pq->cmp` against each of the 24 listed functions is such a rewrite: to remove
+the one call through a pointer, it would put up to 24 comparisons in every
+comparison the heap makes. VERIFY-025's deferred re-base, which would verify
+the home units under `-CC`, changes a unit's preprocessing, and is not
+admitted either.
+
+**When a block is needed.** A block is not needed when, after admissible
+changes, no obligation filed under it is pinned in any unit. Each obligation
+is then proved in CI; or it is no longer generated, because a change stated
+its property in a form that WP proves, so that the property is still stated
+and is proved; or it is filed by name under a block first needed at an earlier
+module, where the block's own Retirement paragraph, written before this
+record, names that refiling. VERIFY-040 adds no refiling of its own under a
+block. A block is needed otherwise, and its first need is then the earliest
+module at which an obligation stays under it.
+
+**A goal proved across a write the model does not see.** WP's typed model
+keeps one memory array per integer kind, the character types' among them, and
+one for pointers, so that a write through one leaves the others alone in the
+model (VERIFY-039 G4). A goal that a change lets WP prove, and whose proof
+takes from the model that such a write left what the goal reads alone, is
+filed in G4's proved-goal argument by that argument's rules, and the round's
+score names it. The proved-goal argument is reported beside *A*, as the main
+pass reports it. A block whose obligations close with such filings under the
+argument's existing facts is not needed; a block whose obligations close only
+through a new fact there is needed, its argument moved into the proved-goal
+argument, and is reported so. Of the blocks still to come, the rule bears on
+two. On block 4: `append_array`'s postcondition on the elements above the new
+ones would read them after its byte copy, the write of the argument's row 27,
+whose range F16 states, and at `Rec` after its store to `len` as well, row
+30's, under F16 and F13; proved, it would be filed at those rows, and no new
+fact is expected. On block 1 at `Rec`: `cc-vec_struct`'s goals read `v->len`
+after element stores through `i64`, as rows 33 to 35 do; proved in round 3,
+they would be filed under F13 at a new write site, and block 1 stays needed
+for `frama-c-vec`'s 24. At `int`, block 1's goals read `len` and `items` after
+`int` stores, which C does not let reach them (C11 6.5p7); block 7's read
+locations after stores of their own type, which the model sees; and block 2's
+are read at a copy, before any byte write in their functions.
+
+**The bound.** For each block the changes tried are those its Retirement
+paragraph names, and at most one alternative, the one the table below names;
+none is added later. A Retirement that names only inadmissible changes, or
+none, leaves the block needed unless the table names an alternative. A block
+whose changes are tried and do not remove it is needed within this bound, and
+the paper reports it so; VERIFY-040 tries nothing further for it.
+
+**How a round is scored.** As VERIFY-039's repairs were. Each round's
+prediction is committed before its fix commits. It names, unit by unit, the
+proved line, the count and the names that leave or enter each roll-call, and
+rates each part (H), (M) or (L). The push carries the ratchet to the predicted
+pins, and the CI scores it. A part that differs from its observation is a
+miss, recorded as one. A block's verdict is read from the CI, not from the
+prediction.
+
+**The nine, and their predicted verdicts.**
+
+| # | Block | First needed | Class | Change tried | Round | Predicted verdict |
+|---|---|---|---|---|---|---|
+| 1 | Loop without annotations in a macro body (48) | vec (13) | *S* | the loop's invariant, `loop assigns` and variant written into `IMPL_VEC_FILL`, which only the -CC units read | 3 | needed (H): `frama-c-vec`'s 24 stay under `-C` |
+| 2 | Byte ranges compared by pointer order across objects (2, and the queue's 3 filed by name) | vec (13) | *S* | `regions_overlap` restated with `\separated`, vec's case within the buffer's block refiled under diag.h's block, as the Retirement names; alternative, for the queue's copy at `pq_push_result`, the step from the buffer's extent to the slot stated as an assertion, as at G21 | 2 | not needed (M) |
+| 3 | Struct exchange whose operands may overlap (2) | vec (13) | *S* | `requires a == b \|\| \separated(a, b);` | 1 | not needed (M) |
+| 4 | Call framed by the callee's default assigns (2, and bitset's 2 filed by name) | vec (13) | *V* | `extend`'s frame stated as postconditions, with `append_array`'s above the new elements; alternative, for `bitset_assign`, whose Retirement names a default clause that gives up its `null` frame, the body returning before its calls when `bs` or its words are null | 2 | not needed (M) |
+| 5 | Struct stored from an initialised local, stated field by field (5) | deque (14) | *V* | the five clauses about `*b` as one conjunction; tried with H1's repair, which admits `a == b` and states the five about `*a` as one too | 1 | not needed (M) |
+| 6 | Word count through a wrap at the capacity bound (2) | bitset (15) | *V* | alternative: the step stated at the store as two assertions, below the bound and at it, each a goal of its own; of the Retirement's changes, the count computed without the wrap fails a test (round 1, below), and the capacity bounded one lower excludes a call C defines | 1 | not needed (H) |
+| 7 | Bit-level identities on the padding word (4) | bitset (15) | *V* | lemmas for the identities, each a goal of its own; the Retirement's other change, a prover that reasons on bit vectors, is a change to the tool | 3 | needed (M) |
+| 8 | Call through a pointer to one of the listed comparators (1) | priority queue (17) | *V* | none admissible: only a WP that implements `\valid_function` | — | needed (H) |
+| 9 | Two slots of one buffer, apart by a multiple of the element size (retired at VERIFY-039 G21) | priority queue (17) | *V* | the step stated as assertions at the two calls, scored at CI #1370 | — | not needed: shown at G21 |
+
+Block 1's verdict does not depend on round 3: the annotations would let the
+-CC units' 48 goals prove, and would leave `frama-c-vec`'s 24.
+
+**What the whole is predicted to show.**
+
+- (H) Blocks 1 and 8 needed, so the curve of needed blocks grows at module 13
+  and at module 17, its last growth at module 17 as by name: saturation at
+  module 12 is not restored.
+- (H) Block 6 not needed; (M) blocks 2, 3, 4 and 5 not needed; and block 9 not
+  needed, as G21 showed: six of the nine.
+- (M) Block 7 needed.
+- So three of the nine needed, one at each of vec, bitset and the queue: from
+  module 13 to 17 the needed curve adds 1, 0, 1, 0 and 1, where the curve of
+  blocks written adds 4, 1, 2, 0 and 2. A count of needed blocks other than
+  three misses in the parts that differ, block by block.
+
+If the prediction holds, two thirds of the blocks first needed after module 12
+were written for want of a change to a contract, an annotation or a body of
+the kinds the two prospective units had from the start, and one third for what
+those kinds of change cannot reach: a feature WP 29 does not implement, a
+unit's preprocessing, and bit-level steps the provers do not take. v5.4's
+"saturated at module 12" stays withdrawn, as three modules after it need a
+block. The paper's Table 1 gains the needed curve, and §4.1 says what the
+treatment was.
+
+**What changes in *A*.** A block that this record removes retires as the main
+pass's did, its heading at 0 and its rows kept: *A* in force falls, *A*
+cumulative does not. A change that brings a residual no block in force covers
+has it filed as the main pass would file it, and a block written for it
+counts, at the module of its first need.
+
+### H1 — deque's swap does not admit the self-swap its tests make (opened)
+
+**Finding.** `deque_test.c`'s `test_swap_self` calls `deque_int_swap(&d, &d)`
+and checks that the deque is unchanged. The call is defined: the first store
+into the deque, `*a = *b`, reads the object it writes, an exact overlap, which
+C allows (C11 6.5.16.1p3), and the second writes back, from the temporary, the
+value the deque had, so the deque ends as it began. deque's contract, in
+`deque_verify.h` and in `IMPL_DEQUE_SWAP`, requires `\separated(a, b)`, which
+`a == b` falsifies, so the call the test makes is outside the verified
+contract, and no proof covers what it checks. The comment over the contract
+gives the reason: a struct exchange through a temporary, "which is only an
+exchange when a and b do not alias". For `a == b` it is one: an exchange of a
+deque with itself leaves it as it was. vec's swap admits `a == b` ("a == b
+aliasing is legal and the ensures still hold", `vec_verify.h`). No goal is
+false: the contract is stronger than the code needs, and a defined call that
+the tests make is left unverified.
+
+**Recommended, and taken into round 1.** The precondition
+`a == b || \separated(a, b)`, as round 1 gives vec's swap: it admits the
+self-swap and excludes only operands that overlap in part, which C leaves
+undefined. With `a == b` admitted, the clauses about `*a` rest on the same
+fact as those about `*b`, the last store then being to the same deque, so they
+too are stated as one conjunction. It is a precondition that admits more calls
+and a clause restated as an equivalent one, both admissible.
+
+### VERIFY-040 round 1 — vec's swap, deque's swap, bitset's word count: committed prediction (before the fix commits)
+
+**Decision (2026-10-20).** Round 1 tries the changes of blocks 3 and 5, each
+named in its Retirement, with H1's repair, and for block 6 the alternative the
+pre-registration states.
+
+- Block 3: vec's swap requires `a == b || \separated(a, b)`, in `vec_verify.h`
+  and in `IMPL_VEC_SWAP`; the macro's documentation states the precondition.
+- Block 5 and H1: deque's swap requires `a == b || \separated(a, b)` and
+  states its exchange as two conjunctions, one about `*a` and one about `*b`,
+  as vec states it, in `deque_verify.h` and in `IMPL_DEQUE_SWAP`. The five
+  clauses about `*b` as one conjunction are the Retirement's change. If a goal
+  of deque's swap stays unproved, round 2 tries that change alone, without
+  H1's, before block 5 is scored.
+- Block 6: two assertions in `bitset_init`, after it stores
+  `BITSET_WORD_COUNT(capacity)`: below the bound, where nothing wraps, the
+  stored count is `bitset_words_for(capacity)`, and at the bound, where the
+  sum wraps to 0 and the difference back to `capacity + 63`, it is too. Each
+  is a goal of its own, and the postconditions that need the count follow from
+  the two. No code changes.
+
+The Retirement's first change for block 6, the count computed without the
+wrap, was tried here first, as `capacity / 64` plus
+`((capacity % 64) + 63) / 64`. The Retirement writes it
+`n / 64 + (n % 64 != 0)`, which adds a comparison's result, essentially
+Boolean in MISRA C:2012's terms (Rule 10.1), to an unsigned count; the form
+tried keeps the arithmetic unsigned, though the `misra` job's cppcheck, run
+here, flags neither. The two forms agree for every capacity. Every capacity
+the contract admits gets the same count as the shipped expression, and the
+provers prove both goals from it. But `bitset_test`'s F1 test installs a
+contract handler that returns, and calls `bitset_init` with `USIZE_MAX`, above
+the bound: past the guard, the wrapped count was 0 and `mem_zero` wrote
+nothing, where the exact count, 2^58 words in either form, has `mem_zero`
+write 2^61 bytes at the test's one-word buffer, and the Debug build's
+AddressSanitizer stops the test. A form that kept 0 above the bound would add
+a decision whose second outcome only a call outside the contract reaches; no
+test in the coverage build makes one, F1's body compiling out there with the
+guard, so MC/DC would gain an outcome to drive by a test outside the contract
+or to justify. It is not the Retirement's change, and the bound admits one
+alternative. The pre-registration's rule that a change keep the tests passing
+was written after that run, before this commit, as the pre-registration says.
+The Retirement's other change, the capacity bounded one lower, excludes a call
+C defines. The assertions are the alternative.
+
+Owed with these files' next change, and made with them:
+
+- `deque_verify.h`'s comment on `swap` (VERIFY-039, batch 2), rewritten for
+  the new contract, and its header's account of the run-1 candidate (iii),
+  which calls the cluster vec's class and points to that comment, given a
+  dated correction;
+- `data/bitset.h`'s comment on the smallest own-residual set (VERIFY-039,
+  G11's close), given a dated correction;
+- in `.github/workflows/cmake-multi-platform.yml`, the `frama-c-region` job's
+  header comment (G19 and G20's close), given its figures since the repair;
+- also in the workflows, the verdict checks: WP 29 prints a prover failure as
+  `[Failure]`, which a check for `[Failed]` does not match (G3). Every check
+  in the two WP workflows matches both, and so does `f4-control.yml`'s listing
+  of the goals not proved, in a manual workflow that gates nothing;
+  `g4-probe.yml`'s matched both already. And `frama-c-lifetime`, which pins
+  its total and its count but not its proved line, so that a goal in any other
+  verdict passes it, pins `4 / 4`: the pinned proved line then catches, in
+  every job, with the job's count (in `frama-c-arena-32`, its residual set's
+  identity with the 64-bit run's), a goal in a verdict that no named check
+  matches, a goal with no result among them, whatever WP 29 prints for it. The
+  paper's draft v6 lists both as owed with the file's next change.
+- VERIFY-025's Correction 2 identifies the paper's fourteen loop obligations
+  with `fill`'s goals; it is given a dated correction (the paper's draft v6,
+  error 3).
+
+Made with them too, though no record listed it as owed: `vec_verify.h`'s two
+notes that class `swap_ensures` as whole-struct copies under the cast model,
+where batch 1 read the placement that overlaps in part, given a dated
+correction.
+
+Owed with its file's next change, which this round does not make:
+`test/data/bitset_test.c`'s F1 test calls `USIZE_MAX - 63` "the first REJECTED
+capacity", where the guard and the contract admit it and the first rejected is
+`USIZE_MAX - 62`. The test does not call it, and passes either way.
+
+**The commits.**
+
+- VERIFY-025's Correction 2 corrected (docs).
+- This prediction, with H1.
+- `data/bitset.h`: the two assertions; the comment on the smallest set.
+- vec's swap: `vmacros/vdrivers/vec_verify.h`, with its notes' correction, and
+  `data/vec/vec_impl.h`.
+- deque's swap: `vmacros/vdrivers/deque_verify.h`, with its comment and its
+  header's correction, and `data/deque/deque_impl.h`.
+- The workflows: the verdict checks, `frama-c-lifetime`'s proved line, the
+  gate policy's note on both, and the region job's comment; `f4-control.yml`'s
+  listing. No existing pin moves.
+- The CI ratchet: `frama-c-bitset`'s, `frama-c-vec`'s and `frama-c-deque`'s
+  proved lines, counts and roll-calls, with the comments and messages that
+  count them; the -CC matrix's lines for vec, deque and vec_struct, and their
+  pin files.
+
+Intermediate commits are not run: the pins are the head's.
+
+**Before the prediction.**
+
+- The local WP 25 now reaches the provers on goals over struct values. Until
+  today they came back `Failed` with `[Why3 Error] Not a record field`, as G14
+  to G17's prediction recorded at slice.h's struct-parameter functions: Why3
+  1.6 requires a record's field symbols to be declared as projections, and WP
+  25's interface to it does not declare them so. Patched locally (two symbols
+  declared with `~proj:true`), it sends them, and the runs below use it, with
+  the CI's three provers at 120 s, Alt-Ergo 2.6.3, Z3 4.15.2 and CVC5 1.2.1.
+  For the swaps, WP 29's conjunctions are emulated by running without
+  `-wp-split`: WP 25 splits a postcondition's conjunction into parts, where WP
+  29 keeps it one goal: the CI pins vec's `swap_ensures`, a conjunction of
+  three equalities, as one name with no part (batch 2). `bitset_init`'s runs
+  use `-wp-split`, as its unit does; run without it, its 24 goals with the
+  assertions have the same verdicts.
+- vec's swap, today: in `frama-c-vec`'s unit and in `cc-vec`'s, `swap_ensures`
+  unproved, all three provers at the limit, and `swap_ensures_2` proved, as
+  the two units pin. With the precondition: both proved, `swap_ensures` by
+  Alt-Ergo in 0.12 s in `frama-c-vec`'s unit and 0.11 s in `cc-vec`'s, and at
+  `Rec` in `cc-vec_struct`'s in 0.12 s; eight goals in each unit's function,
+  as before.
+- deque's swap, today: in `frama-c-deque`'s unit `ensures_6` to `ensures_10`
+  unproved, all three provers at the limit, and `ensures` to `ensures_5`
+  proved, as the unit pins. With the five about `*b` as one conjunction:
+  twelve goals, all proved, the conjunction by Alt-Ergo in 0.22 s
+  (`cc-deque`'s unit, 0.28 s). With H1's repair as well: eight goals, all
+  proved, the two conjunctions in 0.26 s and 0.28 s (`cc-deque`'s, 0.34 s and
+  0.40 s).
+- Under `-wp-split`, as the CI runs: WP 25 gives vec's swap 12 goals with the
+  precondition and without it, in each of its three units, and deque's swap 16
+  in each of its two, today, with the Retirement's change alone and with round
+  1's contract, so the precondition adds no part. WP 25 also splits each of
+  deque's two conjunctions into its five parts, and with round 1's contract
+  none of the ten proves, all three provers at the limit: a part names one
+  field, as the clauses about `*b` did, and with `a == b` admitted the parts
+  about `*a` need the same fact. The prediction for deque rests on WP 29
+  keeping each conjunction one goal, as it keeps vec's.
+- bitset's word count, on a copy in which `mem_zero` and `mem_set` state their
+  frame as a default clause, so that WP 25 frames their calls as WP 29 does
+  (batch 3): today `bitset_init` has 22 goals and the seven the unit pins
+  unproved. With the assertions, 24 goals: the assertion below the bound
+  proved by Alt-Ergo in 0.03 s, the one at it by Alt-Ergo in 0.04 s,
+  `ensures_3` by Z3 in 0.02 s and `ensures_5` by Alt-Ergo in 0.19 s, and the
+  other five unproved, diag.h's byte views as before. With the rewrite
+  instead, 22 goals, the same two proved, and the same five unproved.
+- The measured trees differ from the committed ones in comments only.
+- The ratcheted jobs' steps, run here on synthetic logs with the predicted
+  proved lines and the predicted residual names: `frama-c-bitset`,
+  `frama-c-vec`, `frama-c-deque` and the three -CC families pass; on today's
+  lines and names each fails. `frama-c-lifetime`'s step passes on `4 / 4`, and
+  fails on `3 / 4` with no residual, which today's step passes, printing
+  "ENFORCED PASS: 4/4".
+- actionlint 1.7.12 on the three workflows the round changes: the same 53
+  findings before and after, 51 in the two WP workflows and 2 in
+  `f4-control.yml`, 49 of them at other lines.
+- The builds and tests, with gcc, on 6043e19's tree and on the round's: the
+  Debug build with sanitizers passes 54 of 54 tests on each, and the coverage
+  job's build, with its flags and its exclusions, 51 of 51. gcov 14's line and
+  condition summaries for `bitset.h`, `vec_impl.h` and `deque_impl.h` are the
+  same in every unit on the two trees: no executable line changes. With the
+  Retirement's rewrite instead, `bitset_test` fails, as above.
+- The `misra` job's command, run here with cppcheck 2.13.0: the same 57
+  findings on both trees, 54 and the canary's 3, file, line and rule alike.
+- `tools/idioms`' catalogue, rebuilt on both trees, is the same: the round
+  adds no feature to any of the main workflow's units, which the catalogue
+  reads, `\separated` being in `frama-c-vec`'s and `frama-c-deque`'s already
+  and the catalogue reading no assertion. Its self-test passes.
+- `tools/record_coverage.py` on the branch's head: with
+  `--pending-from 6043e19` it exits 0, the nine names pending, no longer
+  pinned; the three blocks' listed goals all pending, each heading's count the
+  count at the base; the summary all 0; and 227 pinned names, from 236.
+  Without the option it exits 1, on 9 stale listed goals, 3 empty blocks and 3
+  heading counts.
+
+**Predicted.**
+
+| Job | Today | Predicted | What moves |
+|---|---|---|---|
+| `frama-c-bitset` | `4963 / 5041`, 78 | `4967 / 5043`, 76 | two assertions added and proved; `bitset_init`'s `ensures_3` and `ensures_5` proved |
+| `frama-c-vec` | `5474 / 5569`, 95 | `5475 / 5569`, 94 | `vec_int_swap`'s `ensures` proved |
+| `frama-c-deque` | `1656 / 1673`, 17 | `1653 / 1665`, 12 | `deque_int_swap`'s ten goals on its postconditions become two, both proved; the five unproved among the ten leave the roll-call |
+| `cc-vec` | `5483 / 5578`, 95 | `5484 / 5578`, 94 | as in `frama-c-vec` |
+| `cc-vec_struct` | `5481 / 5576`, 95 | `5482 / 5576`, 94 | `vec_Rec_swap`'s `ensures` proved |
+| `cc-deque` | `1656 / 1673`, 17 | `1653 / 1665`, 12 | as in `frama-c-deque` |
+| `frama-c-lifetime` | `4 / 4`, 0, the line not pinned | `4 / 4`, 0, the line pinned | nothing |
+
+- (H) bitset's assertions and its two goals. Below the bound the step is
+  linear arithmetic with a division by a constant, and at it the two wraps are
+  of a constant; the two goals then follow from the assertions as hypotheses.
+  No other goal is added: an assertion is one goal, and the code does not
+  change.
+- (M) vec's swap, at `int` and at `Rec`. Under WP 25 the goal is proved in a
+  tenth of a second; WP 29's goal is expected to be the same, the precondition
+  removing the placement the model admitted, but WP 29's goals are not WP
+  25's.
+- (M) deque's swap: the two conjunctions proved. By batch 2's reading, WP 29
+  does not split a conjunction and its filter keeps the initializer's fact in
+  a goal that names both memories, as for vec's clause about `*b`, which it
+  proves today; whether it proves the side about `*a` from that fact for
+  `a == b` is what the run shows. The totals, `1665` here and `5569` at vec,
+  assume that WP 29 keeps each conjunction one goal and that the precondition
+  adds no part, as it adds none under WP 25 (above); split, deque's ten parts
+  would be expected to stay unproved, as under WP 25.
+- (H) The names that leave are those nine and no other: no other function
+  changes, and no unit calls the two swaps or `bitset_init`.
+- (H) `bitset_init`'s `ensures_3` and `ensures_5` read `*bs` after
+  `mem_zero`'s writes through `char`, as `ensures` and `ensures_2` do, which
+  the proved-goal argument files at its row 6, kept off by F4, the
+  precondition that separates `bs` from the words. Proved, the two are filed
+  there at the score, the argument's properties going from 152 to 154 at the
+  same 40 write sites, under the same 17 facts. No fact is added, so the
+  block's verdict is not needed. The swaps' goals cross no such write.
+- (H) `frama-c-lifetime` at `4 / 4`, as at the runs the record reads, CI #1271
+  (307307c), #1273 and #1274: `lifetime.h`, whose one contracted function the
+  job proves, has not changed since 307307c.
+
+**Also predicted.**
+
+- (H) No goal Failed, Failure, Invalid or Stepout in any WP job.
+- (H) The main CI runs, and every job outside the WP units passes: the builds
+  and tests, 54 of 54; static analysis; `misra`, at 54; coverage, at 92.1%
+  MC/DC and 91.6% of branches. Read from the logs by the maintainer.
+- (H) The -CC workflow runs, since `data/` changes, and its seven families
+  pass, slice, result, option and borrow where they are.
+- (H) Record coverage runs, since the record, the workflow and the pin files
+  change. With the push's base, 6043e19, it takes the nine names as pending
+  and passes; its report prints the three blocks' goals pending.
+- (H) The probes do not run: none of their paths changes.
+
+**What it settles.** If the prediction holds, blocks 3, 5 and 6 cover nothing,
+and retire at the score: *A* stays 31 cumulative and goes to 19 in force, *V*
+to 15 in force and *S* to 4; the proved-goal argument gains two properties, as
+above. VERIFY-040's tally is then four of the nine not needed, 3, 5, 6 and 9;
+blocks 1 and 8 predicted needed; 2, 4 and 7 to come, in rounds 2 and 3. A run
+in which a block's goal stays unproved is a miss, read from the log; that
+block stays, and is scored as the bound says. H1 closes with the round if
+deque's two goals prove. At the score, the figures that read the three jobs'
+pins are brought to the pins the CI shows: `docs/verification.md`'s summary
+card, its notes giving the vec, deque and bitset jobs' pins, deque's table of
+residuals, whose swap row goes, and its data/ table's rows for the three, and
+`docs/traceability.md`'s rows for the three and its total.
