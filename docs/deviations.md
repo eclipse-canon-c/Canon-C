@@ -5416,6 +5416,17 @@ text saying enforcement makes "the 14 loop obligations leave the residue" is
 wrong and is corrected in the next paper pass. Retiring the argument and
 retiring the goals are two different events; this record produced the first.
 
+*Correction (2026-10-20, VERIFY-040), owed since the paper's draft v6.* The
+fourteen were not `vec_int_fill`'s goals. At CI #1337 (6290f4a) the pinned
+goals of a loop invariant or a loop variant were fourteen: eleven of five of
+bitset's loop invariants, the contract handler's invariant, and
+`region_end`'s invariant and variant, none in a macro body. `fill`'s loop
+carries no annotation and so has no such goal; its 24 goals at `int` are its
+termination, its memory accesses, its frames and its postconditions
+(VERIFY-039, batch 1). What the paragraph says of the macro bodies holds: no
+loop annotation was written in one, and `fill`'s goals stayed where they
+were.
+
 **Decision — alongside, not instead.** The `-CC` jobs run beside the driver
 jobs; neither replaces the other yet. The driver jobs remain the enforced home
 units of Table 1 (numbers stay at CI #1304 for the paper), and the `-CC` jobs
