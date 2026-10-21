@@ -56,6 +56,15 @@
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | 55 instrumented (`Found 55 data files`), of which 4 are Shape-B cover TUs `option_cover`, `result_cover`, `vec_cover`, `deque_cover`; ctest registers 54 |
 
+> **Note (2026-10-21, VERIFY-040 round 2).** The latest measurement is
+> CI #1375's (73a7b86), read from the coverage job's log by the maintainer:
+> MC/DC 1870/2030 (92.1%), branches 1666/1818 (91.6%), lines 2727/2814
+> (96.9%) and functions 672/675 (99.6%). `bitset_assign`'s early return
+> (ebe7b05) added a decision whose four branches and four condition outcomes
+> are all covered, so `data/bitset.h` is at 134/138 outcomes (MCDC-012).
+> Lines do not move: gcov counts the new line and no longer the function's
+> closing brace. No other executable line changed.
+>
 > **Note (2026-10-20, VERIFY-040 round 1).** The latest measurement is
 > CI #1374's (62ce2a0), read from the coverage job's log by the maintainer,
 > and every figure is CI #1373's: MC/DC 1866/2026 (92.1%), branches 1662/1814
@@ -254,9 +263,16 @@
 |------------|------------|------------|------------|
 | Lines      | 96.9%      | 2727       | 2814       |
 | Functions  | 99.6%      | 672        | 675        |
-| Branches   | 91.6%      | 1662       | 1814       |
-| MC/DC      | 92.1%      | 1866       | 2026       |
+| Branches   | 91.6%      | 1666       | 1818       |
+| MC/DC      | 92.1%      | 1870       | 2030       |
 
+> **Transcribed from CI #1375's coverage job (run 2026-10-21), 2026-10-21.**
+> All four rows are that run's own figures, read from its log by the
+> maintainer. Deltas from the CI #1373 transcription below: branches
+> 1662/1814 → 1666/1818 and MC/DC 1866/2026 → 1870/2030, `data/bitset.h`'s
+> new decision at `bitset_assign` (VERIFY-040 round 2); lines and functions
+> unchanged.
+>
 > **Transcribed from CI #1373's coverage job (run 2026-10-19), 2026-10-20.**
 > All four rows are that run's own figures, read from its log by the
 > maintainer; they equal CI #1368's. Deltas from the CI #1290 transcription
@@ -716,7 +732,9 @@ by methodology):
   closure, not a regression). The 3 missed outcomes are the
   documented ceiling and not counted as a coverage regression.
 
-- **bitset.h: 97.0% (130/134)** — the ceiling under MCDC-012. The 4
+- **bitset.h: 97.1% (134/138)** since VERIFY-040 round 2's early return in
+  `bitset_assign`, whose four outcomes are covered; 97.0% (130/134) before
+  it — the ceiling under MCDC-012. The 4
   remaining outcomes are the justification rows recorded there; the
   prover-load-bearing `bitset_pad` disjunct (VERIFY-020) means that file
   must not be "simplified" to move this figure.
@@ -902,8 +920,8 @@ residual against its code, as VERIFY-036 read four arguments against theirs,
 and every pinned name is filed under a block of `docs/deviations.md` that
 argues it true for every call the contracts admit, or, for five clauses whose
 value C leaves undefined at some of those calls (four since VERIFY-040 round
-1, CI #1374), wherever C defines them (see the notes under
-`docs/verification.md`'s summary card); the record coverage
+1, CI #1374, and none since round 2, CI #1375), wherever C defines them (see
+the notes under `docs/verification.md`'s summary card); the record coverage
 job, a gate since 140a6ac, checks that join on every push that changes the
 record, the pins or its script. The reading found goals false for calls the
 contracts admitted, each repaired with a committed prediction and scored by
@@ -926,14 +944,21 @@ and after the paragraphs below say where a reading here no longer holds.
 | result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
 | borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
 | diag.h     | 13        |              3058 | 3050 (99.74%) | 8        | VERIFY-017   |
-| vec        | 37        |              5569 | 5475 (98.31%) | 94       | VERIFY-018/23/33/40 |
+| vec        | 37        |              5574 | 5481 (98.33%) | 93       | VERIFY-018/23/33/40 |
 | deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40 |
-| bitset     | 32        |              5043 | 4967 (98.49%) | 76       | VERIFY-020/23/40 |
+| bitset     | 32        |              5052 | 4978 (98.54%) | 74       | VERIFY-020/23/40 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
-| priority_queue.h | 41  |              4688 | 4647 (99.13%) | 41       | VERIFY-022   |
+| priority_queue.h | 41  |              4689 | 4651 (99.19%) | 38       | VERIFY-022/40 |
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
 | stringbuf.h | 29       |              4832 | 4795 (99.23%) | 37       | VERIFY-031..35 |
-| **Total**  | **457**   | **49799**         | **49332 (99.06%)**| **467**  |              |
+| **Total**  | **457**   | **49814**         | **49353 (99.07%)**| **461**  |              |
+
+*Brought to the pins again 2026-10-21 (VERIFY-040 round 2's score).* The
+vec, bitset and priority_queue.h rows read their jobs' pins at CI #1375,
+vec's at the line that run measured, and the total is their sum again: 49814
+obligations, 49353 proved and 461 unproved, from the 49799, 49332 and 467 of
+CI #1374 that the note below gives. `docs/verification.md`'s summary card is
+recomputed from the same pins.
 
 *Brought to the pins again 2026-10-20 (VERIFY-040 round 1's score).* The vec,
 deque and bitset rows read their jobs' pins at CI #1374, since 62ce2a0, and
@@ -1015,8 +1040,10 @@ them: ladder **level 4 only**, one `ensures` clause, no `assigns` (VERIFY-021
 F1), and instrument integrity rather than a module. Zero residuals here means
 zero goals left over from four, not a module cleared.
 
-All figures are the enforced CI pins at CI #1374 (62ce2a0), the vec, deque
-and bitset rows having moved there from CI #1373 (140a6ac); this sentence
+All figures are the enforced CI pins at CI #1375 (73a7b86, vec's line as
+the score's ratchet pins it), the vec, bitset and priority_queue.h rows
+having moved there from CI #1374 (62ce2a0), and the vec, deque and bitset
+rows there from CI #1373 (140a6ac); this sentence
 named, before the sweep of 2026-10-20, HEAD 16d0f0b and CI #1266, post the
 deque arc of CI #1225–#1240 and the vec F4 ratchet of CI #1246–#1247.
 `ptr.h`'s row
@@ -1068,6 +1095,9 @@ Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17.
 
 > **Note (2026-10-20, VERIFY-040 round 1).** At CI #1374 vec's unproved are 94
 > and its own 49: `swap`'s first postcondition is proved since 49d38d7.
+
+> **Note (2026-10-21, VERIFY-040 round 2).** At CI #1375 vec's unproved are 93
+> and its own 48: `extend`'s `ok` frame and its goal are gone since ec88871.
 
 **Prover setup**: Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1 (triple-prover,
 `-wp-timeout 120`). Of the 765 unproved goals, the 438 in-place-header
@@ -1141,6 +1171,10 @@ itself flags — see VERIFY-015).
 > **Note (2026-10-20, VERIFY-040 round 1).** Since CI #1374 the blocks in
 > force are 19, 15 of them verifier-bound and 4 specification-bound:
 > VERIFY-040's round 1 retired three.
+
+> **Note (2026-10-21, VERIFY-040 round 2).** Since CI #1375 the blocks in
+> force are 17, 14 of them verifier-bound and 3 specification-bound:
+> VERIFY-040's round 2 retired two.
 
 **Note on totals**: each per-header row reports that header's own
 obligations (substrate goals are counted under their owning header,
@@ -1419,6 +1453,10 @@ name-only gates.
 > **Note (2026-10-20, VERIFY-040 round 1).** Since 62ce2a0 vec pins
 > 5475 / 5569 with 94: `swap`'s first postcondition is proved (49d38d7).
 
+> **Note (2026-10-21, VERIFY-040 round 2).** Since the score's ratchet vec
+> pins 5481 / 5574 with 93, the line CI #1375 measured: `extend`'s `ok`
+> frame and its goal are gone (ec88871).
+
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
 were discharged automatically — most by Qed, with smaller contributions
@@ -1676,6 +1714,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-10-02 → 10-03 | 9268da3 → (VERIFY-035) | #1319 → #1324 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | stringbuf.h — **module 19, the second prospective test of the saturation claim**; both streams in one arc (VERIFY-031..035, MCDC-016). Predictions pre-registered before any contract (9268da3), an addendum before run 1 (f6e54ca). **Findings before the prover ran**: G1 (a stale view appended back reaches `memcpy` with overlapping regions — abort in ordinary builds, UB in the verified configuration), G2 (`vsnprintf` sized to the remaining capacity — every formatted append fails on musl above 2 GiB free), G3 (failure path overwrites the terminator), G5 (unstated `restrict` precondition); writing contracts found G6. **WP** (Typed+Cast, 29 functions, first variadic definitions, third trusted axiom): own 22 → 5 → 3 → 0; run 1 reported every prover-visible defect at the named seam, and G2 stayed invisible as pre-registered. The last three goals closed through **VERIFY-033/034**: `arena_alloc{,_aligned}` gained the frame clauses the header already stated for its resets, +20 proved goals in arena, arena-32, pool, region, vec, stringbuf and the CC experiment's vec (predicted +4: five split parts per clause). Pinned **4767/4848, 81 by name, all inherited**; **zero new argument blocks**. **Coverage**: 101/136 → 136/138, two environmental rows; aggregate 1827/2020 → **1862/2022**. MISRA 53 → 54 (one 21.2 at the axiom). |
 | 2026-10-05 → 10-19 | 13d13de → 140a6ac | #1326 → #1373 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | **VERIFY-036 and VERIFY-039's main pass** — the arguments read against their code, every pinned residual filed by name under a block of `docs/deviations.md`, and the defects the reading found repaired, each with a committed prediction and scored by CI: specifications false for calls they admitted (bits.h's shifted postconditions, ptr.h's rounding, slice.h's libc calls, memcmp's danglingness at its callers, the combinators' claims for every callback, the allocators' frames, region.h's hook claims and its missing separation, among others). Unproved goals over the twenty units 1076 → 475 (`docs/verification.md`'s card, recomputed). Coverage moved once: slice.h's zero-length returns (G17) added four MC/DC outcomes, all covered (1862/2022 → 1866/2026; branches 1658/1810 → 1662/1814). The record coverage job became a gate at 140a6ac (CI #1373, Record coverage #90): a push that changes the record, the pins or its script fails if a pinned unproved goal is in no block, or a block lists one no longer pinned. |
 | 2026-10-20 | 436aea0 → 62ce2a0 | #1374 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | **VERIFY-040 round 1** — three of the nine argument blocks first needed after module 12 put to the changes their Retirements name or the pre-registration states: vec's and deque's `swap` contracts and two assertions in `bitset_init`. As predicted, the nine goals they covered proved and the three blocks retired; H1, deque's self-swap outside its contract, closed. Unproved goals over the twenty units 475 → 467. No executable line changed, and every coverage figure is #1373's. |
+| 2026-10-21 | 8ac07a7 → 73a7b86 | #1375 | v1.3.0  | 96.9%  | 99.6%     | 91.6%    | 92.1%  | **VERIFY-040 round 2** — two more of the nine argument blocks first needed after module 12 put to the changes their Retirements name and the alternatives the pre-registration's table names: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame stated as postconditions; `bitset_assign`'s return before its calls when null. The goals the two blocks pinned closed, eight names leaving the roll-calls, all but vec's two at `append_array`'s copy, refiled under diag.h's byte view as block 2's Retirement names, and both blocks retired; vec's three units each counted two goals more than predicted, both proved. Coverage moved by `bitset_assign`'s new decision alone: branches 1662/1814 → 1666/1818 and MC/DC 1866/2026 → 1870/2030, `data/bitset.h` 134/138, every new outcome covered. Unproved goals over the twenty units 467 → 461. |
 
 > **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** The bitset row of
 > 2026-08-27 needs three corrections. Its result (2) holds for E1 and not for
