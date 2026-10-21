@@ -22160,7 +22160,7 @@ and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
 |----------------|-------|
 | **ID**         | VERIFY-040 |
 | **Date**       | 2026-10-20 |
-| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25); round 3 to come |
+| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3 to come |
 | **Baseline**   | 6043e19 (CI #1373, CC #54) |
 | **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
 
@@ -23522,3 +23522,97 @@ the remaining effects touch. If a part rated (M) misses, the statistics name
 the clause WP 29 makes into other parts than WP 25; if the part rated (H)
 misses, the two functions do not account for the CI's difference. The score
 records either, and no pin moves with it.
+
+### VERIFY-040 round 2 — the count probe scored (`count-probe.yml` run #1, d2ad2d6), with the score's push (CI #1376, CC #57, Record coverage #97)
+
+**Result: as predicted in every part.** The push of d2ad2d6 carried the score,
+"VERIFY-040 round 2 scored: blocks 2 and 4 retired; vec's count missed", vec's
+pins at CI #1375's and CC #56's lines, the docs, the catalogue and the count
+probe; its tree is the reviewed branch's, ab5ed95b. It ran four workflows, as
+the score said:
+
+- CI #1376, green in 1h 20m 6s, `frama-c-vec` in 1h 18m;
+- CC #57, green in 1h 26m 44s, its seven families passing;
+- Record coverage #97, green in 9s;
+- the count probe's run #1, green in 1m 0s.
+
+The annotations are, in CI #1376, one warning, the deprecation of Node.js 20
+in `compcert`'s actions, and the macOS runners' queue notice, five times; and
+the count probe's five notices. CC #57 and Record coverage #97 show none.
+(GitHub's run pages, read 2026-10-21.)
+
+**The push's parts.**
+
+- (H) The main CI passes: held. Its WP jobs pass only on their pinned proved
+  lines, counts and names, `frama-c-vec` on `5481 / 5574` with its 93. `misra`
+  is at 54 real violations and the canary's 3, 57 in all, and coverage at
+  92.1% MC/DC, 1870 of 2030 condition outcomes, and 91.6% of branches, 1666 of
+  1818, with `data/bitset.h` at 134 of 138 outcomes and lines at 2727 of 2814,
+  read from the logs, which the maintainer pasted.
+- (H) The -CC workflow passes: held, vec and vec_struct on `5490 / 5583` and
+  `5488 / 5581` with 93 each, and the other five families on their pins.
+- (H) Record coverage passes with no name pending: held. The push changed no
+  pinned name, so none was pending; the job passes only when its summary reads
+  0 in every count under `--strict` and `--complete`. Its log was not read.
+- The count probe runs, its parts as predicted: held, below.
+
+**The count probe, part by part.**
+
+| Part | Predicted | Observed at run #1 |
+|---|---|---|
+| (H) The two functions' goals, H less B | 5 | 5: the summary lines read `177 / 196` and `173 / 191`, by Qed alone, and the statistics 196 and 191 |
+| (M) In H, `append_array`'s `ok_ensures_3`, `_4` and `_5`, and `extend`'s `ok_ensures_4` and `_5` | 6, 6 and 6; 1 and 1 | 6, 6 and 6; 1 and 1 |
+| (M) In B, `extend`'s `ok` frame | 3 goals, where WP 25 makes 5 | 3: `typed_cast_vec_int_extend_ok_assigns_exit`, `_normal_part1` and `_normal_part2` |
+| (L) In B, the frame's printed goals | a call effect on each path, and the call's result | so: the `exit` path's one goal a call effect, and the `normal` path's two a call effect and the call's result |
+
+The report step printed MATCH for each part and "Every part of the count probe
+MATCHES.", read from its log, which the maintainer pasted, and from its
+notices. WP 29 wrote its per-goal report under Qed alone, as its source reads,
+naming the 196 goals and the 191.
+
+**What the print shows, read and not scored.** On the `normal` path, WP 29's
+one call-effect goal is the inclusion of `append_array`'s write in `extend`'s
+frame, printed as `included(a_2, x_1, a, 1)` or
+`included(a_2, x_1, shift_sint32(a_1, x), x_2)`, which Qed leaves unknown: the
+goal CI #1374 pinned as `typed_cast_vec_int_extend_ok_assigns_normal_part1`,
+listed under block 4, which round 2 retired. WP 25 makes two call-effect goals
+on that path, a first, `len`'s, that Qed reduces to `true`, and the same
+inclusion second; WP 29 makes no goal of the first. On the `exit` path WP 29's
+one goal is printed `true`, where WP 25 makes two, the first `true` and the
+second an inclusion of the same form; which of them WP 29's stands for, the
+print does not say. `extend`'s default frame is three goals in WP 29 too, in
+both runs, where WP 25 makes five.
+
+**Other differences, not predicted and not scored.** The statistics, WP 29's
+from run #1 and WP 25's from the runs here that the prediction reports, show
+where else WP 29's goals at the two functions differ from WP 25's, each the
+same in both runs, so that the difference between the runs is unchanged. WP 29
+makes each error behaviour's postconditions in half as many goals,
+`append_array`'s in 6 where WP 25 makes 12 and `extend`'s in 1 where WP 25
+makes 2; each function's disjointness goal in 1, where WP 25 makes 4; and
+`extend`'s goal on `append_array`'s third precondition in 1, where WP 25
+makes 2. It adds goals WP 25 does not make, on `terminates` and `exits`: 1 and
+7 at `append_array`, 1 and 1 at `extend`. Over the two functions WP 29 makes
+196 goals and 191, and WP 25 216 and 213.
+
+**What it settles.** The miss is accounted for: the prediction took `extend`'s
+old frame away at WP 25's five goals, and WP 29 has three, so that the two
+functions gain 6 + 2 − 3 = 5 goals, as each vec unit did. The other two
+readings are excluded, `append_array`'s fifth postcondition being six parts
+and `extend`'s two new ones one goal each. That WP 29 makes no goal of the
+call's effect on `len` holds on the `normal` path, where the elements' effect,
+the residual, is its `_part1`; on the `exit` path the print does not settle
+it. A count of a frame's goals at a call read from WP 25's print can overcount
+WP 29's, and so, here, can a count of an error behaviour's postconditions, of
+a disjointness goal and of a call's precondition; each of those was the same
+in both runs, so that the difference round 2 predicted at the two functions
+missed by the frame alone. Where a total in round 3's prediction rests on how
+WP 29 makes a changed clause into goals, the prediction says so and rates it
+(M) at most. The probe stays as it is, run only when its script, its workflow
+or the toolchain pins change, and its README notes the run. VERIFY-040's
+verdicts do not move.
+
+**What this push runs.** (H) Record coverage, since the record changes; it
+passes with no name pending, its report the score's. The main CI, the -CC
+workflow and the probes do not run: the push changes `docs/deviations.md` and
+the count probe's README, which the main CI ignores and no probe's paths name.
