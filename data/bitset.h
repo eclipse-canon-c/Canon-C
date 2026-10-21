@@ -826,9 +826,13 @@ static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
  *
  * Performance: O(1)
  */
-/* Pure delegation to set / clear, so this should discharge from their
-   contracts with no new reasoning — a cheap check that the two are stated
-   strongly enough to compose. */
+/* Delegation to set / clear. set and clear have no default clause, and
+   WP frames a call to either by the union of its behaviours' clauses, its
+   live clause, so a call on the null path could not be shown to assign
+   nothing (VERIFY-039, the block on a call framed by the callee's default
+   assigns). The body returns before the calls when bs or its words are
+   null, as set and clear do, and the null behaviour's frame holds without
+   them (VERIFY-040 round 2). */
 /*@ requires bs == \null || bs->words == \null
              || (bitset_mut(bs) && bitset_pad(bs));
     requires bs == \null || bs->words == \null || i < bs->capacity;
@@ -853,6 +857,7 @@ static inline bool bitset_test(borrowed(const Bitset*) bs, usize i) {
     disjoint behaviors;
 */
 static inline void bitset_assign(borrowed(Bitset*) bs, usize i, bool value) {
+    if (!bs || !bs->words) { return; }
     if (value) { bitset_set(bs, i); }
     else       { bitset_clear(bs, i); }
 }
