@@ -572,6 +572,13 @@ typedef struct {
     // the callee's contract was fully proved. Registered for run 4 as the
     // cause of push_result's accepted_ensures pair, pop_raw's nonempty
     // assigns pair, and the sift assigns fragments.
+    // Corrected 2026-10-21 (VERIFY-040 round 2): WP does not read such a
+    // frame so. VERIFY-039 G4's probe showed its typed model keeping a
+    // location of another type across a write through char with no
+    // separation at all, and run 4 closed none of the goals registered for
+    // it, each failing for another reason. What the separation gives is the
+    // truth of those proofs in C: a write inside the buffer leaves *pq
+    // alone (VERIFY-039's proved-goal argument, F11).
     && \separated(pq, (char*)pq->data + (0 .. pq->capacity * pq->elem_size - 1));
 
   predicate pq_wf(PriorityQueue* pq) = pq_wf_buf(pq) && pq->len <= pq->capacity;
@@ -1092,6 +1099,12 @@ static inline result__Bool_Error pq_push_result(
 {
     if (!pq || !elem) { return result__Bool_Error_err(ERR_INVALID_ARG); }
     if (pq->len >= pq->capacity) { return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); }
+    /* VERIFY-040 round 2: slot len lies in the buffer, which elem is apart
+     * from, the step mem_copy's no-overlap precondition needs (see
+     * pq_swap_). */
+    /*@ assert slot_in_buffer:
+          pq->len * pq->elem_size + pq->elem_size
+              <= pq->capacity * pq->elem_size; */
     mem_copy(ptr_elem(pq->data, pq->len, pq->elem_size), elem, pq->elem_size);
     pq->len++;
     pq_sift_up_(pq, pq->len - 1u);
