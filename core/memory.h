@@ -116,9 +116,20 @@
    ════════════════════════════════════════════════════════════════════════════ */
 
 /*@
-  // Two byte-regions overlap iff each region's start lies within the
-  // other's range. Empty regions (size == 0) never overlap.
+  // Two byte-regions overlap iff they share a byte. Empty regions (size == 0)
+  // never overlap. Stated by \separated, which holds of two byte ranges in
+  // different objects as of two disjoint ranges in one. Until VERIFY-040's
+  // round 2 it was stated by pointer order, which C defines only within one
+  // object (C11 6.5.8p5) and WP only within one base, so a precondition
+  // stated by it could not be shown for a caller's separate object
+  // (VERIFY-022; VERIFY-039, the block on byte ranges compared by pointer
+  // order across objects).
   predicate regions_overlap{L}(char *a, char *b, integer size) =
+      size > 0 && !\separated(a + (0 .. size - 1), b + (0 .. size - 1));
+
+  // The order mem_regions_overlap computes: within one object the same as
+  // regions_overlap, across objects a comparison C leaves undefined.
+  predicate regions_overlap_by_order{L}(char *a, char *b, integer size) =
       size > 0 && a < b + size && b < a + size;
 
   // Address-level alignment: ptr is aligned to a power-of-2 boundary
@@ -158,6 +169,10 @@
 /**
  * @brief Returns true if [a, a+size) and [b, b+size) overlap
  * @note  Used internally; exposed for testing via mem_regions_overlap.
+ * @note  It compares the two pointers by order, which C defines only within
+ *        one object (C11 6.5.8p5); its postcondition states that order,
+ *        regions_overlap_by_order, and the copies' preconditions state the
+ *        overlap itself, regions_overlap (VERIFY-040 round 2).
  */
 /*@
   assigns  \nothing;
@@ -176,7 +191,7 @@
 
   behavior overlapping:
     assumes a != \null && b != \null && size > 0;
-    ensures \result <==> regions_overlap((char *)a, (char *)b, (integer)size);
+    ensures \result <==> regions_overlap_by_order((char *)a, (char *)b, (integer)size);
 
   complete behaviors;
   disjoint behaviors;
