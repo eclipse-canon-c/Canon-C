@@ -22160,7 +22160,7 @@ and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
 |----------------|-------|
 | **ID**         | VERIFY-040 |
 | **Date**       | 2026-10-20 |
-| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3's probe predicted (`fill`'s loop annotated in a copy of the tree and measured under `-CC` and the home unit's preprocessing; bitset's three padding lemmas tried as goals of their own and as the hypotheses of block 7's four goals); its run, round 3's fix and their score to come |
+| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3's probe predicted (`fill`'s loop annotated in a copy of the tree and measured under `-CC` and the home unit's preprocessing; bitset's three padding lemmas tried as goals of their own and as the hypotheses of block 7's four goals); round 3's probe scored (run #1, 79d9e72, with CI #1377 and Record coverage #99: as predicted but for the annotation's count, rated (L), WP 29 making it 16 summary entries at each type where WP 25 makes 27 goals; the three lemmas not proved, so that block 7 is needed, and with them as hypotheses every goal of the four functions proved; `fill`'s annotated goals all proved under `-CC`); the fix push predicted (the annotation written into `IMPL_VEC_FILL`; `cc-vec` at `5530 / 5599` and `cc-vec_struct` at `5528 / 5597`, 69 each, `fill`'s 24 names leaving each roll-call; the probe reduced to block 7's runs); its score to come |
 | **Baseline**   | 6043e19 (CI #1373, CC #54) |
 | **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
 
@@ -23866,3 +23866,237 @@ its lemma file, its README row and its workflow.
 - The round 3 probe runs, its parts as predicted above. The -CC workflow, the
   G4, G11, G13 and G19 probes and the count probe do not run, the push
   changing none of their paths.
+
+### VERIFY-040 round 3 — the probe scored (`round3-probe.yml` run #1, 79d9e72), with its push's runs (CI #1377, Record coverage #99)
+
+**Result: as predicted in every part but the two rated (L), the annotation's
+count.** The push of 79d9e72 carried the prediction, "VERIFY-040 round 3: the
+probe's committed prediction" (60f68a0), and the probe; its tree is the
+reviewed branch's. It ran three workflows, as the prediction said:
+
+- CI #1377, green in 1h 29m 5s;
+- Record coverage #99, green in 9s;
+- the round 3 probe's run #1, red in 3m 57s, its report step exiting 1 on the
+  two misses.
+
+The annotations are, in CI #1377, one warning, the deprecation of Node.js 20
+in `compcert`'s actions, and the macOS runners' queue notice, five times; in
+the probe's run, its six notices and three errors, the two misses and the
+step's exit. Record coverage #99 shows none. (GitHub's run pages, read
+2026-10-21.) The main CI's coverage and `misra` logs, which the maintainer
+pasted, read 92.1% MC/DC, 1870 of 2030 condition outcomes, and 91.6% of
+branches, 1666 of 1818, with `data/bitset.h` at 134 of 138 outcomes and lines
+at 2727 of 2814; and `misra` at 54 real violations and the canary's 3, 57 in
+all. The probe's parts are read from its notices on the run page (GitHub, read
+2026-10-21): its verdicts, its runs' counts, and CP's and SP's goals by
+property and run-time checks as printed.
+
+**The push's parts.**
+
+- (H) The main CI passes: held, every WP job on its pins and the figures
+  above.
+- (H) Record coverage passes with no name pending: held. The push changed no
+  pinned name; its log was not read.
+- The round 3 probe runs, its parts as predicted: as predicted but for the two
+  rated (L), below. The -CC workflow and the other probes did not run.
+
+**The probe, part by part.**
+
+| Part | Predicted | Observed at run #1 |
+|---|---|---|
+| (M) L: `bitset_shr_zero_bits`'s goal | not proved | not proved |
+| (H) L: `bitset_bits_shr_zero`'s goal | not proved | not proved |
+| (H) L: `bitset_mask_bits`'s goal | not proved | not proved |
+| (M) F: the four functions' goals, the three lemmas their hypotheses | all proved, block 7's four among them | all proved: `115 / 115`, 113 goals in the per-goal report, block 7's four among them; by the statistics, `bitset_set`, `bitset_clear` and `bitset_toggle` 32 each and `bitset_clear_padding` 17 |
+| (M) CP and SP: the annotated `fill`'s goals | all proved | all proved: `64 / 64` at each type, 62 goals in each per-goal report |
+| (L) CP less CB, SP less SB, by the summary lines | 27 goals each | 16 each, `17 / 48` as committed, by Qed alone, and `64 / 64` annotated; by the statistics 47 and 62, 15 |
+| (H) VH against VB | the same | the same: `17 / 48`, 47 goals by the statistics, the same names |
+| (H) Every run's summary line, statistics and per-goal report | each printed and written, the goals not proved accounting for its summary line | so, in all eight runs |
+| (H) No goal Failed, Failure, Invalid, Stepout or NoResult in the four runs with provers | none | none |
+
+L's summary line is `1 / 4`: its three goals not proved, and one entry more,
+proved, which the per-goal report does not list.
+
+**WP 29's goals at the annotated `fill`, read and not predicted.** By the
+per-goal report, at each type alike: the run-time checks 13, as WP 25 makes
+them; the three `assigns` clauses' goals 6 each; the `live` behaviour's three
+postconditions 4 each; completeness and disjointness 1 each; and the
+annotation's 17, the first invariant's 4 (established 2, preserved 2), the
+second's 4 (the same), the frame's 5, and the variant's 4 (decrease 2,
+positive 2). WP 25 makes the first invariant 8 goals and adds two parts to
+each `assigns` clause, which WP 29 does not. No termination goal is listed: as
+committed, WP 29's 47 goals are, by their count, WP 25's 45 goals and the two
+termination goals the CI pins, which the variant takes away. So WP 29 adds 17
+goals and removes 2, 15 by the per-goal report. The summary lines count one
+entry more than the per-goal report as committed, and two annotated; the
+notices do not name them. By the G11 probe's score WP 29 counts the doomed
+exit postconditions of a function that calls none WP knows, as `fill` calls
+none, as proved without scheduling them, which would account for the first,
+and a termination goal the variant answers, counted so, for the second.
+
+The run-time checks as printed are the same at both types, each check's access
+named by the definitions it reads: the three first read `items`, `capacity`
+and `len` (`valid_rd`); `_4`, in two parts, writes the element at
+`items + (len + i)`, `len` read in the loop's state; `_5`, `_6` and `_8` are
+`true`, proved by Qed; and `_7`, in two parts, writes `len` after the loop
+(`valid_rw`). WP 25 numbers them alike (its print, with the goals' names, read
+here).
+
+**What it settles.**
+
+- Block 7 is needed. The CI's provers prove none of the three lemmas at 120 s,
+  so none is admissible and none goes into `data/bitset.h`: the change the
+  Retirement names, tried within the bound, leaves the four goals. The verdict
+  is read from this run, which ran the CI's WP, provers and limit on bitset's
+  driver with the lemmas declared after it. With the lemmas as hypotheses
+  every goal of the four functions proves: what the block is needed for is the
+  bit-level steps they state, which the provers do not take. Its first need
+  stays at module 15.
+- Block 1. The annotation's own goals, its invariants', frame's and variant's,
+  prove at both types, so it is admissible, and the fix push writes it into
+  `IMPL_VEC_FILL`, the -CC pins moving by this run's counts. `frama-c-vec`'s
+  24 stay, its preprocessing keeping no annotation in a macro body, as VB and
+  VH show. Block 1 is needed, its first need at module 13.
+- The two misses: a count of a loop annotation's goals read from WP 25
+  overcounts WP 29's, 27 goals against 16 summary entries, 15 goals by the
+  per-goal report, as round 2's count probe found of a frame at a call. The
+  fix push's totals are this run's.
+
+### VERIFY-040 round 3 — the fix push: committed prediction (before the fix commits)
+
+**Decision (2026-10-21).** The round writes block 1's change into the tree, as
+the probe's score settles, and makes none for block 7, whose lemmas the CI's
+provers did not prove.
+
+- `data/vec/vec_impl.h`: `IMPL_VEC_FILL`'s loop given the annotation that the
+  probe wrote into its copy, byte for byte (the files compared). The probe's
+  run proved its own goals, 17 at each type.
+- `vmacros/vdrivers/vec_verify.h`: its note on class (g), the macro body's
+  loop, which calls fill's goals "unprovable BY CONSTRUCTION", given a dated
+  note: this unit's preprocessing strips the annotation, so its 24 stay; under
+  `-CC` the annotation reaches the loop, and the two -CC units prove fill's
+  goals.
+- The ratchet: in `.github/workflows/frama-c-cc.yml`, the vec and vec_struct
+  lines and the comments that count them; `vmacros/vdrivers/cc_pins/vec.txt`
+  and `vec_struct.txt`, fill's 24 names removed from each.
+- The probe reduced to L and F, as G19's repair reduced G19's: block 1's six
+  runs are retired, the copy finding no loop to annotate once the annotation
+  is committed, with its README row and its workflow's name and comment. Its
+  three lemmas are rated (H) now, run #1 having found none proved on the same
+  toolchain.
+
+**The commits.** This prediction, with the probe's score; the fix,
+`vec_impl.h` and `vec_verify.h`; the ratchet; and the reduced probe.
+Intermediate commits are not run: the pins are the head's.
+
+**Before the prediction.** The probe's run #1, above: WP 29 with the CI's
+provers and options on `fill` in the two -CC units, 48 summary entries as
+committed and 64 annotated, all 64 proved, at each type. Here, on today's tree
+and on the round's:
+
+- WP 25, patched as round 1's prediction says, with no prover
+  (`-wp-report-json`), in the three units that read `IMPL_VEC_FILL`:
+  `frama-c-vec`'s 5324 goals on both trees, the same property by property;
+  `cc-vec`'s and `cc-vec_struct`'s 27 more, all at `fill`, its first
+  invariant's 8, its second's 4, its frame's 5 and its variant's 4, and two
+  parts more in each `assigns` clause, as the probe's prediction counted them,
+  every other property of every function the same.
+- The builds and tests, each Linux leg as the build jobs configure it: gcc and
+  clang Debug with the sanitizers, gcc and clang Release, and gcc at `-m32` in
+  Debug and Release, 54 of 54 tests in every leg, with no compiler warning;
+  and the coverage job's build with gcc 14, its flags and its exclusions, 51
+  of 51.
+- Coverage, the coverage job's two measures on its build: the same on both
+  trees, lines 2727 of 2814, branches 1666 of 1818 (91.6%) and MC/DC 1870 of
+  2030 (92.1%), `data/bitset.h` at 134 of 138. gcov counts a macro's expansion
+  at the line that invokes it, and the five lines the round adds are in a
+  macro's body.
+- The `misra` job's command, run here with cppcheck 2.13.0 on both trees: the
+  same findings, 54 and the canary's 3, line for line. The job drops
+  `*_impl.h` from its list of headers; the two findings it reports in
+  `vec_impl.h`, through a header that includes it, lie at lines 114 and 134,
+  above the lines the round adds.
+- The static-analysis job's Linux leg, run here: clang-tidy over the tests
+  with the build's compile commands, no warning on either tree, and Cppcheck
+  2.13.0 with the job's flags, no finding on either.
+- `tools/idioms`' catalogue, built on the round's tree with clang 18.1.3: the
+  committed one but for its commit, every kind and every unit's list the same,
+  `frama-c-vec` listing the three loop clauses already. It is not rebuilt.
+- actionlint 1.7.12 on the two workflows the round changes: the same five
+  findings before and after, positions aside.
+- The -CC gates and `frama-c-vec`'s, run here on synthetic logs: vec and
+  vec_struct pass on the predicted lines with the pin files' 69 names, and
+  fail on today's lines with their 93; `frama-c-vec`'s passes on its pins as
+  they are.
+- The reduced probe, run here under WP 25 with the CI's provers mapped onto Z3
+  and CVC4 at 60 s by the local wrapper: L's three lemmas not proved, and F's
+  goals as WP 25 proves them, 106 of 108, `bitset_clear`'s and
+  `bitset_toggle`'s `live_ensures_part3` not proved, which WP 29 proves
+  (run #1). Every part matches but F's and, WP 25 writing no per-goal report,
+  the part read from it (NO DATA); on that output edited to read as WP 29's
+  would, that part matches.
+- `tools/record_coverage.py` on the branch's head: with
+  `--pending-from 79d9e72` it exits 0, its report the one predicted below;
+  without the option it exits 1, on 24 stale listed goals, block 1's rows 25
+  to 48, and 1 heading count, block 1's.
+
+**Predicted.**
+
+| Job | Today | Predicted | What moves |
+|---|---|---|---|
+| `cc-vec` | `5490 / 5583`, 93 | `5530 / 5599`, 69 | `vec_int_fill`: its 24 names leave the roll-call, 22 proved and its two termination goals no longer scheduled; 16 summary entries more, all proved |
+| `cc-vec_struct` | `5488 / 5581`, 93 | `5528 / 5597`, 69 | as in `cc-vec`, at `Rec` |
+| `frama-c-vec` | `5481 / 5574`, 93 | the same | nothing |
+| every other WP job and -CC family | their pins | the same | nothing |
+
+- (M) The two -CC totals, 16 more each, and with them the proved lines, 40
+  more: the totals rest on how WP 29 makes the annotation into goals, which
+  the probe's run measured on the same function under the same options, and
+  are rated (M), as the count probe's score commits.
+- (H) The two counts, 69 each, 24 fewer, and the roll-calls, fill's 24 names
+  leaving each and none entering: the probe's CP and SP proved every goal of
+  `fill`, with the CI's provers and limit, and listed no termination goal.
+- (H) `frama-c-vec` as today: its preprocessing keeps no comment written in a
+  macro body, as the probe's VB and VH show.
+- (H) No other goal moves in any unit: the annotation is in `fill`'s body
+  alone, and a caller of `fill` reads its contract, not its body.
+
+**Also predicted.**
+
+- (H) No goal Failed, Failure, Invalid or Stepout in any WP job.
+- (H) The main CI runs, since `data/` changes, and passes: every WP job on its
+  pins, `frama-c-vec` at `5481 / 5574` with its 93; the builds and tests, 54
+  of 54; static analysis; `misra` at 54; coverage at 92.1% MC/DC and 91.6% of
+  branches, and lines at 2727 of 2814.
+- (H) The -CC workflow runs, since `data/`, its file and the pin files change:
+  vec and vec_struct at the new pins, and slice, result, option, borrow and
+  deque where they are.
+- (H) Record coverage runs, since the record and the pin files change, with
+  the push's base, 79d9e72, pending: its report as on the branch's head here:
+  196 pinned names, from 220, none in no goal table; 48 names whose pins
+  change, 24 no longer pinned, block 1's rows 25 to 48, and 24 pinned by
+  another unit, its rows 1 to 24, which `frama-c-vec` pins; block 1 listing
+  48, 24 live and 24 pending, its heading's count the count at the base; the
+  proved-goal argument at 40 write sites, 156 properties and 17 facts; and 0
+  in each of the summary's counts.
+- The round 3 probe runs, as its run #2, since its script changes: (H) the
+  three lemmas not proved, as at run #1; (M) F's goals all proved, as at
+  run #1; and (H), as at run #1, each run's summary line, statistics and
+  per-goal report written, the goals not proved accounting for the summary
+  line, and no goal Failed, Failure, Invalid, Stepout or NoResult. The G4,
+  G11, G13 and G19 probes and the count probe do not run.
+
+**What it settles.** If the prediction holds, the score retires block 1's rows
+25 to 48 and leaves rows 1 to 24 to `frama-c-vec` alone, its heading at 24;
+files the goals of `vec_Rec_fill` that read `v->len` after the loop's element
+stores, each storing `due` through `i64`, in the proved-goal argument under
+F13 at a new write site, as the pre-registration says; writes block 7's
+verdict, needed, read from the probe's run, into its Retirement with the
+lemmas' trial; and writes VERIFY-040's verdicts: three of the nine needed,
+blocks 1, 7 and 8, and six not, so that from module 13 to 17 the curve of
+needed blocks adds 1, 0, 1, 0 and 1, as the pre-registration predicted. With
+it, the statements that `fill`'s loop carries no annotation are given dated
+notes, since the fix gives it one, stripped under `-C` and read under `-CC`:
+block 1's Root cause, `docs/verification.md`'s correction on category (g) and
+`docs/traceability.md`'s three. No figure outside this record and the
+workflows reads the -CC pins.
