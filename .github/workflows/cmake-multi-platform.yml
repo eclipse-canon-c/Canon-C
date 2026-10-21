@@ -3139,7 +3139,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-040 round 1 predicted: 5475/5569, 94 unproved (G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
+          echo "  baseline: VERIFY-040 round 2 predicted: 5479/5572, 93 unproved (round 1: 5475/5569, 94; G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3191,8 +3191,12 @@ jobs:
           # VERIFY-040 round 1 predicted: swap's first postcondition proves,
           # its operands the same vec or separated; no goal added or removed
           # (5474 / 5569 before).
-          if [ "${PROVED_COUNT}" != "5475 / 5569" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5475 / 5569)."
+          # VERIFY-040 round 2 predicted: append_array states its frame above
+          # the new elements, six parts added, and extend its frame as two
+          # postconditions, its ok clause's five parts gone, the unproved one
+          # among them; all added goals proved (5475 / 5569 before).
+          if [ "${PROVED_COUNT}" != "5479 / 5572" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5479 / 5572)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3208,7 +3212,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=94   # VERIFY-040 round 1 predicted: 95 -> 94 (VERIFY-039 G18 predicted: 97 -> 95; G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
+          EXPECTED_UNPROVED=93   # VERIFY-040 round 2 predicted: 94 -> 93 (round 1 predicted: 95 -> 94; VERIFY-039 G18 predicted: 97 -> 95; G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt || true)
@@ -3331,7 +3335,6 @@ jobs:
             "typed_cast_vec_int_append_array_ok_ensures_4_part5"
             "typed_cast_vec_int_append_array_ok_assigns_exit_part4"
             "typed_cast_vec_int_append_array_ok_assigns_normal_part14"
-            "typed_cast_vec_int_extend_ok_assigns_normal_part1"
             "typed_cast_vec_int_fill_terminates_part1"
             "typed_cast_vec_int_fill_terminates_part2"
             "typed_cast_vec_int_fill_assert_rte_mem_access_4_part1"
@@ -4525,8 +4528,8 @@ jobs:
           eval $(opam env --switch=frama-c)
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
-          EXPECTED_UNPROVED=76   # VERIFY-040 round 1 predicted: 78 -> 76 (VERIFY-039 G18 predicted: 80 -> 78; G14 to G17 predicted: 98 -> 80; G13 predicted: 96 -> 98; G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4967 / 5043"   # VERIFY-040 round 1 predicted: two assertions on bitset_init's word count added and proved, and its two goals on the count prove (VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed: 4963 / 5041; G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_UNPROVED=74   # VERIFY-040 round 2 predicted: 76 -> 74 (round 1 predicted: 78 -> 76; VERIFY-039 G18 predicted: 80 -> 78; G14 to G17 predicted: 98 -> 80; G13 predicted: 96 -> 98; G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4978 / 5052"   # VERIFY-040 round 2 predicted: bitset_assign returns before its calls when bs or its words are null; its null frame's two parts prove, and nine goals are added, all proved, the guard's check and two parts of each of its four postconditions (round 1 predicted: two assertions on bitset_init's word count added and proved, and its two goals on the count prove: 4967 / 5043; VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed: 4963 / 5041; G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -4645,7 +4648,7 @@ jobs:
             # 80 since G14 to G17 closed the handler pair and 16 of the
             # core substrate's; 78 since G18 closed memory's two frames;
             # 76 since VERIFY-040's round 1 closed bitset_init's two on its
-            # word count.
+            # word count; 74 since its round 2 closed bitset_assign's two.
             # No duplicates, nothing unclassified -- before being written here.
             CHECKS=(
               # ARM C — contract.h handler pair: none since VERIFY-039 G14.
@@ -4715,8 +4718,9 @@ jobs:
               "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
               "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
               "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
-              # ARM D — bitset's OWN residuals, 23 since VERIFY-040's round 1
-              #         (25 since VERIFY-039 G10's repair, 41 after G8's, 42
+              # ARM D — bitset's OWN residuals, 21 since VERIFY-040's round 2
+              #         (23 since its round 1, 25 since VERIFY-039 G10's
+              #         repair, 41 after G8's, 42
               #         after entry 3's loop bounds,
               #         52 after entry 3 / G6, 71 before it; was 66, +5 at CI
               #         #1264, where F2/F5 let the contracts of set, clear,
@@ -4732,8 +4736,6 @@ jobs:
               "typed_cast_bitset_set_live_ensures_3_part3"
               "typed_cast_bitset_clear_live_ensures_3_part3"
               "typed_cast_bitset_toggle_live_ensures_3_part3"
-              "typed_cast_bitset_assign_null_assigns_normal_part1"
-              "typed_cast_bitset_assign_null_assigns_normal_part2"
               "typed_cast_bitset_clear_all_call_mem_zero_requires"
               "typed_cast_bitset_clear_all_live_assigns_normal"
               "typed_cast_bitset_clear_all_live_ensures_2_part3"
@@ -5803,7 +5805,7 @@ jobs:
           #     now carries a contract. A residual outside the two classes
           #     above is a contract error to read, not a number to record.
           OWN_N=$(grep -cE '^typed_cast_pq_' /tmp/pq_resid.txt || true)
-          echo "  pq_* residuals:           ${OWN_N}   (run 1: 199; run 2: 170; run 3: 143; run 4: 144; run 5: 18; run 6: 7; run 7: 6; 4 since VERIFY-039 G21)"
+          echo "  pq_* residuals:           ${OWN_N}   (run 1: 199; run 2: 170; run 3: 143; run 4: 144; run 5: 18; run 6: 7; run 7: 6; 4 since VERIFY-039 G21; 1 since VERIFY-040 round 2)"
           # RUN 5 (CI #1287): 144 -> 18. The calls clause TOOK: pq_cmp_ carries
           # exactly one goal, \\valid_function -- but this regex said 0, because
           # WP names RTE goals with a SINGLE underscore (pq_cmp_assert_...) and
@@ -5832,10 +5834,14 @@ jobs:
           # that step, and the bin holds the three across bases. CI #1369
           # proved pq_swap_'s goal in one attempt and not in its re-run, a
           # goal at the 120 s limit, and remove_at_result's in neither.
+          # Since VERIFY-040's round 2 memory.h states regions_overlap by
+          # \\separated, which separate objects satisfy, and the bin is
+          # empty: the three across bases prove, push_result's with an
+          # assertion of its slot's step before the copy, as at G21.
           MULT_N=$(grep -cE '^typed_cast_pq_(swap__call_mem_swap_requires|remove_at_result_call_mem_copy_requires|push_result_call_mem_copy_requires|pop_raw_call_mem_copy_requires|peek_call_mem_copy_requires)' /tmp/pq_resid.txt || true)
           REST_N=$((OWN_N - CEIL_N - MULT_N))
           echo "    comparator boundary (pq_cmp_):     ${CEIL_N}   (expected 1: \\valid_function only -- calls clause over the 24 built-ins)"
-          echo "    regions_overlap at the copies:     ${MULT_N}   (expected 3: pointer order across bases, VERIFY-039 batch 2; the 2 products with elem_size closed by G21's assertions)"
+          echo "    regions_overlap at the copies:     ${MULT_N}   (expected 0: stated by \\separated since VERIFY-040 round 2; 3 until then, pointer order across bases, VERIFY-039 batch 2; the 2 products with elem_size closed by G21's assertions)"
           echo "    everything else:                   ${REST_N}   (expected 0 -- anything here is a contract to read)"
           if [ "${REST_N}" -eq 0 ]; then
             echo "  run-7 class prediction:   CONFIRMED -- every residual is in a named class"
@@ -5896,13 +5902,14 @@ jobs:
             # Three count predictions refuted (< 60, < 90, < 130); the
             # comparator-boundary and separation-class predictions held.
             #
-            # The 41-name residual set = 31 inherited from memory.h (taken
+            # The 38-name residual set = 31 inherited from memory.h (taken
             # from the memory job's own list at run time, so the two pins
             # cannot drift apart silently) + 6 result(bool, Error), the
             # run-time checks on the combinators' pointers (20 until
             # VERIFY-039 G11 repaired their contracts; 22 until VERIFY-039
-            # G12 contracted get_ok and get_err) + 4 own:
+            # G12 contracted get_ok and get_err) + 1 own:
             #   1  \\valid_function(pq->cmp)             -- Frama-C 29 limit
+            # Until VERIFY-040's round 2, 3 more, 41 in all:
             #   3  !regions_overlap at mem_copy x3 -- memory.h states the
             #      predicate by pointer ORDERING, and these order pointers
             #      into different bases, which \\separated cannot discharge,
@@ -5915,7 +5922,9 @@ jobs:
             #      close (VERIFY-039 batch 2); since VERIFY-039 G21 an
             #      assertion before each call states the step, and both
             #      prove (5 until then; this line gave the candidate for all
-            #      five).
+            #      five). Since VERIFY-040's round 2 the predicate is stated
+            #      by \\separated and the three prove, push_result's with
+            #      an assertion of its slot's step.
             # THIS is the name-stability run: CI #1289 is the first
             # measurement at this contract state, and the enforcing run is
             # the second. If it goes red with no header change, the pin is
@@ -5925,8 +5934,8 @@ jobs:
             # that attempt and not in the re-run, a goal at the 120 s
             # limit. VERIFY-039 G21.)
             # ===============================================================
-            EXPECTED_PROVED="4647 / 4688"   # VERIFY-039 G21 predicted: three assertions added and proved, and the two slot goals prove (G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit: 4642 / 4685; G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
-            EXPECTED_UNPROVED=41   # VERIFY-039 G21 predicted: 43 -> 41 (G18 predicted: 45 -> 43; G14 to G17 predicted: 60 -> 45; G11 (Bool, Error) predicted: 74 -> 60; G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
+            EXPECTED_PROVED="4651 / 4689"   # VERIFY-040 round 2 predicted: regions_overlap stated by \\separated, the three copies' preconditions prove, and push_result's assertion of its slot's step is added and proved (VERIFY-039 G21 predicted: three assertions added and proved, and the two slot goals prove: 4647 / 4688; G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit: 4642 / 4685; G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
+            EXPECTED_UNPROVED=38   # VERIFY-040 round 2 predicted: 41 -> 38 (VERIFY-039 G21 predicted: 43 -> 41; G18 predicted: 45 -> 43; G14 to G17 predicted: 60 -> 45; G11 (Bool, Error) predicted: 74 -> 60; G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
             PIN_NAMES=(
             "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
@@ -5935,9 +5944,6 @@ jobs:
             "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
             "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
             "typed_cast_pq_cmp_assert_rte_function_pointer"
-            "typed_cast_pq_push_result_call_mem_copy_requires_3"
-            "typed_cast_pq_pop_raw_call_mem_copy_requires_3"
-            "typed_cast_pq_peek_call_mem_copy_requires_3"
             )
             FAILURES=0
             PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
@@ -5956,7 +5962,7 @@ jobs:
             PIN_N=$(wc -l < /tmp/pq_pin_all.txt)
             comm -23 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_missing.txt
             comm -13 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_unpinned.txt
-            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 31 memory + 6 result + 4 own) ---"
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 31 memory + 6 result + 1 own) ---"
             echo "    missing (pinned, now proved):    $(wc -l < /tmp/pq_missing.txt)"; sed 's/^/      /' /tmp/pq_missing.txt
             echo "    unpinned (new, unproved):        $(wc -l < /tmp/pq_unpinned.txt)"; sed 's/^/      /' /tmp/pq_unpinned.txt
             if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
