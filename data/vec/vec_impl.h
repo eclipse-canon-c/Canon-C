@@ -1351,7 +1351,8 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
  * @post Returns Err(ERR_INVALID_ARG)       if v, v->items, or src is NULL
  * @post Returns Err(ERR_OVERFLOW)          if v->len + count overflows usize
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if total > v->capacity
- * @post On Ok: v->len increased by count, elements copied from src
+ * @post On Ok: v->len increased by count, elements copied from src, the
+ *       buffer's other elements unchanged
  *
  * Performance:
  * - Time:  O(count)
@@ -1394,6 +1395,8 @@ linkage OptionType fn(borrowed(VecType*) v, usize i) { \
     ==> v->items[k] == \old(v->items[k]);                                        \
     ensures \forall integer k; 0 <= k < count                                    \
     ==> v->items[\old(v->len) + k] == src[k];                                    \
+    ensures \forall integer k; \old(v->len) + count <= k < v->capacity           \
+    ==> v->items[k] == \old(v->items[k]);                                        \
     complete behaviors;                                                          \
     disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \
@@ -1455,11 +1458,14 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, u
     behavior ok:                                                                 \
     assumes v != \null && v->items != \null && src != \null                      \
     && v->len + count <= v->capacity;                                            \
-    assigns v->len, v->items[v->len .. v->len + count - 1];                      \
     ensures \result.is_ok == \true;                                              \
     ensures v->len == \old(v->len) + count;                                      \
     ensures \forall integer k; 0 <= k < count                                    \
     ==> v->items[\old(v->len) + k] == src[k];                                    \
+    ensures \forall integer k; 0 <= k < \old(v->len)                             \
+    ==> v->items[k] == \old(v->items[k]);                                        \
+    ensures \forall integer k; \old(v->len) + count <= k < v->capacity           \
+    ==> v->items[k] == \old(v->items[k]);                                        \
     complete behaviors;                                                          \
     disjoint behaviors; */                                                       \
 linkage result__Bool_Error fn(borrowed(VecType*) v, borrowed(const type*) src, usize count) { \

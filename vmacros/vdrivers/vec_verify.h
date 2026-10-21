@@ -953,7 +953,10 @@ static inline option_int vec_int_remove_option(borrowed(vec_int*) v, usize i);
  * finding F1, mandated by mem_copy's memcpy semantics; its second, src off
  * the vec itself, is VERIFY-039 G9: ensures 4 reads src after the store to
  * len, and on ILP32 an int over len is a counterpart read. The macro's doc
- * comment states both since G9. */
+ * comment states both since G9. The ok behaviour's fifth postcondition
+ * states the frame above the new elements, as its third states it below
+ * them, so that extend can state its frame as postconditions (VERIFY-040
+ * round 2). */
 /*@ requires v == \null || vec_int_mut(v);
     requires (v != \null && v->items != \null && src != \null
               && v->len + count <= v->capacity) ==>
@@ -989,6 +992,8 @@ static inline option_int vec_int_remove_option(borrowed(vec_int*) v, usize i);
                 ==> v->items[k] == \old(v->items[k]);
       ensures \forall integer k; 0 <= k < count
                 ==> v->items[\old(v->len) + k] == src[k];
+      ensures \forall integer k; \old(v->len) + count <= k < v->capacity
+                ==> v->items[k] == \old(v->items[k]);
     complete behaviors;
     disjoint behaviors;
 */
@@ -998,7 +1003,12 @@ static inline result__Bool_Error vec_int_append_array(borrowed(vec_int*) v,
 
 /* Pure delegate to append_array. Its preconditions are append_array's, F1
  * and G9 included; its postconditions are too, less the error behaviours'
- * assigns \nothing and the ok behaviour's clause on the old elements. */
+ * assigns \nothing. The ok behaviour states its frame as postconditions,
+ * the elements below the new ones and above them unchanged, under the
+ * default clause: WP frames the call by append_array's default clause, the
+ * whole buffer, so a narrower clause here could not be shown (VERIFY-039,
+ * the block on a call framed by the callee's default assigns; VERIFY-040
+ * round 2). */
 /*@ requires v == \null || vec_int_mut(v);
     requires (v != \null && v->items != \null && src != \null
               && v->len + count <= v->capacity) ==>
@@ -1024,11 +1034,14 @@ static inline result__Bool_Error vec_int_append_array(borrowed(vec_int*) v,
     behavior ok:
       assumes v != \null && v->items != \null && src != \null
            && v->len + count <= v->capacity;
-      assigns v->len, v->items[v->len .. v->len + count - 1];
       ensures \result.is_ok == \true;
       ensures v->len == \old(v->len) + count;
       ensures \forall integer k; 0 <= k < count
                 ==> v->items[\old(v->len) + k] == src[k];
+      ensures \forall integer k; 0 <= k < \old(v->len)
+                ==> v->items[k] == \old(v->items[k]);
+      ensures \forall integer k; \old(v->len) + count <= k < v->capacity
+                ==> v->items[k] == \old(v->items[k]);
     complete behaviors;
     disjoint behaviors;
 */
