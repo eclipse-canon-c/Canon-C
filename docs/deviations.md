@@ -22077,7 +22077,7 @@ and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
 |----------------|-------|
 | **ID**         | VERIFY-040 |
 | **Date**       | 2026-10-20 |
-| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; rounds 2 and 3 to come |
+| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return); round 3 to come |
 | **Baseline**   | 6043e19 (CI #1373, CC #54) |
 | **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
 
@@ -22682,3 +22682,392 @@ listed goals, 0 empty blocks and 0 heading drift; the proved-goal argument at
 **What the push runs.** Record coverage alone: the main CI's `paths-ignore`
 skips `docs/`, and the push changes no path another workflow watches. (H) It
 passes with no name pending, its report as above.
+
+### VERIFY-040 round 1 — the score's push scored
+
+**Scored.** The score's push, 14b12d0 and bd9466e, ran Record coverage alone,
+as the score said: run #95 on bd9466e, green, its job in 4s. The run shows no
+notice, which the step prints only for a base it cannot fetch, so it read the
+base; the push changed no pin, so no name was pending. The main CI and the -CC
+workflow did not run. (GitHub's run page, read 2026-10-21.)
+
+### VERIFY-040 round 2 — memory.h's predicate, `extend`'s frame, `bitset_assign`'s null path: committed prediction (before the fix commits)
+
+**Decision (2026-10-21).** Round 2 tries the changes that blocks 2 and 4 name
+in their Retirement paragraphs, and for each the alternative the
+pre-registration's table names.
+
+- Block 2. memory.h states `regions_overlap` by `\separated`,
+  `size > 0 && !\separated(a + (0 .. size - 1), b + (0 .. size - 1))`: the
+  Retirement's change, VERIFY-022's VERIFY-024 candidate.
+  `mem_regions_overlap`'s postcondition states what the function's code
+  computes, so it keeps the pointer order, under a second predicate,
+  `regions_overlap_by_order`, the old formula. At the queue's three copies
+  between a caller's memory and its buffer the precondition then states what
+  the block's argument shows, that the two byte ranges share no address; at
+  `pq_push_result`'s the step from the buffer's extent to slot `len`, two
+  product terms, is also stated as an assertion before the copy,
+  `slot_in_buffer`: the alternative the table names, as G21 stated the two
+  slots' step. The restatement alone proves that copy's precondition under WP
+  25 (below), but its step, a product with the element size, is of the kind
+  G21 found the CI's provers taking at their limit, there between two slots of
+  one buffer, and the round states it as a goal of its own rather than leave
+  the proof to the provers' finding it inside the copy's precondition. vec's
+  two, at `append_array`'s copy, stay unproved: the Retirement's case within
+  the buffer's block, the byte view, which the score refiles under diag.h's
+  block, as the Retirement names.
+- Block 4. `append_array`'s `ok` behaviour states its frame above the new
+  elements as a fifth postcondition, as its third states it below them, and
+  `extend`'s `ok` behaviour drops its `assigns` clause and states its frame as
+  two postconditions, below the new elements and above them, under the default
+  clause: the Retirement's change, in `vec_verify.h` and in
+  `IMPL_VEC_APPEND_ARRAY` and `IMPL_VEC_EXTEND`.
+- `bitset_assign`'s two, filed under block 4 by name at batch 3: the
+  alternative the table names, the body returning before its calls when `bs`
+  or its words are null. Their Retirement's change, a default `assigns` atop
+  `bitset_assign` that its `null` behaviour inherits, gives up the `null`
+  frame, and the pre-registration admits no weaker frame.
+
+**Each change is of a kind the pre-registration admits.**
+
+- The predicate. Within one object it is the old one: two byte ranges of one
+  object share a byte exactly when each starts before the other ends. Across
+  objects the old one compares pointers that C leaves unordered (C11 6.5.8p5)
+  and WP orders only within one base. As the no-overlap precondition of
+  `mem_copy`, `mem_swap`, `mem_swap_buf` and `mem_copy_bytes`, the four
+  functions that state it, it now excludes exactly the calls whose ranges
+  share a byte, which make `memcpy`'s behaviour undefined (C11 7.24.2.1p2),
+  and admits every other: a precondition that excludes only calls C leaves
+  undefined. None of the four states a postcondition with it.
+  `mem_regions_overlap`'s postcondition is the old formula under another name:
+  a clause restated as an equivalent one.
+- The assertion: an annotation that WP proves as a goal of its own.
+- `append_array`'s fifth postcondition: one the code establishes. The copy
+  writes `items[len .. len + count - 1]` and the store writes `len`, so the
+  elements from `len + count` to `capacity - 1` are not written.
+- `extend`'s frame: restated as postconditions that state the same with a
+  default clause. The `ok` clause's locations, taken in the pre-state, are
+  `v->len` and `items[\old(len) .. \old(len) + count - 1]`; the default
+  clause's are `v->len` and the whole buffer, and the two postconditions keep
+  the rest of the buffer, below `\old(len)` and from `\old(len) + count` on.
+- `bitset_assign`'s early return: a body rewrite with the same result and the
+  same writes for every call the contract admits, at one test's more work. On
+  the `null` path `bitset_set` and `bitset_clear` returned at their own
+  guards, the same test, and wrote nothing. It adds a decision, and the tests
+  that cover it are in the suite already: `test_single_bit_ops` calls
+  `bitset_assign` with a live set and with `NULL`, and
+  `test_uninitialised_bitset` with a `Bitset` whose words are null. Both tests
+  call `bitset_set` and `bitset_clear` so too, and their guards keep their
+  outcomes.
+
+**Left as it is.** `mem_regions_overlap`'s code compares the two pointers with
+`<`, which C leaves undefined across objects (C11 6.5.8p5): the Retirement's
+"same issue in code". It runs in six `require_msg` checks, `mem_copy`'s,
+`mem_swap`'s, `mem_copy_bytes`'s and `mem_swap_buf`'s three, which
+`CANON_NO_REQUIRE`, under which the units verify, compiles out; and in
+`test/core/memory_test.c` in every build, the coverage job's under
+`CANON_NO_REQUIRE` included, where
+`test_regions_overlap_distinct_stack_arrays` calls it on two distinct arrays
+and asserts the result. No goal checks the comparison: Frama-C's run-time
+checks do not ask that compared pointers point into one object. Comparing the
+addresses as `uintptr_t` values instead would not be undefined, though what
+the integers' order says of the addresses is implementation-defined (C11
+6.3.2.3p6), and the `misra` job's command, run here on memory.h with the
+rewrite, finds nothing new, the casts from `const void *` falling under Rule
+11.6, which the job suppresses. But WP's typed model does not relate an
+address's integer value to its pointer's order: under WP 25, with the provers
+at 60 s, three parts of the function's `overlapping` postcondition then go
+unproved, in a function each of the eleven units verifies. The Retirement
+names no change to the code, and the round makes none. The issue stays
+recorded in block 2's Retirement, and the score records it, with the test, in
+memory.h's own record, VERIFY-008, too.
+
+**Owed with these files' next change, and made with them.**
+
+- `data/priority_queue.h`'s comment on `pq_wf_buf`'s separation, whose reading
+  G4's probe contradicts (G11's close; missed at 77cc69c, b52bba6 and
+  da2fce6), given a dated correction: WP's typed model keeps `*pq` across the
+  buffer's byte writes with or without the separation, and what the separation
+  gives is that those proofs are true in C, F11 of the proved-goal argument.
+- In `.github/workflows/cmake-multi-platform.yml`, the priority-queue job's
+  comments and messages that count the three copies' goals, brought to the
+  ratchet's pins.
+
+Owed still, each with its file's next change, which this round does not make:
+`tools/probes/verify-039/p_combinator_contracts.c`'s header (G11's close) and,
+in `test/data/bitset_test.c`, the F1 comment (round 1) and the comment at
+`test_uninitialised_bitset`'s call to `bitset_assign`, "delegates to set /
+clear", where since this round it returns at its own guard.
+
+**The commits.**
+
+- This prediction, with the score's push scored.
+- `core/memory.h`: the predicate restated.
+- `data/priority_queue.h`: the assertion; the comment on `pq_wf_buf`.
+- vec: `vmacros/vdrivers/vec_verify.h` and `data/vec/vec_impl.h`.
+- `data/bitset.h`: the early return.
+- The CI ratchet: `frama-c-bitset`'s, `frama-c-vec`'s and
+  `frama-c-priority-queue`'s proved lines, counts and roll-calls, with the
+  comments and messages that count them; the -CC matrix's lines for vec and
+  vec_struct, and their pin files.
+
+Intermediate commits are not run: the pins are the head's.
+
+**Before the prediction.** WP 25, patched as round 1's prediction says, with
+the CI's three provers and `-wp-split`, on the functions the changes reach, on
+today's tree and on the round's; the provers at 120 s where a line gives no
+other limit. The measured trees differ from the committed ones in comments
+only.
+
+- memory.h's five functions that state or compute the predicate,
+  `mem_regions_overlap`, `mem_copy`, `mem_swap`, `mem_swap_buf` and
+  `mem_copy_bytes`, in `frama-c-memory`'s unit: 119 goals, all proved, today
+  and with the restatement, by the same names.
+- The queue's five functions that call memory.h's copy or swap, `pq_swap_`,
+  `pq_push_result`, `pq_pop_raw`, `pq_remove_at_result` and `pq_peek`, their
+  call preconditions (`-wp-prop=@requires`) in `frama-c-priority-queue`'s
+  unit, today and with the restatement alone: 65 goals, 49 proved today and 52
+  with the restatement, the three more being the copies' no-overlap
+  preconditions: `pq_push_result`'s by Z3 in 14.9 s, `pq_pop_raw`'s by Z3 in
+  16.2 s and `pq_peek`'s by Alt-Ergo in 1.1 s. The other 13 unproved are the
+  same on both trees, by name: the sift calls' preconditions in
+  `pq_push_result` and `pq_pop_raw` and at `pq_remove_at_result`'s call to
+  `pq_sift_up_`, and in `pq_pop_raw` one path's part of the second `ptr_elem`
+  call's three and of the second copy's first two, each on a path after the
+  cast's warnings (`Stronger`), and none of them pinned by the CI, where WP 29
+  proves them.
+- `pq_push_result` whole, today, with the restatement alone and with the
+  assertion too: 94, 94 and 95 goals, 85, 86 and 87 proved. With the
+  restatement alone the copy's no-overlap precondition proves, by Z3, as in
+  the line above; with the assertion too, the assertion proves by Z3 in 4.7 s
+  and the precondition by Alt-Ergo in 0.12 s. The other eight unproved are the
+  same on the three trees, by name: the run-time check on `pq->len` after the
+  copy, the sift call's two preconditions, a part of the `accepted`
+  behaviour's first postcondition and four parts of its frame, each on a path
+  after the cast's warnings (`Stronger`), and none of them pinned by the CI,
+  where WP 29 proves them.
+- D1, a diagnostic run here and not shipped (`d1_probe.c` in the scratch
+  directory), with the provers at 10 s: `mem_copy` of `n` `int`s into an `int`
+  buffer at `len`, as `append_array` copies, with `src` in another object than
+  the buffer (`\base_addr(src) != \base_addr(buf)`), with `src` separated from
+  the buffer and nothing said of the objects, as `append_array`'s precondition
+  has it, and with `src` in the buffer's own block past its capacity. Today
+  none of the nine goals proves. With the restatement the no-overlap
+  precondition with `src` in another object proves, by Alt-Ergo in 0.03 s; the
+  other two stay unproved, and so do the six validity goals, the copy's byte
+  view, which batch 1 filed under diag.h's block at `append_array`.
+- vec, `append_array` and `extend`, their `assigns` goals left out
+  (`-wp-prop=-@assigns`). In `frama-c-vec`'s unit, 86 of 93 goals proved today
+  and 93 of 101 on the round's tree, every goal the two trees share with the
+  same status on both. `extend`'s five postconditions are proved, the two new
+  ones by Alt-Ergo in 0.04 s each. `append_array`'s fifth is proved in five of
+  its six parts, by Qed; its part on the path through the copy is unproved, as
+  are the same parts of its second and third on both trees, which WP 29 proves
+  today: WP 25 strengthens the goals on that path after the cast's warnings
+  (`Stronger`). The fourth's part there, the copy's three preconditions and
+  the check on `&v->len` after the copy are unproved too, as in CI but the
+  check, which WP 29 proves. In `cc-vec_struct`'s, at `Rec`, on the round's
+  tree, the same: 93 of 101, the same goals unproved, `extend`'s two new ones
+  by Alt-Ergo in 0.05 s each. `cc-vec`'s run is the same too: 93 of 101, the
+  same goals unproved, `extend`'s two new ones by Alt-Ergo in 0.04 s and 0.03
+  s.
+- `bitset_assign`: today 24 goals, 8 unproved: its `null` behaviour's frame
+  and its `live` behaviour's, at its two calls, on the normal and the exit
+  path. WP 25 frames a call to `bitset_set` or `bitset_clear`, which have no
+  default clause, as writing everything (`Prove: false`), where WP 29 frames
+  it by their behaviours' union and pins only the `null` behaviour's normal
+  two (batch 3). With the early return, 33 goals: the `null` four proved by
+  Qed, their hypotheses contradictory, and the `live` four unproved as before;
+  added, the guard's check that `bs->words` is readable, proved, and two parts
+  of each of the `live` behaviour's four postconditions, the guard's two
+  paths, each `Prove: true`.
+- Goal counts with no prover (`-wp-report-json`), in the eleven units whose
+  translation unit includes memory.h, today and with the round: none added or
+  removed in `frama-c-memory`'s, `frama-c-arena`'s at 64 and at 32 bits,
+  `frama-c-pool`'s, `frama-c-region`'s and `frama-c-stringbuf`'s; 9 added in
+  `frama-c-bitset`'s, as above; 1 in the queue's, the assertion; and 3 in each
+  of the three vec units: `append_array`'s fifth postcondition in six parts,
+  as its third and fourth are split by the function's paths, `extend`'s two
+  one goal each, and `extend`'s `ok` clause's five parts gone, three on the
+  normal path and two on the exit path.
+- The builds and tests, on today's tree and on the round's, each leg as the
+  build jobs configure it: gcc and clang, Debug with the sanitizers and
+  Release, and gcc at `-m32` in Debug and Release, 54 of 54 tests in every
+  leg, with no compiler warning; the coverage job's build with gcc 14, its
+  flags and its exclusions, 51 of 51.
+- Coverage, the coverage job's two measures on its build: branches 1662 of
+  1814 today and 1666 of 1818 with the round (91.6%), MC/DC 1866 of 2026 and
+  1870 of 2030 (92.1%). The four branches and four condition outcomes added
+  are the new decision's, each taken, and `bitset.h`'s other lines, branches
+  and outcomes are covered as before: the decision's two conditions are true
+  in `test_single_bit_ops`'s call with `NULL` and
+  `test_uninitialised_bitset`'s with null words, and both false in the calls
+  with a live set. Lines, 2727 of 2814, do not move.
+- The `misra` job's command, run here with cppcheck 2.13.0 on today's tree, on
+  the measured one and on the committed one: the same findings, 54 and the
+  canary's 3, rule for rule, memory.h's three lower by the lines the round
+  adds above them, ten in the measured file, whose comments are shorter, and
+  fifteen in the committed one, from 498, 678 and 728 to 513, 693 and 743.
+- The static-analysis job's Linux leg, run here: clang-tidy over the tests
+  with the build's compile commands, no warning on either tree, and Cppcheck
+  2.13.0 with the job's flags, no finding on either.
+- actionlint 1.7.12 on the two workflows the round changes: the same 51
+  findings before and after, but for one script line that the ratchet's
+  comments move.
+- The ratcheted jobs' steps, run here on synthetic logs with the predicted
+  proved lines and the predicted residual names: `frama-c-bitset`,
+  `frama-c-vec`, `frama-c-priority-queue`, whose roll-call reads
+  `frama-c-memory`'s at run time, and the -CC families vec and vec_struct
+  pass, and on today's lines and names each fails; `frama-c-memory`'s step
+  passes on its pins as they are.
+- `tools/record_coverage.py` on the branch's head: with
+  `--pending-from bd9466e` it exits 0, the seven names pending, no longer
+  pinned; block 4's listed goals all pending, its heading's count the count at
+  the base, and the goals filed by name under it and under block 2 pending,
+  block 2's own two live; the summary all 0; and 220 pinned names, from 227.
+  Without the option it exits 1, on 7 stale listed goals, 1 empty block and 1
+  heading count.
+
+**Predicted.**
+
+| Job | Today | Predicted | What moves |
+|---|---|---|---|
+| `frama-c-bitset` | `4967 / 5043`, 76 | `4978 / 5052`, 74 | `bitset_assign`: its `null` frame's two parts proved; nine goals added, all proved, the guard's check and two parts of each of its four `live` postconditions |
+| `frama-c-priority-queue` | `4647 / 4688`, 41 | `4651 / 4689`, 38 | the three copies' preconditions proved; `pq_push_result`'s assertion added and proved |
+| `frama-c-vec` | `5475 / 5569`, 94 | `5479 / 5572`, 93 | `append_array`'s fifth postcondition added in six parts and `extend`'s two, all proved; `extend`'s `ok` clause's five parts gone, its one unproved among them |
+| `cc-vec` | `5484 / 5578`, 94 | `5488 / 5581`, 93 | as in `frama-c-vec` |
+| `cc-vec_struct` | `5482 / 5576`, 94 | `5486 / 5579`, 93 | as in `frama-c-vec`, at `Rec` |
+| `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf` | `2848 / 2879`, 31; `3523 / 3556`, 33, at both widths; `4042 / 4076`, 34; `3691 / 3730`, 39; `4795 / 4832`, 37 | the same | nothing |
+
+- (H) `bitset_assign`'s two. On the `null` behaviour's path the body returns
+  before either call, so the frame's parts at the two calls have contradictory
+  hypotheses, as WP 25's Qed finds for all four. The guard's check reads
+  `bs->words` with `bs` not null, which the third precondition makes readable
+  (G10).
+- (H) `frama-c-bitset`'s nine added goals, all proved: WP 29 splits a
+  postcondition by the function's paths as WP 25 does, and `bitset_set`'s,
+  behind the same guard, show it: WP 25 gives each of its `live`
+  postconditions three parts, the guard's two paths and the store's, and the
+  unit pins `bitset_set_live_ensures_3_part3` today. The guard's two paths add
+  two parts to each of `bitset_assign`'s four, each `Prove: true`, and the
+  check adds one goal.
+- (M) The queue's three copies' preconditions, proved. Under WP 25, with the
+  restatement alone, Z3 proves `pq_push_result`'s in 14.9 s and `pq_pop_raw`'s
+  in 16.2 s, and Alt-Ergo `pq_peek`'s in 1.1 s; with the assertion, Z3 proves
+  the assertion in 4.7 s and Alt-Ergo the copy's precondition in 0.12 s. Each
+  rests on a product with the element size, the step from the buffer's
+  `capacity * elem_size` bytes to the slot, a step of the kind G21 found the
+  CI's provers taking at their limit, there between two slots of one buffer;
+  WP 29's goals are not WP 25's.
+- (H) `pq_push_result`'s assertion, proved, and one goal added: an assertion
+  is one goal, and it states the product directly from `len < capacity`, as
+  G21's did at CI #1370, each proved.
+- (H) vec's `append_array_call_mem_copy_requires_3` stays unproved in its
+  three units. With `src` in another object than the buffer the restated
+  precondition follows, as D1 shows under WP 25 (`d1_cross`, whose distinct
+  base the proof uses); with `append_array`'s separation alone it does not
+  (`d1_any`), a `src` in the buffer's own block being admitted, where WP
+  counts the copy's `count * sizeof` bytes as that many cells from an offset
+  counted in elements, the byte view of diag.h's block, which keeps the copy's
+  two validity goals unproved at the same call (batch 1).
+- (M) `append_array`'s fifth postcondition proved, its six parts: WP 29 proves
+  its third, the frame below the copy, which reads the buffer across the same
+  byte write in the same model, and the fifth reads the elements past it.
+  Under WP 25 its five parts off the copy's path are proved by Qed, and its
+  part on that path is unproved, as are the same parts of the second and the
+  third on today's tree as on the round's, which WP 29 proves.
+- (M) `extend`'s two proved, from `append_array`'s third and fifth at the
+  call, whose `ok` behaviour applies under `extend`'s `ok` assumption, the
+  same conditions on the same arguments. WP 25 proves both, by Alt-Ergo in
+  0.04 s each.
+- (M) vec's totals, three goals more in each unit. WP 29 splits
+  `append_array`'s postconditions by its paths as WP 25 does, as it pins
+  `ok_ensures_4_part5` today, and keeps `extend`'s, one path, whole. Along a
+  function's code it numbers a frame's parts as WP 25 does, those that
+  simplify to true included: it pins `append_array`'s `assigns_normal_part14`
+  and `assigns_exit_part4`, after thirteen and three parts that WP 25 prints
+  `Prove: true`. At a call the numbering can differ: the residual of
+  `extend`'s `ok` frame, a part of the call's effects, is WP 29's `_part1` and
+  WP 25's `_part2`, the second of the call's two effects, `len`'s and then the
+  elements', so WP 29 orders the two effects otherwise, or generates the
+  frame's parts otherwise, which its pins do not tell apart. The totals assume
+  WP 25's five parts: three on the normal path, the residual among them, and
+  two on the exit path, which WP 29 proves, as it pins none of them today,
+  though how it frames that path was not read here (the block's own text). A
+  frame at a call gains a part on each path in WP 29 too (G18,
+  `vec_int_free`'s `null` frame).
+- (H) memory.h's five functions that state or compute the predicate: their
+  goals proved, in each of the eleven units, as before, and none added or
+  removed.
+- (H) No name leaves a roll-call but those eight, in five units.
+- (M) No other goal changes status: each roll-call is set equality. At the
+  copies and the swap within one buffer the restated precondition states what
+  the old one did, and the restatement changes the hypotheses of the goals
+  after each copy, where WP takes the callee's preconditions as facts, and
+  those goals read nothing the fact constrains. Under WP 25 the 474 goals of
+  the queue's five functions that call memory.h's copy or swap are printed
+  alike on both trees but for their source lines, the predicate called by
+  name, and 57 of them mention it, as a fact after a call or in a call's
+  precondition. With the provers at 120 s the 27 of these among the five
+  functions' call preconditions and `pq_push_result`'s goals keep their status
+  on both trees but the three copies' (above). At 10 s, `pq_swap_`,
+  `pq_pop_raw`, `pq_remove_at_result` and `pq_peek` whole, 380 goals and the
+  other 30 among them, keep theirs but three: `pq_peek`'s copy's, one of the
+  three, and the two parts of the no-overlap precondition at `pq_pop_raw`'s
+  second copy, within the buffer, which prove at 120 s on both trees, by
+  Alt-Ergo in 26 s and 93 s today and by Z3 in 5.3 s and 3.6 s with the
+  restatement. Of the 30, WP 25 proves two at 10 s, on both trees, so for the
+  other 28 the comparison shows nothing; WP 29 proves all 30 today, as it pins
+  none of them. In vec's two functions every goal the trees share keeps its
+  status (above).
+
+**Also predicted.**
+
+- (H) No goal Failed, Failure, Invalid or Stepout in any WP job.
+- (H) The main CI runs, and every job outside the WP units passes: the builds
+  and tests, 54 of 54; static analysis; `misra`, at 54; coverage, at 92.1%
+  MC/DC (1870 of 2030) and 91.6% of branches (1666 of 1818). Read from the
+  logs by the maintainer.
+- (H) The -CC workflow runs, since `core/` and `data/` change; vec and
+  vec_struct at their new pins, and slice, result, option, borrow and deque
+  where they are.
+- (H) The G4 probe runs, since `core/memory.h` changes, as its run #6, and
+  reads as run #5: `Proved goals: 4 / 7`, six scheduled, and the same three
+  not proved, MATCH in its three parts. Its functions call `mem_zero`, whose
+  contract does not state the predicate, and it proves only its six named
+  postconditions.
+- (H) The G13 probe runs, as its run #5, and reads as run #4: report E's 32
+  checks and report W's 10 MATCH. Its nine calls reach `memcmp` through
+  functions that do not state the predicate, and its two forms do not include
+  memory.h. The G11 and G19 probes do not run.
+- (H) Record coverage runs, since the record, the workflow and the pin files
+  change. With the push's base, bd9466e, it takes the seven names as pending
+  and passes; its report is the one above for the branch's head, line for
+  line.
+
+**What it settles.** If the prediction holds, blocks 2 and 4 cover nothing
+pinned but vec's two at `append_array`'s copy, which the score refiles under
+diag.h's block, as block 2's Retirement names, and both retire at the score:
+*A* stays 31 cumulative and goes to 17 in force, *V* stays 19 cumulative and
+goes to 14 in force, and *S* stays 12 cumulative and goes to 3 in force.
+`append_array`'s fifth postcondition is filed in the proved-goal argument at
+rows 27 and 30, under F16 and F13, which already hold: 156 properties at 40
+write sites under 17 facts, from 154; `extend`'s two are dependents, resting
+on `append_array`'s third and fifth, and are not filed again. No fact is
+added, so block 4's verdict is not needed. VERIFY-040's tally is then six of
+the nine not needed, 2, 3, 4, 5, 6 and 9; blocks 1 and 8 predicted needed;
+block 7 to come, in round 3. A run in which a goal of the two blocks stays
+unproved is a miss, read from the log, and the block stays, as the bound says:
+the round tries each Retirement's change and each alternative the table names,
+and nothing further. At the score the figures that read the moved pins are
+brought to the CI's: in `docs/verification.md`, the summary card, summed
+again, its notes giving the bitset, vec and priority-queue jobs' pins, and its
+data/ table's rows for the three; in `docs/traceability.md`, the proof table's
+rows for the three and its total; in `docs/vmacros.md`, its vec and bitset
+rows; the coverage figures the new decision moves, MCDC-012's scope given a
+coverage note (`bitset.h` 134 of 138 outcomes, the four justified as before)
+and `bitset.h`'s 130 of 134 in `docs/traceability.md`, `docs/verification.md`
+and `docs/vmacros.md`, with `docs/traceability.md`'s results table from the
+scoring run's coverage log; and `tools/idioms`' catalogue is rebuilt under the
+memory commit, `\separated` joining `frama-c-memory`'s list, where memory.h
+now writes it, with no kind added.
