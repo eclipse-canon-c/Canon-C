@@ -152,6 +152,12 @@
  *   Permanent named residual; runtime confidence comes from MCDC-010
  *   (fill's three legs measured) and the fuzz invariants. FORWARD-FLAG:
  *   deque's shift loops will hit the same class.
+ *   (Noted 2026-10-21, VERIFY-040 round 3: IMPL_VEC_FILL's loop now
+ *   carries its invariants, frame and variant, written in the macro
+ *   body. This unit's preprocessing strips them, as above, so its 24
+ *   stay; under -CC (VERIFY-025) they reach the loop, and cc-vec and
+ *   cc-vec_struct prove fill's goals. "By construction" holds for
+ *   this unit alone.)
  *
  * Class (e) concretized: the allocation-model residuals are
  *   vec_int_alloc_call_vec_int_init_requires_2 (\fresh cannot establish

@@ -1512,6 +1512,11 @@ linkage void fn(borrowed(VecType*) v, type value, usize count) { \
     if (!v || !v->items) { return; } \
     usize remaining = v->capacity - v->len; \
     usize to_fill   = (count < remaining) ? count : remaining; \
+    /*@ loop invariant 0 <= i <= to_fill;                                        \
+        loop invariant \forall integer k; v->len <= k < v->len + i               \
+        ==> v->items[k] == value;                                                \
+        loop assigns i, v->items[v->len .. v->len + to_fill - 1];                \
+        loop variant to_fill - i; */                                             \
     for (usize i = 0; i < to_fill; i++) { \
         v->items[v->len + i] = value; \
     } \
