@@ -1,72 +1,47 @@
 #!/usr/bin/env python3
 """
 round3_probe.py — the WP runs of .github/workflows/round3-probe.yml
-(VERIFY-040 round 3) and their reading against the committed prediction in
-docs/deviations.md, VERIFY-040 round 3, "the probe's committed prediction".
+(VERIFY-040 round 3) and their reading against the committed predictions in
+docs/deviations.md, VERIFY-040 round 3: "the probe's committed prediction",
+for run #1, and "the fix push: committed prediction", for the runs since.
 
     python3 tools/probes/verify-040/round3_probe.py run
-        Block 1's measurement, on fill's loop with the invariants, frame and
-        variant below (ANNOTATION) written into IMPL_VEC_FILL in a copy of
-        the tree, r3_annotated/, and on the tree as committed:
-          CB, SB  cc-vec's vec_int_fill and cc-vec_struct's vec_Rec_fill as
-                  committed, under -CC, as the -CC units run them, with Qed,
-                  WP's simplifier, as the only prover;
-          CP, SP  the same, annotated, with the CI's provers, Alt-Ergo, Z3
-                  and CVC5 at 120 s, and -wp-print;
-          VB, VH  frama-c-vec's vec_int_fill, under the home unit's
-                  preprocessing, which keeps no comment written in a macro
-                  body: as committed and annotated, with Qed alone.
-        Block 7's trial, with the CI's provers, as frama-c-bitset runs WP, on
-        tools/probes/verify-040/p_padding_lemmas.h, which includes bitset's
-        driver and states three lemmas:
+        Block 7's trial, with the CI's provers, Alt-Ergo, Z3 and CVC5 at
+        120 s, as frama-c-bitset runs WP (Typed+Cast, -wp-rte, -wp-split, its
+        preprocessing), on tools/probes/verify-040/p_padding_lemmas.h, which
+        includes bitset's driver and states three lemmas:
           L  the three lemmas, each a goal of its own (-wp-prop);
           F  bitset_set, bitset_clear, bitset_toggle and bitset_clear_padding,
              whose goals have the lemmas as hypotheses (-wp-fct).
-        Every run is Typed+Cast, with -wp-rte and -wp-split, the units' model
-        and options. Output, for each run X: wp_X.txt, the log; wp_X.json, the
-        statistics per function and property (WP 29's
-        -wp-deprecated-report-json, WP 25's -wp-report-json); on WP 29
-        wp_X_goals.json, the per-goal report, which WP 29 writes for the
-        goals it schedules for a prover, Qed among them. Exits 1, with each
-        failed run's last lines posted as an error annotation, if a run fails
-        or writes no statistics.
+        Run #1 also measured block 1's change, an invariant, a frame and a
+        variant for IMPL_VEC_FILL's loop, written in a copy of the tree; the
+        fix push wrote it into data/vec/vec_impl.h, where the -CC units prove
+        it, and its six runs were retired with it.
+        Output, for each run X: wp_X.txt, the log; wp_X.json, the statistics
+        per function and property (WP 29's -wp-deprecated-report-json, WP
+        25's -wp-report-json); on WP 29 wp_X_goals.json, the per-goal report.
+        Exits 1, with each failed run's last lines posted as an error
+        annotation, if a run fails or writes no statistics.
 
     python3 tools/probes/verify-040/round3_probe.py report
         reads that output and prints MATCH or MISS, with its confidence, for
         each predicted part, or NO DATA where a part has nothing to read. The
-        log needs a sign-in, so it also posts the verdicts, each run's counts
-        and the goals with a prover that did not prove, and, for CP and SP,
-        the goals by property and the run-time checks as printed, each with
-        the definitions its goal reads, as notices on the run page, and
-        everything to the step summary. WP 29 prints no goal's name: its
-        printed checks pair with the per-goal report's names in print order,
-        property by property and part by part. Exits 1 on a MISS, else 2 on
-        NO DATA.
+        log needs a sign-in, so it also posts the verdicts and each run's
+        counts and goals not proved as notices on the run page, and
+        everything to the step summary. Exits 1 on a MISS, else 2 on NO DATA.
 
 Run from the repository root, with frama-c on PATH.
 """
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
 
-COPY = "r3_annotated"
-IMPL = "data/vec/vec_impl.h"
-ANCHOR = ("    usize to_fill   = (count < remaining) ? count : remaining; \\\n"
-          "    for (usize i = 0; i < to_fill; i++) { \\\n")
-# Each line ends in a continuation at column 82, as IMPL_VEC_FILL's contract.
-ANNOTATION = "".join(line.ljust(81) + "\\\n" for line in [
-    "    /*@ loop invariant 0 <= i <= to_fill;",
-    "        loop invariant \\forall integer k; v->len <= k < v->len + i",
-    "        ==> v->items[k] == value;",
-    "        loop assigns i, v->items[v->len .. v->len + to_fill - 1];",
-    "        loop variant to_fill - i; */",
-])
 LEMMA_HDR = "tools/probes/verify-040/p_padding_lemmas.h"
-LEMMAS = [("bitset_shr_zero_bits", "M"), ("bitset_bits_shr_zero", "H"),
+# Run #1 found none of the three proved; the fix push predicts the same.
+LEMMAS = [("bitset_shr_zero_bits", "H"), ("bitset_bits_shr_zero", "H"),
           ("bitset_mask_bits", "H")]
 BITSET_FUNCS = ["bitset_set", "bitset_clear", "bitset_toggle", "bitset_clear_padding"]
 BLOCK7 = ["typed_cast_bitset_set_live_ensures_3_part3",
@@ -80,31 +55,18 @@ PROVERS = "alt-ergo,z3,cvc5"
 # "failure", "noresult" and "computing" are kept for any other spelling.
 BAD = {"failed", "failure", "invalid", "stepout", "none", "noresult", "computing"}
 P = "typed_cast_"
-WP25_ADDED = 27     # goals the annotation adds to each fill, as WP 25 makes them
 LIMIT = 3800        # the runner cuts an annotation's message at 4096
 SUMMARY = os.environ.get("GITHUB_STEP_SUMMARY")
 verdicts = []       # (MATCH, MISS or NO DATA, confidence, label, detail)
 notes = []
 pending = []        # annotations, printed at the end, the verdicts first
 
-INT, REC = "vec_int_fill", "vec_Rec_fill"
-CC_VEC = "vmacros/vdrivers/vec_cc_experiment.h"
-CC_REC = "vmacros/vdrivers/vec_struct_cc_experiment.h"
-HOME = "vmacros/vdrivers/vec_verify.h"
-# run: (tree, file, -CC?, provers, selection, -wp-print?, functions read)
+# run: (selection, functions read)
 RUNS = {
-    "CB": (".", CC_VEC, True, "qed", ["-wp-fct", INT], False, [INT]),
-    "SB": (".", CC_REC, True, "qed", ["-wp-fct", REC], False, [REC]),
-    "VB": (".", HOME, False, "qed", ["-wp-fct", INT], False, [INT]),
-    "VH": (COPY, HOME, False, "qed", ["-wp-fct", INT], False, [INT]),
-    "CP": (COPY, CC_VEC, True, PROVERS, ["-wp-fct", INT], True, [INT]),
-    "SP": (COPY, CC_REC, True, PROVERS, ["-wp-fct", REC], True, [REC]),
-    "L": (".", LEMMA_HDR, False, PROVERS, ["-wp-prop", ",".join(n for n, _ in LEMMAS)],
-          False, []),
-    "F": (".", LEMMA_HDR, False, PROVERS, ["-wp-fct", ",".join(BITSET_FUNCS)], False,
-          BITSET_FUNCS),
+    "L": (["-wp-prop", ",".join(n for n, _ in LEMMAS)], []),
+    "F": (["-wp-fct", ",".join(BITSET_FUNCS)], BITSET_FUNCS),
 }
-ORDER = ["CB", "SB", "VB", "VH", "CP", "SP", "L", "F"]
+ORDER = ["L", "F"]
 
 
 def esc(s):
@@ -112,26 +74,6 @@ def esc(s):
 
 
 # ── run ──────────────────────────────────────────────────────────────────────
-
-def make_copy():
-    """r3_annotated/: the tree with ANNOTATION written into IMPL_VEC_FILL."""
-    if os.path.isdir(COPY):
-        shutil.rmtree(COPY)
-    shutil.copytree(".", COPY, ignore=shutil.ignore_patterns(".git", COPY, "wp_*"))
-    path = os.path.join(COPY, IMPL)
-    with open(path) as fh:
-        text = fh.read()
-    if text.count(ANCHOR) != 1:
-        print("FAILED: IMPL_VEC_FILL's loop found %d times in %s, not once"
-              % (text.count(ANCHOR), IMPL))
-        print("::error title=round 3 probe::the loop to annotate was found %d times in %s"
-              % (text.count(ANCHOR), IMPL))
-        sys.exit(1)
-    first, second = ANCHOR.split("\n")[:2]
-    with open(path, "w") as fh:
-        fh.write(text.replace(ANCHOR, first + "\n" + ANNOTATION + second + "\n"))
-    print("%s/%s: IMPL_VEC_FILL's loop annotated" % (COPY, IMPL))
-
 
 def run_all():
     try:
@@ -149,32 +91,25 @@ def run_all():
     else:
         stats_opt, goals_opt = None, None
     print("statistics report: %s; per-goal report: %s" % (stats_opt, goals_opt))
-    make_copy()
-    here = os.getcwd()
     failed = []
     for run in ORDER:
-        tree, src, cc, provers, sel, prt, _ = RUNS[run]
-        out = {k: os.path.join(here, "wp_%s%s" % (run, k))
-               for k in (".txt", ".json", "_goals.json")}
+        sel = RUNS[run][0]
+        out = {k: "wp_%s%s" % (run, k) for k in (".txt", ".json", "_goals.json")}
         for f in out.values():
             if os.path.exists(f):
                 os.remove(f)
         cmd = ["frama-c", "-wp", "-wp-rte", "-wp-model", "Typed+Cast",
-               "-wp-prover", provers]
-        if provers != "qed":
-            cmd += ["-wp-timeout", "120"]
-        cmd += ["-wp-split"] + (["-wp-print"] if prt else []) + sel
+               "-wp-prover", PROVERS, "-wp-timeout", "120", "-wp-split"] + sel
         if stats_opt:
             cmd += [stats_opt, out[".json"]]
         if goals_opt:
             cmd += [goals_opt, out["_goals.json"]]
-        cmd += ["-cpp-extra-args=%s%s" % ("-CC " if cc else "", CPP), src]
-        print("=== %s, in %s: %s" % (run, tree, " ".join(cmd)))
+        cmd += ["-cpp-extra-args=%s" % CPP, LEMMA_HDR]
+        print("=== %s: %s" % (run, " ".join(cmd)))
         sys.stdout.flush()
         start = time.time()
         with open(out[".txt"], "w") as fh:
-            status = subprocess.run(cmd, cwd=os.path.join(here, tree), stdout=fh,
-                                    stderr=subprocess.STDOUT).returncode
+            status = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT).returncode
         print("    exit status %d, %d s" % (status, time.time() - start))
         with open(out[".txt"], errors="replace") as fh:
             for line in fh:
@@ -216,10 +151,9 @@ def load_json(path, run):
 
 def read_run(run):
     """{proved, total: the summary line; stats; goals, the per-goal report;
-    verdicts {goal: valid?} and src, where they come from; printed [{gid,
-    title, body}]}."""
+    verdicts {goal: valid?} and src, where they come from}."""
     out = {"proved": None, "total": None, "stats": None, "goals": None,
-           "verdicts": {}, "src": None, "printed": []}
+           "verdicts": {}, "src": None}
     log = "wp_%s.txt" % run
     if not os.path.exists(log):
         notes.append("%s: no output file" % run)
@@ -245,36 +179,6 @@ def read_run(run):
     elif logged:
         out["verdicts"], out["src"] = logged, "log"
     out["stats"] = load_json("wp_%s.json" % run, run)
-    # The printed goals: "Goal <title>:", the title wrapped onto the next
-    # line where it is long, then the goal up to a line of dashes. A local
-    # WP 25 built to name each goal prints "GID <name>" on the line before;
-    # WP 29 names none.
-    cur, gid, title = None, None, None
-    for line in lines:
-        if title is not None:
-            title += " " + line.strip()
-            if title.endswith(":"):
-                cur = {"title": title[:-1].strip(), "body": [], "gid": gid}
-                out["printed"].append(cur)
-                title, gid = None, None
-            continue
-        m = re.match(r"^GID (\S+)$", line)
-        if m:
-            gid = m.group(1)
-            continue
-        m = re.match(r"^Goal (.*)$", line)
-        if m:
-            title = m.group(1).rstrip()
-            if title.endswith(":"):
-                cur = {"title": title[:-1].strip(), "body": [], "gid": gid}
-                out["printed"].append(cur)
-                title, gid = None, None
-            continue
-        if cur is not None:
-            if re.match(r"^-{20,}$", line):
-                cur = None
-            else:
-                cur["body"].append(line)
     return out
 
 
@@ -350,98 +254,15 @@ def summary(lines):
 
 
 def describe(run, d):
-    funcs = RUNS[run][6]
+    funcs = RUNS[run][1]
     stats = "; statistics: %s" % ", ".join("%s %s" % (f, stats_total(d, f))
                                            for f in funcs) if funcs else ""
-    line = "%s: summary %s / %s%s; %d goals with a verdict (%s)" % (
-        run, d["proved"], d["total"], stats, len(d["verdicts"]), d["src"])
-    if RUNS[run][3] != "qed":
-        line += "; not proved: %s" % (", ".join(not_proved(d["verdicts"])) or "none")
-    return line
-
-
-def by_property(run, d, fn):
-    """fn's goals, property by property: each goal's name less the model, the
-    function and its part, with how many of its goals proved."""
-    groups = {}
-    for g, v in sorted(of_funcs(d["verdicts"], [fn]).items()):
-        prop = re.sub(r"_part\d+$", "", g[len(P) + len(fn) + 1:])
-        n, ok = groups.get(prop, (0, 0))
-        groups[prop] = (n + 1, ok + (1 if v else 0))
-    return ["%s %s: %s" % (run, fn, ", ".join("%s %d of %d" % (p, ok, n)
-                                             for p, (n, ok) in sorted(groups.items()))
-                           or "no goal with a verdict")]
-
-
-def logical_lines(body):
-    """A printed goal's lines, each with the indented lines after it, which
-    continue it, joined on: "Let a = ...", "Assume { ... }", "Prove: ..."."""
-    out = []
-    for line in body:
-        if not line.strip():
-            continue
-        if out and line[0].isspace():
-            out[-1] += " " + line.strip()
-        else:
-            out.append(line.strip())
-    return out
-
-
-def rte_printed(run, d):
-    """The run-time checks as WP printed them, in order: title, goal, and the
-    definitions the goal reads (WP's "Let" lines), followed through, since
-    the goal alone, valid_rw(Malloc_0, a, 1), does not say which access it
-    is."""
-    out = []
-    for g in d["printed"]:
-        if "rte" not in g["title"]:
-            continue
-        lets, prove = {}, ""
-        for line in logical_lines(g["body"]):
-            m = re.match(r"^Let (\w+) = (.*?)\.?$", line)
-            if m:
-                lets[m.group(1)] = m.group(2)
-            elif line.startswith("Prove:") and not prove:
-                prove = line
-        names, todo = [], re.findall(r"[A-Za-z_]\w*", prove)
-        while todo:
-            v = todo.pop(0)
-            if v in lets and v not in names:
-                names.append(v)
-                todo += re.findall(r"[A-Za-z_]\w*", lets[v])
-        where = ", ".join("%s = %s" % (v, lets[v]) for v in names)
-        out.append("%s%s | %s%s" % ("%s | " % g["gid"] if g["gid"] else "", g["title"],
-                                    prove[:300] or "no Prove line",
-                                    " | where " + where[:300] if where else ""))
-    return out or ["%s: no run-time check printed" % run]
+    return "%s: summary %s / %s%s; %d goals with a verdict (%s); not proved: %s" % (
+        run, d["proved"], d["total"], stats, len(d["verdicts"]), d["src"],
+        ", ".join(not_proved(d["verdicts"])) or "none")
 
 
 def predictions(D):
-    # Block 1.
-    for run, fn in (("CP", INT), ("SP", REC)):
-        vs = of_funcs(D[run]["verdicts"], [fn])
-        check("M", "block 1: under -CC, with the annotation, every goal of %s proves" % fn,
-              None if not vs else all(vs.values()),
-              "%d goals, not proved: %s" % (len(vs), ", ".join(not_proved(vs)) or "none"))
-    for base, ann, fn in (("CB", "CP", INT), ("SB", "SP", REC)):
-        b, h = D[base]["total"], D[ann]["total"]
-        sb, sh = stats_total(D[base], fn), stats_total(D[ann], fn)
-        check("L", "block 1: under -CC the annotation adds %d goals to %s, as WP 25 makes them"
-              % (WP25_ADDED, fn), None if b is None or h is None else h - b == WP25_ADDED,
-              "summary lines %s as committed and %s annotated, %s; statistics %s and %s" % (
-                  b, h, "%+d" % (h - b) if b is not None and h is not None else "?", sb, sh))
-    vb, vh = D["VB"], D["VH"]
-    nb, nh = set(of_funcs(vb["verdicts"], [INT])), set(of_funcs(vh["verdicts"], [INT]))
-    same = None
-    if vb["total"] is not None and vh["total"] is not None:
-        same = (vb["total"], vb["proved"], stats_total(vb, INT)) == \
-               (vh["total"], vh["proved"], stats_total(vh, INT)) and nb == nh
-    check("H", "block 1: frama-c-vec's preprocessing keeps no annotation in IMPL_VEC_FILL: "
-          "vec_int_fill's goals the same, annotated or not",
-          same, "summary lines %s / %s and %s / %s, statistics %s and %s, names %s" % (
-              vb["proved"], vb["total"], vh["proved"], vh["total"], stats_total(vb, INT),
-              stats_total(vh, INT), "equal" if nb == nh else "differ"))
-    # Block 7.
     for name, conf in LEMMAS:
         g = lemma_goals(name, D["L"]["verdicts"])
         check(conf, "block 7: lemma %s not proved" % name,
@@ -472,20 +293,16 @@ def predictions(D):
     check("H", "every run printed its summary line and wrote its statistics%s, and in "
           "each the goals listed as not proved account for its summary line"
           % (" and its per-goal report" if wp29 else ""), not gaps, "; ".join(gaps))
-    # A refutation, or a prover that gave no answer, in the runs with provers;
-    # with Qed alone a goal Qed does not prove has no prover's answer.
     bad, seen = [], False
     for run in ORDER:
-        if RUNS[run][3] == "qed":
-            continue
         goals = D[run]["goals"]
         if isinstance(goals, list):
             seen = True
             bad += ["%s %s %s" % (run, short(str(g.get("goal"))), g.get("verdict"))
                     for g in goals if isinstance(g, dict)
                     and str(g.get("verdict", "")).lower() in BAD]
-    check("H", "no goal Failed, Failure, Invalid, Stepout or NoResult in the runs with "
-          "provers, by WP 29's per-goal reports", None if not seen else not bad,
+    check("H", "no goal Failed, Failure, Invalid, Stepout or NoResult, by WP 29's "
+          "per-goal reports", None if not seen else not bad,
           ", ".join(bad) or ("none" if seen else "no per-goal report (WP 25)"))
 
 
@@ -502,19 +319,6 @@ def main():
         print(line)
     annotate("notice", "round 3 probe: the runs", runs)
     summary(["### Runs"] + ["- " + x for x in runs])
-    for run, fn in (("CP", INT), ("SP", REC)):
-        props = by_property(run, D[run], fn)
-        rte = rte_printed(run, D[run])
-        print("--- %s: %s's goals by property" % (run, fn))
-        for line in props:
-            print("  " + line)
-        print("--- %s: the run-time checks as printed" % run)
-        for line in rte:
-            print("  " + line)
-        annotate("notice", "round 3 probe %s: goals by property" % run, props)
-        annotate("notice", "round 3 probe %s: run-time checks as printed" % run, rte)
-        summary(["### %s: %s's goals by property" % (run, fn)] + ["- " + x for x in props]
-                + ["", "### %s: the run-time checks as printed" % run] + ["- " + x for x in rte])
     predictions(D)
     for n in notes:
         print("NOTE: " + n)
@@ -526,9 +330,6 @@ def main():
     bad = [(v, c, l, d) for v, c, l, d in verdicts if v != "MATCH"]
     for v, c, l, d in bad[:9]:
         annotate("error", "round 3 probe: %s (%s)" % (v, c), [l + (": " + d if d else "")])
-    if len(bad) > 9:
-        annotate("error", "round 3 probe", ["and %d more; see the verdicts notice"
-                                            % (len(bad) - 9)])
     flush(first)
     if any(v == "MISS" for v, _, _, _ in bad):
         sys.exit(1)

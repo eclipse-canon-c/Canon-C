@@ -12,13 +12,13 @@ Run from the repository root, with the repository's history. Exact commands
 are in the file's header. The count probe runs WP, with Qed alone, on
 `vmacros/vdrivers/vec_verify.h`, the driver `frama-c-vec` verifies, as
 committed and as it was at bd9466e, which `git show` writes at the
-repository root as `wp_B_vec_verify.h`. The round 3 probe runs WP on `fill`'s
-function in vec's three units, as committed and in a copy of the tree with
-`IMPL_VEC_FILL`'s loop annotated, which it writes as `r3_annotated/`, and on
+repository root as `wp_B_vec_verify.h`. The round 3 probe runs WP on
 `p_padding_lemmas.h`, which includes bitset's driver and states three lemmas
-after it.
+after it; its run #1 also ran WP on `fill`'s function in vec's three units,
+as committed and in a copy of the tree with `IMPL_VEC_FILL`'s loop annotated,
+runs retired when the fix push wrote the annotation into the tree.
 
 | Probe | Question | Predicted |
 |---|---|---|
 | `count_probe.py` | VERIFY-040 round 2: which clause of `vec_int_append_array` or `vec_int_extend` WP 29 splits otherwise than WP 25, so that each vec unit gained five goals at CI #1375 and CC #56 where the prediction said three | the two functions' goals five more than at bd9466e's driver; `append_array`'s fifth `ok` postcondition in six parts and `extend`'s two new ones one goal each, as WP 25 makes them; `extend`'s old `ok` frame in three goals where WP 25 makes five: one call effect on each path, where WP 25 makes two, and the call's result. Run #1 (d2ad2d6) scored as predicted in every part: 196 goals and 191, `extend`'s old `ok` frame three goals |
-| `round3_probe.py`, `p_padding_lemmas.h` | VERIFY-040 round 3: what WP 29 makes of an invariant, a frame and a variant for `fill`'s loop, and whether the CI's provers prove them, under `-CC` and under `frama-c-vec`'s preprocessing; and whether they prove three lemmas for the bit-level steps of block 7's four goals, and the four goals with the lemmas as hypotheses | `bitset_shr_zero_bits` not proved (M), `bitset_bits_shr_zero` and `bitset_mask_bits` not proved (H); with the three, every goal of the four functions proved (M); `fill`'s goals under `-CC`, annotated, all proved (M), 27 more at each type (L); `frama-c-vec`'s the same, annotated or not (H) |
+| `round3_probe.py`, `p_padding_lemmas.h` | VERIFY-040 round 3: what WP 29 makes of an invariant, a frame and a variant for `fill`'s loop, and whether the CI's provers prove them, under `-CC` and under `frama-c-vec`'s preprocessing; and whether they prove three lemmas for the bit-level steps of block 7's four goals, and the four goals with the lemmas as hypotheses | `bitset_shr_zero_bits` not proved (M), `bitset_bits_shr_zero` and `bitset_mask_bits` not proved (H); with the three, every goal of the four functions proved (M); `fill`'s goals under `-CC`, annotated, all proved (M), 27 more at each type (L); `frama-c-vec`'s the same, annotated or not (H). Run #1 (79d9e72) scored as predicted but for the two counts rated (L): the lemmas not proved, the four goals and `fill`'s annotated goals proved, and WP 29's count 16 summary entries more at each type, 15 goals, where WP 25's is 27 goals. Block 1's runs retired with the fix push; L and F predicted as at run #1 |

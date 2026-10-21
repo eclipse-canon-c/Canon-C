@@ -1,39 +1,35 @@
-name: Round 3 probe (VERIFY-040 round 3, fill's loop and bitset's padding lemmas)
+name: Round 3 probe (VERIFY-040 round 3, bitset's padding lemmas)
 
 # ---------------------------------------------------------------------------
 # VERIFY-040 round 3 — an experiment, not a gate. It runs when the probe's
 # script, its lemma file, this file or the toolchain pins change, and on
-# demand; it never touches the enforced jobs, and its result is scored in
-# docs/deviations.md, VERIFY-040 round 3, "the probe's committed
+# demand; it never touches the enforced jobs, and its results are scored in
+# docs/deviations.md, VERIFY-040 round 3: run #1 against "the probe's
+# committed prediction", the runs since against "the fix push: committed
 # prediction".
 #
-# QUESTION: blocks 1 and 7 are the last two of the nine, and each is tried
-# here before any fix commit. Block 1's change is an invariant, a frame and a
-# variant for fill's loop, written into IMPL_VEC_FILL, which only the -CC
-# units read: how many goals WP 29 makes of it, and whether the CI's provers
-# prove them, give the fix push its -CC pins. Block 7's change is lemmas for
-# the bit-level steps of its four goals. A lemma WP does not prove is not
-# admissible, and in data/bitset.h every goal of the unit would take it as a
-# hypothesis, so it is tried here first: whether the CI's provers prove the
-# lemmas decides block 7's verdict.
+# QUESTION: block 7's change is lemmas for the bit-level steps of its four
+# goals. A lemma WP does not prove is not admissible, and in data/bitset.h
+# every goal of the unit could rest on it, so it is tried here: whether the
+# CI's provers prove the lemmas decides block 7's verdict, and whether the
+# four goals prove with them says what the block is needed for. Run #1 also
+# measured block 1's change, an invariant, a frame and a variant for fill's
+# loop, in a copy of the tree; the fix push wrote it into IMPL_VEC_FILL, and
+# those runs were retired with it.
 #
-# PROBE: tools/probes/verify-040/round3_probe.py runs WP as the units run it
-# (Typed+Cast, -wp-rte, -wp-split, their preprocessing): on fill's function
-# in cc-vec, cc-vec_struct and frama-c-vec, as committed and on a copy of the
-# tree with the annotation written in (r3_annotated/), with Qed alone or with
-# the CI's provers, Alt-Ergo, Z3 and CVC5 at 120 s; and, with those provers,
-# on tools/probes/verify-040/p_padding_lemmas.h, which includes bitset's
-# driver and states the three lemmas: the lemmas, each a goal of its own, and
-# the four functions of block 7's goals, which have the lemmas as hypotheses.
+# PROBE: tools/probes/verify-040/round3_probe.py runs WP as frama-c-bitset
+# runs its driver (Typed+Cast, -wp-rte, -wp-split, its preprocessing), with
+# the CI's provers, Alt-Ergo, Z3 and CVC5 at 120 s, on
+# tools/probes/verify-040/p_padding_lemmas.h, which includes bitset's driver
+# and states the three lemmas: the lemmas, each a goal of its own, and the
+# four functions of block 7's goals, which have the lemmas as hypotheses.
 #
-# PREDICTED before it ran (docs/deviations.md, VERIFY-040 round 3, "the
-# probe's committed prediction"). The report step prints MATCH or MISS, with
-# its confidence, for each part, or NO DATA where a part has nothing to read.
-# The log needs a sign-in, so the step also posts its verdicts, each run's
-# counts, and fill's goals by property and its run-time checks as printed,
-# with the definitions each reads, as notices on the run page, and an error
-# annotation for each MISS or NO DATA; it exits 1 on a MISS, else 2 on NO
-# DATA. The WP step fails if a run fails or writes no statistics.
+# PREDICTED before it ran. The report step prints MATCH or MISS, with its
+# confidence, for each part, or NO DATA where a part has nothing to read. The
+# log needs a sign-in, so the step also posts its verdicts and each run's
+# counts as notices on the run page, and an error annotation for each MISS
+# or NO DATA; it exits 1 on a MISS, else 2 on NO DATA. The WP step fails if
+# a run fails or writes no statistics.
 # ---------------------------------------------------------------------------
 
 on:
@@ -56,7 +52,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
 
-      - name: "WP: fill's loop, annotated and not; bitset's three lemmas"
+      - name: "WP: bitset's three lemmas, and the four functions with them"
         run: |
           eval $(opam env --switch=frama-c)
           python3 tools/probes/verify-040/round3_probe.py run
