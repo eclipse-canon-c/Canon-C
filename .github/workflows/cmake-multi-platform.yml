@@ -3139,7 +3139,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-040 round 2 predicted: 5479/5572, 93 unproved (round 1: 5475/5569, 94; G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
+          echo "  baseline: VERIFY-040 round 2, CI #1375: 5481/5574, 93 unproved (predicted: 5479/5572; round 1: 5475/5569, 94; G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3195,8 +3195,12 @@ jobs:
           # the new elements, six parts added, and extend its frame as two
           # postconditions, its ok clause's five parts gone, the unproved one
           # among them; all added goals proved (5475 / 5569 before).
-          if [ "${PROVED_COUNT}" != "5479 / 5572" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5479 / 5572)."
+          # Measured at CI #1375: 5481 / 5574 and 93, two goals more than
+          # predicted, both proved, the roll-call as predicted: WP 29 makes at
+          # least one changed clause into other parts than WP 25 (VERIFY-040
+          # round 2, scored, and the count probe).
+          if [ "${PROVED_COUNT}" != "5481 / 5574" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5481 / 5574)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -3212,7 +3216,7 @@ jobs:
           # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
           # flip, so proved moves +40 (5231 -> 5271) and the residual set
           # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
-          EXPECTED_UNPROVED=93   # VERIFY-040 round 2 predicted: 94 -> 93 (round 1 predicted: 95 -> 94; VERIFY-039 G18 predicted: 97 -> 95; G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
+          EXPECTED_UNPROVED=93   # VERIFY-040 round 2 predicted: 94 -> 93, held at CI #1375 (round 1 predicted: 95 -> 94; VERIFY-039 G18 predicted: 97 -> 95; G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
           TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
           UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
           FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt || true)

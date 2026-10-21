@@ -125,8 +125,11 @@ jobs:
           # frame above the new elements, six parts added, and extend its
           # frame as two postconditions, its ok clause's five parts gone, the
           # unproved one among them, in vec and vec_struct. Before: vec
-          # 5484 / 5578 and 94, vec_struct 5482 / 5576 and 94.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5488 / 5581", unproved: 93  }
+          # 5484 / 5578 and 94, vec_struct 5482 / 5576 and 94. Measured at
+          # CC #56: vec 5490 / 5583 and vec_struct 5488 / 5581, 93 each, two
+          # goals more each than predicted, both proved, the roll-calls as
+          # predicted (VERIFY-040 round 2, scored, and the count probe).
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5490 / 5583", unproved: 93  }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
@@ -135,7 +138,7 @@ jobs:
           # VERIFY-039 G2: predicted pin, as cc-vec's; G3 ratcheted at CC #31.
           # VERIFY-039 G18: predicted pin, as cc-vec's. Before: 5477 / 5574
           # and 97.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5486 / 5579", unproved: 93  }
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5488 / 5581", unproved: 93  }
     steps:
       - uses: actions/checkout@v6
 
