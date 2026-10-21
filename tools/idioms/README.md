@@ -29,7 +29,7 @@ instances of known ones.
 builds `catalogue.json` from **every Frama-C job in the CI workflow**, each with
 its own translation unit and preprocessor flags, so the catalogue covers exactly
 what CI verifies (22 jobs, 21 units). Each entry lists the jobs it comes from.
-At 642ad8a (CI #1372): 42 ACSL features, 22 C features and 8 family features,
+At 2d36ca1 (CI #1375): 42 ACSL features, 22 C features and 8 family features,
 over the 41 repository files the verified units include. The first build, at
 6290f4a (CI #1337), had 37 ACSL features; VERIFY-039 G11's repair of option's
 and result's drivers wrote `\valid_function` and the `terminates` clause (39
@@ -41,7 +41,10 @@ allocation wrappers wrote `allocates` and `frees`, and stated
 `pool_alloc_zero`'s result, the only pointer result a contract left
 unconstrained, so that shape left the catalogue (41 at 806bdeb, CI #1369).
 G19's and G20's repair of `region_end` wrote its hook rule as a predicate in
-an `axiomatic` block, the first a verified unit reads.
+an `axiomatic` block, the first a verified unit reads (42 at 642ad8a,
+CI #1372). VERIFY-040 round 2 stated memory.h's `regions_overlap` by
+`\separated`, so the built-in joined `frama-c-memory`'s list, and no
+kind was added.
 
     python3 tools/idioms/extract.py crosscheck
 
