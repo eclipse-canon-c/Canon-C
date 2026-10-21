@@ -87,9 +87,11 @@ Sources:
                                                   the filed-by-name tables;
                                                   the proved-goal block's rows
 
-Limits, stated: two retired blocks, VERIFY-009's Category 2c and borrow's
-own, have no goal table and no goal filed by name under them, and are
-reported as not joined; a block in force that is not joined fails --strict.
+Limits, stated: three retired blocks, VERIFY-009's Category 2c, borrow's
+own and, since VERIFY-040 round 2, VERIFY-039's on byte ranges compared by
+pointer order across objects, have no goal table and no goal filed by name
+under them, and are reported as not joined; a block in force that is not
+joined fails --strict.
 Option's and result's blocks have no goal table of their own, their goals
 filed by name under them (VERIFY-039, the main pass). bits.h's roll-call is a
 documented 6-of-15 sample, and bitset's pins all 15; two of the sample's
