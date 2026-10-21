@@ -22160,7 +22160,7 @@ and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
 |----------------|-------|
 | **ID**         | VERIFY-040 |
 | **Date**       | 2026-10-20 |
-| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3 to come |
+| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3's probe predicted (`fill`'s loop annotated in a copy of the tree and measured under `-CC` and the home unit's preprocessing; bitset's three padding lemmas tried as goals of their own and as the hypotheses of block 7's four goals); its run, round 3's fix and their score to come |
 | **Baseline**   | 6043e19 (CI #1373, CC #54) |
 | **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
 
@@ -23616,3 +23616,253 @@ verdicts do not move.
 passes with no name pending, its report the score's. The main CI, the -CC
 workflow and the probes do not run: the push changes `docs/deviations.md` and
 the count probe's README, which the main CI ignores and no probe's paths name.
+
+### VERIFY-040 round 3 — `fill`'s loop and the padding word's lemmas: the probe's committed prediction (before the probe and the fix commits)
+
+**Decision (2026-10-21).** Round 3 tries the changes that blocks 1 and 7, the
+last two of the nine, name in their Retirement paragraphs; the
+pre-registration's table names no alternative for either. Block 1's is an
+invariant, a frame and a variant for `IMPL_VEC_FILL`'s loop, written in the
+macro body before the `for`, each line ending in the macro's continuation as
+the contract's lines do:
+
+```
+/*@ loop invariant 0 <= i <= to_fill;
+    loop invariant \forall integer k; v->len <= k < v->len + i
+    ==> v->items[k] == value;
+    loop assigns i, v->items[v->len .. v->len + to_fill - 1];
+    loop variant to_fill - i; */
+```
+
+Only the -CC units read it. `frama-c-vec`'s preprocessing keeps no comment
+written in a macro body, so that unit's 24 stay whatever round 3 shows, as the
+pre-registration predicts. Block 7's is three lemmas, each a goal of its own,
+that state the bit-level steps its four goals take:
+
+- `bitset_shr_zero_bits`: for `0 <= r <= j`, an integer that shifts right by
+  `r` to 0 has no bit `j`, `(x & (1 << j)) == 0`;
+- `bitset_bits_shr_zero`: for `0 <= r <= 63`, a `u64` with no bit from `r` to
+  63 shifts right by `r` to 0;
+- `bitset_mask_bits`: for `0 < r <= j < 64`, the mask that
+  `bitset_clear_padding` builds, `(u64)((u64)((u64)1 << r) - 1)`, has no bit
+  `j`.
+
+They are the Retirement's change, "ACSL lemmas for the identities", in the
+form that reaches the goals (below). Its other change, a prover that reasons
+on bit vectors, is a change to the tool, which the pre-registration does not
+admit.
+
+**Each change is of a kind the pre-registration admits, or is not committed.**
+The loop's two invariants, `loop assigns` and `loop variant`, and the lemmas
+are annotations that WP proves as goals of their own, and each is admitted
+only if WP proves it. One it does not prove is an annotation it assumes
+without proving: an invariant, frame or variant is a hypothesis of the goals
+after it, in the loop and after the loop, and a lemma in `data/bitset.h` could
+be one of every goal of `frama-c-bitset`'s unit. The loop's annotations are a
+comment in a macro body, so the code the compiler compiles is as it was.
+
+**In two steps.** The changes are run first in a probe, before any fix commit:
+`tools/probes/verify-040/round3_probe.py`, which
+`.github/workflows/round3-probe.yml` runs. For block 7 the probe is the trial.
+The lemmas are stated in `tools/probes/verify-040/p_padding_lemmas.h`, after
+an include of bitset's driver, and WP runs them as `frama-c-bitset` runs its
+driver, with the CI's three provers at 120 s; a lemma reaches `data/bitset.h`
+only if it proves. For block 1 the probe measures, on a copy of the tree, the
+goals WP 29 makes of the annotation and whether the CI's provers prove them,
+so that the fix push's -CC pins are WP 29's counts, read from the probe's run,
+and not WP 25's: round 2's count probe found WP 29 making some clauses into
+other goals than WP 25. The fix push follows the probe's run, with a
+prediction of its own committed before its fix commits; where its totals rest
+on the probe's counts, it says so, and rates them as the count probe's score
+commits.
+
+**Before the prediction.** WP 25, patched as round 1's prediction says, with
+Z3 4.8.12 and CVC4 1.8 at 60 s, the provers at hand, and `-wp-split`; the CI's
+WP 29 and its provers are not at hand here.
+
+- Block 1, in `cc-vec`'s and `cc-vec_struct`'s units: `vec_int_fill` and
+  `vec_Rec_fill` have 45 goals each as committed and 72 each annotated, all 72
+  proved, by Qed or by Z3 or CVC4 in under a second; Qed alone proves 16 of
+  the 45 and 45 of the 72. The 27 added are the first invariant's 8 goals, the
+  second's 4, the frame's 5 and the variant's 4, and two parts more in each of
+  the three `assigns` clauses' goals, the default's, `skip`'s and `live`'s. WP
+  25 makes no termination goal; WP 29 does, and pins two at each type (the
+  block's rows 1, 2, 25 and 26).
+- Block 1, in `frama-c-vec`'s unit, under its preprocessing: `vec_int_fill`
+  has 45 goals as committed and annotated alike, the same property by
+  property, Qed alone proving 16 of them in both. The annotation does not
+  reach the unit.
+- Block 7, the four functions of its goals, `bitset_set`, `bitset_clear`,
+  `bitset_toggle` and `bitset_clear_padding`, in `frama-c-bitset`'s unit: 108
+  goals, 102 proved. Not proved: block 7's four, and `bitset_clear`'s and
+  `bitset_toggle`'s `live_ensures_part3`, which WP 29 proves, the unit pinning
+  neither. With the three lemmas declared after the driver, as the probe
+  states them: the same 108 goals, 106 proved, block 7's four among them, and
+  the other two not proved, as without the lemmas. With `bitset_shr_zero_bits`
+  and `bitset_mask_bits` alone: 102 proved, block 7's four not, so that each
+  of the four takes `bitset_bits_shr_zero`. The lemmas themselves, each a goal
+  of its own (`-wp-prop`): none proved, Z3 out of time and CVC4 answering
+  unknown on each.
+- Before these three, the identities were tried here as the Retirement states
+  them, in the code's own forms, one lemma for each store, `(w >> r) == 0` and
+  `k < r` giving `((w | (u64)1 << k) >> r) == 0` and the like: none proved,
+  and with them as hypotheses block 7's four goals stayed unproved. In each
+  goal WP puts the mask before the word as the operand of `|`, `&` or `^`, as
+  in `bitset_set`'s `lor(x_1, x_3)`, `x_1` the mask, where the lemma for the
+  same store has the word first, and the provers do not match the one to the
+  other. The three lemmas above state the steps a bit at a time, in the form
+  `(x & (1 << j)) == 0`, which WP's theory ties to a bit test
+  (`bit_test_extraction`); with them as hypotheses the provers take the rest
+  of each goal from the theory's axioms on each operator's bits.
+- WP's theory as WP 25 ships it (`cbits.mlw`, with `filter_axioms.ml`) gives
+  the provers it runs through Why3, Alt-Ergo among them, the axioms that state
+  each operator's bits and tie `x & (1 << k)` to bit `k`, and withholds from
+  them the lemmas tagged `remove_for_`, among them those that tie an integer's
+  bits to its bounds (`pos_extraction_sup`, `pos_extraction_sup_inv`), two
+  `u64`s with the same bits to each other (`is_uint64_ext`), `1 << n` to `2^n`
+  (`lsl_1_two_power`), the mask `(1 << n) - 1` to a truncation to `n` bits
+  (`to_uint_land_edge`), and `1 << y` truncated to `n <= y` bits to 0
+  (`is_uint_lsl1_sup`), the last two the most direct way to
+  `bitset_mask_bits`. `bitset_shr_zero_bits` follows from the axioms the
+  provers are given, through instances that no term of its goal triggers.
+  `bitset_bits_shr_zero` and `bitset_mask_bits` do not follow from them
+  without a withheld lemma or an induction over the shift, which the provers
+  do not make. So a lemma that closes the four goals must give the provers a
+  step from a word's bits, or from bounds, to the new word's shift being 0, as
+  `bitset_bits_shr_zero` does, and none follows from the axioms they are given
+  without a withheld lemma or an induction: under WP 25's theory the verdict
+  does not turn on how the lemmas are written. WP 29's theory is not at hand
+  here.
+
+**The probe.** `round3_probe.py run` copies the tree to `r3_annotated/`,
+writes the annotation into the copy's `IMPL_VEC_FILL`, before the loop as
+above, and runs WP eight times, each as the units run it, `Typed+Cast` with
+`-wp-rte` and `-wp-split` and the units' preprocessing, with the CI's provers,
+Alt-Ergo, Z3 and CVC5 at 120 s, or with Qed alone:
+
+| Run | Tree | File, preprocessing | Selected | Provers |
+|---|---|---|---|---|
+| CB | as committed | `vec_cc_experiment.h`, `-CC` | `vec_int_fill` | Qed alone |
+| SB | as committed | `vec_struct_cc_experiment.h`, `-CC` | `vec_Rec_fill` | Qed alone |
+| VB | as committed | `vec_verify.h`, the home unit's | `vec_int_fill` | Qed alone |
+| VH | annotated | `vec_verify.h`, the home unit's | `vec_int_fill` | Qed alone |
+| CP | annotated | `vec_cc_experiment.h`, `-CC` | `vec_int_fill` | the CI's, with `-wp-print` |
+| SP | annotated | `vec_struct_cc_experiment.h`, `-CC` | `vec_Rec_fill` | the CI's, with `-wp-print` |
+| L | as committed | `p_padding_lemmas.h`, as `frama-c-bitset`'s | the three lemmas (`-wp-prop`) | the CI's |
+| F | as committed | `p_padding_lemmas.h`, as `frama-c-bitset`'s | the four functions (`-wp-fct`) | the CI's |
+
+Each run writes its log, WP's statistics report (`-wp-deprecated-report-json`)
+and WP 29's per-goal report (`-wp-report-json`), which WP 29 writes for the
+goals it schedules, with Qed alone too. `report` reads them and prints MATCH
+or MISS, with its confidence, for each part below, or NO DATA where a part has
+nothing to read. The log needs a sign-in, so it also posts, as notices on the
+run page, its verdicts; each run's summary line and statistics, and the goals
+a prover did not prove; and CP's and SP's goals property by property and their
+run-time checks as printed, each with the definitions its goal reads, since
+the score files `vec_Rec_fill`'s goals that read `v->len` after the loop's
+element stores and needs their names, and which access each check is. WP 29
+prints no goal's name, so the printed checks pair with the per-goal report's
+names in print order, property by property and part by part. A check Qed
+proves prints as `true`, with nothing to read; the score reads its access by
+name from WP 25's print, block 1's rows showing WP 29's names of the checks to
+be WP 25's. It exits 1 on a MISS, else 2 on NO DATA; its WP step fails if a
+run fails or writes no statistics. It gates nothing. Run here under WP 25,
+with the CI's provers mapped onto Z3 and CVC4 at 60 s by a local wrapper, it
+reads as the runs above: every part below matches but F's, whose two goals not
+proved WP 29 proves today, and the one read from WP 29's per-goal reports,
+which WP 25 does not write (NO DATA); for the goals' verdicts it reads WP 25's
+log instead. On WP 25's output edited to read as WP 29's would, with a
+per-goal report and a log that names only the goals not proved, it reads the
+same, and that part matches. actionlint 1.7.12 finds in the workflow the one
+finding every WP step's `eval $(opam env ...)` gives.
+
+**Predicted.**
+
+| Part | Predicted |
+|---|---|
+| (M) L: `bitset_shr_zero_bits`'s goal | not proved |
+| (H) L: `bitset_bits_shr_zero`'s goal | not proved |
+| (H) L: `bitset_mask_bits`'s goal | not proved |
+| (M) F: the four functions' goals, the three lemmas their hypotheses | all proved, block 7's four among them |
+| (M) CP and SP: `vec_int_fill`'s and `vec_Rec_fill`'s goals, annotated | all proved |
+| (L) CP less CB, SP less SB, by the summary lines | 27 goals each, as WP 25 makes them |
+| (H) VH against VB | the same summary line, statistics and goal names |
+
+- (M) `bitset_shr_zero_bits` not proved: it follows from the axioms the
+  provers are given, but through instances that no term of its goal triggers,
+  those of the shift's bits at `j - r` and of the bits of 0, and neither local
+  prover found them.
+- (H) `bitset_bits_shr_zero` and `bitset_mask_bits` not proved: neither
+  follows from the axioms the provers are given without a withheld lemma or an
+  induction over the shift, so long as WP 29 gives them what WP 25 does.
+- (M) F: with the three lemmas, block 7's four goals proved, as under WP 25,
+  and every other goal of the four functions, as `frama-c-bitset` proves them
+  today. WP 29's provers are not WP 25's, and the lemmas are new hypotheses
+  for every goal of the four.
+- (M) CP and SP: every goal proved, as under WP 25, where the hardest took a
+  third of a second; WP 29's termination goals, two at each type today, are
+  answered by the variant.
+- (L) The annotation adds 27 goals at each type, as WP 25 makes them. A total
+  that rests on how WP 29 makes new clauses into goals is rated (M) at most,
+  as the count probe's score commits, and here WP 29 makes the termination
+  goals too, of a loop that now has a variant.
+- (H) VH as VB: the home unit's preprocessing keeps no comment written in a
+  macro body (VERIFY-025), as WP 25's runs show.
+
+**Also predicted.**
+
+- (H) Every run prints its summary line and writes its statistics and its
+  per-goal report, and in each the goals the report lists as not proved
+  account for the summary line.
+- (H) No goal Failed, Failure, Invalid, Stepout or NoResult in the four runs
+  with provers.
+
+**What it settles.**
+
+- Block 7. A lemma the CI's provers prove can go into `data/bitset.h`, with
+  the fix push's prediction; one they do not prove cannot. If none is proved,
+  the fix push makes no change for block 7, and the block is needed within the
+  bound, its first need at module 15, its verdict read from the probe's run,
+  which runs the CI's WP, provers and limit on bitset's driver. If all three
+  are, the fix push writes them into `data/bitset.h`, and the block retires if
+  its four goals prove there. If some are, it writes those, and the block
+  keeps the goals they do not close; each of the four takes
+  `bitset_bits_shr_zero` under WP 25. If F holds, the three lemmas would close
+  the four goals, and what the block is needed for is the steps they state,
+  which the provers do not take.
+- Block 1. If the annotation's own goals, its invariants', frame's and
+  variant's, prove in CP and SP, the fix push writes it into `IMPL_VEC_FILL`,
+  the -CC pins moving by CB's, CP's, SB's and SP's counts. If one does not,
+  the annotation is not admissible, as an unproved lemma is not: the fix push
+  writes none of it, and the block keeps its 48 goals. If its own goals prove
+  and another of `fill`'s goals does not, that goal stays in the block, pinned
+  by the fix push. If CP and SP hold, the -CC units' 48 goals leave the block:
+  rows 25 to 48 retire, and rows 1 to 24 stay, `frama-c-vec`'s alone.
+  `vec_Rec_fill`'s goals that read `v->len` after the loop's element stores,
+  each storing `due` through `i64`, are filed in the proved-goal argument
+  under F13 at a new write site, as the pre-registration says. Block 1 is
+  needed, with 24 goals, its first need at module 13.
+- The probe. The fix push reduces it to the runs that can still run, as G19's
+  repair reduced G19's: block 1's six go, since with the annotation committed
+  the copy finds no loop to annotate, and, if a lemma goes into
+  `data/bitset.h`, L and F go with the lemma file, which would declare it
+  again. The workflow runs on a change to the toolchain's setup too, where a
+  run left that cannot run would fail.
+- With block 7 needed, VERIFY-040's tally is three of the nine needed, blocks
+  1, 7 and 8, and six not needed, as the pre-registration predicted: from
+  module 13 to 17 the needed curve adds 1, 0, 1, 0 and 1.
+
+**What this push runs.** Two commits, this prediction and then the probe, with
+its lemma file, its README row and its workflow.
+
+- (H) The main CI runs, since the push adds a workflow, which its paths do not
+  ignore, and passes as CI #1376 did: every WP job on its pins, the builds and
+  tests, static analysis, `misra` at 54 and the canary's 3, and coverage at
+  92.1% MC/DC and 91.6% of branches. The push changes no code and no pin.
+- (H) Record coverage runs, since the record changes, and passes with no name
+  pending, its report as at 36b4502: 220 pinned names, none in no goal table;
+  the proved-goal argument at 40 write sites, 156 properties and 17 facts; and
+  0 in each of the summary's counts.
+- The round 3 probe runs, its parts as predicted above. The -CC workflow, the
+  G4, G11, G13 and G19 probes and the count probe do not run, the push
+  changing none of their paths.
