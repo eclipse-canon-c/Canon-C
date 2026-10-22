@@ -3894,6 +3894,15 @@ byte ranges compared by pointer order across objects is retired too. vec's own
 residuals are 48 at each type, and `frama-c-vec` pins `5481 / 5574` and 93,
 two goals more than round 2 predicted. See VERIFY-040 round 2.
 
+**Repair note (2026-10-22, VERIFY-040 round 3).** Since a95276e (CI #1378,
+CC #58) `fill`'s loop carries its invariants, frame and variant, which
+`frama-c-vec`'s `-C` strips and the -CC units read: `cc-vec` and
+`cc-vec_struct` prove `fill`'s goals, and `frama-c-vec`'s 24 stay, under
+VERIFY-039's block on a loop without annotations in a macro body. vec's own
+residuals are 48 at `int` in `frama-c-vec`, which pins `5481 / 5574` and 93 as
+before, and 24 at each type in the -CC units, `cc-vec` at `5530 / 5599` and
+`cc-vec_struct` at `5528 / 5597`, 69 each. See VERIFY-040 round 3.
+
 ### Fresh-instantiation residuals (22) — result(Bool, Error)
 
 vec's fallible API returns result(Bool, Error); VERIFY-015 verifies
@@ -5493,6 +5502,13 @@ termination, its memory accesses, its frames and its postconditions
 (VERIFY-039, batch 1). What the paragraph says of the macro bodies holds: no
 loop annotation was written in one, and `fill`'s goals stayed where they
 were.
+
+*Note (2026-10-22, VERIFY-040 round 3).* Since a95276e `IMPL_VEC_FILL`'s loop
+carries its invariants, frame and variant, written in the macro body: under
+`-CC` they attach, and `cc-vec` and `cc-vec_struct` prove them and every other
+goal of `fill`; under `-C` they are stripped, and `frama-c-vec`'s 24 stay,
+filed under VERIFY-039's block on a loop without annotations in a macro body
+(VERIFY-040 round 3).
 
 **Decision — alongside, not instead.** The `-CC` jobs run beside the driver
 jobs; neither replaces the other yet. The driver jobs remain the enforced home
@@ -7634,6 +7650,14 @@ exclusion, not a regression.
    construction), both `free` legs, the full NULL/empty/full guard
    matrix, the iterator exhaustion path, and the facade views'
    NULL/empty/live triples.
+
+**Coverage note (2026-10-22, VERIFY-040 round 3).** VERIFY-018's category (g)
+is unprovable by construction only under `-C`: VERIFY-025 found that an
+annotation in a macro body survives `-CC`, and since a95276e `fill`'s loop
+carries its invariants, frame and variant, which `frama-c-vec`'s `-C` strips
+and the -CC units read. `cc-vec` and `cc-vec_struct` prove its goals, which
+are true (VERIFY-039, batch 1); in `frama-c-vec` its 24 stay unproved, and the
+three `fill` legs are still their evidence there.
 
 ### Cross-references
 
@@ -14186,17 +14210,18 @@ The facts that keep a write off what a property reads:
 | 38 | `vec_Rec_set` | `v->items[i] = val`, through `u32` and `i64`, at `items + i`, inside the buffer as `i < len <= capacity` | `cc-vec_struct` | `typed_cast_vec_Rec_set_hit_ensures_3` | `v->len`, the frame's bound, after the store | F13 |
 | 39 | `pool_alloc_zero` | `mem_zero(p, pool->object_size)` on the slot `pool_alloc` returned: `buffer + (base_mark + used * object_size .. base_mark + (used + 1) * object_size - 1)`, `used` as at entry, by its `address` postcondition; inside the slots as `alloc`'s `used < capacity` and `pool_invariant`'s `end_mark - base_mark == capacity * object_size` give, and inside the buffer as it gives `end_mark <= arena->capacity` | `frama-c-pool` | `typed_cast_pool_alloc_zero_alloc_ensures`, `typed_cast_pool_alloc_zero_alloc_ensures_2`, `typed_cast_pool_alloc_zero_alloc_ensures_address`, `typed_cast_pool_alloc_zero_alloc_ensures_zeroed` | `*pool`: `used`, `pool_invariant`'s fields, `arena`, `base_mark` and `object_size` in `address`, and `object_size`, `zeroed`'s bound; `*pool->arena`: `arena_invariant`'s fields, and `buffer` in `address` | F2 for `*pool`, F1 for `*pool->arena` |
 | 40 | `pool_try_alloc_zero` | `*out = p`, a store through `void **`, after `pool_alloc_zero` zeroed the slot `p` addresses: on `*out`, which F17 places apart from that slot when `out` is not null and the pool not full | `frama-c-pool` | `typed_cast_pool_try_alloc_zero_alloc_ensures_zeroed` | the slot's `object_size` bytes, through `char` | F17 |
+| 41 | `vec_Rec_fill` | each iteration's `v->items[v->len + i] = value`, through `u32` and `i64`, at `items + (len + i)`, inside the loop's `assigns`, `items + (len .. len + to_fill - 1)`, and inside the buffer as `to_fill <= capacity - len`; at the later heads the loop's `assigns` stands for it; then `v->len += to_fill`, through `usize`, on `*v` | `cc-vec_struct` | `typed_cast_vec_Rec_fill_loop_invariant_2_preserved`, `typed_cast_vec_Rec_fill_loop_assigns`, `typed_cast_vec_Rec_fill_assert_rte_mem_access_4`, `typed_cast_vec_Rec_fill_live_ensures`, `typed_cast_vec_Rec_fill_live_ensures_2`, `typed_cast_vec_Rec_fill_live_ensures_3` | `v->len` after the element stores: in the second invariant, at each head, in the store's index and its check, and after the loop, in the store to `len` and the postconditions; the elements, their `due` through `i64`, after the store to `len` | F13 |
 
 Properties are named as the decision names them, by WP's property prefix
 without `_partk`. A property with a part among the residuals is filed for its
 other parts, and its row names that part as "(not `_partk`)". `arena.h`'s
 eight units are `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`,
 `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `cc-vec` and
-`cc-vec_struct`. Filed: 156 properties at 40 write sites, kept off by 17 facts
+`cc-vec_struct`. Filed: 162 properties at 41 write sites, kept off by 17 facts
 (groups A to F, the filing complete; rows 39 and 40 and F17 since G18's score,
 147, 38 and 16 before it; row 6's `ensures_3` and `ensures_5` since VERIFY-040
 round 1's score, 152 before it; rows 27's and 30's `ensures_5` since round
-2's, 154 before it).
+2's, 154 before it; row 41 since round 3's, 156 at 40 before it).
 
 ### G4 — the proved-goal argument, group A: `memory.h`, `arena.h`, `pool.h`
 
@@ -14793,6 +14818,14 @@ name `len`, the elements and `*out` through their own types, so the model
 takes none of them across the call, and the wrappers read after it only what
 the callees' postconditions give.
 
+**Note (2026-10-22, VERIFY-040 round 3).** Since a95276e `fill`'s loop carries
+its invariants, frame and variant, which the -CC units read and
+`frama-c-vec`'s `-C` strips. In `cc-vec` and `cc-vec_struct` every goal of
+`fill` is proved: at `Rec` its six properties that read `v->len` after the
+element stores, or the elements after the store to `len`, are filed at row 41,
+under F13; at `int` the element stores are `int` stores, and none is. In
+`frama-c-vec` its 24 goals stay residuals (class (g)).
+
 **Filed: 35**, the block's rows 27 to 38: 12 at `int`, in both units under
 the same names, and 23 at `Rec`.
 
@@ -15319,61 +15352,37 @@ off `*v` as off the buffer, so neither the copy nor the store to `len`
 writes `src`'s elements, and the postcondition holds for every admitted
 call.
 
-#### Loop without annotations in a macro body (48)
+#### Loop without annotations in a macro body (24 — was 48: `cc-vec_struct`'s 24 closed at VERIFY-040 round 3, and `cc-vec`'s, the names `frama-c-vec` pins)
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_vec_int_fill_terminates_part1` | `frama-c-vec`, `cc-vec` | termination: the loop ends after `to_fill` iterations |
-| 2 | `typed_cast_vec_int_fill_terminates_part2` | `frama-c-vec`, `cc-vec` | the same, on the other path through `to_fill`'s conditional |
-| 3 | `typed_cast_vec_int_fill_assert_rte_mem_access_4_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it, on one path through the conditional |
-| 4 | `typed_cast_vec_int_fill_assert_rte_mem_access_4_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
-| 5 | `typed_cast_vec_int_fill_assert_rte_mem_access_5_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it |
-| 6 | `typed_cast_vec_int_fill_assert_rte_mem_access_5_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
-| 7 | `typed_cast_vec_int_fill_assert_rte_mem_access_6_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it |
-| 8 | `typed_cast_vec_int_fill_assert_rte_mem_access_6_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
-| 9 | `typed_cast_vec_int_fill_assert_rte_mem_access_7_part1` | `frama-c-vec`, `cc-vec` | an access in the loop or in `len`'s update after it |
-| 10 | `typed_cast_vec_int_fill_assert_rte_mem_access_7_part2` | `frama-c-vec`, `cc-vec` | the same access, on the other path |
-| 11 | `typed_cast_vec_int_fill_assigns_part3` | `frama-c-vec`, `cc-vec` | the loop's store, `items[len + i]`, in the default clause's `items[0 .. capacity - 1]` |
-| 12 | `typed_cast_vec_int_fill_assigns_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 13 | `typed_cast_vec_int_fill_assigns_part5` | `frama-c-vec`, `cc-vec` | the store to `len` after the loop |
-| 14 | `typed_cast_vec_int_fill_assigns_part6` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 15 | `typed_cast_vec_int_fill_live_assigns_part3` | `frama-c-vec`, `cc-vec` | the loop's store in the `live` clause's `items[len .. capacity - 1]` |
-| 16 | `typed_cast_vec_int_fill_live_assigns_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 17 | `typed_cast_vec_int_fill_live_assigns_part5` | `frama-c-vec`, `cc-vec` | the store to `len` after the loop |
-| 18 | `typed_cast_vec_int_fill_live_assigns_part6` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 19 | `typed_cast_vec_int_fill_live_ensures_part3` | `frama-c-vec`, `cc-vec` | `len` is `\old(len) + min(count, \old(capacity) - \old(len))` |
-| 20 | `typed_cast_vec_int_fill_live_ensures_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 21 | `typed_cast_vec_int_fill_live_ensures_2_part3` | `frama-c-vec`, `cc-vec` | the new elements hold `value` |
-| 22 | `typed_cast_vec_int_fill_live_ensures_2_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 23 | `typed_cast_vec_int_fill_live_ensures_3_part3` | `frama-c-vec`, `cc-vec` | the old elements are unchanged |
-| 24 | `typed_cast_vec_int_fill_live_ensures_3_part4` | `frama-c-vec`, `cc-vec` | the same, on the other path |
-| 25 | `typed_cast_vec_Rec_fill_terminates_part1` | `cc-vec_struct` | termination: the loop ends after `to_fill` iterations |
-| 26 | `typed_cast_vec_Rec_fill_terminates_part2` | `cc-vec_struct` | the same, on the other path through `to_fill`'s conditional |
-| 27 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_4_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it, on one path through the conditional |
-| 28 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_4_part2` | `cc-vec_struct` | the same access, on the other path |
-| 29 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_5_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it |
-| 30 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_5_part2` | `cc-vec_struct` | the same access, on the other path |
-| 31 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_6_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it |
-| 32 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_6_part2` | `cc-vec_struct` | the same access, on the other path |
-| 33 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_7_part1` | `cc-vec_struct` | an access in the loop or in `len`'s update after it |
-| 34 | `typed_cast_vec_Rec_fill_assert_rte_mem_access_7_part2` | `cc-vec_struct` | the same access, on the other path |
-| 35 | `typed_cast_vec_Rec_fill_assigns_part3` | `cc-vec_struct` | the loop's store, `items[len + i]`, in the default clause's `items[0 .. capacity - 1]` |
-| 36 | `typed_cast_vec_Rec_fill_assigns_part4` | `cc-vec_struct` | the same, on the other path |
-| 37 | `typed_cast_vec_Rec_fill_assigns_part5` | `cc-vec_struct` | the store to `len` after the loop |
-| 38 | `typed_cast_vec_Rec_fill_assigns_part6` | `cc-vec_struct` | the same, on the other path |
-| 39 | `typed_cast_vec_Rec_fill_live_assigns_part3` | `cc-vec_struct` | the loop's store in the `live` clause's `items[len .. capacity - 1]` |
-| 40 | `typed_cast_vec_Rec_fill_live_assigns_part4` | `cc-vec_struct` | the same, on the other path |
-| 41 | `typed_cast_vec_Rec_fill_live_assigns_part5` | `cc-vec_struct` | the store to `len` after the loop |
-| 42 | `typed_cast_vec_Rec_fill_live_assigns_part6` | `cc-vec_struct` | the same, on the other path |
-| 43 | `typed_cast_vec_Rec_fill_live_ensures_part3` | `cc-vec_struct` | `len` is `\old(len) + min(count, \old(capacity) - \old(len))` |
-| 44 | `typed_cast_vec_Rec_fill_live_ensures_part4` | `cc-vec_struct` | the same, on the other path |
-| 45 | `typed_cast_vec_Rec_fill_live_ensures_2_part3` | `cc-vec_struct` | the new elements hold `value` |
-| 46 | `typed_cast_vec_Rec_fill_live_ensures_2_part4` | `cc-vec_struct` | the same, on the other path |
-| 47 | `typed_cast_vec_Rec_fill_live_ensures_3_part3` | `cc-vec_struct` | the old elements are unchanged |
-| 48 | `typed_cast_vec_Rec_fill_live_ensures_3_part4` | `cc-vec_struct` | the same, on the other path |
+| 1 | `typed_cast_vec_int_fill_terminates_part1` | `frama-c-vec` | termination: the loop ends after `to_fill` iterations |
+| 2 | `typed_cast_vec_int_fill_terminates_part2` | `frama-c-vec` | the same, on the other path through `to_fill`'s conditional |
+| 3 | `typed_cast_vec_int_fill_assert_rte_mem_access_4_part1` | `frama-c-vec` | an access in the loop or in `len`'s update after it, on one path through the conditional |
+| 4 | `typed_cast_vec_int_fill_assert_rte_mem_access_4_part2` | `frama-c-vec` | the same access, on the other path |
+| 5 | `typed_cast_vec_int_fill_assert_rte_mem_access_5_part1` | `frama-c-vec` | an access in the loop or in `len`'s update after it |
+| 6 | `typed_cast_vec_int_fill_assert_rte_mem_access_5_part2` | `frama-c-vec` | the same access, on the other path |
+| 7 | `typed_cast_vec_int_fill_assert_rte_mem_access_6_part1` | `frama-c-vec` | an access in the loop or in `len`'s update after it |
+| 8 | `typed_cast_vec_int_fill_assert_rte_mem_access_6_part2` | `frama-c-vec` | the same access, on the other path |
+| 9 | `typed_cast_vec_int_fill_assert_rte_mem_access_7_part1` | `frama-c-vec` | an access in the loop or in `len`'s update after it |
+| 10 | `typed_cast_vec_int_fill_assert_rte_mem_access_7_part2` | `frama-c-vec` | the same access, on the other path |
+| 11 | `typed_cast_vec_int_fill_assigns_part3` | `frama-c-vec` | the loop's store, `items[len + i]`, in the default clause's `items[0 .. capacity - 1]` |
+| 12 | `typed_cast_vec_int_fill_assigns_part4` | `frama-c-vec` | the same, on the other path |
+| 13 | `typed_cast_vec_int_fill_assigns_part5` | `frama-c-vec` | the store to `len` after the loop |
+| 14 | `typed_cast_vec_int_fill_assigns_part6` | `frama-c-vec` | the same, on the other path |
+| 15 | `typed_cast_vec_int_fill_live_assigns_part3` | `frama-c-vec` | the loop's store in the `live` clause's `items[len .. capacity - 1]` |
+| 16 | `typed_cast_vec_int_fill_live_assigns_part4` | `frama-c-vec` | the same, on the other path |
+| 17 | `typed_cast_vec_int_fill_live_assigns_part5` | `frama-c-vec` | the store to `len` after the loop |
+| 18 | `typed_cast_vec_int_fill_live_assigns_part6` | `frama-c-vec` | the same, on the other path |
+| 19 | `typed_cast_vec_int_fill_live_ensures_part3` | `frama-c-vec` | `len` is `\old(len) + min(count, \old(capacity) - \old(len))` |
+| 20 | `typed_cast_vec_int_fill_live_ensures_part4` | `frama-c-vec` | the same, on the other path |
+| 21 | `typed_cast_vec_int_fill_live_ensures_2_part3` | `frama-c-vec` | the new elements hold `value` |
+| 22 | `typed_cast_vec_int_fill_live_ensures_2_part4` | `frama-c-vec` | the same, on the other path |
+| 23 | `typed_cast_vec_int_fill_live_ensures_3_part3` | `frama-c-vec` | the old elements are unchanged |
+| 24 | `typed_cast_vec_int_fill_live_ensures_3_part4` | `frama-c-vec` | the same, on the other path |
 
-**Functions affected**: `vec_int_fill` (`frama-c-vec`, `cc-vec`),
-`vec_Rec_fill` (`cc-vec_struct`).
+**Functions affected**: `vec_int_fill` (`frama-c-vec`, and `cc-vec` until
+VERIFY-040 round 3's fix), `vec_Rec_fill` (`cc-vec_struct`, until that fix).
 
 **Root cause**: `IMPL_VEC_FILL`'s `for` loop carries no `loop invariant`,
 `loop assigns` or `loop variant`, so WP knows nothing of its iterations.
@@ -15407,6 +15416,18 @@ clauses. At `Rec` the store is a struct assignment, and the same holds.
 `IMPL_VEC_FILL`, would reach the -CC units, whose 48 goals WP could then
 prove; `frama-c-vec`'s 24 would stay here, with that proof as further
 evidence. A change with its own prediction.
+
+**Coverage update (2026-10-22, VERIFY-040 round 3).** Since a95276e
+`IMPL_VEC_FILL`'s loop carries the invariant, assigns and variant the
+Retirement names, and the root cause above, annotations not written, holds no
+longer: they are written, and `frama-c-vec`'s `-C` strips them. Under `-CC`
+they attach, and `cc-vec` and `cc-vec_struct` prove every goal of `fill`
+(CC #58): its 24 at `Rec` have left the table, and its 24 at `int` stay,
+`frama-c-vec`'s alone, with that proof as further evidence. `vec_Rec_fill`'s
+properties that read `v->len` after the loop's element stores, or the elements
+after the store to `len`, are filed in the proved-goal argument at row 41,
+under F13, a fact it held. The block is needed, its first need at module 13
+(VERIFY-040).
 
 #### Byte ranges compared by pointer order across objects (0 — RETIRED at VERIFY-040 round 2; was 2)
 
@@ -16178,6 +16199,18 @@ single-bit goals. For `bitset_clear_padding`'s, one lemma was tried, stating
 that a `u64` masked by `2^r - 1`, for `0 < r < 64`, shifts right by `r` to
 0: no local prover proved it in 30 s, and with it the goal did not close. A
 change with its own prediction.
+
+**Note (2026-10-22, VERIFY-040 round 3).** The lemmas were tried, as three
+that state the steps a bit at a time
+(`tools/probes/verify-040/p_padding_lemmas.h`), each a goal of its own: the
+CI's provers proved none at 120 s, at the round 3 probe's runs #1 and #2, and
+with the three as hypotheses every goal of the four functions proved. A lemma
+WP does not prove is not admissible, so none is written into `data/bitset.h`,
+and the block is needed within VERIFY-040's bound, its first need at
+module 15. What it is needed for is the step from a word's bits to its shift
+being 0, which, under WP's theory as WP 25 ships it, follows from the axioms
+the provers are given only through a withheld lemma or an induction
+(VERIFY-040 round 3).
 
 #### A clause the code establishes and the specification omits (2)
 
@@ -22160,7 +22193,7 @@ and 17, *S* 12 and 5, beside the proved-goal argument's two blocks, unchanged.
 |----------------|-------|
 | **ID**         | VERIFY-040 |
 | **Date**       | 2026-10-20 |
-| **Status**     | OPEN — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3's probe predicted (`fill`'s loop annotated in a copy of the tree and measured under `-CC` and the home unit's preprocessing; bitset's three padding lemmas tried as goals of their own and as the hypotheses of block 7's four goals); round 3's probe scored (run #1, 79d9e72, with CI #1377 and Record coverage #99: as predicted but for the annotation's count, rated (L), WP 29 making it 16 summary entries at each type where WP 25 makes 27 goals; the three lemmas not proved, so that block 7 is needed, and with them as hypotheses every goal of the four functions proved; `fill`'s annotated goals all proved under `-CC`); the fix push predicted (the annotation written into `IMPL_VEC_FILL`; `cc-vec` at `5530 / 5599` and `cc-vec_struct` at `5528 / 5597`, 69 each, `fill`'s 24 names leaving each roll-call; the probe reduced to block 7's runs); its score to come |
+| **Status**     | CLOSED (2026-10-22) — the question, its rules and the nine predicted verdicts pre-registered, committed before the fix commits they score and written after round 1's local runs, as the pre-registration says; H1 opened (deque's swap did not admit the self-swap its tests make) and taken into round 1; round 1 predicted (blocks 3, 5 and 6) and scored (fixes e4e2635, 49d38d7 and d0dea31, ratchet 62ce2a0; CI #1374, CC #55: as predicted in every part, the nine names gone from six units' roll-calls and nothing else moved, `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 3, 5 and 6 not needed and retired (*A* 31 cumulative and 19 in force, *V* 19 and 15, *S* 12 and 4), `bitset_init`'s two goals filed in the proved-goal argument at row 6 (154 properties); H1 closed; the score's push scored (Record coverage #95: green, as predicted, the main CI not run); round 2 predicted (blocks 2 and 4: memory.h's `regions_overlap` stated by `\separated`, with `pq_push_result`'s slot step asserted; `append_array`'s frame above the new elements and `extend`'s frame as postconditions; `bitset_assign`'s early return) and scored (fixes 2d36ca1, 2ca5475, ec88871 and ebe7b05, ratchet 73a7b86; CI #1375, CC #56: as predicted but for vec's totals, rated (M), five goals more in each vec unit where the prediction said three, the two more proved and every roll-call as predicted; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); blocks 2 and 4 not needed and retired (*A* 31 cumulative and 17 in force, *V* 19 and 14, *S* 12 and 3), vec's two at `append_array`'s copy filed by name under VERIFY-017's block, as block 2's Retirement names, and `append_array`'s fifth postcondition in the proved-goal argument at rows 27 and 30 (156 properties); vec's three pins brought to CI #1375's and CC #56's lines; the count probe predicted (which clause WP 29 makes into other goals than WP 25) and scored, with the score's push (CI #1376, CC #57, Record coverage #97, count probe run #1: as predicted in every part; WP 29 makes `extend`'s old `ok` frame three goals where WP 25 makes five, the two goals by which vec's totals missed); round 3's probe predicted (`fill`'s loop annotated in a copy of the tree and measured under `-CC` and the home unit's preprocessing; bitset's three padding lemmas tried as goals of their own and as the hypotheses of block 7's four goals); round 3's probe scored (run #1, 79d9e72, with CI #1377 and Record coverage #99: as predicted but for the annotation's count, rated (L), WP 29 making it 16 summary entries at each type where WP 25 makes 27 goals; the three lemmas not proved, so that block 7 is needed, and with them as hypotheses every goal of the four functions proved; `fill`'s annotated goals all proved under `-CC`); the fix push predicted (the annotation written into `IMPL_VEC_FILL`; `cc-vec` at `5530 / 5599` and `cc-vec_struct` at `5528 / 5597`, 69 each, `fill`'s 24 names leaving each roll-call; the probe reduced to block 7's runs); the fix push scored (fix a95276e, ratchet cfcc2f6, the probe reduced at 464efb5; CI #1378, CC #58, Record coverage #100, round 3 probe run #2: as predicted in every part, `cc-vec` at `5530 / 5599` and `cc-vec_struct` at `5528 / 5597`, 69 each, and nothing else moving; `misra` at 54 and coverage at 92.1% MC/DC and 91.6% of branches); block 1 needed, its -CC goals closed and its rows at `Rec` gone, its 24 at `int` `frama-c-vec`'s alone; `vec_Rec_fill`'s six properties filed in the proved-goal argument at row 41 (162 properties at 41 write sites); block 7 needed, its lemmas not proved; block 8 needed, as predicted; VERIFY-040 closed: three of the nine needed, blocks 1, 7 and 8, and six not, as the pre-registration predicted in every part, the needed curve adding 1, 0, 1, 0 and 1 from module 13 to 17 (*A* 31 cumulative and 17 in force) |
 | **Baseline**   | 6043e19 (CI #1373, CC #54) |
 | **Scope**      | the nine argument blocks that VERIFY-039's main pass first needed at modules 13 to 17: vec's four, deque's one, bitset's two and the priority queue's two |
 
@@ -24100,3 +24133,198 @@ notes, since the fix gives it one, stripped under `-C` and read under `-CC`:
 block 1's Root cause, `docs/verification.md`'s correction on category (g) and
 `docs/traceability.md`'s three. No figure outside this record and the
 workflows reads the -CC pins.
+
+### VERIFY-040 round 3 — scored (fix a95276e, ratchet cfcc2f6, the probe reduced at 464efb5; CI #1378, CC #58, Record coverage #100, round 3 probe run #2)
+
+**Result: as predicted in every part.** The push of 464efb5 carried the
+probe's score and the prediction, "VERIFY-040 round 3: the probe scored; the
+fix push's prediction" (712ff93), the fix, a95276e (`IMPL_VEC_FILL`'s loop
+annotated, `vec_verify.h`'s note), the ratchet, cfcc2f6, and the reduced
+probe, 464efb5; its tree is the reviewed branch's, 7bb100be. It ran four
+workflows, as the prediction said:
+
+- CI #1378, green in 1h 29m 0s, `frama-c-vec` in 1h 27m;
+- CC #58, green in 1h 3m 33s, its seven families passing;
+- Record coverage #100, green in 7s;
+- the round 3 probe's run #2, green in 4m 6s.
+
+The annotations are, in CI #1378, two warnings, the deprecation of Node.js 20
+in `compcert`'s actions and a cache that `mingw (Debug)` could not save, and
+the macOS runners' queue notice, five times; and the probe's two notices.
+CC #58 and Record coverage #100 show none. (GitHub's run pages, read
+2026-10-22.)
+
+| Unit | Before | Predicted | Observed |
+|---|---|---|---|
+| `cc-vec` | `5490 / 5583`, 93 | `5530 / 5599`, 69 | `5530 / 5599`, 69 |
+| `cc-vec_struct` | `5488 / 5581`, 93 | `5528 / 5597`, 69 | `5528 / 5597`, 69 |
+| `frama-c-vec` | `5481 / 5574`, 93 | the same | the same |
+| every other WP job and -CC family | their pins | the same | the same |
+
+A WP job of the main CI passes only if its proved line, its count of residuals
+and their names equal its pins, and a -CC family only if its proved line, its
+count and its roll-call equal its matrix line's and its pin file's; each fails
+on a goal Failed, Failure, Invalid or Stepout too. A pass is therefore the
+observation. The logs were not read.
+
+**The parts.**
+
+- (M) The two -CC totals, 16 more each, and the proved lines, 40 more: held,
+  `5530 / 5599` and `5528 / 5597`.
+- (H) The two counts, 69 each, and the roll-calls, `fill`'s 24 names leaving
+  each and none entering: held.
+- (H) `frama-c-vec` as before, `5481 / 5574` with its 93: held.
+- (H) No other goal moves in any unit: held, every other WP job and -CC family
+  on its pins.
+
+**Also predicted.**
+
+- (H) No goal Failed, Failure, Invalid or Stepout in any WP job: held, each
+  job passing.
+- (H) The main CI runs and passes: held. The builds and tests: every leg
+  green, on a tree that registers 54 tests. Static analysis: its three legs
+  green. `misra`: at 54 real violations and the canary's 3, 57 in all, read
+  from its log, which the maintainer pasted; the job's command, run here with
+  cppcheck 2.13.0 on the pushed tree, gives 57 findings, those of the
+  prediction's two runs, line for line. Coverage: at 92.1% MC/DC, 1870 of 2030
+  condition outcomes, and 91.6% of branches, 1666 of 1818, with
+  `data/bitset.h` at 134 of 138 outcomes and lines at 2727 of 2814, read from
+  its log, which the maintainer pasted. Lines do not move, as predicted.
+- (H) The -CC workflow runs: held, vec and vec_struct on the new pins, and
+  slice, result, option, borrow and deque on theirs.
+- (H) Record coverage runs, the push's base, 79d9e72, pending: held. Its log
+  was not read; the tool, run here on the pushed tree with that base, gives
+  the report the prediction gives, line for line.
+- The round 3 probe's run #2: held in every part. Its notices read L at
+  `1 / 4`, the three lemmas not proved; F at `115 / 115`, 113 goals in the
+  per-goal report, none unproved; each run's summary line, statistics and
+  per-goal report written, the goals not proved accounting for its summary
+  line; and no goal Failed, Failure, Invalid, Stepout or NoResult. Its six
+  parts printed MATCH. The G4, G11, G13 and G19 probes and the count probe did
+  not run.
+
+**What it shows.** Block 1's change, written into the tree, closes every goal
+of `fill` in the two -CC units, as the probe measured it, and moves nothing
+else; under `frama-c-vec`'s preprocessing it is stripped, and that unit's 24
+stay, as the pre-registration said they would. Block 7's lemmas, tried twice
+on the CI's toolchain, are not proved, and with them as hypotheses the four
+goals prove.
+
+### VERIFY-040 — closed: three of the nine needed
+
+**Block 1, needed.** Its -CC goals closed: `cc-vec_struct`'s 24, at `Rec`,
+have left its table, and its 24 at `int` stay, `frama-c-vec`'s alone, the -CC
+proof as further evidence, as its Retirement said. Its heading reads 24, "was
+48", and a coverage update dated today says that the root cause, annotations
+not written, holds no longer: they are written, and `frama-c-vec`'s
+preprocessing strips them. Its first need stays at module 13. VERIFY-018 gets
+a repair note, as at rounds 1 and 2; VERIFY-025's Correction 2, which left
+`fill`'s goals as debt until the invariants were written under `-CC`, a dated
+note; and MCDC-010, whose item on the three `fill` legs calls their goals
+unprovable by construction, a coverage note.
+
+**Block 7, needed.** Its Retirement's lemmas, tried as three that state the
+steps a bit at a time, are not proved by the CI's provers at 120 s, at the
+round 3 probe's runs #1 and #2, so none is admissible; with them as hypotheses
+every goal of the four functions proves. A dated note under its Retirement
+says so. What it is needed for is the step from a word's bits to its shift
+being 0, which, under WP's theory as WP 25 ships it, follows from the axioms
+the provers are given only through a withheld lemma or an induction. Its first
+need stays at module 15.
+
+**Block 8, needed**, as the pre-registration predicted: no admissible change
+reaches it, only a WP that implements `\valid_function`, and no round tried
+one. Its first need stays at module 17.
+
+**The proved-goal argument.** Row 41 files `vec_Rec_fill`'s six properties
+that read `v->len` after the loop's element stores, through `u32` and `i64`,
+or the elements after the store to `len`: the second invariant's preservation,
+the loop's `assigns`, the check on the store,
+`typed_cast_vec_Rec_fill_assert_rte_mem_access_4`, and the `live` behaviour's
+three postconditions. F13 keeps the buffer's writes off `*v` and the store to
+`len` off the elements, as at rows 33 to 35, so the fact held and no argument
+moves, as the pre-registration said. The other 17 of `vec_Rec_fill`'s
+properties read nothing after a write in another array: the first invariant
+and the variant read locals; the second invariant's establishment, the
+behaviours' completeness and disjointness, and the three frames read `*v`
+before any write, the loop's region taken at its entry; and the other seven
+checks are the validity of `*v`'s members, at addresses computed from `v`, and
+read no value. At `int` the element stores are `int` stores, which C does not
+let reach `len` or `items` (C11 6.5p7), and nothing is filed. The argument
+holds 162 properties at 41 write sites, kept off by 17 facts, from 156 at 40.
+Group E's reading of vec, which says that `fill`'s loop has no annotations,
+gets a dated note.
+
+**The verdicts.**
+
+| # | Block | First needed | Predicted | Verdict | Settled |
+|---|---|---|---|---|---|
+| 1 | Loop without annotations in a macro body | vec (13) | needed (H) | needed: `frama-c-vec`'s 24; the -CC units' closed | round 3 |
+| 2 | Byte ranges compared by pointer order across objects | vec (13) | not needed (M) | not needed | round 2 |
+| 3 | Struct exchange whose operands may overlap | vec (13) | not needed (M) | not needed | round 1 |
+| 4 | Call framed by the callee's default assigns | vec (13) | not needed (M) | not needed | round 2 |
+| 5 | Struct stored from an initialised local, stated field by field | deque (14) | not needed (M) | not needed | round 1 |
+| 6 | Word count through a wrap at the capacity bound | bitset (15) | not needed (H) | not needed | round 1 |
+| 7 | Bit-level identities on the padding word | bitset (15) | needed (M) | needed | round 3 |
+| 8 | Call through a pointer to one of the listed comparators | priority queue (17) | needed (H) | needed | no admissible change |
+| 9 | Two slots of one buffer, apart by a multiple of the element size | priority queue (17) | not needed | not needed | G21 |
+
+**What the whole was predicted to show, scored.**
+
+- (H) Blocks 1 and 8 needed: held. The curve of needed blocks grows at module
+  13 and at module 17, its last growth at module 17, as by name: saturation at
+  module 12 is not restored.
+- (H) Block 6 not needed: held. (M) Blocks 2, 3, 4 and 5 not needed: held.
+  Block 9 not needed, as G21 showed: held. Six of the nine.
+- (M) Block 7 needed: held.
+- Three of the nine needed, one at each of vec, bitset and the queue: held.
+  From module 13 to 17 the curve of needed blocks adds 1, 0, 1, 0 and 1, where
+  the curve of blocks written adds 4, 1, 2, 0 and 2.
+
+Every part held. Of the rounds' own parts, three missed, each a count of WP
+29's goals predicted from WP 25's and rated (M) or lower: round 2's vec
+totals, (M), two goals more than predicted in each vec unit, and the round 3
+probe's two counts, (L), 16 summary entries at each type where WP 25 counts 27
+goals. The count probe accounted for the first, and the round 3 probe's
+per-goal report for the other two. No verdict rested on a part that missed.
+
+**What it settles.** Two thirds of the blocks first needed after module 12
+were written for want of a change to a contract, an annotation or a body of
+the kinds range.h and stringbuf.h were given during their verification, and
+one third for what those kinds of change cannot reach: a feature WP 29 does
+not implement (block 8), a unit's preprocessing (block 1), and bit-level steps
+the provers do not take (block 7). v5.4's "saturated at module 12" stays
+withdrawn, as three modules after it need a block. The blocks first needed at
+modules 1 to 12 were not put to this test, so the needed curve before module
+13 is bounded above by the curve of blocks written and is not measured. The
+paper's Table 1 gains the needed curve, and §4.1 says what the treatment was;
+the paper's update follows, at a frozen commit.
+
+**What this does to *A*.** Round 3 retires no block: *A* stays 31 cumulative
+and 17 in force, *V* 19 and 14, and *S* 12 and 3, beside the proved-goal
+argument's 162 properties at 41 write sites under 17 facts, and the second
+proved-goal block, region.h's, unchanged.
+
+**The statements of the loop's annotation, outside this record**, are given
+dated notes in the commit that follows, "docs: fill's loop annotated since
+VERIFY-040's round 3": in `docs/verification.md`, under its correction on
+vec's category (g); and in `docs/traceability.md`, under its correction on the
+class account, under its correction on the fill cluster, and under its
+MCDC-010 paragraph's correction. Each says that since a95276e the loop carries
+the annotation, which `frama-c-vec`'s preprocessing strips and the -CC units
+read. No figure outside this record and the workflows reads the -CC pins.
+
+**Owed still**, each with its file's next change, which the score does not
+make: `tools/probes/verify-039/p_combinator_contracts.c`'s header (G11's
+close) and, in `test/data/bitset_test.c`, the F1 comment (round 1) and the
+comment at `test_uninitialised_bitset`'s call to `bitset_assign`, "delegates
+to set / clear", where since ebe7b05 it returns at its own guard.
+
+**What this push runs.** (H) Record coverage, since the record changes, and it
+passes with no name pending: 196 pinned names, none in no goal table; block 1
+listing 24, all live, its heading's count 24; the proved-goal argument at 41
+write sites, 162 properties and 17 facts; and 0 in each of the summary's
+counts, as the tool reports here on the branch's head. The main CI, the -CC
+workflow and the probes do not run: the push changes `docs/` and the probes'
+README, which the main CI ignores and neither the -CC workflow's nor any
+probe's paths name.
