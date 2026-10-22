@@ -3606,6 +3606,12 @@ first module without the OWN-003 dispatch class of its own.
 > VERIFY-039's block on a loop without annotations in a macro body,
 > specification-bound.
 
+> **Note (2026-10-22, VERIFY-040 round 3).** Since a95276e the loop carries
+> its invariants, frame and variant, written in `IMPL_VEC_FILL`. Under `-C`
+> they are stripped, as above, and the 24 stay in `frama-c-vec`, under the
+> same block; under `-CC` they attach, and `cc-vec` and `cc-vec_struct` prove
+> fill's goals (CC #58).
+
 ### MCDC-010 cross-reference
 
 vec's cover TU measures 155/158 = 98.10%, its documented ceiling from

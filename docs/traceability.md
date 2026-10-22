@@ -1176,6 +1176,11 @@ itself flags — see VERIFY-015).
 > force are 17, 14 of them verifier-bound and 3 specification-bound:
 > VERIFY-040's round 2 retired two.
 
+> **Note (2026-10-22, VERIFY-040 round 3).** Since a95276e `fill`'s loop
+> carries its invariants, frame and variant. `frama-c-vec`'s preprocessing
+> strips them, so its 24 stay, under the same block, and the -CC units prove
+> them (CC #58). The blocks in force are still 17.
+
 **Note on totals**: each per-header row reports that header's own
 obligations (substrate goals are counted under their owning header,
 not duplicated into downstream rows). The CI WP step for ptr.h
@@ -1457,6 +1462,11 @@ name-only gates.
 > pins 5481 / 5574 with 93, the line CI #1375 measured: `extend`'s `ok`
 > frame and its goal are gone (ec88871).
 
+> **Note (2026-10-22, VERIFY-040 round 3).** Since a95276e the fill loop
+> carries its invariants, frame and variant. Under `-C` they are stripped, so
+> vec's pins do not move; under `-CC` they attach, and the -CC units prove the
+> cluster (CC #58).
+
 The checked.h baseline grew by 214 proof obligations (1541 → 1755) when
 the division and modulo functions were added. All 214 new obligations
 were discharged automatically — most by Qed, with smaller contributions
@@ -1676,6 +1686,11 @@ unprovable by construction — cites the coverage stream as its
 > unproved because the loop carries no annotation, not unprovable by
 > construction: under `-CC` an annotation would attach (VERIFY-025). The
 > coverage stream is still the evidence that the three legs run.
+
+> **Note (2026-10-22, VERIFY-040 round 3).** Since a95276e the loop carries an
+> annotation, which `frama-c-vec`'s `-C` strips and the -CC units read: in
+> `frama-c-vec` the fill goals stay unproved, and the coverage stream is still
+> their evidence there.
 
 ### History
 
