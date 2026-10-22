@@ -108,6 +108,23 @@ def run_clang(files, cpp):
     deps = [d for d in dep.stdout.replace("\\\n", " ").split()[1:]]
     return json.loads(ast.stdout), deps
 
+def own_headers(files, cpp):
+    """Headers a measured program outside the repository brings with it: every
+    file its sources include that is neither a repository file nor found in a
+    system directory (clang -MM leaves those out)."""
+    require_clang()
+    base = [CLANG, "-x", "c", "-std=gnu99", "-w"] + clang_flags(cpp)
+    out = set()
+    for f in files:
+        dep = subprocess.run(base + ["-MM", f], cwd=REPO, capture_output=True, text=True)
+        if dep.returncode != 0:
+            raise SystemExit("clang -MM failed on %s:\n%s" % (f, dep.stderr[-2000:]))
+        for d in dep.stdout.replace("\\\n", " ").split()[1:]:
+            p = os.path.normpath(d if os.path.isabs(d) else os.path.join(REPO, d))
+            if repo_rel(p) is None:
+                out.add(p)
+    return out - {os.path.normpath(f) for f in files}
+
 def repo_rel(path):
     p = os.path.normpath(os.path.join(REPO, path)) if not os.path.isabs(path) else os.path.normpath(path)
     return os.path.relpath(p, REPO) if p.startswith(REPO + os.sep) else None
@@ -215,7 +232,9 @@ class Walker:
         return files, macro
 
     def in_scope(self, files):
-        return any(repo_rel(f) in self.scope for f in files if f)
+        # A measured program may live outside the repository; its files are in
+        # the scope by absolute path (cmd_measure), so they are looked up so.
+        return any((repo_rel(f) or os.path.normpath(f)) in self.scope for f in files if f)
 
     def walk(self, node, func=None, func_scoped=False):
         if not isinstance(node, dict):
@@ -331,8 +350,11 @@ def has_cycle(g):
     sys.setrecursionlimit(100000)
     return any(col[u] == WHITE and dfs(u) for u in list(g))
 
-def system_functions(ast):
-    """Functions declared only in non-repo (system or Frama-C) headers."""
+def system_functions(ast, project=frozenset()):
+    """Functions declared only in non-repo (system or Frama-C) headers.
+    PROJECT holds the normalised absolute paths of the sources being read, so
+    that a measured program outside the repository does not have its own
+    functions taken for libc's."""
     names, cur = {}, None
     for n in ast.get("inner", []):
         loc = n.get("loc", {})
@@ -349,7 +371,7 @@ def system_functions(ast):
             if "file" in part:
                 cur = part["file"]
         if n.get("kind") == "FunctionDecl":
-            repo = repo_rel(cur) is not None if cur else False
+            repo = (repo_rel(cur) is not None or os.path.normpath(os.path.abspath(cur)) in project) if cur else False
             nm = n.get("name")
             names[nm] = names.get(nm, False) or repo
     return {nm for nm, repo in names.items() if not repo}
@@ -408,13 +430,17 @@ def family_features(scope_files, kinds):
     return feats
 
 # ------------------------------------------------------------------ one unit
-def features_of(files, cpp, scope_files=None):
+def features_of(files, cpp, scope_files=None, project=None):
+    """PROJECT: the files outside the repository whose functions are the
+    measured program's own, not libc's; by default the sources themselves."""
     ast, deps = run_clang(files, cpp)
     closure = sorted({r for r in (repo_rel(d) for d in deps) if r})
     scope = set(scope_files) if scope_files is not None else set(closure)
     w = Walker(scope)
     w.walk(ast)
-    feats = w.finish(system_functions(ast))
+    if project is None:
+        project = {os.path.normpath(os.path.abspath(f)) for f in files}
+    feats = w.finish(system_functions(ast, project))
     for f in scope:
         try:
             txt = open(os.path.join(REPO, f), encoding="utf-8", errors="ignore").read()
@@ -468,7 +494,9 @@ def cmd_measure(args):
     _, deps = run_clang(srcs, cpp)
     closure = {r for r in (repo_rel(d) for d in deps) if r}       # repository files only
     unverified = sorted(closure - set(cat["verified_closure"]) - set(own))
-    feats, _ = features_of(srcs, cpp, scope_files=set(own) | set(unverified))
+    extra = own_headers(srcs, cpp)          # a program outside the tree: its own headers
+    feats, _ = features_of(srcs, cpp, scope_files=set(own) | extra | set(unverified),
+                           project={os.path.normpath(f) for f in srcs} | extra)
     feats |= {"unverified header:" + h for h in unverified}
     new = sorted(f for f in feats if f not in known)
     report = {"sources": own, "catalogue_commit": cat["meta"]["substrate_commit"],

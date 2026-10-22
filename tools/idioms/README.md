@@ -57,7 +57,14 @@ the record says produce residuals.
     python3 tools/idioms/extract.py measure [--cpp "FLAGS"] P.c [more.c …]
 
 prints *P*'s features, the ones outside the catalogue, the count per layer, and
-n(*P*). Use the preprocessor flags *P* will be verified with.
+n(*P*). Use the preprocessor flags *P* will be verified with. *P* may lie
+outside the repository, with headers of its own beside it; run the command
+from the repository root. Until the paper's v7 review (2026-10-22) it could
+not: the scope test read repository paths only, so a program outside the tree
+lost its C features (layer B) without a warning, and with that fixed, its own
+functions, and its own headers' functions, would have been read as libc's.
+`measure` now takes as the program's every file its sources include that is
+neither a repository file nor found in a system directory. Test 5 checks it.
 
 ## Tests
 
@@ -69,7 +76,10 @@ n(*P*). Use the preprocessor flags *P* will be verified with.
    the three unverified headers its one planted include pulls in, and a union —
    already used by the substrate — is seen but not counted (negative control);
 3. every verified unit, measured as if it were *P*, has n = 0;
-4. the catalogue rebuilds identically, and the cross-check passes.
+4. the catalogue rebuilds identically, and the cross-check passes;
+5. a program copied outside the repository gives what it gives inside it, and
+   its own functions, and those of a header of its own, are not counted as
+   libc functions.
 
 ## Limits
 
