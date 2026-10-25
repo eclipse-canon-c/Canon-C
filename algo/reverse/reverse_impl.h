@@ -132,7 +132,16 @@ ALGO_REVERSE_LINKAGE void algo_reverse(
 
     if (len < 2u) { return; }
 
-    u8  temp[ALGO_REVERSE_SWAP_BUF_SIZE];
+    /* Zeroed, not left uninitialised. Since mem_regions_overlap compares
+     * addresses as uintptr_t values (VERIFY-008), GCC at -O2 and -O3 (the
+     * MinGW Release build at CI #1380, and GCC 13 and 14 here) reports
+     * temp as maybe uninitialised at the third copy on the path where
+     * array is NULL: the first copy then returns early and the third does
+     * not. require_msg excludes that path for every admitted call, but GCC
+     * cannot see that the handler, called through canon_contract_handler,
+     * never returns, and under CANON_NO_REQUIRE nothing excludes it. The
+     * zeroing costs one write of the buffer per call, not per swap. */
+    u8  temp[ALGO_REVERSE_SWAP_BUF_SIZE] = {0};
     u8* left  = (u8*)array;
     u8* right = (u8*)array + (len - 1u) * elem_size;
 

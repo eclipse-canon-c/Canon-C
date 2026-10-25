@@ -953,8 +953,8 @@ and after the paragraphs below say where a reading here no longer holds.
 | stringbuf.h | 29       |              4826 | 4789 (99.23%) | 37       | VERIFY-031..35 |
 | **Total**  | **457**   | **49766**         | **49305 (99.07%)**| **461**  |              |
 
-*Brought to the pins again 2026-10-25 (VERIFY-008, the overlap fix,
-predicted).* `mem_regions_overlap` compares addresses as `uintptr_t` values,
+*Brought to the pins again 2026-10-25 (VERIFY-008, the overlap fix; held
+at CI #1380).* `mem_regions_overlap` compares addresses as `uintptr_t` values,
 not pointers with `<`; its goals go from 37 to 31, all proved, in the eight
 rows that verify memory.h's functions, so the total is 49766 obligations,
 49305 proved and 461 unproved, from 49814, 49353 and 461. Notes below give
