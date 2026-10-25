@@ -1252,6 +1252,15 @@ with a comment saying why. Predicted:
 The docs' "(predicted)" marks on the overlap fix's pins are removed from the
 status tables and become "CI #1380" where a line cites a run, as they held.
 
+**The reverse repair, scored (2026-10-25, CI #1381, c0286ce).** Part 1 held,
+and part 2 held where read. `mingw (Release)` compiled every unit and its
+tests passed, as did `mingw (Debug)`, and every other job of the run passed,
+every `frama-c-*` job with its pin unchanged; the record coverage gate passed
+(Record coverage #104). MISRA's count, part 2's last, 54 as the misra job's
+command gives here, was again not read from the run's log.
+`mem_regions_overlap` no longer compares pointers into different objects, and
+the defect VERIFY-039 recorded and VERIFY-040 left is repaired.
+
 ## VERIFY-009: WP Limitations Inherited from Substrate Plus ptr_span/Arithmetic-Chain Residuals (arena.h)
 
 | Field          | Value |
@@ -23034,6 +23043,13 @@ unproved, in a function each of the eleven units verifies. The Retirement
 names no change to the code, and the round makes none. The issue stays
 recorded in block 2's Retirement, and the score records it, with the test, in
 memory.h's own record, VERIFY-008, too.
+
+**Reading note (2026-10-25).** Repaired since: VERIFY-008's overlap probe
+found a comparison that cannot wrap, the larger address minus the smaller
+against `size`, which WP 29 with the CI's provers proves where the comparison
+tried here, `a < b + size` on the addresses, left three parts open under
+WP 25. The fix (6fb8442, CI #1380) and a repair it set off in `algo_reverse`
+(c0286ce, CI #1381) are scored in VERIFY-008.
 
 **Owed with these files' next change, and made with them.**
 
