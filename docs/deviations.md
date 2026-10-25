@@ -1115,6 +1115,37 @@ three parts of the `overlapping` postcondition unproved, and the retired block
 on byte ranges compared by pointer order named no change to the code. See
 VERIFY-040 round 2's prediction, "Left as it is".
 
+**Committed prediction (2026-10-25, the overlap probe).** A second change is
+tried for the comparison C leaves undefined: `tools/probes/overlap/overlap.patch`
+converts both addresses to `uintptr_t`, a conversion C leaves
+implementation-defined rather than undefined (C99 6.3.2.3p6), and which on the
+flat-memory targets the CI builds for is the address, and returns whether the
+difference of the larger and the smaller is less than `size`, which cannot
+wrap; the postcondition states that comparison as `regions_overlap_by_addr`,
+over the addresses as mathematical integers, in place of
+`regions_overlap_by_order`, which nothing else names. Round 2's trial
+compared `a < b + size` on the addresses, which can wrap. The probe,
+`.github/workflows/overlap-probe.yml`, runs WP 29 with the CI's provers as
+`frama-c-memory` does, restricted to `mem_regions_overlap`, on the tree as
+committed and as patched, under the default machine and `gcc_x86_32`, and
+counts the whole unit's goals on both with Qed alone. Predicted, from our
+local WP 25 with Z3 alone at 20 s, which proves the patched function:
+
+1. Committed tree, each machine: every goal of `mem_regions_overlap`
+   proved (high); 35 goals (medium: WP 29 has split clauses otherwise
+   than WP 25 before, VERIFY-040 round 2).
+2. Patched tree, each machine: every goal proved (high); 29 goals (medium,
+   as in 1).
+3. memory.h's whole unit: its goal count changes by exactly the function's
+   change, since no other function's contract or code is touched (high);
+   that change is 6 goals fewer (medium).
+
+If 1 to 3 hold, the fix push lowers both numbers of every proved-goal pin
+that verifies memory.h's functions by the function's change, moves no
+residual name, and retires the probe. Measured here, not predicted: MISRA's
+findings are unchanged (cppcheck 2.13.0, the CI's, with the misra job's
+flags on memory.h before and after: the same three).
+
 ## VERIFY-009: WP Limitations Inherited from Substrate Plus ptr_span/Arithmetic-Chain Residuals (arena.h)
 
 | Field          | Value |
