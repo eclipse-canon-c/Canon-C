@@ -1,0 +1,62 @@
+name: Overlap probe (VERIFY-008, mem_regions_overlap by address under WP 29)
+
+# ---------------------------------------------------------------------------
+# VERIFY-008 — an experiment, not a gate. It runs when the probe's script,
+# its patch, this file or the toolchain pins change, and on demand; it never
+# touches the enforced jobs, and its result is scored in docs/deviations.md,
+# VERIFY-008, "Committed prediction (2026-10-25, the overlap probe)".
+#
+# QUESTION: mem_regions_overlap compares two pointers with <, which C leaves
+# undefined unless both point into one object (C11 6.5.8p5), in checks the
+# default build runs. tools/probes/overlap/overlap.patch compares the two
+# addresses as uintptr_t values instead, without wrapping, and states that
+# comparison in the postcondition. Do WP 29 and the CI's provers prove the
+# patched function, and how many goals does it have, under the default
+# machine and under gcc_x86_32? The fix push sets every pin that inherits
+# memory.h from these counts.
+#
+# PROBE: tools/probes/overlap/overlap_probe.py runs WP as frama-c-memory runs
+# it, restricted to mem_regions_overlap, on core/memory.h as committed and
+# as patched in a copy, and counts the whole unit's goals on both with Qed
+# alone. The report step prints MATCH or MISS, with its confidence, for each
+# part, or NO DATA; the log needs a sign-in, so it also posts its verdicts
+# and each run's counts as notices on the run page and to the step summary.
+# It exits 1 on a MISS, else 2 on NO DATA.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'tools/probes/overlap/overlap_probe.py'
+      - 'tools/probes/overlap/overlap.patch'
+      - '.github/workflows/overlap-probe.yml'
+      - '.github/actions/framac-setup/**'
+  workflow_dispatch:
+
+jobs:
+  overlap-probe:
+    # Pinned, not ubuntu-latest: see the runner note in
+    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP: mem_regions_overlap, committed and patched"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/overlap/overlap_probe.py run
+
+      - name: "Report: the parts, against the prediction"
+        if: ${{ !cancelled() }}
+        run: python3 tools/probes/overlap/overlap_probe.py report
+
+      - name: Upload WP output (overlap probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: overlap-probe
+          path: wp_*
+          retention-days: 90
