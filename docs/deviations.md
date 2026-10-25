@@ -1204,6 +1204,54 @@ return now has one decision with two arms where it had two conditions under
 `&&`; the coverage job measures it, and gates only aggregate branch
 coverage at 80 %, which three test calls on one line cannot move far.
 
+**The fix push, scored (2026-10-25, CI #1380 and CC #59, 6fb8442).** Items 1
+to 3 held: every `frama-c-*` job whose unit holds `mem_regions_overlap` passed
+with its pin six lower on both numbers and its unproved count and roll-call
+unchanged, the two vec `-CC` units passed with theirs, every other `frama-c-*`
+job passed with its pin unchanged, and the record coverage gate passed. Item
+4's first part missed: `mingw (Release)` stopped compiling at
+`test/algo/reverse_test.c`, where GCC, the MSYS2 UCRT64 package the job
+installs unpinned, at `-O3 -DNDEBUG -Werror`, reported `temp` in
+`algo_reverse` (`algo/reverse/reverse_impl.h`) as maybe uninitialised at its
+third `mem_copy`, in two inlined copies. `mingw (Debug)` and every other build
+passed, and at 5ace743 (CI #1379) both MinGW builds passed. Item 4's second
+part, MISRA at 54, was not read: the misra job passed, but the count it prints
+is in a job log not reachable from here, as is memory.h's MC/DC.
+
+The warning reproduces here, through a unit whose only line calls
+`algo_reverse` from an externally visible function at element size 4: at
+`-O3 -DNDEBUG -Werror`, GCC 13, GCC 14 and MinGW GCC 13 are silent at
+5ace743 and give the CI's diagnostic at 6fb8442, and a NULL guard before the
+call silences it. The path GCC reports is `array` NULL: the first copy then
+returns early and the third, into `right`, does not. `require_msg` excludes
+that path for every call the contract admits, but GCC cannot see that the
+handler, called through `canon_contract_handler`, never returns, and under
+`CANON_NO_REQUIRE` nothing excludes it. It is a warning on a path the
+contract excludes, not one an admitted call can take. Why the CI's GCC, whose
+version we did not read, also warns on `reverse_test.c`'s own calls, which
+ours compile silently, was not determined. The Release build stopped at its
+first failure, so the units after it were not compiled under Release by
+this run.
+
+**Committed prediction (2026-10-25, the reverse repair).** `algo_reverse`'s
+`temp` is zero-initialised, at the cost of one write of the buffer per call,
+with a comment saying why. Predicted:
+
+1. `mingw (Release)` compiles every unit and its tests pass (medium: the
+   repair silences the reproducer above under MinGW GCC 13 and GCC 13 and 14,
+   and a full Release build here under each of them (the MinGW one targeting
+   Windows) has no warning, but the CI's GCC is unpinned and its version
+   unread, likely newer, and a unit the failed run never compiled under
+   Release may raise another).
+2. Nothing else moves (high): no `frama-c-*` job's unit includes
+   `algo/reverse`, so no pin changes; MISRA's count stays 54 (the misra job's
+   command, run here before and after: 54 and 54); `reverse_test` passes here
+   under GCC 13 and 14 and MinGW GCC 13 at `-O3 -Werror`, and with ASan and
+   UBSan.
+
+The docs' "(predicted)" marks on the overlap fix's pins are removed from the
+status tables and become "CI #1380" where a line cites a run, as they held.
+
 ## VERIFY-009: WP Limitations Inherited from Substrate Plus ptr_span/Arithmetic-Chain Residuals (arena.h)
 
 | Field          | Value |
