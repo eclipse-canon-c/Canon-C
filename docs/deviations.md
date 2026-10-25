@@ -24481,3 +24481,400 @@ counts, as the tool reports here on the branch's head. The main CI, the -CC
 workflow and the probes do not run: the push changes `docs/` and the probes'
 README, which the main CI ignores and neither the -CC workflow's nor any
 probe's paths name.
+
+---
+
+## VERIFY-041: Pre-registration — vec_range.h, the Twentieth Unit: Two Unstated Obligations Found by Probe, and a Loop in a Macro Body Verified Under -CC From the Start
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-041 |
+| **Date**       | 2026-10-26 |
+| **Status**     | PRE-REGISTERED — no contract written, no source changed; findings demonstrated by probe only |
+| **Baseline**   | b7bac65 (CI #____ — author fills; the last run of the main CI is #1381, at c0286ce) |
+| **Scope**      | `data/vec/vec_range.h` (one macro, `IMPL_VEC_EXTEND_FROM_RANGE`, verified at `int`), contracted in place in the macro body; a new driver `vmacros/vdrivers/vec_range_verify.h` with one clause at `int`; a new main-CI job `frama-c-vec-range`, the first main-CI unit preprocessed with `-CC` |
+| **Category**   | Third prospective unit after the saturation claim was written down (after range.h, VERIFY-028, and stringbuf.h, VERIFY-031); prospective test of prover detection on two findings; first unit to take, from its first run, the change VERIFY-040 block 1's Retirement names |
+
+**Why this record exists.** The data/ layer is verified in an order fixed with
+the author: vec's two extension headers, then stack, queue, array, the
+convenience wrappers and hashmap. `vec_range.h` comes first. It bridges two
+verified modules, vec and range.h, and adds one function. It is small, and it
+is the first unit whose only loop lies in a macro body since VERIFY-040 showed
+what `-C` does to such a loop. This record commits, before any contract, the
+findings, the contract, the preprocessing and the predictions. Its commit hash
+is the evidence that they predate the contracts. The rebuilt catalogue is
+committed with it (below), so n(*P*) is fixed by the same hash.
+
+### The unit
+
+`vec_range.h` defines one function per instantiation:
+
+    result__Bool_Error vec_<T>_extend_from_range(borrowed(vec_<T>*) v, range r);
+
+It appends the values `r` yields, in order, after the vector's elements, or
+returns an error and appends nothing. It calls `range_len`, `checked_add`,
+`range_next`, and result's `_ok` and `_err`. It calls no vec function: it reads
+`v->len`, `v->capacity` and `v->items`, and writes `items` and `len`.
+
+**The driver.** Since the function calls no vec function, the unit does not
+instantiate vec's functions. That keeps it at arena's scale rather than vec's
+(`frama-c-vec` runs about three hours). The driver is `vec_cc_experiment.h`'s
+prefix, without option at `int`, plus the extension:
+
+    #include "semantics/error.h"
+    #include "semantics/result/result_defn.h"
+    DEFINE_RESULT_TYPEDEF(bool, Error)
+    DEFINE_RESULT_STRUCT(bool, Error)
+    DEFINE_RESULT_FUNCTIONS(static inline, bool, Error)
+    #define CANON_RESULT_BOOL_ERROR_DEFINED
+    #include "data/vec/vec_defn.h"
+    DEFINE_VEC_STRUCTS(int)
+    #include "data/vec/vec_range.h"
+    /* the clause at int, below */
+    DEFINE_VEC_RANGE(static inline, int)
+
+**The closure** is vec_impl.h's (types, limits, contract, checked, ptr, slice,
+memory, arena, ownership, result, error) plus range.h with its option at
+`isize`. That is arena.h's closure, with result at (Bool, Error), range.h and
+the three struct types `DEFINE_VEC_STRUCTS` emits at `int` (vec, iterator,
+slice), with vec's two empty lifetime helpers.
+
+**Model**: Typed+Cast, arena's and vec's. range.h's home model is Typed. It
+casts no pointer, so the prefix map is expected to carry its names unchanged
+(P2).
+
+**Preprocessing: `-CC`, and why.** The function's only loop lies in the macro
+body. Under `-C`, the main CI's preprocessing, an annotation in a macro body is
+stripped, so the loop would leave a cluster of goals that no admissible change
+could reach. That is VERIFY-040 block 1's root cause: needed for
+`frama-c-vec`'s 24 goals, "kept by a unit's preprocessing". Under `-CC` the
+annotation is kept and attached (VERIFY-025). `cc-vec` and `cc-vec_struct`
+prove `fill`'s goals that way since VERIFY-040 round 3. This unit therefore
+takes block 1's Retirement change from its first run. That choice is made here,
+before any run, to keep out an argument whose cause is already measured. It is
+not made after a failure. The job's flags are `frama-c-vec`'s plus `-CC`, as
+the -CC workflow builds its families' flags. The job lives in the main
+workflow, so it is pinned, reported and catalogued as the main units are.
+
+**n(*P*) = 2**, both layer C: `family:vec@other+integer` (the vec family
+instantiated by a macro other than its own, at an integer type) and
+`unverified header:data/vec/vec_range.h`. Measured by `tools/idioms/extract.py
+measure` on the driver against the catalogue rebuilt at b7bac65, committed
+with this record. The rebuild changes only `meta.substrate_commit`, from
+2d36ca1 to b7bac65; its 42 ACSL, 22 C and 8 family features are unchanged.
+n(*P*) is 2 with the run-1 source and with the run-2 source below: the
+contract writes no ACSL kind the catalogue lacks, and the fixes no C kind.
+`measure` was run without `-CC`, which clang accepts only with `-E` (see
+"Also owed"); `extract.py` reads ACSL from the source files, not from the
+preprocessed text, so the flag changes nothing it reads. This unit is not
+§5.4's test: it was written by the experimenter, and its program is part of
+the substrate. Its by-kind reading is recorded (P10) and carries nothing.
+
+### Findings demonstrated before any contract
+
+All probes: GCC 14.2, `-fsanitize=address,undefined`, default build and
+`-DCANON_NO_REQUIRE`, with the same results in both except where stated. The
+sources are committed with this record: `tools/probes/verify-041/probe_committed.c`
+(the committed header) and `probe_fixed.c` (the run-2 header), each with its
+build line. The probe instantiates
+`DEFINE_VEC_RANGE(static inline, int)` as `vec_test.c` does. The existing tests
+(`test_extend_from_range_wide_rejected_f5`, `_basic`) pass.
+
+**F1 — a value the element type cannot hold is converted silently, and the
+call returns Ok.**
+
+    range_make(INT_MAX - 1, (isize)INT_MAX + 2, 1) into vec_int
+    → ok=1 len=3: 2147483646 2147483647 -2147483648
+
+The conversion `(type)range_next(&r)` is implementation-defined for an `int`
+outside `int`'s range (C11 6.3.1.3p3). It is not undefined. This is **not a
+contradiction of the documentation**: the macro's `@note` says "Ensure type
+can represent the range values without truncation. For signed ranges into
+unsigned types, caller is responsible for validation." The header's "never
+silently truncates" refers to the count, which the capacity check guards. The
+obligation is documented, not checked, and its violation is silent: Ok, with
+values the caller did not ask for.
+
+*What the prover sees.* Nothing, without a contract. The CI runs without
+`-warn-signed-downcast`, so `-wp-rte` emits no goal at the conversion. Two WP
+runs on the uncontracted function in this unit's configuration (local WP 25,
+`-wp-fct`, Qed alone and then Z3; the only WP runs this record made) give it
+12 goals, and none is at the conversion. The fix's predicted visibility comes only through the
+contract's content clause (P4).
+
+*Why the contract cannot carry it as a precondition.* A precondition "every
+value fits `type`" would have to name `type`. ACSL written in a macro body is
+a comment, and the preprocessor substitutes no macro parameter inside a
+comment. `(type)` stays literal, and Frama-C rejects the annotation (parse
+checks under `-CC`, WP 25: "unexpected token '('" in this contract,
+"expecting ';'" in a minimal one). ACSL as Frama-C implements it has no cast to
+the type of an expression (`\typeof` rejected, parse check). The precondition
+could be stated only per instantiation, in a driver. The macro's own contract
+would then be unprovable at every type without that clause, and the default
+build would stay silent.
+
+**Fix:** check each value as it is converted, and return
+`Err(ERR_OUT_OF_RANGE)` with `len` unchanged:
+
+    const isize value = range_next(&r);
+    const type elem = (type)value;
+    if (((isize)elem != value) || ((value < 0) && !(elem < (type)1))) {
+        return result__Bool_Error_err(ERR_OUT_OF_RANGE);
+    }
+    v->items[v->len + i] = elem;
+
+The first clause rejects a value the type cannot hold, round-tripped through
+`isize`. The second rejects a negative value into an unsigned type at least as
+wide as `isize` (`usize`, `u64`): there the round trip returns the value, the
+conversion back being implementation-defined. It is spelled `elem < (type)1`,
+not `elem < 0`, so that an unsigned instantiation draws no `-Wtype-limits`
+warning (checked: GCC 13 and 14, clang 18 and MinGW GCC 13 with `-Wall
+-Wextra -Wconversion -Wsign-conversion`, at `int` and `u64`, no warning). Together,
+not each alone, the two clauses say exactly "the value does not fit" for
+every integer element type, on an implementation that converts modulo 2^N
+(GCC, clang and MSVC document that they do). They were checked at `int`,
+`uint8_t`, `uint32_t` and `size_t` over the boundary values, and by the
+review at every standard integer type, `bool` and `__int128`, under GCC 14 and
+clang 18 at `-O0` with UBSan and at `-O2`, with no mismatch. The check itself
+converts before it compares: `(type)value` for a value a narrower signed type
+cannot hold, and `(isize)elem` for an unsigned type at least as wide as
+`isize`. ISO C makes both conversions implementation-defined, and allows a
+signal to be raised (C11 6.3.1.3p3). On an implementation that raises one,
+the check is not exact. That is F1's own conversion, moved before the store,
+not a new one. Every
+caller that meets the documented obligation gets the same result as before.
+The `@note` becomes a `@post` for the new error, and the element type is
+documented as an integer type: a floating type is outside the contract. On
+this path the slots from `len` up to the one before the failing value's are
+overwritten; the failing value is never stored.
+They are past `len`, so they are not part of the vector's value: stringbuf.h's
+scratch rule (VERIFY-031 G3), stated in the header. Probe of the fixed code:
+
+    f1 wrap up:   Err(ERR_OUT_OF_RANGE), len 0
+    f1 wrap down (INT_MIN + 1 down past INT_MIN): Err(ERR_OUT_OF_RANGE), len unchanged
+    u64, range_make(-1, 2, 1): Err(ERR_OUT_OF_RANGE), len 0
+    u64, range_make(0, 3, 1): Ok, 0 1 2
+
+**F2 — a range with step `ISIZE_MIN` reaches `range_len` and undefined
+behaviour, built by hand in every build and through `range_make` in the
+verified configuration.**
+
+    range r = { 0, -10, ISIZE_MIN };   /* the struct is public */
+    data/range.h:463:21: runtime error: negation of -9223372036854775808
+      cannot be represented in type 'long int'
+    → ok=1 len=1
+
+`range_make` rejects `ISIZE_MIN` with `require_msg`, and maps step 0 to 1.
+range.h states both in `range_wf`, which `range_len` requires. The rejection
+holds in the default build only: under `-DCANON_NO_REQUIRE`, the configuration
+the WP and coverage jobs use, or past a handler that returns, `range_make`
+builds the range and the same negation follows:
+
+    range_make(0, -10, ISIZE_MIN), -DCANON_NO_REQUIRE
+    data/range.h:463:21: runtime error: negation of -9223372036854775808 ...
+    → step=-9223372036854775808 ok=1 len=1
+    default build: CONTRACT VIOLATION in range_make, abort
+
+
+`vec_range.h` states nothing about `r`, and passes it to `range_len`
+unchecked. The prover sees this as `range_len`'s precondition at the call: in
+both uncontracted runs above, that goal is unproved. A range built by hand with
+step 0 also violates `range_wf`. On it the code is defined (range.h treats it
+as empty) and returns Ok with nothing appended.
+
+**Fix:** reject `ISIZE_MIN` with `Err(ERR_INVALID_ARG)`, the code vec already
+uses for a malformed argument. For step 0, keep the result the code gives now
+by not calling `range_len`:
+
+    if (r.step == CANON_ISIZE_MIN) {
+        return result__Bool_Error_err(ERR_INVALID_ARG);
+    }
+    usize count = (r.step == 0) ? (usize)0 : range_len(&r);
+
+A precondition (`requires range_wf(r)`, range.h's convention) was considered
+and not taken. It would leave the hand-built case undefined in builds without
+`require_msg`. With `require_msg`, it would continue past a returning handler
+into the same negation whenever the installed handler returns, as
+`bitset_test.c`'s does (the default handler aborts).
+Probe of the fixed code: `Err(ERR_INVALID_ARG)`, len unchanged; step 0: Ok,
+len unchanged.
+
+### Contract design, fixed before the run
+
+The contract lives in the macro body, as `IMPL_VEC_FILL`'s does. It names no
+macro parameter (F1). One clause at `int`, the only one that must name the
+type, goes on a prototype in the driver. Frama-C merges the two contracts
+("found two contracts ... Merging them", a warning; parse-checked). The same
+contract is used in every run. Only the code changes between run 1 and run 2.
+
+    /*@ requires <IMPL_VEC_FILL's first precondition, verbatim>;
+        assigns v->len, v->items[0 .. v->capacity - 1];
+        behavior invalid:
+          assumes v == \null || (v != \null && v->items == \null)
+               || r.step == CANON_ISIZE_MIN;
+          assigns \nothing;
+          ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;
+        behavior overflow:
+          assumes v != \null && v->items != \null && r.step != CANON_ISIZE_MIN
+               && v->len + range_count(r) > CANON_USIZE_MAX;
+          assigns \nothing;
+          ensures \result.is_ok == \false && \result.val.err == ERR_OVERFLOW;
+        behavior too_big:
+          assumes v != \null && v->items != \null && r.step != CANON_ISIZE_MIN
+               && v->len + range_count(r) <= CANON_USIZE_MAX
+               && v->len + range_count(r) > v->capacity;
+          assigns \nothing;
+          ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED;
+        behavior room:
+          assumes v != \null && v->items != \null && r.step != CANON_ISIZE_MIN
+               && v->len + range_count(r) <= v->capacity;
+          assigns v->len, v->items[v->len .. v->capacity - 1];
+          ensures \result.is_ok ==> v->len == \old(v->len) + range_count(r);
+          ensures \result.is_ok ==> \forall integer k; 0 <= k < range_count(r)
+                    ==> v->items[\old(v->len) + k] == r.current + k * r.step;
+          ensures !\result.is_ok ==> \result.val.err == ERR_OUT_OF_RANGE
+                    && v->len == \old(v->len);
+          ensures \forall integer k; 0 <= k < \old(v->len)
+                    ==> v->items[k] == \old(v->items[k]);
+        complete behaviors;
+        disjoint behaviors; */
+
+The loop's annotation, in the macro body before the `for`:
+
+    /*@ loop invariant 0 <= i <= count;
+        loop invariant r.end == \at(r.end, Pre) && r.step == \at(r.step, Pre);
+        loop invariant range_count(r) == count - i;
+        loop invariant i < count ==> range_wf(r)
+                    && r.current == \at(r.current, Pre) + i * r.step;
+        loop invariant \forall integer k; 0 <= k < i
+                    ==> v->items[v->len + k] == \at(r.current, Pre) + k * r.step;
+        loop assigns i, r.current, v->items[v->len .. v->len + count - 1];
+        loop variant count - i; */
+
+The clause at `int`, on the driver's prototype:
+
+    /*@ ensures fits_ok:
+          (v != \null && v->items != \null && r.step != CANON_ISIZE_MIN
+           && \old(v->len) + range_count(r) <= \old(v->capacity)
+           && \forall integer k; 0 <= k < range_count(r)
+                ==> (int)(r.current + k * r.step) == r.current + k * r.step)
+          ==> \result.is_ok; */
+    static inline result__Bool_Error vec_int_extend_from_range(vec_int* v, range r);
+
+Design notes, each fixed now:
+
+1. **`room`, not `ok`.** Whether a call with room succeeds depends on F1's
+   check, which the macro's contract cannot state (it would name `type`). So
+   `room` says what success and failure mean, and the clause at `int` says
+   when success is owed. At another type, nothing says when it is owed: *Not
+   claimed* below.
+2. **The values are stated as `r.current + k * r.step`,** the k-th value, over
+   mathematical integers. The invariant's step from `i` to `i + 1` is linear;
+   only the statement multiplies.
+3. **Step 0** falls under `room` with `range_count(r) == 0`. range.h's
+   `range_count` is 0 there, so the contract holds as the code behaves now.
+4. **Run 1 runs this contract on the unfixed code.** That is the detection
+   test: F2 and F1 are each predicted to show at named goals (P3, P4).
+5. **Decision rule (VERIFY-028's, restated).** An own goal that does not prove
+   is kept and argued, never weakened or dropped. P1 is not decided by editing
+   the specification after a run.
+6. **Not claimed:** when a call with room succeeds at any type but `int`;
+   floating element types; the slots past `len` after a failure; anything
+   under `CANON_LIFETIME_DEBUG`.
+
+### Run plan
+
+| Run | Source state | Mode |
+|-----|--------------|------|
+| 1 | contract, annotation, driver and `frama-c-vec-range` job; F1 and F2 unfixed | report-only — the detection test |
+| 2 | F1 and F2 fixed; header documentation; regression and MC/DC tests (below) | report-only |
+| 3 | unchanged | report-only, name stability |
+| 4 | pinned | enforced |
+
+Each run is one push of the main CI. The new job is predicted to take well
+under `frama-c-vec`'s three hours, the unit being arena's size plus range.h,
+and it runs beside the other jobs.
+
+### Predictions (author — confirm or amend before committing)
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **Zero new `**Manual proof argument**` blocks.** *A* stays 31 cumulative and 17 in force. | any own residual at enforcement that no existing block covers | M–L (P7) |
+| P2 | **Inherited and fresh residuals = 45, by name:** `frama-c-arena`'s 33 ∪ `frama-c-range`'s 8, with range's `typed_` prefix mapped to `typed_cast_` (39: the two `checked_add` names are in both), ∪ result at (Bool, Error)'s six run-time checks on function pointers, as `cc-vec` pins them. Computed both ways from the pins at b7bac65: the union equals `cc-vec`'s 45 non-vec names, with option at `int`'s six replaced by option at `isize`'s six. No vec function is instantiated, so no vec name is inherited. | count ≠ 45, or any name outside that set | H for the union; M for option at `isize`'s six, which range's unit reads from contracted prototypes under `-C` and this unit from the macro bodies under `-CC` |
+| P3 | **Run 1, F2 detected at one goal only:** `range_len`'s precondition at the call is unproved. Nothing else shows it. WP keeps a callee's precondition as a hypothesis after the call (VERIFY-040), so on the `ISIZE_MIN` path the `invalid` behaviour's postcondition, and the establishment of `i < count ==> range_wf(r) && ...`, prove from contradictory hypotheses. | the call's precondition proves in run 1; or `invalid`'s postcondition or that establishment is unproved in run 1 or run 2 | H; the call's precondition was already unproved in the uncontracted runs, so F2's detection tests little |
+| P4 | **Run 1, F1 detected, through the contract.** The content invariant's preservation is unproved: the store writes `(int)` of the value, which need not equal it. `room`'s content postcondition proves, from the invariant WP assumes at the loop's exit. `fits_ok` proves: the unfixed code returns Ok whenever there is room, and on the `ISIZE_MIN` path from `range_len`'s precondition taken as a hypothesis. | the content invariant's preservation proves in run 1; or `room`'s content postcondition or `fits_ok` is unproved in run 1 | M |
+| P5 | **F1 has no goal of its own, in any run.** No `-wp-rte` goal is emitted at the conversion `(type)value`. | any goal at the conversion | H |
+| P6 | **Run 1: no other own goal is unproved** beyond P3's and P4's and the goals that depend on the unproved invariants. | any own goal unproved for another cause, named in the score | M–L |
+| P7 | **Run 2: own residuals = 0.** Each of the function's goals proves at the CI's provers and timeout. The goals most at risk are the content invariant's preservation (a product, `i * r.step`, with `i + 1` substituted) and `fits_ok`, which needs the hypothesis's quantifier instantiated at `k = i`. (The review of this record found `fits_ok` false for the run-2 code as first drafted: its hypothesis did not exclude step `ISIZE_MIN`, where the code returns `ERR_INVALID_ARG`. The conjunct was added before this commit, with `\old` on `len` and `capacity`.) | own residuals > 0 at enforcement (then P1 fails unless an existing block covers each, and the cause is named) | M–L |
+| P8 | **No existing pin moves**, in the main CI or the -CC workflow. No verified unit includes `vec_range.h`, and `vec_test.c` compiles the macro's ACSL as comments. Record coverage passes on every push of the series. | any proved line, count or roll-call of an existing job changes | H |
+| P9 | **The catalogue, rebuilt with the new job, gains exactly the family feature `vec@other+integer`.** ACSL stays at 42 and C at 22; family features go from 8 to 9; `vec_range.h` joins the verified files. | any other feature added or removed | H |
+| P10 | **By kind, exploratory (§5.4), scored and carrying nothing:** if a block is needed (P1 fails), it is not about either of n(*P*)'s two kinds. The kinds at risk are products and range.h's `range_count`, both already in the catalogue. | — (recorded, not a test) | — |
+
+Not predicted: the unit's goal totals. Counts of WP 29's goals predicted from
+local WP 25 runs missed three times in VERIFY-040, and this record made no
+contracted run to count from. Run 1 measures them.
+
+**Open questions**, recorded and not scored:
+
+- **Q1 — the merge.** If WP 29 rejects the merged contract, or attaches the
+  clause at `int` to the definition otherwise than the parse shows, run 1 is
+  repeated as run 1b with the clause written as a `behavior` of its own in the
+  same prototype. The record states the difference. If neither attaches,
+  `fits_ok` moves to *Not claimed*, and P4's third part is void, not failed.
+- **Q2 — `-CC` in a main-CI unit.** The unit's closure contains macro families
+  whose bodies carry contracts: option at `isize` and result at
+  (Bool, Error). P2 tests that `-CC` gives the closure the residual set its
+  `-C` units pin. A difference is a finding about the instrument, recorded
+  under §6's perturbation table, not under this unit's own residuals.
+
+### What each outcome means
+
+- P1 and P7 hold: the twentieth unit adds no argument, as range.h and
+  stringbuf.h did not. That is a third prospective point for "no block after
+  the twelfth module" under the treatment those two units had (§5.3 of the
+  paper): it shows a new argument could be avoided, not that none was needed.
+- P7 fails at a goal no block covers: a block is written and counted, its
+  cause named, under P10's exploratory reading. "Saturated at the twelfth
+  module" stays withdrawn either way.
+- P2 fails: the composition identity fails for the first unit composed under
+  `-CC` from `-C` substrates. That is a finding about the instrument, recorded
+  under Q2 and §6's table, and the unit's own score stands apart from it.
+- P3 or P4 fails: the prover saw a finding otherwise than predicted. The
+  score names the goals.
+
+### Tests and MC/DC (run 2)
+
+In `test/data/vec_test.c`, beside the two existing tests:
+
+- F1: `range_make(INT_MAX - 1, (isize)INT_MAX + 2, 1)` → `ERR_OUT_OF_RANGE`,
+  `len` and the elements below it unchanged; the descending case below
+  `INT_MIN`; a range whose first value fits and whose later value does not,
+  after existing elements.
+- F1 at an unsigned type as wide as `isize`: `DEFINE_VEC(static inline, u64)`
+  and `DEFINE_VEC_RANGE(static inline, u64)`; `range_make(-1, 2, 1)` →
+  `ERR_OUT_OF_RANGE`; `range_make(0, 3, 1)` → Ok, `0 1 2`. This is the only
+  input that drives the second clause's true side. At `int` it cannot be
+  reached: a value that round-trips into `int` keeps its sign.
+- F2: `{ 0, -10, ISIZE_MIN }` built by hand → `ERR_INVALID_ARG`, `len`
+  unchanged; `{ 0, 10, 0 }` → Ok, nothing appended.
+
+The coverage job attributes macro-generated code to the instantiating file's
+line, so the per-header MC/DC table may not list `vec_range.h` at all. Run 2
+records where its outcomes land, and the total's move, without a prediction.
+`misra`'s count (54) is recorded at run 2, also without a prediction.
+
+### Also owed, with run 1's push
+
+- `tools/idioms/extract.py`'s `clang_flags` drops `-C` and `-CC`. clang
+  rejects both without `-E` ("invalid argument '-CC' only allowed with
+  '-E'"), so the first main-CI job with `-CC` would stop `catalogue` from
+  building. Comments do not change the AST it reads, and ACSL is read from the
+  files themselves, so dropping the flags changes nothing for any job. Test 4
+  (the catalogue rebuilds identically) is run before and after.
+- `tools/record_coverage.py` is checked against a job whose `cpp-extra-args`
+  carries `-CC`, and against a report-only job with no pinned names.
+
+**What this push runs.** Record coverage, since the record changes. It passes
+unchanged: this record adds no goal table and no block. The main CI and the
+-CC workflow do not run: the push changes `docs/` and `tools/`, which the main
+CI ignores, and the -CC workflow's paths name neither.
