@@ -935,23 +935,30 @@ and after the paragraphs below say where a reading here no longer holds.
 | compare.h  | 28        |               208 | 208 (100.00%) | 0        | VERIFY-005   |
 | ptr.h      | 21        |              1958 | 1952 (99.69%) | 6        | VERIFY-006/23 |
 | slice.h    | 22        |               398 | 390 (97.99%) | 8        | VERIFY-007/12 |
-| memory.h   | 27        |              2879 | 2848 (98.92%) | 31       | VERIFY-008/12/23 |
-| arena.h    | 25        |              3556 | 3523 (99.07%) | 33       | VERIFY-009/12/23/33 |
-| pool.h     | 21        |              4076 | 4042 (99.17%) | 34       | VERIFY-010/12/23/33 |
-| region.h   | 12        |              3730 | 3691 (98.95%) | 39       | VERIFY-011/12/23/33 |
+| memory.h   | 27        |              2873 | 2842 (98.92%) | 31       | VERIFY-008/12/23 |
+| arena.h    | 25        |              3550 | 3517 (99.07%) | 33       | VERIFY-009/12/23/33 |
+| pool.h     | 21        |              4070 | 4036 (99.16%) | 34       | VERIFY-010/12/23/33 |
+| region.h   | 12        |              3724 | 3685 (98.95%) | 39       | VERIFY-011/12/23/33 |
 | error.h    | 4         |                65 | 65 (100.00%) | 0        | VERIFY-013   |
 | option     | 16        |               228 | 222 (97.37%) | 6        | VERIFY-014   |
 | result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
 | borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
 | diag.h     | 13        |              3058 | 3050 (99.74%) | 8        | VERIFY-017   |
-| vec        | 37        |              5574 | 5481 (98.33%) | 93       | VERIFY-018/23/33/40 |
+| vec        | 37        |              5568 | 5475 (98.33%) | 93       | VERIFY-018/23/33/40 |
 | deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40 |
-| bitset     | 32        |              5052 | 4978 (98.54%) | 74       | VERIFY-020/23/40 |
+| bitset     | 32        |              5046 | 4972 (98.53%) | 74       | VERIFY-020/23/40 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
-| priority_queue.h | 41  |              4689 | 4651 (99.19%) | 38       | VERIFY-022/40 |
+| priority_queue.h | 41  |              4683 | 4645 (99.19%) | 38       | VERIFY-022/40 |
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
-| stringbuf.h | 29       |              4832 | 4795 (99.23%) | 37       | VERIFY-031..35 |
-| **Total**  | **457**   | **49814**         | **49353 (99.07%)**| **461**  |              |
+| stringbuf.h | 29       |              4826 | 4789 (99.23%) | 37       | VERIFY-031..35 |
+| **Total**  | **457**   | **49766**         | **49305 (99.07%)**| **461**  |              |
+
+*Brought to the pins again 2026-10-25 (VERIFY-008, the overlap fix,
+predicted).* `mem_regions_overlap` compares addresses as `uintptr_t` values,
+not pointers with `<`; its goals go from 37 to 31, all proved, in the eight
+rows that verify memory.h's functions, so the total is 49766 obligations,
+49305 proved and 461 unproved, from 49814, 49353 and 461. Notes below give
+the pins of their dates.
 
 *Brought to the pins again 2026-10-21 (VERIFY-040 round 2's score).* The
 vec, bitset and priority_queue.h rows read their jobs' pins at CI #1375,

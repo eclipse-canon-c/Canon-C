@@ -127,10 +127,14 @@
   predicate regions_overlap{L}(char *a, char *b, integer size) =
       size > 0 && !\separated(a + (0 .. size - 1), b + (0 .. size - 1));
 
-  // The order mem_regions_overlap computes: within one object the same as
-  // regions_overlap, across objects a comparison C leaves undefined.
-  predicate regions_overlap_by_order{L}(char *a, char *b, integer size) =
-      size > 0 && a < b + size && b < a + size;
+  // What mem_regions_overlap computes: the two ranges' addresses, as
+  // uintptr_t values, intersect. Where the conversion is the address, as on
+  // flat memory, the same as regions_overlap; never undefined, unlike
+  // comparing the pointers across objects.
+  predicate regions_overlap_by_addr(char *a, char *b, integer size) =
+      size > 0 &&
+      (integer)(uintptr_t)a < (integer)(uintptr_t)b + size &&
+      (integer)(uintptr_t)b < (integer)(uintptr_t)a + size;
 
   // Address-level alignment: ptr is aligned to a power-of-2 boundary
   // iff its low (alignment - 1) bits are zero.
@@ -169,10 +173,14 @@
 /**
  * @brief Returns true if [a, a+size) and [b, b+size) overlap
  * @note  Used internally; exposed for testing via mem_regions_overlap.
- * @note  It compares the two pointers by order, which C defines only within
- *        one object (C11 6.5.8p5); its postcondition states that order,
- *        regions_overlap_by_order, and the copies' preconditions state the
- *        overlap itself, regions_overlap (VERIFY-040 round 2).
+ * @note  It compares the two ranges' addresses as uintptr_t values. C
+ *        leaves that conversion implementation-defined (C99 6.3.2.3p6), not
+ *        undefined as comparing the pointers with < is unless both point
+ *        into one object (C11 6.5.8p5), and it is the address on the
+ *        flat-memory targets the CI builds for. The difference of the
+ *        larger address and the smaller cannot wrap. The postcondition
+ *        states that comparison, regions_overlap_by_addr; the copies'
+ *        preconditions state the overlap itself, regions_overlap.
  */
 /*@
   assigns  \nothing;
@@ -191,16 +199,16 @@
 
   behavior overlapping:
     assumes a != \null && b != \null && size > 0;
-    ensures \result <==> regions_overlap_by_order((char *)a, (char *)b, (integer)size);
+    ensures \result <==> regions_overlap_by_addr((char *)a, (char *)b, (integer)size);
 
   complete behaviors;
   disjoint behaviors;
 */
 static inline bool mem_regions_overlap(const void* a, const void* b, usize size) {
     if (!a || !b || (size == 0u)) { return false; }
-    const u8* pa = (const u8*)a;
-    const u8* pb = (const u8*)b;
-    return (pa < (pb + size)) && (pb < (pa + size));
+    const uintptr_t ua = (uintptr_t)a;
+    const uintptr_t ub = (uintptr_t)b;
+    return (ua <= ub) ? ((ub - ua) < size) : ((ua - ub) < size);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

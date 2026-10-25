@@ -12,9 +12,19 @@ Combined verification status across all annotated headers:
 |----------------------|--------------------------------------------------------------------------------|
 | **Headers verified** | 20 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h) — lifetime.h is a 21st unit of narrower scope, see VERIFY-021 |
 | **Functions**        | 456 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29; lifetime.h's 1 counted separately) |
-| **Total obligations**| 49810 (summed over the 20 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 49349 (99.07%)                                                                 |
+| **Total obligations**| 49762 (summed over the 20 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 49301 (99.07%)                                                                 |
 | **Unproved**         | 461 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-10-25 (VERIFY-008, the overlap fix, predicted).*
+`mem_regions_overlap` compares the two addresses as `uintptr_t` values, not
+the pointers with `<`, which C leaves undefined across objects. Its goals go
+from 37 to 31 under WP 29, all proved, as the overlap probe measured, in each
+of the eight units that verify memory.h's functions (memory.h, arena.h,
+pool.h, region.h, vec, bitset, priority_queue.h, stringbuf.h) and in
+arena-32 and the two vec `-CC` units: 48 obligations and 48 proved fewer
+over the twenty units, no unproved goal added or removed. Dated notes below
+give the pins of their dates.
 
 *Recomputed 2026-10-21 (VERIFY-040 round 2's score).* Summed again from the
 twenty pins as CI #1375 holds them, vec's at the line that run measured: +15
@@ -260,6 +270,11 @@ above; double-counting them would inflate the aggregate.
 > **Note (2026-10-21, VERIFY-040 round 2).** At CI #1375 vec's pin counts
 > 5574 goals, bitset's 5052 and priority_queue.h's 4689, the others as at
 > CI #1374: 49810.
+
+> **Note (2026-10-25, VERIFY-008, the overlap fix, predicted).** memory.h's
+> pin counts 2873 goals, arena.h's 3550, pool.h's 4070, region.h's 3724,
+> vec's 5568, bitset's 5046, priority_queue.h's 4683 and stringbuf.h's 4826,
+> the others as at CI #1375: 49762.
 
 ---
 
@@ -1593,9 +1608,9 @@ frama-c -wp -wp-rte \
   core/memory.h
 ```
 
-Expected output: `Proved goals: 2848 / 2879` with 31 unproved goals, the pin
-since VERIFY-039 G18 (`2829 / 2872` with 43 at VERIFY-023, `2823 / 2866`
-before it).
+Expected output: `Proved goals: 2842 / 2873` with 31 unproved goals, the pin
+since the VERIFY-008 overlap fix (predicted) (`2848 / 2879` since VERIFY-039
+G18, `2829 / 2872` with 43 at VERIFY-023, `2823 / 2866` before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 
 ---
@@ -1925,9 +1940,9 @@ frama-c -wp -wp-rte \
   core/arena.h
 ```
 
-Expected output: `Proved goals: 3523 / 3556` with 33 unproved goals, the pin
-since VERIFY-039 G18 (`3444 / 3527` with 83 at VERIFY-023, `3430 / 3521`
-and 91 before it).
+Expected output: `Proved goals: 3517 / 3550` with 33 unproved goals, the pin
+since the VERIFY-008 overlap fix (predicted) (`3523 / 3556` since VERIFY-039
+G18, `3444 / 3527` with 83 at VERIFY-023, `3430 / 3521` and 91 before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 The 43 inherited goals are byte-identical
 to memory.h's full residual surface (see VERIFY-009 inherited
@@ -2226,9 +2241,9 @@ frama-c -wp -wp-rte \
   core/pool.h
 ```
 
-Expected output: `Proved goals: 4042 / 4076` with 34 unproved goals, the pin
-since VERIFY-039 G18 (`3914 / 4009` with 95 at VERIFY-023, `3884 / 4003`
-and 119 before it).
+Expected output: `Proved goals: 4036 / 4070` with 34 unproved goals, the pin
+since the VERIFY-008 overlap fix (predicted) (`4042 / 4076` since VERIFY-039
+G18, `3914 / 4009` with 95 at VERIFY-023, `3884 / 4003` and 119 before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 pool.h is the first header whose WP run processes a
 two-hop transitive include (pool.h → arena.h → memory.h → ptr/slice/checked/
@@ -2463,9 +2478,10 @@ frama-c -wp -wp-rte \
   core/region.h
 ```
 
-Expected output: `Proved goals: 3691 / 3730` with 39 unproved goals, the pin
-since VERIFY-039 G19 and G20 (`3592 / 3698` with 106 at VERIFY-023,
-`3578 / 3692` and 114 before it).
+Expected output: `Proved goals: 3685 / 3724` with 39 unproved goals, the pin
+since the VERIFY-008 overlap fix (predicted) (`3691 / 3730` since VERIFY-039
+G19 and G20, `3592 / 3698` with 106 at VERIFY-023, `3578 / 3692` and 114
+before it).
 (The Timeout/Unknown split varies run to run; only the union is pinned.)
 region.h's WP run processes a two-hop
 transitive include (region.h → arena.h → memory.h → ...); the 91
@@ -3656,10 +3672,11 @@ frama-c \
   vmacros/vdrivers/vec_verify.h
 ```
 
-Expected output: `Proved goals: 5481 / 5574` with the 93 documented
-unproved goals, the pin since VERIFY-040 round 2's score (`5475 / 5569` with
-94 since round 1, `5474 / 5569` with 95 since VERIFY-039 G18, `5285 / 5473`
-with 188 at VERIFY-023, 196 before it;
+Expected output: `Proved goals: 5475 / 5568` with the 93 documented unproved
+goals, the pin since the VERIFY-008 overlap fix (predicted) (`5481 / 5574`
+since VERIFY-040 round 2's score, `5475 / 5569` with 94 since round 1,
+`5474 / 5569` with 95 since VERIFY-039 G18, `5285 / 5473` with 188 at
+VERIFY-023, 196 before it;
 VERIFY-018), 0 Failed. Wall time ~3h05m (CI #1247;
 ~2h50m before the F4 contracts added their 38 goals)
 (timeout-dominated; see VERIFY-018's runtime record).
@@ -4349,10 +4366,10 @@ the complete installation and registration procedure.
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
 | slice.h      | ✅ Verified       | 390/398   | 8 documented residuals at CI #1373, memcmp's danglingness at the four functions that call it, true since VERIFY-039 G13 (VERIFY-008 Category 3); 15 before VERIFY-039 G14 and G17 closed seven that did not hold for every admitted call (VERIFY-007/-012); MCDC-002 closed, MC/DC 54/58 |
-| memory.h     | ✅ Verified       | 2848/2879 | 31 documented residuals at CI #1373: 14 inherited (checked.h 2, ptr.h 4, slice.h 8) + 17 own (VERIFY-008 Categories 1 to 3, and `mem_is_aligned`'s two under VERIFY-039's block on a clause the specification omits); 43 at VERIFY-023 (VERIFY-008/-012), each step since in the job's pin comment |
-| arena.h      | ✅ Verified       | 3523/3556 | 33 documented residuals at CI #1373: memory.h's 31, inherited, + 2 own, the zero-content `ensures` of `arena_alloc_zero` and `arena_alloc_aligned_zero`, filed under VERIFY-017's byte-view block since VERIFY-039's batch 5 retired VERIFY-009 Cat 2c; formerly 50 (CI #1350), 79 (VERIFY-033/034), 83 (VERIFY-009/-012/-023); VERIFY-036 and VERIFY-039 closed the rest, each step in the job's pin comment; MCDC-003 |
-| pool.h       | ✅ Verified       | 4042/4076 | 34 documented residuals at CI #1373: arena.h's 33, inherited, + 1 own, VERIFY-010 Cat 2a's division bound; formerly 51 (CI #1350), 91 (VERIFY-033/034), 95 (VERIFY-010/-012/-023); VERIFY-036 and VERIFY-039 closed the rest, each step in the job's pin comment; MCDC-004 |
-| region.h     | ✅ Verified       | 3691/3730 | 39 documented residuals at CI #1373: arena.h's 33, inherited, + 6 own, each true for every admitted call (VERIFY-011 Categories 1 and 2, and VERIFY-039's block on what a hook keeps); formerly 73 (CI #1350) with 23 own, 17 of which VERIFY-039 G19 and G20 closed, fourteen of them not holding for every admitted call; 102 (VERIFY-033/034), 106 (VERIFY-011/-012/-023); MCDC-005, whose outcome is reachable through the API (VERIFY-039 G20) |
+| memory.h     | ✅ Verified       | 2842/2873 (predicted) | 31 documented residuals at CI #1373: 14 inherited (checked.h 2, ptr.h 4, slice.h 8) + 17 own (VERIFY-008 Categories 1 to 3, and `mem_is_aligned`'s two under VERIFY-039's block on a clause the specification omits); 43 at VERIFY-023 (VERIFY-008/-012), each step since in the job's pin comment |
+| arena.h      | ✅ Verified       | 3517/3550 (predicted) | 33 documented residuals at CI #1373: memory.h's 31, inherited, + 2 own, the zero-content `ensures` of `arena_alloc_zero` and `arena_alloc_aligned_zero`, filed under VERIFY-017's byte-view block since VERIFY-039's batch 5 retired VERIFY-009 Cat 2c; formerly 50 (CI #1350), 79 (VERIFY-033/034), 83 (VERIFY-009/-012/-023); VERIFY-036 and VERIFY-039 closed the rest, each step in the job's pin comment; MCDC-003 |
+| pool.h       | ✅ Verified       | 4036/4070 (predicted) | 34 documented residuals at CI #1373: arena.h's 33, inherited, + 1 own, VERIFY-010 Cat 2a's division bound; formerly 51 (CI #1350), 91 (VERIFY-033/034), 95 (VERIFY-010/-012/-023); VERIFY-036 and VERIFY-039 closed the rest, each step in the job's pin comment; MCDC-004 |
+| region.h     | ✅ Verified       | 3685/3724 (predicted) | 39 documented residuals at CI #1373: arena.h's 33, inherited, + 6 own, each true for every admitted call (VERIFY-011 Categories 1 and 2, and VERIFY-039's block on what a hook keeps); formerly 73 (CI #1350) with 23 own, 17 of which VERIFY-039 G19 and G20 closed, fourteen of them not holding for every admitted call; 102 (VERIFY-033/034), 106 (VERIFY-011/-012/-023); MCDC-005, whose outcome is reachable through the API (VERIFY-039 G20) |
 | scope.h      | N/A              |           | Macro-only header; DEFER expands at call sites, no static inline functions to verify. scope_test.c locks the exit-method table to regression tests. |
 | ownership.h  | N/A              |           | Annotation macros expand to T (no behavior); DEFINE_OWNED(T)/DEFINE_BORROWED(T) generate verifiable functions per instantiation but follow the DEFINE_SLICE(T) disposition (VERIFY-007 macro-verification rationale). ownership_test.c covers Widget and Complex instantiations. |
 
@@ -4418,12 +4435,12 @@ discipline) recorded for deque.
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
-| vec (driver) | ✅ Verified  | 5481/5574 | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; ratcheted CI #1202 and CI #1247/43a46b1 for the F4 closure; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 93 residuals at CI #1375: memory.h's 31 and arena.h's 2, inherited, option's 6 and result's 6 at (Bool, Error), the run-time checks on the callbacks' pointers since VERIFY-039 G11, and 48 own, each filed by name (VERIFY-039 batch 1), `swap`'s proved since VERIFY-040 round 1 and `extend`'s frame stated as postconditions since round 2; 94 at CI #1374; 95 at CI #1373; 184 at VERIFY-035 (5337/5521), 196 at CI #1247, each step since in the job's pin comment: 123 inherited byte-identically (largest TU to date; 91 core = arena.h's set verbatim, 32 option mod prefix) + 73 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 20 fresh result(Bool, Error) instantiation, the F4 pair having been removed by contract at CI #1247 — VERIFY-018 Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
+| vec (driver) | ✅ Verified  | 5475/5568 (predicted) | Third driver-verified Shape-B module, first data/-layer module, first driver on Typed+Cast (VERIFY-018, enforced CI #1154; ratcheted CI #1202 and CI #1247/43a46b1 for the F4 closure; baseline CI #1152; report-only #1150–#1151): 37 generated functions via the DEFINE_VEC_STRUCTS/FUNCTIONS split (F3); 93 residuals at CI #1375: memory.h's 31 and arena.h's 2, inherited, option's 6 and result's 6 at (Bool, Error), the run-time checks on the callbacks' pointers since VERIFY-039 G11, and 48 own, each filed by name (VERIFY-039 batch 1), `swap`'s proved since VERIFY-040 round 1 and `extend`'s frame stated as postconditions since round 2; 94 at CI #1374; 95 at CI #1373; 184 at VERIFY-035 (5337/5521), 196 at CI #1247, each step since in the job's pin comment: 123 inherited byte-identically (largest TU to date; 91 core = arena.h's set verbatim, 32 option mod prefix) + 73 subject-side (53 own across 4 categories incl. the new macro-body-loop class (g) forward-flagged for deque, + 20 fresh result(Bool, Error) instantiation, the F4 pair having been removed by contract at CI #1247 — VERIFY-018 Correction note 2026-07-16 and DEMONSTRATED note 2026-08-17); zero own fn-pointer-dispatch goals; MCDC-010 (155/158 ceiling, U1/U2 WP-corroborated infeasible + U3 heap-environmental; third attribution variant); facade views measured but not yet WP-driven (follow-up); `_range`/`_fmt` extensions deferred |
 | deque (driver) | ✅ Verified  | 1653/1665 | Fourth driver-verified Shape-B module, second data/-layer module, first data/-layer driver on plain **Typed** (VERIFY-019, enforced CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240): 24 generated functions via the DEFINE_DEQUE_STRUCTS/FUNCTIONS split (VERIFY-018 F3's checklist item, landed CI #1225 with byte-identical expansion verified first); **zero core-substrate inheritance** — the first module whose inherited surface is SMALLER than its predecessor's, composability tested in the converse direction; 12 residuals at CI #1374: option's 6 and result's 6 at (Bool, Error), the run-time checks on the callbacks' pointers since VERIFY-039 G11, and no own, `swap`'s five proved since VERIFY-040 round 1; 17 at CI #1373, 5 of them own, `swap`'s, true and filed under VERIFY-039's block on a struct stored from an initialised local; 67 when enforced: 2 handler + 32 option (inheritance) + 28 fresh result(Bool, Error) + 5 own (swap cluster only); class (g) macro-body-loop **withdrawn** before the run (a ring shifts nothing); **memory-model invariant** (VERIFY-019-M); closed VERIFY-018 F4; MCDC-011 (82/82, 100%, zero justification rows) |
-| bitset       | ✅ Verified | 4978/5052 | Fifth driver-verified module, third data/-layer module (VERIFY-020; enforced CI #1260, ratcheted CI #1265, gate wired at CI #1285): 32 functions contracted in place behind an interposition driver; 74 residuals at CI #1375: memory.h's 31, bits.h's 12, borrow.h's 4 and option's 6 at `usize`, inherited, + 21 own, each filed by name (VERIFY-039 batch 3), `bitset_init`'s two proved since VERIFY-040 round 1 and `bitset_assign`'s two since round 2; 76 at CI #1374; 78 at CI #1373; 163 when enforced, 71 own, the largest own set among the driver-verified modules then; F4 specification-strength inheritance; MCDC-012 (134/138 since VERIFY-040 round 2, 130/134 before) |
-| priority_queue.h | ✅ Verified | 4651/4689 | First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 38 residuals at CI #1375: memory.h's 31 + result's 6, the run-time checks on the callbacks' pointers, + 1 own, the comparator's `\valid_function` check, the three copies between a caller's memory and the buffer proved since VERIFY-040 round 2, `regions_overlap` stated by `\separated`; 41 at CI #1373; 77 at VERIFY-035 (4521/4598); 71 when enforced (43 inherited + 22 result + 6 own), two of the six own being same-buffer slot goals, not pointer order, which VERIFY-039 G21 closed. Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
+| bitset       | ✅ Verified | 4972/5046 (predicted) | Fifth driver-verified module, third data/-layer module (VERIFY-020; enforced CI #1260, ratcheted CI #1265, gate wired at CI #1285): 32 functions contracted in place behind an interposition driver; 74 residuals at CI #1375: memory.h's 31, bits.h's 12, borrow.h's 4 and option's 6 at `usize`, inherited, + 21 own, each filed by name (VERIFY-039 batch 3), `bitset_init`'s two proved since VERIFY-040 round 1 and `bitset_assign`'s two since round 2; 76 at CI #1374; 78 at CI #1373; 163 when enforced, 71 own, the largest own set among the driver-verified modules then; F4 specification-strength inheritance; MCDC-012 (134/138 since VERIFY-040 round 2, 130/134 before) |
+| priority_queue.h | ✅ Verified | 4645/4683 (predicted) | First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 38 residuals at CI #1375: memory.h's 31 + result's 6, the run-time checks on the callbacks' pointers, + 1 own, the comparator's `\valid_function` check, the three copies between a caller's memory and the buffer proved since VERIFY-040 round 2, `regions_overlap` stated by `\separated`; 41 at CI #1373; 77 at VERIFY-035 (4521/4598); 71 when enforced (43 inherited + 22 result + 6 own), two of the six own being same-buffer slot goals, not pointer order, which VERIFY-039 G21 closed. Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
 | range.h      | ✅ Verified | 2644/2652 | Module 18 and the **first prospective test of the saturation claim** (VERIFY-028 pre-registered, VERIFY-029 scored runs 1–2 and pre-registered run 3, VERIFY-030 enforced at CI #1317, name-identical to #1315/#1316). Shape A in place; thin driver interposes a contracted `option_isize` (F3 guard). Exact `range_count` proved over the whole `isize` domain. 8 residuals at CI #1373, **all inherited** (option's 6 run-time checks + checked.h's 2), **0 own**; 36 when enforced (32 option + 2 handler + 2 checked), VERIFY-039 G11 and G14 closing 28. F1/F2a/F2b/F3/F4 found by reading before the prover ran; **F5** a buffer overflow in `vec_range.h` downstream of F1. P1 (zero new arguments) held; P6 failed at run 2 — closed by a no-wraparound rewrite + two proved lemmas. MC/DC 61/62, 1 justified (MCDC-015). |
-| stringbuf.h  | ✅ Verified | 4795/4832 | Module 19 and the **second prospective test of the saturation claim** (VERIFY-031 pre-registered; VERIFY-032 scored run 2; VERIFY-033/034 closed A2 through arena.h's frame; VERIFY-035 enforced). 29 functions in place, Typed+Cast, no driver, first module with variadic definitions; 37 inherited at CI #1373 (arena.h 33 + borrow.h 4), **0 own**; 81 when enforced (arena.h 79 + borrow.h 2); zero new argument blocks; third trusted axiom (`vsnprintf`). Defects G1/G2/G3/G5/G6 fixed. MCDC-016 (136/138, two environmental rows). |
+| stringbuf.h  | ✅ Verified | 4789/4826 (predicted) | Module 19 and the **second prospective test of the saturation claim** (VERIFY-031 pre-registered; VERIFY-032 scored run 2; VERIFY-033/034 closed A2 through arena.h's frame; VERIFY-035 enforced). 29 functions in place, Typed+Cast, no driver, first module with variadic definitions; 37 inherited at CI #1373 (arena.h 33 + borrow.h 4), **0 own**; 81 when enforced (arena.h 79 + borrow.h 2); zero new argument blocks; third trusted axiom (`vsnprintf`). Defects G1/G2/G3/G5/G6 fixed. MCDC-016 (136/138, two environmental rows). |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 
 ### algo/ (longer term)

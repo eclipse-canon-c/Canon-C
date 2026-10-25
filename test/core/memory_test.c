@@ -153,21 +153,25 @@ static void test_regions_overlap_distinct_stack_arrays(void)
     EXPECT(!mem_regions_overlap(c + 8, c,     4));
 }
 
-/* MC/DC for the final return:
- *   return (pa < pb + size) && (pb < pa + size);
- * Each subcondition must independently affect the outcome. */
+/* MC/DC for the final return, which compares the addresses as uintptr_t
+ * values (VERIFY-008, the overlap fix):
+ *   return (ua <= ub) ? ((ub - ua) < size) : ((ua - ub) < size);
+ * The three calls below take the ternary's false arm with its comparison
+ * true and false, and its true arm with its comparison false;
+ * test_regions_overlap_partial and _contained take the true arm with its
+ * comparison true. */
 static void test_regions_overlap_mcdc(void)
 {
     u8 buf[32];
     memset(buf, 0, sizeof(buf));
 
-    /* Both subconditions true → overlap */
+    /* ua > ub, ua - ub = 4 < 8 → overlap */
     EXPECT(mem_regions_overlap(buf + 4, buf, 8));
 
-    /* First subcondition false: pa(buf+8) >= pb+size(buf+4) */
+    /* ua > ub, ua - ub = 8, not < 4 → no overlap */
     EXPECT(!mem_regions_overlap(buf + 8, buf, 4));
 
-    /* Second subcondition false: pb(buf+8) >= pa+size(buf+4) */
+    /* ua <= ub, ub - ua = 8, not < 4 → no overlap */
     EXPECT(!mem_regions_overlap(buf, buf + 8, 4));
 }
 

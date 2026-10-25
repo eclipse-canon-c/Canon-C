@@ -1353,7 +1353,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/memory.h"
-        # memory.h — Typed+Cast. Expected: 2848 / 2879 proved, exactly 31
+        # memory.h — Typed+Cast. Expected: 2842 / 2873 proved, exactly 31
         # unproved (VERIFY-008, VERIFY-039 G14 to G18): 14 inherited from
         # the substrate (checked.h 2, ptr.h 4, slice.h's memcmp
         # danglingness 8) + 17 own: \fresh and \freeable, which WP does
@@ -1445,8 +1445,10 @@ jobs:
           # (2842 / 2890 before).
           # VERIFY-039 G18 predicted: memory.h's two frames prove, no goal
           # added or removed (2846 / 2879 before).
-          if [ "${PROVED_COUNT}" != "2848 / 2879" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 2848 / 2879)."
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (2848 / 2879 before).
+          if [ "${PROVED_COUNT}" != "2842 / 2873" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 2842 / 2873)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1520,7 +1522,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: memory.h verified — 2848/2879 proved, 31 documented"
+          echo "PASS: memory.h verified — 2842/2873 proved, 31 documented"
           echo "      residuals all observed (VERIFY-008): 14 inherited"
           echo "      from ptr.h/slice.h/checked.h substrate + 17"
           echo "      memory.h-own. Composable verification claim holds:"
@@ -1540,7 +1542,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/arena.h"
-        # arena.h — Typed+Cast. Expected: 3523 / 3556 proved, exactly 33
+        # arena.h — Typed+Cast. Expected: 3517 / 3550 proved, exactly 33
         # unproved (VERIFY-009, VERIFY-039 G14 to G18): 31 inherited
         # (memory.h's full surface) + 2 own (arena_alloc_zero's and
         # arena_alloc_aligned_zero's third postcondition, VERIFY-039 G4).
@@ -1631,8 +1633,10 @@ jobs:
           # (3517 / 3567 before).
           # VERIFY-039 G18 predicted: memory.h's two frames prove, no goal
           # added or removed (3521 / 3556 before).
-          if [ "${PROVED_COUNT}" != "3523 / 3556" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3523 / 3556)."
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (3523 / 3556 before).
+          if [ "${PROVED_COUNT}" != "3517 / 3550" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3517 / 3550)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1708,7 +1712,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: arena.h verified — 3523/3556 proved, 33 documented"
+          echo "PASS: arena.h verified — 3517/3550 proved, 33 documented"
           echo "      residuals all observed (VERIFY-009): 31 inherited +"
           echo "      2 arena.h-own. Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
@@ -1728,8 +1732,9 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/pool.h"
         # pool.h — Typed+Cast. Expected: the Proved line and
-        # EXPECTED_UNPROVED pinned below, since VERIFY-039 G18
-        # 4042 / 4076 and 34 (VERIFY-010): 33 inherited from the substrate
+        # EXPECTED_UNPROVED pinned below: 4036 / 4070 and 34 since the
+        # VERIFY-008 overlap fix (4042 / 4076 since VERIFY-039 G18)
+        # (VERIFY-010): 33 inherited from the substrate
         # + 1 own; G18 added pool_alloc_zero's and the two try wrappers'
         # postconditions, all proved (since G14 to G17: 3998 / 4034 and 36,
         # 35 inherited; since G7: 3994 / 4045 and 51, 50 inherited). Any
@@ -1822,8 +1827,10 @@ jobs:
           # VERIFY-039 G18 predicted: memory.h's two frames prove, and the
           # three wrappers' postconditions add 42 goals, all proved
           # (3998 / 4034 before).
-          if [ "${PROVED_COUNT}" != "4042 / 4076" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 4042 / 4076)."
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (4042 / 4076 before).
+          if [ "${PROVED_COUNT}" != "4036 / 4070" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 4036 / 4070)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1900,7 +1907,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: pool.h verified — 4042/4076 proved, 34 documented"
+          echo "PASS: pool.h verified — 4036/4070 proved, 34 documented"
           echo "      residuals all observed by name (VERIFY-010): 33"
           echo "      inherited from the substrate + 1 pool.h-own (VERIFY-039"
           echo "      G7). Full set equality enforced. Composable"
@@ -1933,7 +1940,8 @@ jobs:
   #
   # Since VERIFY-039 G19 and G20's repair (642ad8a): 3691/3730 proved and 39
   # unproved, 33 inherited and 6 region-own, each true for every admitted
-  # call; the job took 36m 34s at CI #1373. (Added 2026-10-20, VERIFY-040:
+  # call (3685/3724 and the same 39 since the VERIFY-008 overlap fix); the
+  # job took 36m 34s at CI #1373. (Added 2026-10-20, VERIFY-040:
   # the 23 own goals and the run of about 1h40m above are history, as G19
   # and G20's close said.)
   # -------------------------------------------------------------------------
@@ -1946,7 +1954,7 @@ jobs:
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/region.h"
         # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
-        # Expected: 3691 / 3730 proved, exactly 39 unproved (VERIFY-011,
+        # Expected: 3685 / 3724 proved, exactly 39 unproved (VERIFY-011,
         # VERIFY-039 G14 to G20): 33 inherited (arena.h's full surface,
         # two-hop transitive) + 6 region.h-own: region_begin's invariant,
         # and in region_end the check that a hook is a valid function, the
@@ -2050,8 +2058,10 @@ jobs:
           # from 92 / 115 to 112 / 118, as the G19 probe's run R measured;
           # of the 17 names that leave the roll-call, 13 name goals that
           # prove and 4 name none (3671 / 3727 before).
-          if [ "${PROVED_COUNT}" != "3691 / 3730" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3691 / 3730)."
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (3691 / 3730 before).
+          if [ "${PROVED_COUNT}" != "3685 / 3724" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3685 / 3724)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -2133,7 +2143,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: region.h verified — 3691/3730 proved, 39 documented"
+          echo "PASS: region.h verified — 3685/3724 proved, 39 documented"
           echo "      residuals all observed by name (VERIFY-011): 33"
           echo "      inherited (arena.h's full surface, verbatim) + 6"
           echo "      region.h-own. Full set equality enforced. Composable"
@@ -2325,7 +2335,7 @@ jobs:
           echo "==============================================="
           echo "  WP (arena.h, ${MACHDEP}) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — gate is SET EQUALITY with the 64-bit residuals."
-          echo "  64-bit baseline for comparison: 3523 / 3556 proved,"
+          echo "  64-bit baseline for comparison: 3517 / 3550 proved,"
           echo "  33 residuals (VERIFY-009, ratcheted by VERIFY-023, VERIFY-036 F1, F3, F4, F5 and VERIFY-039 G2; G3 added three proved goals; G14 to G17 closed fifteen; G18 two)."
           echo "==============================================="
 
@@ -2484,8 +2494,10 @@ jobs:
           # and 11 added (3517 / 3567 before).
           # VERIFY-039 G18 predicted: as frama-c-arena, memory.h's two
           # frames prove, no goal added or removed (3521 / 3556 before).
-          if [ "${PROVED_COUNT}" != "3523 / 3556" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3523 / 3556)."
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (3523 / 3556 before).
+          if [ "${PROVED_COUNT}" != "3517 / 3550" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3517 / 3550)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"
             echo "      and this job's embedded baseline in one commit."
             FAILURES=$((FAILURES + 1))
@@ -2505,7 +2517,7 @@ jobs:
 
           if [ "${FAILURES}" -eq 0 ]; then
             echo "PASS: arena.h proves identically at 32-bit and 64-bit —"
-            echo "      3523/3556, 33 residuals, same 33 names, zero delta."
+            echo "      3517/3550, 33 residuals, same 33 names, zero delta."
             echo "      Machdep control established. Tier 1's minimum width"
             echo "      is evidenced, not asserted."
           else
@@ -3139,7 +3151,7 @@ jobs:
           echo "==============================================="
           echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
-          echo "  baseline: VERIFY-040 round 2, CI #1375: 5481/5574, 93 unproved (predicted: 5479/5572; round 1: 5475/5569, 94; G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
+          echo "  baseline: VERIFY-008 overlap fix, 6 goals fewer: 5475/5568, 93 unproved; before it, VERIFY-040 round 2, CI #1375: 5481/5574, 93 unproved (predicted: 5479/5572; round 1: 5475/5569, 94; G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
           echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
           echo "            removed are the F4 pair, now discharged by contract."
           echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
@@ -3199,8 +3211,10 @@ jobs:
           # predicted, both proved, the roll-call as predicted: WP 29 makes at
           # least one changed clause into other parts than WP 25 (VERIFY-040
           # round 2, scored, and the count probe).
-          if [ "${PROVED_COUNT}" != "5481 / 5574" ]; then
-            echo "FAIL: proved-goal summary changed (baseline: 5481 / 5574)."
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (5481 / 5574 before).
+          if [ "${PROVED_COUNT}" != "5475 / 5568" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5475 / 5568)."
             echo "      The goal surface drifted — reclassify in VERIFY-018,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -4533,7 +4547,7 @@ jobs:
           # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
           ENFORCE=1
           EXPECTED_UNPROVED=74   # VERIFY-040 round 2 predicted: 76 -> 74 (round 1 predicted: 78 -> 76; VERIFY-039 G18 predicted: 80 -> 78; G14 to G17 predicted: 98 -> 80; G13 predicted: 96 -> 98; G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
-          EXPECTED_PROVED="4978 / 5052"   # VERIFY-040 round 2 predicted: bitset_assign returns before its calls when bs or its words are null; its null frame's two parts prove, and nine goals are added, all proved, the guard's check and two parts of each of its four postconditions (round 1 predicted: two assertions on bitset_init's word count added and proved, and its two goals on the count prove: 4967 / 5043; VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed: 4963 / 5041; G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          EXPECTED_PROVED="4972 / 5046"   # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved (4978 / 5052 before); VERIFY-040 round 2 predicted: bitset_assign returns before its calls when bs or its words are null; its null frame's two parts prove, and nine goals are added, all proved, the guard's check and two parts of each of its four postconditions (round 1 predicted: two assertions on bitset_init's word count added and proved, and its two goals on the count prove: 4967 / 5043; VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed: 4963 / 5041; G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
           WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
           # ------------------------------------------------------------------
           FAILURES=0
@@ -5938,7 +5952,7 @@ jobs:
             # that attempt and not in the re-run, a goal at the 120 s
             # limit. VERIFY-039 G21.)
             # ===============================================================
-            EXPECTED_PROVED="4651 / 4689"   # VERIFY-040 round 2 predicted: regions_overlap stated by \\separated, the three copies' preconditions prove, and push_result's assertion of its slot's step is added and proved (VERIFY-039 G21 predicted: three assertions added and proved, and the two slot goals prove: 4647 / 4688; G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit: 4642 / 4685; G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
+            EXPECTED_PROVED="4645 / 4683"   # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved (4651 / 4689 before); VERIFY-040 round 2 predicted: regions_overlap stated by \\separated, the three copies' preconditions prove, and push_result's assertion of its slot's step is added and proved (VERIFY-039 G21 predicted: three assertions added and proved, and the two slot goals prove: 4647 / 4688; G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit: 4642 / 4685; G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
             EXPECTED_UNPROVED=38   # VERIFY-040 round 2 predicted: 41 -> 38 (VERIFY-039 G21 predicted: 43 -> 41; G18 predicted: 45 -> 43; G14 to G17 predicted: 60 -> 45; G11 (Bool, Error) predicted: 74 -> 60; G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
             PIN_NAMES=(
             "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
@@ -6239,7 +6253,7 @@ jobs:
         # ENFORCED from VERIFY-035. Gates, all exact:
         #   (0) a summary exists
         #   (1) zero Failed / Invalid / Stepout
-        #   (2) proved line == 4795 / 4832   (VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed; G14 to G17 predicted: 22 goals removed and 12 added: 4793 / 4832; G13 predicted: two goals added, both unproved: 4788 / 4842; G3 ratchet: 4788 / 4840; G2: 4785 / 4837; G3 predicted 4790 / 4840)
+        #   (2) proved line == 4789 / 4826   (VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved, 4795 / 4832 before; VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed; G14 to G17 predicted: 22 goals removed and 12 added: 4793 / 4832; G13 predicted: two goals added, both unproved: 4788 / 4842; G3 ratchet: 4788 / 4840; G2: 4785 / 4837; G3 predicted 4790 / 4840)
         #   (3) Timeout + Unknown == 37   (VERIFY-039 G18 predicted: 39 -> 37; G14 to G17 predicted: 54 -> 39; G13 predicted: 52 -> 54; G2: 52, unchanged at G3, which predicted 50; F4: 58)
         #   (4) roll-call: the unproved names == the 37 pinned below, by
         #       set equality (nothing missing, nothing extra; own == 0)
@@ -6273,7 +6287,7 @@ jobs:
           echo "==============================================="
           echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
-          echo "  pinned: 4795 / 4832, 37 unproved, all inherited (VERIFY-035; VERIFY-036 F1, F3, F4, F5; VERIFY-039 G2; G3 added three proved goals; G13 two unproved; G14 to G17 closed fifteen; G18 two)"
+          echo "  pinned: 4789 / 4826, 37 unproved, all inherited (VERIFY-035; VERIFY-036 F1, F3, F4, F5; VERIFY-039 G2; G3 added three proved goals; G13 two unproved; G14 to G17 closed fifteen; G18 two)"
           echo "==============================================="
           echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
           grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
@@ -6386,9 +6400,9 @@ jobs:
               echo "  ================ VERIFY-035 GATES (ENFORCED) ================"
               BAD=$((F + I + S))
               if [ "${BAD}" -ne 0 ]; then note_fail "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."; else echo "  (1) Failed/Invalid/Stepout: 0  OK"; fi
-              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4795 / 4832"; then
-                note_fail "FAIL (2): proved-goal summary changed (pinned: 4795 / 4832). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
-              else echo "  (2) proved: 4795 / 4832  OK"; fi
+              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4789 / 4826"; then
+                note_fail "FAIL (2): proved-goal summary changed (pinned: 4789 / 4826). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
+              else echo "  (2) proved: 4789 / 4826  OK"; fi
               if [ "$((T + U))" -ne 37 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 37."; else echo "  (3) unproved count: 37  OK"; fi
               NMISS=$(wc -l < /tmp/sb_inh_missing.txt); NOWN=$(wc -l < /tmp/sb_own.txt)
               if [ "${NMISS}" -ne 0 ] || [ "${NOWN}" -ne 0 ]; then
