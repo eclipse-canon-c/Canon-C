@@ -1146,6 +1146,64 @@ residual name, and retires the probe. Measured here, not predicted: MISRA's
 findings are unchanged (cppcheck 2.13.0, the CI's, with the misra job's
 flags on memory.h before and after: the same three).
 
+**The overlap probe, scored (2026-10-25, Actions run 40156783382, 5ace743).**
+WP 29 with Alt-Ergo, Z3 and CVC5 at 120 s:
+
+| Run | Tree, machine | Proved / goals | Not proved |
+|-----|---------------|----------------|------------|
+| C64 | committed, default | 37 / 37 | none |
+| P64 | patched, default | 31 / 31 | none |
+| C32 | committed, `gcc_x86_32` | 37 / 37 | none |
+| P32 | patched, `gcc_x86_32` | 31 / 31 | none |
+| Cunit | committed, whole unit, Qed alone | 2879 goals | (counted only) |
+| Punit | patched, whole unit, Qed alone | 2873 goals | (counted only) |
+
+Six of the ten parts held, and the run ended as a failure, as the probe
+exits on any miss. **Held:** every goal proved on both trees and both
+machines (four parts, high), and memory.h's unit changed by exactly the
+function's change, six goals fewer (two parts, high and medium). **Missed:**
+the four counts (medium): WP 29 makes 37 goals of the committed function and
+31 of the patched one where our local WP 25 made 35 and 29, two more on each
+tree, as it split clauses otherwise than WP 25 at VERIFY-040 round 2. The
+miss is in the counts only; the change between the trees, the figure every
+pin moves by, held at six. Cunit's 2879 is the total of `frama-c-memory`'s
+pin, so the probe counted what the job counts.
+
+**Committed prediction (2026-10-25, the fix push).** The push applies the
+probe's change to `core/memory.h`, updates the MC/DC comment in
+`test/core/memory_test.c` that quoted the old return, and retires the probe
+(its workflow and `overlap.patch` removed). Predicted, from the probe's run
+and from the identity of a substrate function's generated tasks across the
+units that include it (`.github/workflows/vc-identity.yml`, runs #5 and #6):
+
+1. Every unit whose translation unit holds `mem_regions_overlap` (checked with
+   Qed on each job's target: memory.h, arena.h, pool.h, region.h, vec's
+   driver, bitset's driver, priority_queue.h and stringbuf.h, and arena.h in
+   `frama-c-arena-32`; under `-CC`, the vec and vec_struct drivers) proves six
+   goals fewer and has six goals fewer (high), observed as both numbers of
+   each pin six lower with its unproved count and names unchanged. The pins
+   move: memory.h 2848 / 2879 to 2842 / 2873; arena.h and arena-32 3523 / 3556
+   to 3517 / 3550; pool.h 4042 / 4076 to 4036 / 4070; region.h 3691 / 3730 to
+   3685 / 3724; vec 5481 / 5574 to 5475 / 5568; bitset 4978 / 5052 to
+   4972 / 5046; priority_queue.h 4651 / 4689 to 4645 / 4683; stringbuf.h
+   4795 / 4832 to 4789 / 4826; vec under `-CC` 5530 / 5599 to 5524 / 5593 and
+   vec_struct 5528 / 5597 to 5522 / 5591.
+2. No unproved count and no residual name moves in any job (high): the
+   function was proved before and is proved after, and no other function's
+   contract or code changes.
+3. The other units' pins do not move (high), and the record coverage gate
+   passes (high: run here with `--strict --complete`).
+4. The tests pass in every build (high: `test/core/memory_test.c` passes
+   here under GCC and Clang with ASan and UBSan, and under `-m32`), and
+   MISRA's count holds at 54 (high: the misra job's command, run here on both
+   trees, gives 54; read from the job's log, which prints the count but does
+   not gate it).
+
+Not predicted, and to be read from the run: memory.h's MC/DC, since the
+return now has one decision with two arms where it had two conditions under
+`&&`; the coverage job measures it, and gates only aggregate branch
+coverage at 80 %, which three test calls on one line cannot move far.
+
 ## VERIFY-009: WP Limitations Inherited from Substrate Plus ptr_span/Arithmetic-Chain Residuals (arena.h)
 
 | Field          | Value |
