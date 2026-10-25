@@ -6219,6 +6219,113 @@ jobs:
           name: wp-proof-range
           path: wp_range_output.txt
           retention-days: 90
+  frama-c-vec-range:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/vec/vec_range.h under -CC (VERIFY-041, report-only)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          # VERIFY-041: vec_range.h's contract and its loop's annotation live
+          # in the macro body, so this unit is preprocessed with -CC, the
+          # first main-CI unit to be (the record says why). Flags otherwise
+          # frama-c-vec's.
+          ENFORCE=0            # VERIFY-041 run plan: runs 1-3 report-only
+          OUT=wp_vec_range_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/vec_range_verify.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (vec_range.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: Typed+Cast  PREPROCESSING: -CC"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      VERIFY-041 Q1: if the merged contract is rejected, run 1b"
+            echo "      moves the int clause into a behavior of its own."
+            grep -E "^\[(kernel|wp)" ${OUT} | head -20 || true
+          else
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              echo "  !!! Failed/Invalid present -- read these first:"
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/vr_all.txt
+            grep -E 'vec_int_extend_from_range' /tmp/vr_all.txt > /tmp/vr_own.txt || true
+            grep -vE 'vec_int_extend_from_range' /tmp/vr_all.txt > /tmp/vr_rest.txt || true
+            echo ""
+            echo "  ============ VERIFY-041 EVIDENCE (not gating) ============"
+            echo "  own (vec_int_extend_from_range): $(wc -l < /tmp/vr_own.txt)"
+            show /tmp/vr_own.txt
+            echo "  P3 (F2): range_len's call precondition unproved in run 1:"
+            grep -E 'call_range_len_requires' /tmp/vr_own.txt > /tmp/vr_p3.txt || true; show /tmp/vr_p3.txt "(none)"
+            echo "  P4 (F1): the content invariant's preservation unproved in run 1;"
+            echo "      the room content ensures and fits_ok proved. Invariants and ensures unproved:"
+            grep -E 'loop_invariant|_ensures|fits_ok' /tmp/vr_own.txt > /tmp/vr_p4.txt || true; show /tmp/vr_p4.txt "(none)"
+            # P2: the inherited set, computed at run time from the pins of
+            # frama-c-arena, frama-c-range and cc-vec's result names, never
+            # copied (VERIFY-041 P2). Names compared modulo the prefix map.
+            python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'tools')
+          import record_coverage as rc
+          from collections import defaultdict
+          by = defaultdict(set)
+          for n, us in rc.pinned_names().items():
+              for u in us:
+                  by[u].add(n)
+          pred = by['frama-c-arena'] | by['frama-c-range'] | {n for n in by['cc-vec'] if n.startswith('typed_result_Bool_Error_')}
+          obs = {rc.norm(l.strip()) for l in open('/tmp/vr_rest.txt') if l.strip()}
+          print('  P2  inherited and fresh: observed %d, predicted %d (pred 45)' % (len(obs), len(pred)))
+          for t, s in (('predicted, not observed', sorted(pred - obs)), ('observed, not predicted', sorted(obs - pred))):
+              print('      %s: %d' % (t, len(s)))
+              for n in s:
+                  print('        ' + n)
+          PY
+            echo "  ==========================================================="
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (vec_range.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-vec-range
+          path: wp_vec_range_output.txt
+          retention-days: 90
   frama-c-stringbuf:
     needs: build
     runs-on: ubuntu-24.04

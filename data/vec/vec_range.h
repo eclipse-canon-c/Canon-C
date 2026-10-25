@@ -127,23 +127,70 @@
  * wrote every element — a buffer overflow (ASan: 3 elements into capacity
  * 1). F1 makes the count exact; this bound makes the capacity check and the
  * writes agree by construction, whatever range_len returns. */
+/* VERIFY-041: the contract and the loop's annotation live in the macro body,
+ * as IMPL_VEC_FILL's do. They are comments, so they name no macro parameter:
+ * the preprocessor substitutes none inside a comment. They reach the prover
+ * only under -CC; frama-c-vec-range preprocesses so. The one clause that must
+ * name the element type is on a prototype in vmacros/vdrivers/
+ * vec_range_verify.h, at int. Run 1 verifies this contract on the code as it
+ * stood: VERIFY-041's F1 and F2 are not yet fixed here. */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
-#define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type) \
-linkage result__Bool_Error fn(borrowed(VecType*) v, range r) { \
-    if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); } \
-    usize count = range_len(&r); \
-    usize total; \
-    if (!checked_add(v->len, count, &total)) { \
-        return result__Bool_Error_err(ERR_OVERFLOW); \
-    } \
-    if (total > v->capacity) { \
-        return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED); \
-    } \
-    for (usize i = 0; i < count; i++) { \
-        v->items[v->len + i] = (type)range_next(&r); \
-    } \
-    v->len = total; \
-    return result__Bool_Error_ok(true); \
+#define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type)                 \
+/*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
+    assigns v->len, v->items[0 .. v->capacity - 1];                            \
+    behavior invalid:                                                          \
+    assumes v == \null || (v != \null && v->items == \null)                    \
+    || r.step == CANON_ISIZE_MIN;                                              \
+    assigns \nothing;                                                          \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;     \
+    behavior overflow:                                                         \
+    assumes v != \null && v->items != \null && r.step != CANON_ISIZE_MIN       \
+    && v->len + range_count(r) > CANON_USIZE_MAX;                              \
+    assigns \nothing;                                                          \
+    ensures \result.is_ok == \false && \result.val.err == ERR_OVERFLOW;        \
+    behavior too_big:                                                          \
+    assumes v != \null && v->items != \null && r.step != CANON_ISIZE_MIN       \
+    && v->len + range_count(r) <= CANON_USIZE_MAX                              \
+    && v->len + range_count(r) > v->capacity;                                  \
+    assigns \nothing;                                                          \
+    ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED; \
+    behavior room:                                                             \
+    assumes v != \null && v->items != \null && r.step != CANON_ISIZE_MIN       \
+    && v->len + range_count(r) <= v->capacity;                                 \
+    assigns v->len, v->items[v->len .. v->capacity - 1];                       \
+    ensures \result.is_ok ==> v->len == \old(v->len) + range_count(r);         \
+    ensures \result.is_ok ==> \forall integer k; 0 <= k < range_count(r)       \
+    ==> v->items[\old(v->len) + k] == r.current + k * r.step;                  \
+    ensures !\result.is_ok ==> \result.val.err == ERR_OUT_OF_RANGE             \
+    && v->len == \old(v->len);                                                 \
+    ensures \forall integer k; 0 <= k < \old(v->len)                           \
+    ==> v->items[k] == \old(v->items[k]);                                      \
+    complete behaviors;                                                        \
+    disjoint behaviors; */                                                     \
+linkage result__Bool_Error fn(borrowed(VecType*) v, range r) {                 \
+    if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); }   \
+    usize count = range_len(&r);                                               \
+    usize total;                                                               \
+    if (!checked_add(v->len, count, &total)) {                                 \
+        return result__Bool_Error_err(ERR_OVERFLOW);                           \
+    }                                                                          \
+    if (total > v->capacity) {                                                 \
+        return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);                  \
+    }                                                                          \
+    /*@ loop invariant 0 <= i <= count;                                        \
+        loop invariant r.end == \at(r.end, Pre) && r.step == \at(r.step, Pre); \
+        loop invariant range_count(r) == count - i;                            \
+        loop invariant i < count ==> range_wf(r)                               \
+        && r.current == \at(r.current, Pre) + i * r.step;                      \
+        loop invariant \forall integer k; 0 <= k < i                           \
+        ==> v->items[v->len + k] == \at(r.current, Pre) + k * r.step;          \
+        loop assigns i, r.current, v->items[v->len .. v->len + count - 1];     \
+        loop variant count - i; */                                             \
+    for (usize i = 0; i < count; i++) {                                        \
+        v->items[v->len + i] = (type)range_next(&r);                           \
+    }                                                                          \
+    v->len = total;                                                            \
+    return result__Bool_Error_ok(true);                                        \
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

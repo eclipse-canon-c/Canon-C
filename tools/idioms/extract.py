@@ -73,8 +73,14 @@ def verified_units():
 
 # ------------------------------------------------------------------ clang
 def clang_flags(cpp):
+    # -C and -CC keep comments through preprocessing; clang accepts them only
+    # with -E. They change no token of the AST read here, and ACSL is read from
+    # the files themselves, so they are dropped (VERIFY-041: frama-c-vec-range
+    # is the first job preprocessed with -CC).
     out, it = [], iter(cpp)
     for tok in it:
+        if tok in ("-C", "-CC"):
+            continue
         if tok == "-I":
             out.append("-I" + next(it))
         else:
