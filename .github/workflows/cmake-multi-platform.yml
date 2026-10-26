@@ -6606,6 +6606,7 @@ jobs:
           ./vec_cover
           ./deque_cover
           ./deque_cover
+          ./vec_range_cover
       
       - name: Collect branch coverage data (lcov)
         run: |
@@ -7674,6 +7675,30 @@ jobs:
             for d in $(find . -type d -name "*.dir"); do
               ls "$d"/*vec_cover* 2>/dev/null || true
             done
+          fi
+      - name: "Debug: per-line MC/DC detail for vec_range.h (cover TU)"
+        # MCDC-017. vec_range.h's conditions are stamped to the cover TU's two
+        # instantiation lines. Predicted misses, exactly three (M2): D1, C true
+        # at int; D2, A true at u64; D3, C false at u64 -- in the check
+        # A || (B && C). Any other miss is a gap in the cover TU, fixed by
+        # extending it. Report-only, like the steps around it. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "vec_range_cover*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate vec_range_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "vec_range_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in vec_range_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No vec_range_cover.c.gcov file generated"
           fi
       - name: "Debug: per-line MC/DC detail for priority_queue.h"
         # Added 2026-09-07 with MCDC-014. priority_queue.h reached 81/82 (MCDC-014); the one

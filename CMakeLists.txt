@@ -666,6 +666,18 @@ if(ENABLE_COVERAGE_TUS)
     # rows — vec's U1/U2 were both !checked_mul legs).
     target_compile_definitions(deque_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
 
-    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover)")
+    add_executable(vec_range_cover vmacros/coverage/vec_range_cover.c)
+    target_include_directories(vec_range_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR}/data
+        ${CMAKE_SOURCE_DIR})
+    # MCDC-017: vec_range.h's conditions, stamped to this TU's two
+    # instantiation lines (int and u64) instead of to test/data/vec_test.c,
+    # which the coverage filter removes. Flags as frama-c-vec-range's run.
+    target_compile_definitions(vec_range_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover)")
  
 endif()
