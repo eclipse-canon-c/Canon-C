@@ -24926,3 +24926,105 @@ UBSan, in the default, `CANON_NO_REQUIRE` and `CANON_LIFETIME_DEBUG` builds.
 The fuzz build compiles. MinGW GCC 13 compiles it with the project's flags.
 The job's labels name run 2's predictions. Its mode stays report-only (runs
 2 and 3).
+
+### Run 2, scored (2026-10-26)
+
+**Run 2** is d2d3f0c (the fixes, the documentation, three tests) with
+4d62cd8 (the test made width-independent). Its first push, CI #1383, was red
+in two jobs and green in the rest. CI #1384, at 4d62cd8, is green in all 56
+jobs. CC #61, at d2d3f0c, is green; the -CC workflow does not run on a
+test-only push. The verified source is the same at both, and
+`frama-c-vec-range` reports the same at both.
+
+    [wp] Proved goals: 5159 / 5204
+    Timeouts: 44  Unknown: 1  Failed: 0  Invalid: 0  Stepout: 0
+    own (vec_int_extend_from_range): 0
+    P2  inherited and fresh: observed 45, predicted 45
+        predicted, not observed: 0
+        observed, not predicted: 0
+
+| # | verdict | reading |
+|---|---------|---------|
+| P7 | **MATCH** | No own residual: every goal of `vec_int_extend_from_range` proves at the CI's provers and timeout, the content invariant's preservation and `fits_ok` included. 45 = the inherited 45. |
+| P1 | **holding** | No own residual, so no block is needed; *A* stays 31 and 17. Scored at enforcement (run 4), after run 3 repeats the names. |
+| P2 | **MATCH** again | The same 45 names. |
+| P3, P4 | **MATCH** (their run-2 parts) | `range_len`'s precondition at the call, `invalid`'s postcondition and the establishment of invariant 4 prove, as P3's falsifier requires in run 2. `fits_ok` proves on the fixed code, with the conjunct the review added. |
+| P8 | **MISS** for run 2's first push | CI #1383's `build-32bit` jobs failed on the new test, not on an existing pin. On `-m32`, `isize` is no wider than `int`, so the test's ranges past `INT_MAX` overflowed their own bounds. Release failed at `-Werror=overflow`, and Debug had seven failed assertions. The local checks had covered 64-bit builds only. 4d62cd8 runs the `int` cases where `isize` is wider and tests F1 at `u8` on every width; it was checked locally with `gcc-14 -m32` at `-O0` and `-O2`, where the old test reproduced CI's seven failures. No pin moved in either run. |
+
+**Not predicted, recorded.** The goal total went from 4916 to 5204: the
+fixes add branches, and the loop's goals split on them. `misra` stays at 54.
+Coverage stays at 92.1% MC/DC (1868 of 2028) and 91.6% of branches (1664 of
+1816): unchanged, because **`vec_range.h` is not measured at all**. Its
+conditions live in a macro body, so GCC stamps them to the instantiation
+site. The only instantiations are in `test/data/vec_test.c`, which the
+coverage job's `'*/test/*'` filter removes, so no row exists for them. The
+record anticipated this ("may not list `vec_range.h` at all"). The remedy is
+the project's own for the other macro modules: a cover TU outside `test/`.
+MCDC-017 pre-registers one.
+
+**Run 3** is the next push. The verified source is unchanged, so run 3 tests
+name stability, and the job stays report-only. It also adds the cover TU,
+which no WP unit reads.
+
+---
+
+## MCDC-017: Pre-registration — vec_range.h, Measured From a Cover TU, With Outcomes Dead at a Type
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | MCDC-017 |
+| **Date**       | 2026-10-26 |
+| **Status**     | PRE-REGISTERED — the cover TU is written after this commit; no MC/DC measurement of `vec_range.h` exists |
+| **Baseline**   | 4d62cd8 (CI #1384): `vec_range.h` absent from the table (VERIFY-041, "Run 2, scored") |
+| **Scope**      | `vmacros/coverage/vec_range_cover.c`, `DEFINE_VEC_RANGE` at `int` and at `u64`, built and run as the four existing cover TUs are |
+| **Category**   | Coverage completeness; run alongside VERIFY-041 |
+
+**The unit.** The cover TU instantiates `DEFINE_VEC_STRUCTS` and
+`DEFINE_VEC_RANGE` at `int`, the WP driver's type, and at `u64`, the one type
+class where the representability check's sign clause can be true. Each
+instantiation's conditions are stamped to its own line in the TU. It is
+built with the coverage job's flags (`-DCANON_NO_REQUIRE -DNDEBUG`), as
+`vec_cover.c` is. `range_len`'s, `range_next`'s and `checked_add`'s
+conditions attribute to `range.h` and `checked.h`, where the largest TU
+already measures more of them, so they do not move those rows.
+
+**The decisions per instantiation**, in source order:
+`!v || !v->items` (2 conditions); `r.step == CANON_ISIZE_MIN`;
+`r.step == 0` (the count's conditional); `!checked_add(...)`;
+`total > v->capacity`; the loop's `i < count`; and the check
+`A || (B && C)`, with A `(isize)elem != value`, B `value < 0` and C
+`!(elem < (type)1)`. That is 11 conditions and 22 outcomes per
+instantiation, if GCC instruments the single-condition decisions and the
+loop condition as it does elsewhere in this table.
+
+**Outcomes dead at a type, written down before the first run:**
+
+- **D1, at `int`:** C true. C is evaluated only when A is false, so when the
+  value round-trips through `int`, and B is true, so when the value is
+  negative. Then `elem == value < 1`, and C is false. A signed type never
+  makes C true. Justified-infeasible at signed types.
+- **D2, at `u64`:** A true. Every `isize` value round-trips through `u64`
+  and back to itself (modulo conversion), so A is never true. Justified-
+  infeasible at unsigned types as wide as `isize`.
+- **D3, at `u64`:** C false. C is evaluated only when B is true, so when the
+  value is negative. Then `elem` is `value + 2^64 ≥ 1`, and C is true.
+  Justified-infeasible at the same types.
+
+Every other outcome is driven by the TU. That includes the overflow guard's
+true side: it uses a fabricated vector with `len` near `USIZE_MAX` and the
+capacity to match, and the function returns before any memory access, as
+MCDC-016's policy allows.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | `vmacros/coverage/vec_range_cover.c` appears in the MC/DC table. | no row | H |
+| M2 | Its missed outcomes are exactly D1, D2 and D3: 3. | any other miss, or one of the three covered | M (GCC's per-outcome rule for a masked condition is read from its behaviour elsewhere in the table, not from its source) |
+| M3 | Its denominator is 44 (22 per instantiation), so 41 / 44. | another denominator | L |
+| M4 | No other row of the table moves, and the total moves only by this row. | any other row's numbers change | M–H |
+
+If M2 fails because an outcome predicted live is missed, the cover TU is
+extended. A deviation entry is not written for it (MCDC-010's rule). If one
+of D1 to D3 is covered, the reasoning above is wrong, and the score says
+where.
