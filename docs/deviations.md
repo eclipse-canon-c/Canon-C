@@ -24878,3 +24878,51 @@ records where its outcomes land, and the total's move, without a prediction.
 unchanged: this record adds no goal table and no block. The main CI and the
 -CC workflow do not run: the push changes `docs/` and `tools/`, which the main
 CI ignores, and the -CC workflow's paths name neither.
+
+### Run 1, scored (2026-10-26)
+
+**Run 1** is 42a89ad: the contract and the loop's annotation written into
+`IMPL_VEC_EXTEND_FROM_RANGE`, word for word as above (checked by script
+against this record before the push), the driver, and `frama-c-vec-range`,
+report-only. F1 and F2 were unfixed. It ran at CI #1382 and CC #60. Every
+job is green, 56 in the main CI and 7 in the -CC workflow. `frama-c-vec-range`
+took 42 minutes.
+
+    [wp] Proved goals: 4869 / 4916
+    Timeouts: 46  Unknown: 1  Failed: 0  Invalid: 0  Stepout: 0
+    own (vec_int_extend_from_range): 2
+        typed_cast_vec_int_extend_from_range_call_range_len_requires
+        typed_cast_vec_int_extend_from_range_loop_invariant_5_preserved
+    P2  inherited and fresh: observed 45, predicted 45
+        predicted, not observed: 0
+        observed, not predicted: 0
+
+| # | verdict | reading |
+|---|---------|---------|
+| P2 | **MATCH** | 45 names, set-equal to the union computed at run time from the pins of `frama-c-arena`, `frama-c-range` and `cc-vec`. option at `isize`'s six, read from the macro bodies under `-CC`, are the six range's unit reads from contracted prototypes under `-C`. Q2 is answered: on this closure, `-CC` gives the residual set the `-C` units pin. |
+| P3 | **MATCH** | F2 shows at one goal, `range_len`'s precondition at the call, and nowhere else. `invalid`'s postcondition and the establishment of invariant 4 (`i < count ==> range_wf(r) && ...`) are not among the unproved, as the review's correction predicted. The uncontracted runs had already shown that goal, so this tests little. |
+| P4 | **MATCH** | F1 shows at the content invariant's preservation (invariant 5, the fifth `loop invariant` of the annotation) and nowhere else. `room`'s content postcondition and `fits_ok` are not among the unproved. |
+| P5 | **MATCH** | No goal at the conversion. RTE generation on the function (`-rte`, local WP 25, the contracted source) inserts memory-access assertions only, and none at `(int)` of the value. WP lists only unproved goals by name, so the CI log alone could not show this. |
+| P6 | **MATCH** | No other own goal is unproved: 47 = 45 + 2. |
+| P8 | **MATCH** for the push: every existing job is green, and each enforces its pins. Record coverage ran, the push changing the main workflow, and passed. |
+| P9 | **MATCH** | The catalogue, rebuilt at 42a89ad with the new job (committed with this score), gains `family:vec@other+integer` and nothing else. ACSL stays 42, C 22, family 8 → 9, and the verified files go from 41 to 43 (`vec_range.h` and the driver). It was measured before the CI run, in a copy, as the run-1 commit says. `tools/idioms`' five tests pass again. |
+| Q1 | answered | WP 29 merged the two contracts ("found two contracts ... Merging them") and proved `fits_ok`. |
+
+P1 and P7 are run 2's. The goal totals were not predicted. They are
+measured here: 4916 goals, the function's share not separated in the log.
+
+**What run 2 is** (pushed with this score, as a separate commit): F1's and
+F2's fixes, exactly the pre-registered code (checked by script against the
+run-2 source fixed before the record); the header's documentation (the
+integer-type requirement, the two new errors, step 0, the scratch slots, and
+the representability check's dependence on modulo conversion); and three
+tests in `test/data/vec_test.c`. The tests are F1 at `int` (past `INT_MAX`,
+past `INT_MIN`, the first value outside, and both boundaries inside), F1 at
+`u64` through `DEFINE_VEC_STRUCTS(u64)` with the vector built by its fields,
+and F2 (step `ISIZE_MIN` → `ERR_INVALID_ARG`; step 0 → Ok, nothing
+appended). Against the old header, the F1 tests fail (negative control,
+local). `vec_test` passes under GCC 13 and 14 and clang 18, with ASan and
+UBSan, in the default, `CANON_NO_REQUIRE` and `CANON_LIFETIME_DEBUG` builds.
+The fuzz build compiles. MinGW GCC 13 compiles it with the project's flags.
+The job's labels name run 2's predictions. Its mode stays report-only (runs
+2 and 3).

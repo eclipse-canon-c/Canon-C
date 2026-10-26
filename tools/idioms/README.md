@@ -44,7 +44,10 @@ G19's and G20's repair of `region_end` wrote its hook rule as a predicate in
 an `axiomatic` block, the first a verified unit reads (42 at 642ad8a,
 CI #1372). VERIFY-040 round 2 stated memory.h's `regions_overlap` by
 `\separated`, so the built-in joined `frama-c-memory`'s list, and no
-kind was added.
+kind was added. VERIFY-041's `frama-c-vec-range`, the first job preprocessed
+with `-CC` (whose comment flags `clang_flags` drops, clang rejecting them
+without `-E`), added the family feature `vec@other+integer`, as that record's
+P9 predicted (43 files and 9 family features at 42a89ad, CI #1382).
 
     python3 tools/idioms/extract.py crosscheck
 
