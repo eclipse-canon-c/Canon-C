@@ -36,7 +36,8 @@
  * - No hidden allocation — fills into existing bounded buffer
  * - Supports ascending, descending, and stepped ranges (full range semantics)
  * - Overflow-protected element count calculation via range_len() + checked.h
- * - Returns result__Bool_Error on failure — never silently truncates
+ * - Returns result__Bool_Error on failure — never silently truncates: neither
+ *   the count (capacity check) nor a value (representability check, VERIFY-041)
  *
  * Ownership model:
  * ────────────────────────────────────────────────────────────────────────────
@@ -94,7 +95,8 @@
  * @param linkage  Function linkage
  * @param VecType  Mangled vector type name
  * @param fn       Mangled function name
- * @param type     Element type (must be castable from isize for range values)
+ * @param type     Element type: an integer type (floating types are outside
+ *                 the contract, VERIFY-041)
  *
  * Generated function signature:
  * ```c
@@ -104,16 +106,26 @@
  * @pre v != NULL
  * @pre v->items != NULL
  * @pre The range element count must not overflow usize (checked via range_len)
+ * @pre r.step != ISIZE_MIN (checked: range_make rejects it only in builds with
+ *      require_msg, and a range built by hand can carry it)
  * @pre v->len + count <= v->capacity (checked)
  *
  * @post On Ok: range values appended to v in iteration order
  * @post Returns Err(ERR_INVALID_ARG)       if v == NULL or v->items == NULL
  * @post Returns Err(ERR_OVERFLOW)          if range element count overflows usize
  * @post Returns Err(ERR_CAPACITY_EXCEEDED) if insufficient space in v
+ * @post Returns Err(ERR_INVALID_ARG)       if r.step == ISIZE_MIN
+ * @post Returns Err(ERR_OUT_OF_RANGE)      if a range value does not fit type
+ *       (a negative value into an unsigned type included); v->len is then
+ *       unchanged. The slots past v->len up to the one before the failing
+ *       value's may have been written: they are not part of the vector.
+ * @post Step 0 (a range built by hand; range_make maps 0 to 1): Ok, nothing
+ *       appended, as range.h treats the range as empty.
  *
- * @note Element values are cast from isize to type.
- *       Ensure type can represent the range values without truncation.
- *       For signed ranges into unsigned types, caller is responsible for validation.
+ * @note The representability check converts each value to type and back
+ *       before storing it. That is exact where integer conversions are
+ *       modulo 2^N (GCC, clang, MSVC); ISO C leaves an out-of-range signed
+ *       conversion implementation-defined (C11 6.3.1.3p3).
  * @note Full range semantics are honoured — ascending, descending, and stepped
  *       ranges all work correctly via range_len(), range_has_next(), range_next().
  *
@@ -132,8 +144,8 @@
  * the preprocessor substitutes none inside a comment. They reach the prover
  * only under -CC; frama-c-vec-range preprocesses so. The one clause that must
  * name the element type is on a prototype in vmacros/vdrivers/
- * vec_range_verify.h, at int. Run 1 verifies this contract on the code as it
- * stood: VERIFY-041's F1 and F2 are not yet fixed here. */
+ * vec_range_verify.h, at int. VERIFY-041's run 1 verified this contract on
+ * the code before F1's and F2's fixes; run 2 on the code below. */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define IMPL_VEC_EXTEND_FROM_RANGE(linkage, VecType, fn, type)                 \
 /*@ requires v == \null || ((\valid_read(v) && v->len <= v->capacity && v->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*v->items) && (v->items == \null ==> v->capacity == 0) && (v->capacity > 0 ==> \valid_read(v->items + (0 .. v->capacity - 1)))) && \valid(v) && (v->capacity > 0 ==> \valid(v->items + (0 .. v->capacity - 1))) && \separated(v, v->items + (0 .. v->capacity - 1))); \
@@ -169,7 +181,10 @@
     disjoint behaviors; */                                                     \
 linkage result__Bool_Error fn(borrowed(VecType*) v, range r) {                 \
     if (!v || !v->items) { return result__Bool_Error_err(ERR_INVALID_ARG); }   \
-    usize count = range_len(&r);                                               \
+    if (r.step == CANON_ISIZE_MIN) {                                           \
+        return result__Bool_Error_err(ERR_INVALID_ARG);                        \
+    }                                                                          \
+    usize count = (r.step == 0) ? (usize)0 : range_len(&r);                    \
     usize total;                                                               \
     if (!checked_add(v->len, count, &total)) {                                 \
         return result__Bool_Error_err(ERR_OVERFLOW);                           \
@@ -187,7 +202,12 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) {                 \
         loop assigns i, r.current, v->items[v->len .. v->len + count - 1];     \
         loop variant count - i; */                                             \
     for (usize i = 0; i < count; i++) {                                        \
-        v->items[v->len + i] = (type)range_next(&r);                           \
+        const isize value = range_next(&r);                                    \
+        const type elem = (type)value;                                         \
+        if (((isize)elem != value) || ((value < 0) && !(elem < (type)1))) {    \
+            return result__Bool_Error_err(ERR_OUT_OF_RANGE);                   \
+        }                                                                      \
+        v->items[v->len + i] = elem;                                           \
     }                                                                          \
     v->len = total;                                                            \
     return result__Bool_Error_ok(true);                                        \
@@ -220,7 +240,7 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) {                 \
  * - vec_##type##_extend_from_range(v, r) → result__Bool_Error
  *
  * @param linkage Function linkage (should match the DEFINE_VEC call)
- * @param type    Element type (must be castable from isize)
+ * @param type    Element type: an integer type
  *
  * Example:
  * ```c
@@ -231,8 +251,8 @@ linkage result__Bool_Error fn(borrowed(VecType*) v, range r) {                 \
  * // result__Bool_Error vec_int_extend_from_range(borrowed(vec_int*) v, range r);
  * ```
  *
- * @note Only makes semantic sense for numeric element types (int, float, i32, etc.)
- *       The range values are cast from isize — ensure the element type can hold them.
+ * @note For integer element types only. A value the type cannot hold is
+ *       rejected with ERR_OUT_OF_RANGE, never converted silently (VERIFY-041).
  */
 #define DEFINE_VEC_RANGE(linkage, type) \
     IMPL_VEC_EXTEND_FROM_RANGE(linkage, MANGLE_VEC_TYPE(type), MANGLE_VEC_EXTEND_FROM_RANGE(type), type)

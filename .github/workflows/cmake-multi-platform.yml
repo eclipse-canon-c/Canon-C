@@ -6289,12 +6289,12 @@ jobs:
             grep -vE 'vec_int_extend_from_range' /tmp/vr_all.txt > /tmp/vr_rest.txt || true
             echo ""
             echo "  ============ VERIFY-041 EVIDENCE (not gating) ============"
-            echo "  own (vec_int_extend_from_range): $(wc -l < /tmp/vr_own.txt)"
+            echo "  own (vec_int_extend_from_range): $(wc -l < /tmp/vr_own.txt)   (run 1: 2; run 2 pred (P7): 0)"
             show /tmp/vr_own.txt
-            echo "  P3 (F2): range_len's call precondition unproved in run 1:"
+            echo "  P3 (F2): range_len's call precondition (run 1: unproved; run 2 pred: proved):"
             grep -E 'call_range_len_requires' /tmp/vr_own.txt > /tmp/vr_p3.txt || true; show /tmp/vr_p3.txt "(none)"
-            echo "  P4 (F1): the content invariant's preservation unproved in run 1;"
-            echo "      the room content ensures and fits_ok proved. Invariants and ensures unproved:"
+            echo "  P4 (F1): invariants and ensures unproved (run 1: the content invariant's"
+            echo "      preservation only; run 2 pred: none, fits_ok included):"
             grep -E 'loop_invariant|_ensures|fits_ok' /tmp/vr_own.txt > /tmp/vr_p4.txt || true; show /tmp/vr_p4.txt "(none)"
             # P2: the inherited set, computed at run time from the pins of
             # frama-c-arena, frama-c-range and cc-vec's result names, never
