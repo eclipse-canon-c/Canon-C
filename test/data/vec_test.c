@@ -67,6 +67,10 @@ DEFINE_VEC_RANGE(static inline, int)
  * function, so the vector is built by its fields. */
 DEFINE_VEC_STRUCTS(u64)
 DEFINE_VEC_RANGE(static inline, u64)
+/* ... and at u8, narrower than isize on every target, so that F1's test
+ * runs on 32-bit builds too, where isize is no wider than int. */
+DEFINE_VEC_STRUCTS(u8)
+DEFINE_VEC_RANGE(static inline, u8)
 
 /* Second instantiation — struct type, exercises all generated code paths */
 typedef struct { int x; int y; } Point;
@@ -1050,11 +1054,15 @@ static void test_extend_from_range_basic(void)
 
 /* ── VERIFY-041 F1: a value the element type cannot hold ───────────────────
  * Before: converted silently, Ok returned. Now: ERR_OUT_OF_RANGE, len and
- * the elements below it unchanged. <limits.h> is shadowed by
+ * the elements below it unchanged. At int, a value int cannot hold exists
+ * only where isize is wider than int: not on -m32 builds, where these
+ * ranges' bounds would themselves overflow (CI #1383's 32-bit jobs). int
+ * is 32 bits on every target the CI builds. <limits.h> is shadowed by
  * core/primitives/limits.h on this include path, so int's bounds are
  * computed. */
 static void test_extend_from_range_value_beyond_int_f1(void)
 {
+#if CANON_ISIZE_MAX > 0x7FFFFFFF
     const isize imax = (isize)(int)(~0u >> 1);
     const isize imin = -imax - 1;
     int buf[8] = { 0 };
@@ -1079,6 +1087,24 @@ static void test_extend_from_range_value_beyond_int_f1(void)
     res = vec_int_extend_from_range(&v, range_make(imin + 1, imin - 1, -1));
     EXPECT(res.is_ok && v.len == 5u);
     EXPECT((isize)buf[3] == imin + 1 && (isize)buf[4] == imin);
+#endif
+}
+
+/* VERIFY-041 F1 at u8, on every target: past 255, below 0, and the top
+ * values themselves. */
+static void test_extend_from_range_beyond_u8_f1(void)
+{
+    u8 b8[4] = { 0 };
+    vec_u8 w = { .items = b8, .len = 0, .capacity = 4 };
+    result__Bool_Error res = vec_u8_extend_from_range(&w, range_make(254, 257, 1));
+    EXPECT(!res.is_ok && res.val.err == ERR_OUT_OF_RANGE);
+    EXPECT(w.len == 0u);
+    res = vec_u8_extend_from_range(&w, range_make(-1, 1, 1));
+    EXPECT(!res.is_ok && res.val.err == ERR_OUT_OF_RANGE);
+    EXPECT(w.len == 0u);
+    res = vec_u8_extend_from_range(&w, range_make(253, 256, 1));
+    EXPECT(res.is_ok && w.len == 3u);
+    EXPECT(b8[0] == 253u && b8[1] == 254u && b8[2] == 255u);
 }
 
 /* VERIFY-041 F1 at u64: a negative value is rejected; an ordinary range is
@@ -1154,6 +1180,8 @@ static void vec_suppress_unused_option_fns(void)
     (void)vec_int_lifetime_close_;
     (void)vec_u64_lifetime_open_;
     (void)vec_u64_lifetime_close_;
+    (void)vec_u8_lifetime_open_;
+    (void)vec_u8_lifetime_close_;
     (void)vec_Point_lifetime_open_;
     (void)vec_Point_lifetime_close_;
 }
@@ -1168,6 +1196,7 @@ int main(void)
     test_extend_from_range_wide_rejected_f5();
     test_extend_from_range_basic();
     test_extend_from_range_value_beyond_int_f1();
+    test_extend_from_range_beyond_u8_f1();
     test_extend_from_range_negative_into_u64_f1();
     test_extend_from_range_malformed_step_f2();
 
@@ -1287,6 +1316,7 @@ static void vec_fuzz_suppress_unused(void)
     /* VERIFY-028 F5 tests are unit-only; the fuzz build never calls it */
     (void)vec_int_extend_from_range;
     (void)vec_u64_extend_from_range;
+    (void)vec_u8_extend_from_range;
 
     /* int option API */
     (void)option_int_is_some;
@@ -1333,6 +1363,8 @@ static void vec_fuzz_suppress_unused(void)
     (void)vec_int_lifetime_close_;
     (void)vec_u64_lifetime_open_;
     (void)vec_u64_lifetime_close_;
+    (void)vec_u8_lifetime_open_;
+    (void)vec_u8_lifetime_close_;
 
     /* Point type — not fuzzed at all */
     (void)point_eq;
