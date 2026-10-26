@@ -17804,12 +17804,12 @@ is how the record compares names.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_result_Bool_Error_map_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
-| 2 | `typed_result_Bool_Error_map_err_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map_err` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
-| 3 | `typed_result_Bool_Error_and_then_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `and_then` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
-| 4 | `typed_result_Bool_Error_or_else_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `or_else` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
-| 5 | `typed_result_Bool_Error_eq_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_ok` only when both are Ok, and requires `\valid_function(eq_ok)` there |
-| 6 | `typed_result_Bool_Error_eq_assert_rte_function_pointer_2` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_err` only when both are Err, and requires `\valid_function(eq_err)` there |
+| 1 | `typed_result_Bool_Error_map_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 2 | `typed_result_Bool_Error_map_err_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map_err` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
+| 3 | `typed_result_Bool_Error_and_then_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `and_then` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 4 | `typed_result_Bool_Error_or_else_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `or_else` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
+| 5 | `typed_result_Bool_Error_eq_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_ok` only when both are Ok, and requires `\valid_function(eq_ok)` there |
+| 6 | `typed_result_Bool_Error_eq_assert_rte_function_pointer_2` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_err` only when both are Err, and requires `\valid_function(eq_err)` there |
 
 ### G11 — repair at option's copies in bitset and range: committed prediction (before the fix commit)
 
@@ -17970,12 +17970,12 @@ The rows name the goals as the units pin them, `frama-c-bitset`'s with the
 | 4 | `typed_cast_option_usize_filter_assert_rte_function_pointer` | `frama-c-bitset` | `filter` calls `pred` only when `o.has_value`, the guard's first conjunct, and requires `\valid_function(pred)` there |
 | 5 | `typed_cast_option_usize_combine_with_assert_rte_function_pointer` | `frama-c-bitset` | `combine_with` calls `combine` only when both have a value, and requires `\valid_function(combine)` there |
 | 6 | `typed_cast_option_usize_eq_assert_rte_function_pointer_part2` | `frama-c-bitset` | `eq` calls `eq` only when both have a value, and requires `\valid_function(eq)` there; `_part1`, on a path that does not reach the call, proves |
-| 7 | `typed_option_isize_map_assert_rte_function_pointer` | `frama-c-range` | `map` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
-| 8 | `typed_option_isize_and_then_assert_rte_function_pointer` | `frama-c-range` | `and_then` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
-| 9 | `typed_option_isize_or_else_assert_rte_function_pointer` | `frama-c-range` | `or_else` calls `fallback` only when `!o.has_value`, and requires `\valid_function(fallback)` there |
-| 10 | `typed_option_isize_filter_assert_rte_function_pointer` | `frama-c-range` | `filter` calls `pred` only when `o.has_value`, the guard's first conjunct, and requires `\valid_function(pred)` there |
-| 11 | `typed_option_isize_combine_with_assert_rte_function_pointer` | `frama-c-range` | `combine_with` calls `combine` only when both have a value, and requires `\valid_function(combine)` there |
-| 12 | `typed_option_isize_eq_assert_rte_function_pointer_part2` | `frama-c-range` | `eq` calls `eq` only when both have a value, and requires `\valid_function(eq)` there; `_part1`, on a path that does not reach the call, proves |
+| 7 | `typed_option_isize_map_assert_rte_function_pointer` | `frama-c-range`, `frama-c-vec-range` | `map` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
+| 8 | `typed_option_isize_and_then_assert_rte_function_pointer` | `frama-c-range`, `frama-c-vec-range` | `and_then` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
+| 9 | `typed_option_isize_or_else_assert_rte_function_pointer` | `frama-c-range`, `frama-c-vec-range` | `or_else` calls `fallback` only when `!o.has_value`, and requires `\valid_function(fallback)` there |
+| 10 | `typed_option_isize_filter_assert_rte_function_pointer` | `frama-c-range`, `frama-c-vec-range` | `filter` calls `pred` only when `o.has_value`, the guard's first conjunct, and requires `\valid_function(pred)` there |
+| 11 | `typed_option_isize_combine_with_assert_rte_function_pointer` | `frama-c-range`, `frama-c-vec-range` | `combine_with` calls `combine` only when both have a value, and requires `\valid_function(combine)` there |
+| 12 | `typed_option_isize_eq_assert_rte_function_pointer_part2` | `frama-c-range`, `frama-c-vec-range` | `eq` calls `eq` only when both have a value, and requires `\valid_function(eq)` there; `_part1`, on a path that does not reach the call, proves |
 
 ### G11 — the declarations and the probe: committed prediction (before the fix commits)
 
@@ -18160,8 +18160,8 @@ and the block retires.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_arena_alloc_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `cc-vec`, `cc-vec_struct` | the fill: on the non-null path `mem_zero(p, size)` runs `memset(p, 0, size)`, which stores `(unsigned char)0`, a byte of zero bits, at each of the `size` bytes, and such a byte reads 0 through `u8` |
-| 2 | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `cc-vec`, `cc-vec_struct` | the same, after `arena_alloc_aligned` |
+| 1 | `typed_cast_arena_alloc_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | the fill: on the non-null path `mem_zero(p, size)` runs `memset(p, 0, size)`, which stores `(unsigned char)0`, a byte of zero bits, at each of the `size` bytes, and such a byte reads 0 through `u8` |
+| 2 | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | the same, after `arena_alloc_aligned` |
 
 Both are the class the block argues, a byte-level write read through a typed
 location, here between two 8-bit kinds: `mem_zero` states the bytes it zeroes
@@ -18812,14 +18812,14 @@ VERIFY-012 get dated notes. G13 is closed.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
-| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
-| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
-| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b` |
-| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
-| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
-| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
-| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
+| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
+| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
+| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
+| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b` |
+| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
+| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
+| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
+| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
 | 9 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | memcmp is reached with equal lengths above 0 and distinct non-null pointers, inside `no_dangling_a`'s guard; its quantifier is `non_escaping(a.bytes.ptr, a.bytes.len)` |
 | 10 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | the same, by `no_dangling_b`, `b.bytes.len` being `a.bytes.len` |
 | 11 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | `str_equal`'s `no_dangling_a` on `a.str` and `b.str`, which `borrowed_str_eq`'s own `no_dangling_a` states of the same views under the same guard |
@@ -18895,8 +18895,8 @@ and three blocks are written below:
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_align_padding_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `align_padding` returns `(0 - n) & (align - 1)` since G16, the residue of `-n` modulo `align` for every `n`, and by the identity the formula, the multiple of `align` in `[n, n + align - 1]` less `n`, is that residue (restated at G14 to G17's close; first read for the body before G16, `align_up(n, align) - n`, which does not wrap under `align_up`'s bound, and whose value is the formula's) |
-| 2 | `typed_cast_ptr_align_padding_nonnull_ensures_part2` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `\result < align`: the value is `align_padding`'s at `p`'s address, the residue, below `align` by the identity; since G16 `align_padding` has no precondition left to break (restated at G14 to G17's close; first read with the bound: at an address that broke it, the wrap in the body cancelled in `usize`, and the value was the same) |
+| 1 | `typed_cast_align_padding_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `align_padding` returns `(0 - n) & (align - 1)` since G16, the residue of `-n` modulo `align` for every `n`, and by the identity the formula, the multiple of `align` in `[n, n + align - 1]` less `n`, is that residue (restated at G14 to G17's close; first read for the body before G16, `align_up(n, align) - n`, which does not wrap under `align_up`'s bound, and whose value is the formula's) |
+| 2 | `typed_cast_ptr_align_padding_nonnull_ensures_part2` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `\result < align`: the value is `align_padding`'s at `p`'s address, the residue, below `align` by the identity; since G16 `align_padding` has no precondition left to break (restated at G14 to G17's close; first read with the bound: at an address that broke it, the wrap in the body cancelled in `usize`, and the value was the same) |
 
 #### Fixed-width arithmetic stated over unbounded integers (10)
 
@@ -19948,8 +19948,8 @@ call.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_mem_is_aligned_nonnull_aligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `nonnull_aligned`, `\result == \true`: past its null check `ptr_is_aligned` returns `is_aligned((usize)(uintptr_t)p, align)`, which by its postcondition is true exactly when the address's bits below `align` are 0, and that is `is_aligned_addr`'s body, `unsigned long`, `uintptr_t` and `usize` having one width on the units' machdeps, LP64 and ILP32; `ptr_is_aligned`'s `nonnull` behaviour states no result, so WP has no hypothesis on it |
-| 2 | `typed_cast_mem_is_aligned_nonnull_unaligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `cc-vec`, `cc-vec_struct` | `nonnull_unaligned`, `\result == \false`: the same, where one of those bits is set |
+| 1 | `typed_cast_mem_is_aligned_nonnull_aligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `nonnull_aligned`, `\result == \true`: past its null check `ptr_is_aligned` returns `is_aligned((usize)(uintptr_t)p, align)`, which by its postcondition is true exactly when the address's bits below `align` are 0, and that is `is_aligned_addr`'s body, `unsigned long`, `uintptr_t` and `usize` having one width on the units' machdeps, LP64 and ILP32; `ptr_is_aligned`'s `nonnull` behaviour states no result, so WP has no hypothesis on it |
+| 2 | `typed_cast_mem_is_aligned_nonnull_unaligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `nonnull_unaligned`, `\result == \false`: the same, where one of those bits is set |
 
 Both fail for the block's mechanism, a fact the code establishes and the
 specification omits; its argument gains the step for them, dated. VERIFY-008's
@@ -24966,6 +24966,27 @@ MCDC-017 pre-registers one.
 name stability, and the job stays report-only. It also adds the cover TU,
 which no WP unit reads.
 
+### Run 3, scored (2026-10-27)
+
+**Run 3** is a78d00e, with the verified source unchanged from run 2. It ran
+at CI #1385, green in every job. `frama-c-vec-range` reports
+`5159 / 5204`, the same 45 unproved names as run 2, and 0 own residuals. The
+`P2` comparison is set-equal again. The prover times differ in the
+milliseconds, and no status changes. The names are stable across two runs,
+which is the run plan's condition for enforcement.
+
+**Run 4** enforces the job, pushed with this score. It sets `ENFORCE=1`,
+pins the proved line `5159 / 5204` and `EXPECTED_UNPROVED=45`, and lists the
+45 names in `PIN_NAMES`. The list is the union P2 named, written out from
+the pins at a78d00e. The 26 goal-table rows whose Units cell lists units
+gain `frama-c-vec-range`, so that `tools/record_coverage.py --strict
+--complete` passes. The other 19 of the 45 are filed in rows whose cells the
+tool accepts as written. No name is filed anew, and no block is written.
+
+Run 4's predictions, each (H): `frama-c-vec-range` passes its gates (the
+proved line, zero Failed or Invalid, the count and the roll-call); every
+other job holds its pins; and Record coverage passes with no name pending.
+
 ---
 
 ## MCDC-017: Pre-registration — vec_range.h, Measured From a Cover TU, With Outcomes Dead at a Type
@@ -25028,3 +25049,47 @@ If M2 fails because an outcome predicted live is missed, the cover TU is
 extended. A deviation entry is not written for it (MCDC-010's rule). If one
 of D1 to D3 is covered, the reasoning above is wrong, and the score says
 where.
+
+### MCDC-017, scored (2026-10-27)
+
+CI #1385 (a78d00e). The coverage job's table has the row
+
+    vmacros/coverage/vec_range_cover.c     90.5%    38     42       4
+
+and the total moved from 1868 / 2028 to 1906 / 2070, +38 / +42, which is
+exactly this row. Branches went from 1664 / 1816 to 1703 / 1858, and lines
+from 2728 / 2815 to 2769 / 2856. The step that prints the TU's missed
+outcomes was not read from the CI log. The same compile, run and `gcov-14
+--conditions` was made locally, after the prediction was pushed, and gives
+the same "90.48% of 42". Per instantiation, it reports:
+
+    line 55, DEFINE_VEC_RANGE(static inline, int):
+      4/4, 2/2, 2/2, 2/2, 2/2, 4/6 (condition 1 true, condition 2 true), 2/2
+    line 58, DEFINE_VEC_RANGE(static inline, u64):
+      4/4, 2/2, 2/2, 2/2, 2/2, 4/6 (condition 0 true, condition 2 false), 2/2
+    observe()'s `!r.is_ok`: 2/2
+
+Conditions 0, 1 and 2 of the 6-outcome decision are A, B and C.
+
+| # | verdict | reading |
+|---|---------|---------|
+| M1 | **MATCH** | The row exists. |
+| M2 | **MISS** (rated M) | Four missed, not three. D1 (C true at `int`), D2 (A true at `u64`) and D3 (C false at `u64`) are missed, as predicted. The fourth is **B true at `int`**. GCC's MC/DC counts an outcome only where it decides the decision. At `int`, B true is always seen with C false, which masks it. B true would decide only beside C true, which never happens at a signed type (D1). So it is dead by D1's own fact. The prediction stopped at C and did not follow the masking to B. No miss is a gap in the TU. |
+| M3 | **MISS** (rated L) | 42, not 44. Per instantiation the code has 10 conditions, not 11: 2 + 1 + 1 + 1 + 1 + 1 + 3. The prediction miscounted its own list. That is −4 over two instantiations. The TU's own helper `observe()` adds a condition, +2, which the prediction did not count. |
+| M4 | **MATCH** | No other row of the MC/DC table moved, and the total moved by this row exactly. |
+
+**Justification rows** (justified-infeasible, dead at a type), on the TU's
+two instantiation lines:
+
+| Row | Line | Outcome | Why it cannot occur |
+|-----|------|---------|---------------------|
+| D1 | 55 (`int`) | C true | B true means a negative value that `int` holds, so `elem == value < 1`. |
+| D1′ | 55 (`int`) | B true, as an independent outcome | B true is masked by C false, and C is never true at a signed type (D1). |
+| D2 | 58 (`u64`) | A true | Every `isize` value round-trips through `u64`. |
+| D3 | 58 (`u64`) | C false | A negative value converts to `value + 2^64 ≥ 1`. |
+
+`vec_range.h`'s measured MC/DC is therefore 38 of 42, every miss justified.
+The other 38 outcomes are driven to both values. The check's dead outcomes
+belong to the generic form, one expression for every integer type. A form
+with no dead outcome at some type would need the type's signedness, which a
+macro over an arbitrary type does not have. MCDC-017 is closed.
