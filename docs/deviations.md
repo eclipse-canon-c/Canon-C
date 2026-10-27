@@ -25131,3 +25131,354 @@ The other 38 outcomes are driven to both values. The check's dead outcomes
 belong to the generic form, one expression for every integer type. A form
 with no dead outcome at some type would need the type's signedness, which a
 macro over an arbitrary type does not have. MCDC-017 is closed.
+
+---
+
+## VERIFY-042: Pre-registration — vec_fmt.h, the Twenty-First Unit: Elements Dropped From the Middle, and Two Blocks Predicted Needed
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-042 |
+| **Date**       | 2026-10-27 |
+| **Status**     | PRE-REGISTERED — no contract in the tree, no source changed; findings demonstrated by probe only; the contract below was written and parse-checked in a scratch copy, and reviewed independently before this commit |
+| **Baseline**   | 63f6ae3 (CI #____ — author fills): `test/data/vec_fmt_test.c`, the header's first tests, pushed before this record |
+| **Scope**      | `data/vec/vec_fmt.h` (two macros, `IMPL_VEC_TO_STRINGBUF` and `IMPL_VEC_TO_STRINGBUF_CB`, verified at `int`), contracted in place in the macro bodies; a driver `vmacros/vdrivers/vec_fmt_verify.h`; a main-CI job `frama-c-vec-fmt` under `-CC`, as `frama-c-vec-range` is; a cover TU (MCDC-018, below) |
+| **Category**   | Fourth prospective unit after the saturation claim; the first predicted to need blocks; an API change decided with the author before any contract |
+
+**Why this record exists.** `vec_fmt.h` is the second of vec's extension
+headers, after `vec_range.h` (VERIFY-041). It had no tests until 63f6ae3,
+which tests what the documentation states and the code does when the
+StringBuf has room. Reading the code for those tests found the defect below.
+Its fix changes the API: both functions return `bool`, and the callback
+returns `bool`. The author decided both shapes on 2026-10-27, choosing
+between the options this record names. This record commits the findings,
+the fix, the contract and the predictions before any contract is written.
+
+**Unlike VERIFY-041, this record predicts blocks.** The callback form calls
+through a function pointer with no `calls` clause, as `region_end` calls its
+hooks, and the callback is arbitrary by design. Two kinds of goal follow
+from that call, whatever the contract says.
+
+- **The run-time check before the call.** WP 29 does not implement
+  `\valid_function`, so this check is unprovable. Each family that calls
+  through a pointer has had a block for it. Option's and result's checks
+  are argued by VERIFY-014's and VERIFY-015's blocks. The queue's comparator
+  check is argued by VERIFY-022's block 8, judged needed at VERIFY-040. The
+  queue's call goes to one of a listed set of functions. `region_end`'s is
+  argued by VERIFY-039's block on what a hook keeps.
+- **The loop's own goals across the call.** WP loses the loop's state
+  across a call through such a pointer. `region_end`'s loop invariant and
+  variant stay unproved for that reason, under VERIFY-011's Category 1
+  (`core/region.h` says so at the call).
+
+By those precedents, `vec_fmt.h` needs a block for each. The prediction is
+written before any run, so it can fail.
+
+### The unit
+
+`vec_fmt.h` defines two functions per instantiation. Today's signatures:
+
+    void vec_<T>_to_stringbuf(const vec_<T>* v, StringBuf* sb, const char* fmt);
+    void vec_<T>_to_stringbuf_cb(const vec_<T>* v, StringBuf* sb,
+                                 void (*cb)(StringBuf*, T));
+
+They call `stringbuf_append_fmt` (as `stringbuf_printf`), a variadic function
+with in-place contracts verified by `frama-c-stringbuf`, and the callback.
+They call no vec function.
+
+**The driver** is the smallest unit that holds the two functions:
+
+    #include "data/vec/vec_defn.h"
+    DEFINE_VEC_STRUCTS(int)
+    #include "data/vec/vec_fmt.h"
+    DEFINE_VEC_FMT(static inline, int)
+
+**Its closure** is stringbuf.h's: arena.h's closure, borrow.h, and
+stringbuf.h with its `__FRAMAC__` `vsnprintf` axiom. `vec_impl.h` adds
+result at (Bool, Error) through `CANON_RESULT(bool, Error)`, since the driver
+does not define `CANON_RESULT_BOOL_ERROR_DEFINED`. `vec_range.h`'s driver
+emits the same expansion itself with `DEFINE_RESULT_*`; this driver is the
+first to rely on `vec_impl.h`'s copy. Under
+`-CC` its macro-body contracts apply. **Model**: Typed+Cast, stringbuf's.
+**Preprocessing**: `-CC`, for the reason VERIFY-041 gives: both loops lie in
+macro bodies.
+
+**n(*P*) = 1**, layer C: `unverified header:data/vec/vec_fmt.h`. It is
+measured on the driver with the run-1 source in a copy, against the
+catalogue rebuilt at 63f6ae3, which is committed with this record. That
+rebuild changes only `meta.substrate_commit`. `family:vec@other+integer`
+has been catalogued since VERIFY-041, and the callback's indirect call and
+`\valid_function` are catalogued kinds. This unit is not §5.4's test,
+for the reason VERIFY-041 gives.
+
+**Uncontracted baseline.** Two local WP 25 runs on the two functions, at
+63f6ae3 with `-wp-fct` and Z3, gave 10 goals, none proved. Among them were
+`stringbuf_append_fmt`'s preconditions at the call (`sb_ok`, `fmt_ok` and
+`fmt_sep`, F2's) and the callback's `assert_rte_function_pointer`. These are
+the only WP runs this record made. The run-1 source was parse-checked under
+`-CC` and measured by `tools/idioms`; neither is a proof.
+
+### Findings demonstrated before any contract
+
+All probes: GCC 14.2 with ASan and UBSan on glibc 2.39; musl 1.2.4 through
+`musl-gcc`, which wraps GCC 13 here, without sanitizers, where stated. The
+sources are committed with this record, in `tools/probes/verify-042/`.
+
+**F1 — when the StringBuf runs out of room, elements are dropped from the
+middle, silently.**
+
+    vector {1, 1000000, 2}, StringBuf of capacity 8
+    to_stringbuf(&v, &sb, "%d ")    → "1 2 "     (1000000 missing)
+    to_stringbuf_cb(&v, &sb, cb)    → "[1][2]"   (the same)
+
+The header says "StringBuf silently truncates if capacity is exceeded". It
+does not truncate. `stringbuf_append_fmt` fails as a whole and leaves the
+string unchanged (VERIFY-031), and the loop ignores the failure and goes on.
+A later element that fits is appended after the gap. The output is
+well-formed, looks complete, and is not the vector's. Both functions return
+`void`, so no caller can tell.
+
+**Fix, decided with the author** (options put to them: stop and keep the
+prefix; stop and roll back; keep `void` and change the documentation):
+**both functions return `bool` and stop at the first element that does not
+fit, keeping what was written.** That is what the header's "truncates"
+promised, and it is what `hashmap_fmt.h` already does. **The callback returns
+`bool`** (options: return `bool`; keep `void` and check only that the
+StringBuf is not full), as `hashmap_fmt.h`'s formatters do. A `void`
+callback is a constraint violation: GCC 14 and clang reject it, and GCC 13
+warns, an error under the project's `-Werror`. Nothing in the repository but 63f6ae3's test
+uses `vec_fmt.h`. A NULL vector, StringBuf, format or callback returns
+`false`; an empty vector returns `true` and writes nothing.
+
+**F2 — an unstated inherited precondition: the format must not lie in the
+StringBuf's unused tail.** `stringbuf_append_fmt` requires it (VERIFY-031
+G5, `fmt_sep`), because `vsnprintf`'s buffer and format are
+`restrict`-qualified. `vec_fmt.h` passes its `fmt` through and states
+nothing:
+
+    format "%d," stored at data + 4 of an empty StringBuf of capacity 32,
+    vector {1234567, 2, 3}
+    glibc: "5677"                    musl: "1234567,567,567,567,"
+
+That is undefined behaviour, resolved differently by the two libcs.
+
+**The whole format string, not only its first byte.** `stringbuf.h`'s
+`fmt_sep` separates the format's first byte from the tail (VERIFY-031: "one
+byte is enough to make G5 visible"). For `vec_fmt.h` that is not enough.
+The review of this record's draft showed a format whose first byte lies in
+the current string and whose terminator lies in the tail
+(`tools/probes/verify-042/f2_terminator.c`). The first append overwrites
+the terminator, and every later call reads a different format:
+
+    StringBuf "x%d", fmt = data + 1, vector {1, 2, 3}
+    glibc (GCC 14, clang): ok=0 "x%d"      musl: ok=1 "x%d1213121"
+
+**Fix**: state it, in the documentation and as the precondition `fmt_sep`
+over the whole string, `fmt + (0 .. strlen(fmt))`. The gap in
+`stringbuf.h`'s own clause is recorded here, not repaired. A single call
+there reads the format while it writes, and restrict forbids any overlap,
+so the first-byte clause is weaker than the rule it states; VERIFY-031 chose
+it knowingly. The same holds for a `%s` argument; that half is documented
+and not verified (the VERIFY-017 limit).
+
+**F3 — a callback that grows the vector it is formatting makes the loop run
+to the vector's capacity.** The loop reads `v->len` after every call:
+
+    vector {1, 2}, capacity 8; a callback that appends each value it formats
+    → 8 calls, "1,2,1,2,1,2,1,2,"
+
+**Fix**: iterate over the length and buffer at entry, read once. Both
+functions do this, the format form for symmetry. The documentation says
+"each element present at the call". This also gives the prover something to
+work with. WP frames a call through an unknown pointer with no frame, so it
+can no longer assume `v->len` and `v->items` are unchanged after the call.
+It keeps validity: WP's model of such a call frees nothing (VERIFY-011,
+G19).
+
+**Also found, not defects.** A vector whose elements lie in the StringBuf's
+unused tail is formatted from bytes the formatting overwrites. C defines
+this, but the output is not the vector's. It is stated as the precondition
+`v_sep`, over the tail only, and documented. Since F3's fix the vector
+struct is read once, at entry, and the current string is never written, so
+neither needs separating. A mismatched format is undefined, as with `printf`; the
+header says so already.
+
+### Contract design, fixed before the run
+
+The contracts live in the macro bodies, and name no macro parameter
+(VERIFY-041 F1's limit). Here none needs to: no clause depends on the
+element type. Run 1 runs them on the fixed code, so there is no detection
+run. F2's detection would test what the uncontracted run already showed.
+F1 and F3 are invisible to the contract (P4).
+
+    #define IMPL_VEC_TO_STRINGBUF(linkage, VecType, fn, type)
+    /*@ requires v_ok:    v == \null || (\valid_read(v) && v->len <= v->capacity && (v->len > 0 ==> \valid_read(v->items + (0 .. v->len - 1))));
+        requires sb_ok:   sb == \null || stringbuf_ok(sb);
+        requires fmt_ok:  fmt == \null || valid_read_string(fmt);
+        requires fmt_sep: !(v != \null && sb != \null && fmt != \null && sb->data != \null && v->len > 0)
+        || \separated(fmt + (0 .. strlen(fmt)), sb->data + (sb->len .. sb->capacity - 1));
+        requires v_sep:   !(v != \null && sb != \null && fmt != \null && sb->data != \null && v->len > 0)
+        || \separated(v->items + (0 .. v->len - 1), sb->data + (sb->len .. sb->capacity - 1));
+        assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+        behavior no_args:
+        assumes v == \null || sb == \null || fmt == \null;
+        assigns \nothing;
+        ensures \result == \false;
+        behavior empty:
+        assumes v != \null && sb != \null && fmt != \null && v->len == 0;
+        assigns \nothing;
+        ensures \result == \true;
+        behavior no_buffer:
+        assumes v != \null && sb != \null && fmt != \null && v->len > 0 && sb->data == \null;
+        assigns \nothing;
+        ensures \result == \false;
+        behavior format:
+        assumes v != \null && sb != \null && fmt != \null && v->len > 0 && sb->data != \null;
+        assigns sb->len, sb->data[sb->len .. sb->capacity - 1];
+        ensures ok:     stringbuf_wf(sb);
+        ensures grown:  \old(sb->len) <= sb->len;
+        ensures prefix: stringbuf_prefix{Pre, Post}(sb, \old(sb->len));
+        complete behaviors;
+        disjoint behaviors; */
+    linkage bool fn(
+            borrowed(const VecType*) v,
+            borrowed(StringBuf*)     sb,
+            borrowed(const char*)    fmt)
+    {
+        if (!v || !sb || !fmt) { return false; }
+        const usize n = v->len;
+        const type* const items = v->items;
+        if (n == 0) { return true; }
+        if (!sb->data) { return false; }
+        /*@ loop invariant 0 <= i <= n;
+            loop invariant stringbuf_wf(sb);
+            loop invariant sb->data == \at(sb->data, Pre) && sb->capacity == \at(sb->capacity, Pre);
+            loop invariant \at(sb->len, Pre) <= sb->len;
+            loop invariant stringbuf_prefix{Pre, Here}(sb, \at(sb->len, Pre));
+            loop invariant valid_read_string(fmt);
+            loop invariant \separated(fmt + (0 .. strlen(fmt)), sb->data + (sb->len .. sb->capacity - 1));
+            loop assigns i, sb->len, sb->data[\at(sb->len, Pre) .. sb->capacity - 1];
+            loop variant n - i; */
+        for (usize i = 0; i < n; i++) {
+            if (!stringbuf_printf(sb, fmt, items[i])) { return false; }
+        }
+        return true;
+    }
+    #define IMPL_VEC_TO_STRINGBUF_CB(linkage, VecType, fn, type)
+    /*@ requires v_ok:  v == \null || (\valid_read(v) && v->len <= v->capacity && (v->len > 0 ==> \valid_read(v->items + (0 .. v->len - 1))));
+        requires cb_ok: (v != \null && sb != \null && cb != \null && v->len > 0) ==> \valid_function(cb);
+        terminates !(v != \null && sb != \null && cb != \null && v->len > 0);
+        exits v != \null && sb != \null && cb != \null && \old(v->len) > 0;
+        behavior no_args:
+        assumes v == \null || sb == \null || cb == \null;
+        assigns \nothing;
+        ensures \result == \false;
+        behavior empty:
+        assumes v != \null && sb != \null && cb != \null && v->len == 0;
+        assigns \nothing;
+        ensures \result == \true;
+        behavior call:
+        assumes v != \null && sb != \null && cb != \null && v->len > 0;
+        complete behaviors;
+        disjoint behaviors; */
+    linkage bool fn(
+            borrowed(const VecType*) v,
+            borrowed(StringBuf*)     sb,
+            bool (*cb)(borrowed(StringBuf*), type))
+    {
+        if (!v || !sb || !cb) { return false; }
+        const usize n = v->len;
+        const type* const items = v->items;
+        if (n == 0) { return true; }
+        /*@ loop invariant 0 <= i <= n;
+            loop variant n - i; */
+        for (usize i = 0; i < n; i++) {
+            if (!cb(sb, items[i])) { return false; }
+        }
+        return true;
+    }
+
+Design notes, each fixed now:
+
+1. **The format form claims what stringbuf claims, and no more.** It keeps
+   the StringBuf well-formed, never shrinks it, and leaves the prefix
+   unchanged. A StringBuf in the zero state (`data == NULL`) returns
+   `false` at a guard of its own, before any call. `stringbuf.h` places the
+   same guard for the same reason (VERIFY-031 run 2): WP frames a call by
+   the callee's top-level `assigns`, so the callee's `no_buffer` behaviour
+   would not keep `len`. It says nothing about the bytes written, since formatting is
+   opaque (VERIFY-031). It says nothing about which elements were written
+   on `false`: "stops at the first that does not fit" is the tests'
+   evidence.
+2. **The callback form claims only what every callback gives**, G11's rule:
+   - `false` with no call;
+   - `true` for an empty vector;
+   - in the calling behaviour, nothing at all: no frame, no result;
+   - termination required only off the calling branch, and an exit allowed
+     only on it, its condition read at entry (`\old(v->len)`);
+   - the callback's validity as a precondition where it is called.
+3. **Decision rule (VERIFY-028's, restated).** An own goal that does not
+   prove is kept and argued, never weakened or dropped.
+4. **Not claimed:**
+   - the bytes formatted;
+   - which elements were written when the result is `false`;
+   - anything a callback does;
+   - the `%s` half of `fmt_sep`;
+   - anything under `CANON_LIFETIME_DEBUG`.
+
+### Run plan
+
+| Run | Source state | Mode |
+|-----|--------------|------|
+| 1 | the fixes, contracts and annotations; the driver and `frama-c-vec-fmt`; tests for F1 and F3 and the new API; the cover TU | report-only |
+| 2 | unchanged | report-only, name stability |
+| 3 | pinned | enforced |
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | **Two new `**Manual proof argument**` blocks, both needed and verifier-bound, both for the callback form.** **(a)** The run-time check `typed_cast_vec_int_to_stringbuf_cb_assert_rte_function_pointer`, argued as VERIFY-014's block argues option's checks. The call is reached only where the contract requires `\valid_function(cb)`, and WP 29 turns the check into `false`. **(b)** The loop's own goals across the call, P6's (the invariant's preservation, the variant's decrease and, likely, the access to `items[i]`): true because the loop's counter and the length and buffer read at entry are locals no callee can reach, and unproved because WP loses them across a call through a pointer with no `calls` clause, as at `region_end`. No admissible change reaches either: a callback is arbitrary, so no `calls` clause can name it. *A* goes to 33 cumulative and 19 in force, and *V* to 21 and 16. | no own residual in the callback form, or one of the two kinds absent, or an own residual of another kind | M for (a); M–L for (b) |
+| P2 | **Inherited and fresh residuals = 43, by name:** `frama-c-stringbuf`'s 37 (arena.h's 33 and borrow.h's 4) ∪ result at (Bool, Error)'s six, as `cc-vec` pins them. Computed from the pins at 63f6ae3. | count ≠ 43, or any name outside that set | H for the union; M for result's six, emitted bare by `vec_impl.h` and read under `-CC` |
+| P3 | `stringbuf_append_fmt`'s `sb_ok` and `fmt_sep` at the call prove, in every run. `fmt_ok` (`valid_read_string(fmt)`) at the call, and the loop invariants that carry it and the whole-string separation, rest on WP keeping `strlen(fmt)` across writes separated from the string. | `sb_ok` or `fmt_sep` unproved; for `fmt_ok` and those invariants, see P5 | H for `sb_ok` and `fmt_sep`; L for `fmt_ok` |
+| P4 | **F1 and F3 have no goal**, in any run. The contract cannot state which elements were written, and does not state the callback's effect. | a goal whose status is attributable to either | H |
+| P5 | **`to_stringbuf`: own residuals = 0.** Most at risk, in order: the invariants carrying `valid_read_string(fmt)` and the whole-string separation across the loop's writes, and `fmt_ok` at the call (P3); then the prefix invariant, carried through each call's `prefix` postcondition from a length that only grows. If any of these stays unproved, the decision rule applies: it is kept and argued, and P1's count rises. | any own residual of `to_stringbuf` | L |
+| P6 | **`to_stringbuf_cb`: own residuals are P1's kinds only**: (a) the run-time check; (b) the loop's goals across the call: the preservation of the loop invariant `0 <= i <= n` and the variant's decrease (`region_end`'s two), and, likely, the access check on `items[i]`. The callback loop states no frame, since none can be checked against a call that writes everything without `region_end`'s `for no_hook:` device. So after the call, nothing ties `n` and `items` at the loop head to their values at entry. The access is filed under (b) if it stays unproved: its argument is the same, locals no callee can reach. The empty vector returns before the loop, so `empty`'s frame and the call's termination and exit goals get their condition from the path. The goal count is not predicted, since WP 29 may split these. | an own residual of another kind in `to_stringbuf_cb` | M–L |
+| P7 | **No existing pin moves**, in the main CI or the -CC workflow. Record coverage passes on every push. | any existing job's proved line, count or roll-call changes | H |
+| P8 | **The catalogue, rebuilt with the new job, gains no kind**; `vec_fmt.h` joins the verified files. | any feature added or removed | H |
+| P9 | **By kind, exploratory (§5.4), scored and carrying nothing:** if P1 holds, both needed blocks are about an indirect call to unknown code. That, `\valid_function` and loops are catalogued kinds, and none is n(*P*)'s one new kind. That is an instance against the by-kind form. | — (recorded, not a test) | — |
+
+Not predicted: the unit's goal totals (VERIFY-041's reason).
+
+### MC/DC: MCDC-018, pre-registered here
+
+`vmacros/coverage/vec_fmt_cover.c` instantiates `DEFINE_VEC_STRUCTS(int)`
+and `DEFINE_VEC_FMT(static inline, int)` outside `test/`, built and run as
+`vec_range_cover.c` is. Per function, the conditions are:
+- the guard: 3 conditions;
+- the empty vector's return, `n == 0`: 1;
+- in the format form only, the zero-state return, `!sb->data`: 1;
+- the loop: 1;
+- the failure test: 1, the append's or the callback's.
+
+That is 7 conditions in the format form and 6 in the callback form: 13
+conditions and 26 outcomes. The TU's helpers carry no condition. (The
+draft of this record counted 20, before the review added the two early
+returns. The re-review counted 26 on the revised source with
+`-fcondition-coverage`, as a check of this count, not as a measurement of
+the TU, which is not written yet.)
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| M1 | The row is `vec_fmt_cover.c`, 26 / 26: every outcome is driven. Each guard condition is true alone. The empty vector drives `n == 0` true in each form, and a zero-state StringBuf with a non-empty vector drives `!sb->data` true. The failure test is driven true by a full StringBuf and by a callback returning `false`. | another figure | M |
+| M2 | No other row moves; the total moves by this row. | another row moves | M–H |
+
+### Also owed, with run 1
+
+- `vec_fmt.h`'s documentation: the new return values, the stop-and-keep
+  rule, F2's precondition over the whole format, F3's "present at the call",
+  and the example callback returning `bool`; and `data/vec/vec.h`'s mention
+  of `vec_fmt.h` (line 123).
+- `test/data/vec_fmt_test.c` to the new API, with F1's and F3's tests: the
+  stop-and-keep result on a small StringBuf, and the callback that grows its
+  vector.
