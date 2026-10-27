@@ -684,6 +684,17 @@ if(ENABLE_COVERAGE_TUS)
     # which the coverage filter removes. Flags as frama-c-vec-range's run.
     target_compile_definitions(vec_range_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
 
-    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover)")
+    add_executable(vec_fmt_cover vmacros/coverage/vec_fmt_cover.c)
+    target_include_directories(vec_fmt_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR}/data
+        ${CMAKE_SOURCE_DIR})
+    # MCDC-018: vec_fmt.h's conditions, stamped to this TU's instantiation
+    # line instead of to test/data/vec_fmt_test.c. Flags as frama-c-vec-fmt's.
+    target_compile_definitions(vec_fmt_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover, vec_fmt_cover)")
  
 endif()

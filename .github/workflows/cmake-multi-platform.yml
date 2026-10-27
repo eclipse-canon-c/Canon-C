@@ -6424,6 +6424,111 @@ jobs:
           name: wp-proof-vec-range
           path: wp_vec_range_output.txt
           retention-days: 90
+  frama-c-vec-fmt:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/vec/vec_fmt.h under -CC (VERIFY-042, report-only)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          # VERIFY-042: vec_fmt.h's contracts and loop annotations live in
+          # the macro bodies, so this unit is preprocessed with -CC, as
+          # frama-c-vec-range is. Flags otherwise frama-c-vec's.
+          ENFORCE=0            # VERIFY-042 run plan: runs 1-2 report-only
+          OUT=wp_vec_fmt_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/vec_fmt_verify.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (vec_fmt.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: Typed+Cast  PREPROCESSING: -CC"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            grep -E "^\[(kernel|wp)" ${OUT} | head -20 || true
+          else
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              echo "  !!! Failed/Invalid present -- read these first:"
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/vf_all.txt
+            grep -E 'vec_int_to_stringbuf' /tmp/vf_all.txt > /tmp/vf_own.txt || true
+            grep -vE 'vec_int_to_stringbuf' /tmp/vf_all.txt > /tmp/vf_rest.txt || true
+            echo ""
+            echo "  ============ VERIFY-042 EVIDENCE (not gating) ============"
+            grep -E 'vec_int_to_stringbuf_cb_' /tmp/vf_own.txt > /tmp/vf_cb.txt || true
+            grep -vE 'vec_int_to_stringbuf_cb_' /tmp/vf_own.txt > /tmp/vf_fmt.txt || true
+            echo "  own, to_stringbuf (P5 pred 0): $(wc -l < /tmp/vf_fmt.txt)"
+            show /tmp/vf_fmt.txt
+            echo "  own, to_stringbuf_cb (P6 pred: the function-pointer check, the loop"
+            echo "      invariant's preservation, the variant's decrease, likely items[i]'s access): $(wc -l < /tmp/vf_cb.txt)"
+            show /tmp/vf_cb.txt
+            echo "  P3: stringbuf_append_fmt's preconditions at the call, unproved (pred: sb_ok, fmt_sep none; fmt_ok L):"
+            grep -E 'call_stringbuf_append_fmt_requires' /tmp/vf_own.txt > /tmp/vf_p3.txt || true; show /tmp/vf_p3.txt "(none)"
+            # P2: the inherited set, computed at run time from the pins of
+            # frama-c-stringbuf and cc-vec's result names, never copied.
+            python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'tools')
+          import record_coverage as rc
+          from collections import defaultdict
+          by = defaultdict(set)
+          for n, us in rc.pinned_names().items():
+              for u in us:
+                  by[u].add(n)
+          pred = by['frama-c-stringbuf'] | {n for n in by['cc-vec'] if n.startswith('typed_result_Bool_Error_')}
+          obs = {rc.norm(l.strip()) for l in open('/tmp/vf_rest.txt') if l.strip()}
+          print('  P2  inherited and fresh: observed %d, predicted %d (pred 43)' % (len(obs), len(pred)))
+          for t, s in (('predicted, not observed', sorted(pred - obs)), ('observed, not predicted', sorted(obs - pred))):
+              print('      %s: %d' % (t, len(s)))
+              for n in s:
+                  print('        ' + n)
+          PY
+            echo "  ==========================================================="
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (vec_fmt.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-vec-fmt
+          path: wp_vec_fmt_output.txt
+          retention-days: 90
   frama-c-stringbuf:
     needs: build
     runs-on: ubuntu-24.04
@@ -6705,6 +6810,7 @@ jobs:
           ./deque_cover
           ./deque_cover
           ./vec_range_cover
+          ./vec_fmt_cover
       
       - name: Collect branch coverage data (lcov)
         run: |
@@ -7797,6 +7903,28 @@ jobs:
             cat "$GCOV"
           else
             echo "No vec_range_cover.c.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for vec_fmt.h (cover TU)"
+        # MCDC-018. vec_fmt.h's conditions are stamped to the cover TU's
+        # instantiation line. Predicted: 26 / 26, no miss. Any miss is a gap
+        # in the cover TU, fixed by extending it. Report-only. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "vec_fmt_cover*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate vec_fmt_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "vec_fmt_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in vec_fmt_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No vec_fmt_cover.c.gcov file generated"
           fi
       - name: "Debug: per-line MC/DC detail for priority_queue.h"
         # Added 2026-09-07 with MCDC-014. priority_queue.h reached 81/82 (MCDC-014); the one

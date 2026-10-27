@@ -120,7 +120,7 @@
  * Extension headers (optional):
  * ```c
  * #include "data/vec/vec_range.h"  // adds vec_extend_from_range
- * #include "data/vec/vec_fmt.h"    // adds vec_to_stringbuf
+ * #include "data/vec/vec_fmt.h"    // adds vec_<T>_to_stringbuf(_cb), each returning bool
  * ```
  *
  * @sa vec_defn.h, vec_decl.h, vec_mangle.h, vec_impl.h
