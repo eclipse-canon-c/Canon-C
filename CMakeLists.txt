@@ -354,6 +354,12 @@ canon_c_test(
 )
 
 canon_c_test(
+    NAME     vec_fmt_test
+    SRC      test/data/vec_fmt_test.c
+    INCLUDES core/primitives core semantics data .
+)
+
+canon_c_test(
     NAME     deque_test
     SRC      test/data/deque_test.c
     INCLUDES core/primitives core semantics data .
