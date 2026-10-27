@@ -24490,7 +24490,7 @@ probe's paths name.
 |----------------|-------|
 | **ID**         | VERIFY-041 |
 | **Date**       | 2026-10-26 |
-| **Status**     | PRE-REGISTERED — no contract written, no source changed; findings demonstrated by probe only |
+| **Status**     | CLOSED (2026-10-27) — pre-registered at de4afae, before any contract; run 1 (42a89ad, CI #1382: the detection test, F2 and F1 each seen at the one goal predicted), run 2 (d2d3f0c and 4d62cd8, CI #1383 and #1384: no own residual; the new test's 32-bit failures a miss), run 3 (a78d00e, CI #1385: name-identical), enforced at 101b4a2 (CI #1386); every prediction matched but P8 at run 2's first push; module 20 adds no argument (*A* 31 cumulative and 17 in force); MCDC-017 scored with it |
 | **Baseline**   | b7bac65 (CI #____ — author fills; the last run of the main CI is #1381, at c0286ce) |
 | **Scope**      | `data/vec/vec_range.h` (one macro, `IMPL_VEC_EXTEND_FROM_RANGE`, verified at `int`), contracted in place in the macro body; a new driver `vmacros/vdrivers/vec_range_verify.h` with one clause at `int`; a new main-CI job `frama-c-vec-range`, the first main-CI unit preprocessed with `-CC` |
 | **Category**   | Third prospective unit after the saturation claim was written down (after range.h, VERIFY-028, and stringbuf.h, VERIFY-031); prospective test of prover detection on two findings; first unit to take, from its first run, the change VERIFY-040 block 1's Retirement names |
@@ -24986,6 +24986,44 @@ tool accepts as written. No name is filed anew, and no block is written.
 Run 4's predictions, each (H): `frama-c-vec-range` passes its gates (the
 proved line, zero Failed or Invalid, the count and the roll-call); every
 other job holds its pins; and Record coverage passes with no name pending.
+
+### Closed (2026-10-27)
+
+**Run 4** is 101b4a2, at CI #1386. Every job is green, `frama-c-vec-range`
+among them, with its gates: the proved line `5159 / 5204`, zero Failed or
+Invalid, the count 45 and the roll-call. Record coverage #110 passes with no
+name pending. Run 4's three predictions match.
+
+| # | verdict |
+|---|---------|
+| P1 | **MATCH** — no own residual at enforcement, so no block. *A* stays 31 cumulative and 17 in force. |
+| P2 | **MATCH** — 45 names, in runs 1 to 3 and at enforcement. |
+| P3, P4, P5, P6 | **MATCH** (run 1) |
+| P7 | **MATCH** (run 2) |
+| P8 | **MATCH** but for run 2's first push, scored above |
+| P9 | **MATCH** |
+| P10 | nothing to read: no block was needed |
+
+**What module 20 adds to Table 1.** vec_range.h adds 0 distinct obligations,
+0 blocks written and 0 needed. It is the third unit verified under a
+prediction, committed by hash before any contract, that it would add no
+argument, after range.h and stringbuf.h, and the third whose prediction held.
+Like those two, it was worked to zero own residuals before enforcement. Its
+fixes, F1's check and F2's rejection, were themselves pre-registered. So it
+shows, as §5.3 of the paper says of the other two, that a new argument could
+be avoided, not that none was needed. It does add one thing the other two did
+not. It is the first unit whose only loop lies in a macro body since
+VERIFY-040 showed what `-C` does to one. Verified under `-CC` from its first
+run, the loop needed no argument. Under `-C`, the annotation would have been
+stripped. By VERIFY-040 block 1's measurement, that leaves goals no admissible
+change reaches, a counterfactual this record did not run.
+
+**Recorded outside this record**, in the same commit:
+`docs/verification.md`'s summary card (21 headers, 457 functions, 54966 /
+54460 / 506) and a section for the header; `docs/traceability.md`'s proof
+table (a row, and the total 54970 / 54464 / 506) and its coverage list (a
+bullet). The paper, frozen at 96a8c5d, is not changed. Its Table 1 ends at
+module 19.
 
 ---
 

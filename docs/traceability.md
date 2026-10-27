@@ -760,6 +760,14 @@ by methodology):
   F2b) and a downstream buffer overflow (F5): MC/DC measures outcomes
   reached, not input regions sampled, and both questions had to be asked.
 
+- **vec_range.h: 90.5% (38/42)**, measured from
+  `vmacros/coverage/vec_range_cover.c` (MCDC-017): `DEFINE_VEC_RANGE` at
+  `int` and at `u64`, outside `test/`. Before it, the header had no row: its
+  conditions were stamped to `test/data/vec_test.c`, which the coverage job's
+  filter removes. The four uncovered outcomes are each dead at a type, in the
+  representability check `A || (B && C)`: C true and B true at `int`, and A
+  true and C false at `u64`.
+
 - **stringbuf.h: 98.55% (136/138)** — the ceiling under MCDC-016. The two
   uncovered outcomes are J1/J2, both TRUE sides of `_va`'s
   `(written < 0) || ((usize)written != needed)`: a second conversion with
@@ -951,7 +959,13 @@ and after the paragraphs below say where a reading here no longer holds.
 | priority_queue.h | 41  |              4683 | 4645 (99.19%) | 38       | VERIFY-022/40 |
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
 | stringbuf.h | 29       |              4826 | 4789 (99.23%) | 37       | VERIFY-031..35 |
-| **Total**  | **457**   | **49766**         | **49305 (99.07%)**| **461**  |              |
+| vec_range.h | 1        |              5204 | 5159 (99.14%) | 45       | VERIFY-041   |
+| **Total**  | **458**   | **54970**         | **54464 (99.08%)**| **506**  |              |
+
+*Brought to the pins again 2026-10-27 (VERIFY-041; CI #1386).* vec_range.h's
+row is new: `frama-c-vec-range`, enforced at 101b4a2, 5159 / 5204 with 45
+unproved, all inherited or fresh and none own. The total is 54970
+obligations, 54464 proved and 506 unproved, from 49766, 49305 and 461.
 
 *Brought to the pins again 2026-10-25 (VERIFY-008, the overlap fix; held
 at CI #1380).* `mem_regions_overlap` compares addresses as `uintptr_t` values,

@@ -10,11 +10,16 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 20 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h) — lifetime.h is a 21st unit of narrower scope, see VERIFY-021 |
-| **Functions**        | 456 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29; lifetime.h's 1 counted separately) |
-| **Total obligations**| 49762 (summed over the 20 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 49301 (99.07%)                                                                 |
-| **Unproved**         | 461 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Headers verified** | 21 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h) — lifetime.h is a 22nd unit of narrower scope, see VERIFY-021 |
+| **Functions**        | 457 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1; lifetime.h's 1 counted separately) |
+| **Total obligations**| 54966 (summed over the 21 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 54460 (99.08%)                                                                 |
+| **Unproved**         | 506 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-10-27 (VERIFY-041, vec_range.h enforced at CI #1386).*
+`frama-c-vec-range` adds a twenty-first unit: +1 function, +5204
+obligations, +5159 proved and +45 unproved, all 45 inherited or fresh and
+none own. The card previously read 20 / 456 / 49762 / 49301 / 461.
 
 *Recomputed 2026-10-25 (VERIFY-008, the overlap fix; held at CI #1380).*
 `mem_regions_overlap` compares the two addresses as `uintptr_t` values, not
@@ -4262,6 +4267,62 @@ its own caller. The suite passed on all of it under ASan and UBSan.
 reveals, stayed invisible to WP as pre-registered (P6): the axiom is true on
 musl because musl's −1 satisfies it vacuously, and the contract cannot
 promise success.
+
+## data/vec/vec_range.h (in-place contracts under -CC, one clause in a driver)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals)            |
+| **Baseline commit**    | 4d62cd8 (Canon-C CI #1384) → name-identical a78d00e (#1385) → enforced at 101b4a2 (#1386) |
+| **Functions**          | 1 (`vec_int_extend_from_range`, from `IMPL_VEC_EXTEND_FROM_RANGE`), contracted in the macro body |
+| **Proof obligations**  | 5159 / 5204 discharged automatically (99.14%)   |
+| **Unproved**           | 45 — all inherited or fresh (arena.h's 33 and range.h's 8, two shared, and result at (Bool, Error)'s 6), **0 own**; VERIFY-041; **0 Failed, 0 Invalid, 0 Stepout** |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
+| **CI enforcement**     | Yes — pinned `5159 / 5204` + zero Failed/Invalid + exact count 45 + by-name roll-call (set equality) |
+| **MC/DC coverage**     | 90.5% (38/42, measured from `vmacros/coverage/vec_range_cover.c`), 4 justified, each dead at a type — see MCDC-017 |
+| **CI artifact**        | `wp-proof-vec-range`                            |
+| **Job runtime**        | ~40 min                                          |
+
+vec_range.h is **module 20** and the **third prospective test of the
+argument-base saturation claim**. VERIFY-041 pre-registered it (de4afae)
+before any contract. It is the first main-CI unit preprocessed with `-CC`,
+chosen before any run so that the annotation of its loop, which lies in a
+macro body, reaches the prover (VERIFY-040 block 1's cause). The unit does not
+instantiate vec's functions, which the extension does not call: its closure
+is arena.h's, result at (Bool, Error), range.h with option at isize, and vec's
+structs at int.
+
+**What is claimed.** Four behaviours, complete and disjoint: `invalid` (a
+NULL vector or buffer, or step `ISIZE_MIN`), `overflow`, `too_big` and `room`.
+Under `room`, success means the length grew by the range's count, the k-th new
+element is `r.current + k * r.step`, and the elements below the old length
+are unchanged. Failure means `ERR_OUT_OF_RANGE` with the length unchanged. At
+`int`, a clause on the driver's prototype (`fits_ok`) claims success whenever
+there is room and every value fits.
+
+**Not claimed:** when a call with room succeeds at any type but `int`;
+floating element types; the slots past `len` after a failure; anything under
+`CANON_LIFETIME_DEBUG`.
+
+**Defects found before the prover ran** (VERIFY-041, by probe):
+
+- **F1:** a value the element type cannot hold was converted silently and
+  the call returned Ok. The documentation put representability on the caller,
+  in a note. Fixed by a check that returns `ERR_OUT_OF_RANGE`. The contract
+  could not state the obligation itself, since ACSL in a macro body cannot
+  name the macro's type parameter.
+- **F2:** a range with step `ISIZE_MIN`, built by hand or through
+  `range_make` under `CANON_NO_REQUIRE`, reached undefined behaviour in
+  `range_len`. Fixed by returning `ERR_INVALID_ARG` before the call. Step 0
+  keeps its result (Ok, nothing appended).
+
+Run 1 verified the contract on the unfixed code. F2 showed at `range_len`'s
+call precondition only, and F1 at the content invariant's preservation only,
+as predicted. Run 2, on the fixed code, left no own residual.
 
 ## Triple-prover rationale
 
