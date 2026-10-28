@@ -6431,13 +6431,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
-      - name: "WP: data/vec/vec_fmt.h under -CC (VERIFY-042, report-only)"
+      - name: "WP: data/vec/vec_fmt.h under -CC (VERIFY-042, enforced)"
         run: |
           eval $(opam env --switch=frama-c)
           # VERIFY-042: vec_fmt.h's contracts and loop annotations live in
           # the macro bodies, so this unit is preprocessed with -CC, as
           # frama-c-vec-range is. Flags otherwise frama-c-vec's.
-          ENFORCE=0            # VERIFY-042 run plan: runs 1-2 report-only
+          ENFORCE=1            # VERIFY-042 run 3: pinned from runs 1 and 2 (CI #1388 and its re-run)
           OUT=wp_vec_fmt_output.txt
           FAILURES=0
           note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
@@ -6520,6 +6520,105 @@ jobs:
                   print('        ' + n)
           PY
             echo "  ==========================================================="
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ -n "${PROVED_LINE}" ]; then
+            # ===============================================================
+            # ENFORCED as of VERIFY-042 run 3, pinned from runs 1 and 2 (CI
+            # #1388 at cf28c02 and the job's re-run, workflow run
+            # 40592358164): 5239 / 5286, 47 residuals, name-identical in
+            # both runs. 43 are inherited or fresh, equal by name to
+            # frama-c-stringbuf's 37 and result at (Bool, Error)'s six as
+            # cc-vec pins them; 4 are vec_fmt.h's own, all of
+            # to_stringbuf_cb, filed under VERIFY-042's two blocks (the
+            # callback's run-time check; the loop's state across the call).
+            # A pinned name that starts proving is a RATCHET; a new name is a
+            # finding. Neither is ever absorbed silently.
+            # ===============================================================
+            EXPECTED_PROVED="5239 / 5286"   # VERIFY-042 runs 1 and 2
+            EXPECTED_UNPROVED=47
+            PIN_NAMES=(
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_vec_int_to_stringbuf_cb_assert_rte_function_pointer"
+            "typed_cast_vec_int_to_stringbuf_cb_assert_rte_mem_access_3"
+            "typed_cast_vec_int_to_stringbuf_cb_loop_invariant_preserved"
+            "typed_cast_vec_int_to_stringbuf_cb_loop_variant_decrease"
+            )
+            echo ""
+            echo "==============================================="
+            echo "  MODE: ENFORCED (VERIFY-042)"
+            echo "==============================================="
+            PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved-goal summary ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              note_fail "FAIL: ${F} Failed / ${I} Invalid goal(s) -- a REAL finding, never pinnable."
+            fi
+            printf '%s\n' "${PIN_NAMES[@]}" | sort -u > /tmp/vf_pin.txt
+            PIN_N=$(wc -l < /tmp/vf_pin.txt)
+            comm -23 /tmp/vf_pin.txt /tmp/vf_all.txt > /tmp/vf_missing.txt
+            comm -13 /tmp/vf_pin.txt /tmp/vf_all.txt > /tmp/vf_unpinned.txt
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 37 stringbuf + 6 result + 4 own) ---"
+            echo "    missing (pinned, now proved):    $(wc -l < /tmp/vf_missing.txt)"; show /tmp/vf_missing.txt
+            echo "    unpinned (new, unproved):        $(wc -l < /tmp/vf_unpinned.txt)"; show /tmp/vf_unpinned.txt
+            if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: pin list has ${PIN_N} names, EXPECTED_UNPROVED is ${EXPECTED_UNPROVED} -- the job is inconsistent."
+            fi
+            if [ -s /tmp/vf_missing.txt ] || [ -s /tmp/vf_unpinned.txt ]; then
+              echo "FAIL: residual set differs from the pin by name."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              FAILURES=$((FAILURES + 1))
+            fi
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "PASS: vec_fmt.h verified -- ${PROVED_COUNT} proved, ${EXPECTED_UNPROVED}"
+              echo "      residuals, 43 inherited or fresh and 4 own, each filed, all observed by name (VERIFY-042)."
+            else
+              echo "VERIFY-042 ENFORCED FAIL: ${FAILURES} check(s) above."
+            fi
+            echo "==============================================="
           fi
           if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
       - name: Upload WP proof output (vec_fmt.h)

@@ -17804,12 +17804,12 @@ is how the record compares names.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_result_Bool_Error_map_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
-| 2 | `typed_result_Bool_Error_map_err_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map_err` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
-| 3 | `typed_result_Bool_Error_and_then_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `and_then` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
-| 4 | `typed_result_Bool_Error_or_else_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `or_else` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
-| 5 | `typed_result_Bool_Error_eq_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_ok` only when both are Ok, and requires `\valid_function(eq_ok)` there |
-| 6 | `typed_result_Bool_Error_eq_assert_rte_function_pointer_2` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_err` only when both are Err, and requires `\valid_function(eq_err)` there |
+| 1 | `typed_result_Bool_Error_map_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 2 | `typed_result_Bool_Error_map_err_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map_err` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
+| 3 | `typed_result_Bool_Error_and_then_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `and_then` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 4 | `typed_result_Bool_Error_or_else_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `or_else` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
+| 5 | `typed_result_Bool_Error_eq_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_ok` only when both are Ok, and requires `\valid_function(eq_ok)` there |
+| 6 | `typed_result_Bool_Error_eq_assert_rte_function_pointer_2` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_err` only when both are Err, and requires `\valid_function(eq_err)` there |
 
 ### G11 — repair at option's copies in bitset and range: committed prediction (before the fix commit)
 
@@ -18160,8 +18160,8 @@ and the block retires.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_arena_alloc_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | the fill: on the non-null path `mem_zero(p, size)` runs `memset(p, 0, size)`, which stores `(unsigned char)0`, a byte of zero bits, at each of the `size` bytes, and such a byte reads 0 through `u8` |
-| 2 | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | the same, after `arena_alloc_aligned` |
+| 1 | `typed_cast_arena_alloc_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-vec`, `cc-vec_struct` | the fill: on the non-null path `mem_zero(p, size)` runs `memset(p, 0, size)`, which stores `(unsigned char)0`, a byte of zero bits, at each of the `size` bytes, and such a byte reads 0 through `u8` |
+| 2 | `typed_cast_arena_alloc_aligned_zero_ensures_3_part1` | `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-stringbuf`, `frama-c-vec`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-vec`, `cc-vec_struct` | the same, after `arena_alloc_aligned` |
 
 Both are the class the block argues, a byte-level write read through a typed
 location, here between two 8-bit kinds: `mem_zero` states the bytes it zeroes
@@ -18812,18 +18812,18 @@ VERIFY-012 get dated notes. G13 is closed.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
-| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
-| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
-| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b` |
-| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
-| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
-| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
-| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
-| 9 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | memcmp is reached with equal lengths above 0 and distinct non-null pointers, inside `no_dangling_a`'s guard; its quantifier is `non_escaping(a.bytes.ptr, a.bytes.len)` |
-| 10 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | the same, by `no_dangling_b`, `b.bytes.len` being `a.bytes.len` |
-| 11 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | `str_equal`'s `no_dangling_a` on `a.str` and `b.str`, which `borrowed_str_eq`'s own `no_dangling_a` states of the same views under the same guard |
-| 12 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `cc-borrow` | the same, by `no_dangling_b` |
+| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
+| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
+| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
+| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b` |
+| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
+| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
+| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
+| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
+| 9 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | memcmp is reached with equal lengths above 0 and distinct non-null pointers, inside `no_dangling_a`'s guard; its quantifier is `non_escaping(a.bytes.ptr, a.bytes.len)` |
+| 10 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | the same, by `no_dangling_b`, `b.bytes.len` being `a.bytes.len` |
+| 11 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | `str_equal`'s `no_dangling_a` on `a.str` and `b.str`, which `borrowed_str_eq`'s own `no_dangling_a` states of the same views under the same guard |
+| 12 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | the same, by `no_dangling_b` |
 
 **What this does to *A*.** One block retires and none is written. *A* is
 27 cumulative and 19 in force, *V* 16 cumulative and 15 in force, and *S*
@@ -18895,8 +18895,8 @@ and three blocks are written below:
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_align_padding_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `align_padding` returns `(0 - n) & (align - 1)` since G16, the residue of `-n` modulo `align` for every `n`, and by the identity the formula, the multiple of `align` in `[n, n + align - 1]` less `n`, is that residue (restated at G14 to G17's close; first read for the body before G16, `align_up(n, align) - n`, which does not wrap under `align_up`'s bound, and whose value is the formula's) |
-| 2 | `typed_cast_ptr_align_padding_nonnull_ensures_part2` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `\result < align`: the value is `align_padding`'s at `p`'s address, the residue, below `align` by the identity; since G16 `align_padding` has no precondition left to break (restated at G14 to G17's close; first read with the bound: at an address that broke it, the wrap in the body cancelled in `usize`, and the value was the same) |
+| 1 | `typed_cast_align_padding_ensures` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-vec`, `cc-vec_struct` | `align_padding` returns `(0 - n) & (align - 1)` since G16, the residue of `-n` modulo `align` for every `n`, and by the identity the formula, the multiple of `align` in `[n, n + align - 1]` less `n`, is that residue (restated at G14 to G17's close; first read for the body before G16, `align_up(n, align) - n`, which does not wrap under `align_up`'s bound, and whose value is the formula's) |
+| 2 | `typed_cast_ptr_align_padding_nonnull_ensures_part2` | `frama-c-ptr`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-vec`, `cc-vec_struct` | `\result < align`: the value is `align_padding`'s at `p`'s address, the residue, below `align` by the identity; since G16 `align_padding` has no precondition left to break (restated at G14 to G17's close; first read with the bound: at an address that broke it, the wrap in the body cancelled in `usize`, and the value was the same) |
 
 #### Fixed-width arithmetic stated over unbounded integers (10)
 
@@ -19948,8 +19948,8 @@ call.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_mem_is_aligned_nonnull_aligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `nonnull_aligned`, `\result == \true`: past its null check `ptr_is_aligned` returns `is_aligned((usize)(uintptr_t)p, align)`, which by its postcondition is true exactly when the address's bits below `align` are 0, and that is `is_aligned_addr`'s body, `unsigned long`, `uintptr_t` and `usize` having one width on the units' machdeps, LP64 and ILP32; `ptr_is_aligned`'s `nonnull` behaviour states no result, so WP has no hypothesis on it |
-| 2 | `typed_cast_mem_is_aligned_nonnull_unaligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `cc-vec`, `cc-vec_struct` | `nonnull_unaligned`, `\result == \false`: the same, where one of those bits is set |
+| 1 | `typed_cast_mem_is_aligned_nonnull_aligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-vec`, `cc-vec_struct` | `nonnull_aligned`, `\result == \true`: past its null check `ptr_is_aligned` returns `is_aligned((usize)(uintptr_t)p, align)`, which by its postcondition is true exactly when the address's bits below `align` are 0, and that is `is_aligned_addr`'s body, `unsigned long`, `uintptr_t` and `usize` having one width on the units' machdeps, LP64 and ILP32; `ptr_is_aligned`'s `nonnull` behaviour states no result, so WP has no hypothesis on it |
+| 2 | `typed_cast_mem_is_aligned_nonnull_unaligned_ensures` | `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-vec`, `cc-vec_struct` | `nonnull_unaligned`, `\result == \false`: the same, where one of those bits is set |
 
 Both fail for the block's mechanism, a fact the code establishes and the
 specification omits; its argument gains the step for them, dated. VERIFY-008's
@@ -25528,3 +25528,110 @@ source, for name stability. This push changes only `docs/` and `tools/`,
 which the main CI ignores. So run 2 is the job re-run on CI #1388 at
 cf28c02, from the run's page. Its prediction (H) is the same 47 names and
 `5239 / 5286`.
+
+### Run 2, scored (2026-10-28)
+
+**Run 2** is `frama-c-vec-fmt` run again on cf28c02, the verified source
+unchanged (workflow run 40592358164, its artifact `wp-proof-vec-fmt`
+12801646805):
+
+    [wp] Proved goals: 5239 / 5286
+    Timeouts: 45  Unknown: 2  Failed: 0  Invalid: 0  Stepout: 0
+    own, to_stringbuf: 0
+    own, to_stringbuf_cb: 4 (the same four names)
+    P2  inherited and fresh: observed 43, predicted 43, set-equal
+
+The same 47 names as run 1, and the same proved line. One inherited goal,
+`typed_cast_mem_align_to_normal_ensures_part3`, went from Timeout to Unknown;
+the split moved from 46 / 1 to 45 / 2. It is unproved in both runs, so the
+set does not change. That is the kind of prover nondeterminism §6's table
+lists as P5. The prediction for run 2 matches: the same names and the same
+proved line.
+
+### Run 3: enforcement, and the two blocks
+
+`frama-c-vec-fmt` is enforced in the commit carrying this section. It pins
+`5239 / 5286`, `EXPECTED_UNPROVED=47` and the 47 names. 24 goal-table rows whose Units
+cell lists units gain `frama-c-vec-fmt`, so that `tools/record_coverage.py
+--strict --complete` passes; the other 19 inherited names are filed in rows
+whose cells the tool accepts as written. The
+four own names are filed below, under the two blocks P1 predicted, both
+written at module 21 and both verifier-bound. Run 3's predictions, each (H):
+the job passes its gates; every other job holds its pins; and Record
+coverage passes with no name pending.
+
+#### A call through the formatting callback, a pointer no clause can list (1)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_to_stringbuf_cb_assert_rte_function_pointer` | `frama-c-vec-fmt` | `\valid_function(cb)` before the call `cb(sb, items[i])` |
+
+**Functions affected**: `vec_int_to_stringbuf_cb` (`frama-c-vec-fmt`).
+
+**Root cause**: the callback form calls the caller's formatter through the
+pointer `cb`, which is arbitrary by design, so no `calls` clause can list it.
+The contract requires `\valid_function(cb)` wherever the call is made (its
+`cb_ok`), and WP 29 does not implement `\valid_function`: it turns the
+run-time check into `false`, which no prover discharges where the context is
+consistent. Verifier-bound: a WP that implemented `\valid_function` would
+prove it from the precondition.
+
+**Manual proof argument**: The call is made only past the guard
+`if (!v || !sb || !cb)` and the empty vector's return, so where it is made
+`v`, `sb` and `cb` are not null and the length read at entry is positive.
+That is the condition under which `cb_ok` requires `\valid_function(cb)`.
+`cb` is a parameter, not changed by the function. A callback cannot reach it,
+since its address is never taken. So at every call, in every iteration,
+`cb` is the pointer the precondition holds valid, and the check holds for
+every call the contract admits. This is VERIFY-014's argument for option's
+checks, and VERIFY-015's for result's, at another family.
+
+**Retirement.** A WP that implements `\valid_function` (the case of option's,
+result's and the queue's checks), or a formatter mechanism whose formatters
+are listed, so that `calls` names them.
+
+#### The callback loop's own state across a call through an unlisted pointer (3)
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_vec_int_to_stringbuf_cb_loop_invariant_preserved` | `frama-c-vec-fmt` | `0 <= i <= n` after an iteration |
+| 2 | `typed_cast_vec_int_to_stringbuf_cb_loop_variant_decrease` | `frama-c-vec-fmt` | `n - i` decreases across an iteration |
+| 3 | `typed_cast_vec_int_to_stringbuf_cb_assert_rte_mem_access_3` | `frama-c-vec-fmt` | `items[i]` is readable at the call's argument |
+
+**Functions affected**: `vec_int_to_stringbuf_cb` (`frama-c-vec-fmt`).
+
+**Root cause**: across a call through a pointer with no `calls` clause, WP 29
+takes the call to write everything and keeps only validity, which its model
+of the call does not free (VERIFY-039 G19). The loop states no frame, since
+none can be checked against such a call without `region_end`'s
+`for no_hook:` device. So after a call, nothing ties the counter `i`, the
+length `n` and the buffer `items` read at entry to their values before it.
+The invariant's preservation, the variant's decrease and the access
+`items[i]`, which needs `i < n` and `items` as at entry, stay unproved. These
+are `region_end`'s two loop goals under VERIFY-011's Category 1, and an access
+of the same kind. Verifier-bound: the facts lost are about locals, which C
+puts out of any callee's reach.
+
+**Manual proof argument**: `i`, `n` and `items` are locals of
+`vec_int_to_stringbuf_cb` whose addresses are never taken. A callee can reach
+an object only through a pointer to it or through its own scope, so no
+callback can write them; `n` and `items` are also `const`. Across each call
+they therefore keep their values: `n` and `items` are the length and buffer
+read at entry, and `i` is the iteration's index. The loop condition gives
+`i < n` before the call, and the increment makes `i + 1 <= n` after it, so
+`0 <= i <= n` is preserved: goal 1. `n - i` falls by one each iteration and
+stays non-negative: goal 2. At the head, `i < n` and `items` is the buffer the
+precondition `v_ok` holds readable for `n` elements, and a callback frees
+nothing in WP's model and, by the contract's `v_ok`, has no license to free
+in C. So `items[i]` is readable: goal 3. Each holds for every call the
+contract admits.
+
+**Retirement.** A WP that keeps unaddressed locals across a call through an
+unlisted pointer, or a `calls` clause that can name the formatter, which
+would give the call a frame. Neither is an admissible change of
+`vec_fmt.h`: a callback is arbitrary by design (the record's P1).
+
+**What this does to *A*.** Two blocks are written at module 21, both
+verifier-bound and both needed, as P1 predicted: *A* is 33 cumulative and 19
+in force, and *V* 21 and 16. The paper's Table 1 is frozen at module 19 and
+does not change.
