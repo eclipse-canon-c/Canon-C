@@ -25140,7 +25140,7 @@ macro over an arbitrary type does not have. MCDC-017 is closed.
 |----------------|-------|
 | **ID**         | VERIFY-042 |
 | **Date**       | 2026-10-27 |
-| **Status**     | PRE-REGISTERED — no contract in the tree, no source changed; findings demonstrated by probe only; the contract below was written and parse-checked in a scratch copy, and reviewed independently before this commit |
+| **Status**     | CLOSED (2026-10-28) — pre-registered at 723d646 after two independent reviews; run 1 (cf28c02, CI #1388: every prediction scored matched, P5 and P3's `fmt_ok` among them), run 2 (the job re-run on cf28c02: name-identical), enforced at 270494a (CI #1389); two blocks written and needed, as P1 predicted (*A* 33 cumulative and 19 in force, *V* 21 and 16); MCDC-018 26 / 26, as predicted |
 | **Baseline**   | 63f6ae3 (CI #____ — author fills): `test/data/vec_fmt_test.c`, the header's first tests, pushed before this record |
 | **Scope**      | `data/vec/vec_fmt.h` (two macros, `IMPL_VEC_TO_STRINGBUF` and `IMPL_VEC_TO_STRINGBUF_CB`, verified at `int`), contracted in place in the macro bodies; a driver `vmacros/vdrivers/vec_fmt_verify.h`; a main-CI job `frama-c-vec-fmt` under `-CC`, as `frama-c-vec-range` is; a cover TU (MCDC-018, below) |
 | **Category**   | Fourth prospective unit after the saturation claim; the first predicted to need blocks; an API change decided with the author before any contract |
@@ -25635,3 +25635,37 @@ would give the call a frame. Neither is an admissible change of
 verifier-bound and both needed, as P1 predicted: *A* is 33 cumulative and 19
 in force, and *V* 21 and 16. The paper's Table 1 is frozen at module 19 and
 does not change.
+
+### Closed (2026-10-28)
+
+**Run 3** is 270494a, at CI #1389. Every job is green, `frama-c-vec-fmt`
+among them, with its gates: `5239 / 5286`, zero Failed or Invalid, the count
+47 and the roll-call. Record coverage #115 passes with no name pending. Run
+3's three predictions match.
+
+| # | verdict |
+|---|---------|
+| P1 | **MATCH** — two blocks, both needed and verifier-bound, for exactly P6's four goals. |
+| P2 | **MATCH** — 43 names, in both runs and at enforcement. |
+| P3 | **MATCH** — all three, `fmt_ok` (L) included. |
+| P4, P7, P8 | **MATCH** |
+| P5 | **MATCH** (L) |
+| P6 | **MATCH** — the predicted kinds, `items[i]`'s access as the second review added. |
+| P9 | recorded: both needed blocks are about an indirect call to unknown code, catalogued kinds, neither n(*P*)'s one new kind. An instance against the by-kind form, exploratory, carrying nothing. |
+
+**What module 21 adds to Table 1.** 4 own distinct obligations; 2 blocks
+written, both needed (*V*). It is the fourth unit verified under a
+prediction committed before any contract. It is the first whose prediction
+was that blocks would be needed, and the prediction held in the count, the
+kind and the goals. A unit that calls code no contract can describe needs an
+argument for what the verifier loses at that call. VERIFY-040's verdict on
+the queue's comparator says the same, and so does `region_end`'s hooks'.
+`vec_fmt.h` adds two more instances, at another family. The two reviews
+mattered: the first draft predicted one block and one goal, and three of the
+four goals would have been misses.
+
+**Recorded outside this record**, in the same commit:
+`docs/verification.md`'s summary card (22 headers, 459 functions, 60252 /
+59699 / 553) and a section for the header; `docs/traceability.md`'s proof
+table (a row; the total 60256 / 59703 / 553) and its coverage list (a
+bullet). The paper, frozen at 96a8c5d, is not changed.

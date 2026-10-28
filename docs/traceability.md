@@ -760,6 +760,11 @@ by methodology):
   F2b) and a downstream buffer overflow (F5): MC/DC measures outcomes
   reached, not input regions sampled, and both questions had to be asked.
 
+- **vec_fmt.h: 100% (26/26)**, measured from `vmacros/coverage/vec_fmt_cover.c`
+  (MCDC-018), as predicted before the TU was written. The tests in
+  `test/data/vec_fmt_test.c` are filtered out of the table, like every test
+  file; the cover TU stamps the conditions outside `test/`.
+
 - **vec_range.h: 90.5% (38/42)**, measured from
   `vmacros/coverage/vec_range_cover.c` (MCDC-017): `DEFINE_VEC_RANGE` at
   `int` and at `u64`, outside `test/`. Before it, the header had no row: its
@@ -960,7 +965,13 @@ and after the paragraphs below say where a reading here no longer holds.
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
 | stringbuf.h | 29       |              4826 | 4789 (99.23%) | 37       | VERIFY-031..35 |
 | vec_range.h | 1        |              5204 | 5159 (99.14%) | 45       | VERIFY-041   |
-| **Total**  | **458**   | **54970**         | **54464 (99.08%)**| **506**  |              |
+| vec_fmt.h  | 2         |              5286 | 5239 (99.11%) | 47       | VERIFY-042   |
+| **Total**  | **460**   | **60256**         | **59703 (99.08%)**| **553**  |              |
+
+*Brought to the pins again 2026-10-28 (VERIFY-042; CI #1389).* vec_fmt.h's
+row is new: `frama-c-vec-fmt`, enforced at 270494a, 5239 / 5286 with 47
+unproved, 43 inherited or fresh and 4 own. The total is 60256 obligations,
+59703 proved and 553 unproved, from 54970, 54464 and 506.
 
 *Brought to the pins again 2026-10-27 (VERIFY-041; CI #1386).* vec_range.h's
 row is new: `frama-c-vec-range`, enforced at 101b4a2, 5159 / 5204 with 45

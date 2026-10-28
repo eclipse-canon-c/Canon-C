@@ -10,11 +10,17 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 21 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h) — lifetime.h is a 22nd unit of narrower scope, see VERIFY-021 |
-| **Functions**        | 457 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1; lifetime.h's 1 counted separately) |
-| **Total obligations**| 54966 (summed over the 21 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 54460 (99.08%)                                                                 |
-| **Unproved**         | 506 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Headers verified** | 22 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h) — lifetime.h is a 23rd unit of narrower scope, see VERIFY-021 |
+| **Functions**        | 459 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2; lifetime.h's 1 counted separately) |
+| **Total obligations**| 60252 (summed over the 22 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 59699 (99.08%)                                                                 |
+| **Unproved**         | 553 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-10-28 (VERIFY-042, vec_fmt.h enforced at CI #1389).*
+`frama-c-vec-fmt` adds a twenty-second unit: +2 functions, +5286
+obligations, +5239 proved and +47 unproved, 43 inherited or fresh and 4 own,
+filed under VERIFY-042's two blocks. The card previously read 21 / 457 /
+54966 / 54460 / 506.
 
 *Recomputed 2026-10-27 (VERIFY-041, vec_range.h enforced at CI #1386).*
 `frama-c-vec-range` adds a twenty-first unit: +1 function, +5204
@@ -4323,6 +4329,63 @@ floating element types; the slots past `len` after a failure; anything under
 Run 1 verified the contract on the unfixed code. F2 showed at `range_len`'s
 call precondition only, and F1 at the content invariant's preservation only,
 as predicted. Run 2, on the fixed code, left no own residual.
+
+## data/vec/vec_fmt.h (in-place contracts under -CC)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (with documented residuals)            |
+| **Baseline commit**    | cf28c02 (Canon-C CI #1388) → name-identical re-run of the job (workflow run 40592358164) → enforced at 270494a (#1389) |
+| **Functions**          | 2 (`vec_int_to_stringbuf`, `vec_int_to_stringbuf_cb`), contracted in the macro bodies |
+| **Proof obligations**  | 5239 / 5286 discharged automatically (99.11%)   |
+| **Unproved**           | 47 — 43 inherited or fresh (stringbuf.h's 37 and result at (Bool, Error)'s 6), **4 own**, all of `to_stringbuf_cb`, under VERIFY-042's two blocks; **0 Failed, 0 Invalid, 0 Stepout** |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
+| **CI enforcement**     | Yes — pinned `5239 / 5286` + zero Failed/Invalid + exact count 47 + by-name roll-call (set equality) |
+| **MC/DC coverage**     | 100% (26/26, measured from `vmacros/coverage/vec_fmt_cover.c`) — see MCDC-018 |
+| **CI artifact**        | `wp-proof-vec-fmt`                              |
+| **Job runtime**        | ~45 min                                          |
+
+vec_fmt.h is **module 21** and the **fourth prospective unit** after the
+saturation claim. VERIFY-042 pre-registered it (723d646) before any contract,
+after two independent reviews, and it is the first such unit predicted to
+need blocks: two, for the callback form's call through a pointer no clause
+can list. Both were needed, as predicted, and no other.
+
+**The API changed** (decided with the author before the contract): both
+functions return `bool`, stop at the first element that does not fit, keeping
+what was written, and the callback returns `bool`.
+
+**What is claimed.** The format form keeps the StringBuf well-formed, never
+shrinks it and leaves the prefix unchanged; it returns `false` for NULL
+arguments or a StringBuf without a buffer, and `true` for an empty vector.
+The callback form claims what every callback gives (VERIFY-039 G11): `false`
+with no call, `true` for an empty vector, the callback's validity where it is
+called, and termination and exit only off the calling branch.
+
+**Not claimed:** the bytes formatted; which elements were written when the
+result is `false` (the tests' evidence); anything a callback does; the `%s`
+half of the format's separation; anything under `CANON_LIFETIME_DEBUG`.
+
+**Defects found before the prover ran** (VERIFY-042, by probe):
+
+- **F1:** when the StringBuf filled up, an element was skipped and later
+  ones appended after the gap, silently. Now the function stops and returns
+  `false`.
+- **F2:** an unstated precondition, inherited from `stringbuf_append_fmt`:
+  the format must not lie in the StringBuf's unused tail. It is now stated
+  over the whole string, since a terminator in the tail is overwritten
+  across iterations.
+- **F3:** a callback that grew the vector ran the loop to capacity. The
+  length and buffer are now read once, at entry.
+
+**The four own residuals**, each argued in VERIFY-042: the run-time check
+`\valid_function(cb)`, which WP 29 does not implement; and the callback loop's
+invariant, variant and `items[i]` access, whose locals WP loses across a call
+through an unlisted pointer, as at `region_end`.
 
 ## Triple-prover rationale
 
