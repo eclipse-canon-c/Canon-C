@@ -1,7 +1,7 @@
 {
  "meta": {
   "tool_version": "1",
-  "substrate_commit": "63f6ae3",
+  "substrate_commit": "cf28c02",
   "clang": "Ubuntu clang version 18.1.3 (1ubuntu1)",
   "workflow": ".github/workflows/cmake-multi-platform.yml"
  },
@@ -416,6 +416,28 @@
    "features": 61
   },
   {
+   "job": "frama-c-vec-fmt",
+   "files": [
+    "vmacros/vdrivers/vec_fmt_verify.h"
+   ],
+   "cpp": [
+    "-CC",
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    "data",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 59
+  },
+  {
    "job": "frama-c-stringbuf",
    "files": [
     "data/stringbuf.h"
@@ -458,6 +480,7 @@
   "data/range.h",
   "data/stringbuf.h",
   "data/vec/vec_defn.h",
+  "data/vec/vec_fmt.h",
   "data/vec/vec_impl.h",
   "data/vec/vec_mangle.h",
   "data/vec/vec_range.h",
@@ -477,6 +500,7 @@
   "vmacros/vdrivers/option_verify.h",
   "vmacros/vdrivers/range_verify.h",
   "vmacros/vdrivers/result_verify.h",
+  "vmacros/vdrivers/vec_fmt_verify.h",
   "vmacros/vdrivers/vec_range_verify.h",
   "vmacros/vdrivers/vec_verify.h"
  ],
@@ -485,6 +509,7 @@
    "frama-c-bitset",
    "frama-c-region",
    "frama-c-stringbuf",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\base_addr": [
@@ -498,6 +523,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\dangling": [
@@ -512,6 +538,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\exists": [
@@ -536,6 +563,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\forall": [
@@ -552,6 +580,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\freeable": [
@@ -564,6 +593,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\fresh": [
@@ -576,6 +606,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\from": [
@@ -593,6 +624,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\let": [
@@ -604,6 +636,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\min": [
@@ -611,6 +644,7 @@
    "frama-c-borrow",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\nothing": [
@@ -634,6 +668,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\null": [
@@ -653,6 +688,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\old": [
@@ -669,6 +705,7 @@
    "frama-c-result",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\result": [
@@ -694,6 +731,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\separated": [
@@ -708,6 +746,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\true": [
@@ -728,6 +767,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\valid": [
@@ -749,6 +789,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\valid_function": [
@@ -760,6 +801,7 @@
    "frama-c-region",
    "frama-c-result",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\valid_read": [
@@ -779,6 +821,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:allocates": [
@@ -791,6 +834,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:assigns": [
@@ -815,6 +859,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:assumes": [
@@ -837,6 +882,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:axiomatic": [
@@ -862,6 +908,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:calls": [
@@ -887,6 +934,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:disjoint behaviors": [
@@ -909,6 +957,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:ensures": [
@@ -934,6 +983,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:exits": [
@@ -954,6 +1004,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:frees": [
@@ -966,6 +1017,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:lemma": [
@@ -995,6 +1047,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:loop invariant": [
@@ -1008,6 +1061,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:loop variant": [
@@ -1021,6 +1075,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:predicate": [
@@ -1038,6 +1093,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:requires": [
@@ -1061,6 +1117,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-clause:terminates": [
@@ -1081,6 +1138,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-logic:pointer-to-integer cast": [
@@ -1094,6 +1152,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "acsl-pattern:behavior leaves the result unconstrained": [
@@ -1112,6 +1171,7 @@
    "frama-c-result",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ]
  },
@@ -1129,6 +1189,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:dynamic allocation": [
@@ -1141,6 +1202,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:floating point": [
@@ -1156,6 +1218,7 @@
    "frama-c-region",
    "frama-c-result",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:integer-to-pointer cast": [
@@ -1169,6 +1232,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:loop": [
@@ -1182,10 +1246,12 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:loop in a macro body": [
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:nonlinear arithmetic": [
@@ -1203,6 +1269,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:pointer-to-integer cast": [
@@ -1217,6 +1284,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:union": [
@@ -1224,6 +1292,7 @@
    "frama-c-priority-queue",
    "frama-c-result",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:variadic call": [
@@ -1244,10 +1313,12 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "c:variadic definition": [
-   "frama-c-stringbuf"
+   "frama-c-stringbuf",
+   "frama-c-vec-fmt"
   ],
   "libc:abort": [
    "frama-c-arena",
@@ -1267,6 +1338,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:fflush": [
@@ -1287,6 +1359,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:fprintf": [
@@ -1307,6 +1380,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:memcmp": [
@@ -1321,6 +1395,7 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:memcpy": [
@@ -1334,6 +1409,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:memmove": [
@@ -1347,6 +1423,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:memset": [
@@ -1360,6 +1437,7 @@
    "frama-c-region",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:snprintf": [
@@ -1377,10 +1455,12 @@
    "frama-c-slice",
    "frama-c-stringbuf",
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "libc:vsnprintf": [
-   "frama-c-stringbuf"
+   "frama-c-stringbuf",
+   "frama-c-vec-fmt"
   ]
  },
  "C": {
@@ -1420,13 +1500,16 @@
   ],
   "family:vec": [
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "family:vec@integer": [
    "frama-c-vec",
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ],
   "family:vec@other+integer": [
+   "frama-c-vec-fmt",
    "frama-c-vec-range"
   ]
  }

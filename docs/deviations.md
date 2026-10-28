@@ -25482,3 +25482,49 @@ the TU, which is not written yet.)
 - `test/data/vec_fmt_test.c` to the new API, with F1's and F3's tests: the
   stop-and-keep result on a small StringBuf, and the callback that grows its
   vector.
+
+### Run 1, scored (2026-10-28)
+
+**Run 1** is cf28c02: the fixes, the contracts and the annotations, written
+into the two macro bodies word for word as above (checked by script), with
+the driver, `frama-c-vec-fmt` (report-only), the tests and the cover TU. It
+ran at CI #1388, CC #62 and Record coverage #113, every job green.
+`frama-c-vec-fmt` took 45 minutes.
+
+    [wp] Proved goals: 5239 / 5286
+    Timeouts: 46  Unknown: 1  Failed: 0  Invalid: 0  Stepout: 0
+    own, to_stringbuf: 0
+    own, to_stringbuf_cb: 4
+        typed_cast_vec_int_to_stringbuf_cb_assert_rte_function_pointer
+        typed_cast_vec_int_to_stringbuf_cb_assert_rte_mem_access_3
+        typed_cast_vec_int_to_stringbuf_cb_loop_invariant_preserved
+        typed_cast_vec_int_to_stringbuf_cb_loop_variant_decrease
+    P3: stringbuf_append_fmt's preconditions at the call, unproved: none
+    P2  inherited and fresh: observed 43, predicted 43, set-equal
+
+| # | verdict | reading |
+|---|---------|---------|
+| P2 | **MATCH** | 43 names, set-equal to `frama-c-stringbuf`'s 37 ∪ result at (Bool, Error)'s six. result's six, emitted by `vec_impl.h` and read under `-CC`, are `cc-vec`'s names. 47 = 43 + 4. |
+| P3 | **MATCH**, all three | `sb_ok`, `fmt_sep` and `fmt_ok` prove at the call. `fmt_ok`, rated L, proves: WP carries `strlen(fmt)` across the loop's writes, which are separated from the whole string. |
+| P4 | **MATCH** | No goal attributable to F1 or F3. |
+| P5 | **MATCH** (rated L) | `to_stringbuf` has no own residual. The invariants carrying `valid_read_string(fmt)` and the whole-string separation prove, and so does the prefix invariant. |
+| P6 | **MATCH** | `to_stringbuf_cb`'s own residuals are exactly the predicted kinds: (a) the run-time check; (b) the invariant's preservation, the variant's decrease and the access to `items[i]` (`mem_access_3`), the third rated "likely" after the second review. The call's termination and exit goals, and `empty`'s frame, prove, as the early return was meant to make them. |
+| P7 | **MATCH** for this push | Every existing job is green and holds its pins. Record coverage #113 passes. |
+| P8 | **MATCH** | The catalogue rebuilt at cf28c02 with the new job (committed with this score) gains no kind: ACSL 42, C 22 and family 9 as before. The verified files go from 43 to 45 (`vec_fmt.h` and its driver). `tools/idioms`' five tests pass. |
+| P1 | **holding** | The four own residuals are P1's two kinds and no other. The two blocks are written at enforcement, when the names are pinned: (a) for the check, (b) for the three goals of the loop across the call. |
+
+**MCDC-018, scored.** CI #1388's coverage job has the row
+
+    vmacros/coverage/vec_fmt_cover.c      100.0%    26     26       0
+
+M1 **MATCH**: 26 / 26, the count the re-review corrected before commit. M2
+**MATCH**: the total moved from 1906 / 2070 to 1932 / 2096, +26 / +26, this
+row exactly, and no other row moved. Branches went from 1703 / 1858 to
+1717 / 1872, and lines from 2769 / 2856 to 2796 / 2883. `vec_fmt.h`'s
+measured MC/DC is 26 of 26, with no justification row. MCDC-018 is closed.
+
+**Run 2** is a second run of `frama-c-vec-fmt` on the same verified
+source, for name stability. This push changes only `docs/` and `tools/`,
+which the main CI ignores. So run 2 is the job re-run on CI #1388 at
+cf28c02, from the run's page. Its prediction (H) is the same 47 names and
+`5239 / 5286`.
