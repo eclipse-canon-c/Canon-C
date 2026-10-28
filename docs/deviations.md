@@ -25669,3 +25669,57 @@ four goals would have been misses.
 59699 / 553) and a section for the header; `docs/traceability.md`'s proof
 table (a row; the total 60256 / 59703 / 553) and its coverage list (a
 bullet). The paper, frozen at 96a8c5d, is not changed.
+
+---
+
+## VERIFY-043: Platform Axes, Part 1 — musl and Linux AArch64 Join the Matrix
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-043 |
+| **Date**       | 2026-10-28 |
+| **Status**     | PREDICTED — the jobs and this prediction in one commit, before either job has run in CI |
+| **Baseline**   | a503bf6 (CI #1389's tree, VERIFY-042 closed) |
+| **Scope**      | Two test jobs in `.github/workflows/cmake-multi-platform.yml`: `musl` (Alpine 3.20, GCC, Release and Debug, no sanitizers) and `build-arm64` (`ubuntu-24.04-arm`, GCC and clang, Release and Debug, sanitizers in Debug). No source changes. |
+| **Category**   | Test-matrix extension, decided with the author on 2026-10-26: the first two of five platform additions, after vec_range.h and vec_fmt.h |
+
+**Why.** The test matrix covers three data models, four compilers and four C
+libraries, all little-endian and all with a signed plain `char`. Two axes C
+leaves open are missing.
+
+- **A fifth C library, musl.** musl is the C library of Alpine and of much
+  embedded and container use. It differs from glibc where the standard
+  allows. VERIFY-031 G2, stringbuf.h's `vsnprintf` size argument, failed
+  only on musl. That record named a musl CI leg as follow-up, and none was
+  added.
+- **An unsigned plain `char`.** On AArch64 Linux, plain `char` is unsigned.
+  Every target in the matrix today has it signed, macOS on arm64 included,
+  where Apple keeps it signed. The string, parsing and byte-view code
+  compares and converts `char` values.
+
+The other three additions follow in their own records: big-endian s390x, a
+bare-metal compile check, and WP at the Windows machine model. Two of them
+have findings to fix first.
+
+**Measured before this record, locally.** At a503bf6 the full suite (55
+tests) passes in Release and Debug:
+- under `musl-gcc` (musl 1.2.4, GCC 13);
+- under `aarch64-linux-gnu-gcc` 13, linked static and run under
+  `qemu-aarch64`.
+
+Neither ran with sanitizers. The CI's AArch64 Debug legs run native GCC 13
+and clang 18 with ASan and UBSan, which nothing here has run. Alpine 3.20's
+GCC is 13.2, but it builds against musl 1.2.5, not 1.2.4.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | `musl` passes, Release and Debug: every test, 55 of 55. | any leg fails | H |
+| Q2 | `build-arm64` passes in its two Release legs, GCC and clang: 55 of 55. | either fails | H |
+| Q3 | `build-arm64` passes in its two Debug legs, with ASan and UBSan: no sanitizer report. | either fails | M (never run with sanitizers on AArch64) |
+| Q4 | No other job changes, and no pin moves. | any existing job's result changes | H |
+
+If a leg fails, its cause is found and recorded before any fix. A failure is
+a finding of the kind these jobs exist to make, not a reason to drop the
+leg.

@@ -36,6 +36,9 @@ concurrency:
 #   build           — all platforms, Release + Debug, sanitizers
 #   build-32bit     — Linux GCC -m32, Release + Debug. Tier 1 size_t==32
 #                     width boundary; exercises the 32-bit arithmetic claims.
+#   musl            — Alpine (musl libc, GCC), Release + Debug (VERIFY-043)
+#   build-arm64     — Linux AArch64, GCC and clang, Release + Debug; char is
+#                     unsigned there (VERIFY-043)
 #   mingw           — Windows MSYS2 UCRT64 (GCC), Release + Debug. The
 #                     GCC-on-Windows pairing the build job excludes; tests
 #                     the UCRT runtime / stdio format-specifier surface.
@@ -260,6 +263,71 @@ jobs:
   #        path with backslashes confuses the msys2 bash shell; "." resolves
   #        cleanly from the checkout directory.
   # -------------------------------------------------------------------------
+  # -------------------------------------------------------------------------
+  # 1c. musl libc — Alpine, GCC (VERIFY-043)
+  #
+  #    The only C library in the matrix outside glibc, Apple's, MSVC's UCRT
+  #    and MinGW's. It found a real defect before any job ran it:
+  #    stringbuf.h's vsnprintf size argument (VERIFY-031 G2), whose musl leg
+  #    that record noted as follow-up. Sanitizers OFF: musl does not support
+  #    ASan. The image is pinned by version, as the runner is (VERIFY-039's
+  #    rule: move it deliberately).
+  # -------------------------------------------------------------------------
+  musl:
+    needs: build
+    runs-on: ubuntu-24.04
+    container: alpine:3.20
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - name: Install toolchain
+        run: apk add --no-cache build-base cmake git
+      - uses: actions/checkout@v6
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=OFF \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+  # -------------------------------------------------------------------------
+  # 1d. Linux AArch64 — GCC and clang (VERIFY-043)
+  #
+  #    On AArch64 Linux, plain char is unsigned, unlike every other target in
+  #    the matrix (Apple keeps it signed on arm64). Sanitizers in Debug, as
+  #    the build job runs them. The runner label is pinned.
+  # -------------------------------------------------------------------------
+  build-arm64:
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        c_compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CMake
+        run: |
+          SANITIZERS=OFF
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then SANITIZERS=ON; fi
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=${SANITIZERS} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
   mingw:
     needs: build
     runs-on: windows-latest
