@@ -78,7 +78,8 @@
  * - All bit operations are O(1); bulk ops (count, find, and/or/xor) are O(n/64)
  * - Backed by u64 words — 64 bits per word, cache-friendly
  * - Bits beyond capacity are always kept zero (padding invariant)
- * - bytes_t view available via bitset_as_bytes() for I/O and serialization
+ * - bytes_t view available via bitset_as_bytes(): the words' bytes in the
+ *   host's byte order, so not a portable serialization format (see there)
  * - Tracked borrowed_bytes view available via bitset_as_borrowed_bytes()
  *   when borrows need to participate in the lifetime substrate
  *
@@ -1645,8 +1646,15 @@ static inline option_usize bitset_find_last_option(borrowed(const Bitset*) bs) {
  *
  * NULL bs returns bytes_empty().
  * Covers the entire word array including any padding bits (always zero).
- * Useful for serialization, hashing, or passing to byte-level APIs.
  * Non-owning — do not free the returned bytes_t.ptr.
+ *
+ * Byte order: the view is the u64 words' object representation, in the
+ * host's byte order. Bit i is in word i / 64. On a little-endian host it is
+ * in byte i / 8 of the view; on a big-endian one, in byte
+ * (i / 64) * 8 + 7 - (i % 64) / 8. Within its byte it is bit i % 8 in both.
+ * Hashing and byte-level APIs on the same host are fine. Bytes written on
+ * one host and read on a host of the other byte order are not the same
+ * bitset (VERIFY-045).
  *
  * This is the untracked view. For substrate-aware views that participate
  * in lifetime checking, use bitset_as_borrowed_bytes() instead.

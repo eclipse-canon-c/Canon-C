@@ -365,6 +365,49 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --output-on-failure --no-tests=error
+  # -------------------------------------------------------------------------
+  # 1f. Big-endian — Linux s390x, GCC cross-compiler, run under qemu-user
+  #     (VERIFY-045)
+  #
+  #    Every other target in the matrix is little-endian. s390x is
+  #    big-endian with 64-bit pointers. The tests are cross-compiled and
+  #    CTest runs each one through qemu-s390x (CMAKE_CROSSCOMPILING_EMULATOR).
+  #    No sanitizers: their runtimes are not reliable under qemu-user.
+  #    --no-tests=error: a leg that finds no test fails.
+  # -------------------------------------------------------------------------
+  big-endian:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the s390x cross toolchain and qemu-user
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-s390x-linux-gnu libc6-dev-s390x-cross qemu-user
+          s390x-linux-gnu-gcc --version | head -1
+          qemu-s390x --version | head -1
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=s390x \
+            -DCMAKE_C_COMPILER=s390x-linux-gnu-gcc \
+            "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-s390x;-L;/usr/s390x-linux-gnu" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Check the binaries are big-endian s390x
+        run: |
+          file build/bitset_test
+          file build/bitset_test | grep -q "MSB.*IBM S/390"
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
   mingw:
     needs: build
     runs-on: windows-latest

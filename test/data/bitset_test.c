@@ -63,6 +63,8 @@
 
 #include "data/bitset.h"
 
+#include <string.h>
+
 /* ════════════════════════════════════════════════════════════════════════════
    Unit test build
    ════════════════════════════════════════════════════════════════════════════ */
@@ -413,12 +415,25 @@ static void test_as_bytes(void)
     EXPECT(bv.ptr != NULL);
     if (bv.ptr == NULL) { return; }
 
-    /* Setting a bit should be visible in the byte view */
-    bitset_set(&bs, 0);
-    EXPECT(bv.ptr[0] == 1);
+    /* The view is the words' object representation, in the host's byte
+     * order (VERIFY-045 B1). On a little-endian host bit 0 is in byte 0
+     * and bit 63 in byte 7; on a big-endian one, byte 7 and byte 0. The
+     * test asked for the little-endian layout and failed on s390x. */
+    {
+        const u64 probe = 1u;
+        const int little = (*(const unsigned char*)&probe == 1u);
+        const usize lsb = little ? 0u : 7u;
+        const usize msb = little ? 7u : 0u;
 
-    bitset_set(&bs, 63);
-    EXPECT(bv.ptr[7] == 0x80);
+        bitset_set(&bs, 0);
+        EXPECT(bv.ptr[lsb] == 1);
+
+        bitset_set(&bs, 63);
+        EXPECT(bv.ptr[msb] == 0x80);
+
+        /* The byte order is the host's: the same bytes as the words. */
+        EXPECT(memcmp(bv.ptr, words, sizeof words) == 0);
+    }
 
     /* NULL */
     bytes_t nb = bitset_as_bytes(NULL);

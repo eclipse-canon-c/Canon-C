@@ -132,11 +132,16 @@ static void test_none_value_zero_initialized(void)
 {
     /* IMPL_OPTION_NONE zero-initializes the value field to avoid
      * indeterminate memory flagged by ASan/Valgrind/Frama-C.
-     * We can't read .value directly on None, but the struct should be
-     * safe to memcmp — no indeterminate bytes. */
+     * The API gives no access to .value on None, so the test reads the
+     * field's bytes. Only the members are compared: the padding between
+     * has_value and value is unspecified, so a memcmp of the whole struct
+     * held by chance (VERIFY-045 B2). */
     option_int a = option_int_none();
     option_int b = option_int_none();
-    EXPECT(memcmp(&a, &b, sizeof(option_int)) == 0);
+    static const unsigned char zero[sizeof(int)] = {0};
+    EXPECT(a.has_value == b.has_value);
+    EXPECT(memcmp(&a.value, zero, sizeof a.value) == 0);
+    EXPECT(memcmp(&b.value, zero, sizeof b.value) == 0);
 }
 
 static void test_some_struct(void)
