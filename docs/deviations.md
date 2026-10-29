@@ -26048,3 +26048,111 @@ to the local scan that VERIFY-044 predicted from:
 
 This upgrades VERIFY-044 S3 from "MATCH on the count" to **MATCH**, and
 completes VERIFY-045 E2: **MATCH**.
+
+---
+
+## VERIFY-046: Pre-registration — Bare-Metal Arm: a Compile Check for the README's Embedded Claims
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-046 |
+| **Date**       | 2026-10-29 |
+| **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Baseline**   | 459c6e6 |
+| **Scope**      | `semantics/error.h` (`error_in_range`'s body; the contract unchanged), `test/data/priority_queue_test.c`, `README.md` (the bare-metal section), a script `tools/embedded_compile_check.sh`, and a CI job `embedded` |
+| **Category**   | Portability defect in a shipped header, found by a compile check; one test defect it had masked; a documentation gap |
+
+**Why this record exists.** The README's bare-metal section makes specific
+claims:
+- Tier 0 and Tier 1 headers work on any 32-bit-or-wider target, given a
+  replaced contract handler.
+- stdio is inert on newlib or picolibc stubs.
+- malloc is reached only through `mem_alloc` and `data/convenience/`.
+
+No job compiled anything for such a target. `arm-none-eabi-gcc` with newlib
+is the common bare-metal toolchain. It differs from every hosted target in
+the matrix in two ways that matter to C code:
+- enums are short (`-fshort-enums` is its ABI default);
+- newlib's `int32_t` is `long`, not `int`.
+
+This is the third of the platform additions decided on 2026-10-28.
+
+**What the check is, and is not.** It compiles every public header as its
+own translation unit, and every test file, under the project's warning
+flags (C99, `-Wall -Wextra -Wpedantic -Werror`). It does this for Cortex-M0+
+and Cortex-M4 (hard float), at `-O0`, `-Os` and `-O2`. **Nothing is
+linked or run.** The check shows that the code compiles cleanly there. It
+does not show that the code works there. Left out, each for a stated reason
+(the script lists them):
+- `util/time.h` and its test need an OS clock (A3).
+- The concurrency test needs pthreads.
+- `*_impl.h` and `*_mangle.h` are template fragments, reached through the
+  headers that include them.
+- The five hashmap headers that need `HASHMAP_KEY_TYPE` are compiled
+  through `hashmap_test.c`.
+
+### Findings
+
+**A1 — `error_in_range` did not compile under `-Werror` with short enums.**
+With `-fshort-enums`, `Error` is `unsigned char`, and GCC's `-Wtype-limits`
+reports `(int)e >= (int)ERR_OK` as always true. Every translation unit
+that includes `semantics/error.h` failed:
+- `error.h` itself, the containers, `diag`, `log`, `parse`, `file`,
+  `fold`;
+- 21 of the 79 header units and 17 of the 54 tests, at every CPU and
+  level: 95 of 133 compiled.
+
+All 38 failures have this as their first error (measured on the
+baseline). **Fix**: the value goes through a local `int`, so the comparison
+no longer appears to be on a narrow type. The contract is unchanged.
+- **WP** (local WP 25, Z3): `error.h`'s per-property goal counts are
+  identical before and after. 57 of 57 locally, where CI's pin is 65 of 65
+  with three provers.
+- **MISRA**: the first form of the fix added a rule 12.1 at that line, a
+  rule held at zero. The committed form is parenthesised, and the local
+  scan gives the same 55 findings as CI #1392's report, line for line.
+
+**A2 — `priority_queue_test`'s comparators returned `i32`.**
+`algo_cmp_fn` returns `int`. On every hosted target `i32` is `int`, so
+this went unseen. On arm-none-eabi it is `long`, and passing the
+comparators is an incompatible-pointer error. It was masked by A1, since
+the test includes `error.h`, and surfaced once A1 was fixed. **Fix**: they
+return `int`. The library's own comparators already did; the header sweep
+passes.
+
+**A3 — the README's bare-metal section counted two platform dependencies;
+there are three.** It named stdio and malloc. `util/time.h` also needs a
+monotonic OS clock (`QueryPerformanceCounter` or
+`clock_gettime(CLOCK_MONOTONIC)`), and newlib on bare metal has neither, so
+the header does not compile there. The section's own Tier 2 paragraph
+lists "OS clocks", so the tiers were right and the summary was not.
+**Fix**: the section names the clock, and says what CI checks and what it
+does not.
+
+### Measured before this record, locally
+
+`arm-none-eabi-gcc` 13.2.1 (Ubuntu 24.04's `gcc-arm-none-eabi`), newlib
+4.4.0:
+- **Baseline**: 95 of 133 at each of the six configurations, all 38
+  failures A1's.
+- **With the fix**: 133 of 133 at all six, in 81 seconds.
+- **Hosts**: 55 of 55 with GCC and clang, Debug with sanitizers, and under
+  C23 with clang.
+
+### The CI job
+
+`embedded`: `ubuntu-24.04`. It installs `gcc-arm-none-eabi` and
+`libnewlib-arm-none-eabi`, then runs `tools/embedded_compile_check.sh`.
+The script fails on any failed compile, or if either list is empty.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A-P1 | `embedded` passes: 133 of 133 at all six configurations. | any compile fails | H (same Ubuntu packages, measured) |
+| A-P2 | `frama-c-error` holds its pins: 65 / 65, nothing unproved, roll-call unchanged. | any moves | H (per-property counts identical locally) |
+| A-P3 | `misra` prints 55, with CI #1392's findings. | another count or composition | H (local scan, line for line) |
+| A-P4 | Every other job is green. | any red | H |
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
