@@ -26037,3 +26037,14 @@ before this record. It is unchanged, although VERIFY-044 edited
 
 **Status**: B1 and B2 are fixed, and big-endian s390x is in the matrix.
 VERIFY-044 and VERIFY-045 are closed.
+
+**Addendum (2026-10-29): the `misra` report read.** The author attached
+CI #1392's `misra` output. `Real violations: 55`, canary 3, 58 in all.
+Its 58 findings, compared by file, line, column and rule, are **identical**
+to the local scan that VERIFY-044 predicted from:
+- `fold_impl.h:80` and `log.h:47`, 5.7;
+- `fold.h:164`, 2.3;
+- the two 5.5 gone.
+
+This upgrades VERIFY-044 S3 from "MATCH on the count" to **MATCH**, and
+completes VERIFY-045 E2: **MATCH**.
