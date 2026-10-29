@@ -25723,3 +25723,170 @@ GCC is 13.2, but it builds against musl 1.2.5, not 1.2.4.
 If a leg fails, its cause is found and recorded before any fix. A failure is
 a finding of the kind these jobs exist to make, not a reason to drop the
 leg.
+
+### Scored (2026-10-29)
+
+CI #1390 (873ed2e) is green in all 62 jobs, the six new legs among them:
+`musl` Release and Debug, and `build-arm64` Release and Debug, each with GCC
+and clang. The legs ran in 10 to 22 seconds, the suite being under a second.
+Their logs were not read: a leg passes only if `ctest` exits 0, and a run
+with no test found would also exit 0. VERIFY-044's job adds
+`--no-tests=error` to its own `ctest` calls.
+
+| # | verdict |
+|---|---------|
+| Q1 | **MATCH** — `musl` passes, Release and Debug. |
+| Q2 | **MATCH** — `build-arm64` Release passes, GCC and clang. |
+| Q3 | **MATCH** (rated M) — `build-arm64` Debug passes with ASan and UBSan, GCC and clang: no sanitizer report on AArch64. |
+| Q4 | **MATCH** — every other job green, and no pin moved. |
+
+VERIFY-043 is closed. The remaining platform additions follow, C23 first
+(VERIFY-044), as decided with the author on 2026-10-28.
+
+---
+
+## VERIFY-044: Pre-registration — C23: Canon-C Did Not Compile Under the Current Standard
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-044 |
+| **Date**       | 2026-10-29 |
+| **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Baseline**   | 873ed2e (CI #1390) |
+| **Scope**      | `core/primitives/contract.h`, eight `CANON_RESULT(bool, Error)` instantiations and the comments that explained their name, `CMakeLists.txt` (the standard made overridable), `test/core/primitives/contract_test.c`, the `misra` job's expected-count text, and a CI job `c-standards` (C11, C17 and C23, GCC 14 and clang 18, Debug with sanitizers) |
+| **Category**   | Portability defect in the shipped headers, found by a compile check while weighing the platform additions; an API addition decided with the author |
+
+**Why this record exists.** The README says "Requires C99 or later". The CI
+pins C99 in `CMakeLists.txt`, so nothing built under a later standard. C23
+is the current standard, and GCC 15 compiles as `gnu23` by default. A check
+made on 2026-10-28, compiling every test file with `gcc-14 -std=c23` and the
+project's warning flags, found **48 of 56 failing**. C11 and C17 compile
+cleanly.
+
+### Findings
+
+**C1 — `bool` is a keyword in C23, so the result type's name changes.**
+`CANON_RESULT(bool, Error)` builds names by token pasting. In C99 to C17,
+`bool` is a macro for `_Bool`, and the name is `result__Bool_Error`, the name
+every container's functions are written against (the headers' comments say
+so). In C23, `bool` is a keyword. It is not expanded before `##`, so the
+pasted name changes and every use of `result__Bool_Error` fails: unknown
+type names and undeclared functions, the bulk of the 48 failures. Eight
+instantiations are affected:
+- `util/log/log.h`;
+- `algo/fold/fold_impl.h` and `fold_decl.h`;
+- `data/deque/deque_impl.h`;
+- `data/priority_queue.h`;
+- `data/hashmap/hashmap_decl.h` and `hashmap_impl.h`;
+- `data/vec/vec_impl.h`.
+
+**Fix**: write `CANON_RESULT(_Bool, Error)`. `_Bool` is a keyword in every
+standard from C99 to C23 and is pasted as written. The name is
+`result__Bool_Error` everywhere, and in C99 to C17 the expansion is token
+for token the one `bool` produced.
+
+**C2 — `unreachable` is a standard macro in C23.** C23's `<stddef.h>`
+defines `unreachable()`, a hint whose reaching is undefined behaviour.
+`contract.h` defines its own `unreachable()`, which calls the contract
+handler in debug builds and under `CANON_STRICT`. Under C23 the two clash,
+and `-Werror` reports "unreachable redefined" in every test file. Redefining
+a standard library macro is undefined behaviour in ISO C (7.1.3), so
+Canon-C cannot keep its definition under that name in C23.
+
+**Fix, decided with the author on 2026-10-29** (options: a new name with
+the old one kept where it can be; override the standard macro; rename and
+drop the old name):
+- `canon_unreachable()` carries Canon-C's semantics in every standard.
+- `contract.h` includes `<stddef.h>`. If the standard library does not
+  define `unreachable`, `unreachable()` is `canon_unreachable()`, as before.
+  If it does (C23), `unreachable()` is the standard's, and the header says
+  so.
+- Nothing changes before C23. `unreachable_msg()` has no standard
+  counterpart and keeps its name.
+
+**C3 — the build could not be asked for another standard.**
+`CMakeLists.txt` sets `CMAKE_C_STANDARD 99` unconditionally, so
+`-DCMAKE_C_STANDARD=23` is ignored, silently: the compiler still gets
+`-std=c99` (checked in `flags.make`). **Fix**: set 99 only when no standard
+is given.
+
+**C4 — the Release test executed a hint whose reaching is undefined.**
+Found while changing `contract_test`. In Release without `CANON_STRICT`,
+`unreachable()` and `unreachable_msg()` expand to
+`__builtin_unreachable()`. The test ran both inside `FIRES(...)` and
+expected no handler call, so every Release leg executed undefined
+behaviour and passed by the compiler's choice. **Fix**: in that
+configuration the macros are compiled behind a branch never taken
+(a `volatile` flag) and not executed. They are still executed, and must
+fire, in Debug and under `CANON_STRICT`.
+
+### Measured before this record, locally
+
+A first pass, in a scratch copy, with C1's fix, C3's, and a first form of
+C2's (the standard macro kept under C23, with no `canon_unreachable` yet),
+built the suite with GCC 14 and clang 18, Debug, ASan and UBSan:
+- under C99, C11 and C17: 55 of 55, both compilers;
+- under C23: 54 of 55 with both. The failure was `contract_test`, whose test
+  of `unreachable()` expects the handler to fire, and under C23 that is the
+  standard's macro, which never does.
+
+That failure is what made C2's API decision necessary, and the fix's test
+changes answer it. `contract_test` tests `canon_unreachable()` in every
+standard. It tests `unreachable()` as Canon-C's only where the header says
+it is (`CANON_UNREACHABLE_IS_CANON`). It never executes the standard's
+macro, whose reaching is undefined.
+
+Then the fix itself, as committed after this record:
+- **Tests**: 55 of 55 under C99, C11, C17 and C23, each with GCC 14 and
+  clang 18, Debug with ASan and UBSan; and under C99 and C23 in Release,
+  both compilers. Every `flags.make` carried the requested standard (GCC
+  14's C23 flag, under CMake 3.28, is spelled `-std=c2x`).
+  `CANON_UNREACHABLE_IS_CANON` is defined under C99 and not under C23.
+- **C99 identity for WP**: every file a WP job is run on (21 headers and
+  drivers) was normalised by Frama-C (`-print`, local WP 25, the shared
+  include and define flags), under both `-C` and `-CC`, before and after:
+  42 of 42 identical. With GCC, `-E -P` of the 15 drivers is identical
+  too. Under `-CC`, GCC's output gains only its `<stddef.h>` licence
+  comment, from the new include, whose code is already guarded out.
+- **MISRA**: the `misra` job's command, run on the baseline and on the
+  fix, gives **54 → 55**. The count was 54 on the baseline, so the scan
+  reproduces CI's. The change is the scanner, not the code. cppcheck does
+  not read system headers (`missingIncludeSystem` is suppressed), so it
+  never saw `<stdbool.h>` and pasted `bool` as written. That gave it
+  `result_bool_Error`, which collided with `fold.h`'s compatibility macros
+  of that name: rule 5.5 at `log.h` and `fold_impl.h`. With `_Bool` it
+  sees the compiler's names:
+  - the two 5.5 go;
+  - rule 19.2, the result union, appears at `fold_impl.h`, the one
+    instantiation without the inline MISRA-DEV-014 suppression every
+    other carries. The fix adds it (33 → 34 inline sites);
+  - rule 5.7 appears at the same two lines: the tag `result__Bool_Error`
+    is defined in several headers, under one guard, as at
+    `fold_decl.h:59` already;
+  - rule 2.3 appears at `fold.h:164`: the `result_bool_Error` typedef
+    is unused in the header.
+
+  The three new findings are reported, not deviated here. cppcheck
+  reports one finding per location, so suppressing a finding can expose
+  another one at the same line, as the 19.2 suppression exposed 5.7. The
+  job's expected-count text is updated.
+
+### The CI job
+
+`c-standards`: `ubuntu-24.04`, a matrix of `c_std` ∈ {11, 17, 23} and
+`c_compiler` ∈ {gcc-14, clang}, each configured with
+`-DCMAKE_C_STANDARD=${c_std}`, Debug, sanitizers on, and `ctest
+--no-tests=error`. C99 stays the default everywhere else.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | `c-standards` passes in all six legs: 55 of 55 under C11, C17 and C23, GCC 14 and clang 18, with no sanitizer report. | any leg fails | H for C11 and C17; M–H for C23 (only the first form of C2's fix was run locally) |
+| S2 | Under C99 the WP surface does not change: every proved line, `EXPECTED_UNPROVED` and roll-call holds, in every Frama-C job. | any of them moves | H (normalised ASTs identical, above) |
+| S3 | `misra` prints 55 real findings: the 54 less the two 5.5, plus the two 5.7 and the 2.3 above. | another count, or another composition | H (the job's command, run here; cppcheck 2.13.0 locally, as the runner's) |
+| S4 | `coverage`'s MC/DC figures hold. | any figure moves | M (not run locally; the test change adds executions, in `test/`, whose macro-body conditions the job filters) |
+| S5 | Every other job is green, Release legs included: `contract_test` no longer executes the hint (C4). | any red | H |
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
