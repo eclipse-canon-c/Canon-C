@@ -26001,3 +26001,39 @@ are read. This record does not touch it.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Scored (2026-10-29)
+
+CI #1392 (62da0d2) is green in every job, the author reports. That
+includes `Canon-C CC` #64. The record landed as f799b2d. The author pasted
+the `coverage` job's MC/DC table.
+
+| # | verdict |
+|---|---------|
+| E1 | **MATCH**. Both `big-endian` legs pass. A leg fails if its binaries are not MSB S/390, or if `ctest` finds no test. Their logs were not read. |
+| E2 | **MATCH for the pins and the jobs**: every enforced Frama-C job is green, and every other job too. **`misra`'s count was not read** (the job is advisory and passes at any count). |
+
+**VERIFY-044 S4 closed: MATCH.** CI #1392 runs VERIFY-044's code and
+VERIFY-045's. VERIFY-045 changes only `test/` (filtered from the tables)
+and comments. Its coverage job gives the same three totals as CI #1388,
+after MCDC-018:
+- MC/DC 1932 / 2096, 164 missed;
+- branches 1717 / 1872;
+- lines 2796 / 2883.
+
+A move in one file offset by another would not show in a total. The
+per-file rows with recorded figures match them:
+- `bitset.h` 134/138;
+- `priority_queue.h` 81/82;
+- `range.h` 61/62;
+- `stringbuf.h` 136/138;
+- `vec_cover.c` 155/158;
+- `vec_range_cover.c` 38/42;
+- `vec_fmt_cover.c` 26/26.
+
+`contract.h`'s row, 0 / 2, is the instrumentation artifact recorded long
+before this record. It is unchanged, although VERIFY-044 edited
+`contract.h`.
+
+**Status**: B1 and B2 are fixed, and big-endian s390x is in the matrix.
+VERIFY-044 and VERIFY-045 are closed.
