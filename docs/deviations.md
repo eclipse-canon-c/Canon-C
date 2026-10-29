@@ -25915,3 +25915,89 @@ include the Test step's output. Each leg passed, and its `ctest` runs with
 **Status**: C1 to C4 are fixed. Canon-C now builds and passes under C11,
 C17 and C23, with GCC 14 and clang 18, and CI holds it there. S4 stays open
 until the coverage figures are read.
+
+---
+
+## VERIFY-045: Pre-registration — Big-Endian: the First Byte-Order Target
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-045 |
+| **Date**       | 2026-10-29 |
+| **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Baseline**   | 1a3a9f0 |
+| **Scope**      | `test/data/bitset_test.c`, `test/semantics/option_test.c`, `data/bitset.h` (documentation only, no ACSL), and a CI job `big-endian` (Linux s390x, GCC cross-compiled, tests run under qemu-user, Release and Debug) |
+| **Category**   | Portability: one test defect observed on the new target, one found by inspection, and an undocumented byte-order property of a public view |
+
+**Why this record exists.** Every target in the matrix is little-endian:
+x86-64, i386 (`-m32`), AArch64 Linux and macOS, and Windows. Code that
+reads a multi-byte object as bytes has run in only one byte order. s390x is
+big-endian with 64-bit pointers. Ubuntu 24.04 packages a cross-compiler for
+it (`gcc-s390x-linux-gnu`, GCC 13.3) and `qemu-user`, so the suite can run
+on a standard runner. This is the second of the platform additions decided
+on 2026-10-28.
+
+### Findings
+
+**B1 — `bitset_as_bytes`'s byte order was undocumented, and its test
+assumed little-endian.** The view is the u64 words' object representation,
+so which byte holds a given bit depends on the host's byte order. The
+header did not say so, and offered the view "for I/O and serialization".
+Bytes written on a host of one byte order and read on the other are a
+different bitset. `test_as_bytes` asserted the little-endian layout
+(`bv.ptr[0] == 1` after setting bit 0; `bv.ptr[7] == 0x80` after bit 63).
+On s390x both assertions fail: observed locally, in Debug and Release.
+- **The code is right; the documentation and the test were not.** A view
+  must not reorder bytes, and an O(1) view cannot.
+- **Fix:**
+  - The header states the byte order, says where bit i sits in each byte
+    order, and drops "serialization".
+  - The test derives the expected byte indices from a probe of the host's
+    byte order. It also checks that the view's bytes equal the words',
+    which is the documented property, in either order.
+- A portable, byte-order-independent export is not added here. That would
+  be an API decision.
+
+**B2 — `option_test` compared padding.** `test_none_value_zero_initialized`
+`memcmp`'d two whole `option_int` objects. `{ bool has_value; int value; }`
+has padding after `has_value`, whose bytes are unspecified, so the
+comparison held by chance. Found by inspection while weighing this target;
+**not observed failing**, on s390x or anywhere. **Fix**: compare
+`has_value`, and check that `value`'s bytes are zero in each.
+
+### Measured before this record, locally
+
+- **s390x baseline** (1a3a9f0, `s390x-linux-gnu-gcc` 13.3, `qemu-s390x`
+  8.2.2): 54 of 55 in Debug and in Release. `bitset_test` fails at its
+  lines 418 and 421, B1's two assertions. Nothing else fails.
+- **With the fix**: 55 of 55 on s390x, Debug and Release. On x86-64, 55 of
+  55 with GCC and clang, in Debug with sanitizers and in Release. The
+  binaries are `ELF 64-bit MSB ... IBM S/390`.
+- **WP**: `bitset.h` changes only in comments outside ACSL. Frama-C's
+  normalised AST of `bitset_verify.h` (local WP 25) is identical before and
+  after, under `-C` and `-CC`.
+
+### The CI job
+
+`big-endian`: `ubuntu-24.04`, a matrix of Release and Debug.
+- It installs `gcc-s390x-linux-gnu`, `libc6-dev-s390x-cross` and
+  `qemu-user`.
+- It cross-configures CMake for `s390x` and sets
+  `CMAKE_CROSSCOMPILING_EMULATOR` to `qemu-s390x -L /usr/s390x-linux-gnu`,
+  so CTest runs each test under qemu.
+- It checks that `bitset_test` is an MSB S/390 binary, then runs `ctest
+  --no-tests=error`.
+- No sanitizers: their runtimes are not reliable under qemu-user.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| E1 | `big-endian` passes in both legs: 55 of 55, binaries MSB S/390. | either leg fails | H (measured locally, same Ubuntu packages) |
+| E2 | Nothing else moves. Every Frama-C pin holds, `misra` prints 55 (it does not scan `test/`, and `bitset.h` changes only in comments), and every other job is green. | any pin, the count, or any other job moves | H |
+
+VERIFY-044's S4 (the MC/DC figures) stays open until the coverage figures
+are read. This record does not touch it.
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
