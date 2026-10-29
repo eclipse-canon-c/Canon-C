@@ -808,7 +808,18 @@ For what Canon-C intentionally omits, established C libraries exist:
 > **Bare-metal and embedded use**
 >
 > Canon-C has two platform dependencies that require attention on
-> bare-metal or RTOS targets: stdio and malloc.
+> bare-metal or RTOS targets: stdio and malloc. A third, a monotonic OS
+> clock, is needed only by `util/time.h` (`QueryPerformanceCounter` on
+> Windows, `clock_gettime(CLOCK_MONOTONIC)` elsewhere); it does not
+> compile against newlib on bare metal, which provides neither (Tier 2
+> below).
+>
+> CI compiles every other public header, and every test but the
+> pthread concurrency test and `time.h`'s, for Cortex-M0+ and Cortex-M4
+> with `arm-none-eabi-gcc` and newlib, under the project's warning flags
+> (job `embedded`). The hashmap headers, which need a key type defined,
+> are compiled through the tests that define one. That shows they
+> compile there; they are not linked or run on the target.
 >
 > **stdio**
 > stdio enters Canon-C in exactly two ways. The default contract panic

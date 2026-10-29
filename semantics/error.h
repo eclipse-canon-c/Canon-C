@@ -227,7 +227,11 @@ static inline bool error_is_ok(Error e) {
     ensures \result <==> ((int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT);
 */
 static inline bool error_in_range(Error e) {
-    return (int)e >= (int)ERR_OK && (int)e < (int)ERR_COUNT;
+    /* Through an int: with -fshort-enums, the default on arm-none-eabi,
+     * Error is unsigned char, and GCC's -Wtype-limits reports
+     * `(int)e >= 0` as always true (VERIFY-046 A1). */
+    const int v = (int)e;
+    return (v >= (int)ERR_OK) && (v < (int)ERR_COUNT);
 }
 
 /**

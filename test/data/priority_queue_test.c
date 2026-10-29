@@ -56,14 +56,18 @@
 
 /* ── Comparators ─────────────────────────────────────────────────────────── */
 
-static i32 cmp_int_asc(const void* a, const void* b, void* ctx) {
+/* They return int, as algo_cmp_fn does. They returned i32, which is int on
+ * the hosted targets but long on arm-none-eabi (newlib's int32_t), where
+ * passing them was an incompatible-pointer error (VERIFY-046 A2). */
+
+static int cmp_int_asc(const void* a, const void* b, void* ctx) {
     (void)ctx;
     int ia = *(const int*)a;
     int ib = *(const int*)b;
     return (ia > ib) - (ia < ib);
 }
 
-static i32 cmp_int_desc(const void* a, const void* b, void* ctx) {
+static int cmp_int_desc(const void* a, const void* b, void* ctx) {
     (void)ctx;
     int ia = *(const int*)a;
     int ib = *(const int*)b;
@@ -78,7 +82,7 @@ DEFINE_PRIORITY_QUEUE(int)
 /* Second instantiation — struct type, exercises all generated code paths */
 typedef struct { int priority; int id; } Score;
 
-static i32 cmp_score(const void* a, const void* b, void* ctx) {
+static int cmp_score(const void* a, const void* b, void* ctx) {
     (void)ctx;
     int pa = ((const Score*)a)->priority;
     int pb = ((const Score*)b)->priority;

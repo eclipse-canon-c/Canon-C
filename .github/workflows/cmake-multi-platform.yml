@@ -408,6 +408,28 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --output-on-failure --no-tests=error
+  # -------------------------------------------------------------------------
+  # 1g. Bare-metal Arm — compile only (VERIFY-046)
+  #
+  #    arm-none-eabi-gcc with newlib, Cortex-M0+ and Cortex-M4 (hard float),
+  #    at -O0, -Os and -O2, under the project's warning flags. Every public
+  #    header is compiled as its own translation unit, and every test file.
+  #    Nothing is linked or run: this backs the README's bare-metal section
+  #    as far as compiling goes. On this target enums are short
+  #    (-fshort-enums) and int32_t is long, which no hosted target has.
+  #    The lists, and what is left out and why, are in the script.
+  # -------------------------------------------------------------------------
+  embedded:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install arm-none-eabi-gcc and newlib
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Compile for Cortex-M0+ and Cortex-M4
+        run: tools/embedded_compile_check.sh
   mingw:
     needs: build
     runs-on: windows-latest
