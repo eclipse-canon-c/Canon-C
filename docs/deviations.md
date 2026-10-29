@@ -25890,3 +25890,28 @@ Then the fix itself, as committed after this record:
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Scored (2026-10-29)
+
+CI on 21506e4 is green, the author reports. The fix commit landed as
+21506e4 and the record as 45b8811: `git am` re-created the commits, so their
+hashes differ from the ones in the patches. The author pasted the
+`c-standards` logs and the `misra` summary.
+
+The `c-standards` logs show the standard check passing in all six legs:
+`55 -std=c11` twice, `55 -std=c17` twice, `55 -std=c2x` (GCC 14's spelling)
+and `55 -std=c23`. All 55 targets built in each. The pasted text does not
+include the Test step's output. Each leg passed, and its `ctest` runs with
+`--no-tests=error`, so a leg that found no test would have failed.
+
+| # | verdict |
+|---|---------|
+| S1 | **MATCH**. All six legs pass. |
+| S2 | **MATCH**. Every Frama-C job is green. The enforced jobs fail on a moved proved line, unproved set or roll-call. |
+| S3 | **MATCH on the count**. `Real violations: 55`, canary 3. The composition (two 5.5 gone; two 5.7 and one 2.3 new) was predicted from the local scan, which gave the same count. The CI report artifact was not read, so the composition is matched locally, not in CI. |
+| S4 | **NOT ESTABLISHED**. `coverage` is green, but the job enforces only its branch-coverage threshold, not the MC/DC figures, and its log was not read. It stays open until the figures are read. |
+| S5 | **MATCH**. Every other job is green, the Release legs among them, where `contract_test` no longer executes the hint. |
+
+**Status**: C1 to C4 are fixed. Canon-C now builds and passes under C11,
+C17 and C23, with GCC 14 and clang 18, and CI holds it there. S4 stays open
+until the coverage figures are read.
