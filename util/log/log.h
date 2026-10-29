@@ -29,9 +29,10 @@
    result_bool_Error instantiation
    ──────────────────────────────────────────────────────────────────────────
 
-   In C99, bool is a macro (#define bool _Bool), so CANON_RESULT(bool, Error)
-   would mangle to result__Bool_Error — not result_bool_Error. To get the
-   correct name, we use a typedef alias that is a plain identifier.
+   The instantiation is written with _Bool, so the generated name is
+   result__Bool_Error in every standard. Written with bool it would be the
+   same in C99 to C17, where bool is a macro for _Bool, but not in C23,
+   where bool is a keyword and pastes as written (VERIFY-044).
 
    Guard: only instantiate if not already provided by another header. */
 
@@ -43,7 +44,7 @@
 /* Instantiate exactly as every other canon header does, under the shared
  * guard, so the struct tag is declared at most once per translation unit. */
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-CANON_RESULT(bool, Error)
+CANON_RESULT(_Bool, Error)
 
 #endif /* CANON_RESULT_BOOL_ERROR_DEFINED */
 

@@ -76,5 +76,6 @@
  */
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
 #define CANON_RESULT_BOOL_ERROR_DEFINED
-CANON_RESULT(bool, Error)
+/* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
+CANON_RESULT(_Bool, Error)
 #endif /* CANON_RESULT_BOOL_ERROR_DEFINED */

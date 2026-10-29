@@ -57,8 +57,8 @@
  *
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
- * CANON_RESULT(bool, Error) generates result__Bool_Error (not result_bool_Error)
- * because bool expands to _Bool before ## token-pasting in C99. The extern
+ * CANON_RESULT(_Bool, Error) generates result__Bool_Error (not result_bool_Error)
+ * in every standard: _Bool is pasted as written. The extern
  * declarations for hashmap_init and hashmap_insert use result__Bool_Error to
  * match the definitions emitted by hashmap_impl.h exactly.
  *
@@ -111,7 +111,7 @@ CANON_OPTION(hm_decl_val_t)
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
 #define CANON_RESULT_BOOL_ERROR_DEFINED
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-CANON_RESULT(bool, Error)
+CANON_RESULT(_Bool, Error)
 #endif /* CANON_RESULT_BOOL_ERROR_DEFINED */
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
 CANON_RESULT(hm_decl_val_t, Error)
@@ -158,8 +158,8 @@ typedef struct {
  * External function declarations
  *
  * Note: hashmap_init and hashmap_insert return result__Bool_Error, not
- * result_bool_Error. CANON_RESULT(bool, Error) token-pastes to
- * result__Bool_Error because bool expands to _Bool before ## in C99.
+ * result_bool_Error. CANON_RESULT(_Bool, Error) token-pastes to
+ * result__Bool_Error in every standard: _Bool is pasted as written.
  * ========================================================================= */
 
 extern usize HM_BUFFER_SIZE_(usize capacity);

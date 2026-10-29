@@ -56,8 +56,8 @@
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
  * collect_keys and collect_values return result__Bool_Error (not
- * result_bool_Error) because CANON_RESULT(bool, Error) token-pastes to
- * result__Bool_Error in C99 — bool expands to _Bool before ## sees it.
+ * result_bool_Error) because CANON_RESULT(_Bool, Error) token-pastes to
+ * result__Bool_Error in every standard: _Bool is pasted as written.
  *
  * Usage example:
  * ────────────────────────────────────────────────────────────────────────────

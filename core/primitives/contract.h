@@ -190,6 +190,9 @@
 /* cppcheck-suppress misra-c2012-21.6 ; MISRA-DEV-016 */
 #include <stdio.h>
 #include <stdlib.h>
+/* C23 defines unreachable() here; contract.h must see it before deciding
+ * whether to define its own (see canon_unreachable below). */
+#include <stddef.h>
 
 /* ============================================================================
  * Contract Violation Handler
@@ -508,6 +511,14 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *
  * With CANON_STRICT: always triggers panic (never silently optimized away).
  *
+ * canon_unreachable() has these semantics in every standard. The short
+ * name unreachable() is the same macro where the standard library does not
+ * define one, as before C23. C23's <stddef.h> defines unreachable() as a
+ * hint only, whose reaching is undefined behaviour, and a program may not
+ * redefine it (C 7.1.3); there unreachable() is the standard's, and code
+ * that wants the panic writes canon_unreachable(). CANON_UNREACHABLE_IS_CANON
+ * is defined when unreachable() is Canon-C's (VERIFY-044).
+ *
  * @note Never returns
  *
  * Example:
@@ -516,37 +527,42 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  *     case STATE_INIT:    return init_handler();
  *     case STATE_RUNNING: return run_handler();
  *     case STATE_STOPPED: return stop_handler();
- *     default: unreachable();
+ *     default: canon_unreachable();
  * }
  * ```
  *
  * @sa unreachable_msg()
  */
 #if defined(CANON_STRICT)
-    #define unreachable() \
+    #define canon_unreachable() \
         do { \
             CANON_INVOKE_HANDLER_("unreachable code path", NULL); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #elif defined(NDEBUG)
-    #define unreachable() CANON_UNREACHABLE_HINT()
+    #define canon_unreachable() CANON_UNREACHABLE_HINT()
 #else
-    #define unreachable() \
+    #define canon_unreachable() \
         do { \
             CANON_INVOKE_HANDLER_("unreachable code path", NULL); \
             CANON_UNREACHABLE_HINT(); \
         } while (0)
 #endif
 
+#if !defined(unreachable)
+    #define unreachable() canon_unreachable()
+    #define CANON_UNREACHABLE_IS_CANON 1
+#endif
+
 /**
  * @brief Mark code path as unreachable with custom message
  *
- * Like unreachable(), but includes a custom error message.
+ * Like canon_unreachable(), but includes a custom error message.
  * With CANON_STRICT: always panics.
  *
  * @param msg Custom error message explaining why code is unreachable
  *
- * @sa unreachable()
+ * @sa canon_unreachable()
  */
 #if defined(CANON_STRICT)
     #define unreachable_msg(msg) \

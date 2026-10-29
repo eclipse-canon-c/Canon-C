@@ -25,7 +25,7 @@
  * The functions call no vec function, so only vec's structs are
  * instantiated. The closure is stringbuf.h's (arena.h's closure, borrow.h,
  * the vsnprintf axiom) and result at (Bool, Error), which vec_impl.h emits
- * through CANON_RESULT(bool, Error) since this driver does not define
+ * through CANON_RESULT(_Bool, Error) since this driver does not define
  * CANON_RESULT_BOOL_ERROR_DEFINED (VERIFY-042, "The unit").
  * ============================================================================ */
 

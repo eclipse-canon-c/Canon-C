@@ -22,7 +22,7 @@
  *
  * Because fold is macro-based, this file is minimal — it sets the
  * ALGO_FOLD_LINKAGE guard and includes fold_impl.h which instantiates
- * CANON_RESULT(bool, Error) for the translation unit.
+ * CANON_RESULT(_Bool, Error) for the translation unit.
  *
  * Example (fold_support.c):
  * ────────────────────────────────────────────────────────────────────────────

@@ -122,8 +122,8 @@
  * Guard prevents duplicate definition if multiple deque types are instantiated,
  * or if both vec and deque are instantiated in the same translation unit.
  *
- * Note: CANON_RESULT(bool, Error) token-pastes to result__Bool_Error because
- * bool expands to _Bool in C99. The generated type name is result__Bool_Error,
+ * Note: CANON_RESULT(_Bool, Error) token-pastes to result__Bool_Error in every
+ * standard (_Bool is pasted as written; VERIFY-044). The generated type name is result__Bool_Error,
  * not result_bool_Error. All push/pop signatures and call sites use the correct
  * generated name.
  *
@@ -132,7 +132,7 @@
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
     #define CANON_RESULT_BOOL_ERROR_DEFINED
     /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-    CANON_RESULT(bool, Error)
+    CANON_RESULT(_Bool, Error)
 #endif
 
 /* ════════════════════════════════════════════════════════════════════════════

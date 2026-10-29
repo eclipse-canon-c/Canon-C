@@ -35,8 +35,8 @@
 /*
  * Instantiate the Result type used by fallible operations.
  *
- * NOTE: CANON_RESULT(bool, Error) token-pastes to result__Bool_Error
- * (not result_bool_Error) because bool expands to _Bool before ## in C99.
+ * NOTE: CANON_RESULT(_Bool, Error) token-pastes to result__Bool_Error
+ * (not result_bool_Error) in every standard: _Bool is pasted as written.
  * All function signatures and call sites use result__Bool_Error accordingly.
  *
  * Guarded against multi-TU collision when vec/deque/priority_queue/hashmap
@@ -207,7 +207,7 @@
         DEFINE_RESULT_FUNCTIONS(static inline, bool, Error)
     #else
         /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-        CANON_RESULT(bool, Error)
+        CANON_RESULT(_Bool, Error)
     #endif
 #endif
 
@@ -1635,9 +1635,9 @@ static inline cbytes_t pq_as_cbytes(borrowed(const PriorityQueue*) pq) {
  * @param type Element type — CANON_OPTION(type) must be instantiated first
  *
  * Note: pq_##type##_push_result and pq_##type##_remove_at_result return
- * result__Bool_Error (not result_bool_Error) — CANON_RESULT(bool, Error)
- * token-pastes to result__Bool_Error in C99 because bool expands to _Bool
- * before ## sees it.
+ * result__Bool_Error (not result_bool_Error) — CANON_RESULT(_Bool, Error)
+ * token-pastes to result__Bool_Error in every standard: _Bool is pasted
+ * as written.
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_PRIORITY_QUEUE(type)                                                          \

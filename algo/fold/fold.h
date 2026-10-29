@@ -44,7 +44,7 @@
  *   - Level 3 (DEFINE_ALGO_FOLD) generates typed slice functions with
  *     void* acc_ptr (to allow arbitrary accumulator types) and typed
  *     element pointers.
- *   - fold_impl.h contains only the CANON_RESULT(bool, Error)
+ *   - fold_impl.h contains only the CANON_RESULT(_Bool, Error)
  *     instantiation needed for fallible fold — not the core algorithm.
  *
  * This deviation is intentional and documented here for readers who have

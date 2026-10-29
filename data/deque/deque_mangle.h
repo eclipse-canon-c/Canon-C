@@ -123,9 +123,9 @@
  *
  * Default: result__Bool_Error_is_ok
  *
- * Note: CANON_RESULT(bool, Error) generates result__Bool_Error (not
- * result_bool_Error) because bool expands to _Bool before token-pasting
- * in C99. This macro uses the correct generated name.
+ * Note: CANON_RESULT(_Bool, Error) generates result__Bool_Error (not
+ * result_bool_Error) in every standard: _Bool is pasted as written.
+ * This macro uses the correct generated name.
  *
  * The type parameter is accepted for macro uniformity but ignored in the
  * default expansion — the result type is fixed as result__Bool_Error across

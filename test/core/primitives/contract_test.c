@@ -38,7 +38,7 @@
  *   require_msg()    — fires on false with correct message, silent on true
  *   ensure()         — fires on false in debug, silent in release (NDEBUG)
  *   ensure_msg()     — fires on false with correct message
- *   unreachable()    — always fires in debug builds
+ *   canon_unreachable() — always fires in debug builds
  *   unreachable_msg()— fires with correct message
  *   panic()          — always fires, correct message
  *   contract_set_handler() — custom handler is called; NULL restores default
@@ -303,40 +303,58 @@ static void test_ensure_msg(void) {
 /* =========================================================================
  * unreachable() tests
  *
- * unreachable() fires the handler in debug builds and CANON_STRICT.
+ * canon_unreachable() fires the handler in debug builds and CANON_STRICT.
  * In Release builds without CANON_STRICT it expands to a compiler hint
- * that does not call the handler.
+ * that does not call the handler. unreachable() is the same macro only
+ * where contract.h says so (CANON_UNREACHABLE_IS_CANON); under C23 it is
+ * the standard's, whose reaching is undefined, so it is never executed.
  * ====================================================================== */
 
-static void test_unreachable(void) {
-    contract_set_handler(_capture_handler);
-
+/* Release without CANON_STRICT: the macros are a pure hint, and reaching
+ * one is undefined behaviour, so they are compiled behind a branch never
+ * taken and not executed (VERIFY-044, C4). Elsewhere they must fire. */
 #if defined(NDEBUG) && !defined(CANON_STRICT)
-    /* Release build: unreachable() is a pure hint — must not fire */
-    FIRES(unreachable());
-    EXPECT(_cap_fired == 0);
+    #define CANON_TEST_HINT_ONLY_ 1
+static volatile int never_taken_ = 0;
 #else
-    /* Debug or CANON_STRICT: must fire */
-    FIRES(unreachable());
+static void check_unreachable_fired_(void) {
     EXPECT(_cap_fired == 1);
     /* expr string contains "unreachable" */
     EXPECT(strstr(_cap_expr, "unreachable") != NULL);
     /* msg is NULL (no message variant) */
     EXPECT(_cap_msg[0] == '\0');
+}
+#endif
+
+static void test_unreachable(void) {
+    contract_set_handler(_capture_handler);
+
+#if defined(CANON_TEST_HINT_ONLY_)
+    _cap_reset();
+    if (never_taken_ != 0) { canon_unreachable(); }
+  #if defined(CANON_UNREACHABLE_IS_CANON)
+    if (never_taken_ != 0) { unreachable(); }
+  #endif
+    EXPECT(_cap_fired == 0);
+#else
+    FIRES(canon_unreachable());
+    check_unreachable_fired_();
+  #if defined(CANON_UNREACHABLE_IS_CANON)
+    contract_set_handler(_capture_handler);
+    FIRES(unreachable());
+    check_unreachable_fired_();
+  #endif
 #endif
 
     contract_set_handler(_capture_handler);
 }
 
-/* =========================================================================
- * unreachable_msg() tests
- * ====================================================================== */
-
 static void test_unreachable_msg(void) {
     contract_set_handler(_capture_handler);
 
-#if defined(NDEBUG) && !defined(CANON_STRICT)
-    FIRES(unreachable_msg("release_unreachable"));
+#if defined(CANON_TEST_HINT_ONLY_)
+    _cap_reset();
+    if (never_taken_ != 0) { unreachable_msg("release_unreachable"); }
     EXPECT(_cap_fired == 0);
 #else
     FIRES(unreachable_msg("test_unreachable_msg_sentinel"));

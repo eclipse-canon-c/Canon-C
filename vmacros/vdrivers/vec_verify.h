@@ -272,7 +272,7 @@
 
 /* Real, unmodified module headers. vec_defn.h pulls vec_mangle.h and
  * vec_impl.h (which pulls types/limits/contract/checked/memory/arena/
- * ownership + result + error, and emits the guarded CANON_RESULT(bool,
+ * ownership + result + error, and emits the guarded CANON_RESULT(_Bool,
  * Error) instantiation — those result__Bool_Error goals were originally
  * labelled INHERITED here, but VERIFY-018's Correction note (2026-07-16)
  * reclassified them as a FRESH INSTANTIATION: result's home unit verifies

@@ -328,6 +328,43 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --output-on-failure
+  # -------------------------------------------------------------------------
+  # 1e. Later C standards — C11, C17 and C23, GCC 14 and clang (VERIFY-044)
+  #
+  #    Every other job compiles as C99, the project default. Canon-C claims
+  #    "C99 or later"; this job holds it to that under the later standards,
+  #    C23 among them (bool a keyword, unreachable() a standard macro).
+  #    Debug with sanitizers. --no-tests=error: a leg that finds no test fails.
+  # -------------------------------------------------------------------------
+  c-standards:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        c_std: [11, 17, 23]
+        c_compiler: [gcc-14, clang]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_C_STANDARD=${{ matrix.c_std }} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_SANITIZERS=ON \
+            -S .
+      - name: Check the requested standard reached the compiler
+        run: |
+          find build -name flags.make -exec grep -hoE -- '-std=[a-z0-9]+' {} + | sort | uniq -c
+          if find build -name flags.make -exec grep -lE -- '-std=(c|gnu)99' {} + | grep -q .; then
+            echo "::error::-std=c99 found in a C${{ matrix.c_std }} build"; exit 1
+          fi
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
   mingw:
     needs: build
     runs-on: windows-latest
@@ -8394,11 +8431,16 @@ jobs:
           echo "  Total violations incl. canary: ${TOTAL}"
           echo "  Real violations:               $((TOTAL - CANARY))"
           echo ""
-          echo "  Expected real count: 54 (pinned; cppcheck 2.13.0,"
+          echo "  Expected real count: 55 (pinned; cppcheck 2.13.0,"
           echo "  suppression set MISRA-DEV-001..012 + 014..017)."
           echo "  53 -> 54 at VERIFY-031 run 1 (f6e54ca): one 21.2 at"
           echo "  data/stringbuf.h's __FRAMAC__-only vsnprintf axiom — the"
           echo "  same shape as semantics/diag.h's two (snprintf, fprintf)."
+          echo "  54 -> 55 at VERIFY-044 (predicted from a local scan):"
+          echo "  CANON_RESULT(_Bool, Error) lets cppcheck, which does not"
+          echo "  read <stdbool.h>, see the names the compiler sees. Two 5.5"
+          echo "  go (log.h, fold_impl.h); two 5.7 (same two lines) and one"
+          echo "  2.3 (fold.h's result_bool_Error typedef) appear."
           echo ""
           echo "  The ledger reads as TWO SEGMENTS joined at Commit 12,"
           echo "  because MISRA-SCAN-001 re-baselined the analysis surface"
@@ -8448,7 +8490,7 @@ jobs:
           echo "  (MISRA-DEV-001..010 project-wide, applied as the"
           echo "  command-line suppressions above; MISRA-DEV-011 inline at"
           echo "  util/time.h; MISRA-DEV-012 inline at 117 template-"
-          echo "  machinery macros; MISRA-DEV-014..017 inline at 33"
+          echo "  machinery macros; MISRA-DEV-014..017 inline at 34"
           echo "  design-identity sites; MISRA-CFG-001 tool."
           echo "  MISRA-DEV-013 is SUPERSEDED — MISRA-SCAN-001 removed the"
           echo "  condition it existed for and its 13 suppressions were"

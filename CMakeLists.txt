@@ -8,7 +8,9 @@ project(Canon-C
 # ---------------------------------------------------------------------------
 # Language standard — C99 strict, no compiler extensions
 # ---------------------------------------------------------------------------
-set(CMAKE_C_STANDARD 99)
+if(NOT DEFINED CMAKE_C_STANDARD)
+    set(CMAKE_C_STANDARD 99)
+endif()
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 

@@ -82,8 +82,8 @@
  *
  * Note on result__Bool_Error:
  *   push, pop, insert, remove, append_array, and extend return result__Bool_Error
- *   (not result_bool_Error) because CANON_RESULT(bool, Error) token-pastes to
- *   result__Bool_Error in C99 — bool expands to _Bool before ## sees it.
+ *   (not result_bool_Error) because CANON_RESULT(_Bool, Error) token-pastes to
+ *   result__Bool_Error in every standard: _Bool is pasted as written.
  *   These extern signatures must match the definitions emitted by DEFINE_VEC exactly.
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */

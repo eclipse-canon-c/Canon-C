@@ -39,8 +39,8 @@
  *
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
- * CANON_RESULT(bool, Error) generates result__Bool_Error (not result_bool_Error)
- * because bool expands to _Bool before ## token-pasting in C99. All function
+ * CANON_RESULT(_Bool, Error) generates result__Bool_Error (not result_bool_Error)
+ * in every standard: _Bool is pasted as written. All function
  * signatures and call sites use the correct generated name result__Bool_Error.
  *
  * Lifetime tracking (define CANON_LIFETIME_DEBUG before including):
@@ -146,15 +146,15 @@ typedef HASHMAP_VAL_TYPE hm_val_t;
 /* ============================================================================
  * Result and Option instantiations needed by the API
  *
- * CANON_RESULT(bool, Error) generates result__Bool_Error (not result_bool_Error)
- * because bool expands to _Bool before ## in C99.
+ * CANON_RESULT(_Bool, Error) generates result__Bool_Error (not result_bool_Error)
+ * in every standard: _Bool is pasted as written.
  * ========================================================================= */
 
 CANON_OPTION(hm_val_t)
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
     #define CANON_RESULT_BOOL_ERROR_DEFINED
     /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-    CANON_RESULT(bool, Error)
+    CANON_RESULT(_Bool, Error)
 #endif
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
 CANON_RESULT(hm_val_t, Error)

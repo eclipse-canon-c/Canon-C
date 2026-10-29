@@ -60,8 +60,8 @@
  *
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
- * CANON_RESULT(bool, Error) token-pastes to result__Bool_Error (not
- * result_bool_Error) because bool expands to _Bool before ## in C99.
+ * CANON_RESULT(_Bool, Error) token-pastes to result__Bool_Error (not
+ * result_bool_Error): it is written with _Bool, a keyword in every standard.
  * All enqueue/dequeue signatures use result__Bool_Error to match the
  * type instantiated by deque_impl.h.
  *
@@ -537,8 +537,8 @@ linkage void queue_##type##_clear(borrowed(queue_##type*) q) { \
  * Match with DEFINE_QUEUE(linkage, type) in exactly one .c file.
  *
  * Note: enqueue and dequeue return result__Bool_Error (not result_bool_Error).
- * CANON_RESULT(bool, Error) token-pastes to result__Bool_Error in C99 because
- * bool expands to _Bool before ## sees it.
+ * CANON_RESULT(_Bool, Error) token-pastes to result__Bool_Error in every
+ * standard (written with bool, C23 would paste bool as written).
  *
  * @param type Element type — DECLARE_DEQUE(type) must be called first
  *
