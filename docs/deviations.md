@@ -26513,3 +26513,164 @@ four more embedded configurations' worth of claims:
 - the Tier 0 / Tier 1 line at a 16-bit `size_t`.
 
 VERIFY-048 is closed.
+
+---
+
+## VERIFY-049: Pre-registration — data/stack.h, the Twenty-Third Unit; and the Separate-Compilation Path, Which Had Never Compiled
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-049 (with MCDC-019) |
+| **Date**       | 2026-10-31 |
+| **Status**     | PREDICTED. This record and the rebuilt catalogue are committed before the contract and fix commit, which is pushed with them. Neither has run in CI. No WP run of the contracts was made. |
+| **Baseline**   | 258d61d (`actions/cache@v5` in `compcert`, pushed with this series; the last CI run is #1396, at 834a373) |
+| **Scope**      | `data/stack.h` (14 macro-body contracts and documentation); `data/vec/vec_decl.h` and `data/deque/deque_decl.h` (S1); `data/queue.h` (examples); a new driver `vmacros/vdrivers/stack_verify.h`; a new workflow `.github/workflows/frama-c-stack.yml`; a new test `test/integration/separate_compilation_test.c` with its header and second source; a cover TU `vmacros/coverage/stack_cover.c` with `test/support/stack_cover_vec.c`; `CMakeLists.txt` (`canon_c_test` takes several sources) |
+| **Category**   | Next data/ unit in the agreed order; a defect class found by compiling a header's documented example: a documented API path that no build had ever compiled |
+
+**Why this record exists.** The data/ layer is verified in the order agreed
+with the author: vec's two extensions (VERIFY-041, VERIFY-042), then stack,
+queue, array, the convenience wrappers and hashmap. stack.h is next. It
+wraps vec. Each of its 14 functions is a vec call under a LIFO name, except
+`peek`, which adds two checks and a copy. This record commits the following
+before any WP run of them:
+- the findings;
+- the contracts;
+- the driver and its preprocessing;
+- the predictions;
+- the catalogue n(*P*) is measured against.
+
+### Findings demonstrated before any contract
+
+All probes: GCC 14.2, sanitizers on, in the default build and under
+`-DCANON_NO_REQUIRE`, with the same results in both.
+
+**S1 — `DECLARE_VEC` and `DECLARE_DEQUE` did not compile, so the
+separate-compilation path of vec, deque, stack and queue had never been
+built.**
+- `vec_decl.h` (10 sites) and `deque_decl.h` (5) wrote parameters as
+  `borrowed((type)*)`. `borrowed(T)` expands to `T`, so this gives `(Task)*
+  out`, a syntax error.
+- Every container header documents this path: `DECLARE_*` in a shared
+  header, `DEFINE_*` in one `.c` file. But no test uses any `DECLARE_*`
+  container macro. `header_combination_test` includes `fold_decl.h` and no
+  container's.
+- Found by compiling stack.h's own "Separate compilation" example. Its
+  shared-header half fails at `vec_decl.h:119`:
+
+      error: expected declaration specifiers or '...' before '(' token
+
+  `queue.h`'s fails the same way at `deque_decl.h:104`.
+- **Fix**: `borrowed(type*)`.
+- **Detection test**: `test/integration/separate_compilation_test.c`. It
+  declares option, vec, stack, deque and queue at a struct type in a shared
+  header. A second source defines them, without including that header. The
+  test uses each container through its declarations alone.
+  - On the baseline it does not compile (measured).
+  - With the fix it passes: built and linked, Debug with sanitizers,
+    GCC 14 and clang 18, and C23.
+- `canon_c_test` now takes several `SRC` files; the existing calls are
+  unchanged.
+
+**S2 — the examples for the same path were wrong even with S1 fixed.**
+- stack.h's, queue.h's, `vec_decl.h`'s and `deque_decl.h`'s examples call
+  `DECLARE_VEC`/`DECLARE_DEQUE` with no `option_Task` in scope, though the
+  declarations name it. `deque_decl.h`'s note said to call `CANON_OPTION`,
+  which gives each translation unit `static inline` copies.
+- `vec_decl.h`'s definition half wrote `DEFINE_VEC(static, Task)`. Static
+  definitions cannot satisfy the header's `extern` declarations.
+- **Fix**: the four examples now show the recipe the test builds:
+  - the shared header: `DECLARE_OPTION_ALL(extern, Task)` before the
+    container's `DECLARE_*`;
+  - the definitions file: `DEFINE_OPTION_ALL(, Task)` and the containers'
+    `DEFINE_*` with empty linkage, and it does not include the shared
+    header. `DEFINE_*` re-emits the struct typedefs, and C99 forbids a
+    repeated typedef.
+
+  The `@pre` of `DECLARE_STACK` and `DECLARE_QUEUE` says the same.
+
+**S3 — the quick-start example's result was wrong.** It pushes 10 and 20,
+pops 20, pushes 42 and `frame`, then calls `pop_option` with the comment
+`// Some(10)`. Compiled and run, it returns `frame`, the last pushed (7 in
+the probe). **Fix**: the comment.
+
+**S4 — `init`'s documentation contradicted itself, and left out vec's
+refusal.** It listed both `@pre capacity > 0` and `@pre buffer != NULL ||
+capacity == 0`. `vec_init` admits capacity 0, and `init(&s, NULL, 0)` gives
+an empty stack that refuses every push (probe). Above
+`CANON_VEC_MAX_CAPACITY / sizeof(type)`, vec returns its zero value, and the
+stack is then silently unusable: `items` NULL, every push `ERR_INVALID_ARG`
+(probe). **Fix**: one precondition, and a `@post` for the refusal. The
+contract has it as a behaviour, `too_big`.
+
+**S5 — `peek`'s "Stack is unchanged" was false when `out` points into the
+stack's buffer.** With the stack holding 1 2 3, `peek(&s, &buf[0])` returns
+true, and the stack then holds 3 2 3 (probe). This is the shape of vec's
+G1 (VERIFY-039), whose `get` and `pop` require `out` to lie outside the
+buffer. **Fix**: an `@pre`. The contract requires `out` separated from the
+stack and from its buffer, as `pop`'s already is.
+
+### The contracts
+
+The contracts are in the macro body, type-free, one per function, each
+before its definition. They state vec's own contracts for the function they
+call:
+- `push`, `try_push`, `push_unchecked`, `pop`, `pop_option`, `clear` and
+  the five queries take vec's requirements on `s` and vec's behaviours,
+  with `s` for `v`.
+- `init`: `\valid(s)`, vec_init's two requirements, `assigns *s`, and two
+  behaviours, `too_big` and `ok`, stated on `*s`.
+- `peek`: vec's representation invariant (read access), `\valid(out)`, and
+  `out` separated from `s` and from the buffer (S5). `assigns *out`. Two
+  behaviours: `empty` (false) and `top` (true, `*out` is the top element).
+- `peek_option`: the invariant, `assigns \nothing`, and the same two
+  behaviours stated on the option.
+
+`peek`'s `require_msg` checks make `s` and `out` non-null in every build
+but `CANON_NO_REQUIRE`, the verified configuration. There the contract
+requires both. The contracts parse and attach under `-CC`, checked by
+`frama-c -print` (local WP 25). That is the only Frama-C run made on them.
+
+### The unit
+
+**The driver** is `vec_cc_experiment.h`'s content verbatim, followed by
+`#include "data/stack.h"` and `DEFINE_STACK(static inline, int)`. The prefix
+is identical, by `diff`. Every vec function the stack calls is therefore
+defined, contracted and proved in this unit too. That is the project's
+convention: a unit proves its closure, and goals are counted as instances.
+**Preprocessing: `-CC`**, as cc-vec, since both vec's contracts and the
+stack's are in macro bodies. **Model**: Typed+Cast, cc-vec's. **The job**,
+`frama-c-stack`, lives in its own workflow file (see VERIFY-047's
+addendum). It has cc-vec's flags and a 300-minute budget, and it is
+report-only on run 1. It fails on any Failed, Invalid or Stepout goal or a
+missing summary. It splits the unproved names:
+- **own**: names containing `_stack_int_`;
+- **inherited**: the rest, compared with cc-vec's 69 pins
+  (`vmacros/vdrivers/cc_pins/vec.txt`).
+
+**n(*P*) = 2**, both layer C:
+- `unverified header:data/stack.h`;
+- `unverified header:data/vec/vec.h`, the umbrella header stack.h includes.
+
+This was measured by `tools/idioms/extract.py measure` on the driver,
+against the catalogue rebuilt at 258d61d and committed with this record.
+The rebuild changes only `meta.substrate_commit`, from cf28c02 to 258d61d.
+Its 42 A, 22 B and 9 C features are unchanged. The contracts write no
+ACSL kind outside the catalogue.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | `frama-c-stack` completes within its budget. No goal is Failed, Invalid or Stepout. | otherwise | H |
+| P2 | The inherited unproved set is cc-vec's 69 names exactly: adding the stack changes no vec goal. | any one-sided name | H |
+| P3 | **No own residual**: every goal of the 14 stack functions is proved. The stack states its callees' contracts, and WP gets each from the matching callee's postconditions. | any `_stack_int_` name unproved | M. If wrong, the likeliest places are `peek_option`'s call to `peek`, with the local's separation from `s` and its buffer, and `init`'s whole-struct copy. |
+| P4 | The proved line is (5524 + *k*) / (5593 + *k*), where *k* is the stack's own goal count. *k* is not predicted: no WP run was made. | the difference from 5593 not all own goals | H |
+| P5 | No new argument block is needed (*A* stays 33 cumulative and 19 in force). | an own residual whose argument no existing block covers | M (follows P3) |
+| P6 | `separate_compilation_test` passes in every build job, the Windows (MSVC, MinGW), musl, AArch64, s390x, i386 and C11 to C23 legs among them. The suite is 56 of 56 wherever it runs. | any failure | H for GCC and clang hosts, which were measured; M for MSVC and MinGW, which were not run |
+| P7 | `embedded` compiles 134 of 134 at all 18 configurations. The new test file is one more; its helper sources are not `*_test.c`. | another count | H (measured) |
+| P8 | `misra` prints the same 55 findings. The changed headers' ACSL is in comments, and the `decl.h` edits change no line cppcheck reports. | another count or composition | H (measured, line for line) |
+| M1 | MCDC-019: `vmacros/coverage/stack_cover.c`'s row reads **5 / 6**. The six outcomes are `peek`'s two decisions and `peek_option`'s one. The one miss is `peek`'s `!last` true, dead: a non-empty stack has a top element under vec's invariant. | another row | M (the outcome count rests on how GCC counts these decisions; not measured) |
+| M2 | The MC/DC total moves by M1's row alone: from 1932 / 2096 to 1937 / 2102. Vec's definitions for the cover TU are under `test/`, whose rows the table filters out. | any other row moves | M |
+
+The fix and the contracts are pushed with this record, in the commit after
+it. Its hash follows this one, and neither has run in CI.
