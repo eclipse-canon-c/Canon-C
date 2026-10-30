@@ -407,7 +407,7 @@ This ensures **explicitness** and prevents hidden behaviors or fragile dependenc
 - No forced global state
 - No forced framework coupling
 - No forced require runtime
-- Works in **plain C99**
+- Works in **plain C99**, and builds and passes its tests under C11, C17 and C23 too (CI)
 - Convenience macros requiring GNU C or C23 are optional (disable with `#define CANON_NO_GNU_EXTENSIONS`)
 - No clever tricks
 
@@ -904,6 +904,33 @@ For what Canon-C intentionally omits, established C libraries exist:
 > it would require width-conditional constants, a 16-bit verification
 > run, and per-width coverage re-derivation. It will be revisited if and
 > when a concrete user with a concrete 16-bit target materializes.
+
+---
+
+## Where CI checks it
+
+Every push to master runs these. A configuration not listed is not
+checked.
+
+**Builds and tests** (the full suite unless stated otherwise):
+
+| target | compilers | how |
+|--------|-----------|-----|
+| Linux x86-64 (glibc) | GCC, clang | Release, and Debug with ASan and UBSan; Valgrind; libFuzzer (clang) |
+| Linux i386 (`-m32`) | GCC | `size_t` exactly 32 bits |
+| Linux x86-64 (musl, Alpine) | GCC | Release and Debug |
+| Linux AArch64 | GCC, clang | Release, and Debug with sanitizers; `char` unsigned |
+| Linux s390x | GCC (cross) | run under qemu-user; **big-endian** |
+| Windows x64 | MSVC; MinGW GCC | Release and Debug |
+| macOS (`macos-latest`) | clang | Release, and Debug with sanitizers |
+| C11, C17 and C23 | GCC 14, clang 18 | Debug with sanitizers; C99 everywhere else |
+| bare-metal Cortex-M0+ and M4 | `arm-none-eabi-gcc`, newlib | **compile only**, every header and test; not linked or run |
+
+**Formal verification** (Frama-C WP, `docs/verification.md`): every
+verified unit at the x86-64 (LP64) machine model. `arena.h` is also proved
+at 32-bit, with the same residuals. `memory.h` and `bits.h` are also run
+at 64-bit Windows' LLP64 model, where `long` is 32 bits, and compared with
+their x86-64 runs (VERIFY-047; report-only until two runs agree).
 
 ---
 

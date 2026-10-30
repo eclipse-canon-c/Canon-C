@@ -137,9 +137,12 @@
       (integer)(uintptr_t)b < (integer)(uintptr_t)a + size;
 
   // Address-level alignment: ptr is aligned to a power-of-2 boundary
-  // iff its low (alignment - 1) bits are zero.
+  // iff its low (alignment - 1) bits are zero. Through uintptr_t, as the
+  // code is: unsigned long is 32 bits on 64-bit Windows (LLP64), where the
+  // casts truncated, and for an alignment above 2^32 the predicate held of
+  // pointers the code reports unaligned (VERIFY-047 W1).
   predicate is_aligned_addr(void *ptr, integer alignment) =
-      alignment > 0 && ((unsigned long)ptr & (unsigned long)(alignment - 1)) == 0;
+      alignment > 0 && ((uintptr_t)ptr & (uintptr_t)(alignment - 1)) == 0;
 
   // Bytes-region read validity: either size == 0 (no read needed) or
   // every byte in [ptr, ptr + size) is readable.

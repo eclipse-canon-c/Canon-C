@@ -1107,7 +1107,7 @@ int c = mem_compare(a, b, n);            /* memcmp-style ordering, NULL-safe */
 [↑ Back to constructs](#table-of-c-constructs)
 
 > Header: `contract.h` (`require` / `require_msg`, `ensure` / `ensure_msg`,
-> `unreachable` / `unreachable_msg`, `panic`). Pulls in `types.h`, so:
+> `canon_unreachable` / `unreachable_msg`, `panic`). Pulls in `types.h`, so:
 > ```c
 > #include "core/primitives/contract.h"
 > ```
@@ -1188,11 +1188,17 @@ switch (state) {
     default:  unreachable_msg("invalid state");
 }
 ```
-> Buys you: a real signal instead of a fake return value. `unreachable` /
-> `unreachable_msg` (contract.h) fire the panic handler in debug builds, act as
-> a compiler optimization hint in release, and always panic under
+> Buys you: a real signal instead of a fake return value. `canon_unreachable()`
+> and `unreachable_msg()` (contract.h) fire the panic handler in debug builds,
+> act as a compiler optimization hint in release, and always panic under
 > `CANON_STRICT`. Use only for paths that genuinely cannot occur through your
 > API — for a recoverable "unexpected input", return an error value instead.
+>
+> The short name `unreachable()` is the same macro up to C17. In C23 it is the
+> standard library's (`<stddef.h>`), a hint only, undefined behaviour if
+> reached, and Canon-C does not redefine it. Write `canon_unreachable()` when
+> you want the panic in every standard. `CANON_UNREACHABLE_IS_CANON` is
+> defined when `unreachable()` is Canon-C's.
 
 </details>
 

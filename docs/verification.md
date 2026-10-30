@@ -16,6 +16,24 @@ Combined verification status across all annotated headers:
 | **Proved automatic** | 59699 (99.08%)                                                                 |
 | **Unproved**         | 553 (each filed by name in `docs/deviations.md`; see per-header sections)      |
 
+*Not recomputed 2026-10-30 (VERIFY-043 to VERIFY-047): no pin moved.*
+These five records add platforms to the test matrix: musl, AArch64 Linux,
+C11 to C23, big-endian s390x and bare-metal Arm (compile only). They change
+proved code in four places, each without moving a pin:
+- `error_in_range` compares through a local `int` (VERIFY-046);
+- `CANON_RESULT(_Bool, Error)` replaces `bool` at eight instantiations,
+  the same tokens under C99 (VERIFY-044);
+- `memory.h`'s `is_aligned_addr` casts through `uintptr_t`, the same type
+  as `unsigned long` at x86_64 (VERIFY-047);
+- `bits.h` includes `<intrin.h>` only outside Frama-C (VERIFY-047).
+
+The last two are about machine models. Every unit is verified at x86_64
+(LP64). `arena.h` is also verified at `gcc_x86_32` (`frama-c-arena-32`).
+Since VERIFY-047, `memory.h` and `bits.h` are also run at `msvc_x86_64`
+(`frama-c-win64`, LLP64: `long` is 32 bits), each compared, by unproved
+name, with its own x86_64 run. The job is report-only until two runs
+agree, as every new WP job is.
+
 *Recomputed 2026-10-28 (VERIFY-042, vec_fmt.h enforced at CI #1389).*
 `frama-c-vec-fmt` adds a twenty-second unit: +2 functions, +5286
 obligations, +5239 proved and +47 unproved, 43 inherited or fresh and 4 own,
@@ -494,6 +512,13 @@ Expected output: `Proved goals: 1753 / 1755` with exactly 2 timeouts.
 > `bits_insert`'s `normal`, the two rotations' shift checks and the three byte
 > swaps), the SWAR population count's range (one) and bit smearing to the next
 > power of two (four). The job's roll-call is a sample of six names.
+
+> **Note (2026-10-30, VERIFY-047 W2).** bits.h included `<intrin.h>`
+> whenever `_MSC_VER` was defined. Frama-C defines it at an MSVC machine
+> model, and its libc has no such header, so bits.h could not be analysed
+> there. The include is now skipped under `__FRAMAC__`, where the fallback is
+> forced anyway. At x86_64 the unit is unchanged. `frama-c-win64` proves it
+> at `msvc_x86_64` and compares it with x86_64 by name.
 
 ### What is proved
 
@@ -1258,6 +1283,16 @@ since VERIFY-039 G14 and G17 (`379 / 394` with 15 before them).
 | **CI enforcement**     | Yes — 2829/2872 with 43 named goals expected (2823/2866 before VERIFY-023; set unchanged) |
 | **MC/DC coverage**     | 88.3% (113/128 condition outcomes)              |
 | **CI artifact**        | `wp-proof-memory` (full per-goal breakdown)     |
+
+> **Note (2026-10-30, VERIFY-047 W1).** The predicate `is_aligned_addr`,
+> used by `mem_is_aligned`'s behaviours, cast the pointer and the mask to
+> `unsigned long`. On 64-bit Windows (LLP64) that type is 32 bits, so the
+> casts truncated. For an alignment above 2^32, the predicate then held of
+> pointers the code, which computes through `uintptr_t`, reports unaligned.
+> It casts through `uintptr_t` now. At x86_64 the two types are the same,
+> and the normalised ASTs differ only in the typedef's name. The two
+> behaviours' `ensures` were already pinned residuals, so no prover had
+> seen the difference. Found by reading.
 
 > **Correction (2026-10-20, VERIFY-039).** The table and the sections below
 > give the baseline's figures, brought up to date at VERIFY-023. Since a79b69d
@@ -2519,6 +2554,13 @@ the 23 own goals split across category 1 (19) / category 2 (4).
 | **CI enforcement**     | Yes — 65/65 required, 0 unproved allowed        |
 | **MC/DC coverage**     | 100% (trivial — no condition outcomes to miss)  |
 | **CI artifact**        | `wp-proof-error` (full per-goal breakdown)      |
+
+> **Note (2026-10-30, VERIFY-046 A1).** `error_in_range` now compares
+> through a local `int`. Under `-fshort-enums`, arm-none-eabi's default,
+> `Error` is `unsigned char`, and GCC's `-Wtype-limits` failed every
+> translation unit that included this header. The contract is unchanged, and
+> the per-property goal counts are identical (measured locally); the pin
+> holds at 65 / 65.
 
 error.h is the first verified header of the semantics/ layer and the
 first header since compare.h (VERIFY-005) to prove fully automatically

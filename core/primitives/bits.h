@@ -107,7 +107,12 @@
 
 #if defined(_MSC_VER)
     #define CANON_BITS_MSVC 1
-    #include <intrin.h>
+    #if !defined(__FRAMAC__)
+        /* Frama-C models no MSVC intrinsic, its libc has no <intrin.h>, and
+         * under it the fallback is forced below. Without this guard bits.h
+         * could not be analysed at an MSVC machine model (VERIFY-047 W2). */
+        #include <intrin.h>
+    #endif
 #else
     #define CANON_BITS_MSVC 0
 #endif

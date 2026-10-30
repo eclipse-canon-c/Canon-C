@@ -130,10 +130,18 @@ profile, and it is why this is written up rather than quietly patched.
 
    **The ladder has four rungs rather than one for a reason worth stating.**
    A C11-only fix was written first and was wrong: Canon-C is C99
-   (`CMAKE_C_STANDARD 99`, `REQUIRED ON`), so level 1 is unreachable in
+   (`CMAKE_C_STANDARD 99`, `REQUIRED ON`), so level 1 was unreachable in
    every CI job and for every caller following the project's own language
    stance. The fix would have been correct and never compiled. Levels 2 and
    3 are what make it reach the shipped configuration.
+
+   The CI job for this property, `lifetime-token-concurrency`, runs the
+   concurrency test at `-std=gnu11` as well as C99, so level 1 runs under
+   concurrent load there. Since VERIFY-044 the `c-standards` job also
+   builds the whole suite as C11, C17 and C23, so every header compiles
+   with level 1 selected and `lifetime_test`, the sequential checks, runs
+   on it. The other build jobs are C99: level 2 with GCC and clang,
+   level 3 with MSVC, and level 4 in the CompCert job (below).
 
    Levels 2 and 3 are compiler extensions, so `CANON_NO_GNU_EXTENSIONS`
    drops to level 4 — which is how the CompCert job and any strict-C99 build
