@@ -26352,3 +26352,25 @@ x86_64. Their residual sets are identical by name. W1's fix is in
 **Next.** Run 2 is a re-run of the two legs on the same commit, to check
 name stability. If the sets are again equal, `ENFORCE` becomes 1 and the
 job gates on equality.
+
+### Run 2 scored, and enforced (2026-10-30)
+
+Run 2 is a re-run of `Canon-C platforms` #1 on the same commit, 901eb94
+(attempt 2, green in every job). The author pasted both step logs.
+
+| leg | x86_64 | msvc_x86_64 | one-sided names | duration |
+|-----|--------|-------------|-----------------|----------|
+| `bits` | 745 / 757, 12 unproved | 745 / 757, 12 unproved | none: **SAME** | 19 m 33 s |
+| `memory` | 2842 / 2873, 31 unproved | 2842 / 2873, 31 unproved | none: **SAME** | 53 m 9 s |
+
+The figures are run 1's, and the controls passed again. Four runs of each
+unit, two per model, gave one unproved set each. So the equality is
+stable, and the job is now **enforced** (`ENFORCE=1`): a one-sided name
+fails it. The commit after this one makes the change, and updates the
+README and `docs/verification.md`, which called the job report-only.
+
+**VERIFY-047 is closed.** W1 and W2 are fixed. `memory.h` and `bits.h` are
+proved at 64-bit Windows' LLP64 data model, with the residuals they have at
+x86_64, and CI holds that. What it does not cover, as the record says:
+- MSVC's preprocessor branches, since the preprocessor is GCC's;
+- the other units, whose verified code has no `long`-width dependence.
