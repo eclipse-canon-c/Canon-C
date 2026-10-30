@@ -26484,3 +26484,32 @@ The `embedded` job installs the new packages and runs two scripts:
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Scored (2026-10-30)
+
+On 834a373 every job is green: `Canon-C CI` (57 jobs), `Canon-C
+platforms` (18 jobs), `Canon-C CC` and Record coverage. These were read
+through the GitHub API, job conclusions and annotations. The step logs
+were not readable from the session.
+
+| # | verdict |
+|---|---------|
+| H-P1 | **MATCH**. `embedded` passes, in 3 min 58 s. The script fails on any failed compile or an empty list, so green means 133 of 133 at all 18 configurations. |
+| H-P2 | **MATCH for every gated check**. The script fails unless the stock refusal is by the f64 pin, unless Tier 0 compiles, and unless the eight Tier 1 headers are refused by the `#error`. The 29 / 49 / 2 classification is report-only, and its log was not read. |
+| H-P3 | **MATCH for the pins and jobs**. Every enforced Frama-C job is green, and so is `frama-c-win64`, its first enforced run. That makes a third pair of equal sets: `bits` in 22 min, `memory` in 54. `misra` is advisory, and its report was not read. |
+
+The only annotations are:
+- `workflow-size`'s predicted warning (504,733 bytes);
+- a queue notice on the macOS runners;
+- in `compcert`, GitHub's notice that `actions/cache@v4` targets Node.js
+  20, which is deprecated. That last one is outside this record, a
+  follow-up for the workflow.
+
+**Status**: H1 and H2 are corrected in the documentation, and CI checks
+four more embedded configurations' worth of claims:
+- picolibc on Cortex-M;
+- RISC-V RV32 and RV64, compiling;
+- AVR's refusal of a 4-byte `double`;
+- the Tier 0 / Tier 1 line at a 16-bit `size_t`.
+
+VERIFY-048 is closed.
