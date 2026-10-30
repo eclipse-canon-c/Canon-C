@@ -1,0 +1,323 @@
+name: Canon-C platforms
+# Platform jobs, moved out of cmake-multi-platform.yml on 2026-10-30, when
+# that file passed GitHub's 500 KB limit for a workflow file and its run
+# (#1394) did not start (VERIFY-047). The jobs are unchanged except that
+# they no longer wait for the build job of the other workflow, which a job
+# cannot need across workflows.
+#
+#   workflow-size   — fails if any workflow file is 500 KB or more (the
+#                     limit), warns from 480 KB
+#   musl            — Alpine (musl libc, GCC), Release + Debug (VERIFY-043)
+#   build-arm64     — Linux AArch64, GCC and clang (VERIFY-043)
+#   c-standards     — C11, C17 and C23, GCC 14 and clang (VERIFY-044)
+#   big-endian      — Linux s390x, cross GCC, under qemu-user (VERIFY-045)
+#   embedded        — arm-none-eabi-gcc + newlib, compile only (VERIFY-046)
+#   frama-c-win64   — memory.h and bits.h at the LLP64 model (VERIFY-047)
+on:
+  push:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB
+  # or more, and says only "a workflow file issue". This job names the file.
+  # -------------------------------------------------------------------------
+  workflow-size:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check every workflow file is under GitHub's 500 KB limit
+        run: |
+          LIMIT=512000; WARN=491520; FAIL=0
+          for f in .github/workflows/*.yml; do
+            n=$(wc -c < "$f")
+            echo "$n $f"
+            if [ "$n" -ge "$LIMIT" ]; then
+              echo "::error file=$f::$n bytes: at or over GitHub's 500 KB limit; the workflow will not run"; FAIL=1
+            elif [ "$n" -ge "$WARN" ]; then
+              echo "::warning file=$f::$n bytes: within 20 KB of GitHub's 500 KB limit"
+            fi
+          done
+          exit "$FAIL"
+  # -------------------------------------------------------------------------
+  # 1c. musl libc — Alpine, GCC (VERIFY-043)
+  #
+  #    The only C library in the matrix outside glibc, Apple's, MSVC's UCRT
+  #    and MinGW's. It found a real defect before any job ran it:
+  #    stringbuf.h's vsnprintf size argument (VERIFY-031 G2), whose musl leg
+  #    that record noted as follow-up. Sanitizers OFF: musl does not support
+  #    ASan. The image is pinned by version, as the runner is (VERIFY-039's
+  #    rule: move it deliberately).
+  # -------------------------------------------------------------------------
+  musl:
+    runs-on: ubuntu-24.04
+    container: alpine:3.20
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - name: Install toolchain
+        run: apk add --no-cache build-base cmake git
+      - uses: actions/checkout@v6
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=OFF \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+  # -------------------------------------------------------------------------
+  # 1d. Linux AArch64 — GCC and clang (VERIFY-043)
+  #
+  #    On AArch64 Linux, plain char is unsigned, unlike every other target in
+  #    the matrix (Apple keeps it signed on arm64). Sanitizers in Debug, as
+  #    the build job runs them. The runner label is pinned.
+  # -------------------------------------------------------------------------
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+        c_compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CMake
+        run: |
+          SANITIZERS=OFF
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then SANITIZERS=ON; fi
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=${SANITIZERS} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+  # -------------------------------------------------------------------------
+  # 1e. Later C standards — C11, C17 and C23, GCC 14 and clang (VERIFY-044)
+  #
+  #    Every other job compiles as C99, the project default. Canon-C claims
+  #    "C99 or later"; this job holds it to that under the later standards,
+  #    C23 among them (bool a keyword, unreachable() a standard macro).
+  #    Debug with sanitizers. --no-tests=error: a leg that finds no test fails.
+  # -------------------------------------------------------------------------
+  c-standards:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        c_std: [11, 17, 23]
+        c_compiler: [gcc-14, clang]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_C_STANDARD=${{ matrix.c_std }} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_SANITIZERS=ON \
+            -S .
+      - name: Check the requested standard reached the compiler
+        run: |
+          find build -name flags.make -exec grep -hoE -- '-std=[a-z0-9]+' {} + | sort | uniq -c
+          if find build -name flags.make -exec grep -lE -- '-std=(c|gnu)99' {} + | grep -q .; then
+            echo "::error::-std=c99 found in a C${{ matrix.c_std }} build"; exit 1
+          fi
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
+  # -------------------------------------------------------------------------
+  # 1f. Big-endian — Linux s390x, GCC cross-compiler, run under qemu-user
+  #     (VERIFY-045)
+  #
+  #    Every other target in the matrix is little-endian. s390x is
+  #    big-endian with 64-bit pointers. The tests are cross-compiled and
+  #    CTest runs each one through qemu-s390x (CMAKE_CROSSCOMPILING_EMULATOR).
+  #    No sanitizers: their runtimes are not reliable under qemu-user.
+  #    --no-tests=error: a leg that finds no test fails.
+  # -------------------------------------------------------------------------
+  big-endian:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install the s390x cross toolchain and qemu-user
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-s390x-linux-gnu libc6-dev-s390x-cross qemu-user
+          s390x-linux-gnu-gcc --version | head -1
+          qemu-s390x --version | head -1
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=s390x \
+            -DCMAKE_C_COMPILER=s390x-linux-gnu-gcc \
+            "-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-s390x;-L;/usr/s390x-linux-gnu" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -S .
+      - name: Build
+        run: cmake --build build -j
+      - name: Check the binaries are big-endian s390x
+        run: |
+          file build/bitset_test
+          file build/bitset_test | grep -q "MSB.*IBM S/390"
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --no-tests=error
+  # -------------------------------------------------------------------------
+  # 1g. Bare-metal Arm — compile only (VERIFY-046)
+  #
+  #    arm-none-eabi-gcc with newlib, Cortex-M0+ and Cortex-M4 (hard float),
+  #    at -O0, -Os and -O2, under the project's warning flags. Every public
+  #    header is compiled as its own translation unit, and every test file.
+  #    Nothing is linked or run: this backs the README's bare-metal section
+  #    as far as compiling goes. On this target enums are short
+  #    (-fshort-enums) and int32_t is long, which no hosted target has.
+  #    The lists, and what is left out and why, are in the script.
+  # -------------------------------------------------------------------------
+  embedded:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install arm-none-eabi-gcc and newlib
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Compile for Cortex-M0+ and Cortex-M4
+        run: tools/embedded_compile_check.sh
+  # -------------------------------------------------------------------------
+  # 5c. LLP64 (64-bit Windows) machine model — memory.h and bits.h
+  #     (VERIFY-047; REPORT-ONLY on its first run)
+  #
+  #   Every other WP job runs at x86_64 (LP64: long is 64 bits). On 64-bit
+  #   Windows long is 32 bits, pointers and size_t 64. Frama-C's msvc_x86_64
+  #   machdep is that model. The preprocessor is still GCC's, so __GNUC__
+  #   and __LP64__ stay defined: this checks the LLP64 DATA MODEL, not MSVC's
+  #   preprocessor branches (Canon-C tests neither __LP64__ nor
+  #   __SIZEOF_LONG__; under __FRAMAC__ bits.h and checked.h force their
+  #   fallbacks).
+  #
+  #   Two units: memory.h, the one verified unit whose ACSL named a
+  #   long-width type (W1), and bits.h, which could not be preprocessed at
+  #   an MSVC model at all (W2). Each leg proves its unit at x86_64 and at
+  #   msvc_x86_64 in the same job, and compares the unproved-name sets; the
+  #   prediction is equality. No second copy of any pin.
+  # -------------------------------------------------------------------------
+  frama-c-win64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: [memory, bits]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: ${{ matrix.unit }} at x86_64 and at msvc_x86_64"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=0   # VERIFY-047 run 1: report-only
+          echo "=== machine models available in this Frama-C ==="
+          frama-c -machdep help 2>&1 | head -20 || true
+          MACHDEP=msvc_x86_64
+          case "${{ matrix.unit }}" in
+            memory) FILE=core/memory.h;          MODEL="-wp-model Typed+Cast" ;;
+            bits)   FILE=core/primitives/bits.h; MODEL="" ;;
+          esac
+
+          # ---- Positive control: the machdep must change the data model.
+          printf '%s\n' \
+            '#include <stddef.h>' \
+            '#include <stdint.h>' \
+            '#include <limits.h>' \
+            'typedef char probe_long[(sizeof(long)   == 4u) ? 1 : -1];' \
+            'typedef char probe_ptr [(sizeof(void*)  == 8u) ? 1 : -1];' \
+            'typedef char probe_size[(sizeof(size_t) == 8u) ? 1 : -1];' \
+            'typedef char probe_lmax[(LONG_MAX == 2147483647L) ? 1 : -1];' \
+            > machdep_probe.c
+          CONTROL_OK=1
+          if frama-c -machdep "${MACHDEP}" machdep_probe.c > probe_w64.log 2>&1; then
+            echo "PASS: at ${MACHDEP}, long is 4 bytes (LONG_MAX 2^31-1), pointers and size_t 8."
+          else
+            CONTROL_OK=0; echo "FAIL: the LLP64 probe was rejected at ${MACHDEP}."; head -20 probe_w64.log
+          fi
+          if frama-c -machdep x86_64 machdep_probe.c > probe_64.log 2>&1; then
+            CONTROL_OK=0; echo "FAIL: the probe also passed at x86_64; it does not discriminate."
+          else
+            echo "PASS: the probe is rejected at x86_64."
+          fi
+          if [ "${CONTROL_OK}" -ne 1 ]; then
+            echo "CONTROL NOT ESTABLISHED — no comparison below means anything."; exit 1
+          fi
+
+          run_wp() {
+            # shellcheck disable=SC2086
+            frama-c -wp -wp-rte -machdep "$1" ${MODEL} \
+              -wp-prover alt-ergo,z3,cvc5 -wp-timeout 120 -wp-split \
+              -cpp-extra-args=" -I core/primitives -I core -I . -DCANON_NO_REQUIRE -DNDEBUG" \
+              "${FILE}" > "wp_$1.txt" 2>&1
+            grep -E "^\[wp\] Proved goals:" "wp_$1.txt" || { echo "FAIL: no WP summary at $1"; grep -E "^\[(kernel|wp)" "wp_$1.txt" | head -20; return 1; }
+            grep -oE "^\[wp\] \[(Timeout|Unknown)\] [A-Za-z0-9_]+" "wp_$1.txt" | awk '{print $3}' | sort -u > "res_$1.txt"
+            BAD=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "wp_$1.txt" || true)
+            echo "  $1: unproved $(wc -l < "res_$1.txt"), Failed/Invalid/Stepout ${BAD}"
+            [ "${BAD}" -eq 0 ]
+          }
+          set +e
+          run_wp x86_64;      R64=$?
+          run_wp "${MACHDEP}"; RW=$?
+          set -e
+          if [ "${R64}" -ne 0 ] || [ "${RW}" -ne 0 ]; then
+            echo "FAIL: a run did not complete, or a goal Failed / was Invalid."; exit 1
+          fi
+          echo "=== goals unproved at x86_64 only ==="
+          comm -23 res_x86_64.txt "res_${MACHDEP}.txt" | sed 's/^/    /'
+          echo "=== goals unproved at ${MACHDEP} only ==="
+          comm -13 res_x86_64.txt "res_${MACHDEP}.txt" | sed 's/^/    /'
+          if cmp -s res_x86_64.txt "res_${MACHDEP}.txt"; then
+            echo "SAME: $(wc -l < res_x86_64.txt) unproved, the same names at both models."
+          elif [ "${ENFORCE}" -eq 1 ]; then
+            echo "FAIL: the unproved sets differ between the two models."; exit 1
+          else
+            echo "REPORT-ONLY: the sets differ (see above); not failing on run 1."
+          fi
+      - name: Upload WP output (win64)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-win64-${{ matrix.unit }}
+          path: |
+            wp_*.txt
+            res_*.txt
+          retention-days: 90
