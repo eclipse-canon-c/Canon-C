@@ -26374,3 +26374,113 @@ proved at 64-bit Windows' LLP64 data model, with the residuals they have at
 x86_64, and CI holds that. What it does not cover, as the record says:
 - MSVC's preprocessor branches, since the preprocessor is GCC's;
 - the other units, whose verified code has no `long`-width dependence.
+
+---
+
+## VERIFY-048: Pre-registration — picolibc, RISC-V and AVR: the Embedded Claims, Widened
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-048 |
+| **Date**       | 2026-10-30 |
+| **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Baseline**   | edbb638 (VERIFY-047 enforced) |
+| **Scope**      | `tools/embedded_compile_check.sh` (four targets added), a new `tools/avr_tier_check.sh`, the `embedded` job in `platforms.yml`, `README.md` (Tier 0 and Tier 1 text, the CI table), `CONTRIBUTING.md` (the tier rules), and one comment in `core/primitives/types.h` |
+| **Category**   | Two README claims found false or unchecked on a target they named; checks widened to a second C library and a second architecture |
+
+**Why this record exists.** VERIFY-046 checked bare-metal Arm with newlib
+only. Its scoring left three things untested, and the author chose to
+check them:
+1. **The 16-bit tier claims.** The README said the Tier 0 headers "work
+   on any conforming target, including 16-bit-`size_t` MCUs (MSP430,
+   AVR)", and that Tier 1 refuses such targets by a named `#error`.
+   Nothing compiled for one.
+2. **picolibc.** The README names it beside newlib as a stub libc.
+3. **RISC-V.** The project's ThreadX guide (`docs/threadx`) is planned,
+   and Eclipse ThreadX runs on RISC-V. So CI should first show that
+   Canon-C compiles there.
+
+The checks run with Ubuntu 24.04's packages:
+- `picolibc-arm-none-eabi` and `picolibc-riscv64-unknown-elf`, both 1.8.6;
+- `gcc-riscv64-unknown-elf` 13.2;
+- `gcc-avr` 7.3 and `avr-libc` 2.0.
+
+### Findings
+
+**H1 — AVR's default `double` is refused at `types.h`, and the README
+named AVR as a Tier 0 target.** avr-gcc makes `double` 4 bytes by default.
+Its `DBL_DIG` is 6, below C's minimum of 10, so it is non-conforming.
+`types.h` pins `sizeof(f64) == 8`, so every header that includes it is
+refused there. Only `scope.h`, which includes nothing, compiles.
+- **The code is right.** The pin catches exactly the "realistic failure
+  mode" its comment names. The claim was wrong.
+- **Decided with the author (2026-10-30)**, with two alternatives: make
+  `f64` optional, an API change; or drop AVR from the claim. The choice:
+  keep the pin and correct the documentation. AVR needs `-mdouble=64`,
+  GCC 10 and later. Ubuntu's avr-gcc 7 cannot test that, so CI checks the
+  refusal itself.
+
+**H2 — the README put `slice.h` in Tier 1, and it compiles at a 16-bit
+`size_t`.** The README said Tier 1 covers "everything built on [limits.h,
+checked.h, ptr.h]: arenas, pools, slices, collections". `slice.h`
+includes only `types.h` and `contract.h`. On AVR, with H1's pin removed in
+a scratch copy, it compiles. **Fix**: the README no longer lists slices
+under Tier 1. It says `slice.h` compiles at a 16-bit `size_t`, and that no
+test or proof covers it there. This changes no code.
+
+### Measured before this record, locally
+
+**AVR** (avr-gcc 7.3, `-mmcu=atmega328p`, the project's warning flags):
+- **Stock:** `types.h`, `bits.h`, `compare.h` and `contract.h` are refused,
+  each by the f64 pin. `scope.h` compiles.
+- **With only the f64 pin removed** (one line, in a scratch copy):
+  - the README's five Tier 0 headers compile;
+  - eight Tier 1 headers are refused, each by `limits.h`'s `#error`
+    "Canon-C platform contract (Tier 1) …": `limits.h`, `checked.h`,
+    `ptr.h`, `memory.h`, `arena.h`, `pool.h`, `region.h`, `stringbuf.h`.
+- **Every public header** (80; the hashmap headers that need a key type
+  are left out, as in the other script):
+  - 29 compile;
+  - 49 are refused by the Tier 1 `#error`;
+  - 2 fail for other reasons, both Tier 2 (hosted libc), as the README
+    places them. `util/parse.h` needs `strtoll`, which avr-libc lacks;
+    `util/time.h` needs an OS clock.
+
+**picolibc and RISC-V** (`--specs=picolibc.specs`), at `-Os` on each new
+target:
+- Cortex-M4 with picolibc (its include path is picolibc's, checked): 133
+  of 133.
+- RV32 (`rv32imac`, `ilp32`): 133 of 133.
+- RV64 (`rv64imac`, `lp64`, `-mcmodel=medany`): 133 of 133.
+- `util/time.h` still does not compile against picolibc on either
+  architecture (`clock_gettime`), as it is left out.
+
+**Measured with the fix.** `embedded_compile_check.sh` with its six
+targets gives 133 of 133 at all 18 configurations, in 3 min 43 s locally.
+`avr_tier_check.sh` passes, with the classification above.
+
+### The CI job
+
+The `embedded` job installs the new packages and runs two scripts:
+- `tools/embedded_compile_check.sh` now has six targets, each at `-O0`,
+  `-Os` and `-O2`:
+  - Cortex-M0+ and Cortex-M4 with newlib;
+  - the same two cores with picolibc;
+  - RV32 and RV64 with picolibc.
+- `tools/avr_tier_check.sh` runs in three parts:
+  1. the stock refusal, by the f64 pin;
+  2. Tier 0 compiling and Tier 1 refused by its `#error`, in a scratch
+     copy with exactly one line removed (the script fails if it does not
+     remove exactly one);
+  3. a report-only classification of every public header.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| H-P1 | `embedded_compile_check.sh` passes: 133 of 133 at all 18 configurations. | any compile fails | H (measured) |
+| H-P2 | `avr_tier_check.sh` passes. The stock refusal is by the f64 pin, Tier 0 compiles, and the eight Tier 1 headers are refused by the `#error`. The classification reads 29 / 49 / 2. | any check fails, or another classification | H (measured, same packages) |
+| H-P3 | Nothing else moves. `types.h` changes in a comment only. Every WP pin holds, `misra` gives the same 55 findings, and every other job of both workflows is green. | any | H |
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
