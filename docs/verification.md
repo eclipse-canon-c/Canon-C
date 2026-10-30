@@ -31,8 +31,8 @@ The last two are about machine models. Every unit is verified at x86_64
 (LP64). `arena.h` is also verified at `gcc_x86_32` (`frama-c-arena-32`).
 Since VERIFY-047, `memory.h` and `bits.h` are also run at `msvc_x86_64`
 (`frama-c-win64`, LLP64: `long` is 32 bits), each compared, by unproved
-name, with its own x86_64 run. The job is report-only until two runs
-agree, as every new WP job is.
+name, with its own x86_64 run. Two runs gave the same sets (12 and 31), and
+the job is enforced on that equality.
 
 *Recomputed 2026-10-28 (VERIFY-042, vec_fmt.h enforced at CI #1389).*
 `frama-c-vec-fmt` adds a twenty-second unit: +2 functions, +5286

@@ -930,7 +930,7 @@ checked.
 verified unit at the x86-64 (LP64) machine model. `arena.h` is also proved
 at 32-bit, with the same residuals. `memory.h` and `bits.h` are also run
 at 64-bit Windows' LLP64 model, where `long` is 32 bits, and compared with
-their x86-64 runs (VERIFY-047; report-only until two runs agree).
+their x86-64 runs: the same goals unproved, by name (VERIFY-047).
 
 ---
 

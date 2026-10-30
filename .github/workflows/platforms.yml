@@ -12,7 +12,8 @@ name: Canon-C platforms
 #   c-standards     — C11, C17 and C23, GCC 14 and clang (VERIFY-044)
 #   big-endian      — Linux s390x, cross GCC, under qemu-user (VERIFY-045)
 #   embedded        — arm-none-eabi-gcc + newlib, compile only (VERIFY-046)
-#   frama-c-win64   — memory.h and bits.h at the LLP64 model (VERIFY-047)
+#   frama-c-win64   — memory.h and bits.h at the LLP64 model, enforced
+#                     equality with x86_64 (VERIFY-047)
 on:
   push:
     branches: [ "master" ]
@@ -219,7 +220,7 @@ jobs:
         run: tools/embedded_compile_check.sh
   # -------------------------------------------------------------------------
   # 5c. LLP64 (64-bit Windows) machine model — memory.h and bits.h
-  #     (VERIFY-047; REPORT-ONLY on its first run)
+  #     (VERIFY-047; ENFORCED since its second run)
   #
   #   Every other WP job runs at x86_64 (LP64: long is 64 bits). On 64-bit
   #   Windows long is 32 bits, pointers and size_t 64. Frama-C's msvc_x86_64
@@ -248,7 +249,7 @@ jobs:
       - name: "WP: ${{ matrix.unit }} at x86_64 and at msvc_x86_64"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-047 run 1: report-only
+          ENFORCE=1   # VERIFY-047: enforced after runs 1 and 2 (platforms #1, attempts 1 and 2) gave equal sets
           echo "=== machine models available in this Frama-C ==="
           frama-c -machdep help 2>&1 | head -20 || true
           MACHDEP=msvc_x86_64
