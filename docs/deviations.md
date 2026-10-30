@@ -26181,3 +26181,125 @@ With this, three of the platform additions decided on 2026-10-28 are done:
 
 musl and AArch64 Linux came first, in VERIFY-043. What remains of the list
 is the optional item: WP at `x86_win64`.
+
+---
+
+## VERIFY-047: Pre-registration — WP at the LLP64 Machine Model (64-bit Windows)
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-047 |
+| **Date**       | 2026-10-30 |
+| **Status**     | PREDICTED. This record is committed before the fix commit. Both are pushed together, before any CI run of either. The new job is report-only on its first run. |
+| **Baseline**   | 661bb8e |
+| **Scope**      | `core/memory.h` (one ACSL predicate), `core/primitives/bits.h` (one preprocessor guard), a CI job `frama-c-win64`, and the documentation the author asked to be brought up to date with VERIFY-043 to VERIFY-047: `README.md`, `CHEATSHEET.md`, `docs/verification.md`, `docs/traceability.md`, `docs/thread-safety.md`, and the workflow's job index |
+| **Category**   | One specification defect at a supported data model, found by reading; one tooling defect that blocked analysis at an MSVC model; a new machine model for two units |
+
+**Why this record exists.** Every WP job runs at Frama-C's default
+x86_64 model (LP64: `long` and pointers 64 bits). `frama-c-arena-32` adds
+32-bit for arena. 64-bit Windows is a tested build target (MSVC, MinGW),
+and there `long` is 32 bits while pointers and `size_t` are 64 (LLP64).
+No proof had been run at that model. This is the last item, the optional
+one, of the platform additions decided on 2026-10-28. The author chose it
+before `data/stack.h`.
+
+**What the model is.** Frama-C's `msvc_x86_64` machdep sets the LLP64 type
+model. Checked locally with WP 25: `sizeof(long) == 4`, `LONG_MAX ==
+2^31 - 1`, `sizeof(void*) == sizeof(size_t) == 8`. The preprocessor is
+still GCC's, so `__GNUC__`, `__LP64__` and `__SIZEOF_LONG__ == 8` stay
+defined, beside the `_MSC_VER` Frama-C adds.
+- This checks the **data model**, not MSVC's preprocessor branches.
+- Canon-C reads neither `__LP64__` nor `__SIZEOF_LONG__`, checked by
+  search.
+- Under `__FRAMAC__`, `bits.h` and `checked.h` force their portable
+  fallbacks.
+- `lifetime.h`'s atomics ladder takes its `__GNUC__` rung before
+  `_MSC_VER`'s.
+
+**Which units, and why only two.** Canon-C's verified code uses
+fixed-width types, `size_t` and `uintptr_t`. These have the same widths at
+LP64 and LLP64; only their spellings differ (`unsigned long long` for
+`unsigned long`). A search of the verified headers for `long`, its limits
+and the platform macros finds two sites that matter, W1 and W2 below. The
+other hits are three:
+- `unsigned long index` inside MSVC-only intrinsic branches of `bits.h`,
+  never compiled under Frama-C;
+- `strtol` in `option.h`'s and `result.h`'s documentation examples;
+- `util/file.h`'s `ftell`, which is not a WP unit.
+
+Every unit was parsed at `msvc_x86_64` (local WP 25). All 23 parse but
+`bits.h` and the bitset driver that includes it (W2). So the job runs the
+two units the findings are in, as `frama-c-arena-32` runs one.
+
+### Findings
+
+**W1 — `memory.h`'s alignment predicate truncated on LLP64.**
+`is_aligned_addr`, the predicate `mem_is_aligned`'s behaviours are stated
+with, cast the pointer and the mask to `unsigned long`. At LLP64 that is 32
+bits. For an alignment above 2^32, which a `usize` admits, the predicate
+held of a pointer aligned to 2^32 but not to the alignment. The code, which
+computes through `uintptr_t`, reports that pointer unaligned. So
+`nonnull_aligned`'s `ensures` was **false** at that model for those calls.
+- **Found by reading, not by a prover.** Both behaviours' `ensures` are
+  already pinned residuals of `memory.h` (the Typed+Cast pointer-to-integer
+  bridge). WP cannot tell a false goal there from a true one.
+- **Fix**: cast through `uintptr_t`, as `regions_overlap_by_addr` beside it
+  already does.
+- **At x86_64 nothing changes.** `uintptr_t` is `unsigned long` there. In
+  every unit, Frama-C's normalised AST (local WP 25) differs only in the
+  typedef's name: 10 units print the new spelling, 13 are byte-identical.
+- **WP**: `memory.h` proved locally before and after, at x86_64 (Z3, 20 s),
+  gives 2639 / 2686 both times. The only per-property differences are in
+  `checked_mul_isize` and `checked_mul_u64`, which the change does not
+  touch. Run to run, those move at that timeout.
+
+**W2 — `bits.h` could not be analysed at an MSVC model.** It included
+`<intrin.h>` whenever `_MSC_VER` was defined. Frama-C defines it at
+`msvc_x86_64`, and its libc has no such header, so preprocessing failed:
+for `bits.h`, and for `bitset_verify.h` through it. **Fix**: skip the
+include under `__FRAMAC__`, where the intrinsics are never used. At x86_64
+the unit is byte-identical.
+
+### Measured before this record, locally (WP 25, Z3 only, 20 s)
+
+- `bits.h`: 859 / 872 at both models, every one of its 86 properties with
+  the same totals and the same proved counts.
+- `memory.h` at `msvc_x86_64`: 2646 / 2686, against 2639 / 2686 at x86_64
+  in the same setting. Every property differing is in `checked_mul_isize`
+  and `checked_mul_u64`. The two runs at x86_64 differed in those same
+  functions, so the difference is the timeout's, not the model's.
+  `mem_is_aligned`'s two `ensures` are unproved at both models.
+- The local Frama-C (WP 25, Z3 only) does not reproduce CI's figures (WP
+  29, three provers, 120 s). `memory.h` gives 2686 goals locally and 2873
+  in CI, and `bits.h` 872 and 757. So the predictions below are about the
+  in-job comparison, and CI's own pins, not local numbers.
+
+### The CI job
+
+`frama-c-win64`: a matrix of `memory` and `bits`. Each leg:
+1. runs a positive control: an LLP64 probe must be accepted at
+   `msvc_x86_64` and rejected at x86_64, or the leg fails;
+2. proves its unit at x86_64 and at `msvc_x86_64`, with the same flags as
+   the unit's own job;
+3. fails on any Failed, Invalid or Stepout goal, or a missing summary;
+4. compares the two unproved-name sets and prints each one-sided
+   difference.
+
+Run 1 is report-only on a difference (`ENFORCE=0`). The gate is equality
+with the same leg's x86_64 run, so no pin is copied.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| W-P1 | The positive control passes in both legs. | it fails | H (the same probe passes and discriminates locally) |
+| W-P2 | `bits`: the unproved sets are equal. Each run leaves `frama-c-bits`'s 12, at 745 / 757. | any one-sided name, or another count | H |
+| W-P3 | `memory`: the unproved sets are equal. Each run leaves `frama-c-memory`'s 31, at 2842 / 2873, `mem_is_aligned`'s two among them. | any one-sided name | M–H (`checked_mul_*` is near the timeout locally; CI proves it at 120 s with three provers) |
+| W-P4 | No Failed or Invalid goal at either model. | any | H |
+| W-P5 | Nothing else moves. `frama-c-memory`, `-arena`, `-arena-32`, `-pool`, `-region`, `-bits`, `-bitset`, the vec units, `-priority-queue` and `-stringbuf` hold their pins. `misra` prints the same 55 findings (local scan, line for line). | any pin or finding moves | H |
+
+If W-P2 and W-P3 hold at run 1, the second run checks name stability.
+After that the job is enforced (`ENFORCE=1`).
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
