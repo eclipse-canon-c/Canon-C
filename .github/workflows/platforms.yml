@@ -11,7 +11,9 @@ name: Canon-C platforms
 #   build-arm64     — Linux AArch64, GCC and clang (VERIFY-043)
 #   c-standards     — C11, C17 and C23, GCC 14 and clang (VERIFY-044)
 #   big-endian      — Linux s390x, cross GCC, under qemu-user (VERIFY-045)
-#   embedded        — arm-none-eabi-gcc + newlib, compile only (VERIFY-046)
+#   embedded        — compile only: Cortex-M with newlib and picolibc
+#                     (VERIFY-046, -048), RISC-V RV32 and RV64 with picolibc,
+#                     and AVR's platform tiers (VERIFY-048)
 #   frama-c-win64   — memory.h and bits.h at the LLP64 model, enforced
 #                     equality with x86_64 (VERIFY-047)
 on:
@@ -207,17 +209,25 @@ jobs:
   #    as far as compiling goes. On this target enums are short
   #    (-fshort-enums) and int32_t is long, which no hosted target has.
   #    The lists, and what is left out and why, are in the script.
+  #
+  #    VERIFY-048 adds picolibc on the same two cores, RISC-V RV32 (rv32imac,
+  #    ilp32) and RV64 (rv64imac, lp64) with picolibc, and an AVR step: the
+  #    README's platform tiers at a 16-bit size_t (tools/avr_tier_check.sh).
   # -------------------------------------------------------------------------
   embedded:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - name: Install arm-none-eabi-gcc and newlib
+      - name: Install the Arm, RISC-V and AVR toolchains, newlib and picolibc
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
-      - name: Compile for Cortex-M0+ and Cortex-M4
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            picolibc-arm-none-eabi gcc-riscv64-unknown-elf \
+            picolibc-riscv64-unknown-elf gcc-avr avr-libc
+      - name: Compile for Cortex-M (newlib, picolibc) and RISC-V RV32, RV64 (picolibc)
         run: tools/embedded_compile_check.sh
+      - name: AVR — the platform tiers at a 16-bit size_t (VERIFY-048)
+        run: tools/avr_tier_check.sh
   # -------------------------------------------------------------------------
   # 5c. LLP64 (64-bit Windows) machine model — memory.h and bits.h
   #     (VERIFY-047; ENFORCED since its second run)

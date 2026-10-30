@@ -53,8 +53,9 @@ Platform requirements mirror the dependency hierarchy: a header inherits
 the contracts of everything it includes, and must guard any **new**
 requirement it introduces — at its origin, once.
 
-- Tier 0 (8-bit bytes, C99 exact-width types) is enforced in `types.h`.
-  Every header inherits it by inclusion.
+- Tier 0 (8-bit bytes, C99 exact-width types, a 4-byte `float` and an
+  8-byte `double`) is enforced in `types.h`. Every header inherits it by
+  inclusion.
 - Tier 1 (`size_t` >= 32 bits) is enforced in `limits.h`, beside the size
   literals that need it.
 - Tier 2 (hosted libc: working malloc, retargeted stdio, OS clocks —
@@ -63,6 +64,10 @@ requirement it introduces — at its origin, once.
   property the preprocessor cannot test (`__STDC_HOSTED__` tracks a
   compilation mode — newlib bare-metal reports 1 — not whether malloc
   works). The linker enforces the rest.
+- CI checks the guards where they bite: `tools/avr_tier_check.sh` (job
+  `embedded`) compiles the Tier 0 headers at AVR's 16-bit `size_t` and
+  expects every Tier 1 header refused by `limits.h`'s `#error`. A new
+  Tier 1 header belongs in its `TIER1` list.
 - Never duplicate a guard downstream. Never centralize guards in a shared
   platform header. One requirement, one home, inherited by inclusion.
 - Guards testing a macro's **value** must gate on `defined()` first:

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# VERIFY-046: compile Canon-C for bare-metal Arm (arm-none-eabi-gcc, newlib).
+# VERIFY-046, VERIFY-048: compile Canon-C for bare-metal Arm (newlib and
+# picolibc) and RISC-V RV32 and RV64 (picolibc).
 #
 # Compile only: nothing is linked or run on the target. Every public header
 # is compiled as its own translation unit, and every test file, under the
@@ -16,13 +17,21 @@
 #   hashmap_fmt}.h                      — need HASHMAP_KEY_TYPE (and a key
 #                                         formatter); compiled through
 #                                         test/data/hashmap_test.c
+#
+# Targets (VERIFY-046; picolibc and RISC-V added by VERIFY-048). Each entry
+# is a compiler and its flags; every one is run at -O0, -Os and -O2.
 set -u
-CC=${CC:-arm-none-eabi-gcc}
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 
-CPUS=("-mcpu=cortex-m0plus -mthumb"
-      "-mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16")
+TARGETS=(
+  "arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb"
+  "arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
+  "arm-none-eabi-gcc --specs=picolibc.specs -mcpu=cortex-m0plus -mthumb"
+  "arm-none-eabi-gcc --specs=picolibc.specs -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16"
+  "riscv64-unknown-elf-gcc --specs=picolibc.specs -march=rv32imac -mabi=ilp32"
+  "riscv64-unknown-elf-gcc --specs=picolibc.specs -march=rv64imac -mabi=lp64 -mcmodel=medany"
+)
 OPTS=(-O0 -Os -O2)
 INC="-I . -I core/primitives -I core -I semantics -I data -I algo -I util"
 WARN="-std=c99 -Wall -Wextra -Wpedantic -Werror"
@@ -37,24 +46,24 @@ mapfile -t TESTS < <(find test -name '*_test.c' \
 if [ "${#HEADERS[@]}" -eq 0 ] || [ "${#TESTS[@]}" -eq 0 ]; then
   echo "FAIL: empty header or test list"; exit 1
 fi
-"$CC" --version | head -1
+for cc in arm-none-eabi-gcc riscv64-unknown-elf-gcc; do "$cc" --version | head -1; done
 echo "headers: ${#HEADERS[@]}  tests: ${#TESTS[@]}"
 
 FAILS=0
-for cpu in "${CPUS[@]}"; do
+for cpu in "${TARGETS[@]}"; do
   for opt in "${OPTS[@]}"; do
     n=0
     for h in "${HEADERS[@]}"; do
       printf '#include "%s"\ntypedef int canon_tu_not_empty_;\n' "$h" > "$OUT/h.c"
       # shellcheck disable=SC2086
-      if ! "$CC" $cpu $opt $WARN $INC -c "$OUT/h.c" -o "$OUT/h.o" 2> "$OUT/err"; then
+      if ! $cpu $opt $WARN $INC -c "$OUT/h.c" -o "$OUT/h.o" 2> "$OUT/err"; then
         echo "FAIL [$cpu $opt] header $h"; sed 's/^/    /' "$OUT/err" | head -20
         FAILS=$((FAILS + 1))
       else n=$((n + 1)); fi
     done
     for t in "${TESTS[@]}"; do
       # shellcheck disable=SC2086
-      if ! "$CC" $cpu $opt $WARN $INC -c "$t" -o "$OUT/t.o" 2> "$OUT/err"; then
+      if ! $cpu $opt $WARN $INC -c "$t" -o "$OUT/t.o" 2> "$OUT/err"; then
         echo "FAIL [$cpu $opt] test $t"; sed 's/^/    /' "$OUT/err" | head -20
         FAILS=$((FAILS + 1))
       else n=$((n + 1)); fi

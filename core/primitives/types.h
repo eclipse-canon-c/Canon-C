@@ -132,6 +132,11 @@ typedef double    f64;   /* 64-bit floating point (IEEE 754 on all supported pla
  * without claiming to verify full IEEE semantics. The negative-size-array
  * pattern is used instead of static_require because contract.h includes
  * this header — using it here would form an include cycle.
+ *
+ * That failure mode is real: AVR's GCC makes double 4 bytes by default
+ * (non-conforming: C requires DBL_DIG >= 10), and the f64 pin refuses it.
+ * Build for AVR with -mdouble=64 (GCC 10 and later). CI checks the
+ * refusal with avr-gcc 7 (VERIFY-048, tools/avr_tier_check.sh).
  * ──────────────────────────────────────────────────────────────────────── */
 /* cppcheck-suppress misra-c2012-2.3 ; MISRA-DEV-017 */
 typedef char canon_types_assert_f32_is_4_bytes_[(sizeof(f32) == 4) ? 1 : -1];

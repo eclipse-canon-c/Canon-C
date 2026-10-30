@@ -816,8 +816,9 @@ For what Canon-C intentionally omits, established C libraries exist:
 >
 > CI compiles every other public header, and every test but the
 > pthread concurrency test and `time.h`'s, for Cortex-M0+ and Cortex-M4
-> with `arm-none-eabi-gcc` and newlib, under the project's warning flags
-> (job `embedded`). The hashmap headers, which need a key type defined,
+> with `arm-none-eabi-gcc` and both newlib and picolibc, and for RISC-V
+> RV32 and RV64 with picolibc, under the project's warning flags (job
+> `embedded`). The hashmap headers, which need a key type defined,
 > are compiled through the tests that define one. That shows they
 > compile there; they are not linked or run on the target.
 >
@@ -877,14 +878,24 @@ For what Canon-C intentionally omits, established C libraries exist:
 > enforced in `types.h` and inherited by every header through inclusion.
 > The Tier 0 subset — `types.h`, `bits.h`, `compare.h`, `scope.h`,
 > `contract.h` — works on any conforming target, including
-> 16-bit-`size_t` MCUs (MSP430, AVR). Tier 0 means "freestanding plus
+> 16-bit-`size_t` MCUs. `types.h` also requires a 64-bit `double`
+> (`f64`); a 32-bit `double` does not conform anyway, since C requires
+> `DBL_DIG` of at least 10. AVR's GCC has a 32-bit `double` by default,
+> so on AVR Tier 0 needs `-mdouble=64` (GCC 10 and later); an older or
+> default avr-gcc is refused at `types.h`. CI checks
+> both halves on AVR with avr-gcc 7 (job `embedded`, VERIFY-048): the
+> refusal, and, with that one check removed in a scratch copy, that
+> Tier 0 compiles and Tier 1 is refused by its `#error`. MSP430 is not
+> checked. Tier 0 means "freestanding plus
 > stub-capable libc headers": `contract.h` pulls in `<stdio.h>` and
 > `<stdlib.h>` for its default panic handler — swap the handler as
 > described above and stdio is never reached.
 >
 > **Tier 1** — `size_t` >= 32 bits, enforced in `limits.h` beside the
 > size literals that need it. Covers `limits.h`, `checked.h`, `ptr.h`,
-> and everything built on them: arenas, pools, slices, collections. On
+> and everything built on them: arenas, pools, collections. (`slice.h`
+> includes only Tier 0 headers and compiles at a 16-bit `size_t`; no test
+> or proof covers it there.) On
 > a 16-bit-`size_t` target the size literals (`CANON_GB`) would wrap to
 > 0 under well-defined unsigned arithmetic and silently zero every
 > capacity constant; the guard turns that silent breakage into a named
@@ -924,7 +935,9 @@ checked.
 | Windows x64 | MSVC; MinGW GCC | Release and Debug |
 | macOS (`macos-latest`) | clang | Release, and Debug with sanitizers |
 | C11, C17 and C23 | GCC 14, clang 18 | Debug with sanitizers; C99 everywhere else |
-| bare-metal Cortex-M0+ and M4 | `arm-none-eabi-gcc`, newlib | **compile only**, every header and test; not linked or run |
+| bare-metal Cortex-M0+ and M4 | `arm-none-eabi-gcc`, newlib and picolibc | **compile only**, every header and test; not linked or run |
+| bare-metal RISC-V RV32, RV64 | `riscv64-unknown-elf-gcc`, picolibc | **compile only**, every header and test |
+| AVR (16-bit `size_t`) | avr-gcc 7 | **compile only**: the platform tiers' guards, see Tier 0 above |
 
 **Formal verification** (Frama-C WP, `docs/verification.md`): every
 verified unit at the x86-64 (LP64) machine model. `arena.h` is also proved
