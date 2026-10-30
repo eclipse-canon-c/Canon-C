@@ -26322,3 +26322,33 @@ at CI #1393, which ran.
 - **W-P1 to W-P5 stand unchanged** for the first run of the two
   workflows. W-P5's "every other job" now covers both files, and the new
   `workflow-size` job is predicted green (H).
+
+### Run 1 scored (2026-10-30)
+
+Run 1 is the first run of the two workflows on 901eb94: `Canon-C CI`
+#1395 and `Canon-C platforms` #1. Both are green in every job, the author
+reports. The author pasted both `frama-c-win64` step logs. Frama-C 29
+lists `msvc_x86_64` among its machine models.
+
+| leg | x86_64 | msvc_x86_64 | one-sided names | duration |
+|-----|--------|-------------|-----------------|----------|
+| `bits` | 745 / 757, 12 unproved | 745 / 757, 12 unproved | none: **SAME** | 19 m 35 s |
+| `memory` | 2842 / 2873, 31 unproved | 2842 / 2873, 31 unproved | none: **SAME** | 53 m 9 s |
+
+| # | verdict |
+|---|---------|
+| W-P1 | **MATCH**. In both legs the probe passes at `msvc_x86_64` (`long` 4 bytes, `LONG_MAX` 2^31 - 1, pointers and `size_t` 8) and is rejected at x86_64. |
+| W-P2 | **MATCH**. `bits`: 12 and 12, the same names, at `frama-c-bits`'s 745 / 757. |
+| W-P3 | **MATCH**. `memory`: 31 and 31, the same names, at `frama-c-memory`'s 2842 / 2873. The `checked_mul_*` goals that moved locally (Z3 alone, 20 s) did not move in CI. |
+| W-P4 | **MATCH**. No Failed, Invalid or Stepout goal at either model. |
+| W-P5 | **MATCH for the jobs**: every job of both workflows is green, the enforced Frama-C jobs among them. `misra`'s report was not read this time. `workflow-size` passed with the warning predicted: 504,733 bytes, within 20 KB of the limit. |
+
+**What this shows.** At 64-bit Windows' data model, where `long` is 32
+bits, `memory.h` and `bits.h` prove exactly the goals they prove at
+x86_64. Their residual sets are identical by name. W1's fix is in
+`memory.h`'s predicate. W1 itself remains a reading result: the two
+`ensures` it concerns are residuals at both models, as predicted.
+
+**Next.** Run 2 is a re-run of the two legs on the same commit, to check
+name stability. If the sets are again equal, `ENFORCE` becomes 1 and the
+job gates on equality.
