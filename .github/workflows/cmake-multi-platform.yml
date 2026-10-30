@@ -8726,7 +8726,7 @@ jobs:
 
       - name: Restore opam / CompCert cache
         id: compcert-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.opam
           # Key tracks the PINNED CompCert version below. Bump both
