@@ -154,7 +154,7 @@ enable_testing()
 #   )
 # ---------------------------------------------------------------------------
 function(canon_c_test)
-    cmake_parse_arguments(T "FUZZABLE" "NAME;SRC" "INCLUDES" ${ARGN})
+    cmake_parse_arguments(T "FUZZABLE" "NAME" "SRC;INCLUDES" ${ARGN})
 
     # --- Unit test binary ---------------------------------------------------
     add_executable(${T_NAME} ${T_SRC})
@@ -406,6 +406,17 @@ canon_c_test(
     NAME     header_combination_test
     SRC      test/integration/header_combination_test.c
     INCLUDES core/primitives core semantics data algo util util/str .
+)
+
+# VERIFY-049 S1: the separate-compilation path (DECLARE_* in a shared header,
+# DEFINE_* in a second translation unit) of vec, stack, deque and queue.
+# Two sources, linked: the test must find every definition through the
+# declarations alone.
+canon_c_test(
+    NAME     separate_compilation_test
+    SRC      test/integration/separate_compilation_test.c
+             test/integration/separate_compilation_defs.c
+    INCLUDES core/primitives core semantics data test/integration .
 )
 
 canon_c_test(
@@ -697,6 +708,18 @@ if(ENABLE_COVERAGE_TUS)
     # line instead of to test/data/vec_fmt_test.c. Flags as frama-c-vec-fmt's.
     target_compile_definitions(vec_fmt_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
 
-    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover, vec_fmt_cover)")
+    add_executable(stack_cover vmacros/coverage/stack_cover.c
+                               test/support/stack_cover_vec.c)
+    target_include_directories(stack_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR}/data
+        ${CMAKE_SOURCE_DIR})
+    # MCDC-019: stack.h's conditions alone; vec is defined in the second
+    # source, under test/, whose rows the coverage table filters out.
+    target_compile_definitions(stack_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover, vec_fmt_cover, stack_cover)")
  
 endif()

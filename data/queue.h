@@ -151,18 +151,25 @@
  * Separate compilation:
  * ```c
  * // In tasks.h:
+ * #include "semantics/option/option_decl.h"
  * #include "data/deque/deque_decl.h"
  * #include "data/queue.h"
+ * #include "task.h"                  // typedef struct { ... } Task;
+ * DECLARE_OPTION_ALL(extern, Task)
  * DECLARE_DEQUE(Task)
  * DECLARE_QUEUE(Task)
  *
- * // In tasks.c:
+ * // In tasks.c (which does not include tasks.h):
+ * #include "semantics/option/option_defn.h"
  * #include "data/deque/deque_defn.h"
  * #include "data/queue.h"
- * CANON_OPTION(Task)
+ * #include "task.h"
+ * DEFINE_OPTION_ALL(, Task)
  * DEFINE_DEQUE(, Task)
  * DEFINE_QUEUE(, Task)
  * ```
+ * Built and linked by test/integration/separate_compilation_test.c
+ * (VERIFY-049).
  *
  * Common use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -543,23 +550,30 @@ linkage void queue_##type##_clear(borrowed(queue_##type*) q) { \
  * @param type Element type — DECLARE_DEQUE(type) must be called first
  *
  * @pre DECLARE_DEQUE(type) has already been called for the same type
- * @pre option_##type is available (from CANON_OPTION(type))
+ * @pre option_##type is declared (DECLARE_OPTION_ALL(extern, type))
  *
  * Example:
  * ```c
  * // In tasks.h:
+ * #include "semantics/option/option_decl.h"
  * #include "data/deque/deque_decl.h"
  * #include "data/queue.h"
+ * #include "task.h"                  // typedef struct { ... } Task;
+ * DECLARE_OPTION_ALL(extern, Task)
  * DECLARE_DEQUE(Task)
  * DECLARE_QUEUE(Task)
  *
- * // In tasks.c:
+ * // In tasks.c (which does not include tasks.h):
+ * #include "semantics/option/option_defn.h"
  * #include "data/deque/deque_defn.h"
  * #include "data/queue.h"
- * CANON_OPTION(Task)
+ * #include "task.h"
+ * DEFINE_OPTION_ALL(, Task)
  * DEFINE_DEQUE(, Task)
  * DEFINE_QUEUE(, Task)
  * ```
+ * Built and linked by test/integration/separate_compilation_test.c
+ * (VERIFY-049).
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_QUEUE(type) \

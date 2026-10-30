@@ -1,0 +1,99 @@
+name: Frama-C stack (VERIFY-049)
+# data/stack.h's WP unit, in its own file: cmake-multi-platform.yml is within
+# 20 KB of GitHub's 500 KB limit for a workflow file (VERIFY-047), so new
+# jobs go in files of their own.
+#
+# The unit: vmacros/vdrivers/stack_verify.h, which is cc-vec's driver
+# (vec_cc_experiment.h) plus DEFINE_STACK(static inline, int). stack.h's
+# contracts are in its macro body, so the unit is preprocessed with -CC,
+# with cc-vec's flags and model (Typed+Cast). Its unproved goals are
+# predicted to be cc-vec's 69, by name (vmacros/vdrivers/cc_pins/vec.txt),
+# plus the stack's own, which VERIFY-049 predicts.
+#
+# REPORT-ONLY until two runs agree (the project's protocol); a Failed,
+# Invalid or Stepout goal, or a missing summary, fails it from run 1.
+on:
+  push:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frama-c-stack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP under -CC: data/stack.h at int"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=0   # VERIFY-049 run 1: report-only
+          OUT=wp_stack_output.txt
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/stack_verify.h > "${OUT}" 2>&1
+          WP_EXIT=$?
+          set -e
+          echo "frama-c exit: ${WP_EXIT}   model: Typed+Cast   preprocessing: -CC"
+          if ! grep -E "^\[wp\] Proved goals:" "${OUT}"; then
+            echo "FAIL: WP produced no summary."; grep -E "^\[(kernel|wp)" "${OUT}" | head -30; exit 1
+          fi
+          BAD=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "${OUT}" || true)
+          if [ "${BAD}" -ne 0 ]; then
+            echo "FAIL: ${BAD} goal(s) Failed, Invalid or Stepout:"
+            grep -E "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "${OUT}"; exit 1
+          fi
+          grep -oE "^\[wp\] \[(Timeout|Unknown)\] [A-Za-z0-9_]+" "${OUT}" | awk '{print $3}' | sort -u > unproved.txt
+          grep -E '_stack_int_' unproved.txt > own.txt || true
+          grep -vE '_stack_int_' unproved.txt > inherited.txt || true
+          sort -u vmacros/vdrivers/cc_pins/vec.txt > pins_vec.txt
+          echo "=== unproved: $(wc -l < unproved.txt) (inherited $(wc -l < inherited.txt), own $(wc -l < own.txt)) ==="
+          echo "=== own (stack_int_*) ==="; sed 's/^/    /' own.txt
+          echo "=== inherited, not among cc-vec's 69 ==="; comm -13 pins_vec.txt inherited.txt | sed 's/^/    /'
+          echo "=== cc-vec's 69, not unproved here ==="; comm -23 pins_vec.txt inherited.txt | sed 's/^/    /'
+          if cmp -s pins_vec.txt inherited.txt; then
+            echo "INHERITED SAME: the 69 cc-vec names, exactly."
+          elif [ "${ENFORCE}" -eq 1 ]; then
+            echo "FAIL: the inherited set differs from cc-vec's."; exit 1
+          else
+            echo "REPORT-ONLY: the inherited set differs (above); not failing on run 1."
+          fi
+      - name: Upload WP output (stack)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-stack
+          path: |
+            wp_stack_output.txt
+            unproved.txt
+            own.txt
+            inherited.txt
+          retention-days: 90

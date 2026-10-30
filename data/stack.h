@@ -143,7 +143,7 @@
  * }
  *
  * // Option variant — no out-param needed
- * option_int top = stack_int_pop_option(&s);   // Some(10)
+ * option_int top = stack_int_pop_option(&s);   // Some(frame), the last pushed
  *
  * // Peek without popping
  * option_int peek = stack_int_peek_option(&s);
@@ -152,18 +152,25 @@
  * Separate compilation:
  * ```c
  * // In tasks.h:
+ * #include "semantics/option/option_decl.h"
  * #include "data/vec/vec_decl.h"
  * #include "data/stack.h"
+ * #include "task.h"                  // typedef struct { ... } Task;
+ * DECLARE_OPTION_ALL(extern, Task)
  * DECLARE_VEC(Task)
  * DECLARE_STACK(Task)
  *
- * // In tasks.c:
+ * // In tasks.c (which does not include tasks.h):
+ * #include "semantics/option/option_defn.h"
  * #include "data/vec/vec_defn.h"
  * #include "data/stack.h"
- * CANON_OPTION(Task)
+ * #include "task.h"
+ * DEFINE_OPTION_ALL(, Task)
  * DEFINE_VEC(, Task)
  * DEFINE_STACK(, Task)
  * ```
+ * Built and linked by test/integration/separate_compilation_test.c
+ * (VERIFY-049).
  *
  * Common use cases:
  * ────────────────────────────────────────────────────────────────────────────
@@ -262,15 +269,30 @@ typedef MANGLE_VEC_TYPE(type) stack_##type; \
  * \
  * @pre s != NULL \
  * @pre buffer != NULL || capacity == 0 \
- * @pre capacity > 0 \
  * \
  * @post Stack is empty, ready for push/pop \
  * @post Capacity is fixed — no growth possible \
+ * @post If capacity > CANON_VEC_MAX_CAPACITY / sizeof(type), the stack is \
+ *       zero (items NULL, capacity 0), as vec_init returns it: every push \
+ *       then fails with ERR_INVALID_ARG (VERIFY-049 S4) \
  * \
  * Performance: \
  * - Time:  O(1) \
  * - Space: O(1) — wraps caller-provided buffer \
  */ \
+/*@ requires \valid(s);                                                              \
+    requires buffer == \null ==> capacity == 0;                                      \
+    requires (capacity > 0 && capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*buffer))  \
+    ==> \valid(buffer + (0 .. capacity - 1));                                        \
+    assigns *s;                                                                      \
+    behavior too_big:                                                                \
+    assumes capacity > CANON_VEC_MAX_CAPACITY / sizeof(*buffer);                     \
+    ensures s->items == \null && s->len == 0 && s->capacity == 0;                    \
+    behavior ok:                                                                     \
+    assumes capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*buffer);                    \
+    ensures s->items == buffer && s->len == 0 && s->capacity == capacity;            \
+    complete behaviors;                                                              \
+    disjoint behaviors; */                                                           \
 linkage void stack_##type##_init( \
     borrowed(stack_##type*) s, borrowed(type*) buffer, usize capacity) \
 { \
@@ -292,6 +314,25 @@ linkage void stack_##type##_init( \
  * - Time:  O(1) — no allocation \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+    assigns s->len, s->items[0 .. s->capacity - 1];                                                                                                                                                                                                                                                                                                                                           \
+    behavior invalid:                                                                                                                                                                                                                                                                                                                                                                         \
+    assumes s == \null || (s != \null && s->items == \null);                                                                                                                                                                                                                                                                                                                                  \
+    assigns \nothing;                                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;                                                                                                                                                                                                                                                                                                                    \
+    behavior full:                                                                                                                                                                                                                                                                                                                                                                            \
+    assumes s != \null && s->items != \null && s->len >= s->capacity;                                                                                                                                                                                                                                                                                                                         \
+    assigns \nothing;                                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result.is_ok == \false && \result.val.err == ERR_CAPACITY_EXCEEDED;                                                                                                                                                                                                                                                                                                              \
+    behavior ok:                                                                                                                                                                                                                                                                                                                                                                              \
+    assumes s != \null && s->items != \null && s->len < s->capacity;                                                                                                                                                                                                                                                                                                                          \
+    assigns s->len, s->items[s->len];                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result.is_ok == \true;                                                                                                                                                                                                                                                                                                                                                           \
+    ensures s->len == \old(s->len) + 1;                                                                                                                                                                                                                                                                                                                                                       \
+    ensures s->items[\old(s->len)] == item;                                                                                                                                                                                                                                                                                                                                                   \
+    ensures \forall integer k; 0 <= k < \old(s->len) ==> s->items[k] == \old(s->items[k]);                                                                                                                                                                                                                                                                                                    \
+    complete behaviors;                                                                                                                                                                                                                                                                                                                                                                       \
+    disjoint behaviors; */                                                                                                                                                                                                                                                                                                                                                                    \
 linkage result__Bool_Error stack_##type##_push( \
     borrowed(stack_##type*) s, type item) \
 { \
@@ -311,6 +352,21 @@ linkage result__Bool_Error stack_##type##_push( \
  * @sa stack_##type##_push — Result variant with specific error codes \
  * @sa stack_##type##_push_unchecked — unchecked variant for maximum throughput \
  */ \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+    assigns s->len, s->items[0 .. s->capacity - 1];                                                                                                                                                                                                                                                                                                                                           \
+    behavior refuse:                                                                                                                                                                                                                                                                                                                                                                          \
+    assumes s == \null || (s != \null && (s->items == \null || s->len >= s->capacity));                                                                                                                                                                                                                                                                                                       \
+    assigns \nothing;                                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result == \false;                                                                                                                                                                                                                                                                                                                                                                \
+    behavior ok:                                                                                                                                                                                                                                                                                                                                                                              \
+    assumes s != \null && s->items != \null && s->len < s->capacity;                                                                                                                                                                                                                                                                                                                          \
+    assigns s->len, s->items[s->len];                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result == \true;                                                                                                                                                                                                                                                                                                                                                                 \
+    ensures s->len == \old(s->len) + 1;                                                                                                                                                                                                                                                                                                                                                       \
+    ensures s->items[\old(s->len)] == item;                                                                                                                                                                                                                                                                                                                                                   \
+    ensures \forall integer k; 0 <= k < \old(s->len) ==> s->items[k] == \old(s->items[k]);                                                                                                                                                                                                                                                                                                    \
+    complete behaviors;                                                                                                                                                                                                                                                                                                                                                                       \
+    disjoint behaviors; */                                                                                                                                                                                                                                                                                                                                                                    \
 linkage bool stack_##type##_try_push( \
     borrowed(stack_##type*) s, type item) \
 { \
@@ -336,6 +392,13 @@ linkage bool stack_##type##_try_push( \
  * @sa stack_##type##_push — Result variant with full diagnostics \
  * @sa stack_##type##_try_push — bool variant with runtime checks \
  */ \
+/*@ requires ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+    requires s->items != \null;                                                                                                                                                                                                                                                                                                                                                 \
+    requires s->len < s->capacity;                                                                                                                                                                                                                                                                                                                                              \
+    assigns s->len, s->items[s->len];                                                                                                                                                                                                                                                                                                                                           \
+    ensures s->len == \old(s->len) + 1;                                                                                                                                                                                                                                                                                                                                         \
+    ensures s->items[\old(s->len)] == item;                                                                                                                                                                                                                                                                                                                                     \
+    ensures \forall integer k; 0 <= k < \old(s->len) ==> s->items[k] == \old(s->items[k]); */                                                                                                                                                                                                                                                                                   \
 linkage void stack_##type##_push_unchecked( \
     borrowed(stack_##type*) s, type item) \
 { \
@@ -357,6 +420,28 @@ linkage void stack_##type##_push_unchecked( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+    requires out == \null || \valid(out);                                                                                                                                                                                                                                                                                                                                                     \
+    requires (s != \null && out != \null) ==>                                                                                                                                                                                                                                                                                                                                                 \
+    \separated(out, s->items + (0 .. s->capacity - 1)) && \separated(out, s);                                                                                                                                                                                                                                                                                                                 \
+    assigns s->len, *out;                                                                                                                                                                                                                                                                                                                                                                     \
+    behavior invalid:                                                                                                                                                                                                                                                                                                                                                                         \
+    assumes s == \null || out == \null || (s != \null && s->items == \null);                                                                                                                                                                                                                                                                                                                  \
+    assigns \nothing;                                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_ARG;                                                                                                                                                                                                                                                                                                                    \
+    behavior empty:                                                                                                                                                                                                                                                                                                                                                                           \
+    assumes s != \null && out != \null && s->items != \null && s->len == 0;                                                                                                                                                                                                                                                                                                                   \
+    assigns \nothing;                                                                                                                                                                                                                                                                                                                                                                         \
+    ensures \result.is_ok == \false && \result.val.err == ERR_INVALID_STATE;                                                                                                                                                                                                                                                                                                                  \
+    behavior ok:                                                                                                                                                                                                                                                                                                                                                                              \
+    assumes s != \null && out != \null && s->items != \null && s->len > 0;                                                                                                                                                                                                                                                                                                                    \
+    assigns s->len, *out;                                                                                                                                                                                                                                                                                                                                                                     \
+    ensures \result.is_ok == \true;                                                                                                                                                                                                                                                                                                                                                           \
+    ensures s->len == \old(s->len) - 1;                                                                                                                                                                                                                                                                                                                                                       \
+    ensures *out == \old(s->items[s->len - 1]);                                                                                                                                                                                                                                                                                                                                               \
+    ensures \forall integer k; 0 <= k < s->len ==> s->items[k] == \old(s->items[k]);                                                                                                                                                                                                                                                                                                          \
+    complete behaviors;                                                                                                                                                                                                                                                                                                                                                                       \
+    disjoint behaviors; */                                                                                                                                                                                                                                                                                                                                                                    \
 linkage result__Bool_Error stack_##type##_pop( \
     borrowed(stack_##type*) s, borrowed(type*) out) \
 { \
@@ -373,6 +458,19 @@ linkage result__Bool_Error stack_##type##_pop( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+    assigns s->len;                                                                                                                                                                                                                                                                                                                                                                           \
+    behavior some:                                                                                                                                                                                                                                                                                                                                                                            \
+    assumes s != \null && s->items != \null && s->len > 0;                                                                                                                                                                                                                                                                                                                                    \
+    assigns s->len;                                                                                                                                                                                                                                                                                                                                                                           \
+    ensures \result.has_value == \true;                                                                                                                                                                                                                                                                                                                                                       \
+    ensures \result.value == \old(s->items[s->len - 1]);                                                                                                                                                                                                                                                                                                                                      \
+    ensures s->len == \old(s->len) - 1;                                                                                                                                                                                                                                                                                                                                                       \
+    behavior none:                                                                                                                                                                                                                                                                                                                                                                            \
+    assumes s == \null || (s != \null && (s->items == \null || s->len == 0));                                                                                                                                                                                                                                                                                                                 \
+    ensures \result.has_value == \false;                                                                                                                                                                                                                                                                                                                                                      \
+    complete behaviors;                                                                                                                                                                                                                                                                                                                                                                       \
+    disjoint behaviors; */                                                                                                                                                                                                                                                                                                                                                                    \
 linkage option_##type stack_##type##_pop_option( \
     borrowed(stack_##type*) s) \
 { \
@@ -391,6 +489,8 @@ linkage option_##type stack_##type##_pop_option( \
  * \
  * @pre s   != NULL (programming error — triggers require_msg) \
  * @pre out != NULL (programming error — triggers require_msg) \
+ * @pre out does not point into the stack's buffer or at the stack itself: \
+ *      the copy would write the stack (VERIFY-049 S5, as vec's G1) \
  * \
  * @post Stack is unchanged \
  * \
@@ -398,6 +498,21 @@ linkage option_##type stack_##type##_pop_option( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires \valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)));  \
+    requires \valid(out);                                                                                                                                                                                                               \
+    requires \separated(out, s);                                                                                                                                                                                                        \
+    requires s->capacity > 0 ==> \separated(out, s->items + (0 .. s->capacity - 1));                                                                                                                                                    \
+    assigns *out;                                                                                                                                                                                                                       \
+    behavior empty:                                                                                                                                                                                                                     \
+    assumes s->len == 0;                                                                                                                                                                                                                \
+    assigns \nothing;                                                                                                                                                                                                                   \
+    ensures \result == \false;                                                                                                                                                                                                          \
+    behavior top:                                                                                                                                                                                                                       \
+    assumes s->len > 0;                                                                                                                                                                                                                 \
+    ensures \result == \true;                                                                                                                                                                                                           \
+    ensures *out == s->items[s->len - 1];                                                                                                                                                                                               \
+    complete behaviors;                                                                                                                                                                                                                 \
+    disjoint behaviors; */                                                                                                                                                                                                              \
 linkage bool stack_##type##_peek( \
     borrowed(const stack_##type*) s, borrowed(type*) out) \
 { \
@@ -428,6 +543,17 @@ linkage bool stack_##type##_peek( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires \valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)));  \
+    assigns \nothing;                                                                                                                                                                                                                   \
+    behavior empty:                                                                                                                                                                                                                     \
+    assumes s->len == 0;                                                                                                                                                                                                                \
+    ensures \result.has_value == \false;                                                                                                                                                                                                \
+    behavior top:                                                                                                                                                                                                                       \
+    assumes s->len > 0;                                                                                                                                                                                                                 \
+    ensures \result.has_value == \true;                                                                                                                                                                                                 \
+    ensures \result.value == s->items[s->len - 1];                                                                                                                                                                                      \
+    complete behaviors;                                                                                                                                                                                                                 \
+    disjoint behaviors; */                                                                                                                                                                                                              \
 linkage option_##type stack_##type##_peek_option( \
     borrowed(const stack_##type*) s) \
 { \
@@ -448,6 +574,9 @@ linkage option_##type stack_##type##_peek_option( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+    assigns \nothing;                                                                                                                                                                                                                                   \
+    ensures \result == (s == \null ? 0 : s->len); */                                                                                                                                                                                                    \
 linkage usize stack_##type##_len( \
     borrowed(const stack_##type*) s) \
 { \
@@ -464,6 +593,9 @@ linkage usize stack_##type##_len( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+    assigns \nothing;                                                                                                                                                                                                                                   \
+    ensures \result == (s == \null ? 0 : s->capacity); */                                                                                                                                                                                               \
 linkage usize stack_##type##_capacity( \
     borrowed(const stack_##type*) s) \
 { \
@@ -480,6 +612,10 @@ linkage usize stack_##type##_capacity( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+    assigns \nothing;                                                                                                                                                                                                                                   \
+    ensures s == \null ==> \result == 0;                                                                                                                                                                                                                \
+    ensures s != \null ==> \result == s->capacity - s->len; */                                                                                                                                                                                          \
 linkage usize stack_##type##_remaining( \
     borrowed(const stack_##type*) s) \
 { \
@@ -496,6 +632,9 @@ linkage usize stack_##type##_remaining( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+    assigns \nothing;                                                                                                                                                                                                                                   \
+    ensures \result <==> (s == \null || s->len == 0); */                                                                                                                                                                                                \
 linkage bool stack_##type##_is_empty( \
     borrowed(const stack_##type*) s) \
 { \
@@ -512,6 +651,9 @@ linkage bool stack_##type##_is_empty( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || (\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1))));  \
+    assigns \nothing;                                                                                                                                                                                                                                   \
+    ensures \result <==> (s == \null || s->len >= s->capacity); */                                                                                                                                                                                      \
 linkage bool stack_##type##_is_full( \
     borrowed(const stack_##type*) s) \
 { \
@@ -531,6 +673,17 @@ linkage bool stack_##type##_is_full( \
  * - Time:  O(1) \
  * - Space: O(1) \
  */ \
+/*@ requires s == \null || ((\valid_read(s) && s->len <= s->capacity && s->capacity <= CANON_VEC_MAX_CAPACITY / sizeof(*s->items) && (s->items == \null ==> s->capacity == 0) && (s->capacity > 0 ==> \valid_read(s->items + (0 .. s->capacity - 1)))) && \valid(s) && (s->capacity > 0 ==> \valid(s->items + (0 .. s->capacity - 1))) && \separated(s, s->items + (0 .. s->capacity - 1)));  \
+    assigns s->len;                                                                                                                                                                                                                                                                                                                                                                           \
+    behavior null:                                                                                                                                                                                                                                                                                                                                                                            \
+    assumes s == \null;                                                                                                                                                                                                                                                                                                                                                                       \
+    assigns \nothing;                                                                                                                                                                                                                                                                                                                                                                         \
+    behavior live:                                                                                                                                                                                                                                                                                                                                                                            \
+    assumes s != \null;                                                                                                                                                                                                                                                                                                                                                                       \
+    assigns s->len;                                                                                                                                                                                                                                                                                                                                                                           \
+    ensures s->len == 0;                                                                                                                                                                                                                                                                                                                                                                      \
+    complete behaviors;                                                                                                                                                                                                                                                                                                                                                                       \
+    disjoint behaviors; */                                                                                                                                                                                                                                                                                                                                                                    \
 linkage void stack_##type##_clear(borrowed(stack_##type*) s) { \
     MANGLE_VEC_CLEAR(type)(s); \
 }
@@ -552,7 +705,7 @@ linkage void stack_##type##_clear(borrowed(stack_##type*) s) { \
  * @param type Element type — DECLARE_VEC(type) must be called first
  *
  * @pre DECLARE_VEC(type) has already been called for the same type
- * @pre option_##type is available (from CANON_OPTION(type))
+ * @pre option_##type is declared (DECLARE_OPTION_ALL(extern, type))
  */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DECLARE_STACK(type) \

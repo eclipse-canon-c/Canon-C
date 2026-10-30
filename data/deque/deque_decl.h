@@ -38,21 +38,31 @@
  * ────────────────────────────────────────────────────────────────────────────
  * - Requires C99 or later
  *
- * Typical usage — in a shared header (e.g. tasks.h):
+ * Typical usage — in a shared header (e.g. tasks.h). The deque's
+ * functions name option_Task, so its declarations come first:
  * ```c
+ * #include "semantics/option/option_decl.h"
  * #include "data/deque/deque_decl.h"
- * DECLARE_DEQUE(int)
+ * #include "task.h"                  // typedef struct { ... } Task;
+ * DECLARE_OPTION_ALL(extern, Task)
  * DECLARE_DEQUE(Task)
  * ```
  *
- * Matching definition — in exactly one .c file (e.g. tasks.c):
+ * Matching definition — in exactly one .c file (e.g. tasks.c), with
+ * external linkage:
  * ```c
+ * #include "semantics/option/option_defn.h"
  * #include "data/deque/deque_defn.h"
- * CANON_OPTION(int)
- * DEFINE_DEQUE(, int)
- * CANON_OPTION(Task)
+ * #include "task.h"
+ * DEFINE_OPTION_ALL(, Task)
  * DEFINE_DEQUE(, Task)
  * ```
+ *
+ * tasks.c does not include tasks.h: DEFINE_* emits the struct typedefs
+ * DECLARE_* already emitted, and C99 forbids a repeated typedef. Task's own
+ * typedef lives in a header both include (task.h here). This recipe is
+ * built and linked by test/integration/separate_compilation_test.c
+ * (VERIFY-049).
  *
  * @sa deque_defn.h, deque_mangle.h, deque_impl.h, deque.h
  */
@@ -82,7 +92,7 @@
  * @note Must be matched by exactly one DEFINE_DEQUE(linkage, type) in a .c file.
  * @note Do NOT use DECLARE_DEQUE if you are using the header-only path via deque.h.
  * @note MANGLE_DEQUE_OPTION_TYPE(type) must be available at the declaration site —
- *       include semantics/option/option.h and call CANON_OPTION(type) beforehand.
+ *       DECLARE_OPTION_ALL(extern, type) beforehand, as in the example above.
  *
  * Note on result__Bool_Error:
  *   push and pop functions return result__Bool_Error (not result_bool_Error)
@@ -101,7 +111,7 @@ IMPL_DEQUE_STRUCT( \
 ) \
 \
 /* Constructor */ \
-extern void                    MANGLE_DEQUE_INIT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) buffer, usize capacity); \
+extern void                    MANGLE_DEQUE_INIT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) buffer, usize capacity); \
 extern MANGLE_DEQUE_TYPE(type) MANGLE_DEQUE_EMPTY(type)(void); \
 \
 /* Queries */ \
@@ -124,16 +134,16 @@ extern void MANGLE_DEQUE_PUSH_FRONT_UNCHECKED(type)(borrowed(MANGLE_DEQUE_TYPE(t
 extern void MANGLE_DEQUE_PUSH_BACK_UNCHECKED(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, type item); \
 \
 /* Pop — Result variants */ \
-extern result__Bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
-extern result__Bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
+extern result__Bool_Error MANGLE_DEQUE_POP_FRONT(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern result__Bool_Error MANGLE_DEQUE_POP_BACK(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
 \
 /* Pop — Option variants */ \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_FRONT_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_POP_BACK_OPTION(type)(borrowed(MANGLE_DEQUE_TYPE(type)*) d); \
 \
 /* Peek — bool variants */ \
-extern bool MANGLE_DEQUE_PEEK_FRONT(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
-extern bool MANGLE_DEQUE_PEEK_BACK(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed((type)*) out); \
+extern bool MANGLE_DEQUE_PEEK_FRONT(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
+extern bool MANGLE_DEQUE_PEEK_BACK(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d, borrowed(type*) out); \
 \
 /* Peek — Option variants */ \
 extern MANGLE_DEQUE_OPTION_TYPE(type) MANGLE_DEQUE_PEEK_FRONT_OPTION(type)(borrowed(const MANGLE_DEQUE_TYPE(type)*) d); \
