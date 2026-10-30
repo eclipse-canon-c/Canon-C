@@ -26156,3 +26156,28 @@ The script fails on any failed compile, or if either list is empty.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Scored (2026-10-30)
+
+CI #1393 (09ff426) is green in every job, the author reports. That
+includes `Canon-C CC` #65. The record landed as the commit before it. The
+author attached the `misra` output.
+
+| # | verdict |
+|---|---------|
+| A-P1 | **MATCH**. `embedded` passes. The script fails on any failed compile, and on an empty header or test list, so a green job means 133 of 133 at all six configurations. Its log was not read. |
+| A-P2 | **MATCH**. `frama-c-error` is green. It is enforced and fails if 65 / 65, the unproved set or the roll-call moves. |
+| A-P3 | **MATCH**. `Real violations: 55`. The 58 findings equal, by file, line, column and rule, the local scan the prediction was made from, and so CI #1392's. |
+| A-P4 | **MATCH**. Every other job is green. |
+
+**Status**: A1 to A3 are fixed. Canon-C compiles for bare-metal Cortex-M0+
+and Cortex-M4 with newlib, and CI holds it there. That is compile only, as
+the record and the README say. VERIFY-046 is closed.
+
+With this, three of the platform additions decided on 2026-10-28 are done:
+- C23 (VERIFY-044);
+- big-endian s390x (VERIFY-045);
+- bare-metal Arm (VERIFY-046).
+
+musl and AArch64 Linux came first, in VERIFY-043. What remains of the list
+is the optional item: WP at `x86_win64`.
