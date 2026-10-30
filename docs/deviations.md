@@ -26303,3 +26303,22 @@ After that the job is enforced (`ENFORCE=1`).
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+**Addendum (2026-10-30): CI #1394 did not start.** The fix commit, pushed
+as 07ed9aa, made `cmake-multi-platform.yml` 517,264 bytes. GitHub runs no
+workflow file over its 500 KB limit, and the run failed with "a workflow
+file issue" and no job. The limit is 512,000 bytes: the file was 511,502
+at CI #1393, which ran.
+- **So no prediction was tested.** The other workflows ran, the probes
+  green, and `Canon-C CC` was still running when this was written.
+- **Fix, in the commit after this addendum:** six platform jobs move,
+  unchanged, to a new workflow, `platforms.yml`: `musl`, `build-arm64`,
+  `c-standards`, `big-endian`, `embedded` and `frama-c-win64`. A job
+  cannot need a job of another workflow, so they no longer wait for
+  `build`. The main file goes to 504,733 bytes.
+- **A guard:** a `workflow-size` job in `platforms.yml` fails if any
+  workflow file reaches 512,000 bytes, and warns from 491,520. The main
+  file is above that warning now, so new jobs go in files of their own.
+- **W-P1 to W-P5 stand unchanged** for the first run of the two
+  workflows. W-P5's "every other job" now covers both files, and the new
+  `workflow-size` job is predicted green (H).
