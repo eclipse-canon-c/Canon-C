@@ -14,7 +14,7 @@ cite.
 | 3 | `analysis.yml` | 3 · Static analysis & coverage | clang-tidy and Cppcheck, MISRA C:2012, MC/DC and branch coverage, CompCert | static-analysis and coverage's threshold: yes. MISRA: advisory. CompCert: informational |
 | 4 | `proofs-core.yml` | 4 · Proofs: core/ | Frama-C WP, one job per unit of core/ and core/primitives/, plus arena at 32-bit and memory/bits at LLP64 | yes, each job on its pins |
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
-| 6 | `proofs-data.yml` | 6 · Proofs: data/ | WP for vec, deque, bitset, priority_queue, range, vec_range, vec_fmt, stringbuf, stack | yes |
+| 6 | `proofs-data.yml` | 6 · Proofs: data/ | WP for vec, deque, bitset, priority_queue, range, vec_range, vec_fmt, stringbuf, stack, array | yes |
 | 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family | per family's gates |
 | 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls) and the workflow-size guard | yes |
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3). Each runs only when its own paths change | a probe's MISS fails it |

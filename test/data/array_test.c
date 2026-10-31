@@ -34,7 +34,7 @@
  *   - array_int_8_first_option(a)      — Some / None
  *   - array_int_8_last_option(a)       — Some / None
  *   - array_int_8_fill_all(a, val)     — all elements mutated
- *   - array_int_8_copy_from(dst, src)  — deep element copy
+ *   - array_int_8_copy_from(dst, src)  — deep element copy; dst == src
  *   - array_int_8_equal(a, b)          — true / false / self-equal
  *   - array_int_8_as_slice(a)          — non-owning slice view
  *   - array_int_8_as_bytes(a)          — mutable bytes view
@@ -358,6 +358,22 @@ static void test_copy_from(void)
     EXPECT(src_val == 10);
 }
 
+/* VERIFY-052 A1: copying an array onto itself. Before the fix this was
+ * memcpy with source and destination the same object, undefined behaviour
+ * (C99 7.21.2.1) that sanitizers do not report. It is now a struct
+ * assignment, defined when the objects coincide exactly (C99 6.5.16.1p3). */
+static void test_copy_from_self(void)
+{
+    int src_data[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    array_int_8 a = array_int_8_from_ptr(src_data, 8);
+
+    array_int_8_copy_from(&a, &a);
+
+    for (usize i = 0; i < 8; i++) {
+        EXPECT(a.items[i] == src_data[i]);
+    }
+}
+
 /* ── equal ───────────────────────────────────────────────────────────────── */
 
 static void test_equal(void)
@@ -642,6 +658,7 @@ int main(void)
     test_first_last();
     test_fill_all();
     test_copy_from();
+    test_copy_from_self();
     test_equal();
     test_as_slice();
     test_as_bytes();

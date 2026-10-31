@@ -568,6 +568,7 @@ jobs:
           ./vec_range_cover
           ./vec_fmt_cover
           ./stack_cover
+          ./array_cover
       
       - name: Collect branch coverage data (lcov)
         run: |
@@ -1709,6 +1710,31 @@ jobs:
             cat "$GCOV"
           else
             echo "No stack_cover.c.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for array.h (cover TU)"
+        # MCDC-020 (VERIFY-052). array.h's conditions are stamped to the cover
+        # TU's instantiation line; option is defined under test/support.
+        # Measured locally (GCC 14) 42 / 46: the four misses are checked_mul's
+        # failure at from_ptr, size_bytes, as_bytes and as_cbytes, dead (the
+        # product is the size of an object that exists). Any other miss is a
+        # gap in the cover TU. Report-only. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "array_cover.c.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate array_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "array_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in array_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No array_cover.c.gcov file generated"
           fi
       - name: "Debug: per-line MC/DC detail for priority_queue.h"
         # Added 2026-09-07 with MCDC-014. priority_queue.h reached 81/82 (MCDC-014); the one

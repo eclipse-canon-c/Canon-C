@@ -135,8 +135,8 @@
  * ```c
  * #include "data/array.h"
  *
- * CANON_OPTION(int)    // must precede DEFINE_ARRAY when using _option functions
- * DEFINE_SLICE(int)    // must precede DEFINE_ARRAY when using as_slice
+ * CANON_OPTION(int)    // must precede DEFINE_ARRAY (it names option_int)
+ * DEFINE_SLICE(int)    // must precede DEFINE_ARRAY (it names slice_int)
  * DEFINE_ARRAY(int, 8)
  *
  * // Zero-initialize all elements
@@ -167,6 +167,12 @@
  * @sa core/ownership.h           -- owned/borrowed/moved/dropped annotations
  * @sa core/primitives/checked.h  -- checked_mul() for overflow-safe arithmetic
  * @sa semantics/option/option.h  -- CANON_OPTION(type) must precede DEFINE_ARRAY
+ *
+ * Verification (VERIFY-052): every generated function carries an ACSL
+ * contract in the macro body, proved by WP under -CC at (int, 8)
+ * (vmacros/vdrivers/array_verify.h, job frama-c-array). The contracts name
+ * the element count as sizeof(x.items) / sizeof(x.items[0]): ACSL in a
+ * macro body cannot name the parameter N.
  */
 
 /* ============================================================================
@@ -180,9 +186,11 @@
  * Requirements:
  * - N > 0 -- checked via static_require at instantiation
  * - type must be trivially copyable (memcpy-safe)
- * - DEFINE_SLICE(type) must be called before DEFINE_ARRAY to use as_slice
- * - CANON_OPTION(type) must be called before DEFINE_ARRAY to use any
- *   _option functions (get_option, first_option, last_option)
+ * - DEFINE_SLICE(type) and CANON_OPTION(type) must both be called before
+ *   DEFINE_ARRAY, whichever functions the program uses: DEFINE_ARRAY
+ *   generates all of them, so as_slice names slice_##type and the three
+ *   _option functions name option_##type. Without them it does not compile
+ *   (VERIFY-052 A2).
  *
  * Note on static_require:
  * The static assertion message incorporates both type and N
@@ -247,15 +255,23 @@ typedef struct { \
    Constructors
    ============================================================================ */ \
 \
+/*@ assigns \nothing;                                                                               \
+    ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == 0; */\
 static inline array_##type##_##N array_##type##_##N##_zero(void) { \
     array_##type##_##N a; \
     memset(a.items, 0, sizeof(a.items)); \
     return a; \
 } \
 \
+/*@ assigns \nothing;                                                                               \
+    ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == val; */\
 static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
     array_##type##_##N a; \
     usize _i; \
+    /*@ loop invariant 0 <= _i <= (sizeof(a.items) / sizeof(a.items[0]));                           \
+        loop invariant \forall integer k; 0 <= k < _i ==> a.items[k] == val;                        \
+        loop assigns _i, a.items[0 .. (sizeof(a.items) / sizeof(a.items[0])) - 1];                  \
+        loop variant (sizeof(a.items) / sizeof(a.items[0])) - _i; */                                \
     for (_i = 0; _i < (usize)(N); _i++) { \
         a.items[_i] = val; \
     } \
@@ -272,6 +288,17 @@ static inline array_##type##_##N array_##type##_##N##_fill(type val) { \
  * If count > N, only the first N elements are copied. \
  * Returns a zeroed array if src == NULL or count == 0. \
  */ \
+/*@ requires src == \null || count == 0 || \valid_read(src + (0 .. count - 1));                     \
+    assigns \nothing;                                                                               \
+    behavior none:                                                                                  \
+      assumes src == \null || count == 0;                                                           \
+      ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == 0;\
+    behavior copy:                                                                                  \
+      assumes src != \null && count > 0;                                                            \
+      ensures \forall integer k; 0 <= k < (sizeof(\result.items) / sizeof(\result.items[0])) && k < count ==> \result.items[k] == src[k];\
+      ensures \forall integer k; count <= k < (sizeof(\result.items) / sizeof(\result.items[0])) ==> \result.items[k] == 0;\
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline array_##type##_##N array_##type##_##N##_from_ptr( \
     borrowed(const type *) src, usize count) { \
     array_##type##_##N a; \
@@ -290,6 +317,7 @@ static inline array_##type##_##N array_##type##_##N##_from_ptr( \
    ============================================================================ */ \
 \
 /** @brief Returns the number of elements (always N). O(1) */ \
+/*@ assigns \nothing; */                                                                            \
 static inline usize array_##type##_##N##_len(void) { \
     return (usize)(N); \
 } \
@@ -298,6 +326,7 @@ static inline usize array_##type##_##N##_len(void) { \
  * @brief Returns the total size in bytes (N * sizeof(type)). \
  * Returns CANON_USIZE_MAX on overflow (unreachable in practice). O(1) \
  */ \
+/*@ assigns \nothing; */                                                                            \
 static inline usize array_##type##_##N##_size_bytes(void) { \
     usize result; \
     if (!checked_mul((usize)(N), sizeof(type), &result)) { \
@@ -316,6 +345,19 @@ static inline usize array_##type##_##N##_size_bytes(void) { \
  * @param out borrowed(type*) -- written into caller's storage \
  * @return true on success, false if a == NULL, out == NULL, or i >= N. O(1) \
  */ \
+/*@ requires a == \null || \valid_read(a);                                                          \
+    requires out == \null || \valid(out);                                                           \
+    assigns *out;                                                                                   \
+    behavior refuse:                                                                                \
+      assumes a == \null || out == \null || i >= (sizeof((*a).items) / sizeof((*a).items[0]));      \
+      ensures \result == \false;                                                                    \
+      ensures out != \null ==> *out == \old(*out);                                                  \
+    behavior ok:                                                                                    \
+      assumes a != \null && out != \null && i < (sizeof((*a).items) / sizeof((*a).items[0]));       \
+      ensures \result == \true;                                                                     \
+      ensures *out == \old(a->items[i]);                                                            \
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline bool array_##type##_##N##_get( \
     borrowed(const array_##type##_##N *) a, usize i, borrowed(type *) out) { \
     if (!a || !out || i >= (usize)(N)) { return false; } \
@@ -329,6 +371,16 @@ static inline bool array_##type##_##N##_get( \
  * @return Some(element) on success, None if a == NULL or i >= N. O(1) \
  * @pre CANON_OPTION(type) must have been called before DEFINE_ARRAY(type, N). \
  */ \
+/*@ requires a == \null || \valid_read(a);                                                          \
+    assigns \nothing;                                                                               \
+    behavior none:                                                                                  \
+      assumes a == \null || i >= (sizeof((*a).items) / sizeof((*a).items[0]));                      \
+      ensures \result.has_value == \false;                                                          \
+    behavior some:                                                                                  \
+      assumes a != \null && i < (sizeof((*a).items) / sizeof((*a).items[0]));                       \
+      ensures \result.has_value == \true && \result.value == a->items[i];                           \
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline option_##type array_##type##_##N##_get_option( \
     borrowed(const array_##type##_##N *) a, usize i) { \
     if (!a || i >= (usize)(N)) { return option_##type##_none(); } \
@@ -342,6 +394,10 @@ static inline option_##type array_##type##_##N##_get_option( \
  * @pre i < N -- caller must guarantee this \
  * @note Checked via ensure_msg() in debug builds only. O(1) \
  */ \
+/*@ requires \valid_read(a);                                                                        \
+    requires i < (sizeof((*a).items) / sizeof((*a).items[0]));                                      \
+    assigns \nothing;                                                                               \
+    ensures \result == a->items[i]; */                                                              \
 static inline type array_##type##_##N##_get_unchecked( \
     borrowed(const array_##type##_##N *) a, usize i) { \
     ensure_msg(a != NULL,       "array_" #type "_" #N "_get_unchecked: a cannot be NULL"); \
@@ -354,6 +410,19 @@ static inline type array_##type##_##N##_get_unchecked( \
  * @param a   borrowed(array_##type##_##N*) \
  * @return true on success, false if a == NULL or i >= N. O(1) \
  */ \
+/*@ requires a == \null || \valid(a);                                                               \
+    assigns a->items[0 .. (sizeof((*a).items) / sizeof((*a).items[0])) - 1];                        \
+    behavior refuse:                                                                                \
+      assumes a == \null || i >= (sizeof((*a).items) / sizeof((*a).items[0]));                      \
+      ensures \result == \false;                                                                    \
+      ensures a != \null ==> \forall integer k; 0 <= k < (sizeof((*a).items) / sizeof((*a).items[0])) ==> a->items[k] == \old(a->items[k]);\
+    behavior ok:                                                                                    \
+      assumes a != \null && i < (sizeof((*a).items) / sizeof((*a).items[0]));                       \
+      ensures \result == \true;                                                                     \
+      ensures a->items[i] == val;                                                                   \
+      ensures \forall integer k; 0 <= k < (sizeof((*a).items) / sizeof((*a).items[0])) && k != i ==> a->items[k] == \old(a->items[k]);\
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline bool array_##type##_##N##_set( \
     borrowed(array_##type##_##N *) a, usize i, type val) { \
     if (!a || i >= (usize)(N)) { return false; } \
@@ -366,6 +435,16 @@ static inline bool array_##type##_##N##_set( \
  * @param a   borrowed(array_##type##_##N*) \
  * @return borrowed(type*) -- view into a's storage; caller must NOT free \
  */ \
+/*@ requires a == \null || \valid(a);                                                               \
+    assigns \nothing;                                                                               \
+    behavior none:                                                                                  \
+      assumes a == \null || i >= (sizeof((*a).items) / sizeof((*a).items[0]));                      \
+      ensures \result == \null;                                                                     \
+    behavior some:                                                                                  \
+      assumes a != \null && i < (sizeof((*a).items) / sizeof((*a).items[0]));                       \
+      ensures \result == &a->items[i];                                                              \
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline borrowed(type *) array_##type##_##N##_at( \
     borrowed(array_##type##_##N *) a, usize i) { \
     if (!a || i >= (usize)(N)) { return NULL; } \
@@ -377,6 +456,9 @@ static inline borrowed(type *) array_##type##_##N##_at( \
  * @param a   borrowed(array_##type##_##N*) \
  * @return borrowed(type*) -- view into a's storage; caller must NOT free \
  */ \
+/*@ requires \valid(a);                                                                             \
+    assigns \nothing;                                                                               \
+    ensures \result == &a->items[0]; */                                                             \
 static inline borrowed(type *) array_##type##_##N##_first( \
     borrowed(array_##type##_##N *) a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_first: a cannot be NULL"); \
@@ -388,6 +470,9 @@ static inline borrowed(type *) array_##type##_##N##_first( \
  * @param a   borrowed(array_##type##_##N*) \
  * @return borrowed(type*) -- view into a's storage; caller must NOT free \
  */ \
+/*@ requires \valid(a);                                                                             \
+    assigns \nothing;                                                                               \
+    ensures \result == &a->items[(sizeof((*a).items) / sizeof((*a).items[0])) - 1]; */              \
 static inline borrowed(type *) array_##type##_##N##_last( \
     borrowed(array_##type##_##N *) a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_last: a cannot be NULL"); \
@@ -399,6 +484,16 @@ static inline borrowed(type *) array_##type##_##N##_last( \
  * @param a   borrowed(const array_##type##_##N*) \
  * @pre CANON_OPTION(type) must have been called before DEFINE_ARRAY(type, N). \
  */ \
+/*@ requires a == \null || \valid_read(a);                                                          \
+    assigns \nothing;                                                                               \
+    behavior none:                                                                                  \
+      assumes a == \null;                                                                           \
+      ensures \result.has_value == \false;                                                          \
+    behavior some:                                                                                  \
+      assumes a != \null;                                                                           \
+      ensures \result.has_value == \true && \result.value == a->items[0];                           \
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline option_##type array_##type##_##N##_first_option( \
     borrowed(const array_##type##_##N *) a) { \
     if (!a) { return option_##type##_none(); } \
@@ -410,6 +505,16 @@ static inline option_##type array_##type##_##N##_first_option( \
  * @param a   borrowed(const array_##type##_##N*) \
  * @pre CANON_OPTION(type) must have been called before DEFINE_ARRAY(type, N). \
  */ \
+/*@ requires a == \null || \valid_read(a);                                                          \
+    assigns \nothing;                                                                               \
+    behavior none:                                                                                  \
+      assumes a == \null;                                                                           \
+      ensures \result.has_value == \false;                                                          \
+    behavior some:                                                                                  \
+      assumes a != \null;                                                                           \
+      ensures \result.has_value == \true && \result.value == a->items[(sizeof((*a).items) / sizeof((*a).items[0])) - 1];\
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline option_##type array_##type##_##N##_last_option( \
     borrowed(const array_##type##_##N *) a) { \
     if (!a) { return option_##type##_none(); } \
@@ -424,10 +529,17 @@ static inline option_##type array_##type##_##N##_last_option( \
  * @brief Sets every element to val. NULL-safe: no-op when a == NULL. O(N) \
  * @param a   borrowed(array_##type##_##N*) \
  */ \
+/*@ requires a == \null || \valid(a);                                                               \
+    assigns a->items[0 .. (sizeof((*a).items) / sizeof((*a).items[0])) - 1];                        \
+    ensures a != \null ==> \forall integer k; 0 <= k < (sizeof((*a).items) / sizeof((*a).items[0])) ==> a->items[k] == val; */\
 static inline void array_##type##_##N##_fill_all( \
     borrowed(array_##type##_##N *) a, type val) { \
     usize _i; \
     if (!a) { return; } \
+    /*@ loop invariant 0 <= _i <= (sizeof((*a).items) / sizeof((*a).items[0]));                     \
+        loop invariant \forall integer k; 0 <= k < _i ==> a->items[k] == val;                       \
+        loop assigns _i, a->items[0 .. (sizeof((*a).items) / sizeof((*a).items[0])) - 1];           \
+        loop variant (sizeof((*a).items) / sizeof((*a).items[0])) - _i; */                          \
     for (_i = 0; _i < (usize)(N); _i++) { \
         a->items[_i] = val; \
     } \
@@ -439,13 +551,21 @@ static inline void array_##type##_##N##_fill_all( \
  * @param src borrowed(const array_##type##_##N*) -- caller retains ownership \
  * @pre dst != NULL \
  * @pre src != NULL \
+ * \
+ * dst may be src: the copy is then a no-op. It is a struct assignment, \
+ * which C defines when the two objects coincide exactly; memcpy, used \
+ * before VERIFY-052 (A1), is undefined for overlapping objects. \
  */ \
+/*@ requires \valid(dst);                                                                           \
+    requires \valid_read(src);                                                                      \
+    assigns *dst;                                                                                   \
+    ensures *dst == \old(*src); */                                                                  \
 static inline void array_##type##_##N##_copy_from( \
     borrowed(array_##type##_##N *)       dst, \
     borrowed(const array_##type##_##N *) src) { \
     require_msg(dst != NULL, "array_" #type "_" #N "_copy_from: dst cannot be NULL"); \
     require_msg(src != NULL, "array_" #type "_" #N "_copy_from: src cannot be NULL"); \
-    memcpy(dst->items, src->items, sizeof(dst->items)); \
+    *dst = *src; \
 } \
 \
 /* ============================================================================
@@ -463,6 +583,27 @@ static inline void array_##type##_##N##_copy_from( \
  * \
  * @return false if a == NULL or b == NULL. \
  */ \
+/*@ requires a == \null || \valid_read(a);                                                          \
+    requires b == \null || \valid_read(b);                                                          \
+    requires init_ab: (a != \null && b != \null && a != b) ==>                                      \
+             (\initialized((char *)a->items + (0 .. sizeof(a->items) - 1)) &&                       \
+              \initialized((char *)b->items + (0 .. sizeof(b->items) - 1)));                        \
+    requires no_dangling_a: (a != \null && b != \null && a != b) ==>                                \
+             \forall integer k; 0 <= k < sizeof(a->items) ==> !\dangling((char *)a->items + k);     \
+    requires no_dangling_b: (a != \null && b != \null && a != b) ==>                                \
+             \forall integer k; 0 <= k < sizeof(b->items) ==> !\dangling((char *)b->items + k);     \
+    assigns \nothing;                                                                               \
+    behavior null_arg:                                                                              \
+      assumes a == \null || b == \null;                                                             \
+      ensures \result == \false;                                                                    \
+    behavior same:                                                                                  \
+      assumes a != \null && a == b;                                                                 \
+      ensures \result == \true;                                                                     \
+    behavior compare:                                                                               \
+      assumes a != \null && b != \null && a != b;                                                   \
+      ensures \result == \true <==> memcmp{Pre,Pre}((char *)a->items, (char *)b->items, sizeof(a->items)) == 0;\
+    complete behaviors;                                                                             \
+    disjoint behaviors; */                                                                          \
 static inline bool array_##type##_##N##_equal( \
     borrowed(const array_##type##_##N *) a, \
     borrowed(const array_##type##_##N *) b) { \
@@ -485,6 +626,9 @@ static inline bool array_##type##_##N##_equal( \
  * @pre DEFINE_SLICE(type) must have been called before DEFINE_ARRAY(type, N). \
  * @pre a != NULL \
  */ \
+/*@ requires \valid(a);                                                                             \
+    assigns \nothing;                                                                               \
+    ensures \result.ptr == &a->items[0] && \result.len == (sizeof((*a).items) / sizeof((*a).items[0])); */\
 static inline borrowed(slice_##type) array_##type##_##N##_as_slice( \
     borrowed(array_##type##_##N *) a) { \
     require_msg(a != NULL, "array_" #type "_" #N "_as_slice: a cannot be NULL"); \
@@ -499,6 +643,9 @@ static inline borrowed(slice_##type) array_##type##_##N##_as_slice( \
  * Returns bytes_empty() on overflow (unreachable in practice). \
  * @pre a != NULL \
  */ \
+/*@ requires \valid(a);                                                                             \
+    assigns \nothing;                                                                               \
+    ensures \result.ptr == (u8 *)&a->items[0] && \result.len == sizeof(a->items); */                \
 static inline borrowed(bytes_t) array_##type##_##N##_as_bytes( \
     borrowed(array_##type##_##N *) a) { \
     usize byte_size; \
@@ -517,6 +664,9 @@ static inline borrowed(bytes_t) array_##type##_##N##_as_bytes( \
  * Returns cbytes_empty() on overflow (unreachable in practice). \
  * @pre a != NULL \
  */ \
+/*@ requires \valid_read(a);                                                                        \
+    assigns \nothing;                                                                               \
+    ensures \result.ptr == (const u8 *)&a->items[0] && \result.len == sizeof(a->items); */          \
 static inline borrowed(cbytes_t) array_##type##_##N##_as_cbytes( \
     borrowed(const array_##type##_##N *) a) { \
     usize byte_size; \

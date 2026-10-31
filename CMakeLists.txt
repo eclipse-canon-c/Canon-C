@@ -720,6 +720,18 @@ if(ENABLE_COVERAGE_TUS)
     # source, under test/, whose rows the coverage table filters out.
     target_compile_definitions(stack_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
 
-    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover, vec_fmt_cover, stack_cover)")
+    add_executable(array_cover vmacros/coverage/array_cover.c
+                               test/support/array_cover_option.c)
+    target_include_directories(array_cover PRIVATE
+        ${CMAKE_SOURCE_DIR}/core/primitives
+        ${CMAKE_SOURCE_DIR}/core
+        ${CMAKE_SOURCE_DIR}/semantics
+        ${CMAKE_SOURCE_DIR}/data
+        ${CMAKE_SOURCE_DIR})
+    # MCDC-020: array.h's conditions alone; option is defined in the second
+    # source, under test/, whose rows the coverage table filters out.
+    target_compile_definitions(array_cover PRIVATE CANON_NO_REQUIRE NDEBUG)
+
+    message(STATUS "Canon-C: coverage cover-TUs enabled (option_cover, result_cover, vec_cover, deque_cover, vec_range_cover, vec_fmt_cover, stack_cover, array_cover)")
  
 endif()
