@@ -268,6 +268,8 @@ typedef MANGLE_DEQUE_TYPE(type) queue_##type; \
  * @pre q != NULL \
  * @pre buffer != NULL \
  * @pre capacity > 0 \
+ * @pre capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(type) (deque_init's \
+ *      require_msg; under CANON_NO_REQUIRE it is not checked) \
  * \
  * @post Queue is empty, ready for enqueue/dequeue \
  * @post Capacity is fixed — no growth possible \
@@ -358,6 +360,9 @@ linkage void queue_##type##_enqueue_unchecked( \
  * @param out borrowed(type*) — pointer to store the dequeued value \
  * @return result__Bool_Error — Ok(true) on success \
  * \
+ * @pre out, if non-NULL, does not point into the queue's buffer: the copy \
+ *      would overwrite an element still queued (VERIFY-051) \
+ * \
  * @post Returns Err(ERR_INVALID_ARG)   if q == NULL, out == NULL, or q->buffer == NULL \
  * @post Returns Err(ERR_INVALID_STATE) if queue is empty \
  * \
@@ -399,6 +404,8 @@ linkage option_##type queue_##type##_dequeue_option( \
  * \
  * @pre q   != NULL (programming error — triggers require_msg) \
  * @pre out != NULL (programming error — triggers require_msg) \
+ * @pre out does not point into the queue's buffer: the copy would write a \
+ *      live element, and the queue would change (VERIFY-051) \
  * \
  * @post Queue is unchanged \
  * \

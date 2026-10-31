@@ -781,6 +781,10 @@ linkage void fn(borrowed(DequeType*) d, type item) { \
  * result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
  * ```
  *
+ * @pre out, if non-NULL, does not point into d's buffer: the copy would
+ *      write a live element (VERIFY-051, as vec's G1). The contract does not
+ *      require it; it claims nothing about the other elements.
+ *
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
  * @post Returns Err(ERR_INVALID_STATE) if d->size == 0
  * @post On Ok: *out holds removed element, head advanced, size decremented
@@ -841,6 +845,10 @@ linkage result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out) { \
  * ```c
  * result__Bool_Error fn(borrowed(DequeType*) d, borrowed(type*) out);
  * ```
+ *
+ * @pre out, if non-NULL, does not point into d's buffer: the copy would
+ *      write a live element (VERIFY-051, as vec's G1). The contract does not
+ *      require it; it claims nothing about the other elements.
  *
  * @post Returns Err(ERR_INVALID_ARG)   if d == NULL, out == NULL, or d->buffer == NULL
  * @post Returns Err(ERR_INVALID_STATE) if d->size == 0
@@ -993,10 +1001,13 @@ linkage OptionType fn(borrowed(DequeType*) d) { \
  *
  * @pre d   != NULL (programming error — triggers require_msg)
  * @pre out != NULL (programming error — triggers require_msg)
+ * @pre out, if non-NULL, does not point into d's buffer: the copy would
+ *      write a live element (VERIFY-051, as vec's G1). The contract does not
+ *      require it; it claims nothing about the other elements.
  *
  * @post Returns false if deque is empty — this is a normal query result
  * @post *out set on true return only
- * @post d is unchanged
+ * @post d is unchanged, and so are its elements if out is outside its buffer
  *
  * Performance:
  * - Time:  O(1)
@@ -1040,10 +1051,13 @@ linkage bool fn(borrowed(const DequeType*) d, borrowed(type*) out) { \
  *
  * @pre d   != NULL (programming error — triggers require_msg)
  * @pre out != NULL (programming error — triggers require_msg)
+ * @pre out, if non-NULL, does not point into d's buffer: the copy would
+ *      write a live element (VERIFY-051, as vec's G1). The contract does not
+ *      require it; it claims nothing about the other elements.
  *
  * @post Returns false if deque is empty — this is a normal query result
  * @post *out set on true return only
- * @post d is unchanged
+ * @post d is unchanged, and so are its elements if out is outside its buffer
  *
  * Performance:
  * - Time:  O(1)
