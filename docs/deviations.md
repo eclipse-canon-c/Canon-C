@@ -27033,3 +27033,151 @@ is GitHub's cache contention, not a test result.
 
 **L1: MATCH.** VERIFY-051 is closed. queue.h is done on the light
 treatment. Next in the agreed order is array.h, on the full treatment.
+
+---
+
+## VERIFY-052: Pre-registration — data/array.h, the Twenty-Fourth Unit: a Self-Copy That Was Undefined, and a Byte-View Residual Predicted by Name
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-052 (with MCDC-020) |
+| **Date**       | 2026-10-31 |
+| **Status**     | PREDICTED. This record and the rebuilt catalogue are committed before the contract and fix commit, which is pushed with them. Neither has run in CI. |
+| **Baseline**   | 6feed52 (VERIFY-051 closed) |
+| **Scope**      | `data/array.h` (20 macro-body contracts, two loop annotations, `copy_from`'s body, documentation); a new driver `vmacros/vdrivers/array_verify.h`; a new job `frama-c-array` in `proofs-data.yml`; a cover TU `vmacros/coverage/array_cover.c` with `test/support/array_cover_option.c`, registered in `CMakeLists.txt` and run, with a per-line debug step, by `coverage`; one test in `test/data/array_test.c`; the CI map |
+| **Category**   | Next data/ unit in the agreed order, on the full treatment: array.h has code of its own, not wrappers |
+
+**Why this record exists.** array.h is the fixed-size companion of vec: a
+struct holding `type items[N]`, and 20 generated functions. Unlike stack
+and queue, it does not delegate to a verified container. Its functions
+index, loop, and call `memset`, `memcpy` and `memcmp` themselves. This
+record commits the findings, the contracts, the unit, the predictions and
+the catalogue n(*P*) is measured against, before any CI run.
+
+### Findings demonstrated before any contract
+
+All probes: GCC 13 and 14, sanitizers on.
+
+**A1 — `copy_from(&a, &a)` was undefined behaviour.** It called
+`memcpy(dst->items, src->items, sizeof(dst->items))`, and C forbids
+overlapping objects for `memcpy` (C99 7.21.2.1). Nothing documented or
+refused `dst == src`.
+- Under the sanitizers the call returns the right contents, so no test
+  could have seen it. The undefinedness is by the standard, not observed.
+- Frama-C's libc contract for `memcpy` states it as a precondition,
+  `separation`. The local WP run (below) leaves it unproved.
+- **Fix**: `*dst = *src;`. Struct assignment is defined when the two
+  objects coincide exactly (C99 6.5.16.1p3). Two distinct arrays of one
+  type cannot partly overlap, so no other case remains. The documentation
+  says that `dst` may be `src`.
+- **Detection test**: `test_copy_from_self` in `array_test.c`. It passes on
+  both sides of the fix, since the failure is not observable. It holds the
+  case in the suite and the cover TU.
+- **What else changes.** `memcpy` copied padding bytes; struct assignment
+  need not. `equal` compares bytes, so after a copy, an element type with
+  padding could compare unequal. `equal`'s documentation already says it is
+  not meant for such types. For types without padding nothing changes.
+
+**A2 — the documentation understated what `DEFINE_ARRAY` needs.** It said
+`CANON_OPTION(T)` must precede it "to use any `_option` functions", and
+`DEFINE_SLICE(T)` "to use `as_slice`". `DEFINE_ARRAY` generates every
+function, so both are always required. `DEFINE_ARRAY(long, 4)` without them
+fails at `array.h:332`:
+
+    error: unknown type name 'option_long'
+
+**Fix**: the requirement, the quick-start comments and the `@sa` line now
+say so. This changes no code.
+
+The quick-start example compiles and gives the values its comments state.
+
+### The contracts
+
+The contracts are in the macro body, type-free, one per function, each
+before its definition. ACSL in a macro body cannot name the parameter `N`,
+so they name the element count as `sizeof(x.items) / sizeof(x.items[0])`.
+- **Accessors** (`get`, `get_option`, `set`, `at`, `first_option`,
+  `last_option`): `a` null or valid, and behaviours for refusal (null
+  argument or index out of range) and success. `set` frames all elements
+  and states that the others are unchanged.
+- **`get_unchecked`, `first`, `last`**: `a` valid, the index in range.
+- **Constructors**: `zero` and `fill` state every element. `from_ptr`
+  requires `count` readable elements when `src` is not null and `count` is
+  not 0, and states the copied prefix and the zeroed rest.
+- **`fill_all`**: the frame and every element. `fill` and `fill_all` have
+  loop invariants, assigns and variants.
+- **`copy_from`**: `*dst == \old(*src)`. It admits `dst == src` (A1).
+- **`equal`**: three behaviours: a null argument, the same array, and the
+  comparison, stated with libc's `memcmp` logic function. When it compares,
+  it requires the bytes compared initialized and not dangling, as
+  `bytes_equal` does (VERIFY-012, VERIFY-039 G13).
+- **The views**: the pointer and the length.
+- **`len` and `size_bytes`**: `assigns \nothing` only. Their value is `N`,
+  which a contract cannot name.
+
+The contracts state what the functions require, not the byte-level
+validity of the views they make. That is bitset's choice (its P4 note): a
+`requires \valid((u8 *)…)` would move the bridge onto every caller.
+
+### The unit
+
+**The driver** `vmacros/vdrivers/array_verify.h` defines what
+`DEFINE_ARRAY` needs:
+- option at `int`, as `option_cc_experiment.h` does;
+- `DEFINE_SLICE(int)`, whose contracts are cc-slice's at another type.
+
+Then `DEFINE_ARRAY(int, 8)`. **Preprocessing**: `-CC`. **Model**:
+Typed+Cast, forced by the byte views and the `mem*` calls. **The job**,
+`frama-c-array`, has frama-c-stack's flags and a 120-minute budget. It is
+report-only on run 1. It fails on any Failed, Invalid or Stepout goal or a
+missing summary. It splits the unproved names:
+- **own**: names containing `_array_int_8_`, compared with the eight
+  predicted below;
+- **inherited**: the rest, compared with the closure's existing pins:
+  - cc-slice's 8 memcmp-danglingness names (`cc_pins/slice.txt`);
+  - from cc-vec's (`cc_pins/vec.txt`), option's 6 function-pointer names
+    and checked.h's 2.
+
+**A local WP run, stated with its limits.** WP 25, Z3 4.8 only, 20 s, not
+CI's WP 29 with three provers at 120 s. Its unproved array goals were
+exactly the eight below. Every postcondition, loop annotation and frame
+was proved, among them `zero`'s and `from_ptr`'s elements after `memset`
+and `memcpy`. Before the contracts, the same run left 26 array goals
+unproved. Its inherited set is not comparable: WP 25 emits `terminates`
+and `exits` goals that WP 29 does not.
+
+**n(*P*) = 1**, layer C: `unverified header:data/array.h`. This was
+measured by `tools/idioms/extract.py measure` on the driver, against the
+catalogue rebuilt at 6feed52 and committed with this record. The rebuild
+adds `frama-c-stack` to the units, as VERIFY-050 said the next record's
+rebuild would. Its 42 A, 22 B and 9 C features are unchanged.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| P1 | `frama-c-array` completes within its budget. No goal is Failed, Invalid or Stepout. | otherwise | H |
+| P2 | The inherited unproved set is the closure's 16 names exactly. | any one-sided name | M (the option and checked.h names were measured in Typed+Cast units, cc-vec's, but never with slice at `int` beside them) |
+| P3 | The own unproved set is these 8, exactly. Each is a libc or view call's precondition on the array's bytes. | another set | M. The local run left exactly these. CI's three provers at 120 s may prove some, likeliest `memset`'s `valid_s`. |
+| P4 | Every own goal not in P3 is proved: all postconditions, loop annotations, frames and runtime-error goals. | any other own name unproved | M (the local run proved them all) |
+| P5 | Filing needs no new argument block. Six of P3's names are the byte-type bridge of bitset's P4 and memory.h's byte views. The two `danglingness` names are VERIFY-008's Category 3 as VERIFY-039 G13 restated it. They are filed by name at enforcement. | an own residual no existing block covers | M (follows P3) |
+| P6 | `array_test` passes in every build job, the suite 56 of 56; `embedded` 134 of 134 at all 18 configurations. | any failure | H (measured: GCC 13, GCC 14 at C23, clang; the embedded script locally) |
+| P7 | `misra` prints the same 55 findings. | another count or composition | H (array.h's findings measured identical before and after, cppcheck 2.13) |
+| M1 | MCDC-020: `vmacros/coverage/array_cover.c`'s row reads **42 / 46**. The four misses are `checked_mul`'s failure at `from_ptr`, `size_bytes`, `as_bytes` and `as_cbytes`, dead. | another row | H (measured locally with the coverage job's flags) |
+| M2 | The MC/DC total moves by M1's row alone: from 1937 / 2102 to 1979 / 2148. | any other row moves | H (the job's pipeline, run locally, reproduces 1937 / 2102 at the baseline and gives 1979 / 2148 with the change) |
+
+The eight names of P3:
+
+| # | Goal | Class |
+|---|------|-------|
+| 1 | `typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2` | byte view of the elements |
+| 2 | `typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2` | byte view of the elements |
+| 3 | `typed_cast_array_int_8_zero_call_memset_requires_valid_s` | byte view of the elements |
+| 4 | `typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s` | byte view of the elements |
+| 5 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1` | byte view of the elements |
+| 6 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2` | byte view of the elements |
+| 7 | `typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s1` | `\dangling`, not implemented in WP |
+| 8 | `typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s2` | `\dangling`, not implemented in WP |
+
+The fix and the contracts are pushed with this record, in the commit after
+it. Its hash follows this one, and neither has run in CI.
