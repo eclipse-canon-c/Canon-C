@@ -26794,3 +26794,25 @@ new argument block was needed. *A* stays 33 cumulative and 19 in force. S1
 to S5 are fixed. The separate-compilation path of vec, deque, stack and
 queue is built, linked and run in every CMake job and in `compcert`.
 VERIFY-049 closes when run 3 holds.
+
+### Run 3 scored: the first enforced run holds; VERIFY-049 closed (2026-10-31)
+
+Run 3 ran on 0db844c: `Frama-C stack (VERIFY-049)` #3, `Canon-C CI` #1399,
+platforms #5 and record coverage #132, all green. The result was read
+through the GitHub API from the job's own annotation, with no log pasted,
+the first time a record is scored that way:
+
+    proved 5714 / 5783 (pin 5714 / 5783); unproved 69: inherited 69, own 0; 0 difference(s)
+
+The 69 inherited names are now identical in three runs, of two contract
+texts. The stack's own set has been empty in both runs of the final text.
+The enforced gate passed with no difference, so the stability check holds.
+
+**VERIFY-049 is closed.** data/stack.h is verified (module 22):
+- 190 own goals, all proved;
+- 69 residuals, all cc-vec's;
+- no new argument block.
+
+S1 to S5 are fixed. Separate compilation of vec, deque, stack and queue is
+built and tested everywhere. MCDC-019 is closed at 5 / 6, the one miss
+dead, with its per-line debug step in the coverage job.
