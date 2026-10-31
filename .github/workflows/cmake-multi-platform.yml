@@ -8031,6 +8031,30 @@ jobs:
           else
             echo "No vec_fmt_cover.c.gcov file generated"
           fi
+      - name: "Debug: per-line MC/DC detail for stack.h (cover TU)"
+        # MCDC-019 (VERIFY-049). stack.h's conditions are stamped to the cover
+        # TU's instantiation line; vec is defined under test/support. Measured
+        # 5 / 6: the one miss is peek's `!last` true, dead (a non-empty stack
+        # has a top element). Any other miss is a gap in the cover TU.
+        # Report-only. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "stack_cover.c.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate stack_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "stack_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in stack_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No stack_cover.c.gcov file generated"
+          fi
       - name: "Debug: per-line MC/DC detail for priority_queue.h"
         # Added 2026-09-07 with MCDC-014. priority_queue.h reached 81/82 (MCDC-014); the one
         # remaining outcome is J1, pq_swap_'s a == b guard, dead by construction
