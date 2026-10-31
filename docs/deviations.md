@@ -26918,3 +26918,33 @@ of the limit. Every new proof unit is a job in its layer's file.
 
 The reorganisation is pushed with this record, in the commit after it. Its
 hash follows this one, and neither has run in CI.
+
+### Scored (2026-10-31): every prediction matched; VERIFY-050 closed
+
+Run on 47bbe6f, the first under the new layout. All nine triggered
+workflows are green: 91 jobs, every one `success`. This record is scored
+entirely from job conclusions and annotations read through the GitHub API.
+The author pasted no log.
+
+| # | verdict |
+|---|---------|
+| Q1 | **MATCH**. All nine workflows started under their numbered names, with no "workflow file issue". |
+| Q2 | **MATCH**, every value at its pin. The annotations read, by layer: |
+| | **core/**: checked 1753 / 1755; bits 745 / 757; compare 208 / 208; ptr 1952 / 1958; slice 390 / 398; memory 2842 / 2873; arena 3517 / 3550; pool 4036 / 4070; region 3685 / 3724; arena-32 3517 / 3550; lifetime 4 / 4; win64: memory 2842 / 2873 and bits 745 / 757 at both models. |
+| | **semantics/**: error 65 / 65; option 222 / 228; result 207 / 213; borrow 2451 / 2465; diag 3050 / 3058. |
+| | **data/**: vec 5475 / 5568; deque 1653 / 1665; bitset 4972 / 5046; priority_queue 4645 / 4683; range 2644 / 2652; vec_range 5159 / 5204; vec_fmt 5239 / 5286; stringbuf 4789 / 4826; stack 5714 / 5783 (own 0, 0 differences). |
+| | Every proof job: Failed/Invalid/Stepout 0. |
+| | **Elsewhere**: `misra` real 55, canary 3; MC/DC 1937 / 2102 with `stack_cover.c` 5/6 and every other cover row as before; `compcert` 57 / 57 compiled and ran; `embedded` 6 targets × 3 levels, 134 units each, 0 failed; AVR 29 / 49 / 2, 0 checks failed. |
+| Q3 | **MATCH**. The `changes` job ran all six probes, since `probes.yml` changed, and all six passed. Their own verdicts, in their annotations: G11 "MATCH (H)" at every combinator; Round 3 "MATCH (H) block 7"; Count "MATCH (H)" (+5, as at CI #1375); G13 and G19 "MATCH (H)"; G4 green. |
+| Q4 | **MATCH**. `records.yml`: `record-coverage` and `workflow-size` are green, and `workflow-size` gives no warning. |
+| Q5 | **MATCH** (through the API). The repository's workflow list holds exactly the 11 new workflows, in numbered order; the deleted ones are not listed. |
+
+The only other annotations are GitHub's macOS queue notices.
+
+**What this leaves in place:**
+- a CI a newcomer can read in order, mapped in `.github/workflows/README.md`;
+- a home in a layer file for every future unit;
+- records that can be scored from annotations, without logs.
+
+VERIFY-050 is closed. Next in the agreed order is queue.h, on the lighter
+treatment.
