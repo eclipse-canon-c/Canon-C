@@ -26816,3 +26816,105 @@ The enforced gate passed with no difference, so the stability check holds.
 S1 to S5 are fixed. Separate compilation of vec, deque, stack and queue is
 built and tested everywhere. MCDC-019 is closed at 5 / 6, the one miss
 dead, with its per-line debug step in the coverage job.
+
+---
+
+## VERIFY-050: Pre-registration — CI Reorganised: Numbered Workflows, One Proof File per Layer, Results as Annotations
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-050 |
+| **Date**       | 2026-10-31 |
+| **Status**     | PREDICTED. This record is committed before the reorganisation commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 9328398 (VERIFY-049 closed) |
+| **Scope**      | `.github/workflows/` (14 files become 11), `tools/record_coverage.py` and `tools/idioms/extract.py` (they read the proof files), `tools/embedded_compile_check.sh` and `tools/avr_tier_check.sh` (an annotation line each), the probe scripts' and READMEs' references, a new `.github/workflows/README.md`, `README.md`, `CONTRIBUTING.md`, one line of `docs/verification.md` |
+| **Category**   | Infrastructure, asked for by the author: "a person shouldn't get lost", and it must "easily adapt" when a unit is added. No source, contract, test or pin changes. |
+
+**Why this record exists.** The Actions sidebar listed 14 workflows
+alphabetically, with no order to read them in. One file,
+`cmake-multi-platform.yml`, held 35 jobs, among them 25 proof jobs. It was
+within 20 KB of GitHub's 500 KB limit, which had already stopped one run
+(VERIFY-047, CI #1394). Its last proof unit, stack, had to go in a file of
+its own. Scores needed the author to paste logs, because the session cannot
+read GitHub's log storage. The author asked for a structure a newcomer can
+follow, and that new units fit without workflow surgery.
+
+### The change
+
+Every job is moved verbatim, by a script that cuts each job with the
+banner above it:
+
+| # | file | sidebar name | jobs |
+|---|------|--------------|------|
+| 1 | `ci.yml` (was `cmake-multi-platform.yml`) | 1 · Build & test | build, build-32bit, mingw, valgrind, fuzzing, lifetime-token-concurrency, lifetime-debug |
+| 2 | `platforms.yml` | 2 · Platforms | musl, build-arm64, c-standards, big-endian, embedded |
+| 3 | `analysis.yml` | 3 · Static analysis & coverage | static-analysis, misra, coverage, compcert |
+| 4 | `proofs-core.yml` | 4 · Proofs: core/ | the 11 core/ proof jobs (arena-32 among them), and frama-c-win64 from platforms |
+| 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | error, option, result, borrow, diag |
+| 6 | `proofs-data.yml` | 6 · Proofs: data/ | the 8 data/ proof jobs, and frama-c-stack from its own file |
+| 7 | `proofs-cc.yml` (was `frama-c-cc.yml`) | 7 · Proofs: -CC (macro-body contracts) | frama-c-cc |
+| 8 | `records.yml` (was `record-coverage.yml`) | 8 · Records | record-coverage, and workflow-size from platforms |
+| 9 | `probes.yml` (six files merged) | 9 · Probes (closed experiments) | a new `changes` job, then g4-, g11-, g13-, g19-, count- and round3-probe |
+| 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | renamed only |
+
+**What changes inside jobs, all of it listed.** A parse of every workflow
+before and after compares all 53 jobs. They are identical except for the
+following:
+- **`needs: build`** is dropped from the 28 jobs that leave `build`'s file,
+  since `needs` cannot cross workflows. Those jobs no longer wait for the
+  build matrix. If `build` fails, they still run.
+- **Three readers of the old file.**
+  - The arena-32 coupling check reads `frama-c-arena`'s list.
+  - `frama-c-priority-queue` reads `frama-c-memory`'s.
+  - The -CC workflow reads each driver job's pins.
+
+  Each now reads the three layer files joined into one text, by
+  `cat .github/workflows/proofs-{core,semantics,data}.yml`. On the baseline
+  file and on the joined text, the three extractions give identical results:
+  - `frama-c-memory`'s list (same md5);
+  - arena's list (same md5);
+  - each CC family's driver names and `EXPECTED_UNPROVED`, for slice,
+    result, option, borrow, vec and deque.
+- **Two echo and comment lines** in `f4-control` name the new file.
+- **The probes.** Each probe job gains `needs: changes` and an `if:` on its
+  own output. The `changes` job compares the push with the commit it moved
+  master from (`git diff --name-only`). It matches each probe's former path
+  list, so a probe still runs only when its own paths change; a manual run
+  runs all of them. This was checked locally against three pushes:
+  - one touching no probe path: all six skipped;
+  - 661bb8e..HEAD, which touched `core/memory.h`: G4 and G13 run, as their
+    workflows did on 07ed9aa;
+  - a new-branch push: all six run.
+- **New annotation steps (additive).** Every proof job but `frama-c-stack`,
+  which has its own, ends with a "Result annotation" step. It posts proved,
+  unproved and Failed/Invalid/Stepout counts from the job's `wp_*.txt`
+  files, and runs `if: always()`. `misra`, `coverage` (the MC/DC total and
+  each cover file's row), `compcert`, the embedded script and the AVR
+  script each post one too. These are new lines. No gate reads them.
+
+**Tools.**
+- `record_coverage.py` reads the three proof files, or the old file at a
+  revision that predates them. Its output is byte-identical before and
+  after, and `--strict --complete` passes.
+- `extract.py` reads the three proof files. Its rebuilt catalogue has the
+  same 42 A, 22 B and 9 C features. It sees 25 units, not 24: the new one
+  is `frama-c-stack`, now in a proof file and verified since VERIFY-049. Its
+  closure adds `data/stack.h`, `data/vec/vec.h` and the stack driver. The
+  committed catalogue is not rebuilt here; the next unit's record rebuilds
+  it.
+
+**Sizes.** The largest file is `proofs-data.yml`, at 188,825 bytes, a third
+of the limit. Every new proof unit is a job in its layer's file.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | Every workflow starts, with no "workflow file issue". | any | H (each file parses and passes actionlint) |
+| Q2 | Every job is green, with the results it had before. The new annotations show it without logs: each proof job's proved line is its pin, for example `frama-c-vec` 5475 / 5568, `frama-c-memory` 2842 / 2873, `frama-c-stack` 5714 / 5783 with 0 differences. Also `misra` 55; MC/DC 1937 / 2102 with `stack_cover.c` 5/6; `compcert` 57 / 57; `embedded` 0 failed; the AVR check 29 / 49 / 2. | any job red, or an annotation off its pin | H for the gates, which are unchanged; M for the annotation steps themselves, new code whose only run so far was local |
+| Q3 | The six probes all run on this push, because `probes.yml` changed and its path is in every filter, and each passes as at its last run. | a probe red | M (G11, G19, Count and Round 3 have not run since their records closed) |
+| Q4 | `records.yml` is green, and `workflow-size` no longer warns: the largest file is 188,825 bytes. | a warning or failure | H |
+| Q5 | The sidebar lists the 11 new workflows in numbered order. | another order | M. GitHub may keep listing the deleted workflows while they have runs; they then sort after the numbered ones, and can be removed by deleting their old runs. |
+
+The reorganisation is pushed with this record, in the commit after it. Its
+hash follows this one, and neither has run in CI.
