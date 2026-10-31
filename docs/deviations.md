@@ -26674,3 +26674,84 @@ ACSL kind outside the catalogue.
 
 The fix and the contracts are pushed with this record, in the commit after
 it. Its hash follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-10-31)
+
+Run 1 ran on 497a011: `Frama-C stack (VERIFY-049)` #1 (1 h 1 m 23 s),
+`Canon-C CI` #1397, `Canon-C platforms` #3 and `Canon-C CC` #68, all green.
+`compcert` failed inside its `continue-on-error` job (P6). The author pasted
+the `frama-c-stack` step, `compcert`'s summary, the `misra` summary and the
+coverage job's MC/DC table.
+
+    [wp] Proved goals: 5731 / 5807
+    === unproved: 76 (inherited 69, own 7) ===
+    INHERITED SAME: the 69 cc-vec names, exactly.
+
+| # | verdict |
+|---|---------|
+| P1 | **MATCH**. Complete in 61 minutes; no Failed, Invalid or Stepout goal. |
+| P2 | **MATCH**. The inherited set is cc-vec's 69 names, exactly, with no one-sided name either way. |
+| P3 | **MISS**. Seven own goals are unproved, every one a per-behaviour frame (listed below). |
+| P4 | **MATCH for the total, MISS for the proved count by P3's seven.** *k* = 5807 − 5593 = 214 own goals. The proved line is (5524 + 207) / (5593 + 214). |
+| P5 | **MATCH**. The seven need no new argument; the contracts are changed instead (below). |
+| P6 | **MISS in one job, from the instrument.** Every CMake-built job passes the new test, the Windows, musl, AArch64, s390x, i386 and C11–C23 legs among them. `compcert` compiles each `*_test.c` as one file and links nothing else, so the two-source test failed to link there: 56 of 57 compiled. The fix is in the job: it now links `X_defs.c` when one sits beside `X_test.c`. |
+| P7 | **NOT READ**. `embedded` is green, and green means every compile passed, but its count was not pasted. |
+| P8 | **MATCH on the count**: `Real violations: 55`. The findings were not compared line by line. |
+| M1 | **MATCH**. `vmacros/coverage/stack_cover.c`: 5 / 6, 83.3 %. |
+| M2 | **MATCH**. The MC/DC total moves from 1932 / 2096 to **1937 / 2102**, exactly M1's row. No other row moves. |
+
+**P3's seven, and why the prediction missed.** The unproved goals:
+
+    typed_cast_stack_int_push_invalid_assigns_normal_part1
+    typed_cast_stack_int_push_full_assigns_normal_part1
+    typed_cast_stack_int_push_ok_assigns_normal_part1
+    typed_cast_stack_int_try_push_refuse_assigns_normal_part1
+    typed_cast_stack_int_try_push_ok_assigns_normal_part1
+    typed_cast_stack_int_pop_invalid_assigns_normal_part1
+    typed_cast_stack_int_pop_empty_assigns_normal_part1
+
+Each is a frame a behaviour states that is narrower than the contract's
+top-level `assigns`. Examples are `assigns \nothing` for `invalid`, and
+`assigns s->len, s->items[s->len]` for `ok`. The mechanism is not new. WP
+frames a call by the callee's top-level `assigns`, so a wrapper cannot
+inherit its callee's narrower per-behaviour frames. The project knew this
+and had written it into two contracts:
+- pool.h's (VERIFY-039: "No behaviour states a frame narrower than the
+  default", under the block on a call framed by the callee's default
+  `assigns`);
+- vec_fmt.h's guard (VERIFY-042, after stringbuf.h's in VERIFY-031).
+
+This record's contracts copied vec's behaviours with their frames, which
+vec can state because vec's own code is what writes. That was a slip in
+the contract, not a property of the code. The prediction would have caught
+it had the record applied the convention. `pop`'s `ok` frame equals its
+top-level clause and was proved. The rest of the stack proves in full,
+`peek`'s and `peek_option`'s separations and `init`'s struct copy among
+them. That was the risk P3 named, and it did not occur.
+
+**The change, before run 2.** `push`, `try_push` and `pop` state their
+frame once, at the top, and no behaviour states its own. That removes 8
+clauses: the seven above and `pop`'s `ok`. `stack.h` notes the convention
+beside `DEFINE_STACK`. A frame that remains in a behaviour is one the
+function's own code establishes, and run 1 proved each:
+- `peek`'s `empty`: `assigns \nothing`;
+- `pop_option`'s `some`: `s->len`;
+- `clear`'s `null` and `live`.
+
+The convention costs this: a caller of `stack_int_push` can no longer read,
+from the contract, that a full stack is left exactly as it was. That is
+the cost pool.h records for `pool_alloc`'s `full`.
+
+### Run 2 predictions (pre-registered, before the run)
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R2-1 | No own residual: `own 0`. | any `_stack_int_` name | H (run 1 proved everything else; the removed clauses were the seven) |
+| R2-2 | The inherited set is cc-vec's 69 again. | any one-sided name | H |
+| R2-3 | Total goals: 5807 less the removed clauses' goals. Proved = total − 69. | proved ≠ total − 69 | H |
+| R2-4 | `compcert` compiles and runs 57 of 57. `separate_compilation_test` links with its `_defs.c`. | otherwise | M (ccomp's linking of the two units not run locally) |
+| R2-5 | Nothing else moves: MC/DC 1937 / 2102, `misra` 55, every other job green. | any | H |
+
+If R2-1 to R2-3 hold, run 3, a re-run of the same commit, checks name
+stability. Then `frama-c-stack` is enforced, pinned at run 2's line and its
+69 names.
