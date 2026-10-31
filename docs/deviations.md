@@ -27017,3 +27017,19 @@ empty paths.
 | # | prediction | falsified if | confidence |
 |---|------------|--------------|------------|
 | L1 | Nothing measured moves. The change is comments outside any ACSL. Every annotation reads as at VERIFY-050: each proof job at its pin (deque 1653 / 1665), `misra` 55, MC/DC 1937 / 2102, `compcert` 57 / 57, embedded 0 failed. | any | H |
+
+### Scored (2026-10-31): L1 matched; VERIFY-051 closed
+
+Run on 5693388: eight workflows, 84 jobs, all `success`, read from the
+annotations through the API. The probes did not run, correctly: no probe's
+paths changed. Every proof job reads its pin, among them `frama-c-deque`
+1653 / 1665, whose header's comments changed, and `frama-c-stack` with 0
+differences. `misra` reads 55, MC/DC 1937 / 2102, `compcert` 57 / 57,
+`embedded` 0 failed and AVR 29 / 49 / 2.
+
+The only other annotation is a cache-reservation warning on `mingw
+(Release)`: another job was saving the same msys2 cache at the time. That
+is GitHub's cache contention, not a test result.
+
+**L1: MATCH.** VERIFY-051 is closed. queue.h is done on the light
+treatment. Next in the agreed order is array.h, on the full treatment.
