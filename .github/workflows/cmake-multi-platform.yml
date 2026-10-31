@@ -8836,7 +8836,10 @@ jobs:
           # public header.
           while IFS= read -r t; do
             n=$(basename "$t" .c)
-            if ccomp "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n" "$t" \
+            # A test may have a second source, X_defs.c beside X_test.c,
+            # linked in as CMake does (separate_compilation_test, VERIFY-049).
+            extra=(); d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=("$d")
+            if ccomp "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n" "$t" "${extra[@]}" \
                  > "ccomp-out/$n.log" 2>&1; then
               COMPILED=$((COMPILED+1))
               if "./ccomp-out/$n" > "ccomp-out/$n.run.log" 2>&1; then
