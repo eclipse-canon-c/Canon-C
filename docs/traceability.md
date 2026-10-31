@@ -966,7 +966,13 @@ and after the paragraphs below say where a reading here no longer holds.
 | stringbuf.h | 29       |              4826 | 4789 (99.23%) | 37       | VERIFY-031..35 |
 | vec_range.h | 1        |              5204 | 5159 (99.14%) | 45       | VERIFY-041   |
 | vec_fmt.h  | 2         |              5286 | 5239 (99.11%) | 47       | VERIFY-042   |
-| **Total**  | **460**   | **60256**         | **59703 (99.08%)**| **553**  |              |
+| stack.h    | 14        |              5783 | 5714 (98.81%) | 69       | VERIFY-049   |
+| **Total**  | **474**   | **66039**         | **65417 (99.06%)**| **622**  |              |
+
+*Brought to the pins again 2026-10-31 (VERIFY-049; Frama-C stack #2).* stack.h's
+row is new: `frama-c-stack`, pinned at run 2 and enforced from run 3, 5714 /
+5783 with 69 unproved, all inherited (cc-vec's) and none own. The total is
+66039 obligations, 65417 proved and 622 unproved, from 60256, 59703 and 553.
 
 *Brought to the pins again 2026-10-28 (VERIFY-042; CI #1389).* vec_fmt.h's
 row is new: `frama-c-vec-fmt`, enforced at 270494a, 5239 / 5286 with 47
@@ -1765,6 +1771,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-10-26 → 10-28 | de4afae → a503bf6 | #1382 → #1389 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **vec_range.h and vec_fmt.h** (VERIFY-041, VERIFY-042) — the data/ layer's two helpers, both with in-place contracts under `-CC`. vec_range.h 5159/5204, 45 unproved, none own; vec_fmt.h 5239/5286, 47 unproved, 4 own, under two new argument blocks. Coverage: MCDC-017 38/42 and MCDC-018 26/26; aggregate MC/DC 1932/2096. |
 | 2026-10-28 → 10-30 | 873ed2e → (VERIFY-047) | #1390 → #1395 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **Platform additions** (VERIFY-043 to VERIFY-047), no pin moved, coverage totals unchanged. Test matrix: musl and AArch64 Linux (043); C11, C17 and C23 (044, after fixing `CANON_RESULT(bool, …)`'s pasted name and the clash with C23's `unreachable`, now `canon_unreachable`); big-endian s390x under qemu (045, bitset's byte order documented); bare-metal Cortex-M compile check (046, `error_in_range` under short enums). WP: `memory.h` and `bits.h` at the LLP64 machine model (047): the same 31 and 12 residuals as at x86_64, by name, enforced. CI #1394 did not start (the workflow file passed GitHub's 500 KB limit); the platform jobs moved to `platforms.yml`. MISRA 54 → 55, from cppcheck's reading of `_Bool` (044). |
 | 2026-10-30 | 362df2e → 834a373 | #1396 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **VERIFY-048** — the embedded check widened: picolibc on Cortex-M0+/M4, RISC-V RV32 and RV64 (picolibc), and the platform tiers on AVR (16-bit `size_t`). Found: avr-gcc's default 4-byte `double` is refused at `types.h` while the README named AVR a Tier 0 target (docs corrected: `-mdouble=64`), and `slice.h` was listed under Tier 1 though it compiles at 16-bit. `frama-c-win64` enforced (VERIFY-047). No pin moved. |
+| 2026-10-31 | 955d49c → (VERIFY-049) | #1397 → #1398 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **stack.h** (VERIFY-049), module 22: 14 macro-body contracts, 5714/5783, all 69 residuals cc-vec's, none own (run 1 left 7 per-behaviour frames, removed at run 2). Found first: `DECLARE_VEC`/`DECLARE_DEQUE` never compiled, so separate compilation of vec, deque, stack and queue had never been built (now tested). MC/DC 1937/2102 with `stack_cover.c` 5/6 (MCDC-019). |
 
 > **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** The bitset row of
 > 2026-08-27 needs three corrections. Its result (2) holds for E1 and not for

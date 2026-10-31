@@ -10,8 +10,10 @@ name: Frama-C stack (VERIFY-049)
 # predicted to be cc-vec's 69, by name (vmacros/vdrivers/cc_pins/vec.txt),
 # plus the stack's own, which VERIFY-049 predicts.
 #
-# REPORT-ONLY until two runs agree (the project's protocol); a Failed,
-# Invalid or Stepout goal, or a missing summary, fails it from run 1.
+# ENFORCED since VERIFY-049 run 3: the proved line, an empty own set and
+# the 69 inherited names are pinned (pins from run 2). A Failed, Invalid or
+# Stepout goal, or a missing summary, always fails it. The result is also
+# emitted as an annotation, readable without the log.
 on:
   push:
     branches: [ "master" ]
@@ -42,7 +44,8 @@ jobs:
       - name: "WP under -CC: data/stack.h at int"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-049 run 1: report-only
+          ENFORCE=1   # VERIFY-049: enforced at run 3; pins from run 2 (Frama-C stack #2, f5cc32d)
+          PIN_PROVED="5714 / 5783"
           OUT=wp_stack_output.txt
           set +e
           frama-c -wp -wp-rte \
@@ -63,6 +66,7 @@ jobs:
           WP_EXIT=$?
           set -e
           echo "frama-c exit: ${WP_EXIT}   model: Typed+Cast   preprocessing: -CC"
+          PROVED=$(grep -E "^\[wp\] Proved goals:" "${OUT}" | grep -oE "[0-9]+ / [0-9]+" | tail -1)
           if ! grep -E "^\[wp\] Proved goals:" "${OUT}"; then
             echo "FAIL: WP produced no summary."; grep -E "^\[(kernel|wp)" "${OUT}" | head -30; exit 1
           fi
@@ -79,12 +83,25 @@ jobs:
           echo "=== own (stack_int_*) ==="; sed 's/^/    /' own.txt
           echo "=== inherited, not among cc-vec's 69 ==="; comm -13 pins_vec.txt inherited.txt | sed 's/^/    /'
           echo "=== cc-vec's 69, not unproved here ==="; comm -23 pins_vec.txt inherited.txt | sed 's/^/    /'
+          FAILS=0
           if cmp -s pins_vec.txt inherited.txt; then
             echo "INHERITED SAME: the 69 cc-vec names, exactly."
-          elif [ "${ENFORCE}" -eq 1 ]; then
-            echo "FAIL: the inherited set differs from cc-vec's."; exit 1
           else
-            echo "REPORT-ONLY: the inherited set differs (above); not failing on run 1."
+            echo "DIFFERS: the inherited set is not cc-vec's (above)."; FAILS=$((FAILS + 1))
+          fi
+          if [ -s own.txt ]; then
+            echo "DIFFERS: own goals unproved (above); the pin is none."; FAILS=$((FAILS + 1))
+          else
+            echo "OWN NONE: every stack_int goal is proved."
+          fi
+          if [ "${PROVED}" = "${PIN_PROVED}" ]; then
+            echo "PROVED SAME: ${PROVED}"
+          else
+            echo "DIFFERS: proved ${PROVED}, pinned ${PIN_PROVED}."; FAILS=$((FAILS + 1))
+          fi
+          echo "::notice title=frama-c-stack::proved ${PROVED} (pin ${PIN_PROVED}); unproved $(wc -l < unproved.txt): inherited $(wc -l < inherited.txt), own $(wc -l < own.txt); ${FAILS} difference(s)"
+          if [ "${FAILS}" -ne 0 ] && [ "${ENFORCE}" -eq 1 ]; then
+            echo "FAIL: ${FAILS} difference(s) from the pins."; exit 1
           fi
       - name: Upload WP output (stack)
         if: always()

@@ -10,11 +10,16 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 22 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h) — lifetime.h is a 23rd unit of narrower scope, see VERIFY-021 |
-| **Functions**        | 459 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2; lifetime.h's 1 counted separately) |
-| **Total obligations**| 60252 (summed over the 22 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 59699 (99.08%)                                                                 |
-| **Unproved**         | 553 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Headers verified** | 23 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h) — lifetime.h is a 24th unit of narrower scope, see VERIFY-021 |
+| **Functions**        | 473 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14; lifetime.h's 1 counted separately) |
+| **Total obligations**| 66035 (summed over the 23 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 65413 (99.06%)                                                                 |
+| **Unproved**         | 622 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-10-31 (VERIFY-049, stack.h enforced from its run 3).*
+`frama-c-stack` adds a twenty-third unit: +14 functions, +5783
+obligations, +5714 proved and +69 unproved, all 69 inherited (cc-vec's) and
+none own. The card previously read 22 / 459 / 60252 / 59699 / 553.
 
 *Not recomputed 2026-10-30 (VERIFY-043 to VERIFY-047): no pin moved.*
 These five records add platforms to the test matrix: musl, AArch64 Linux,
@@ -4428,6 +4433,48 @@ half of the format's separation; anything under `CANON_LIFETIME_DEBUG`.
 `\valid_function(cb)`, which WP 29 does not implement; and the callback loop's
 invariant, variant and `items[i]` access, whose locals WP loses across a call
 through an unlisted pointer, as at `region_end`.
+
+## data/stack.h (in-place contracts under -CC)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (all residuals inherited)              |
+| **Baseline commit**    | 497a011 (run 1, Frama-C stack #1) → f5cc32d (run 2, #2, the pins) → enforced from run 3 |
+| **Functions**          | 14 (`stack_int_*`), contracted in the macro body |
+| **Proof obligations**  | 5714 / 5783 discharged automatically (98.81%); the stack's own 190, all proved |
+| **Unproved**           | 69, **all inherited**: cc-vec's 69 names exactly (`vmacros/vdrivers/cc_pins/vec.txt`); **0 own**; 0 Failed, 0 Invalid |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
+| **Driver**             | `vmacros/vdrivers/stack_verify.h`: cc-vec's driver verbatim, plus `DEFINE_STACK(static inline, int)` |
+| **CI enforcement**     | Yes, in `.github/workflows/frama-c-stack.yml`: pinned `5714 / 5783` + empty own set + the 69 inherited names (set equality) |
+| **MC/DC coverage**     | 5/6, one outcome dead (`peek`'s `!last` true), measured from `vmacros/coverage/stack_cover.c` — see MCDC-019 in VERIFY-049 |
+| **CI artifact**        | `wp-proof-stack`                                |
+| **Job runtime**        | ~1 h                                            |
+
+stack.h is **module 22**. Each function states the contract of the vec
+function it calls. `push`, `try_push` and `pop` state their frame at the
+top only, because WP frames a call by its callee's top-level `assigns`
+(VERIFY-049 run 1: the per-behaviour frames left seven own goals). `peek`
+and `peek_option` have contracts of their own.
+
+**Defects found before the prover ran** (VERIFY-049):
+- **S1:** `DECLARE_VEC` and `DECLARE_DEQUE` did not compile, so the
+  separate-compilation path of vec, deque, stack and queue had never been
+  built. It is now tested by `separate_compilation_test`.
+- **S2:** that path's four examples were wrong.
+- **S3:** the quick start's comment was wrong.
+- **S4:** `init`'s preconditions contradicted each other, and its refusal
+  above vec's cap was undocumented.
+- **S5:** `peek` wrote the stack when `out` pointed into its buffer.
+
+**Not claimed:** anything at another element type, or under
+`CANON_LIFETIME_DEBUG`. A caller cannot read from the contract that a
+failed push or pop leaves the stack unchanged; the tests show it.
+
+---
 
 ## Triple-prover rationale
 
