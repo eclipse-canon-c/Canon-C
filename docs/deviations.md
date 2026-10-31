@@ -26948,3 +26948,72 @@ The only other annotations are GitHub's macOS queue notices.
 
 VERIFY-050 is closed. Next in the agreed order is queue.h, on the lighter
 treatment.
+
+---
+
+## VERIFY-051: data/queue.h, Light Treatment — an Aliasing Precondition Missing From queue and deque
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-051 |
+| **Date**       | 2026-10-31 |
+| **Status**     | PREDICTED. This record is committed before the documentation commit, pushed with it. |
+| **Baseline**   | 0b308c3 (VERIFY-050 closed) |
+| **Scope**      | `data/queue.h` and `data/deque/deque_impl.h`, comments only |
+| **Category**   | The **light treatment** agreed with the author for thin wrappers (2026-10-31): read and probe, fix the documentation, test what is missing, and record it briefly. No WP job is added unless the probing finds something a contract should state. |
+
+**What queue.h is.** queue.h has 14 functions, every one a direct call to
+a deque function: `enqueue` is `push_back`, `dequeue` is `pop_front`, and
+`peek` is `peek_front`. Deque is verified (VERIFY-019; `frama-c-deque`,
+`cc-deque`). Since VERIFY-049 the separate-compilation path is built and
+tested (`separate_compilation_test`). So the probing concerns the
+wrapper's documented claims, read against deque's code and contracts. All
+probes use GCC 14 with sanitizers, in the default build and under
+`-DCANON_NO_REQUIRE`, with the same results in both.
+
+**Q1 — `peek` and `dequeue` write the queue when `out` points into its
+buffer, and the documentation did not say so.** With 1 2 3 queued in a
+four-slot buffer:
+- `queue_int_peek(&q, &buf[2])` returns true, and the queue then holds
+  1 2 1. The documentation said "@post Queue is unchanged".
+- `queue_int_dequeue(&q, &buf[2])` removes 1, then the queue yields 2 and
+  1 where it should yield 2 and 3.
+
+This is vec's G1 (VERIFY-039) and stack's S5 (VERIFY-049) in deque's
+functions. Deque's **contracts are consistent with it**. `peek_front`,
+`peek_back`, `pop_front` and `pop_back` require `out` separated from the
+deque struct only, assign `*out`, and claim nothing about the other
+elements. So no proved claim is false. Their documentation was the gap:
+`peek_front`'s "d is unchanged" read as covering the elements.
+
+**Fix: documentation.**
+- The four deque functions and queue's `peek` and `dequeue` state the
+  precondition: `out` does not point into the buffer.
+- Deque's "d is unchanged" now says the elements are unchanged only when
+  `out` is outside the buffer.
+- Queue's `init` lists deque_init's fourth precondition,
+  `capacity <= CANON_DEQUE_MAX_CAPACITY / sizeof(type)`, which its
+  documentation had left out.
+
+**Not done, and why.** vec took G1 into its contracts (`requires
+\separated(out, v->items + …)`) with an ensures that the other elements are
+kept. Doing the same for deque would change a verified module's contracts,
+and with them `frama-c-deque`'s and `cc-deque`'s goals and pins. That is a
+full-treatment change, left for a deque record of its own if wanted. No
+test is added: the behaviour is a precondition violation. `queue_test.c`
+already covers all 14 functions, including wrap-around and the NULL and
+empty paths.
+
+**Checked and found right:**
+- the quick start (dequeue gives 10, then `dequeue_option` gives `Some(20)`,
+  run);
+- every documented error code against deque's code;
+- the NULL-safety of the queries;
+- `clear`'s postconditions;
+- `DECLARE_QUEUE` (VERIFY-049).
+
+### Prediction
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| L1 | Nothing measured moves. The change is comments outside any ACSL. Every annotation reads as at VERIFY-050: each proof job at its pin (deque 1653 / 1665), `misra` 55, MC/DC 1937 / 2102, `compcert` 57 / 57, embedded 0 failed. | any | H |
