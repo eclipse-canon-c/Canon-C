@@ -1,0 +1,67 @@
+name: "8 · Records"
+# The bookkeeping gates: record coverage (each argument block in
+# docs/deviations.md joined to the roll-calls that pin its goals) and the
+# workflow-size guard. Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'docs/deviations.md'
+      - '.github/workflows/**'
+      - 'vmacros/vdrivers/cc_pins/*.txt'
+      - 'tools/record_coverage.py'
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  record-coverage:
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: "Join docs/deviations.md to the roll-calls (strict)"
+        # The base is the pull request's, or the commit the push moved the
+        # branch from; a manual run has none. The checkout holds one commit,
+        # so the base is fetched for the script to read its pins.
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          ARGS=(--strict --complete)
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            if git fetch -q --no-tags --depth=1 origin "$BASE"; then
+              ARGS+=(--pending-from "$BASE")
+            else
+              echo "::notice::the base $BASE could not be fetched: no name is taken as pending"
+            fi
+          fi
+          echo "python3 tools/record_coverage.py ${ARGS[*]}"
+          python3 tools/record_coverage.py "${ARGS[@]}"
+
+  # -------------------------------------------------------------------------
+  # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB
+  # or more, and says only "a workflow file issue". This job names the file.
+  # -------------------------------------------------------------------------
+  workflow-size:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check every workflow file is under GitHub's 500 KB limit
+        run: |
+          LIMIT=512000; WARN=491520; FAIL=0
+          for f in .github/workflows/*.yml; do
+            n=$(wc -c < "$f")
+            echo "$n $f"
+            if [ "$n" -ge "$LIMIT" ]; then
+              echo "::error file=$f::$n bytes: at or over GitHub's 500 KB limit; the workflow will not run"; FAIL=1
+            elif [ "$n" -ge "$WARN" ]; then
+              echo "::warning file=$f::$n bytes: within 20 KB of GitHub's 500 KB limit"
+            fi
+          done
+          exit "$FAIL"

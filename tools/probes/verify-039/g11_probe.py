@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-g11_probe.py — the WP runs of .github/workflows/g11-probe.yml (VERIFY-039 G11)
+g11_probe.py — the WP runs of the g11-probe job of .github/workflows/probes.yml (VERIFY-039 G11)
 and their reading against the committed predictions in docs/deviations.md,
 VERIFY-039: "G11 — committed prediction for the probe" for run #1, and "G11 —
 the declarations and the probe: committed prediction" since.

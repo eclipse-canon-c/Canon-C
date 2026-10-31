@@ -1,0 +1,2055 @@
+name: "3 · Static analysis & coverage"
+# clang-tidy and Cppcheck, MISRA C:2012 (advisory), MC/DC and branch
+# coverage (GCC 14), and CompCert (informational, upstream only).
+# Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    # Documentation-only pushes change nothing a gate measures; skip them.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # 2. Static analysis
+  # -------------------------------------------------------------------------
+  static-analysis:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install clang-tidy and Cppcheck (Ubuntu)
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy cppcheck
+      - name: Restore Cppcheck build (macOS)
+        if: matrix.os == 'macos-latest'
+        id: cppcheck-macos-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/cppcheck-pinned
+          # Key tracks the PINNED version and commit in the next step.
+          # Bump all three together, deliberately.
+          key: cppcheck-${{ runner.os }}-${{ runner.arch }}-2.19.0-9730a448fb7e9c205b7ec47b7ba88c5406954538-v1
+      - name: Install Cppcheck (macOS)
+        # PINNED to 2.19.0, the Windows leg's version. The step used to
+        # run `brew install cppcheck`, which takes whatever Homebrew ships.
+        # At CI #1366 the leg failed on ten warnings in test/ that
+        # Homebrew's current 2.22.0 gives and 2.19.0, 2.20.0 and 2.21.0 do
+        # not (VERIFY-039, CI #1366 read). Homebrew keeps no versioned
+        # cppcheck formula, so the release is built from source: the
+        # commit the 2.19.0 tag names is fetched by hash from the
+        # project's repository (cppcheck-opensource/cppcheck, formerly
+        # danmar/cppcheck), checked, built with CMake and cached. The
+        # cache is saved only when the job passes. Bump version, commit
+        # and cache key together, deliberately, and re-check the
+        # suppressions when bumping (the Windows $Version policy).
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        env:
+          CPPCHECK_VERSION: "2.19.0"
+          CPPCHECK_COMMIT: "9730a448fb7e9c205b7ec47b7ba88c5406954538"
+          CACHE_HIT: ${{ steps.cppcheck-macos-cache.outputs.cache-hit }}
+        run: |
+          PREFIX="${HOME}/cppcheck-pinned"
+          if [ "${CACHE_HIT}" != "true" ]; then
+            SRC="${RUNNER_TEMP}/cppcheck-src"
+            BUILD="${RUNNER_TEMP}/cppcheck-build"
+            git init -q "${SRC}"
+            git -C "${SRC}" fetch -q --depth 1 \
+              https://github.com/cppcheck-opensource/cppcheck.git "${CPPCHECK_COMMIT}"
+            git -C "${SRC}" checkout -q FETCH_HEAD
+            ACTUAL=$(git -C "${SRC}" rev-parse HEAD)
+            if [ "${ACTUAL}" != "${CPPCHECK_COMMIT}" ]; then
+              echo "cppcheck commit mismatch. Expected ${CPPCHECK_COMMIT}, got ${ACTUAL}"
+              exit 1
+            fi
+            cmake -S "${SRC}" -B "${BUILD}" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+              -DUSE_MATCHCOMPILER=Off \
+              -DBUILD_GUI=Off \
+              -DBUILD_TESTS=Off
+            cmake --build "${BUILD}" -j "$(sysctl -n hw.ncpu)"
+            cmake --install "${BUILD}"
+          fi
+          VERSION_LINE=$("${PREFIX}/bin/cppcheck" --version)
+          echo "${VERSION_LINE}"
+          if [ "${VERSION_LINE}" != "Cppcheck ${CPPCHECK_VERSION}" ]; then
+            echo "cppcheck version mismatch. Expected ${CPPCHECK_VERSION}"
+            exit 1
+          fi
+          echo "${PREFIX}/bin" >> "${GITHUB_PATH}"
+      - name: Install Cppcheck (Windows)
+        # Pinned direct download from the official GitHub release —
+        # same pattern as the CVC5 install in framac-setup, for the
+        # same reason: deterministic tool versions. winget was removed
+        # after 0x8a15000f stale-source failures on hosted runners
+        # (winget depends on msstore source state the runner images
+        # don't reliably ship). Note: the repo has moved to
+        # cppcheck-opensource/cppcheck; GitHub redirects danmar/ URLs.
+        # Bump $Version deliberately — cppcheck version changes can
+        # move findings, so re-check suppressions when bumping.
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $Version  = "2.19.0"
+          $Checksum = "AAC15F6DC2B404B3B2562015419F11D91F391E686279CABD20627A8435782128"
+          $Url = "https://github.com/danmar/cppcheck/releases/download/$Version/cppcheck-$Version-x64-Setup.msi"
+          Invoke-WebRequest -Uri $Url -OutFile cppcheck.msi
+          $Actual = (Get-FileHash cppcheck.msi -Algorithm SHA256).Hash
+          if ($Actual -ne $Checksum) {
+            Write-Error "cppcheck MSI checksum mismatch. Expected $Checksum, got $Actual"
+            exit 1
+          }
+          Start-Process msiexec.exe -ArgumentList '/i','cppcheck.msi','/qn','/norestart' -Wait
+          $Exe = Get-ChildItem "C:\Program Files\Cppcheck" -Filter "cppcheck.exe" `
+            -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $Exe) {
+            Write-Error "cppcheck.exe not found after MSI install"
+            exit 1
+          }
+          Add-Content $env:GITHUB_PATH $Exe.DirectoryName
+          & $Exe.FullName --version
+      - name: Configure CMake for compile_commands.json (Linux only)
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -S "${{ github.workspace }}"
+      - name: Run clang-tidy (Linux only)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          SKIP="dynstring_test.c dynvec_test.c"
+          FILES=""
+          for f in $(find "${{ github.workspace }}/test" -name "*.c" 2>/dev/null | sort); do
+            if ! grep -qE '[^[:space:]]' "$f"; then continue; fi
+            BASENAME=$(basename "$f")
+            SKIP_THIS=0
+            for s in $SKIP; do
+              if [ "$BASENAME" = "$s" ]; then SKIP_THIS=1; break; fi
+            done
+            if [ "$SKIP_THIS" = "1" ]; then continue; fi
+            FILES="$FILES $f"
+          done
+          if [ -z "$FILES" ]; then
+            echo "No files to analyse — skipping clang-tidy"
+            exit 0
+          fi
+          clang-tidy \
+            -p build \
+            --extra-arg="-I${{ github.workspace }}/core/primitives" \
+            --extra-arg="-I${{ github.workspace }}/core" \
+            --extra-arg="-I${{ github.workspace }}" \
+            $FILES
+      - name: Run Cppcheck (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cppcheck \
+            --enable=warning \
+            --std=c99 \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --suppress=toomanyconfigs \
+            "--suppress=returnDanglingLifetime:*slice_test.c" \
+            "--suppress=returnDanglingLifetime:*borrow_test.c" \
+            "--suppress=returnDanglingLifetime:*array_test.c" \
+            "--suppress=returnDanglingLifetime:*any_all_test.c" \
+            "--suppress=returnDanglingLifetime:*filter_test.c" \
+            "--suppress=returnDanglingLifetime:*find_test.c" \
+            "--suppress=returnDanglingLifetime:*fold_test.c" \
+            "--suppress=returnDanglingLifetime:*map_test.c" \
+            "--suppress=returnDanglingLifetime:*reverse_test.c" \
+            "--suppress=returnDanglingLifetime:*search_test.c" \
+            "--suppress=returnDanglingLifetime:*sort_test.c" \
+            "--suppress=returnDanglingLifetime:*unique_test.c" \
+            "--suppress=literalWithCharPtrCompare:*diag_test.c" \
+            "--suppress=arrayIndexOutOfBounds:*diag.h" \
+            "--suppress=ctunullpointer:*deque_test.c" \
+            "--suppress=ctunullpointer:*vec_test.c" \
+            "--suppress=ctunullpointer:*hashmap_test.c" \
+            "--suppress=ctunullpointer:*queue_test.c" \
+            "--suppress=ctunullpointer:*stack_test.c" \
+            "--suppress=ctunullpointer:*array_test.c" \
+            -I "${{ github.workspace }}/core/primitives" \
+            -I "${{ github.workspace }}/core" \
+            -I "${{ github.workspace }}/semantics" \
+            -I "${{ github.workspace }}/data" \
+            -I "${{ github.workspace }}/algo" \
+            -I "${{ github.workspace }}/util" \
+            -I "${{ github.workspace }}" \
+            "${{ github.workspace }}/test"
+      - name: Run Cppcheck (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cppcheck `
+            --enable=warning `
+            --std=c99 `
+            --error-exitcode=1 `
+            --suppress=missingIncludeSystem `
+            --suppress=toomanyconfigs `
+            "--suppress=returnDanglingLifetime:*slice_test.c" `
+            "--suppress=returnDanglingLifetime:*borrow_test.c" `
+            "--suppress=returnDanglingLifetime:*array_test.c" `
+            "--suppress=returnDanglingLifetime:*any_all_test.c" `
+            "--suppress=returnDanglingLifetime:*filter_test.c" `
+            "--suppress=returnDanglingLifetime:*find_test.c" `
+            "--suppress=returnDanglingLifetime:*fold_test.c" `
+            "--suppress=returnDanglingLifetime:*map_test.c" `
+            "--suppress=returnDanglingLifetime:*reverse_test.c" `
+            "--suppress=returnDanglingLifetime:*search_test.c" `
+            "--suppress=returnDanglingLifetime:*sort_test.c" `
+            "--suppress=returnDanglingLifetime:*unique_test.c" `
+            "--suppress=literalWithCharPtrCompare:*diag_test.c" `
+            "--suppress=arrayIndexOutOfBounds:*diag.h" `
+            "--suppress=ctunullpointer:*deque_test.c" `
+            "--suppress=ctunullpointer:*vec_test.c" `
+            "--suppress=ctunullpointer:*hashmap_test.c" `
+            "--suppress=ctunullpointer:*queue_test.c" `
+            "--suppress=ctunullpointer:*stack_test.c" `
+            "--suppress=ctunullpointer:*array_test.c" `
+            -I "${{ github.workspace }}/core/primitives" `
+            -I "${{ github.workspace }}/core" `
+            -I "${{ github.workspace }}/semantics" `
+            -I "${{ github.workspace }}/data" `
+            -I "${{ github.workspace }}/algo" `
+            -I "${{ github.workspace }}/util" `
+            -I "${{ github.workspace }}" `
+            "${{ github.workspace }}/test"
+
+  # -------------------------------------------------------------------------
+  # 7. MISRA C:2012 advisory analysis (Linux only)
+  #
+  #    Uses Cppcheck's MISRA addon for preliminary compliance checking.
+  #    This is NOT a qualified MISRA checker — it covers approximately
+  #    60-70% of MISRA C:2012 rules. For certification, replace with
+  #    a qualified tool: Polyspace, LDRA, PC-lint, or Parasoft C/C++test.
+  #
+  #    Findings are advisory — real violations do not fail the build.
+  #    Their purpose is to track MISRA compliance progress and identify
+  #    deviations that must be documented in docs/deviations.md
+  #    (inline via `cppcheck-suppress misra-c2012-X.Y` comments,
+  #    honored through --inline-suppr).
+  #
+  #    The INSTRUMENT, however, is enforced: canary/misra_canary.h
+  #    contains intentional violations, and the job FAILS if they are
+  #    not detected. Rationale: cppcheck emits MISRA addon findings at
+  #    "style" severity, which is silently discarded without
+  #    --enable=style — this job previously reported "0 violations"
+  #    for that exact reason while the addon's findings were being
+  #    filtered out. The canary makes any such silent breakage of the
+  #    toolchain (severity filtering, addon resolution, packaging
+  #    changes) a hard failure instead of a fake-green zero.
+  #
+  #    PROJECT-WIDE RULE DEVIATIONS — each maps 1:1 to a record in
+  #    docs/deviations.md (do not add a suppression without one):
+  #      15.5        MISRA-DEV-001  early-return guard-clause style
+  #      2.5         MISRA-DEV-002  standalone-TU unused-macro artifact
+  #      20.10       MISRA-DEV-003  ## is the type-instantiation mechanism
+  #      3.1         MISRA-DEV-004  // and /* inside doc comments (URLs)
+  #      5.6/5.8/5.9 MISRA-DEV-005  instantiation-header identifier artifact
+  #      11.5        MISRA-DEV-006  void* generic interface level
+  #      20.5        MISRA-DEV-007  #undef template-parameter cleanup
+  #      18.4        MISRA-DEV-008  bounded slice/string pointer arithmetic
+  #      17.1        MISRA-DEV-009  stdarg in fmt/log entry points (Tier 2)
+  #      11.6        MISRA-DEV-010  uintptr_t alignment round-trips
+  #                                 (same sites as VERIFY-006/-008)
+  #    CANARY INTERACTION: the canary relies on rules 21.6, 14.4/15.1,
+  #    and 10.1 — none of which may be added to the list above without
+  #    path-scoping the suppression, or the self-test goes blind.
+  #
+  #    PER-LINE MASKING (measured property of cppcheck's misra output):
+  #    at most one misra violation is reported per source line, so a
+  #    line violating several rules shows only one until that one is
+  #    suppressed or fixed — then the next surfaces. All counts in this
+  #    job and in the MISRA-DEV records are counts of VISIBLE findings
+  #    under the then-active suppression set, i.e. lower bounds. The
+  #    1672-finding baseline unmasked 224 shadowed findings when the
+  #    892 deviation-covered findings were suppressed (-> 1004).
+  #
+  #    Suppressions (tool limitations):
+  #      - misra-config:*_impl.h — macro-templated implementation headers
+  #        (hashmap_impl.h, deque_impl.h, etc.) emit [misra-config]
+  #        errors because Cppcheck cannot resolve macro-instantiated
+  #        type names (e.g. HASHMAP_SLOT_NAME) without an instantiation
+  #        context. This is a tool limitation, not a code defect
+  #        (MISRA-CFG-001). Qualified MISRA checkers handle this
+  #        correctly via full preprocessor-aware analysis.
+  # -------------------------------------------------------------------------
+  misra:
+    # PINNED RUNNER — not ubuntu-latest. The misra job's finding set is a
+    # function of the cppcheck/misra-addon version, which comes from the
+    # runner image's apt archive (24.04 -> cppcheck 2.13.0, newer images
+    # -> 2.17+ with expanded MISRA coverage: rules 19.2/8.7/5.7 and
+    # macro-body 15.6 descent). During the ubuntu-latest image migration
+    # the label is nondeterministic and the Real count flips 780 <-> 1004
+    # between pushes. Pin the image = pin the tool = stable baseline.
+    # Bump this pin DELIBERATELY (same policy as the Windows cppcheck
+    # $Version pin in static-analysis): re-baseline the counts, add/extend
+    # deviation records for newly covered rules (19.2 union-backed result,
+    # 5.7 instantiation-header tags -> MISRA-DEV-005, 15.6 grows to ~262,
+    # 12.3 comma declarators, 8.7 standalone-TU linkage artifact), then
+    # move the pin and the expected count in one acknowledged commit.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+      - name: Run MISRA C:2012 analysis on library headers
+        shell: bash
+        run: |
+          # SCAN SURFACE (re-baselined 2026-07-25, Commit 12 — see
+          # MISRA-SCAN-001 in docs/deviations.md).
+          #
+          # `*_impl.h` and `*_mangle.h` are INTERNAL TEMPLATE FRAGMENTS: they
+          # are never compiled alone and depend on macros (`*_LINKAGE`, type
+          # parameters) that their including entry point supplies. Handing them
+          # to cppcheck as standalone translation units left those macros
+          # undefined, the function signatures unparseable, and produced
+          # findings that describe the scan rather than the code. Excluding
+          # them does NOT reduce analysis coverage: every fragment is reached
+          # through an entry point that IS scanned (verified by include-graph
+          # reachability — 28 fragments, 0 unreached), so their contents are
+          # still analysed, with configuration, and findings are still reported
+          # at their own file:line.
+          #
+          # `*_decl.h` / `*_defn.h` are deliberately NOT excluded: nothing
+          # includes them, so they are user-facing entry points whose content
+          # would go entirely unanalysed if dropped.
+          HEADERS=$(find \
+            "${{ github.workspace }}/core" \
+            "${{ github.workspace }}/semantics" \
+            "${{ github.workspace }}/data" \
+            "${{ github.workspace }}/algo" \
+            "${{ github.workspace }}/util" \
+            "${{ github.workspace }}/canary" \
+            -name "*.h" -type f 2>/dev/null \
+            | grep -vE '_(impl|mangle)\.h$' | sort)
+          if [ -z "$HEADERS" ]; then
+            echo "No header files found — skipping MISRA analysis"
+            exit 0
+          fi
+          echo "Found $(echo "$HEADERS" | wc -l) header files to analyze"
+          echo "Toolchain: $(cppcheck --version)" | tee misra_toolchain.txt
+          cppcheck \
+            --addon=misra \
+            --enable=style \
+            --inline-suppr \
+            --std=c99 \
+            --language=c \
+            --suppress=missingIncludeSystem \
+            --suppress=toomanyconfigs \
+            "--suppress=misra-config:*_impl.h" \
+            --suppress=misra-c2012-15.5 \
+            --suppress=misra-c2012-2.5 \
+            --suppress=misra-c2012-20.10 \
+            --suppress=misra-c2012-3.1 \
+            --suppress=misra-c2012-5.6 \
+            --suppress=misra-c2012-5.8 \
+            --suppress=misra-c2012-5.9 \
+            --suppress=misra-c2012-11.5 \
+            --suppress=misra-c2012-20.5 \
+            --suppress=misra-c2012-18.4 \
+            --suppress=misra-c2012-17.1 \
+            --suppress=misra-c2012-11.6 \
+            -I "${{ github.workspace }}/core/primitives" \
+            -I "${{ github.workspace }}/core" \
+            -I "${{ github.workspace }}/semantics" \
+            -I "${{ github.workspace }}/data" \
+            -I "${{ github.workspace }}/algo" \
+            -I "${{ github.workspace }}/util" \
+            -I "${{ github.workspace }}" \
+            $HEADERS \
+            2>&1 | tee misra_report.txt
+          echo ""
+          # ---- Instrument self-test: the canary MUST be flagged ----
+          CANARY=$(grep -c "misra_canary\.h.*\[misra-" misra_report.txt || true)
+          if [ "${CANARY}" -eq 0 ]; then
+            echo "FAIL: MISRA self-test — canary violations not detected."
+            echo "The addon is not producing output; any count is meaningless."
+            exit 1
+          fi
+          TOTAL=$(grep -c "\[misra-" misra_report.txt || true)
+          echo "==============================================="
+          echo "  MISRA C:2012 Summary"
+          echo "==============================================="
+          echo "  Toolchain: $(cppcheck --version) (runner-pinned; see job comment)"
+          echo "  Canary findings (expected >0): ${CANARY}"
+          echo "  Total violations incl. canary: ${TOTAL}"
+          echo "  Real violations:               $((TOTAL - CANARY))"
+          echo "::notice title=misra::real $((TOTAL - CANARY)); canary ${CANARY}; total ${TOTAL}"   # VERIFY-050
+          echo ""
+          echo "  Expected real count: 55 (pinned; cppcheck 2.13.0,"
+          echo "  suppression set MISRA-DEV-001..012 + 014..017)."
+          echo "  53 -> 54 at VERIFY-031 run 1 (f6e54ca): one 21.2 at"
+          echo "  data/stringbuf.h's __FRAMAC__-only vsnprintf axiom — the"
+          echo "  same shape as semantics/diag.h's two (snprintf, fprintf)."
+          echo "  54 -> 55 at VERIFY-044 (predicted from a local scan):"
+          echo "  CANON_RESULT(_Bool, Error) lets cppcheck, which does not"
+          echo "  read <stdbool.h>, see the names the compiler sees. Two 5.5"
+          echo "  go (log.h, fold_impl.h); two 5.7 (same two lines) and one"
+          echo "  2.3 (fold.h's result_bool_Error typedef) appear."
+          echo ""
+          echo "  The ledger reads as TWO SEGMENTS joined at Commit 12,"
+          echo "  because MISRA-SCAN-001 re-baselined the analysis surface"
+          echo "  itself (template fragments are not translation units):"
+          echo "    pre-2026-07-25 surface: 1672 -> 108"
+          echo "    corrected surface:       98 ->  53 -> 54"
+          echo "  (53 at the campaign's close; the 54th is the VERIFY-031"
+          echo "  axiom above — a recorded addition, not a regression.)"
+          echo "  -10 of that step is the INSTRUMENT, not the code, and the"
+          echo "  two segments are not directly comparable. See"
+          echo "  MISRA-SCAN-001 for the reachability proof that excluding"
+          echo "  28 fragments loses no analysis coverage."
+          echo ""
+          echo "  Eighteen rules now held at zero — fourteen by fix"
+          echo "  (21.1, 10.4, 15.6, 12.1, 14.4, 17.7, 20.7, 17.8, 10.7,"
+          echo "  13.3, 12.3, 14.2, 10.8, 11.8) and four by documented"
+          echo "  deviation (19.2 unions, 21.3 allocation, 21.6 stdio,"
+          echo "  2.3 static-assertion idiom — MISRA-DEV-014..017)."
+          echo ""
+          echo "  Two of those rules found REAL DEFECTS rather than style"
+          echo "  noise: rule 5.7 exposed eleven public header pairs that"
+          echo "  could not be compiled together (Commit 15, guarded by"
+          echo "  test/integration/header_combination_test.c), and rule"
+          echo "  11.8 exposed ten accessors that took a const pointer and"
+          echo "  returned mutable access to the object storage (API-001,"
+          echo "  guarded by test/integration/const_correctness_test.c)."
+          echo ""
+          echo "  NOTE — per-line masking: cppcheck reports at most ONE"
+          echo "  misra violation per source line. Counts are therefore a"
+          echo "  LOWER BOUND on (line, rule) pairs: suppressing or fixing"
+          echo "  a rule can SURFACE previously shadowed violations on the"
+          echo "  same lines (measured: suppressing 892 baseline findings"
+          echo "  surfaced 224 shadowed ones, 1672 -> 1004, all 224"
+          echo "  machine-verified as same-line unmaskings). A count that"
+          echo "  RISES after cleanup work is surfacing, not regression —"
+          echo "  diff the report artifact against the previous run before"
+          echo "  concluding anything."
+          echo ""
+          echo "  Advisory only — real violations do not fail the build."
+          echo ""
+          echo "  NOTE: Rule category breakdown (Mandatory/Required/Advisory)"
+          echo "  requires a MISRA rule lookup table and is not produced by"
+          echo "  Cppcheck alone. For certification, use a qualified tool"
+          echo "  (Polyspace, LDRA, PC-lint) that emits categorized output."
+          echo ""
+          echo "  Deviations documented in: docs/deviations.md"
+          echo "  (MISRA-DEV-001..010 project-wide, applied as the"
+          echo "  command-line suppressions above; MISRA-DEV-011 inline at"
+          echo "  util/time.h; MISRA-DEV-012 inline at 117 template-"
+          echo "  machinery macros; MISRA-DEV-014..017 inline at 34"
+          echo "  design-identity sites; MISRA-CFG-001 tool."
+          echo "  MISRA-DEV-013 is SUPERSEDED — MISRA-SCAN-001 removed the"
+          echo "  condition it existed for and its 13 suppressions were"
+          echo "  deleted, verified dead beforehand.)"
+          echo "==============================================="
+          # Real violations are advisory by design. When MISRA compliance
+          # is mature, uncomment to enforce a zero-real-violations gate:
+          # if [ "$((TOTAL - CANARY))" -gt 0 ]; then
+          #   echo "FAIL: $((TOTAL - CANARY)) MISRA violations found"
+          #   exit 1
+          # fi
+      - name: Upload MISRA report
+        uses: actions/upload-artifact@v6
+        with:
+          name: misra-report
+          path: |
+            misra_report.txt
+            misra_toolchain.txt
+          
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # 6. MC/DC coverage — GCC 14 -fcondition-coverage (Linux only)
+  #
+  #    -DCANON_CHECKED_FORCE_FALLBACK and -DCANON_BITS_FORCE_FALLBACK are
+  #    passed so the fallback paths in checked.h and bits.h are exercised.
+  #    Without these flags, GCC expands builtins to single instructions
+  #    with no branches, the #else fallback blocks become dead code, and
+  #    gcov reports 0% MC/DC on them. Forcing the fallback makes coverage
+  #    measure the same code Frama-C is proving — the two tracks stay
+  #    consistent.
+  # -------------------------------------------------------------------------
+  coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install GCC 14 and lcov
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 lcov
+      - name: Configure CMake with MC/DC coverage instrumentation
+        # CANON_CHECKED_FORCE_FALLBACK: exercise the same fallback path WP
+        #   verifies (otherwise GCC expands __builtin_*_overflow to single
+        #   instructions with no branches for gcov to see).
+        # CANON_BITS_FORCE_FALLBACK: same rationale for bits.h — forces the
+        #   portable fallback paths for popcount, clz, ctz, and bswap
+        #   instead of compiler builtins.
+        # CANON_NO_REQUIRE: compiles CHECKED_ASSERT_RESULT(result) out to
+        #   nothing. Without this, every function contains a runtime NULL
+        #   assertion whose NULL branch is structurally unreachable (the
+        #   ACSL `requires \valid(result)` clause proves it for every
+        #   caller), yet gcov counts it as an uncovered branch. Defining
+        #   CANON_NO_REQUIRE removes the assertion from the preprocessed
+        #   source, keeping MC/DC measurement focused on real branches.
+        #   The frama-c job passes the same flag for the same reason, so
+        #   the WP and coverage evidence streams stay aligned.
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc-14 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_BITS_FORCE_FALLBACK -DCANON_NO_REQUIRE" \
+            -DENABLE_SANITIZERS=OFF \
+            -DENABLE_COVERAGE_TUS=ON \
+            -S "${{ github.workspace }}"
+      - name: Build
+        run: cmake --build build
+      - name: Run tests
+        working-directory: build
+        # contract_test is excluded here: the coverage build defines
+        # CANON_NO_REQUIRE, which compiles require()/require_msg() into
+        # ((void)0). contract_test's entire purpose is to verify that
+        # those macros fire when preconditions are violated, so with
+        # the macros disabled every assertion in the test fails by
+        # design. contract_test still runs (and passes) in every other
+        # CI job — build, valgrind, fuzzing — where CANON_NO_REQUIRE is
+        # not defined. Excluding it here is honest about what the
+        # coverage build measures: the fallback path of the Canon-C
+        # library headers, not the assertion infrastructure itself.
+        # Also excluded: the two test/integration/ guards. They are
+        # COMPILE-TIME assertions — header_combination_test proves public
+        # headers can be combined, const_correctness_test proves read-only
+        # accessors reject mutable use (API-001). Neither adds behavioural
+        # coverage, but both include many headers shallowly, and the MC/DC
+        # aggregation below takes the MAX condition total per file across
+        # translation units. A broad-but-shallow TU therefore DISPLACES a
+        # narrow-but-thorough one as the max and lowers the reported
+        # percentage for files nobody changed. Excluding them keeps the
+        # report measuring behavioural coverage. They still run in every
+        # other job, where their failure modes (compile errors) surface.
+        run: ctest --build-config Debug --output-on-failure --exclude-regex '^(contract_test|header_combination_test|const_correctness_test)$'
+      - name: Run MC/DC cover TUs (Shape-B modules)
+        working-directory: build
+        # Cover TUs are not ctests — run them directly so their .gcda is
+        # written. They exit 0; they exist to emit coverage, not to assert.
+        run: |
+          ./option_cover
+          ./result_cover
+          ./vec_cover
+          ./deque_cover
+          ./deque_cover
+          ./vec_range_cover
+          ./vec_fmt_cover
+          ./stack_cover
+      
+      - name: Collect branch coverage data (lcov)
+        run: |
+          lcov --capture \
+            --directory build \
+            --output-file coverage_raw.info \
+            --rc branch_coverage=1 \
+            --ignore-errors unused \
+            --gcov-tool gcov-14
+          lcov --remove coverage_raw.info \
+            '/usr/*' \
+            '*/test/*' \
+            --output-file coverage.info \
+            --rc branch_coverage=1 \
+            --ignore-errors unused
+      - name: Collect MC/DC condition coverage (gcov-14 --conditions)
+        run: |
+          cd build
+          for gcda in $(find . -name "*.gcda" | sort); do
+            gcov-14 --conditions "$gcda" 2>/dev/null
+          done > gcov_output.txt 2>&1
+          awk '
+            /^File / {
+              current = $0
+              sub(/^File /, "", current)
+              gsub(/'\''/, "", current)
+              have_file = 1
+              next
+            }
+            /^Condition outcomes covered:/ {
+              if (have_file) {
+                print current "\t" $0
+                have_file = 0
+              }
+            }
+          ' gcov_output.txt | \
+            grep -v "/test/" | \
+            sed "s|${{ github.workspace }}/||" | \
+            tee mcdc_per_file.txt
+          python3 << 'PYEOF'
+          import re
+          best = {}
+          with open("mcdc_per_file.txt") as f:
+              for line in f:
+                  parts = line.strip().split("\t")
+                  if len(parts) < 2:
+                      continue
+                  filename = parts[0].strip()
+                  m = re.search(r"([\d.]+)% of (\d+)", parts[1])
+                  if not m:
+                      continue
+                  pct = float(m.group(1))
+                  total = int(m.group(2))
+                  hit = int(total * pct / 100 + 0.5)
+                  if filename not in best:
+                      best[filename] = (pct, hit, total)
+                  else:
+                      cur_pct, cur_hit, cur_total = best[filename]
+                      if total > cur_total or (total == cur_total and pct > cur_pct):
+                          best[filename] = (pct, hit, total)
+          results = [(v[0], v[1], v[2], v[2]-v[1], k) for k, v in best.items()]
+          results.sort()
+          total_hit = sum(r[1] for r in results)
+          total_all = sum(r[2] for r in results)
+          overall = 100.0 * total_hit / total_all if total_all else 0
+          print()
+          print("=" * 85)
+          print("  Canon-C MC/DC Condition Coverage (GCC 14 -fcondition-coverage)")
+          print("=" * 85)
+          print(f"  {'File':<50} {'MC/DC%':>8} {'Hit':>5} {'Total':>6} {'Missed':>7}")
+          print("-" * 85)
+          for pct, hit, total, missed, f in results:
+              print(f"  {f:<50} {pct:>7.1f}% {hit:>5} {total:>6} {missed:>7}")
+          print("-" * 85)
+          print(f"  {'TOTAL':<50} {overall:>7.1f}% {total_hit:>5} {total_all:>6} {total_all-total_hit:>7}")
+          print("=" * 85)
+          covers = "; ".join(f"{f} {hit}/{total}" for pct, hit, total, missed, f in results
+                             if f.startswith("vmacros/coverage/"))
+          print(f"::notice title=coverage::MC/DC {total_hit} / {total_all}; {covers}")   # VERIFY-050
+          with open("mcdc_summary.txt", "w") as out:
+              out.write(f"{overall:.1f}\n")
+              out.write(f"{total_hit}\n")
+              out.write(f"{total_all}\n")
+          PYEOF
+      - name: "Debug: per-line MC/DC detail for checked.h"
+        run: |
+          cd build
+          CHECKED_GCDA=$(find . -name "checked_test*.gcda" | head -1)
+          if [ -z "$CHECKED_GCDA" ]; then
+            echo "ERROR: could not locate checked_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+          echo "Running gcov on: $CHECKED_GCDA"
+          gcov-14 --conditions --all-blocks "$CHECKED_GCDA" 2>&1 | \
+            grep -A 200 "checked.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for checked.h ==="
+          find . -name "checked.h.gcov" -exec echo "Found: {}" \;
+          CHECKED_GCOV=$(find . -name "checked.h.gcov" | head -1)
+          if [ -n "$CHECKED_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $CHECKED_GCOV ==="
+            cat "$CHECKED_GCOV"
+          else
+            echo "No checked.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*checked* 2>/dev/null || true
+            done
+          fi
+      - name: "Debug: per-line MC/DC detail for ptr.h"
+        # Identifies which specific conditions in ptr.h are uncovered.
+        # As of CI #788, ptr.h reached 100% MC/DC (42/42). This debug
+        # step remains in place to catch future regressions — if a new
+        # function is added without corresponding tests, the output
+        # will show which conditions drop below 100%.
+        run: |
+          cd build
+          PTR_GCDA=$(find . -name "ptr_test*.gcda" | head -1)
+          if [ -z "$PTR_GCDA" ]; then
+            echo "ERROR: could not locate ptr_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+          echo "Running gcov on: $PTR_GCDA"
+          gcov-14 --conditions --all-blocks "$PTR_GCDA" 2>&1 | \
+            grep -A 200 "ptr.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for ptr.h ==="
+          find . -name "ptr.h.gcov" -exec echo "Found: {}" \;
+          PTR_GCOV=$(find . -name "ptr.h.gcov" | head -1)
+          if [ -n "$PTR_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $PTR_GCOV ==="
+            cat "$PTR_GCOV"
+          else
+            echo "No ptr.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*ptr* 2>/dev/null || true
+            done
+          fi
+      - name: "Debug: per-line MC/DC detail for slice.h"
+        # Identifies which specific conditions in slice.h are uncovered.
+        # As of CI #816, slice.h reached its achievable MC/DC ceiling at
+        # 93.1% (54/58, 4 missed). The 4 remaining outcomes are documented
+        # in docs/deviations.md as MCDC-002 — they are the `!ptr` left-side
+        # of OR in bytes_slice (line 117), bytes_skip (line 130),
+        # str_slice (line 194), and str_skip (line 207). All four are
+        # API-unreachable in MC/DC isolation.
+        #
+        # This step remains in place as a regression detector — if a
+        # new function is added without corresponding tests, or if any
+        # of the previously-closed reachable gaps regress, the output
+        # will show which conditions drop below the documented ceiling.
+        #
+        # When VERIFY-007 confirms WP discharges the four MCDC-002
+        # branches as unreachable, MCDC-002 transitions from "API-
+        # unreachable" to "WP-discharged unreachable" — but the gcov
+        # measurement remains at 93.1% because gcov instruments the
+        # source, not the proof. The two evidence streams complement
+        # each other rather than converge.
+        run: |
+          cd build
+          SLICE_GCDA=$(find . -name "slice_test*.gcda" | head -1)
+          if [ -z "$SLICE_GCDA" ]; then
+            echo "ERROR: could not locate slice_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+          echo "Running gcov on: $SLICE_GCDA"
+          gcov-14 --conditions --all-blocks "$SLICE_GCDA" 2>&1 | \
+            grep -A 200 "slice.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for slice.h ==="
+          find . -name "slice.h.gcov" -exec echo "Found: {}" \;
+          SLICE_GCOV=$(find . -name "slice.h.gcov" | head -1)
+          if [ -n "$SLICE_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $SLICE_GCOV ==="
+            cat "$SLICE_GCOV"
+          else
+            echo "No slice.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*slice* 2>/dev/null || true
+            done
+          fi
+      - name: "Debug: per-line MC/DC detail for memory.h"
+        # Identifies which specific conditions in memory.h are uncovered.
+        # As of CI #831, memory.h reached 88.3% MC/DC (113/128, 15 missed).
+        # The 15 remaining outcomes split into three rough categories
+        # (estimated, to be confirmed by reading this debug output and
+        # documented in deviations.md as a memory.h-specific MCDC entry):
+        #
+        #   1. MCDC-002-pattern (~6 conditions) — the bytes_t variants
+        #      mem_copy_bytes, mem_move_bytes, mem_zero_bytes, mem_set_bytes,
+        #      mem_equal_bytes, mem_secure_zero_bytes contain compound
+        #      `!b.ptr || b.len == 0` early returns. The {ptr, len}
+        #      structure plus cbytes_empty() = {NULL, 0} make some
+        #      subcondition combinations API-unreachable in MC/DC
+        #      isolation, analogous to slice.h's bytes_slice / str_slice
+        #      defensive branches.
+        #
+        #   2. require_msg panic paths (~4-6 conditions) — mem_align_to,
+        #      mem_is_aligned, mem_swap, mem_swap_buf use require_msg to
+        #      enforce preconditions. The failing branches collapse under
+        #      -DCANON_NO_REQUIRE (used by the coverage build), but their
+        #      structural positions still register as conditions in some
+        #      cases. Same pattern as the contract.h 0/2 entry that
+        #      appears in every test row.
+        #
+        #   3. Reachable gaps (~3-5 conditions) — mem_compare's `if (a == b)`
+        #      vs `if (!a || !b)` interaction, and mem_swap_buf's three
+        #      separate overlap require_msg calls, are likely the
+        #      reachable subset that more-careful test design could close.
+        #
+        # This step remains in place as a regression detector. If a new
+        # function is added without corresponding tests, or if any of the
+        # previously-closed reachable gaps regress, the output will show
+        # which conditions drop below the documented baseline.
+        run: |
+          cd build
+          MEMORY_GCDA=$(find . -name "memory_test*.gcda" | head -1)
+          if [ -z "$MEMORY_GCDA" ]; then
+            echo "ERROR: could not locate memory_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+          echo "Running gcov on: $MEMORY_GCDA"
+          gcov-14 --conditions --all-blocks "$MEMORY_GCDA" 2>&1 | \
+            grep -A 200 "memory.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for memory.h ==="
+          find . -name "memory.h.gcov" -exec echo "Found: {}" \;
+          MEMORY_GCOV=$(find . -name "memory.h.gcov" | head -1)
+          if [ -n "$MEMORY_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $MEMORY_GCOV ==="
+            cat "$MEMORY_GCOV"
+          else
+            echo "No memory.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*memory* 2>/dev/null || true
+            done
+          fi
+      - name: "Debug: per-line MC/DC detail for arena.h"
+        # Identifies which specific conditions in arena.h are uncovered.
+        # As of the CI run that landed test_try_alloc_aligned_failure
+        # (closing the line 510 compound-return gap), arena.h reaches
+        # 90.6% MC/DC (58/64, 6 missed). The 6 remaining outcomes are
+        # documented in docs/deviations.md as MCDC-003 and split into
+        # two categories:
+        #
+        #   1. Overflow guard structural unreachability (4 outcomes) —
+        #      the compound `||` in arena_alloc (line 346) and
+        #      arena_alloc_aligned (line 401):
+        #          if ((arena->offset > (CANON_USIZE_MAX - pad)) ||        // cond 0
+        #              ((arena->offset + pad) > (CANON_USIZE_MAX - size)) || // cond 1
+        #              ((arena->offset + pad + size) > arena->capacity)) {   // cond 2
+        #              return NULL;
+        #          }
+        #      gcov reports cond 0 and cond 1 as "not covered (true)" in
+        #      both functions. Both subconditions are structurally
+        #      unreachable under the arena_invariant predicate:
+        #        - arena_invariant requires capacity <= CANON_ARENA_MAX_SIZE
+        #        - CANON_ARENA_MAX_SIZE = CANON_GB = 2^30 (limits.h)
+        #        - pad <= CANON_DEFAULT_ALIGN - 1 <= 15
+        #        - therefore offset + pad <= 2^30 + 15, well below
+        #          CANON_USIZE_MAX on both 32-bit and 64-bit platforms,
+        #          so cond 0 cannot fire
+        #        - cond 1 firing in MC/DC isolation requires
+        #          offset + pad + size > CANON_USIZE_MAX while cond 2 is
+        #          false (offset + pad + size <= capacity); since
+        #          capacity is a usize, this is mathematically
+        #          impossible regardless of CANON_ARENA_MAX_SIZE
+        #      Same "structurally unreachable under type invariants"
+        #      pattern as slice.h's MCDC-002.
+        #
+        #   2. Release-build macro no-op artifacts (2 outcomes) — the
+        #      `_arena_debug_update(arena)` calls on lines 356 and 411.
+        #      Under release builds (no CANON_ARENA_DEBUG, as in the
+        #      coverage build's compile flags), the macro expands to
+        #      `((void)0)` per arena.h:176. gcov-14 still registers a
+        #      structural "condition" there and counts it as
+        #      "condition 0 not covered (false)". Same artifact pattern
+        #      as the contract.h 0/2 entry that appears in every test
+        #      row across the project — not a real condition, not a
+        #      coverage gap.
+        #
+        # Previously this step described a third category — a real test
+        # gap on arena_try_alloc_aligned line 510 (`p != NULL` not
+        # covered false). That gap was closed by adding
+        # test_try_alloc_aligned_failure to arena_test.c. Line 510 now
+        # reports 4/4, matching line 485 (arena_try_alloc's compound
+        # return).
+        #
+        # Cross-stream evidence (VERIFY-009 + MCDC-003):
+        #   VERIFY-009 separately documents that WP verifies the
+        #   arena_invariant predicate is preserved across all alloc
+        #   paths, and that arena_invariant entails capacity <=
+        #   CANON_ARENA_MAX_SIZE, which is the substrate fact used to
+        #   establish the line 346/401 cond-0 unreachability. The
+        #   line 346/401 cond-1 unreachability is purely mathematical
+        #   (independent of any constant), so WP does not need to
+        #   discharge it specifically — it falls out of usize
+        #   arithmetic alone. This is the same cross-stream evidence
+        #   pattern slice.h's MCDC-002 established (gcov reports
+        #   uncovered, WP proves unreachable, both streams consistent).
+        #
+        # This step remains in place as a regression detector. If a new
+        # function is added without corresponding tests, or if any of
+        # the previously-closed reachable gaps regress, the output will
+        # show which conditions drop below the documented baseline.
+        run: |
+          cd build
+          ARENA_GCDA=$(find . -name "arena_test*.gcda" | head -1)
+          if [ -z "$ARENA_GCDA" ]; then
+            echo "ERROR: could not locate arena_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+          echo "Running gcov on: $ARENA_GCDA"
+          gcov-14 --conditions --all-blocks "$ARENA_GCDA" 2>&1 | \
+            grep -A 200 "arena.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for arena.h ==="
+          find . -name "arena.h.gcov" -exec echo "Found: {}" \;
+          ARENA_GCOV=$(find . -name "arena.h.gcov" | head -1)
+          if [ -n "$ARENA_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $ARENA_GCOV ==="
+            cat "$ARENA_GCOV"
+          else
+            echo "No arena.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*arena* 2>/dev/null || true
+            done
+          fi
+      - name: "Debug: per-line MC/DC detail for pool.h"
+        # Surfaces which specific conditions in pool.h are uncovered.
+        # First measured baseline (this run's sibling coverage job):
+        # 73.5% MC/DC (50/68, 18 missed). The 18 missed outcomes are
+        # not yet classified — this dump is what lets us classify them
+        # (defensive-branch-unreachable vs require_msg-panic-artifact
+        # vs genuinely-untested-reachable) before writing a documented
+        # MCDC-NNN deviations entry. Report-only; never fails.
+        run: |
+          cd build
+          POOL_GCDA=$(find . -name "pool_test*.gcda" | head -1)
+          if [ -z "$POOL_GCDA" ]; then
+            echo "ERROR: could not locate pool_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 1
+          fi
+          echo "Running gcov on: $POOL_GCDA"
+          gcov-14 --conditions --all-blocks "$POOL_GCDA" 2>&1 | \
+            grep -A 200 "pool.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for pool.h ==="
+          find . -name "pool.h.gcov" -exec echo "Found: {}" \;
+          POOL_GCOV=$(find . -name "pool.h.gcov" | head -1)
+          if [ -n "$POOL_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $POOL_GCOV ==="
+            cat "$POOL_GCOV"
+          else
+            echo "No pool.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*pool* 2>/dev/null || true
+            done
+          fi
+      - name: Generate HTML coverage report
+        run: |
+          genhtml coverage.info \
+            --output-directory coverage_html \
+            --branch-coverage \
+            --title "Canon-C MC/DC Coverage" \
+            --legend \
+            --demangle-cpp \
+            --ignore-errors unused
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: |
+            coverage_html/
+            build/mcdc_per_file.txt
+          retention-days: 90
+      - name: Print branch coverage summary
+        run: |
+          echo "==============================================="
+          echo "  Canon-C Branch Coverage Summary"
+          echo "==============================================="
+          lcov --summary coverage.info \
+            --rc branch_coverage=1
+          echo "==============================================="
+      - name: Enforce coverage threshold
+        run: |
+          BRANCH_COV=$(lcov --summary coverage.info \
+            --rc branch_coverage=1 2>&1 | \
+            grep "branches" | grep -oP '[\d.]+%' | head -1 | tr -d '%')
+          echo "Branch coverage: ${BRANCH_COV}%"
+          if [ -f build/mcdc_summary.txt ]; then
+            MCDC_COV=$(head -1 build/mcdc_summary.txt)
+            echo "MC/DC coverage:  ${MCDC_COV}%"
+          fi
+          # Threshold progression plan:
+          #   Phase 1 (complete): 70% — baseline established
+          #   Phase 2 (current):  80% — post-bits.h and compare.h verification
+          #   Phase 3:            90% — certification readiness (DO-178C Level C)
+          #   Phase 4:            95%+ — certification readiness (DO-178C Level A/B)
+          THRESHOLD=80
+          if [ "$(echo "${BRANCH_COV} < ${THRESHOLD}" | bc -l)" -eq 1 ]; then
+            echo "FAIL: Branch coverage ${BRANCH_COV}% is below threshold ${THRESHOLD}%"
+            exit 1
+          else
+            echo "PASS: Branch coverage ${BRANCH_COV}% meets threshold ${THRESHOLD}%"
+          fi
+      - name: "Debug: per-line MC/DC detail for region.h"
+        # First measured MC/DC baseline for region.h. Report-only: surfaces
+        # which condition outcomes are uncovered so they can be classified
+        # before an MCDC-NNN deviations entry is written. Never fails.
+        #
+        # Anticipated shapes to look for in the dump (classify, don't assume):
+        #   - ensure_msg artifacts: region_assert_open and
+        #     region_assert_borrow_valid use ensure_msg (NDEBUG-gated), so
+        #     they may show uncovered outcomes — analogous to the
+        #     contract.h 0/2 artifact in every test row (MCDC-001).
+        #   - require_msg artifacts: region_begin/end/attach_arena/register/
+        #     set_parent use require_msg, compiled out under the coverage
+        #     build's -DCANON_NO_REQUIRE — same pattern as other headers.
+        #   - genuinely reachable: region_register table-full branch
+        #     (num_hooks >= MAX) and region_end's `if (h->fn != NULL)` hook guard;
+        #     confirm region_test.c exercises both sides of each.
+        #   - CANON_NO_REGION_PARENT is NOT defined in the coverage build,
+        #     so region_has_parent / region_set_parent compile in; their
+        #     null/open subconditions should be reachable.
+        run: |
+          cd build
+          REGION_GCDA=$(find . -name "region_test*.gcda" | head -1)
+          if [ -z "$REGION_GCDA" ]; then
+            echo "ERROR: could not locate region_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $REGION_GCDA"
+          gcov-14 --conditions --all-blocks "$REGION_GCDA" 2>&1 | \
+            grep -A 200 "region.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for region.h ==="
+          find . -name "region.h.gcov" -exec echo "Found: {}" \;
+          REGION_GCOV=$(find . -name "region.h.gcov" | head -1)
+          if [ -n "$REGION_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $REGION_GCOV ==="
+            cat "$REGION_GCOV"
+          else
+            echo "No region.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*region* 2>/dev/null || true
+            done
+          fi
+      
+      - name: "Debug: per-line MC/DC detail for bitset (in-place header)"
+        # VERIFY-020 / MCDC-012. Measurement half of the bitset arc.
+        # Baseline at CI #1240 and unchanged at #1251: 109/126 (86.5%),
+        # SEVENTEEN outcomes missed. This step enumerates them; nothing
+        # else in the job does, and 17 unexplained outcomes cannot be
+        # dispositioned from a percentage.
+        #
+        # WHY THERE IS NO bitset_cover.c, AND WHY THAT IS NOT AN OVERSIGHT
+        # ----------------------------------------------------------------
+        # vec, deque, option and result each need a cover TU because their
+        # conditions live in IMPL_ macro BODIES, stamped to the
+        # instantiation site — which for the tests is a test/ file the
+        # coverage glob removes. bitset is an ordinary header: its
+        # conditions are stamped to data/bitset.h and are already measured.
+        # gcov target here is therefore bitset_test, exactly as for
+        # region.h / borrow.h / diag.h.
+        #
+        # A prediction was made and REFUTED before this step was written,
+        # and the refutation is why the step looks like this. Since
+        # 2026-08-22 bitset.h instantiates option_usize itself (behind
+        # CANON_OPTION_USIZE_DEFINED). The prediction was that option's ~30
+        # condition outcomes would migrate INTO bitset.h's row, taking the
+        # denominator 126 -> 156 and the rate 86.5% -> ~72%. MEASURED AT
+        # #1251: 109/126, byte-identical to #1240, and the aggregate
+        # unchanged at 1774/2004.
+        #
+        # The reasoning error: gcov measures EMITTED code. The six option
+        # combinators (map, and_then, or_else, filter, combine_with, eq)
+        # are static inline with NO CALLER anywhere in the build, so GCC
+        # discards them — no arcs, no conditions, nothing to inflate a
+        # denominator with. option_cover.c reports 30 precisely because it
+        # CALLS them. The only measurable trace of the migration is in the
+        # summary: functions 655/658 -> 660/663, +5 covered on both sides,
+        # zero new uncovered — some/none/is_some/unwrap, the four bitset
+        # actually calls, moving from an excluded test file into a measured
+        # header. Lines +1.
+        #
+        # Adding a bitset_cover.c would therefore ADD risk for no gain: it
+        # would compile bitset.h a SECOND time under -DCANON_NO_REQUIRE
+        # alongside bitset_test.c's build of the same header, and lcov
+        # merges by (file, line). bitset would be the first module whose
+        # measured header carries a macro instantiation built under two
+        # flag sets. Don't invite that to cover conditions that are
+        # already covered.
+        #
+        # WHAT THE 17 ARE NOT: require_msg artifacts. The coverage build
+        # passes -DCANON_NO_REQUIRE (see the configure step), so require_msg
+        # is ((void)0) here exactly as in the WP run — that flag alignment
+        # is deliberate and is why the two streams measure the same surface.
+        # So finding F2's NULL legs in set/clear/toggle/test are NOT in this
+        # denominator, and the 17 must be explained by something else.
+        #
+        # LIKELY CANDIDATES, to be confirmed against the dump rather than
+        # assumed: the `!bs || !bs->words` runtime guards in clear_all /
+        # set_all / not / count / is_empty / is_full / is_disjoint /
+        # find_* (real runtime tests, not require_msg, so they compile in
+        # and both legs need driving); clear_padding's `rem != 0u`; and the
+        # word-index ternaries in find_next / find_last.
+        #
+        # DISPOSITION: same rule deque's MCDC-011 used. An uncovered
+        # outcome is first assumed to have a driving input that
+        # bitset_test.c does not yet supply — find it and extend the test.
+        # A justification row is the LAST resort and needs a genuine
+        # infeasibility argument, which is a finding worth writing up
+        # rather than a bookkeeping entry.
+        #
+        # Report-only. Never fails the coverage job.
+        run: |
+          cd build
+          BITSET_GCDA=$(find . -name "bitset_test*.gcda" | head -1)
+          if [ -z "$BITSET_GCDA" ]; then
+            echo "ERROR: could not locate bitset_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $BITSET_GCDA"
+          gcov-14 --conditions --all-blocks "$BITSET_GCDA" 2>&1 | \
+            grep -A 200 "bitset.h" | head -500
+          echo ""
+          echo "=== File ownership check (bitset is NOT a macro module) ==="
+          echo "Expected: conditions attribute to data/bitset.h itself."
+          echo "If they appear against test/data/bitset_test.c instead, the"
+          echo "coverage glob is removing them and bitset WOULD need a cover"
+          echo "TU after all — that would be a new finding, not a config bug."
+          gcov-14 --conditions --all-blocks "$BITSET_GCDA" 2>&1 | \
+            grep -E "^File .*(bitset\.h|bitset_test\.c)" -A 2 || true
+          echo ""
+          echo "=== Looking for the generated .gcov file for bitset.h ==="
+          find . -name "bitset.h.gcov" -exec echo "Found: {}" \;
+          BITSET_GCOV=$(find . -name "bitset.h.gcov" | head -1)
+          if [ -n "$BITSET_GCOV" ]; then
+            echo ""
+            echo "=== The 17 missed outcomes (expected count: 17) ==="
+            MISSED=$(grep -c "not covered" "$BITSET_GCOV" || true)
+            echo "  'not covered' lines found: ${MISSED}"
+            echo ""
+            grep -n -B 6 "not covered" "$BITSET_GCOV" | head -160 || \
+              echo "  (none found — check the full dump below)"
+            echo ""
+            echo "=== option_usize instantiation footprint ==="
+            echo "Expected: the six combinators (map/and_then/or_else/filter/"
+            echo "combine_with/eq) have NO caller and are discarded by GCC, so"
+            echo "they contribute NO conditions here. If they appear, the"
+            echo "refuted prediction above was right after all and the"
+            echo "denominator should have moved — read that before anything else."
+            grep -nE "option_usize_(map|and_then|or_else|filter|combine_with|eq)" \
+              "$BITSET_GCOV" | head -20 || \
+              echo "  (absent, as measured at #1251 — expected)"
+            echo ""
+            echo "=== Full contents of $BITSET_GCOV ==="
+            cat "$BITSET_GCOV"
+          else
+            echo "No bitset.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*bitset* 2>/dev/null || true
+            done
+          fi
+
+      - name: "Debug: per-line MC/DC detail for option (cover TU)"
+        # First measured MC/DC baseline for the option module: 29/30 (96.7%),
+        # exactly 1 condition outcome missed. Report-only — surfaces which
+        # single outcome is uncovered so it can be classified (defensive-
+        # branch-unreachable vs require_msg/NO_REQUIRE artifact vs genuinely
+        # reachable-and-testable) before an MCDC-NNN deviations entry is
+        # written. Never fails.
+        #
+        # NOTE: option is Shape B. The conditions live in IMPL_OPTION_* macro
+        # bodies and are stamped to the cover TU's instantiation site, so the
+        # gcov target here is option_cover.c (NOT an option_*.h header — the
+        # macro bodies have no own source location). The same reason the cover
+        # TU exists at all.
+        run: |
+          cd build
+          OPTION_GCDA=$(find . -name "option_cover*.gcda" | head -1)
+          if [ -z "$OPTION_GCDA" ]; then
+            echo "ERROR: could not locate option_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $OPTION_GCDA"
+          gcov-14 --conditions --all-blocks "$OPTION_GCDA" 2>&1 | \
+            grep -A 400 "option_cover.c" | head -600
+          echo ""
+          echo "=== Looking for the generated .gcov file for option_cover.c ==="
+          find . -name "option_cover.c.gcov" -exec echo "Found: {}" \;
+          OPTION_GCOV=$(find . -name "option_cover.c.gcov" | head -1)
+          if [ -n "$OPTION_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $OPTION_GCOV ==="
+            cat "$OPTION_GCOV"
+          else
+            echo "No option_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*option_cover* 2>/dev/null || true
+            done
+          fi
+      
+      - name: "Debug: Shape-B attribution check for result (result_test)"
+        # Per-module attribution confirmation (docs/vmacros.md checklist):
+        # option confirmed the Shape-B pattern, but each module gets its own
+        # cheap one-run check before its cover TU's numbers become the module
+        # baseline. Confirms result's macro-generated conditions are stamped
+        # to the instantiation TU (result_test.c) and therefore removed by
+        # the '*/test/*' lcov filter — the precondition for result_cover.c
+        # being the correct fix rather than a filter-narrowing change.
+        # Expected outcome: conditions owned by result_test.c. If result_impl.h
+        # appears as the owner instead, STOP — the cover TU is unnecessary
+        # for this module and the filter is the fix. Report-only; never fails.
+        run: |
+          cd build
+          RESULT_GCDA=$(find . -name "result_test*.gcda" | head -1)
+          if [ -z "$RESULT_GCDA" ]; then
+            echo "ERROR: could not locate result_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $RESULT_GCDA"
+          gcov-14 --conditions "$RESULT_GCDA" 2>/dev/null | \
+            grep -B 1 -A 3 -E "result_(test|impl|defn)" | head -120
+          echo ""
+          echo "=== File ownership of result-generated conditions ==="
+          gcov-14 --conditions "$RESULT_GCDA" 2>&1 | \
+            awk '/^File /{f=$0} /Condition outcomes covered:/{print f "\t" $0}' | \
+            grep -iE "result" || echo "(no result-owned condition rows found)"
+      
+      - name: "Debug: per-line MC/DC detail for result (cover TU)"
+        # First measured MC/DC baseline for the result module. Report-only —
+        # surfaces which condition outcomes (if any) are uncovered so they
+        # can be classified before an MCDC-NNN deviations entry is written.
+        # Never fails.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: unlike option (MCDC-006), result's
+        # entire panic surface (unwrap / unwrap_err / expect / get_* NULL
+        # guard) is plain require_msg, compiled to ((void)0) under this
+        # build's -DCANON_NO_REQUIRE. No handler-invocation path survives the
+        # flag, so the expected disposition is "no unreachable outcomes"
+        # (the error.h-style nothing-to-document case) rather than an
+        # MCDC-006-style ceiling. If uncovered outcomes appear anyway,
+        # classify (gcov artifact vs scaffolding vs genuine cover-TU gap —
+        # the last is fixed by extending result_cover.c's main(), not by a
+        # deviation entry).
+        #
+        # NOTE: result is Shape B. The conditions live in IMPL_RESULT_* macro
+        # bodies and are stamped to the cover TU's instantiation site, so the
+        # gcov target here is result_cover.c (NOT a result_*.h header).
+        run: |
+          cd build
+          RESULT_GCDA=$(find . -name "result_cover*.gcda" | head -1)
+          if [ -z "$RESULT_GCDA" ]; then
+            echo "ERROR: could not locate result_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $RESULT_GCDA"
+          gcov-14 --conditions --all-blocks "$RESULT_GCDA" 2>&1 | \
+            grep -A 400 "result_cover.c" | head -600
+          echo ""
+          echo "=== Looking for the generated .gcov file for result_cover.c ==="
+          find . -name "result_cover.c.gcov" -exec echo "Found: {}" \;
+          RESULT_GCOV=$(find . -name "result_cover.c.gcov" | head -1)
+          if [ -n "$RESULT_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $RESULT_GCOV ==="
+            cat "$RESULT_GCOV"
+          else
+            echo "No result_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*result_cover* 2>/dev/null || true
+            done
+          fi
+      
+      - name: "Debug: per-line MC/DC detail for borrow.h"
+        # First measured MC/DC ceiling for borrow.h: 95.0% (38/40) as of
+        # CI #1106 (a76202d), reached by the CANON_NO_REQUIRE-gated
+        # _get(NULL) tests that closed the three defensive NULL-branch
+        # outcomes (35/40 -> 38/40).
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: the 2 remaining uncovered
+        # outcomes are expected to be the two NULL-true sides of the
+        # one-NULL guard inside borrowed_bytes_eq:
+        #
+        #     if (a.bytes.ptr == NULL || b.bytes.ptr == NULL) {
+        #         return false; /* impossible by construction */
+        #     }
+        #
+        # Reaching either outcome requires a {NULL, len>0} cbytes_t — the
+        # exact malformed value cbytes_invariant forbids and cbytes_from
+        # refuses to construct (the guard sits behind three earlier exits:
+        # lengths equal, len > 0, pointers differ). This is the slice.h
+        # MCDC-002 shape. If the dump confirms it, the two outcomes are
+        # the MCDC-008 candidate — "API-unreachable, deviation pending"
+        # until the borrow.h WP run discharges the branch under
+        # cbytes_invariant, at which point MCDC-008 is written with the
+        # full cross-stream record. If the dump shows a DIFFERENT open
+        # outcome (e.g. in borrowed_bytes_slice's clamping chain), that
+        # is a reachable test gap (MCDC-003 line-510 shape) — fix it with
+        # an ordinary ungated test, not a deviation entry.
+        #
+        # NOTE on scope: borrow.h is a hybrid Shape-A/Shape-B header. The
+        # 40-outcome denominator covers ONLY the non-macro functions
+        # (borrowed_ptr / borrowed_str / borrowed_bytes). The
+        # DEFINE_BORROWED_SLICE conditions are stamped to borrow_test.c
+        # (a /test/ path) and removed by the coverage filter — the known
+        # Shape-B attribution, docs/vmacros.md. Do not read this row as
+        # covering the macro family; its disposition is tracked with the
+        # other single-file macro families.
+        #
+        # This step remains in place as a regression detector. If a
+        # future change opens a new uncovered outcome or closes one of
+        # the two documented ones, the output surfaces it for human
+        # review. Report-only; never fails.
+        run: |
+          cd build
+          BORROW_GCDA=$(find . -name "borrow_test*.gcda" | head -1)
+          if [ -z "$BORROW_GCDA" ]; then
+            echo "ERROR: could not locate borrow_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $BORROW_GCDA"
+          gcov-14 --conditions --all-blocks "$BORROW_GCDA" 2>&1 | \
+            grep -A 200 "borrow.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for borrow.h ==="
+          find . -name "borrow.h.gcov" -exec echo "Found: {}" \;
+          BORROW_GCOV=$(find . -name "borrow.h.gcov" | head -1)
+          if [ -n "$BORROW_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $BORROW_GCOV ==="
+            cat "$BORROW_GCOV"
+            echo ""
+            echo "=== Uncovered condition outcomes (quick filter) ==="
+            grep -n "not covered" "$BORROW_GCOV" || \
+              echo "(no 'not covered' lines found — check the full dump above)"
+          else
+            echo "No borrow.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*borrow* 2>/dev/null || true
+            done
+          fi
+      
+      - name: "Debug: per-line MC/DC detail for diag.h"
+        # First measured MC/DC ceiling for diag.h: 97.67% (84/86) as of
+        # CI #1120 (93fa22c), reached by the render/print gap-closure tests
+        # that took the header from 73.91% (34/46). The denominator grew
+        # 46 -> 86 because diag_render and diag_render_frame were entirely
+        # uncalled before this pass: uncalled `static inline` functions are
+        # invisible to gcov, so the render pair was silently excluded from
+        # the old baseline rather than counted as missed. The gap-closure
+        # pass also surfaced two pre-verification defects on the newly
+        # exercised path — a contract-violating NULL guard in diag_render
+        # (a snprintf(NULL, >0) UB path) and a -Werror=format-truncation
+        # break on the documented truncation path (CI #1120) — both fixed
+        # before this ceiling was pinned.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: the 2 remaining uncovered
+        # outcomes are expected to be two distinct dead-true-sides, of two
+        # DIFFERENT dispositions (unlike borrow.h, whose pair shared one):
+        #
+        #   (a) line 293 — the GCC-16 overflow-clamp guard in diag_push:
+        #
+        #         if (d->depth >= DIAG_MAX_FRAMES) {
+        #             d->depth = DIAG_MAX_FRAMES - 1u;   /* clamp */
+        #         }
+        #
+        #       The true side is unreachable on every correct execution:
+        #       the memmove branch immediately above already holds depth at
+        #       DIAG_MAX_FRAMES - 1, so depth >= DIAG_MAX_FRAMES is false by
+        #       construction here. This is invariant-dead defensive code —
+        #       the slice.h MCDC-002 / borrow.h MCDC-008 shape. The header
+        #       carries a named `/*@ assert dead_by_invariant_clamp: \false; */`
+        #       at this site; when the diag.h WP run discharges it under
+        #       diag_invariant, the MCDC entry is written with the full
+        #       cross-stream record (gcov: outcome unreachable; WP: goal
+        #       proved \false). Until then: "invariant-dead, deviation
+        #       pending".
+        #
+        #   (b) line 668 — the snprintf encoding-error skip in diag_render:
+        #
+        #         if (n < 0) { continue; }   /* encoding error — skip frame */
+        #
+        #       The true side is LIBC-ENVIRONMENTAL, not invariant-dead:
+        #       it is unreachable because these format strings with valid
+        #       arguments cannot provoke an encoding error on any hosted
+        #       libc, NOT because any diag invariant forbids it. This is a
+        #       NEW disposition flavor for the traceability record — do not
+        #       file it under the invariant-dead family. WP will not
+        #       discharge it from diag's own contracts (it depends on the
+        #       stdio spec), so it remains a permanent documented residual
+        #       rather than a deviation that later closes. The sibling
+        #       encoding-error skip in diag_render_frame is expected to be
+        #       gimplified out of the condition denominator (value-selecting
+        #       context), so it is not counted here; if the dump shows it
+        #       open, that is a real gap.
+        #
+        # If the dump shows a DIFFERENT open outcome — anywhere in the
+        # inspectors, the diag_push copy loop, or the render total/rem
+        # accounting — that is a reachable test gap (MCDC-003 line-510
+        # shape), NOT a deviation: fix it with an ordinary ungated test,
+        # not a records entry.
+        #
+        # NOTE on scope: diag.h is a Shape-A header. The 86-outcome
+        # denominator covers the 13 `static inline` functions. The four
+        # DIAG_PUSH / DIAG_PUSH_FMT / DIAG_RETURN_IF / DIAG_PROPAGATE
+        # macros are call-site expansion wrappers: their conditions are
+        # stamped to diag_test.c (a /test/ path) and removed by the
+        # coverage filter — the known single-file macro attribution,
+        # docs/vmacros.md. Do not read this row as covering the macros;
+        # they are documented-not-verified, exercised by diag_test.c.
+        #
+        # This step remains in place as a regression detector. If a future
+        # change opens a new uncovered outcome or closes one of the two
+        # documented ones, the output surfaces it for human review.
+        # Report-only; never fails.
+        run: |
+          cd build
+          DIAG_GCDA=$(find . -name "diag_test*.gcda" | head -1)
+          if [ -z "$DIAG_GCDA" ]; then
+            echo "ERROR: could not locate diag_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $DIAG_GCDA"
+          gcov-14 --conditions --all-blocks "$DIAG_GCDA" 2>&1 | \
+            grep -A 200 "diag.h" | head -500
+          echo ""
+          echo "=== Looking for the generated .gcov file for diag.h ==="
+          find . -name "diag.h.gcov" -exec echo "Found: {}" \;
+          DIAG_GCOV=$(find . -name "diag.h.gcov" | head -1)
+          if [ -n "$DIAG_GCOV" ]; then
+            echo ""
+            echo "=== Full contents of $DIAG_GCOV ==="
+            cat "$DIAG_GCOV"
+            echo ""
+            echo "=== Uncovered condition outcomes (quick filter) ==="
+            grep -n "not covered" "$DIAG_GCOV" || \
+              echo "(no 'not covered' lines found — check the full dump above)"
+            echo ""
+            echo "=== Expected ceiling: lines 293 (invariant-dead) and 668 (libc-environmental) ==="
+          else
+            echo "No diag.h.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*diag* 2>/dev/null || true
+            done
+          fi
+      
+      - name: "Debug: Shape-B attribution check for vec (vec_test)"
+        # Per-module attribution confirmation (docs/vmacros.md checklist):
+        # option and result confirmed the Shape-B pattern; vec gets its own
+        # cheap one-run check before vec_cover.c's numbers become the module
+        # baseline. Confirms vec's macro-generated CONDITIONS are stamped to
+        # the instantiation TU (vec_test.c) and therefore removed by the
+        # '*/test/*' lcov filter — the precondition for vec_cover.c being
+        # the correct fix rather than a filter-narrowing change.
+        #
+        # VEC-SPECIFIC EXPECTATION: vec_impl.h itself IS expected to appear
+        # in the ownership table — but with the result__Bool_Error
+        # fingerprint only: 4 functions / 1 line (the guarded
+        # CANON_RESULT(bool, Error) emission at file scope, vec_impl.h
+        # ~line 113) and ZERO conditions. CI #1147's genhtml already showed
+        # exactly this (lines=1 functions=4), as did deque_impl.h and
+        # fold_impl.h (same guarded emission). For the MCDC-010 split this
+        # is a functions-only reclassification note (result-module
+        # inherited); nothing moves in the condition accounting.
+        #
+        # STOP SIGNAL: vec_impl.h owning CONDITION rows (not just function
+        # rows) would mean the cover TU is unnecessary for this module and
+        # the filter is the fix. Expected outcome: condition rows owned by
+        # vec_test.c only. Report-only; never fails.
+        run: |
+          cd build
+          VEC_GCDA=$(find . -name "vec_test*.gcda" | head -1)
+          if [ -z "$VEC_GCDA" ]; then
+            echo "ERROR: could not locate vec_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $VEC_GCDA"
+          gcov-14 --conditions "$VEC_GCDA" 2>/dev/null | \
+            grep -B 1 -A 3 -E "vec_(test|impl|defn|mangle)" | head -120
+          echo ""
+          echo "=== File ownership of vec-generated conditions ==="
+          gcov-14 --conditions "$VEC_GCDA" 2>&1 | \
+            awk '/^File /{f=$0} /Condition outcomes covered:/{print f "\t" $0}' | \
+            grep -iE "vec" || echo "(no vec-owned condition rows found)"
+      
+      
+      - name: "Debug: Shape-B attribution check for deque (deque_test)"
+        # Per-module attribution confirmation (docs/vmacros.md checklist).
+        # THIS STEP, not the WP run, is what earns deque's "Shape B
+        # (confirmed)" upgrade in the status table — the WP run does not
+        # test attribution at all. Leave the table at "(provisional)" until
+        # this and the cover-TU step below have both reported.
+        #
+        # Expected: condition rows owned by deque_test.c, and deque_impl.h
+        # present with the result__Bool_Error fingerprint ONLY — functions
+        # and lines but ZERO conditions (the guarded CANON_RESULT(bool,
+        # Error) emission at deque_impl.h:132, the same shape vec_impl.h
+        # and fold_impl.h show).
+        #
+        # STOP SIGNAL: deque_impl.h owning CONDITION rows would mean a body
+        # is written out as real source lines, i.e. deque is NOT Shape B and
+        # the cover TU is unnecessary — the filter would be the fix instead.
+        # This is vec's Shape-A-drift tripwire. Report-only; never fails.
+        run: |
+          cd build
+          DEQUE_GCDA=$(find . -name "deque_test*.gcda" | head -1)
+          if [ -z "$DEQUE_GCDA" ]; then
+            echo "ERROR: could not locate deque_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $DEQUE_GCDA"
+          gcov-14 --conditions "$DEQUE_GCDA" 2>/dev/null | \
+            grep -B 1 -A 3 -E "deque_(test|impl|defn|mangle)" | head -120
+          echo ""
+          echo "=== File ownership of deque-generated conditions ==="
+          gcov-14 --conditions "$DEQUE_GCDA" 2>&1 | \
+            awk '/^File /{f=$0} /Condition outcomes covered:/{print f "\t" $0}' | \
+            grep -iE "deque" || echo "(no deque-owned condition rows found)"
+
+      - name: "Debug: per-line MC/DC detail for deque (cover TU)"
+        # First measured MC/DC baseline for the deque module (MCDC-011).
+        # Report-only — never fails.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT (written into deque_cover.c's
+        # header before this ever ran):
+        #   denominator  41 conditions / 82 outcomes
+        #                = 39 generated (78) + 2 scaffolding (4), counted
+        #                  statically off the preprocessed expansion under
+        #                  -DCANON_NO_REQUIRE -DNDEBUG. A different
+        #                  generated total means the flag pair is not what
+        #                  the cover TU assumes — check that require_msg
+        #                  really compiled out before chasing anything else.
+        #   uncoverable  ZERO. No justification rows. This is the strongest
+        #                prediction any cover TU here has made and it is
+        #                meant to be falsifiable at a glance: vec's three
+        #                (U1/U2 !checked_mul guard-redundancy, U3 heap-OOM
+        #                environmental) ALL came from allocation, and deque
+        #                allocates nothing — caller-owned buffer, no
+        #                alloc/free family, checked.h not even in the
+        #                include closure.
+        #
+        # DISPOSITION IF AN OUTCOME COMES BACK UNCOVERED: do NOT open a
+        # justification row. The argument above says a driving input exists,
+        # so find it and extend deque_cover.c's main(). Only a genuine
+        # infeasibility argument may turn one of these into a justified row,
+        # and it would be a new finding worth writing up rather than a
+        # bookkeeping entry.
+        #
+        # DELIBERATELY NOT EXERCISED, so absent from the denominator: the
+        # NULL legs of peek_front / peek_back / peek_*_option / swap / both
+        # unchecked pushes. Under -DCANON_NO_REQUIRE their require_msg
+        # guards are ((void)0) and those calls are UB — see F1 in
+        # deque_verify.h, the peek_*/pop_* NULL-guard asymmetry.
+        #
+        # NOTE: deque is Shape B; conditions attribute to deque_cover.c
+        # itself (direct DEFINE_DEQUE instantiation — vec_cover's
+        # convention, not result_cover's driver-include one).
+        run: |
+          cd build
+          DEQUE_GCDA=$(find . -name "deque_cover*.gcda" | head -1)
+          if [ -z "$DEQUE_GCDA" ]; then
+            echo "ERROR: could not locate deque_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $DEQUE_GCDA"
+          gcov-14 --conditions --all-blocks "$DEQUE_GCDA" 2>&1 | \
+            grep -A 400 "deque_cover.c" | head -600
+          echo ""
+          echo "=== Looking for the generated .gcov file for deque_cover.c ==="
+          find . -name "deque_cover.c.gcov" -exec echo "Found: {}" \;
+          DEQUE_GCOV=$(find . -name "deque_cover.c.gcov" | head -1)
+          if [ -n "$DEQUE_GCOV" ]; then
+            echo ""
+            echo "=== Uncovered condition outcomes (expected: NONE) ==="
+            grep -n -B 6 "not covered" "$DEQUE_GCOV" | head -80 || \
+              echo "  (none — MCDC-011 prediction of 100% confirmed)"
+            echo ""
+            echo "=== Full contents of $DEQUE_GCOV ==="
+            cat "$DEQUE_GCOV"
+          else
+            echo "No deque_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*deque_cover* 2>/dev/null || true
+            done
+          fi
+
+      - name: "Debug: per-line MC/DC detail for vec (cover TU)"
+        # First measured MC/DC baseline for the vec module: 155/158 (98.1%),
+        # exactly 3 condition outcomes missed as of CI #1147 (cc1fa2b).
+        # Report-only — surfaces WHICH three outcomes are uncovered so the
+        # MCDC-010 deviations entry can pin them by name rather than by
+        # count. Never fails.
+        #
+        # PREDICTION TO CONFIRM, NOT ASSERT: the 3 missed outcomes are the
+        # three written down in vec_cover.c's header BEFORE the first run:
+        #   U1  alloc:       `!checked_mul(...)` true-outcome — INFEASIBLE.
+        #       The preceding capacity <= CANON_VEC_MAX_CAPACITY/sizeof(type)
+        #       guard bounds the product; the multiplication cannot overflow.
+        #   U2  arena_alloc: same condition, same argument — INFEASIBLE.
+        #   U3  alloc:       `!buf` true-outcome — heap OOM not portably
+        #       forcible from a cover TU (ENVIRONMENT). The arena analogue
+        #       IS covered (deterministic exhaustion), so U3 is heap-only.
+        # Disposition if confirmed: U1/U2 -> justified-infeasible rows,
+        # U3 -> justified-environment row in MCDC-010. If any of the three
+        # lands on a different line, that is a cover-TU gap — fixed by
+        # extending vec_cover.c's main(), not by a deviation entry.
+        # (WP cross-check: VERIFY-018 predicts the U1/U2 branches are
+        # proved DEAD — the two evidence streams should agree.)
+        # (2026-07-16 note: all three CONFIRMED at block level on the
+        # frozen #1154 artifacts — the coverage stream's completed
+        # pre-registration; see MCDC-010 and the paper's §8.)
+        #
+        # NOTE: vec is Shape B. The conditions live in IMPL_VEC_* macro
+        # bodies and are stamped to the instantiation site — vec_cover.c
+        # itself (vec_cover instantiates DEFINE_VEC directly, unlike
+        # result_cover, which takes its instantiation from the driver
+        # include, so result's conditions attribute to result_verify.h).
+        # Both conventions survive the '*/test/*' filter; the gcov target
+        # here is vec_cover.c.
+        run: |
+          cd build
+          VEC_GCDA=$(find . -name "vec_cover*.gcda" | head -1)
+          if [ -z "$VEC_GCDA" ]; then
+            echo "ERROR: could not locate vec_cover gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only — do not fail the coverage job
+          fi
+          echo "Running gcov on: $VEC_GCDA"
+          gcov-14 --conditions --all-blocks "$VEC_GCDA" 2>&1 | \
+            grep -A 400 "vec_cover.c" | head -600
+          echo ""
+          echo "=== Looking for the generated .gcov file for vec_cover.c ==="
+          find . -name "vec_cover.c.gcov" -exec echo "Found: {}" \;
+          VEC_GCOV=$(find . -name "vec_cover.c.gcov" | head -1)
+          if [ -n "$VEC_GCOV" ]; then
+            echo ""
+            echo "=== Uncovered condition outcomes in vec_cover.c ==="
+            grep -n -B 6 "not covered" "$VEC_GCOV" | head -80
+            echo ""
+            echo "=== Full contents of $VEC_GCOV ==="
+            cat "$VEC_GCOV"
+          else
+            echo "No vec_cover.c.gcov file generated — trying alternative approach"
+            for d in $(find . -type d -name "*.dir"); do
+              ls "$d"/*vec_cover* 2>/dev/null || true
+            done
+          fi
+      - name: "Debug: per-line MC/DC detail for vec_range.h (cover TU)"
+        # MCDC-017. vec_range.h's conditions are stamped to the cover TU's two
+        # instantiation lines. Predicted misses, exactly three (M2): D1, C true
+        # at int; D2, A true at u64; D3, C false at u64 -- in the check
+        # A || (B && C). Any other miss is a gap in the cover TU, fixed by
+        # extending it. Report-only, like the steps around it. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "vec_range_cover*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate vec_range_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "vec_range_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in vec_range_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No vec_range_cover.c.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for vec_fmt.h (cover TU)"
+        # MCDC-018. vec_fmt.h's conditions are stamped to the cover TU's
+        # instantiation line. Predicted: 26 / 26, no miss. Any miss is a gap
+        # in the cover TU, fixed by extending it. Report-only. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "vec_fmt_cover*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate vec_fmt_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "vec_fmt_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in vec_fmt_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No vec_fmt_cover.c.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for stack.h (cover TU)"
+        # MCDC-019 (VERIFY-049). stack.h's conditions are stamped to the cover
+        # TU's instantiation line; vec is defined under test/support. Measured
+        # 5 / 6: the one miss is peek's `!last` true, dead (a non-empty stack
+        # has a top element). Any other miss is a gap in the cover TU.
+        # Report-only. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "stack_cover.c.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate stack_cover gcda file"
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1 || true
+          GCOV=$(find . -name "stack_cover.c.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Condition outcomes not fully covered in stack_cover.c ==="
+            grep -n -B 2 -A 8 "not covered" "$GCOV" | head -80 || echo "  (none)"
+            echo ""
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+          else
+            echo "No stack_cover.c.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for priority_queue.h"
+        # Added 2026-09-07 with MCDC-014. priority_queue.h reached 81/82 (MCDC-014); the one
+        # remaining outcome is J1, pq_swap_'s a == b guard, dead by construction
+        # after PQ-A. Any OTHER miss printed here is a regression.
+        # Report-only, like the fourteen steps above it: the justification
+        # register for this file lives in deviations.md (the MCDC entry's
+        # table), is checked by hand against this dump before a release cut,
+        # and automating that check -- one file:line allowlist per graduated
+        # file, failing on any unexplained miss -- is recorded future work,
+        # not an existing mechanism. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "priority_queue_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate priority_queue_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" 2>&1 | \
+            grep -A 200 "priority_queue.h" | head -500
+          echo ""
+          GCOV=$(find . -name "priority_queue.h.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+            echo ""
+            echo "=== Condition outcomes not fully covered in priority_queue.h ==="
+            grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+          else
+            echo "No priority_queue.h.gcov file generated"
+          fi
+
+      - name: "Debug: per-line MC/DC detail for lifetime.h"
+        # Added 2026-09-07 with MCDC-014. lifetime.h is 1/2 (MCDC-013); the one remaining outcome is
+        # the REGION_ID_STATIC guard's TRUE leg, platform-dead on the runner.
+        # Any OTHER miss printed here is a regression.
+        # Report-only, like the fourteen steps above it: the justification
+        # register for this file lives in deviations.md (the MCDC entry's
+        # table), is checked by hand against this dump before a release cut,
+        # and automating that check -- one file:line allowlist per graduated
+        # file, failing on any unexplained miss -- is recorded future work,
+        # not an existing mechanism. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "lifetime_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate lifetime_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" 2>&1 | \
+            grep -A 200 "lifetime.h" | head -500
+          echo ""
+          GCOV=$(find . -name "lifetime.h.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+            echo ""
+            echo "=== Condition outcomes not fully covered in lifetime.h ==="
+            grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+          else
+            echo "No lifetime.h.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for range.h"
+        # Added with VERIFY-028/029 (the range.h arc). Baseline 81.7% (49/60)
+        # at run 1; 92.3% (48/52) at run 2 after the F1/F2 regression tests.
+        # Run 3 rewrote range_len around the decision (lo >= 0) || (hi < 0)
+        # and added test_len_sign_cases so each condition can be shown to
+        # flip it independently (VERIFY-029 Q7). The misses printed here are
+        # the input to range.h's MCDC entry, which will classify each one as
+        # a test gap or a justified dead outcome (e.g. range_is_empty's
+        # step == 0 arm, dead under range_wf — VERIFY-028 design item 5).
+        # range.h is ALSO compiled into vec_test via vec_range.h; that TU
+        # sees only the functions extend_from_range calls, so this step reads
+        # range_test's data — the unit's own tests, as every step above does.
+        # Report-only, like the sixteen steps above it. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "range_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate range_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" 2>&1 | \
+            grep -A 200 "range.h" | head -500
+          echo ""
+          GCOV=$(find . -name "range.h.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+            echo ""
+            echo "=== Condition outcomes not fully covered in range.h ==="
+            grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+          else
+            echo "No range.h.gcov file generated"
+          fi
+      - name: "Debug: per-line MC/DC detail for stringbuf.h"
+        # Added with MCDC-016 (the stringbuf.h arc, VERIFY-031..035). Baseline
+        # 101/136 at f6e54ca; 130/132 at 600f238 (run 2: zero state, NULL /
+        # empty arguments, out-of-domain guards with fabricated inputs, the
+        # %ls measure failure, and the four blind-spot functions now called);
+        # final 136/138 at fc924e2 (run 3: the fmt wrapper's guard, +6, all
+        # covered, plus direct _va guard tests). The two remaining misses are
+        # MCDC-016 J1/J2: the pass-2 failure outcomes of _va's
+        # (written < 0) || ((usize)written != needed), environmental once G2
+        # sized the write pass to needed + 1. Any OTHER miss printed here is
+        # a regression. stringbuf.h is ALSO compiled into borrow_test; this
+        # step reads stringbuf_test's data, the unit's own tests.
+        # Report-only, like the seventeen steps above it. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "stringbuf_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate stringbuf_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" 2>&1 | \
+            grep -A 200 "stringbuf.h" | head -500
+          echo ""
+          GCOV=$(find . -name "stringbuf.h.gcov" | head -1)
+          if [ -n "$GCOV" ]; then
+            echo "=== Full contents of $GCOV ==="
+            cat "$GCOV"
+            echo ""
+            echo "=== Condition outcomes not fully covered in stringbuf.h ==="
+            grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+          else
+            echo "No stringbuf.h.gcov file generated"
+          fi
+
+  # -------------------------------------------------------------------------
+  # 12. CompCert — Linux only, INFORMATIONAL, upstream repository only
+  #
+  #   Compiles and runs the test suite with ccomp, the formally verified C
+  #   compiler, as portability evidence: the sources are accepted by a
+  #   compiler whose translation is proved to preserve semantics.
+  #
+  #   LICENSING — read docs/compcert-licensing.md before enabling this.
+  #   CompCert's non-commercial release is used here as a CI-only evaluation
+  #   tool under the INRIA Non-Commercial License, per written confirmation
+  #   from AbsInt (2026-07-10). That permission covers THIS project's
+  #   non-commercial evaluation use and does NOT extend to third parties.
+  #
+  #   The `if:` guard below therefore restricts the job to the upstream
+  #   repository. A fork does not run it unless its owner edits this
+  #   condition — an explicit, deliberate act — because running it in a
+  #   commercial context would be the fork owner's own use of CompCert and
+  #   requires their own licence from AbsInt (https://www.absint.com/).
+  #   The default is "off for everyone but upstream" rather than "on unless
+  #   you notice the docs", so nobody inherits a licensing obligation by
+  #   forking.
+  #
+  #   `continue-on-error: true` keeps this stream INFORMATIONAL, as the
+  #   licensing record states. It is portability evidence, not a gate: a
+  #   ccomp failure must never block a merge, and no other evidence stream
+  #   (WP proofs, MC/DC, MISRA, fuzzing, sanitizers) depends on it.
+  # -------------------------------------------------------------------------
+  compcert:
+    runs-on: ubuntu-24.04
+    if: github.repository == 'eclipse-canon-c/Canon-C'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Restore opam / CompCert cache
+        id: compcert-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.opam
+          # Key tracks the PINNED CompCert version below. Bump both
+          # together, deliberately — same policy as the cppcheck $Version
+          # pin in static-analysis and the CVC5 pin in framac-setup, and
+          # for a sharper reason here: this job's output is evidence, and
+          # "compiles cleanly under a formally verified compiler" is a
+          # claim about a SPECIFIC compiler. A key that does not track the
+          # version would restore a stale toolchain after an upstream
+          # release with nothing to signal the change.
+          key: opam-Linux-ocaml-4.14.2-compcert-3.17-v1
+
+      - name: Install OCaml and opam
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y opam m4 pkg-config
+
+      - name: Initialise opam and install CompCert
+        if: steps.compcert-cache.outputs.cache-hit != 'true'
+        run: |
+          # coq-compcert is the non-commercial release (INRIA NCL).
+          # VERSION IS PINNED: an unpinned `opam install coq-compcert`
+          # takes whatever is latest, so the toolchain behind an evidence
+          # claim could change without any commit saying so. Bump this and
+          # the cache key together, then re-read the run summary — a new
+          # CompCert may accept or reject different constructs.
+          # Cold build ~12 min (measured, CI #1205); cached thereafter.
+          opam init --bare --disable-sandboxing --yes
+          opam switch create compcert 4.14.2 --yes
+          eval $(opam env --switch=compcert)
+          opam repository add coq-released https://coq.inria.fr/opam/released --yes
+          opam install coq-compcert.3.17 --yes
+
+      - name: Record CompCert version (provenance for the licensing record)
+        # Also a pin check: if ccomp reports anything other than the pinned
+        # version, the cache key and the install line have drifted apart and
+        # the evidence claim is about a compiler nobody chose.
+        run: |
+          eval $(opam env --switch=compcert)
+          ccomp -version
+          if ! ccomp -version | grep -q "version 3.17"; then
+            echo "FAIL: ccomp is not the pinned 3.17 — cache key and install"
+            echo "      line have drifted. Reconcile both before trusting"
+            echo "      this run as portability evidence."
+            exit 1
+          fi
+
+      - name: Compile and run the test suite with ccomp
+        shell: bash
+        run: |
+          eval $(opam env --switch=compcert)
+
+          # Canon-C's GNU-extension escape hatches, all pre-existing and
+          # documented — none added for CompCert's benefit:
+          #
+          #   CANON_NO_GNU_EXTENSIONS     range.h's RANGE_FOR falls back from
+          #                               typeof() to an isize cast;
+          #                               contract.h's CANON_UNREACHABLE_HINT
+          #                               becomes ((void)0) instead of
+          #                               __builtin_unreachable().
+          #   CANON_CHECKED_FORCE_FALLBACK  checked.h uses its portable
+          #                               overflow arithmetic instead of
+          #                               __builtin_*_overflow.
+          #   CANON_BITS_FORCE_FALLBACK   bits.h uses its portable clz/ctz/
+          #                               popcount instead of the builtins.
+          #
+          # The two FORCE_FALLBACK flags are the SAME ones the coverage job
+          # uses. They are needed here for a reason worth stating: ccomp
+          # delegates preprocessing to the system cpp, so __GNUC__ is defined
+          # while the headers are preprocessed and the builtin branches are
+          # selected — but ccomp itself does not implement
+          # __builtin_add_overflow and friends. Forcing the fallback selects
+          # the paths that are portable C99, which is what this job is
+          # evidence about.
+          #
+          # -fall enables CompCert's optional features (struct passing and
+          # return by value, bit-fields, etc). Canon-C passes bytes_t, str_t
+          # and Result by value throughout, so this is not optional for it.
+          CCOMP_FLAGS=(
+            -fall
+            -DCANON_NO_GNU_EXTENSIONS
+            -DCANON_CHECKED_FORCE_FALLBACK
+            -DCANON_BITS_FORCE_FALLBACK
+            -I core/primitives -I core -I semantics -I .
+          )
+          # The include set is deliberately NARROW. Tests reference library
+          # headers path-qualified from the repo root ("data/bitset.h"), so
+          # `-I .` covers them; only nine primitives are included bare
+          # (bits.h, checked.h, ptr.h, ...), which is what the other three
+          # entries are for. Adding `-I util` breaks the build: it puts
+          # util/time.h ahead of the system <time.h> on the search path, so
+          # `struct timespec` never gets declared and time_test fails to
+          # compile. Verified with GCC under exactly these flags before this
+          # job was written: 53/53 translation units compile and run.
+
+          mkdir -p ccomp-out
+          COMPILED=0; RAN=0; FAILED_COMPILE=(); FAILED_RUN=()
+
+          # The test suite is the compile surface rather than the headers
+          # themselves: Canon-C is header-only, and several headers are not
+          # standalone translation units by design — hashmap needs
+          # HASHMAP_KEY_TYPE defined by the includer, bitset needs a
+          # CANON_OPTION(usize) instantiation (see MISRA-SCAN-001 and the
+          # Commit 15 header-combination work). The tests ARE complete TUs,
+          # they instantiate what they use, and together they include every
+          # public header.
+          while IFS= read -r t; do
+            n=$(basename "$t" .c)
+            # A test may have a second source, X_defs.c beside X_test.c,
+            # linked in as CMake does (separate_compilation_test, VERIFY-049).
+            extra=(); d="${t%_test.c}_defs.c"; [ -f "$d" ] && extra=("$d")
+            if ccomp "${CCOMP_FLAGS[@]}" -o "ccomp-out/$n" "$t" "${extra[@]}" \
+                 > "ccomp-out/$n.log" 2>&1; then
+              COMPILED=$((COMPILED+1))
+              if "./ccomp-out/$n" > "ccomp-out/$n.run.log" 2>&1; then
+                RAN=$((RAN+1))
+              else
+                FAILED_RUN+=("$n")
+              fi
+            else
+              FAILED_COMPILE+=("$n")
+            fi
+          done < <(find test -name '*_test.c' | sort)
+
+          TOTAL=$(find test -name '*_test.c' | wc -l)
+          echo "==============================================="
+          echo "  CompCert portability evidence (INFORMATIONAL)"
+          echo "==============================================="
+          echo "  translation units:  ${TOTAL}"
+          echo "  compiled by ccomp:  ${COMPILED}"
+          echo "  ran successfully:   ${RAN}"
+          echo "::notice title=compcert::${COMPILED} / ${TOTAL} compiled, ${RAN} ran"   # VERIFY-050
+
+          if [ ${#FAILED_COMPILE[@]} -gt 0 ]; then
+            echo ""
+            echo "  did not compile (${#FAILED_COMPILE[@]}):"
+            for n in "${FAILED_COMPILE[@]}"; do
+              echo "    --- $n ---"
+              sed 's/^/      /' "ccomp-out/$n.log" | head -15
+            done
+          fi
+          if [ ${#FAILED_RUN[@]} -gt 0 ]; then
+            echo ""
+            echo "  compiled but failed at runtime (${#FAILED_RUN[@]}):"
+            for n in "${FAILED_RUN[@]}"; do
+              echo "    --- $n ---"
+              sed 's/^/      /' "ccomp-out/$n.run.log" | tail -15
+            done
+          fi
+          echo "==============================================="
+          echo "  This stream is informational — see"
+          echo "  docs/compcert-licensing.md for what it does and"
+          echo "  does not claim, and for the licensing boundary."
+          echo "==============================================="
+
+          # Non-zero exit still surfaces in the log; continue-on-error keeps
+          # the run green, per the licensing record's "optional /
+          # informational" requirement.
+          if [ ${#FAILED_COMPILE[@]} -gt 0 ] || [ ${#FAILED_RUN[@]} -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload CompCert logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: compcert-logs
+          path: ccomp-out/*.log
+          retention-days: 90
+          if-no-files-found: ignore

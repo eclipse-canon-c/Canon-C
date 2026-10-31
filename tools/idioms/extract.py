@@ -42,13 +42,16 @@ import argparse, json, os, re, shutil, subprocess, sys
 from collections import defaultdict
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-WORKFLOW = os.path.join(REPO, ".github", "workflows", "cmake-multi-platform.yml")
+# The proof jobs' workflows: since VERIFY-050, one file per layer, read in
+# this order as one text (before it, cmake-multi-platform.yml held them all).
+WORKFLOWS = [os.path.join(REPO, ".github", "workflows", f)
+             for f in ("proofs-core.yml", "proofs-semantics.yml", "proofs-data.yml")]
 TOOL_VERSION = "1"
 
 # ------------------------------------------------------------------ workflow
 def verified_units():
     """(job, [files], [cpp flags]) for every frama-c-* job in the CI workflow."""
-    lines = open(WORKFLOW, encoding="utf-8").read().split("\n")
+    lines = "".join(open(w, encoding="utf-8").read() for w in WORKFLOWS).split("\n")
     jobs = [(i, re.match(r"^  ([a-z0-9-]+):\s*$", l).group(1))
             for i, l in enumerate(lines) if re.match(r"^  ([a-z0-9-]+):\s*$", l)]
     units = []
@@ -478,7 +481,7 @@ def cmd_catalogue(args):
                                          capture_output=True, text=True).stdout.strip()
     clang = subprocess.run([CLANG, "--version"], capture_output=True, text=True).stdout.split("\n")[0]
     out = {"meta": {"tool_version": TOOL_VERSION, "substrate_commit": head or "unknown",
-                    "clang": clang, "workflow": os.path.relpath(WORKFLOW, REPO)},
+                    "clang": clang, "workflow": " ".join(os.path.relpath(w, REPO) for w in WORKFLOWS)},
            "verified_units": units,
            "verified_closure": sorted(closure_all),
            "A": {k: sorted(set(v)) for k, v in sorted(cat["A"].items())},

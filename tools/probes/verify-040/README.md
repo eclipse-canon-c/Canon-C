@@ -1,5 +1,10 @@
 # VERIFY-040 probes
 
+
+> **Since VERIFY-050 (2026-10-31)** each probe workflow named below is a job of
+> `.github/workflows/probes.yml` ("9 · Probes"), with the same name and steps,
+> and still runs only when its own paths change.
+
 Executable checks of what the record reads from the tools, against the code
 they describe. Findings, predictions and scoring live in `docs/deviations.md`,
 VERIFY-040. These files are recorded probes, not tests: nothing builds them

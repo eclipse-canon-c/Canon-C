@@ -4449,7 +4449,7 @@ through an unlisted pointer, as at `region_end`.
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
 | **Driver**             | `vmacros/vdrivers/stack_verify.h`: cc-vec's driver verbatim, plus `DEFINE_STACK(static inline, int)` |
-| **CI enforcement**     | Yes, in `.github/workflows/frama-c-stack.yml`: pinned `5714 / 5783` + empty own set + the 69 inherited names (set equality) |
+| **CI enforcement**     | Yes, in `.github/workflows/proofs-data.yml` (job `frama-c-stack`): pinned `5714 / 5783` + empty own set + the 69 inherited names (set equality) |
 | **MC/DC coverage**     | 5/6, one outcome dead (`peek`'s `!last` true), measured from `vmacros/coverage/stack_cover.c` — see MCDC-019 in VERIFY-049 |
 | **CI artifact**        | `wp-proof-stack`                                |
 | **Job runtime**        | ~1 h                                            |

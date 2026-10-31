@@ -62,7 +62,7 @@ listed goal, empty block, block in force that names no goal, heading count
 that is not its block's live count, pinned filed part, problem reading a
 proved-goal block or filing problem exits 1, or --complete, in which case a
 pinned name in no goal table exits 1. The record coverage job runs both
-since VERIFY-039's main pass (record-coverage.yml).
+since VERIFY-039's main pass (records.yml since VERIFY-050; record-coverage.yml before).
 
 --pending-from REV reads the pins as committed at REV, with git show, and
 takes as pending each name whose pins differ between REV and the working
@@ -104,16 +104,26 @@ names are compared modulo the typed_ / typed_cast_ prefix, as in the paper.
 import re, sys, os, glob, argparse, subprocess
 from collections import defaultdict
 
-WF = '.github/workflows/cmake-multi-platform.yml'
+# The proof jobs' workflows. Since VERIFY-050 they are three files, one per
+# layer, read in this order as one text; before it, the one CI workflow.
+WF_LEGACY = '.github/workflows/cmake-multi-platform.yml'
 REC = 'docs/deviations.md'
 CC = 'vmacros/vdrivers/cc_pins/*.txt'
+
+def wf_files(names):
+    """The proof workflows among NAMES, in layer order, or the legacy file."""
+    order = ['proofs-core.yml', 'proofs-semantics.yml', 'proofs-data.yml']
+    have = [os.path.basename(n) for n in names]
+    files = ['.github/workflows/' + f for f in order if f in have]
+    return files or [WF_LEGACY]
 
 def norm(n): return re.sub(r'^typed_cast_', 'typed_', n)
 
 def tree_source():
-    """The pins' sources in the working tree: (the workflow's text,
+    """The pins' sources in the working tree: (the proof workflows' text,
     {pin file: its text})."""
-    return (open(WF, encoding='utf-8').read(),
+    files = wf_files(glob.glob('.github/workflows/*.yml'))
+    return (''.join(open(f, encoding='utf-8').read() for f in files),
             {f: open(f, encoding='utf-8').read() for f in sorted(glob.glob(CC))})
 
 def git_source(rev):
@@ -122,7 +132,8 @@ def git_source(rev):
         return subprocess.run(['git'] + list(args), check=True, capture_output=True,
                               encoding='utf-8').stdout
     files = git('ls-tree', '--name-only', rev, os.path.dirname(CC) + '/').split()
-    return (git('show', f'{rev}:{WF}'),
+    wfs = wf_files(git('ls-tree', '--name-only', rev, '.github/workflows/').split())
+    return (''.join(git('show', f'{rev}:{f}') for f in wfs),
             {f: git('show', f'{rev}:{f}') for f in sorted(files) if f.endswith('.txt')})
 
 def pinned_names(source=None):

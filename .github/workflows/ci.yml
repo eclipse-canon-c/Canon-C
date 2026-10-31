@@ -1,0 +1,554 @@
+name: "1 · Build & test"
+# Builds and runs the test suite: Linux, Windows (MSVC, MinGW) and macOS,
+# Release and Debug with sanitizers; i386; Valgrind; libFuzzer; the lifetime
+# token under concurrency and the lifetime-debug build. Start here.
+# Map of every workflow: .github/workflows/README.md (VERIFY-050).
+#
+# NOTE — Dr. Memory (Windows memory checker) is intentionally omitted.
+#   Dr. Memory crashes internally on Windows Server 2022 (the current
+#   windows-latest runner, Build 26100) with an unrecoverable internal
+#   fault at startup. This is a known upstream bug with no available fix
+#   or workaround as of the time of writing. Memory safety on Windows is
+#   covered by the MSVC build with /W4 /WX and by Valgrind on Linux.
+#   Re-enable dr-memory when upstream ships a compatible release.
+#
+# NOTE — the Linux runner is pinned: every Linux job runs on ubuntu-24.04,
+#   never ubuntu-latest (docs/deviations.md, VERIFY-039, runner pin).
+#   GitHub moves the ubuntu-latest label to Ubuntu 26.04 between 2026-10-19
+#   and 2026-11-19 (actions/runner-images#14748). While a label migrates,
+#   the image it names can differ from push to push (the misra job's
+#   lesson; see its banner) and between the jobs of one run, each of which
+#   gets its own runner. What the gates measure depends on the image: the
+#   gcc that preprocesses every Frama-C unit, the system the cached opam
+#   switch is restored onto (the cache key names runner.os, which is Linux
+#   on any Ubuntu), and the apt-installed tools (cppcheck, clang-tidy,
+#   gcc-14, lcov, valgrind, clang, gcc-multilib). Move the label
+#   DELIBERATELY, as its own predicted change, never by drift.
+on:
+  push:
+    branches: [ "master" ]
+    # Documentation-only pushes change nothing a gate measures; skip them.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # 1. Build + test — all platforms, Release and Debug
+  # -------------------------------------------------------------------------
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+        build_type: [Release, Debug]
+        c_compiler: [gcc, clang, cl]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+          - os: ubuntu-24.04
+            c_compiler: gcc
+          - os: ubuntu-24.04
+            c_compiler: clang
+          - os: macos-latest
+            c_compiler: clang
+        exclude:
+          - os: windows-latest
+            c_compiler: gcc
+          - os: ubuntu-24.04
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Configure CMake (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          SANITIZERS=OFF
+          if [[ "${{ matrix.build_type }}" == "Debug" ]]; then
+            SANITIZERS=ON
+          fi
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=${SANITIZERS} \
+            -S "${{ github.workspace }}"
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sanitizers = if ("${{ matrix.build_type }}" -eq "Debug") { "ON" } else { "OFF" }
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DENABLE_SANITIZERS="$sanitizers" `
+            -S "${{ github.workspace }}"
+      - name: Build
+        run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
+      - name: Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 1b. 32-bit build + test — Linux GCC -m32
+  #
+  #    Exercises the width axis nothing else in the matrix hits: on -m32,
+  #    size_t is EXACTLY 32 bits (CANON_USIZE_MAX == 2^32-1), the minimum
+  #    Tier 1 promises to support. This is where the arena overflow-guard
+  #    unreachability argument (MCDC-003 / VERIFY-009, which reasons "on
+  #    both 32-bit and 64-bit platforms") actually runs, instead of being
+  #    asserted from a 64-bit-only matrix.
+  #
+  #    Sanitizers OFF: -m32 ASan/UBSan need the 32-bit runtime libs and are
+  #    historically flaky to stand up. Once green, -m32 UBSan (the higher-
+  #    value one for width-dependent overflow/shift UB) can be a follow-up.
+  # -------------------------------------------------------------------------
+  build-32bit:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install 32-bit GCC toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib
+      - name: Configure CMake (-m32)
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_FLAGS="-m32" \
+            -DCMAKE_EXE_LINKER_FLAGS="-m32" \
+            -DENABLE_SANITIZERS=OFF \
+            -S "${{ github.workspace }}"
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }}
+      - name: Test
+        working-directory: build
+        run: ctest --build-config ${{ matrix.build_type }} --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 1c. MinGW build + test — Windows, MSYS2 UCRT64 (GCC-on-Windows)
+  #
+  #    Fills the one (compiler, OS) pairing the `build` job excludes that
+  #    has a large real-world user base: the MSYS2/MinGW-w64 toolchain.
+  #    The compiler frontend is already covered by Linux GCC; the value
+  #    here is the C RUNTIME — UCRT instead of glibc. This is where the
+  #    classic C99 format-specifier landmine lives: usize is size_t, and
+  #    %zu / %llu against the wrong Windows CRT misbehaves. UCRT64 is the
+  #    correct, fixed target; this cell proves the stdio surface (contract
+  #    handler, diag.h, log.h, snprintf formatters) is sound on a Windows
+  #    libc under -Wall -Wextra -Wpedantic -Werror.
+  #
+  #    Sanitizers OFF: ASan/UBSan support on MinGW is limited. Windows
+  #    memory safety remains covered by the MSVC /W4 /WX build and by
+  #    Valgrind on Linux.
+  #
+  #    Notes on the invocation:
+  #      - Ninja is used (the path of least resistance inside the msys2
+  #        shell). It is a single-config generator, so the build type is
+  #        fixed at configure time — that is why the Build and Test steps
+  #        do not pass --config / --build-config like the multi-config jobs.
+  #      - -S . (not ${{ github.workspace }}) because the Windows workspace
+  #        path with backslashes confuses the msys2 bash shell; "." resolves
+  #        cleanly from the checkout directory.
+  # -------------------------------------------------------------------------
+  mingw:
+    needs: build
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DENABLE_SANITIZERS=OFF \
+            -S .
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 3. Valgrind — Linux only
+  # -------------------------------------------------------------------------
+  valgrind:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+      - name: Configure CMake (no sanitizers — conflicts with Valgrind)
+        run: |
+          cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_SANITIZERS=OFF \
+            -S "${{ github.workspace }}"
+      - name: Build
+        run: cmake --build build
+      - name: Test under Valgrind
+        working-directory: build
+        run: |
+          ctest \
+            --build-config Debug \
+            --output-on-failure \
+            --overwrite MemoryCheckCommand=$(which valgrind) \
+            --overwrite MemoryCheckCommandOptions="--error-exitcode=1 --leak-check=full --track-origins=yes --show-leak-kinds=all" \
+            -T memcheck
+
+  # -------------------------------------------------------------------------
+  # 4. Fuzzing — Linux only
+  # -------------------------------------------------------------------------
+  fuzzing:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Clang with libFuzzer runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Configure CMake
+        run: |
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_FUZZING=ON \
+            -S "${{ github.workspace }}"
+      - name: Build fuzz targets
+        run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config Debug
+      - name: Run fuzz targets
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config Debug --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # 8. Lifetime-debug build — all platforms, Release + Debug
+  #
+  #    Builds and runs the full test suite with CANON_LIFETIME=debug,
+  #    which defines CANON_LIFETIME_DEBUG project-wide. This activates:
+  #      - lifetime_t lt field on Arena, Pool, DynString, every
+  #        dynvec_T instantiation, and (Phase 3) smallvec instantiations
+  #      - source_lt + captured_id fields on every borrow struct
+  #      - _from_lifetime constructors capture the source's token
+  #      - BORROW_LT_CHECK_ fires require_msg on every _get if the
+  #        captured ID no longer matches the source's current ID
+  #
+  #    Matrix mirrors the default `build` job — same OS/compiler/
+  #    build-type coverage. This catches:
+  #      - MSVC vs GCC/Clang struct-padding differences for the
+  #        embedded lifetime_t field
+  #      - macOS Clang vs Linux Clang alignment behavior of uint64_t
+  #        inside struct
+  #      - Platform-specific pointer-size assumptions in the
+  #        (region_id_t)(uintptr_t)&v ID derivation
+  #      - Release-mode codegen differences when LIKELY/UNLIKELY hints
+  #        interact with the additional fields
+  #
+  #    Sanitizers (ASan + UBSan) are enabled in Debug on Linux + macOS
+  #    to catch any latent UB the lifetime instrumentation might
+  #    introduce — e.g. a forgotten field initialiser leaving
+  #    captured_id uninitialised, or pointer arithmetic that the
+  #    additional fields perturb. MSVC builds skip ASan (DLL
+  #    deployment limitation; see ENABLE_SANITIZERS in CMakeLists.txt).
+  #
+  #    Previously this job was Linux-Clang only — sufficient evidence
+  #    when only arena and borrow embedded lifetime_t (Phase 1). After
+  #    Phase 2 broadened the surface to five owning types plus all
+  #    macro-generated dynvec instantiations, single-platform coverage
+  #    was no longer adequate. The matrix expanded after Phase 2
+  #    landed.
+  # -------------------------------------------------------------------------
+  # -------------------------------------------------------------------------
+  # lifetime-token-concurrency — the ONLY concurrent test in the project
+  #
+  # Canon-C is a single-threaded library (docs/thread-safety.md). It owns no
+  # threads and holds no locks, so every other job in this workflow tests
+  # sequential code. This job exists because token generation under
+  # CANON_LIFETIME_DEBUG is the single place where the library performs a
+  # read-modify-write on state shared between the CALLER's threads.
+  #
+  # WHAT IS AT STAKE. A token is `counter ^ owner-address`. Non-atomically,
+  # two concurrent constructions can read the same counter, so two owners can
+  # receive the same token — and the token is exactly what the borrow checks
+  # compare. A stale borrow then validates against a different live owner:
+  # the check PASSES WHEN IT SHOULD FAIL. The debug mode's whole purpose is
+  # defeated, silently, in the unsafe direction. Hence a job for one function.
+  #
+  # WHAT IS GATED AND WHAT IS NOT — read before adding assertions here.
+  #   GATED   zero duplicate tokens on an atomic path. Atomicity either holds
+  #           or it does not; the direction is deterministic.
+  #   GATED   zero TSan races on the atomic path.
+  #   GATED   TSan DOES report the race on the forced-fallback path. If it
+  #           stops, either TSan regressed or the fallback silently became
+  #           atomic — both are things to investigate, not to accept.
+  #   NOT     the duplicate COUNT on the fallback path. A data race is
+  #   GATED   undefined behaviour, not a scheduled event: the same counter
+  #           produced 50000, 50000, 0, 50000, 50000 duplicates across five
+  #           consecutive runs on one machine. Requiring the race to appear
+  #           would fail roughly one run in five and would assert that UB is
+  #           reliable. It is printed for the record and nothing more.
+  #
+  # This job does not gate any proof baseline and cannot: every WP job runs
+  # with CANON_LIFETIME off, so none of this code is in any verified TU.
+  # See MISRA-DEV-018 for the rule 1.2 deviation the atomic intrinsics need.
+  # -------------------------------------------------------------------------
+  lifetime-token-concurrency:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: "Ladder: which atomic level does each configuration select?"
+        # The ladder is the fix. A C11-only version of this fix was written
+        # first and was WRONG — Canon-C is C99 (CMAKE_C_STANDARD 99,
+        # REQUIRED), so it would have been correct code that never compiled
+        # in any job or for any caller. This step exists so that regression
+        # is visible immediately rather than after a silent fallback.
+        run: |
+          set -e
+          cat > /tmp/level_probe.c <<'PROBE_EOF'
+          #define CANON_LIFETIME_DEBUG
+          #include "core/primitives/lifetime.h"
+          #include <stdio.h>
+          int main(void) {
+          #ifdef CANON_LIFETIME_ATOMIC_LEVEL_
+              printf("%d %d\n", CANON_LIFETIME_ATOMIC_IDS, CANON_LIFETIME_ATOMIC_LEVEL_);
+          #else
+              printf("%d 4\n", CANON_LIFETIME_ATOMIC_IDS);
+          #endif
+              return 0;
+          }
+          PROBE_EOF
+          FAILURES=0
+          probe() {  # $1 = label, $2 = expected "atomic level", $3.. = flags
+            label="$1"; expect="$2"; shift 2
+            gcc "$@" -I . -o /tmp/level_probe /tmp/level_probe.c
+            got=$(/tmp/level_probe)
+            if [ "${got}" = "${expect}" ]; then
+              echo "  OK   ${label}: atomic/level = ${got}"
+            else
+              echo "  FAIL ${label}: atomic/level = ${got}, expected ${expect}"
+              FAILURES=$((FAILURES + 1))
+            fi
+          }
+          echo "=== ladder selection ==="
+          # THE important row: the project's own standard must NOT fall back.
+          probe "C99 (the shipped standard)"  "1 2" -std=c99
+          probe "C11"                         "1 1" -std=gnu11
+          probe "C99 + NO_GNU_EXTENSIONS"     "0 4" -std=c99 -DCANON_NO_GNU_EXTENSIONS
+          probe "C99 + LIFETIME_NO_ATOMICS"   "0 4" -std=c99 -DCANON_LIFETIME_NO_ATOMICS
+          echo ""
+          if [ "${FAILURES}" -ne 0 ]; then
+            echo "FAIL: ${FAILURES} ladder selection(s) wrong."
+            echo "      A C99 build falling to level 4 means the fix is"
+            echo "      unreachable in the configuration this project ships —"
+            echo "      which is the exact defect the ladder was written to"
+            echo "      correct. Do not 'fix' this by relaxing the expectation."
+            exit 1
+          fi
+          echo "PASS: every configuration selects the intended level."
+
+      - name: "Gated: zero duplicate tokens on the atomic paths"
+        run: |
+          set -e
+          for std in c99 gnu11; do
+            for opt in -O0 -O2; do
+              echo "--- -std=${std} ${opt} ---"
+              gcc -std=${std} ${opt} -Wall -Wextra -I . -pthread \
+                  -o /tmp/lt test/concurrency/lifetime_token_test.c
+              /tmp/lt || exit 1
+            done
+          done
+          echo "PASS: no duplicates on any atomic configuration."
+          echo "      -O0 is included deliberately: the fallback race does NOT"
+          echo "      reproduce without optimisation (the optimiser is what"
+          echo "      keeps the counter in a register), so an -O2-only matrix"
+          echo "      would miss a level that had quietly stopped being atomic."
+
+      - name: "Reported only: the fallback path"
+        # Never gated — see the banner. Printed so the record shows what the
+        # conforming-C99 path actually does on this runner.
+        run: |
+          set -e
+          for flag in -DCANON_LIFETIME_NO_ATOMICS -DCANON_NO_GNU_EXTENSIONS; do
+            echo "--- ${flag} ---"
+            gcc -std=c99 -O2 -Wall -Wextra ${flag} -I . -pthread \
+                -o /tmp/lt_fb test/concurrency/lifetime_token_test.c
+            /tmp/lt_fb
+          done
+
+      - name: "Gated: ThreadSanitizer, both directions"
+        # TSan instruments accesses instead of sampling outcomes, so unlike
+        # the duplicate count it is a deterministic detector and can be gated
+        # in BOTH directions.
+        run: |
+          set -e
+          FAILURES=0
+
+          echo "=== atomic path: expect ZERO races ==="
+          gcc -std=c99 -O1 -g -fsanitize=thread -I . -pthread \
+              -o /tmp/ts_atomic test/concurrency/lifetime_token_test.c
+          /tmp/ts_atomic > /tmp/ts_atomic.log 2>&1 || true
+          ATOMIC_RACES=$(grep -c "WARNING: ThreadSanitizer: data race" /tmp/ts_atomic.log || true)
+          echo "  races on atomic path: ${ATOMIC_RACES}"
+          if [ "${ATOMIC_RACES}" -ne 0 ]; then
+            echo "FAIL: the atomic path races. The increment selected by the"
+            echo "      ladder is not actually atomic on this toolchain."
+            grep -A6 "WARNING: ThreadSanitizer" /tmp/ts_atomic.log | head -20
+            FAILURES=$((FAILURES + 1))
+          fi
+
+          echo ""
+          echo "=== forced fallback: expect the race to BE reported ==="
+          gcc -std=c99 -O1 -g -DCANON_LIFETIME_NO_ATOMICS -fsanitize=thread \
+              -I . -pthread -o /tmp/ts_fb test/concurrency/lifetime_token_test.c
+          /tmp/ts_fb > /tmp/ts_fb.log 2>&1 || true
+          FB_RACES=$(grep -c "WARNING: ThreadSanitizer: data race" /tmp/ts_fb.log || true)
+          echo "  races on fallback path: ${FB_RACES}"
+          if [ "${FB_RACES}" -eq 0 ]; then
+            echo "FAIL: TSan found no race on the NON-ATOMIC path. This is a"
+            echo "      positive control, and its failure voids the result"
+            echo "      above: if TSan cannot see a race that is known to be"
+            echo "      there, 'zero races on the atomic path' means nothing."
+            echo "      Either TSan regressed or the fallback stopped being"
+            echo "      the fallback. Investigate before trusting this job."
+            FAILURES=$((FAILURES + 1))
+          fi
+
+          echo ""
+          if [ "${FAILURES}" -ne 0 ]; then
+            echo "FAIL: ${FAILURES} TSan check(s) failed."
+            exit 1
+          fi
+          echo "PASS: atomic path clean, fallback race detected (control held)."
+
+      - name: Upload concurrency logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lifetime-token-concurrency-logs
+          path: |
+            /tmp/ts_atomic.log
+            /tmp/ts_fb.log
+          retention-days: 90
+          if-no-files-found: ignore
+
+  lifetime-debug:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+        build_type: [Release, Debug]
+        c_compiler: [gcc, clang, cl]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+          - os: ubuntu-24.04
+            c_compiler: gcc
+          - os: ubuntu-24.04
+            c_compiler: clang
+          - os: macos-latest
+            c_compiler: clang
+        exclude:
+          - os: windows-latest
+            c_compiler: gcc
+          - os: ubuntu-24.04
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Configure CMake (Linux / macOS, CANON_LIFETIME=debug)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          SANITIZERS=OFF
+          if [[ "${{ matrix.build_type }}" == "Debug" ]]; then
+            SANITIZERS=ON
+          fi
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" \
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCANON_LIFETIME=debug \
+            -DENABLE_SANITIZERS=${SANITIZERS} \
+            -S "${{ github.workspace }}"
+      - name: Configure CMake (Windows, CANON_LIFETIME=debug)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sanitizers = if ("${{ matrix.build_type }}" -eq "Debug") { "ON" } else { "OFF" }
+          cmake -B "${{ steps.strings.outputs.build-output-dir }}" `
+            -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DCANON_LIFETIME=debug `
+            -DENABLE_SANITIZERS="$sanitizers" `
+            -S "${{ github.workspace }}"
+      - name: Build
+        run: cmake --build "${{ steps.strings.outputs.build-output-dir }}" --config ${{ matrix.build_type }}
+      - name: Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config ${{ matrix.build_type }} --output-on-failure

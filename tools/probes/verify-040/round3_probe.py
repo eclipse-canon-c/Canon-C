@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-round3_probe.py — the WP runs of .github/workflows/round3-probe.yml
+round3_probe.py — the WP runs of the round3-probe job of .github/workflows/probes.yml
 (VERIFY-040 round 3) and their reading against the committed predictions in
 docs/deviations.md, VERIFY-040 round 3: "the probe's committed prediction",
 for run #1, and "the fix push: committed prediction", for the runs since.

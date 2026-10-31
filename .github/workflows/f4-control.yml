@@ -1,4 +1,4 @@
-name: F4 separating control (manual)
+name: "9 · Probes (manual): F4 separating control"
 
 # ---------------------------------------------------------------------------
 # VERIFY-018 F4 — the separating control, run ON DEMAND ONLY.
@@ -9,7 +9,7 @@ name: F4 separating control (manual)
 #   - Separate file so it cannot perturb the main workflow's job graph, its
 #     wall clock, or any of the seventeen enforced WP jobs.
 #   - It asserts NOTHING about deque's baseline. deque's pins live in
-#     cmake-multi-platform.yml's frama-c-deque job and are untouched here.
+#     proofs-data.yml's frama-c-deque job and are untouched here.
 #
 # WHAT IT TESTS:
 #   Run 1 of frama-c-deque (CI #1231) observed the result(Bool, Error)
@@ -82,7 +82,7 @@ on:
 jobs:
   f4-control:
     # Pinned, not ubuntu-latest: see the runner note in
-    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    # ci.yml (VERIFY-039, runner pin).
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -195,7 +195,7 @@ jobs:
           echo "  into VERIFY-018. A confounded answer is worse than none —"
           echo "  that is how F4 got into this state."
           echo "  This job gates NOTHING. deque's enforced baseline lives in"
-          echo "  cmake-multi-platform.yml and is untouched by this run."
+          echo "  proofs-data.yml and is untouched by this run."
           echo "==============================================="
           if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
 

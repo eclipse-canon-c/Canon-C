@@ -1,0 +1,1174 @@
+name: "5 · Proofs: semantics/"
+# Frama-C WP proofs of semantics/, one job per unit, each enforced on its
+# pins. Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    # Documentation-only pushes change nothing a gate measures; skip them.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # semantics/error.h — ENFORCED. First header of the semantics/ layer.
+  #
+  # error.h is a plain int-backed enum plus four pure lookup/predicate
+  # functions. No void* casts, so it uses WP's DEFAULT Typed model (not
+  # Typed+Cast like the core/ headers from compare.h onward). All four
+  # functions are expected to prove fully automatically with ZERO residuals
+  # (VERIFY-013) — the calibration baseline for the semantics/ layer.
+  #
+  # error_message carries the weak postcondition `\result != \null` that the
+  # public contract actually guarantees, NOT full string validity. Asserting
+  # valid_read_string(\result) would cross the libc strlen/valid_string
+  # boundary documented in VERIFY-007 cat 2; the weak spec keeps error.h at
+  # 0 residuals. See docs/verification.md, error.h section.
+  # -------------------------------------------------------------------------
+  frama-c-error:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: semantics/error.h"
+        # error.h is expected to prove 100% automatically — 0 unproved goals.
+        # Any unproved goal is a regression and fails the job. If a future
+        # edit strengthens error_message's spec to valid_read_string and that
+        # introduces a residual, this wrapper must be updated AND a VERIFY-013
+        # category added to docs/deviations.md before the count is changed.
+        # (2026-07-16 retrofit): Failed gated at zero explicitly; Proved
+        # line pinned hard (65 / 65).
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            semantics/error.h 2>&1 | tee wp_error_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (error.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_error_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in error.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_error_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_error_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_error_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_error_output.txt || true)
+          INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_error_output.txt || true)
+          STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_error_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          EXPECTED_UNPROVED=0
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED —"
+            echo "      a contract in error.h is falsified:"
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_error_output.txt
+            exit 1
+          fi
+          if [ "${INVALID_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
+            echo "      FALSIFIED with a counter-example. Invalid is WP's"
+            echo "      refutation verdict; Failed is a prover error. This"
+            echo "      is categorically different from a residual and can"
+            echo "      never be pinned:"
+            grep -E "^\\[wp\\] \\[Invalid\\]" wp_error_output.txt
+            exit 1
+          fi
+          if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+            echo "      Stepout is a non-proved verdict this project has"
+            echo "      never observed. It is deliberately NOT pooled into"
+            echo "      the residual count, because the residual set is"
+            echo "      defined as Timeout u Unknown. If this fires, decide"
+            echo "      whether to pool it and update the definition first:"
+            grep -E "^\\[wp\\] \\[Stepout\\]" wp_error_output.txt
+            exit 1
+          fi
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          if [ "${PROVED_COUNT}" != "65 / 65" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 65 / 65)."
+            echo "      The goal surface drifted — a VERIFY-013 category is"
+            echo "      required in docs/deviations.md before this pin moves."
+            exit 1
+          fi
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: error.h should have 0 unproved goals."
+            echo "      Found ${UNPROVED_COUNT} unproved goals — this is a"
+            echo "      regression. error.h is the semantics/ layer's clean"
+            echo "      baseline; any residual needs a VERIFY-013 category in"
+            echo "      docs/deviations.md before this wrapper is updated."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_error_output.txt || true
+            exit 1
+          fi
+          echo "PASS: error.h fully verified — all goals proved automatically,"
+          echo "      0 residuals. semantics/ layer baseline established."
+          echo "==============================================="
+      - name: Upload WP proof output (error.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-error
+          path: wp_error_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # semantics/option — ENFORCED. First Shape-B macro-module driver.
+  #
+  # option is the first verified module whose functions are macro-generated
+  # (Shape B per vmacros.md): there is no option_int_* function to point WP
+  # at until DEFINE_OPTION_FUNCTIONS(static inline, int) instantiates one.
+  # WP runs over vmacros/vdrivers/option_verify.h — a driver that instantiates
+  # the REAL shipped macros and attaches ACSL contracts to the generated
+  # prototypes (integrity rule: one source of truth, never a verified copy).
+  # The driver's contracted prototypes are static inline to match the linkage
+  # of DEFINE_OPTION_FUNCTIONS(static inline, int) — a bare external-linkage
+  # prototype ahead of a static-inline definition is a C99 6.2.2p7 conflict.
+  #
+  # Default Typed model (NOT Typed+Cast): option_T is a by-value tagged struct
+  # { bool has_value; T value; } with no void* casts — same situation as
+  # error.h, so this job omits the CVC5-presence check the core/ headers carry.
+  #
+  # Promoted from report-only to enforced as of CI #1065 (VERIFY-014):
+  # 189 / 223 proved, exactly 34 unproved. Since VERIFY-039 G11: 222 / 230
+  # proved, exactly 8 unproved; since G14, 222 / 228 and 6. Two categories:
+  #   (a) INHERITED (0 since VERIFY-039 G14; 2 until then) — contract.h
+  #       handler non-termination. option_impl.h includes contract.h;
+  #       error.h avoided this pair by including only types.h, but option
+  #       cannot (expect/get/unwrap/replace/take route through it). The
+  #       VERIFY-006 cat-4 pair, re-emitted until G14's repair closed it.
+  #       option was the first semantics/ header to inherit them.
+  #   (b) OWN (6; 32 before VERIFY-039 G11) — function-pointer dispatch
+  #       across the six combinators (map / and_then / or_else / filter /
+  #       combine_with / eq): the run-time check that the called pointer is
+  #       a valid function, one per combinator. Each is true for every call
+  #       the contract admits, which requires the pointer valid where it is
+  #       called, and unproved because WP 29 does not implement
+  #       \valid_function. Until G11 the contracts, with the clauses WP 29
+  #       supplies by default, also claimed termination, no exit and an
+  #       empty frame for every callback, and the 26 other goals at the
+  #       calls through the pointer were false for some admitted callbacks
+  #       (tools/probes/verify-039/p_combinator_callback.c); under the new
+  #       contracts they close (g11-probe.yml run #1). Every non-combinator
+  #       function proves fully.
+  #
+  # The residual set is name-stable: the 6 category-(b) goals are the
+  # run-time checks on the pointer, and the 2 category-(a) goals were
+  # genuine full timeouts, identical to the pair pinned in six other
+  # headers, until VERIFY-039 G14 repaired the handler's contract. The
+  # by-name roll-call below pins all 6. A WP that implemented
+  # \valid_function would prove the 6, true under the contracts: a ratchet,
+  # not a regression.
+  # -------------------------------------------------------------------------
+  frama-c-option:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/option_verify.h"
+        # option — first Shape-B macro-module driver, default Typed model
+        # (by-value tagged struct, no void* casts — like error.h, so no
+        # CVC5-presence check). Expected: 222 / 228 proved, exactly 6
+        # unproved (VERIFY-014, VERIFY-039 G11), all own: the run-time
+        # check on the pointer at each of the six combinators
+        # (\valid_function, which WP 29 does not implement). Until
+        # VERIFY-039 G14, 222 / 230 and 8: the contract.h handler pair
+        # (VERIFY-006 cat 4) was inherited too. Any deviation is a
+        # regression and fails the job.
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from
+        # the pooled count; Proved-line warning promoted to a hard pin.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/option_verify.h 2>&1 | tee wp_option_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (option_verify.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_option_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in option_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_option_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_option_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_option_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_option_output.txt || true)
+          INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_option_output.txt || true)
+          STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_option_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          EXPECTED_UNPROVED=6   # VERIFY-039 G14 predicted: 8 -> 6 (G11 predicted: 34 -> 8)
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in option_verify.h is falsified:"
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_option_output.txt
+            exit 1
+          fi
+          if [ "${INVALID_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
+            echo "      FALSIFIED with a counter-example. Invalid is WP's"
+            echo "      refutation verdict; Failed is a prover error. This"
+            echo "      is categorically different from a residual and can"
+            echo "      never be pinned:"
+            grep -E "^\\[wp\\] \\[Invalid\\]" wp_option_output.txt
+            exit 1
+          fi
+          if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+            echo "      Stepout is a non-proved verdict this project has"
+            echo "      never observed. It is deliberately NOT pooled into"
+            echo "      the residual count, because the residual set is"
+            echo "      defined as Timeout u Unknown. If this fires, decide"
+            echo "      whether to pool it and update the definition first:"
+            grep -E "^\\[wp\\] \\[Stepout\\]" wp_option_output.txt
+            exit 1
+          fi
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          # VERIFY-039 G11 predicted: 26 closed and 7 goals added, all proved
+          # (189 / 223 before). VERIFY-039 G14 predicted: the handler's
+          # invariant goals removed, its termination proved (222 / 230
+          # before).
+          if [ "${PROVED_COUNT}" != "222 / 228" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 222 / 228)."
+            echo "      The goal surface drifted — reclassify in VERIFY-014,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (option section) and"
+            echo "      docs/deviations.md (VERIFY-014) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_option_output.txt || true
+            exit 1
+          fi
+          CHECKS=(
+            # (a) inherited — none since VERIFY-039 G14 (the contract.h
+            # handler pair, VERIFY-006 cat 4, until then)
+            # (b) own — function-pointer dispatch, 6 combinators: the run-time
+            # check on the pointer at each (VERIFY-039 G11; 32 before)
+            "typed_option_int_map_assert_rte_function_pointer"
+            "typed_option_int_and_then_assert_rte_function_pointer"
+            "typed_option_int_or_else_assert_rte_function_pointer"
+            "typed_option_int_filter_assert_rte_function_pointer"
+            "typed_option_int_combine_with_assert_rte_function_pointer"
+            "typed_option_int_eq_assert_rte_function_pointer_part2"
+          )
+          # ANCHORED with a trailing ( |$), as vec's and deque's roll-calls
+          # are (VERIFY-039 G11): with the exact count above, presence of
+          # every name is then set equality.
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_option_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+          echo "PASS: option verified — 222/228 proved, 6 documented"
+          echo "      residuals all observed (VERIFY-014, VERIFY-039 G11),"
+          echo "      all own (the run-time check on the pointer at each"
+          echo "      combinator); none inherited since G14. First"
+          echo "      Shape-B module; every non-combinator function proved"
+          echo "      fully."
+          echo "==============================================="
+      - name: Upload WP proof output (option)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-option
+          path: wp_option_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # semantics/result — second Shape-B macro-module driver, default Typed
+  # model (by-value tagged struct, no void* casts — like error.h and option,
+  # so no CVC5-presence check). WP runs over vmacros/vdrivers/result_verify.h,
+  # which instantiates the REAL shipped macros at (int, VErr) (docs/vmacros.md).
+  #
+  # Expected: 207 / 213 proved, exactly 6 unproved (VERIFY-015, VERIFY-039
+  # G11 and G14; 207 / 215 and 8 before G14, 185 / 215 and 30 before G11):
+  #   (a) 0 inherited since VERIFY-039 G14; 2 until then, the contract.h
+  #       handler non-termination (VERIFY-006 cat-4 pair), which G14's
+  #       repair closes. Definition-presence inheritance ONLY: result's
+  #       entire panic surface (unwrap / unwrap_err / expect / get_* NULL
+  #       guard) is plain require_msg, compiled out under
+  #       -DCANON_NO_REQUIRE, so unlike option's expect no result function
+  #       contains a handler call and all of them prove fully.
+  #   (b) 6 own (28 before VERIFY-039 G11) — function-pointer dispatch
+  #       across the five dispatching combinators: the run-time check that
+  #       a called pointer is a valid function, one per combinator and two
+  #       at eq, which dispatches TWO pointers (eq_ok, eq_err) across two
+  #       calling branches. Each is true for every call the contract admits
+  #       and unproved because WP 29 does not implement \valid_function.
+  #       Until G11 the class held 28 (map 6, map_err 6, and_then 4,
+  #       or_else 4, eq 8): these 6, and the termination, exit and frame
+  #       goals at the calls through the pointers, which were false for
+  #       some admitted callbacks.
+  #
+  # NO union-goal residuals: result is the first union-typed module, and all
+  # union-member postconditions proved — under WP's union field model, which
+  # WP flags with [wp:union] "might be unsound" warnings. Soundness rests on
+  # the no-type-punning discipline documented in VERIFY-015 (every union
+  # read, in bodies and specs alike, is guarded by the is_ok value that
+  # selected the write). The warnings are expected and not failures.
+  #
+  # The residual set is name-stable: the 6 category-(b) goals are the
+  # run-time checks on the pointers, and the 2 category-(a) goals were
+  # genuine full timeouts, identical to the pair pinned in six other
+  # headers, until VERIFY-039 G14 repaired the handler's contract. The
+  # by-name roll-call below pins all 6. A WP that implemented
+  # \valid_function would prove the 6, true under the contracts: a ratchet,
+  # not a regression.
+  #
+  # NOTE (2026-07-16): this driver verifies the family at (int, VErr). The
+  # vec TU separately instantiates result(Bool, Error) — a FRESH
+  # instantiation, a new verification subject, NOT covered by this job's
+  # evidence (VERIFY-018 Correction note; instantiation-identity rule in
+  # docs/vmacros.md). This job's residual profile is the comparison
+  # baseline for that fresh instance's 22 goals. (VERIFY-039 G11: vec_verify.h
+  # copies this driver's repaired combinator contracts, and vec's result arm
+  # is predicted to fall to the same 6 run-time checks, at (Bool, Error).)
+  # -------------------------------------------------------------------------
+  frama-c-result:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/result_verify.h"
+        # (2026-07-16 retrofit): Failed gated at zero and excluded from
+        # the pooled count; Proved-line warning promoted to a hard pin.
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/result_verify.h 2>&1 | tee wp_result_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (result_verify.h) exit status: ${WP_EXIT}"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_result_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in result_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_result_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_result_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_result_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_result_output.txt || true)
+          INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_result_output.txt || true)
+          STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_result_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          EXPECTED_UNPROVED=6   # VERIFY-039 G14 predicted: 8 -> 6 (G11 predicted: 30 -> 8)
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout/unknown) —"
+            echo "      a contract in result_verify.h is falsified:"
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_result_output.txt
+            exit 1
+          fi
+          if [ "${INVALID_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
+            echo "      FALSIFIED with a counter-example. Invalid is WP's"
+            echo "      refutation verdict; Failed is a prover error. This"
+            echo "      is categorically different from a residual and can"
+            echo "      never be pinned:"
+            grep -E "^\\[wp\\] \\[Invalid\\]" wp_result_output.txt
+            exit 1
+          fi
+          if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+            echo "      Stepout is a non-proved verdict this project has"
+            echo "      never observed. It is deliberately NOT pooled into"
+            echo "      the residual count, because the residual set is"
+            echo "      defined as Timeout u Unknown. If this fires, decide"
+            echo "      whether to pool it and update the definition first:"
+            grep -E "^\\[wp\\] \\[Stepout\\]" wp_result_output.txt
+            exit 1
+          fi
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          # VERIFY-039 G11 predicted: 22 closed, no goal added (185 / 215
+          # before). VERIFY-039 G14 predicted: the handler's invariant
+          # goals removed, its termination proved (207 / 215 before).
+          if [ "${PROVED_COUNT}" != "207 / 213" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 207 / 213)."
+            echo "      The goal surface drifted — reclassify in VERIFY-015,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo ""
+            echo "FAIL: unexpected number of unproved goals."
+            echo "      Expected exactly ${EXPECTED_UNPROVED} documented unproved goals."
+            echo "      See docs/verification.md (result section) and"
+            echo "      docs/deviations.md (VERIFY-015) for the full list."
+            echo ""
+            echo "Observed unproved goals:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_result_output.txt || true
+            exit 1
+          fi
+          CHECKS=(
+            # (a) inherited — none since VERIFY-039 G14 (the contract.h
+            # handler pair, VERIFY-006 cat 4, until then)
+            # (b) own — function-pointer dispatch, 5 combinators: the run-time
+            # check on the pointer at each, two at eq, one per pointer
+            # (VERIFY-039 G11; 28 before)
+            "typed_result_int_VErr_map_assert_rte_function_pointer"
+            "typed_result_int_VErr_map_err_assert_rte_function_pointer"
+            "typed_result_int_VErr_and_then_assert_rte_function_pointer"
+            "typed_result_int_VErr_or_else_assert_rte_function_pointer"
+            "typed_result_int_VErr_eq_assert_rte_function_pointer"
+            "typed_result_int_VErr_eq_assert_rte_function_pointer_2"
+          )
+          # ANCHORED with a trailing ( |$), as vec's and deque's roll-calls
+          # are (VERIFY-039 G11): eq's first check is a prefix of its _2, so
+          # an unanchored match let one line stand for both names. With the
+          # exact count above, presence of every name is then set equality.
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_result_output.txt; then
+              echo "FAIL: expected unproved goal ${goal} not observed."
+              exit 1
+            fi
+          done
+          echo "PASS: result verified — 207/213 proved, 6 documented"
+          echo "      residuals all observed (VERIFY-015, VERIFY-039 G11),"
+          echo "      all own (the run-time check on the pointer at each"
+          echo "      combinator, two at eq); none inherited since G14."
+          echo "      Second Shape-B module; every"
+          echo "      non-combinator function proved fully, including all"
+          echo "      union-member postconditions (first union-typed"
+          echo "      module — see VERIFY-015 union-model note)."
+          echo "==============================================="
+      - name: Upload WP proof output (result)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-result
+          path: wp_result_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # borrow.h — ENFORCED, 120s / -wp-split.
+  #
+  # First verified header in semantics/ with in-place contracts, and the
+  # project's first hybrid Shape-A/Shape-B header: the 24 non-macro
+  # functions (borrowed_ptr x6, borrowed_str x9, borrowed_bytes x9) carry
+  # ACSL and are verified here; DEFINE_BORROWED_SLICE is outside the
+  # verified surface, parked with the other single-file macro families in
+  # docs/vmacros.md (DEFINE_SLICE precedent: documented + tested, not
+  # WP-verified).
+  #
+  # Verified configuration is the default build (CANON_LIFETIME off,
+  # -DCANON_NO_REQUIRE -DNDEBUG): the BORROW_LT_* macros expand to nothing,
+  # so WP sees the exact shipped bodies of the ABI guarantee. The
+  # lifetime-debug path is runtime-only by construction (OWN-001 §7) and
+  # stays covered by borrow_test.c across the CI matrix, including the
+  # OWN-002 double-reset regression guards.
+  #
+  # Composability check #6 — CONFIRMED: the TU's substrate is checked.h +
+  # slice.h (no ptr.h, no memory.h — slice.h does not pull them), and the
+  # inherited surface is exactly 17 goals re-emitted byte-identically:
+  # slice.h's 15 (VERIFY-007/-012) + checked.h's 2 (VERIFY-002, prefix
+  # flipped typed_ -> typed_cast_ under this TU's model). Own residuals:
+  # exactly 2, both on borrowed_bytes_eq's memcmp call site (the only
+  # direct libc call in the header) — the danglingness_s1/s2 pair; the
+  # valid_s1/s2 and initialization goals closed via the day-one guarded
+  # \valid_read/\initialized requires. Zero function-pointer residuals:
+  # borrow.h has no combinators or hooks — the first downstream header
+  # since error.h to add no new residual class at all.
+  # (VERIFY-039 G13: 4 own since its repair. borrowed_str_eq requires,
+  # as str_equal now does, that no byte compared holds a dangling
+  # address; WP does not implement \dangling, so the two goals at its
+  # call for str_equal's no_dangling_a and no_dangling_b stay unproved,
+  # the class of the memcmp pair.)
+  #
+  # Cross-stream tie-in: gcov reports borrow.h at 38/40 MC/DC (95.0%,
+  # CI #1106) with exactly 2 outcomes open — the NULL-true sides of the
+  # one-NULL guard in borrowed_bytes_eq. The named goal dead_by_invariant
+  # (an /*@ assert \false */ inside that guard) PROVED at CI #1110 under
+  # cbytes_invariant, completing the MCDC-008 cross-stream record
+  # (MCDC-002 shape, seventh instance, first in semantics/, first carried
+  # by a named assert). This job's proved-set check on dead_by_invariant
+  # is the proof-stream regression detector; the per-line coverage debug
+  # step in the coverage job is the measurement-stream one.
+  #
+  # Promoted from report-only to enforced at commit 79ad684 (2026-07-05,
+  # "Change borrow.h to enforced status in CI" — the commit that flips
+  # ENFORCE=0 -> 1; its Actions run is the record). VERIFY-016/MCDC-008
+  # landed in the same PR. Report-only first at
+  # 383bf9f (CI #1109, 27 unproved — the final 19 plus 8 call-site
+  # chaining goals from slice.h contracts mirrored by shape); aligned to
+  # slice.h's real clauses at 262a503 (CI #1110): 2433/2452 proved,
+  # exactly 19 unproved (17 inherited + 2 own), 0 Unknown, 0 Failed,
+  # zero outside prediction, dead_by_invariant proved. The 19 are the
+  # identical named subset of #1109's 27 — name-stable across both runs.
+  # No timeout-minutes override: this TU is slice.h-sized, not
+  # region.h-sized — the default job budget is ample.
+  # -------------------------------------------------------------------------
+  frama-c-borrow:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: semantics/borrow.h"
+        # borrow.h — Typed+Cast. Expected: 2451 / 2465 proved, exactly 14
+        # unproved (VERIFY-016, VERIFY-039 G14 to G17): 10 inherited
+        # (slice.h's full 8-goal surface, + checked.h's 2 with the
+        # typed_ -> typed_cast_ prefix flip; 17 until G14 and G17 closed
+        # the handler pair and slice.h's five) + 4 borrow-own (memcmp
+        # danglingness at borrowed_bytes_eq, the header's only libc call,
+        # and since VERIFY-039 G13's repair the two no_dangling goals at
+        # borrowed_str_eq's call to str_equal, 2 until then).
+        # Also enforces the MCDC-008 closure: the named in-body assert
+        # dead_by_invariant must remain in the proved set. Any deviation
+        # is a regression.
+        #
+        # First hybrid Shape-A/Shape-B header: the 24 non-macro functions
+        # are annotated in place (slice.h-style); DEFINE_BORROWED_SLICE is
+        # outside the verified surface (docs/vmacros.md). Verified
+        # configuration is the default build (CANON_LIFETIME off,
+        # -DCANON_NO_REQUIRE -DNDEBUG) — the exact shipped bodies of the
+        # ABI guarantee; the lifetime-debug path stays runtime-verified by
+        # borrow_test.c across the CI matrix (OWN-001 §7).
+        #
+        # Promoted from report-only at 79ad684 (2026-07-05); see the
+        # banner above for the #1109 -> #1110 chronology and VERIFY-016 in
+        # docs/deviations.md for the full residual classification.
+        # (2026-07-16 retrofit): Failed now gated explicitly via note_fail
+        # and EXCLUDED from the pooled count; roll-call regexes tightened
+        # to (Timeout|Unknown); the MODE echo made conditional (it was
+        # hardcoded "report-only" while ENFORCE=1 — misleading in logs).
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=1
+          EXPECTED_UNPROVED=14   # VERIFY-039 G14 to G17 predicted: 21 -> 14 (G13 predicted: 19 -> 21)
+          EXPECTED_PROVED="2451 / 2465"   # VERIFY-039 G14 to G17 predicted: 2 goals removed and 7 added (G13 predicted: two goals added, both unproved: 2439 / 2460, was 2439 / 2458)
+          FAILURES=0
+          note_fail() {
+            echo "$1"
+            FAILURES=$((FAILURES + 1))
+          }
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            semantics/borrow.h 2>&1 | tee wp_borrow_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (borrow.h) exit status: ${WP_EXIT}"
+          if [ "${ENFORCE}" -eq 1 ]; then
+            echo "  MODE: ENFORCED"
+          else
+            echo "  MODE: report-only (ENFORCE=${ENFORCE})"
+          fi
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_borrow_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to"
+            echo "      an ACSL syntax error in borrow.h. Check the WP"
+            echo "      output above for [kernel:annot-error] or"
+            echo "      [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_borrow_output.txt | head -10 || true
+          else
+            TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_borrow_output.txt || true)
+            UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_borrow_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_borrow_output.txt || true)
+            INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_borrow_output.txt || true)
+            STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_borrow_output.txt || true)
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+            echo "  Timeouts: ${TIMEOUT_COUNT}"
+            echo "  Unknown:  ${UNKNOWN_COUNT}"
+            echo "  Failed:   ${FAILED_COUNT}"
+            echo "  Total unproved (T+U): ${UNPROVED_COUNT}"
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in borrow.h is falsified:"
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_borrow_output.txt || true
+            fi
+            if [ "${INVALID_COUNT}" -ne 0 ]; then
+              echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
+              echo "      FALSIFIED with a counter-example. Invalid is WP's"
+              echo "      refutation verdict; Failed is a prover error. This"
+              echo "      is categorically different from a residual and can"
+              echo "      never be pinned:"
+              grep -E "^\\[wp\\] \\[Invalid\\]" wp_borrow_output.txt
+              exit 1
+            fi
+            if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+              echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+              echo "      Stepout is a non-proved verdict this project has"
+              echo "      never observed. It is deliberately NOT pooled into"
+              echo "      the residual count, because the residual set is"
+              echo "      defined as Timeout u Unknown. If this fires, decide"
+              echo "      whether to pool it and update the definition first:"
+              grep -E "^\\[wp\\] \\[Stepout\\]" wp_borrow_output.txt
+              exit 1
+            fi
+            if [ -n "${EXPECTED_UNPROVED}" ] && \
+               [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
+            fi
+            PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+            echo "  Proved: ${PROVED_COUNT}"
+            if [ -n "${EXPECTED_PROVED}" ] && \
+               [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved count ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_borrow_output.txt || \
+              echo "  (none)"
+            echo ""
+            echo "  --- Inherited roll-call: 10 expected re-emissions ---"
+            INHERITED=(
+              "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+              "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+              "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+              "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+              "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+              "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+              "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+              "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+              "typed_cast_checked_add_overflow_ensures"
+              "typed_cast_checked_add_u64_overflow_ensures"
+            )
+            INHERITED_SEEN=0
+            for goal in "${INHERITED[@]}"; do
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_borrow_output.txt; then
+                INHERITED_SEEN=$((INHERITED_SEEN + 1))
+              else
+                echo "  MISSING inherited residual: ${goal}"
+              fi
+            done
+            echo "  Inherited residuals observed: ${INHERITED_SEEN}/10"
+            if [ "${INHERITED_SEEN}" -ne 10 ]; then
+              note_fail "FAIL: inherited set differs from the composability prediction."
+            fi
+            echo ""
+            echo "  --- Own-residual roll-call (borrowed_bytes_eq memcmp, borrowed_str_eq's call) ---"
+            OWN_CHECKS=(
+              "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
+              "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
+            )
+            OWN_SEEN=0
+            for goal in "${OWN_CHECKS[@]}"; do
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_borrow_output.txt; then
+                OWN_SEEN=$((OWN_SEEN + 1))
+              else
+                note_fail "FAIL: expected unproved goal ${goal} not observed."
+              fi
+            done
+            echo "  Own residuals observed: ${OWN_SEEN}/4 (expected 4)"
+            OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
+            echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
+            if [ "${OTHER_UNPROVED}" -ne 0 ]; then
+              note_fail "FAIL: undocumented residuals present — see VERIFY-016."
+            fi
+            echo ""
+            echo "  --- MCDC-008 cross-stream goal ---"
+            if grep -qE "\[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\].*dead_by_invariant" wp_borrow_output.txt; then
+              note_fail "FAIL: dead_by_invariant UNPROVED — one-NULL guard not discharged."
+              echo "      This regresses the MCDC-008 cross-stream closure. Investigate"
+              echo "      the cbytes_invariant preconditions on borrowed_bytes_eq."
+            else
+              echo "  dead_by_invariant: PROVED — one-NULL guard formally dead"
+              echo "  under cbytes_invariant. MCDC-008 closure intact."
+            fi
+            CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_borrow_output.txt || true)
+            echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+            if [ "${CVC5_INVOKED}" -eq 0 ]; then
+              echo "WARNING: CVC5 does not appear in WP output."
+              echo "         The triple-prover setup may have degraded to"
+              echo "         dual-prover. Check the prover configuration step."
+            fi
+          fi
+          echo ""
+          echo "==============================================="
+          if [ "${FAILURES}" -eq 0 ]; then
+            echo "PASS: borrow.h verified — 2451/2465 proved, 14 documented"
+            echo "      residuals all observed (VERIFY-016): 10 inherited +"
+            echo "      4 own, zero new residual classes; dead_by_invariant"
+            echo "      proved (MCDC-008 closure intact). Composability"
+            echo "      confirmation #6."
+          else
+            echo "FAIL: ${FAILURES} enforcement check(s) missed — see FAIL lines above."
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -ne 0 ]; then
+            exit 1
+          fi
+          echo "==============================================="
+      - name: Upload WP proof output (borrow.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-borrow
+          path: wp_borrow_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # semantics/diag.h — ENFORCED. Fifth verified semantics/ module, third
+  # verified in place (after error.h and borrow.h).
+  #
+  # PINNED baseline: 3050 / 3058 proved, exactly 8 unproved (VERIFY-017,
+  # VERIFY-039 G14), all diag-own; 3050 / 3060 and 10 until G14, with
+  # 2 inherited (contract.h handler pair — definition-presence only under
+  # CANON_NO_REQUIRE; typed_cast_ prefix per this TU's model, the
+  # VERIFY-016 prefix-flip precedent) + 8 diag-own (libc byte-view through
+  # Typed+Cast: diag_init memset 1, diag_push memmove valid_dest/src 2,
+  # push_shift_semantics .code-equality parts 3, push assigns framing 2).
+  # All Timeout-class at pinning; the diag_init memset goal has also been
+  # observed as Unknown (#1132) — the wrapper counts the classes together,
+  # so the oscillation is pin-safe. Smallest inherited surface of any
+  # residual-carrying header; composability confirmation #7.
+  #
+  # Chronology: report-only first at d8566d5 (CI #1132, 300s, 59 unproved);
+  # re-measured name-stable at 1597a51 (CI #1133, 120s, 59 — same goal set
+  # at both timeouts, refuting time-starvation); pinned at 1965b23
+  # (2026-07-08, actions run 28967245082, 120s, 17m21s) — the same commit
+  # set ENFORCE=1 and EXPECTED_PROVED="3050 / 3060" — after the trusted-
+  # stdio-axiom alignment in diag.h closed 49 of the 59 (32 valid_fmt
+  # caller obligations deleted by weakening the axiom requires to
+  # format != \null; 17 rf_/r_terminated goals closed by the axiom's
+  # conditional `term` ensures plus diag_render's render_terminated loop
+  # invariant). Toolchain byte-identical across all three runs — the
+  # collapse was specification alignment alone. See VERIFY-017's "Trusted
+  # stdio axioms" section for the normative record of the two deliberate
+  # judgment calls in the __FRAMAC__ block.
+  #
+  # MODEL: Typed+Cast, forced by diag.h's OWN byte-view casts (the
+  # (char *) views of Diag/DiagFrame at the memset/memmove sites and in
+  # push_no_alias) — first semantics/ header to originate the requirement
+  # rather than inherit it.
+  #
+  # MCDC-009 cross-stream: the named assert dead_by_invariant_clamp at the
+  # diag_push overflow clamp PROVED (#1132, re-confirmed every run since).
+  # WP prints only unproved goals by name, so absence from the unproved
+  # list (given a summary exists) IS the proof — the check below uses the
+  # borrow.h inverted form and is the proof-stream regression detector;
+  # the coverage job's per-line diag.h debug step is the measurement-
+  # stream one. gcov holds the matching outcome open at 84/86 (97.67%,
+  # ceiling since CI #1120). diag_render's n<0 encoding-error skip is the
+  # libc-environmental permanent residual (MCDC-009 outcome 2) — NOT
+  # WP-closable, deliberately no check here; its assumption is the same
+  # one the snprintf axiom's `term` ensures rests on.
+  #
+  # -variadic-no-translation is REQUIRED: the trusted stdio axioms bind to
+  # the untranslated snprintf/fprintf calls; with translation ON the calls
+  # become snprintf_va_* (spec never attaches) and the generated variadic
+  # spec's open assigns range aborts WP with 'Invalid infinite range'.
+  # -------------------------------------------------------------------------
+  frama-c-diag:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: semantics/diag.h"
+        # diag.h — Typed+Cast, 120s / -wp-split, -variadic-no-translation.
+        # Expected: 3050 / 3058 proved, exactly 8 unproved (VERIFY-017,
+        # VERIFY-039 G14): 8 own; the 2 inherited closed at G14. Also
+        # enforces the MCDC-009 closure:
+        # dead_by_invariant_clamp must remain in the proved set. Any
+        # deviation is a regression and fails the job.
+        # (2026-07-16 retrofit): Failed now gated explicitly via note_fail
+        # and EXCLUDED from the pooled count; roll-call regexes tightened
+        # to (Timeout|Unknown).
+        run: |
+          eval $(opam env --switch=frama-c)
+          # ---- ENFORCEMENT VALUES: pinned at 1965b23 (2026-07-08) ----
+          ENFORCE=1
+          EXPECTED_UNPROVED=8   # VERIFY-039 G14 predicted: 10 -> 8
+          EXPECTED_PROVED="3050 / 3058"   # VERIFY-039 G14 predicted: the handler's invariant goals removed, its termination proved (3050 / 3060 before)
+          WP_MODEL="Typed+Cast"         # diag.h's own casts force it
+          # ------------------------------------------------------------------
+          FAILURES=0
+          note_fail() {
+            echo "$1"
+            FAILURES=$((FAILURES + 1))
+          }
+          set +e
+          frama-c \
+            -variadic-no-translation \
+            -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            semantics/diag.h 2>&1 | tee wp_diag_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (diag.h) exit status: ${WP_EXIT}"
+          if [ "${ENFORCE}" -eq 1 ]; then
+            echo "  MODE: ENFORCED  MODEL: ${WP_MODEL}"
+          else
+            echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          fi
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_diag_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP — check for"
+            echo "      [kernel:annot-error] or [kernel] User Error above."
+            echo "      (If the abort mentions 'Invalid infinite range', the"
+            echo "      -variadic-no-translation flag or the __FRAMAC__ stdio"
+            echo "      axioms in diag.h have been removed/broken.)"
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_diag_output.txt | head -20 || true
+          else
+            TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_diag_output.txt || true)
+            UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_diag_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_diag_output.txt || true)
+            INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_diag_output.txt || true)
+            STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_diag_output.txt || true)
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+            echo "  Timeouts: ${TIMEOUT_COUNT}"
+            echo "  Unknown:  ${UNKNOWN_COUNT}   (0-1 — the diag_init memset goal oscillates Timeout/Unknown)"
+            echo "  Failed:   ${FAILED_COUNT}"
+            echo "  Total unproved (T+U): ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in diag.h is falsified:"
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_diag_output.txt || true
+            fi
+            if [ "${INVALID_COUNT}" -ne 0 ]; then
+              echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
+              echo "      FALSIFIED with a counter-example. Invalid is WP's"
+              echo "      refutation verdict; Failed is a prover error. This"
+              echo "      is categorically different from a residual and can"
+              echo "      never be pinned:"
+              grep -E "^\\[wp\\] \\[Invalid\\]" wp_diag_output.txt
+              exit 1
+            fi
+            if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+              echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+              echo "      Stepout is a non-proved verdict this project has"
+              echo "      never observed. It is deliberately NOT pooled into"
+              echo "      the residual count, because the residual set is"
+              echo "      defined as Timeout u Unknown. If this fires, decide"
+              echo "      whether to pool it and update the definition first:"
+              grep -E "^\\[wp\\] \\[Stepout\\]" wp_diag_output.txt
+              exit 1
+            fi
+            if [ -n "${EXPECTED_UNPROVED}" ] && \
+               [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
+              echo "      See docs/verification.md (diag.h section) and"
+              echo "      docs/deviations.md (VERIFY-017) for the documented set."
+            fi
+            PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+            echo "  Proved: ${PROVED_COUNT}"
+            if [ -n "${EXPECTED_PROVED}" ] && \
+               [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved count ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+              echo "      This may indicate added or removed functions, a new"
+              echo "      timeout, or a newly-proved goal. Review the output and"
+              echo "      update VERIFY-017 in docs/deviations.md before updating"
+              echo "      this wrapper."
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_diag_output.txt || \
+              echo "  (none)"
+            echo ""
+            echo "  --- Inherited roll-call: 0 expected re-emissions ---"
+            # The contract.h handler pair — VERIFY-006 cat 4, definition-
+            # presence only (CANON_NO_REQUIRE compiles out every handler call
+            # site) — was this unit's whole inherited set until VERIFY-039
+            # G14 repaired the handler's contract.
+            INHERITED=(
+            )
+            INHERITED_SEEN=0
+            for goal in "${INHERITED[@]}"; do
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_diag_output.txt; then
+                INHERITED_SEEN=$((INHERITED_SEEN + 1))
+              else
+                echo "  MISSING inherited residual: ${goal}"
+              fi
+            done
+            echo "  Inherited residuals observed: ${INHERITED_SEEN}/0"
+            if [ "${INHERITED_SEEN}" -ne 0 ]; then
+              note_fail "FAIL: inherited set differs from the composability record."
+            fi
+            echo ""
+            echo "  --- Own-residual roll-call: 8 expected (VERIFY-017 cat 1) ---"
+            # libc byte-view through Typed+Cast — memset/memmove byte specs
+            # vs typed struct locations (VERIFY-007/-008 class, two new
+            # sites). The depth-tracking goals through the same memmove all
+            # PROVE (incl. dead_by_invariant_clamp below); only frame-content
+            # and byte-range-validity goals resist.
+            OWN_CHECKS=(
+              # diag_init — byte view of a local Diag at the memset
+              # (oscillates Timeout/Unknown across runs)
+              "typed_cast_diag_init_call_memset_requires_valid_s"
+              # diag_push — overflow-shift memmove call site
+              "typed_cast_diag_push_call_memmove_requires_valid_dest"
+              "typed_cast_diag_push_call_memmove_requires_valid_src"
+              # diag_push — .code equality across the byte-level shift
+              "typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part05"
+              "typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part06"
+              "typed_cast_diag_push_valid_diag_ensures_push_shift_semantics_part07"
+              # diag_push — assigns framing vs the byte-level write
+              "typed_cast_diag_push_valid_diag_assigns_exit_part02"
+              "typed_cast_diag_push_valid_diag_assigns_normal_part03"
+            )
+            OWN_SEEN=0
+            for goal in "${OWN_CHECKS[@]}"; do
+              if grep -qE "\[(Timeout|Unknown)\].*${goal}" wp_diag_output.txt; then
+                OWN_SEEN=$((OWN_SEEN + 1))
+              else
+                note_fail "FAIL: expected unproved goal ${goal} not observed."
+              fi
+            done
+            echo "  Own residuals observed: ${OWN_SEEN}/8 (expected 8)"
+            OTHER_UNPROVED=$((UNPROVED_COUNT - INHERITED_SEEN - OWN_SEEN))
+            echo "  Unproved outside the documented set: ${OTHER_UNPROVED} (expected 0)"
+            if [ "${OTHER_UNPROVED}" -ne 0 ]; then
+              note_fail "FAIL: undocumented residuals present — see VERIFY-017."
+              echo "      If the new names are render_terminated loop-invariant"
+              echo "      or r_terminated goals, the diag_render loop invariant"
+              echo "      or the snprintf axiom's term ensures has been weakened."
+            fi
+            echo ""
+            echo "  --- MCDC-009 cross-stream goal ---"
+            # WP prints only UNPROVED goals by name; a proved goal never
+            # appears in the output. Absence from the unproved list (given
+            # the summary exists) IS the proof — borrow.h inverted form.
+            if grep -qE "\[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\].*dead_by_invariant_clamp" wp_diag_output.txt; then
+              note_fail "FAIL: dead_by_invariant_clamp UNPROVED — overflow clamp not discharged."
+              echo "      This regresses the MCDC-009 cross-stream closure."
+              echo "      Investigate the diag_invariant precondition on"
+              echo "      diag_push and the overflow-branch decrement the"
+              echo "      contradiction depends on."
+            else
+              echo "  dead_by_invariant_clamp: PROVED — clamp true-side formally"
+              echo "  dead under diag_invariant. MCDC-009 closure intact."
+            fi
+            CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_diag_output.txt || true)
+            echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+            if [ "${CVC5_INVOKED}" -eq 0 ]; then
+              echo "WARNING: CVC5 does not appear in WP output."
+              echo "         The triple-prover setup may have degraded to"
+              echo "         dual-prover. Check the prover configuration step."
+            fi
+          fi
+          echo ""
+          echo "==============================================="
+          if [ "${ENFORCE}" -eq 0 ]; then
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "REPORT-ONLY: all pinned checks match — safe to (re)enable"
+              echo "  enforcement (ENFORCE=1)."
+            else
+              echo "REPORT-ONLY: ${FAILURES} check(s) missed — see FAIL lines"
+              echo "  above. Classify the deltas against VERIFY-017 before"
+              echo "  (re)enabling enforcement."
+            fi
+          elif [ "${FAILURES}" -eq 0 ]; then
+            echo "PASS: diag.h verified — 3050/3058 proved, 8 documented"
+            echo "      residuals all observed (VERIFY-017): 0 inherited"
+            echo "      (the contract.h handler pair until VERIFY-039 G14)"
+            echo "      + 8 own (libc byte-view"
+            echo "      through Typed+Cast at the memset/memmove sites);"
+            echo "      dead_by_invariant_clamp proved (MCDC-009 closure"
+            echo "      intact). Zero stdio residuals under the documented"
+            echo "      trusted axioms. Composability confirmation #7 —"
+            echo "      smallest inherited surface of any residual-carrying"
+            echo "      header."
+          else
+            echo "FAIL: ${FAILURES} enforcement check(s) missed — see FAIL lines above."
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -ne 0 ]; then
+            exit 1
+          fi
+          echo "==============================================="
+      - name: Upload WP proof output (diag.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-diag
+          path: wp_diag_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done

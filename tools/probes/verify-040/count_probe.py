@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-count_probe.py — the WP run of .github/workflows/count-probe.yml (VERIFY-040
+count_probe.py — the WP run of the count-probe job of .github/workflows/probes.yml (VERIFY-040
 round 2) and its reading against the committed prediction in
 docs/deviations.md, VERIFY-040: "the count probe: committed prediction".
 

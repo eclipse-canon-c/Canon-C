@@ -71,5 +71,7 @@ for cpu in "${TARGETS[@]}"; do
     echo "[$cpu $opt] $n / $(( ${#HEADERS[@]} + ${#TESTS[@]} )) compiled"
   done
 done
+SUMMARY="${#TARGETS[@]} targets x ${#OPTS[@]} levels, $(( ${#HEADERS[@]} + ${#TESTS[@]} )) units each, ${FAILS} failed"
+[ -n "${GITHUB_ACTIONS:-}" ] && echo "::notice title=embedded::${SUMMARY}"   # VERIFY-050
 if [ "$FAILS" -ne 0 ]; then echo "FAIL: $FAILS compile(s) failed"; exit 1; fi
 echo "OK"

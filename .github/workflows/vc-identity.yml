@@ -1,4 +1,4 @@
-name: VC identity (paper experiment)
+name: "9 · Probes (manual): VC identity (paper experiment)"
 
 # ---------------------------------------------------------------------------
 # MANUAL TRIGGER ONLY. Does WP hand the solvers the SAME generated task for a
@@ -63,7 +63,7 @@ env:
 jobs:
   vc-identity:
     # Pinned, not ubuntu-latest: see the runner note in
-    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    # ci.yml (VERIFY-039, runner pin).
     runs-on: ubuntu-24.04
     timeout-minutes: 330
     steps:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-g13_probe.py — the runs of .github/workflows/g13-probe.yml (VERIFY-039 G13)
+g13_probe.py — the runs of the g13-probe job of .github/workflows/probes.yml (VERIFY-039 G13)
 and their reading against the committed prediction in docs/deviations.md,
 VERIFY-039: "G13 — committed prediction for the probe".
 

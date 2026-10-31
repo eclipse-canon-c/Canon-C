@@ -104,6 +104,16 @@ grep -rnE '\b(CHAR_BIT|SCHAR_MIN|SCHAR_MAX|UCHAR_MAX|CHAR_MIN|CHAR_MAX|MB_LEN_MA
 
 ---
 
+## CI
+
+The workflows are numbered by what they check: build and test, platforms,
+analysis, proofs by layer, records, probes. `.github/workflows/README.md`
+maps each file, says which jobs fail a push, and says where a new test,
+verified unit or platform check goes. Every proof job, MISRA, coverage,
+CompCert and the embedded checks post their results as annotations on the
+run's page. Keep each workflow file under GitHub's 500 KB limit; the
+`workflow-size` job enforces it.
+
 ## Submission Process
 
 1. Fork the repository.

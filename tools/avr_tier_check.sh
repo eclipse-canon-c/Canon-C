@@ -81,6 +81,7 @@ for h in "${ALL[@]}"; do
   else other=$((other + 1)); echo "  other      $h: $(grep -m1 -oE 'error:.*' "$OUT/err" | cut -c1-120)"; fi
 done
 echo "  ${#ALL[@]} headers: $ok compile, $t1 refused by Tier 1, $other other"
+[ -n "${GITHUB_ACTIONS:-}" ] && echo "::notice title=avr::${#ALL[@]} headers: $ok compile, $t1 refused by Tier 1, $other other; ${FAILS} check(s) failed"   # VERIFY-050
 
 if [ "$FAILS" -ne 0 ]; then echo "FAIL: $FAILS check(s) failed"; exit 1; fi
 echo "OK"

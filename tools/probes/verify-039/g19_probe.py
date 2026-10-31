@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-g19_probe.py — the WP run of .github/workflows/g19-probe.yml (VERIFY-039
+g19_probe.py — the WP run of the g19-probe job of .github/workflows/probes.yml (VERIFY-039
 G19) and its reading against the committed prediction in
 docs/deviations.md, VERIFY-039: "G19 — committed prediction for the probe",
 for the run named F, and "G19 and G20 — the repair: committed prediction".

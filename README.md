@@ -921,7 +921,8 @@ For what Canon-C intentionally omits, established C libraries exist:
 ## Where CI checks it
 
 Every push to master runs these. A configuration not listed is not
-checked.
+checked. Which workflow file holds which job, and where a new one goes:
+[`.github/workflows/README.md`](.github/workflows/README.md).
 
 **Builds and tests** (the full suite unless stated otherwise):
 

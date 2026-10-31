@@ -1,0 +1,3003 @@
+name: "6 · Proofs: data/"
+# Frama-C WP proofs of data/, one job per unit, each enforced on its pins.
+# A new data/ unit is a new job here. Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    # Documentation-only pushes change nothing a gate measures; skip them.
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE*'
+      - '.gitignore'
+      - 'tools/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # data/vec — third Shape-B macro-module driver, FIRST data/-layer module,
+  # and the first driver on the Typed+Cast model: unlike option/result
+  # (by-value structs, plain Typed), vec crosses void* boundaries —
+  # (int*)mem_alloc(bytes), int* buffers through mem_copy/mem_move's void*
+  # parameters. The model, prover set, and timeout match the memory.h and
+  # arena.h jobs exactly (their contracts are the ones vec's call sites
+  # must discharge), so the CVC5-presence check from those jobs applies.
+  #
+  # WP runs over vmacros/vdrivers/vec_verify.h, which instantiates the REAL
+  # shipped macros at int via the DEFINE_VEC_STRUCTS / DEFINE_VEC_FUNCTIONS
+  # split (docs/vmacros.md). Verified config: -DCANON_NO_REQUIRE -DNDEBUG,
+  # CANON_LIFETIME off — under it vec's entire panic surface (3 require_msg,
+  # 10 ensure_msg, zero direct handler calls) compiles away; the driver's
+  # requires clauses are load-bearing.
+  #
+  # ENFORCED (promoted from report-only after 3 runs; option/result house
+  # style, exact-match). Baseline: CI #1202 (Commit 16/16b ratchet; orig. CI #1152) — 5231/5429 proved,
+  # 198 unproved, 0 Failed, classified in
+  # docs/verification.md and docs/deviations.md VERIFY-018 (incl.
+  # Correction note 2026-07-16) and the driver header:
+  #   inherited 123 — byte-identical to the substrate's pinned lists: the
+  #     91-goal core arm equals arena.h's CHECKS verbatim (both units run
+  #     Typed+Cast — no prefix map applies; -wp-split fragment indices and
+  #     the three Unknown sub-verdicts reproduced on the same goals), and
+  #     the 32-goal option arm equals option's roll-call modulo the
+  #     typed_ -> typed_cast_ prefix, fragment indices included
+  #     (machine-diffed against the frozen #1154 artifacts)
+  #   fresh instantiation 22 — result(Bool, Error): a type pair NOT
+  #     verified in VERIFY-015's home unit (int, VErr), so a NEW
+  #     verification subject co-resident in this TU, not inheritance.
+  #     20 goals match the family's home profile family/count/split-
+  #     exactly; 8 home assigns goals are never emitted (this driver
+  #     attaches no assigns clauses to result functions — per this run's
+  #     pedantic-assigns warnings); 2 union get_ok/get_err rte_mem_access
+  #     goals are new (attribution open — VERIFY-018 F4)
+  #   vec-own 53 = (e) 2 allocation-model (\fresh/\freeable unimplemented)
+  #              + (g) 24 fill macro-body-loop cluster (unprovable by
+  #                construction: ACSL loop annotations cannot survive macro
+  #                definition — forward-flag for deque's shift loops)
+  #              + (d) 5 element-transfer ensures (mem_copy/mem_move are
+  #                frame-only) + (h) 22 Typed+Cast int<->char bridging
+  #   (The CI baseline label was originally recorded as 143 inherited +
+  #    53 own; the 2026-07-16 Correction note reclassified to 121 + 75
+  #    with the SAME 196 names — no gate or count changed. Those are the
+  #    #1154 figures and are left as recorded; API-001 later took the set
+  #    to 198 = 123 + 75 at #1202.)
+  #   VERIFY-039 G11: the option arm is 6 since option_verify.h's
+  #     combinators state only what holds for every callback, the run-time
+  #     check on the pointer at each; the other 26 close, and option's eq
+  #     gains 7 frame goals, all proved (5396 / 5522, 126 unproved).
+  #   VERIFY-039 G11, result at (Bool, Error): the five combinators carry
+  #     result_verify.h's repaired contracts, copied. Predicted: the result
+  #     arm falls from 20 to its 6 run-time checks, and the contracts add
+  #     56 goals, all proved (5466 / 5578, 112 unproved).
+  # Gates: pinned Proved line, 0 Failed ever, exact count, by-name roll-call
+  # (= set equality). ANY change to the residual set, either direction,
+  # fails CI; the fix is the acknowledged ratchet — update the pinned
+  # Proved line, EXPECTED_UNPROVED, and CHECKS together in one commit.
+  # A goal flipping to Proved on a fast prover day is a red run carrying
+  # good news: ratchet down, do not widen.
+  # -------------------------------------------------------------------------
+  frama-c-vec:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/vec_verify.h (VERIFY-018, enforced)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/vec_verify.h 2>&1 | tee wp_vec_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (vec_verify.h) exit status: ${WP_EXIT}"
+          echo "  MODE: ENFORCED — VERIFY-018 baseline, exact match."
+          echo "  baseline: VERIFY-008 overlap fix, 6 goals fewer: 5475/5568, 93 unproved; before it, VERIFY-040 round 2, CI #1375: 5481/5574, 93 unproved (predicted: 5479/5572; round 1: 5475/5569, 94; G18: 5474/5569, 95; G14 to G17: 5470/5567, 97; G11 (Bool, Error): 5466/5578, 112; G11 option: 5396/5522, 126; G3 ratchet: 5363/5515, 152; G2: 5360/5512, 152)"
+          echo "            prior: CI #1202 (16b): 5231/5429, 198 — the 2 goals"
+          echo "            removed are the F4 pair, now discharged by contract."
+          echo "  model=Typed+Cast provers=alt-ergo,z3,cvc5 timeout=120 split=on"
+          echo "  config=-DCANON_NO_REQUIRE -DNDEBUG (CANON_LIFETIME off)"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_vec_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            echo ""
+            echo "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in vec_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_vec_output.txt | head -10 || true
+            echo "==============================================="
+            exit 1
+          fi
+          # Prover-environment check (informational, kept from report-only):
+          # if CVC5 vanished from the prover set, its 8 baseline goals will
+          # flip and the gates below will fail — this warning names the
+          # likely cause before the confusing diff does.
+          CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_vec_output.txt || true)
+          if [ "${CVC5_INVOKED}" -eq 0 ]; then
+            echo "WARNING: CVC5 does not appear in WP output."
+            echo "         The triple-prover setup may have degraded to"
+            echo "         dual-prover. Check the prover configuration step;"
+            echo "         expect gate failures below if so."
+          fi
+          # Gate 0 — pinned goal surface (promotion checklist step 3).
+          # Catches silent drift of the goal set itself (a function dropping
+          # out of the TU, a deleted contract, an include-graph change)
+          # that gates 1-3 could miss.
+          PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+          # VERIFY-033/034: +20 proved, +20 total — frame_buffer/frame_capacity
+          # on arena_alloc{,_aligned}: 2 clauses x 2 functions x 5 split parts.
+          # VERIFY-039 G11 predicted: the option arm's 26 closed and option's
+          # eq gains 7 frame goals, all proved (5363 / 5515 before).
+          # VERIFY-039 G11, result at (Bool, Error), predicted: the result
+          # arm's 14 termination and exit goals closed, and 56 goals added,
+          # all proved (5396 / 5522 before).
+          # VERIFY-039 G14 to G17 predicted: 22 goals removed and 11 added
+          # (5466 / 5578 before).
+          # VERIFY-039 G18 predicted: memory.h's two frames prove, and free's
+          # null frame gains a part on each path, both proved
+          # (5470 / 5567 before).
+          # VERIFY-040 round 1 predicted: swap's first postcondition proves,
+          # its operands the same vec or separated; no goal added or removed
+          # (5474 / 5569 before).
+          # VERIFY-040 round 2 predicted: append_array states its frame above
+          # the new elements, six parts added, and extend its frame as two
+          # postconditions, its ok clause's five parts gone, the unproved one
+          # among them; all added goals proved (5475 / 5569 before).
+          # Measured at CI #1375: 5481 / 5574 and 93, two goals more than
+          # predicted, both proved, the roll-call as predicted: WP 29 makes at
+          # least one changed clause into other parts than WP 25 (VERIFY-040
+          # round 2, scored, and the count probe).
+          # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
+          # -> 31, all proved (5481 / 5574 before).
+          if [ "${PROVED_COUNT}" != "5475 / 5568" ]; then
+            echo "FAIL: proved-goal summary changed (baseline: 5475 / 5568)."
+            echo "      The goal surface drifted — reclassify in VERIFY-018,"
+            echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
+            echo "      together in one acknowledged commit."
+            exit 1
+          fi
+          # VERIFY-018 baseline residual count.
+          # RATCHETED 198 -> 196 (VERIFY-018 F4 demonstration). get_ok and
+          # get_err were previously among the uncontracted remainder, so
+          # -wp-rte's memory-access obligation for each union read had
+          # nothing to discharge it. Contracting them (vec_verify.h, shapes
+          # copied from deque_verify.h) discharged exactly those two and
+          # nothing else. Fully accounted: the two contracts ADD 38 goals
+          # (5429 -> 5467), all 38 prove, and 2 previously-unproved goals
+          # flip, so proved moves +40 (5231 -> 5271) and the residual set
+          # loses exactly the F4 pair. Ratchet DOWN, per this job's rule.
+          EXPECTED_UNPROVED=93   # VERIFY-040 round 2 predicted: 94 -> 93, held at CI #1375 (round 1 predicted: 95 -> 94; VERIFY-039 G18 predicted: 97 -> 95; G14 to G17 predicted: 112 -> 97; G11 (Bool, Error) predicted: 126 -> 112; G11 option: 152 -> 126; G3 ratchet, CI #1344: 152 as at G2; G2: 158, G1: 161, F4: 177, F3: 181, F5: 183, F1: 184)
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_vec_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_vec_output.txt || true)
+          FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt || true)
+          INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_vec_output.txt || true)
+          STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_vec_output.txt || true)
+          UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          echo "  Timeouts: ${TIMEOUT_COUNT}"
+          echo "  Unknown:  ${UNKNOWN_COUNT}"
+          echo "  Failed:   ${FAILED_COUNT}"
+          echo "  Total unproved: ${UNPROVED_COUNT} (expected ${EXPECTED_UNPROVED})"
+          # Gate 1 — no Failed verdicts, ever. Timeout/Unknown are the
+          # classified residual verdicts; Failed means a contract is WRONG.
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${FAILED_COUNT} goal(s) FAILED (not timeout) —"
+            echo "      a contract in vec_verify.h is falsified:"
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_vec_output.txt
+            exit 1
+          fi
+          if [ "${INVALID_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is"
+            echo "      FALSIFIED with a counter-example. Invalid is WP's"
+            echo "      refutation verdict; Failed is a prover error. This"
+            echo "      is categorically different from a residual and can"
+            echo "      never be pinned:"
+            grep -E "^\\[wp\\] \\[Invalid\\]" wp_vec_output.txt
+            exit 1
+          fi
+          if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit."
+            echo "      Stepout is a non-proved verdict this project has"
+            echo "      never observed. It is deliberately NOT pooled into"
+            echo "      the residual count, because the residual set is"
+            echo "      defined as Timeout u Unknown. If this fires, decide"
+            echo "      whether to pool it and update the definition first:"
+            grep -E "^\\[wp\\] \\[Stepout\\]" wp_vec_output.txt
+            exit 1
+          fi
+          # Gate 2 — exact count.
+          if [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+            echo "FAIL: unproved count ${UNPROVED_COUNT} != ${EXPECTED_UNPROVED}."
+            echo "      Higher: regression or new residual — classify in"
+            echo "      VERIFY-018 before touching this job. Lower: a goal"
+            echo "      newly proved — ratchet CHECKS, EXPECTED_UNPROVED and"
+            echo "      the pinned Proved line down in the same PR. Diff"
+            echo "      against CHECKS below:"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_vec_output.txt || true
+            exit 1
+          fi
+          # Gate 3 — by-name roll-call: every classified residual must be
+          # present. With gate 2's exact count and unique names, presence
+          # of all of them == set equality (a swap — one goal regressing
+          # while another improves, count unchanged — fails here).
+          CHECKS=(
+            "typed_cast_option_int_map_assert_rte_function_pointer"
+            "typed_cast_option_int_and_then_assert_rte_function_pointer"
+            "typed_cast_option_int_or_else_assert_rte_function_pointer"
+            "typed_cast_option_int_filter_assert_rte_function_pointer"
+            "typed_cast_option_int_combine_with_assert_rte_function_pointer"
+            "typed_cast_option_int_eq_assert_rte_function_pointer_part2"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_vec_int_alloc_call_vec_int_init_requires_2"
+            "typed_cast_vec_int_free_call_mem_free_requires"
+            "typed_cast_vec_int_insert_assigns_exit_part2"
+            "typed_cast_vec_int_insert_assigns_normal_part10"
+            "typed_cast_vec_int_insert_call_mem_move_requires"
+            "typed_cast_vec_int_insert_call_mem_move_requires_2"
+            "typed_cast_vec_int_insert_ok_ensures_5_part5"
+            "typed_cast_vec_int_insert_ok_assigns_exit_part2"
+            "typed_cast_vec_int_insert_ok_assigns_normal_part10"
+            "typed_cast_vec_int_remove_assigns_exit_part3"
+            "typed_cast_vec_int_remove_assigns_normal_part13"
+            "typed_cast_vec_int_remove_call_mem_move_requires"
+            "typed_cast_vec_int_remove_call_mem_move_requires_2"
+            "typed_cast_vec_int_remove_ok_ensures_5_part6"
+            "typed_cast_vec_int_remove_ok_assigns_exit_part3"
+            "typed_cast_vec_int_remove_ok_assigns_normal_part13"
+            "typed_cast_vec_int_append_array_assigns_exit_part4"
+            "typed_cast_vec_int_append_array_assigns_normal_part14"
+            "typed_cast_vec_int_append_array_call_mem_copy_requires"
+            "typed_cast_vec_int_append_array_call_mem_copy_requires_2"
+            "typed_cast_vec_int_append_array_call_mem_copy_requires_3"
+            "typed_cast_vec_int_append_array_ok_ensures_4_part5"
+            "typed_cast_vec_int_append_array_ok_assigns_exit_part4"
+            "typed_cast_vec_int_append_array_ok_assigns_normal_part14"
+            "typed_cast_vec_int_fill_terminates_part1"
+            "typed_cast_vec_int_fill_terminates_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_4_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_4_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_5_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_5_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_6_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_6_part2"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_7_part1"
+            "typed_cast_vec_int_fill_assert_rte_mem_access_7_part2"
+            "typed_cast_vec_int_fill_assigns_part3"
+            "typed_cast_vec_int_fill_assigns_part4"
+            "typed_cast_vec_int_fill_assigns_part5"
+            "typed_cast_vec_int_fill_assigns_part6"
+            "typed_cast_vec_int_fill_live_ensures_part3"
+            "typed_cast_vec_int_fill_live_ensures_part4"
+            "typed_cast_vec_int_fill_live_ensures_2_part3"
+            "typed_cast_vec_int_fill_live_ensures_2_part4"
+            "typed_cast_vec_int_fill_live_ensures_3_part3"
+            "typed_cast_vec_int_fill_live_ensures_3_part4"
+            "typed_cast_vec_int_fill_live_assigns_part3"
+            "typed_cast_vec_int_fill_live_assigns_part4"
+            "typed_cast_vec_int_fill_live_assigns_part5"
+            "typed_cast_vec_int_fill_live_assigns_part6"
+          )
+          MISSING=0
+          for goal in "${CHECKS[@]}"; do
+            if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_vec_output.txt; then
+              echo "MISSING from unproved set (newly proved or renamed): ${goal}"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ "${MISSING}" -ne 0 ]; then
+            echo "FAIL: ${MISSING} CHECKS goal(s) not in this run's unproved"
+            echo "      set while the count still matched — a swap occurred"
+            echo "      (something regressed AND something improved). Diff"
+            echo "      the roll-call above against CHECKS and reclassify."
+            exit 1
+          fi
+          echo ""
+          echo "VERIFY-018 ENFORCED PASS: 0 Failed, count ${UNPROVED_COUNT}/${EXPECTED_UNPROVED},"
+          echo "all ${EXPECTED_UNPROVED} classified residuals verified by name."
+          echo "==============================================="
+      - name: Upload WP proof output (vec)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-vec
+          path: wp_vec_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # data/deque via vmacros/vdrivers/deque_verify.h — REPORT-ONLY (VERIFY-019)
+  #
+  # Fourth Shape-B macro-module driver, second data/-layer module. THE ONLY
+  # NON-ENFORCED WP JOB IN THIS WORKFLOW, deliberately, until the three-run
+  # pinning discipline completes: run 1 establishes the surface, run 2 must
+  # reproduce it name-identically, run 3 becomes the baseline and only then
+  # does ENFORCE flip to 1. Do not pin from a single run — vec's run 1 (362
+  # unproved) and run 3 (196) differ by more than half again, and the point
+  # of the discipline is that the first number is not the answer.
+  #
+  # MODEL: Typed, NOT vec's Typed+Cast. This is deliberate and must not be
+  # "harmonised" with the vec job for consistency's sake. deque's own impl
+  # contains zero casts and its include closure is types/limits/contract/
+  # ownership + error + option + result — no memory.h, ptr.h, slice.h,
+  # arena.h or checked.h, i.e. none of the cast-originating headers. Two
+  # things ride on it:
+  #   1. The option arm should re-emit with NO prefix transform (vec needed
+  #      typed_ -> typed_cast_ to diff its option edge).
+  #   2. It makes this run the separating experiment for VERIFY-018 F4 — the
+  #      get_ok/get_err rte_mem_access pair on the fresh result(Bool, Error)
+  #      instance, the only two goals in the dataset with no pinned class.
+  #      vec ran that same instance under Typed+Cast.
+  #
+  # PRE-REGISTERED PREDICTIONS (deque_verify.h banner, ARMs A-D). Counts are
+  # derived from the frozen roll-calls in this same file, not estimated:
+  #   ARM C  contract handler pair ....................  2
+  #          VERIFY-039 G14: 0 since the handler's contract states
+  #          terminates \false and its loop no invariant
+  #          (PREDICT_HANDLER in the WP step).
+  #   ARM A  option_int_*, INHERITANCE .................  32
+  #          (option's job pins 34 = these 32 + the shared handler pair;
+  #           the pair is counted once here, under ARM C)
+  #          VERIFY-039 G11: 6 since option_verify.h's repair, the run-time
+  #          check on the pointer at each combinator (option's job pins 8;
+  #          6 since VERIFY-039 G14 closed the handler pair);
+  #          PREDICT_OPTION in the WP step.
+  #   ARM B  result_Bool_Error_*, FRESH INSTANTIATION ..  30
+  #          result's home unit residual is 30 = 2 handler + 28 own. vec's
+  #          instance showed 22 = 20 profile-matching + 2 get_* − the 8
+  #          home `assigns` goals its lighter contracts never emitted. THIS
+  #          driver attaches the FULL home contract set (the instantiation-
+  #          identity rule's first option, where vec took the second), so
+  #          those 8 SHOULD come back: 20 + 8 + 2 = 30. Their absence means
+  #          the retyping dropped a clause.
+  #          VERIFY-039 G11: result's home unit is 8 = 2 handler + 6 own
+  #          since result_verify.h's repair, and deque_verify.h now
+  #          transcribes the repaired contracts: predicted 6, the run-time
+  #          check on the pointer at each combinator, two at eq
+  #          (PREDICT_RESULT in the WP step). Since VERIFY-039 G14
+  #          result's home unit is 6, all own.
+  #   ARM D  deque_int_* own residuals .................  0
+  #          No allocation (vec's class (e)), no mem_copy/mem_move (class
+  #          (d) — deque moves single elements by assignment), no
+  #          fn-pointer parameters (class (f)/OWN-003), no Typed+Cast
+  #          bridging (class (h)), and NO LOOPS AT ALL, so class (g) has
+  #          nothing to attach to. The roadmap forward-flagged "deque's
+  #          shift loops" into (g); a ring shifts nothing and deque_impl.h
+  #          contains exactly one `while`, the do/while(0) contract idiom.
+  #          That pre-classification is withdrawn.
+  #   core substrate arm ..............................  0
+  #          vec inherited 89 byte-identically from arena.h. deque's
+  #          closure excludes every header those goals come from. This is
+  #          the first module whose inherited surface is SMALLER than its
+  #          predecessor's — composability tested in the other direction.
+  #   ----------------------------------------------------------------
+  #   TOTAL PREDICTED UNPROVED ........................  64
+  #
+  # RUNTIME: expect well under the vec job's ~2h50m. vec's wall clock was
+  # timeout-dominated (193 x 120s), mostly the 89-goal core arm plus 24
+  # fill-loop goals, neither of which exists here. timeout-minutes is 240
+  # anyway for the first runs — measure before tightening. If this job
+  # approaches vec's, ARM D is wrong somewhere and runtime is the first
+  # symptom.
+  # -------------------------------------------------------------------------
+  frama-c-deque:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: vmacros/vdrivers/deque_verify.h (VERIFY-019, report-only)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          # ---- PROMOTED TO ENFORCED at CI #1237 (VERIFY-019) ----
+          # Three-run discipline satisfied:
+          #   #1231  run 0 — pre-fix measurement, 71 unproved. SUPERSEDED: its
+          #          value was the ARM A-D scorecard, not the counts. Four of
+          #          its nine own residuals were a missing default `assigns`
+          #          on the pop_*/peek_* callees — a drafting error, fixed the
+          #          vec_int_pop way — so the driver changed and the clock reset.
+          #   #1234  run 1 — 1601/1668, 67 unproved. Surface established.
+          #   #1237  run 2 — 1601/1668, 67 unproved, SET-IDENTICAL to #1234.
+          # Between #1234 and #1237 the driver took COMMENT-ONLY edits. The
+          # evidence that they were semantically inert is in the numbers, not
+          # in the intent: goals scheduled (1583), goals total (1668), goals
+          # proved (1601) and all 67 residual names unchanged; only the line
+          # references in WP's warnings moved (526 -> 533, the added comments).
+          ENFORCE=1
+          # VERIFY-039 G11 predicted: the option arm's 26 closed and option's
+          # eq gains 7 frame goals, all proved (67 and 1601 / 1668 before).
+          # VERIFY-039 G11, result at (Bool, Error), predicted: the result
+          # arm's 22 closed, no goal added (41 and 1634 / 1675 before).
+          # VERIFY-039 G14 predicted: the handler's invariant goals
+          # removed and its termination proved (19 and 1656 / 1675 before).
+          # VERIFY-040 round 1 predicted: swap states its exchange as two
+          # conjunctions, one for each side, and admits a == b (H1): its
+          # ten goals become two, both proved, five of the ten proved
+          # before (17 and 1656 / 1673 before).
+          EXPECTED_UNPROVED=12
+          EXPECTED_PROVED="1653 / 1665"
+          # Pre-registered arm counts (see banner). Printed against observed
+          # in every run; they do not gate until ENFORCE=1.
+          # 0 since VERIFY-039 G14 (2 before: the invariant's establishment
+          # and the loop's termination, both false as written).
+          PREDICT_HANDLER=0
+          # 6 since VERIFY-039 G11, the run-time check on the pointer at each
+          # combinator (32 before; option_verify.h is option's home driver).
+          PREDICT_OPTION=6
+          # 28, NOT 30. The pre-run-1 arithmetic was 20 (family profile) + 8
+          # (home assigns clauses this driver attaches and vec's reduced
+          # surface omitted) + 2 (the F4 get_ok/get_err pair) = 30. Runs
+          # #1231 and #1234 both observed the F4 pair ABSENT under Typed, so
+          # the arm is 20 + 8 = 28. This value was left stale at 30 for
+          # #1234 while PREDICT_TOTAL was correctly updated to 67 — two
+          # equal and opposite errors, so TOTAL read 67/67 by cancellation
+          # rather than by being right. Corrected here, and the self-check
+          # below now makes that class of drift impossible to repeat.
+          # If the Typed+Cast control brings the pair back, ARM B under
+          # THAT model is two more (30 then, 8 since VERIFY-039 G11) and
+          # this line does not change.
+          # VERIFY-039 G11: 6 since deque_verify.h transcribes the repaired
+          # contracts, the run-time check on the pointer at each combinator,
+          # two at eq (28 before).
+          PREDICT_RESULT=6
+          # RUN-2 VALUES. Run 1 (CI #1231) observed ARM D = 9 against a
+          # predicted 0. Four of the nine were a missing default `assigns`
+          # on the pop_*/peek_* callees (my drafting error, now fixed the
+          # vec_int_pop way); five are the swap ensures cluster, true
+          # clauses whose proving fact WP's hypothesis filter drops -- not
+          # vec's swap residual, which is another class (VERIFY-039, batch 2;
+          # this comment said vec pinned the same class).
+          # So: 5 expected, all swap, and the four wrapper goals must NOT
+          # return — if they do, the framing problem is deeper than a
+          # missing clause and the fix was wrong.
+          # 0 since VERIFY-040's round 1: each side of swap's exchange is one
+          # conjunction, whose goal names both memories the last store
+          # writes, so that the filter keeps the fact that proves it.
+          PREDICT_OWN=0
+          PREDICT_TOTAL=12
+          # Self-check: the arms partition the residual set, so their
+          # predictions must sum to the total prediction. #1234 shipped with
+          # a sum of 69 against a total of 67 and nobody noticed, because the
+          # observed total matched anyway. An internally inconsistent
+          # prediction cannot be confirmed OR refuted by a run — it is not a
+          # prediction. This fires before WP is even invoked.
+          PREDICT_SUM=$((PREDICT_HANDLER + PREDICT_OPTION + PREDICT_RESULT + PREDICT_OWN))
+          if [ "${PREDICT_SUM}" -ne "${PREDICT_TOTAL}" ]; then
+            echo "FAIL: prediction bookkeeping is inconsistent —"
+            echo "      arms sum to ${PREDICT_SUM} but PREDICT_TOTAL is ${PREDICT_TOTAL}."
+            echo "      Reconcile before reading anything below as evidence."
+            exit 1
+          fi
+          FAILURES=0
+          note_fail() {
+            echo "$1"
+            FAILURES=$((FAILURES + 1))
+          }
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/deque_verify.h 2>&1 | tee wp_deque_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (deque_verify.h) exit status: ${WP_EXIT}"
+          if [ "${ENFORCE}" -eq 1 ]; then
+            echo "  MODE: ENFORCED"
+          else
+            echo "  MODE: report-only (ENFORCE=${ENFORCE}) — nothing is pinned."
+            echo "        Transcribe the scorecard, re-run unchanged, then pin."
+          fi
+          echo "  model=Typed provers=alt-ergo,z3,cvc5 timeout=120 split=on"
+          echo "  config=-DCANON_NO_REQUIRE -DNDEBUG (CANON_LIFETIME off)"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_deque_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP, likely due to an"
+            echo "      ACSL syntax error in deque_verify.h or an include"
+            echo "      resolution failure. Check the WP output above for"
+            echo "      [kernel:annot-error] or [kernel] User Error messages."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_deque_output.txt | head -20 || true
+          else
+            TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_deque_output.txt || true)
+            UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_deque_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_deque_output.txt || true)
+            INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_deque_output.txt || true)
+            STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_deque_output.txt || true)
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+            echo "  Timeouts: ${TIMEOUT_COUNT}"
+            echo "  Unknown:  ${UNKNOWN_COUNT}"
+            echo "  Failed:   ${FAILED_COUNT}"
+            echo "  Total unproved (T+U): ${UNPROVED_COUNT} (predicted ${PREDICT_TOTAL})"
+            # Failed / Invalid / Stepout are NOT residual verdicts and are
+            # gated even in report-only: a Failed goal means a contract in
+            # deque_verify.h is falsified, which is a drafting bug to fix,
+            # not a number to write down. House rule, gate 1.
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${FAILED_COUNT} goal(s) FAILED — a contract in deque_verify.h is falsified:"
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_deque_output.txt || true
+            fi
+            if [ "${INVALID_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${INVALID_COUNT} goal(s) INVALID — a contract is FALSIFIED with a counter-example. Invalid is WP's refutation verdict; Failed is a prover error. Neither can ever be pinned:"
+              grep -E "^\\[wp\\] \\[Invalid\\]" wp_deque_output.txt || true
+            fi
+            if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+              note_fail "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit — a verdict this project has never observed. It is deliberately NOT pooled into the residual count (residual = Timeout u Unknown); decide whether to pool it and update the definition before pinning anything:"
+              grep -E "^\\[wp\\] \\[Stepout\\]" wp_deque_output.txt || true
+            fi
+            if [ -n "${EXPECTED_UNPROVED}" ] && \
+               [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
+            fi
+            PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+            echo "  Proved: ${PROVED_COUNT}"
+            if [ -n "${EXPECTED_PROVED}" ] && \
+               [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved count ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            echo "  This list IS the run-1 deliverable. Run 2 must reproduce"
+            echo "  it name-identically before run 3 pins anything."
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_deque_output.txt || \
+              echo "  (none)"
+
+            # ── ARM C: contract handler pair ──────────────────────────────
+            # Definition-presence inheritance only: deque has ZERO direct
+            # CANON_INVOKE_HANDLER_ calls (the clean-audit shape, like vec
+            # and result), so no deque function reaches the handler. The
+            # goals appeared because the handler is DEFINED in the TU; since
+            # VERIFY-039 G14 its contract proves, and the arm is empty.
+            echo ""
+            echo "  --- ARM C: contract handler ---"
+            HANDLER_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*contract_default_handler" wp_deque_output.txt || true)
+            echo "  observed ${HANDLER_SEEN} / predicted ${PREDICT_HANDLER}"
+
+            # ── ARM A: option arm, INHERITANCE ────────────────────────────
+            echo ""
+            echo "  --- ARM A: option arm (INHERITANCE) ---"
+            OPTION_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*typed_option_int_" wp_deque_output.txt || true)
+            OPTION_CAST=$(grep -cE "\[(Timeout|Unknown)\].*typed_cast_option_int_" wp_deque_output.txt || true)
+            echo "  typed_option_int_*      observed ${OPTION_SEEN} / predicted ${PREDICT_OPTION}"
+            echo "  typed_cast_option_int_* observed ${OPTION_CAST} / predicted 0"
+            if [ "${OPTION_CAST}" -ne 0 ]; then
+              note_fail "FAIL: Typed+Cast-prefixed option goals under -wp-model Typed — this job's model claim is wrong, and the F4 experiment below is void."
+            fi
+
+            # ── ARM B: result(Bool, Error) arm, FRESH INSTANTIATION ───────
+            echo ""
+            echo "  --- ARM B: result(Bool, Error) arm (FRESH) ---"
+            RESULT_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*result_Bool_Error_" wp_deque_output.txt || true)
+            RESULT_ASSIGNS=$(grep -cE "\[(Timeout|Unknown)\].*result_Bool_Error_.*assigns" wp_deque_output.txt || true)
+            echo "  result_Bool_Error_*  observed ${RESULT_SEEN} / predicted ${PREDICT_RESULT}"
+            echo "  of which assigns:    observed ${RESULT_ASSIGNS} / predicted 0"
+            echo "  8 until VERIFY-039 G11: the transcribed home set stated the"
+            echo "  empty frame on the calling branches too, where an unknown"
+            echo "  callee need not keep it. The repaired contracts state it"
+            echo "  only in the behaviours that call nothing, where it proves."
+
+            # ── VERIFY-018 F4 separating experiment ───────────────────────
+            echo ""
+            echo "  --- F4 separating experiment (Typed vs vec's Typed+Cast) ---"
+            F4_OK=$(grep -cE "\[(Timeout|Unknown)\].*result_Bool_Error_get_ok_assert_rte_mem_access" wp_deque_output.txt || true)
+            F4_ERR=$(grep -cE "\[(Timeout|Unknown)\].*result_Bool_Error_get_err_assert_rte_mem_access" wp_deque_output.txt || true)
+            F4_TOTAL=$((F4_OK + F4_ERR))
+            echo "  get_ok  rte_mem_access unproved: ${F4_OK}"
+            echo "  get_err rte_mem_access unproved: ${F4_ERR}"
+            echo "  F4 is CLOSED (2026-08-15) as a CONTRACT-SURFACE effect."
+            echo "  History, kept because the mistake is the useful part: run 1"
+            echo "  (CI #1231) printed 'model-emission effect' from an"
+            echo "  experiment with TWO variables moved, not one — vec runs"
+            echo "  Typed+Cast with a REDUCED result contract surface, this"
+            echo "  driver runs Typed with the FULL home set, which adds"
+            echo "  'requires \\valid(out)' to get_ok/get_err. The control"
+            echo "  (.github/workflows/f4-control.yml, manual) held the"
+            echo "  contracts fixed and moved only the model: the pair is"
+            echo "  ABSENT under Typed+Cast too, twice, with the positive"
+            echo "  control established (67 cast-prefixed / 0 plain). The"
+            echo "  model is eliminated; the added requires is what discharges"
+            echo "  the union read. See VERIFY-018 F4 and VERIFY-019-M."
+            echo "  The lines below therefore remain an OBSERVATION of this"
+            echo "  configuration, not a re-derivation of that conclusion."
+            if [ "${F4_TOTAL}" -eq 2 ]; then
+              echo "  F4 OBSERVATION: pair PRESENT under Typed."
+              echo "    => consistent with a type/contract-surface effect."
+            elif [ "${F4_TOTAL}" -eq 0 ]; then
+              echo "  F4 OBSERVATION: pair ABSENT under Typed."
+              echo "    => consistent with EITHER a Typed+Cast model effect OR"
+              echo "       the added requires discharging the union read."
+            else
+              echo "  F4 OBSERVATION: SPLIT (${F4_TOTAL}/2) — one of the pair only."
+              echo "    => neither hypothesis as stated. Do NOT close F4;"
+              echo "       investigate which of the two differs and why."
+            fi
+            echo "  Do not re-derive F4 from this job — it cannot: this job"
+            echo "  runs one model. If this pair ever REAPPEARS here, that is"
+            echo "  a finding against VERIFY-018 F4's closure, not a routine"
+            echo "  residual: re-run the Typed+Cast control before touching"
+            echo "  anything."
+
+            # ── ARM D: deque's own surface, predicted ZERO ────────────────
+            echo ""
+            echo "  --- ARM D: deque's own residuals ---"
+            OWN_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*deque_int_" wp_deque_output.txt || true)
+            echo "  deque_int_*  observed ${OWN_SEEN} / predicted ${PREDICT_OWN}"
+            WRAPPER_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*deque_int_(pop|peek)_(front|back)_option" wp_deque_output.txt || true)
+            SWAP_SEEN=$(grep -cE "\[(Timeout|Unknown)\].*deque_int_swap_" wp_deque_output.txt || true)
+            OTHER_OWN=$((OWN_SEEN - WRAPPER_SEEN - SWAP_SEEN))
+            echo "    of which swap cluster:    ${SWAP_SEEN} (expected 0 since VERIFY-040)"
+            echo "    of which *_option frame:  ${WRAPPER_SEEN} (expected 0 after the run-1 fix)"
+            echo "    of which anything else:   ${OTHER_OWN} (expected 0)"
+            if [ "${WRAPPER_SEEN}" -ne 0 ]; then
+              echo "  The four *_option assigns goals RETURNED. The run-1 fix"
+              echo "  (default assigns on the pop_*/peek_* callees, vec_int_pop"
+              echo "  shape) is therefore NOT the explanation, and the framing"
+              echo "  problem is deeper than a missing clause. Do not re-fix by"
+              echo "  guessing — classify in VERIFY-019 first:"
+              grep -E "\[(Timeout|Unknown)\].*deque_int_(pop|peek)_(front|back)_option" wp_deque_output.txt || true
+            fi
+            if [ "${OTHER_OWN}" -ne 0 ]; then
+              echo "  Own residuals outside BOTH known clusters — this is the"
+              echo "  genuinely new one. Candidate (ii), the modular division"
+              echo "  goals, did NOT fire in run 1, so its appearance now would"
+              echo "  mean the size <= capacity threading has been weakened:"
+              grep -E "\[(Timeout|Unknown)\].*deque_int_" wp_deque_output.txt \
+                | grep -vE "deque_int_swap_|deque_int_(pop|peek)_(front|back)_option" || true
+            fi
+            if [ "${OWN_SEEN}" -ne "${PREDICT_OWN}" ]; then
+              echo "  ARM D count differs from the revised prediction. This is a"
+              echo "  prediction miss to CLASSIFY in VERIFY-019, not a build"
+              echo "  failure — report-only mode is exactly for this."
+            else
+              echo "  ARM D matches the prediction: no own residual. The"
+              echo "  swap cluster's five, true clauses whose proving fact"
+              echo "  WP's hypothesis filter dropped (VERIFY-039, batch 2),"
+              echo "  prove stated as one conjunction for each side of the"
+              echo "  exchange, since VERIFY-040's round 1."
+            fi
+            # Loop goals should not exist at all: deque has no loops. Their
+            # appearance means a body is not what the source reads as, and
+            # would also refute the cover TU's Shape-B attribution.
+            LOOP_GOALS=$(grep -cE "\[(Timeout|Unknown)\].*deque_int_.*loop" wp_deque_output.txt || true)
+            if [ "${LOOP_GOALS}" -ne 0 ]; then
+              note_fail "FAIL: ${LOOP_GOALS} loop goal(s) on deque functions — deque_impl.h contains no loops. Something is not what it appears:"
+              grep -E "\[(Timeout|Unknown)\].*deque_int_.*loop" wp_deque_output.txt || true
+            fi
+
+            # ── Gate 3: by-name roll-call ─────────────────────────────────
+            # With gate 2's exact count and unique names this IS set equality:
+            # a swap — one goal regressing while another improves, count
+            # unchanged — fails here. Matching is ANCHORED with a trailing
+            # ( |$) because one name is a proper prefix of another
+            # (..._eq_assert_rte_function_pointer vs ..._2); an unanchored
+            # grep would let the shorter be satisfied by the longer.
+            CHECKS=(
+              # ARM C — contract.h handler pair: none since VERIFY-039 G14.
+              # ARM A — option arm, INHERITANCE. These 6 are option's own roll-call
+              #         (its 8 less the handler pair until VERIFY-039 G14): the
+              #         run-time check on the pointer at each combinator since
+              #         VERIFY-039 G11 (32 before). No typed_cast_ prefix: same
+              #         Typed model as option's home unit.
+              "typed_option_int_map_assert_rte_function_pointer"
+              "typed_option_int_and_then_assert_rte_function_pointer"
+              "typed_option_int_or_else_assert_rte_function_pointer"
+              "typed_option_int_filter_assert_rte_function_pointer"
+              "typed_option_int_combine_with_assert_rte_function_pointer"
+              "typed_option_int_eq_assert_rte_function_pointer_part2"
+              # ARM B — result(Bool, Error), FRESH INSTANTIATION, full home contract
+              #         set: the run-time check on the pointer at each
+              #         combinator, two at eq, since VERIFY-039 G11 (28
+              #         before: 20 family-profile + 8 assigns that vec's
+              #         reduced surface never emitted). The get_ok/get_err pair
+              #         (VERIFY-018 F4) is ABSENT under this configuration — see
+              #         the F4 note above; do not add it here on the strength of
+              #         vec's roll-call.
+              "typed_result_Bool_Error_map_assert_rte_function_pointer"
+              "typed_result_Bool_Error_map_err_assert_rte_function_pointer"
+              "typed_result_Bool_Error_and_then_assert_rte_function_pointer"
+              "typed_result_Bool_Error_or_else_assert_rte_function_pointer"
+              "typed_result_Bool_Error_eq_assert_rte_function_pointer"
+              "typed_result_Bool_Error_eq_assert_rte_function_pointer_2"
+              # ARM D — deque's own: none since VERIFY-040's round 1. Until
+              #         then the swap cluster: ensures 1-5 (a receives b)
+              #         proved, 6-10 (b receives \old(a) via the local
+              #         temporary) did not. The clauses were true: WP
+              #         generates the fact that proves them, *b after the
+              #         last store equal to *a before the first, as tmp's
+              #         initializer, and its hypothesis filter dropped it
+              #         from a goal that names one field (VERIFY-039, batch
+              #         2, "Struct stored from an initialised local, stated
+              #         field by field"). Each side of the exchange is one
+              #         conjunction since VERIFY-040, whose goal names both
+              #         memories the last store writes, and the fact stays.
+            )
+            MISSING=0
+            for goal in "${CHECKS[@]}"; do
+              if ! grep -qE "^\[wp\] \[(Timeout|Unknown)\] ${goal}( |$)" wp_deque_output.txt; then
+                echo "  MISSING from unproved set (newly proved or renamed): ${goal}"
+                MISSING=$((MISSING + 1))
+              fi
+            done
+            if [ "${MISSING}" -ne 0 ]; then
+              note_fail "FAIL: ${MISSING} CHECKS goal(s) absent while the count still matched — a swap occurred. Diff the roll-call above against CHECKS and reclassify in VERIFY-019 (VERIFY-039 for the swap five) before ratcheting."
+            else
+              echo "  Roll-call: all ${EXPECTED_UNPROVED} classified residuals present by name."
+            fi
+
+            # ── Accounting ────────────────────────────────────────────────
+            # The four arms are disjoint by construction: the goal-name
+            # prefixes cannot overlap (typed_option_int_ is not a substring
+            # of typed_cast_option_int_, etc), so the sum is a partition,
+            # not an over-count.
+            echo ""
+            echo "  --- Accounting ---"
+            ACCOUNTED=$((HANDLER_SEEN + OPTION_SEEN + RESULT_SEEN + OWN_SEEN))
+            printf '  %-22s %4s %4s\n' "arm" "obs" "pred"
+            printf '  %-22s %4d %4d\n' "ARM C handler"  "${HANDLER_SEEN}" "${PREDICT_HANDLER}"
+            printf '  %-22s %4d %4d\n' "ARM A option"   "${OPTION_SEEN}"  "${PREDICT_OPTION}"
+            printf '  %-22s %4d %4d\n' "ARM B result"   "${RESULT_SEEN}"  "${PREDICT_RESULT}"
+            printf '  %-22s %4d %4d\n' "ARM D own"      "${OWN_SEEN}"     "${PREDICT_OWN}"
+            printf '  %-22s %4d %4d\n' "TOTAL"          "${UNPROVED_COUNT}" "${PREDICT_TOTAL}"
+            echo "  accounted:   ${ACCOUNTED} of ${UNPROVED_COUNT}"
+            echo "  UNACCOUNTED: $((UNPROVED_COUNT - ACCOUNTED)) (predicted 0)"
+            if [ "$((UNPROVED_COUNT - ACCOUNTED))" -ne 0 ]; then
+              echo "  Unaccounted goals are a residual class nobody predicted."
+              echo "  Name them in VERIFY-019 BEFORE run 2 — the point of the"
+              echo "  second run is to test a written-down prediction, and a"
+              echo "  prediction written after seeing run 2 tests nothing."
+              echo "  Candidates most likely hiding here: a core-substrate"
+              echo "  goal (would refute the closure claim outright) or an"
+              echo "  option/result goal under an unexpected prefix."
+            fi
+
+            # Prover-environment note. House wording, per the ptr/slice/
+            # memory/arena/pool/region jobs: a zero here is NOT evidence of
+            # a degraded prover set. WP tries provers in sequence, so a TU
+            # whose goals Alt-Ergo or Z3 close (or which time out) never
+            # mentions cvc5 at all. Prover AVAILABILITY is hard-gated in
+            # .github/actions/framac-setup, which is what actually matters.
+            CVC5_INVOKED=$(grep -cE "CVC5|cvc5" wp_deque_output.txt || true)
+            echo ""
+            echo "  CVC5 mentions in WP output: ${CVC5_INVOKED}"
+          fi
+          echo ""
+          echo "==============================================="
+          if [ "${FAILURES}" -eq 0 ] && [ "${ENFORCE}" -eq 1 ]; then
+            echo "VERIFY-019 ENFORCED PASS: ${EXPECTED_PROVED} proved, 0 Failed, count"
+            echo "      ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, all ${EXPECTED_UNPROVED} classified residuals verified"
+            echo "      by name (set equality). Arms: 0 handler + 6 option"
+            echo "      (inheritance) + 6 result(Bool,Error) (fresh) + 0 own"
+            echo "      (the swap cluster proved since VERIFY-040)."
+            echo "      ZERO core-substrate residuals — deque's closure excludes"
+            echo "      every header vec inherited its 89 from, so this is the"
+            echo "      first module whose inherited surface is SMALLER than its"
+            echo "      predecessor's. Composability confirmed in the direction"
+            echo "      no prior module tested."
+            echo ""
+            echo "      VERIFY-018 F4: CLOSED (contract-surface effect) by the"
+            echo "      Typed+Cast control, twice. Follow-up queued as its own"
+            echo "      ratchet arc: adding 'requires \\valid(out)' to"
+            echo "      vec_verify.h should take VERIFY-018 from 198 to 196."
+          elif [ "${FAILURES}" -eq 0 ]; then
+            echo "REPORT-ONLY PASS: deque_verify.h analysed, no falsified"
+            echo "      contracts. Transcribe the goal list and the ARM A-D"
+            echo "      scorecard into VERIFY-019 (naming each arm CONFIRMED"
+            echo "      / REFUTED / ADJUSTED), then re-run UNCHANGED for the"
+            echo "      name-stability check. Do not edit the driver between"
+            echo "      runs — that would restart the count."
+          else
+            echo "FAIL: ${FAILURES} check(s) missed — see FAIL lines above."
+            echo "      ANY change to the residual set, in EITHER direction,"
+            echo "      fails this job. The fix is the acknowledged ratchet:"
+            echo "      update EXPECTED_PROVED, EXPECTED_UNPROVED, the ARM"
+            echo "      predictions and CHECKS together in one commit, with the"
+            echo "      reclassification written into VERIFY-019 first. A goal"
+            echo "      flipping to Proved is a red run carrying good news —"
+            echo "      ratchet DOWN, never widen."
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -ne 0 ]; then
+            exit 1
+          fi
+          echo "==============================================="
+      - name: Upload WP proof output (deque_verify.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-deque
+          path: wp_deque_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  frama-c-bitset:
+    runs-on: ubuntu-24.04
+    # GUARDS REMOVED, 2026-08-24. Added after CI #1254 and both withdrawn:
+    #   -wp-par 2        was aimed at the OOM, but the OOM was E1's unbounded
+    #                    shift exponent, reverted since. It roughly DOUBLED
+    #                    runtime, ~3h -> 5h, for no remaining benefit.
+    #   timeout-minutes  then killed CI #1255 at 5h 0m 17s -- a guard meant to
+    #                    protect the job is what ended it. The log had already
+    #                    reached the residual list, so the experiment was read
+    #                    anyway, but the result was nearly lost to my own
+    #                    protection. Default parallelism and no wall clamp
+    #                    restore the ~3h profile every other WP job runs at.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/bitset.h"
+        # bitset.h — VERIFY-020, PATCH 1 of N, REPORT-ONLY.
+        #
+        # NOT an in-place header, contrary to the original classification.
+        # bitset.h uses option_usize but never instantiates it, so frama-c
+        # aborts in the PARSER when handed the header directly. See the
+        # banner in bitset_verify.h. Its own 32 functions are still
+        # contracted IN PLACE in bitset.h; the driver exists solely to
+        # interpose a CONTRACTED option_usize (vec run-1 lesson R1: a bare
+        # CANON_OPTION leaves the combinators spec-less and drowns the
+        # caller). Smallest driver in the project; contracts none of the
+        # subject module.
+        #
+        # Scope of THIS run: the ACSL logic layer plus Group 1 only — the
+        # ten functions that carry no dependency on bits.h (word_of,
+        # mask_of, clear_padding, init, close, set, clear, toggle, test,
+        # assign) plus the two lifetime helpers. count / find_first /
+        # find_next / find_last and the three _option wrappers are NOT yet
+        # contracted, deliberately: bits_popcount and bits_ctz are
+        # specified at RANGE strength only, by a written decision in
+        # bits.h, so those seven functions are subject to a
+        # SPECIFICATION-STRENGTH CAP that has no precedent in this
+        # campaign. Every prior ceiling was PROVER weakness (timeouts, WP
+        # feature gaps). This one is upstream SPECIFICATION weakness
+        # propagating downward. It gets its own record in VERIFY-020, and
+        # its own patch.
+        #
+        # MODEL: Typed+Cast, forced by bitset_as_bytes / bitset_as_cbytes
+        # handing bs->words (u64*) to bytes_from / cbytes_from. Goal names
+        # therefore carry the typed_cast_ prefix (diag.h / vec precedent).
+        # A plain-Typed run would be a different unit; do not "simplify"
+        # this to Typed without re-deriving the roll-call.
+        #
+        # ENFORCE=0 ON PURPOSE. Nothing is pinned until the predictions
+        # below have been checked against a real run and recorded in
+        # VERIFY-020. Do not set ENFORCE=1 in the same commit that first
+        # turns this job green.
+        run: |
+          eval $(opam env --switch=frama-c)
+          # ---- ENFORCED as of VERIFY-020, baseline CI #1259 (95526a9) ----
+          ENFORCE=1
+          EXPECTED_UNPROVED=74   # VERIFY-040 round 2 predicted: 76 -> 74 (round 1 predicted: 78 -> 76; VERIFY-039 G18 predicted: 80 -> 78; G14 to G17 predicted: 98 -> 80; G13 predicted: 96 -> 98; G11: 122 -> 96; G10: 138 -> 122; G8, CI #1354: 138; entry 3 loop bounds, CI #1353: 139; entry 3 / G6, CI #1352: 149; VERIFY-036 F1 ratchet, CI #1326: 168, was 169)
+          EXPECTED_PROVED="4972 / 5046"   # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved (4978 / 5052 before); VERIFY-040 round 2 predicted: bitset_assign returns before its calls when bs or its words are null; its null frame's two parts prove, and nine goals are added, all proved, the guard's check and two parts of each of its four postconditions (round 1 predicted: two assertions on bitset_init's word count added and proved, and its two goals on the count prove: 4967 / 5043; VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed: 4963 / 5041; G14 to G17 predicted: 22 goals removed and 12 added: 4961 / 5041; G13 predicted: two goals added, both unproved: 4953 / 5051; G11: 4953 / 5049; G10: 4920 / 5042; G8, CI #1354: 4898 / 5036; entry 3 loop bounds, CI #1353: 4887 / 5026; entry 3 / G6, CI #1352: 4877 / 5026; G3: 4858 / 5026; F4: 4855 / 5023; F1: 4853 / 5021; VERIFY-023: 4853 / 5022)
+          WP_MODEL="Typed+Cast"   # forced by as_bytes / as_cbytes
+          # ------------------------------------------------------------------
+          FAILURES=0
+          note_fail() {
+            echo "$1"
+            FAILURES=$((FAILURES + 1))
+          }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/bitset_verify.h 2>&1 | tee wp_bitset_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (bitset.h) exit status: ${WP_EXIT}"
+          if [ "${ENFORCE}" -eq 1 ]; then
+            echo "  MODE: ENFORCED  MODEL: ${WP_MODEL}"
+          else
+            echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          fi
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_bitset_output.txt || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      frama-c aborted before running WP — check for"
+            echo "      [kernel:annot-error] or [kernel] User Error above."
+            echo "      Most likely cause on patch 1: an ACSL syntax error in"
+            echo "      the logic layer, or option_usize not instantiated"
+            echo "      (bitset.h needs CANON_OPTION(usize) from the includer;"
+            echo "      if WP cannot see it, that is a REAL finding about the"
+            echo "      header's self-containedness, not a job bug)."
+            echo ""
+            echo "First diagnostic lines from WP output:"
+            grep -E "^\[(kernel|wp)" wp_bitset_output.txt | head -20 || true
+          else
+            TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_bitset_output.txt || true)
+            UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_bitset_output.txt || true)
+            FAILED_COUNT=$(grep -cE "^\[wp\] \[(Failed|Failure)\]" wp_bitset_output.txt || true)
+            INVALID_COUNT=$(grep -cE "^\\[wp\\] \\[Invalid\\]" wp_bitset_output.txt || true)
+            STEPOUT_COUNT=$(grep -cE "^\\[wp\\] \\[Stepout\\]" wp_bitset_output.txt || true)
+            UNPROVED_COUNT=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+            echo "  Timeouts: ${TIMEOUT_COUNT}"
+            echo "  Unknown:  ${UNKNOWN_COUNT}"
+            echo "  Failed:   ${FAILED_COUNT}"
+            echo "  Total unproved (T+U): ${UNPROVED_COUNT}"
+            # Failed / Invalid are NOT residuals and are never pinned. On a
+            # report-only first run they are the single most important
+            # signal: they mean a contract written above is FALSE, not
+            # merely hard. Surfaced loudly even though the job stays green.
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              echo ""
+              echo "  !!! ${FAILED_COUNT} goal(s) FAILED — a contract in"
+              echo "      bitset.h is falsified. On patch 1 the likely"
+              echo "      culprits, in order: bitset_pad preservation in"
+              echo "      set/clear/toggle (see P1), the \\separated clause"
+              echo "      in init, or bitset_mask_of's \\result != 0."
+              grep -E "^\[wp\] \[(Failed|Failure)\]" wp_bitset_output.txt || true
+            fi
+            if [ "${INVALID_COUNT}" -ne 0 ]; then
+              echo ""
+              echo "  !!! ${INVALID_COUNT} goal(s) INVALID — a contract is"
+              echo "      FALSIFIED WITH A COUNTER-EXAMPLE. Invalid is WP's"
+              echo "      refutation verdict; it can never be pinned and is"
+              echo "      categorically different from a residual. Read the"
+              echo "      counter-example before touching anything else."
+              grep -E "^\\[wp\\] \\[Invalid\\]" wp_bitset_output.txt
+            fi
+            if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+              echo "  NOTE: ${STEPOUT_COUNT} Stepout — never observed in this"
+              echo "        project. Not pooled into the residual count."
+              grep -E "^\\[wp\\] \\[Stepout\\]" wp_bitset_output.txt
+            fi
+            if [ -n "${EXPECTED_UNPROVED}" ] && \
+               [ "${UNPROVED_COUNT}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: unproved count ${UNPROVED_COUNT} != pinned ${EXPECTED_UNPROVED}."
+            fi
+            PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
+            echo "  Proved: ${PROVED_COUNT}"
+            if [ -n "${EXPECTED_PROVED}" ] && \
+               [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved count ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_bitset_output.txt || \
+              echo "  (none)"
+            # ── BY-NAME ROLL-CALL (set equality), VERIFY-020 ──────────────
+            # The count gate above is necessary but NOT sufficient: a residual
+            # could vanish while a new one appears and the total would not move.
+            # This checks every one by NAME, and separately that no unlisted goal
+            # is unproved -- both directions, i.e. set equality, as vec and
+            # deque pin.
+            #
+            # THE LIST WAS GENERATED, NOT TRANSCRIBED. Hand-copying 158 names is
+            # exactly the mechanical-error class this arc kept tripping on. The
+            # array below was produced by script from #1259 output and its arm
+            # partition verified arithmetically -- 2 + 32 + 58 + 66 = 158
+            # when written; 71 own / 163 total at #1264, 41 own / 138 total
+            # after VERIFY-039 G8's repair, 25 own / 122 total after G10's,
+            # and 96 total since G11's repair of option_usize, whose arm is 6;
+            # 98 since G13's repair, borrow's two at borrowed_str_eq's call;
+            # 80 since G14 to G17 closed the handler pair and 16 of the
+            # core substrate's; 78 since G18 closed memory's two frames;
+            # 76 since VERIFY-040's round 1 closed bitset_init's two on its
+            # word count; 74 since its round 2 closed bitset_assign's two.
+            # No duplicates, nothing unclassified -- before being written here.
+            CHECKS=(
+              # ARM C — contract.h handler pair: none since VERIFY-039 G14.
+              # ARM A — option_usize, INHERITANCE via the interposition driver:
+              #         the run-time check on the pointer at each combinator
+              #         since VERIFY-039 G11 (32 before).
+              "typed_cast_option_usize_map_assert_rte_function_pointer"
+              "typed_cast_option_usize_and_then_assert_rte_function_pointer"
+              "typed_cast_option_usize_or_else_assert_rte_function_pointer"
+              "typed_cast_option_usize_filter_assert_rte_function_pointer"
+              "typed_cast_option_usize_combine_with_assert_rte_function_pointer"
+              "typed_cast_option_usize_eq_assert_rte_function_pointer_part2"
+              # ARM S — CORE SUBSTRATE, 47, byte-identical to each home module's
+              #         pinned list modulo the typed_cast_ prefix: bits 12,
+              #         memory 17, slice-libc 8, ptr 4, checked 2, borrow 4.
+              #         58 when written: VERIFY-026 added ptr's six, and
+              #         VERIFY-036 F1 closed one of memory's; 63 until
+              #         VERIFY-039 G13 added borrow's two at borrowed_str_eq's
+              #         call to str_equal; 65 until G15 to G17 closed bits'
+              #         three, ptr's eight (the six among them listed first,
+              #         above ARM C, until then) and slice-libc's five; 49
+              #         until G18 closed memory's two frames.
+              "typed_cast_bits_clear_ensures"
+              "typed_cast_bits_insert_normal_ensures_part3"
+              "typed_cast_bits_popcount_ensures"
+              "typed_cast_bits_rotl_assert_rte_shift_2"
+              "typed_cast_bits_rotr_assert_rte_shift_2"
+              "typed_cast_bits_next_power_of_two_normal_ensures_part3"
+              "typed_cast_bits_next_power_of_two_normal_ensures_2_part3"
+              "typed_cast_bits_next_power_of_two_normal_ensures_3_part3"
+              "typed_cast_bits_next_power_of_two_normal_ensures_4_part3"
+              "typed_cast_bits_bswap16_assert_rte_signed_overflow"
+              "typed_cast_bits_bswap32_ensures"
+              "typed_cast_bits_bswap64_ensures"
+              "typed_cast_checked_add_overflow_ensures"
+              "typed_cast_checked_add_u64_overflow_ensures"
+              "typed_cast_align_up_ensures"
+              "typed_cast_align_down_ensures"
+              "typed_cast_align_padding_ensures"
+              "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+              "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+              "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+              "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+              "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+              "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+              "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+              "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+              "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+              "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+              "typed_cast_mem_free_call_free_requires_freeable"
+              "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+              "typed_cast_mem_align_normal_ensures_part3"
+              "typed_cast_mem_align_normal_ensures_2_part3"
+              "typed_cast_mem_align_to_normal_ensures_part3"
+              "typed_cast_mem_align_to_normal_ensures_2_part3"
+              "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+              "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+              "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+              "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+              "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+              "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+              "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+              "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+              "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+              "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+              "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
+              "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+              "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
+              # ARM D — bitset's OWN residuals, 21 since VERIFY-040's round 2
+              #         (23 since its round 1, 25 since VERIFY-039 G10's
+              #         repair, 41 after G8's, 42
+              #         after entry 3's loop bounds,
+              #         52 after entry 3 / G6, 71 before it; was 66, +5 at CI
+              #         #1264, where F2/F5 let the contracts of set, clear,
+              #         toggle, test and not admit a null words without
+              #         requiring *bs readable, which their guards read: G10,
+              #         not a proof cost).
+              "typed_cast_bitset_clear_padding_ensures_part1"
+              "typed_cast_bitset_init_assigns_exit_part5"
+              "typed_cast_bitset_init_assigns_normal_part5"
+              "typed_cast_bitset_init_call_mem_zero_requires"
+              "typed_cast_bitset_init_ensures_4"
+              "typed_cast_bitset_init_ensures_6"
+              "typed_cast_bitset_set_live_ensures_3_part3"
+              "typed_cast_bitset_clear_live_ensures_3_part3"
+              "typed_cast_bitset_toggle_live_ensures_3_part3"
+              "typed_cast_bitset_clear_all_call_mem_zero_requires"
+              "typed_cast_bitset_clear_all_live_assigns_normal"
+              "typed_cast_bitset_clear_all_live_ensures_2_part3"
+              "typed_cast_bitset_clear_all_live_ensures_part3"
+              "typed_cast_bitset_set_all_call_mem_set_requires"
+              "typed_cast_bitset_set_all_live_assigns_exit_part1"
+              "typed_cast_bitset_set_all_live_assigns_normal_part1"
+              "typed_cast_bitset_find_next_ensures_3_part7"
+              "typed_cast_bitset_find_next_option_ensures_2_part2"
+              "typed_cast_bitset_as_bytes_call_bytes_from_requires_2"
+              "typed_cast_bitset_as_cbytes_call_cbytes_from_requires_2"
+              "typed_cast_bitset_as_borrowed_bytes_call_borrowed_bytes_from_lifetime_requires_readable_region"
+            )
+            MISSING=0
+            for g in "${CHECKS[@]}"; do
+              if ! grep -qE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] ${g}( |$)" \
+                    wp_bitset_output.txt; then
+                echo "  MISSING from residual set: ${g}"
+                MISSING=$((MISSING + 1))
+              fi
+            done
+            echo ""
+            echo "  --- Roll-call (set equality) ---"
+            echo "    listed:  ${#CHECKS[@]}"
+            echo "    missing: ${MISSING}"
+            if [ "${MISSING}" -ne 0 ]; then
+              note_fail "FAIL: ${MISSING} pinned residual(s) absent."
+              echo "      A goal that starts proving is GOOD NEWS and a RED RUN"
+              echo "      by design: ratchet the pin in its own commit rather"
+              echo "      than widening the gate. Do not delete names to pass."
+            fi
+            grep -oE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] [A-Za-z0-9_]+" \
+              wp_bitset_output.txt | awk '{print $3}' | sort -u > /tmp/bitset_seen.txt
+            printf '%s\n' "${CHECKS[@]}" | sort -u > /tmp/bitset_pinned.txt
+            EXTRA=$(comm -23 /tmp/bitset_seen.txt /tmp/bitset_pinned.txt | wc -l)
+            echo "    unpinned-but-unproved: ${EXTRA}"
+            if [ "${EXTRA}" -ne 0 ]; then
+              note_fail "FAIL: ${EXTRA} unproved goal(s) not in the pinned set."
+              comm -23 /tmp/bitset_seen.txt /tmp/bitset_pinned.txt | sed 's/^/      /'
+            fi
+
+            echo ""
+            echo "  ================================================="
+            echo "   PREDICTIONS — written before the first run"
+            echo "  ================================================="
+            echo ""
+            echo "  P1: the one hard spot is bitset_pad preservation in the"
+            echo "      FINAL word. Every other Group 1 goal is either a"
+            echo "      syntactic match to the code or plain bitvector work."
+            echo "      The exception is set/clear/toggle/assign proving"
+            echo "      'ensures bitset_pad(bs)'. When word_l(i) < wc-1 it is"
+            echo "      trivial. When the index lands IN the final word, WP"
+            echo "      must derive i % 64 < capacity % 64 from i < capacity"
+            echo "      and i / 64 == (capacity+63)/64 - 1. True, but"
+            echo "      integer-division reasoning rather than bitvector."
+            echo "      If it times out the fix is a LEMMA, not a"
+            echo "      justification row."
+            echo ""
+            echo "  P2 (REVISED before first green run): the FULL 92-goal"
+            echo "      arm appears in patch 1 — contract 2 + bits 15 +"
+            echo "      memory 20 + slice-libc 13 + ptr 6 + checked 2 +"
+            echo "      borrow 2 + option 32 = 92. The original prediction of"
+            echo "      a 43-goal SUBSET was wrong twice: option enters now"
+            echo "      because the driver contracts option_usize, and"
+            echo "      bits.h enters now because bits.h's OWN functions"
+            echo "      carry contracts and WP verifies every contracted"
+            echo "      function in the TU — nothing to do with whether"
+            echo "      bitset contracts its callers. Strictly better: it"
+            echo "      makes P3 testable on run 1 instead of patch 2."
+            echo ""
+            echo "  P3: bits.h's 15 residuals re-emit BYTE-IDENTICALLY."
+            echo "      bitset is the FIRST verified module whose closure"
+            echo "      contains bits.h — all eleven previously verified"
+            echo "      headers were checked and none include it. So this is"
+            echo "      byte-identity's first test on a timeout-class"
+            echo "      ARITHMETIC surface; every prior test was libc or"
+            echo "      WP-feature-gap. No instantiation prefix to differ."
+            echo "      IF THIS PREDICTION FAILS, STOP: it is a finding"
+            echo "      about the method, not about bitset."
+            echo ""
+            echo "  P4: a Typed+Cast bridging class at the as_bytes /"
+            echo "      as_cbytes / as_borrowed_bytes sites, analogous to"
+            echo "      vec's class (h), but over 3 sites rather than vec's"
+            echo "      surface. NOT expected in patch 1 — those three are"
+            echo "      uncontracted here — so any bridging goal appearing"
+            echo "      NOW is unpredicted and worth reading."
+            echo "      (Corrected before first run: an earlier draft of"
+            echo "      this arc predicted plain Typed. bitset_as_bytes"
+            echo "      makes that wrong.)"
+            echo ""
+            echo "  ================================================="
+            echo "   VERDICTS — scored at CI #1260, the enforcing run"
+            echo "  ================================================="
+            echo "  P1  REFUTED, then SUBSUMED. It called for a LEMMA to"
+            echo "      derive i%64 < capacity%64. No lemma was ever written:"
+            echo "      E1's division-free form made the same fact plain"
+            echo "      SUBTRACTION. And the goals P1 named are residuals"
+            echo "      anyway. Right that the obstacle was arithmetic,"
+            echo "      wrong about the mechanism and wrong about the fix."
+            echo "  P2  EXACT. 92, family by family, on every run from #1251"
+            echo "      to #1260. The only prediction in this arc that was"
+            echo "      right first time and never adjusted."
+            echo "  P3  CONFIRMED. bits.h's 15 re-emit byte-identically."
+            echo "      bitset is the first verified module whose closure"
+            echo "      contains bits.h, so this was byte-identity's first"
+            echo "      test on a timeout-class ARITHMETIC surface rather"
+            echo "      than libc or a WP feature gap. It held."
+            echo "  P4  CONFIRMED, OVER-COUNTED. The Typed+Cast bridging"
+            echo "      class is real and sits exactly where predicted, but"
+            echo "      at 3 goals (1 per site), not the 9 estimated. Right"
+            echo "      mechanism, wrong size. (This verdict said 6, 2 per"
+            echo "      site, until VERIFY-039 G10 found the other three to be"
+            echo "      the null guards' reads of bs->words.)"
+            echo ""
+            echo "  NOT PREDICTED, and the arc's most useful finding: a"
+            echo "  disjunct that is REDUNDANT FOR THE LOGIC can be"
+            echo "  LOAD-BEARING FOR THE PROVER. E1 removed"
+            echo "  'capacity%64 == 0 ||' from bitset_pad as a"
+            echo "  simplification and took the CI runner down twice --"
+            echo "  the shift exponent stopped being syntactically bounded"
+            echo "  in [0,63] and became x/2^k with k a free variable."
+            echo "  See the DO-NOT-SIMPLIFY note on bitset_pad."
+
+            echo ""
+            echo "  --- Per-function roll-call (all 32 contracted) ---"
+            # CORRECTED 2026-08-23. The first version of this block grepped
+            # the whole log for "typed_cast_<fn>" and printed "NOT SEEN ...
+            # contract may not have attached" when absent. That reading is
+            # INVERTED: the log names only UNPROVED goals, so absence means
+            # the function proved CLEANLY. On the first run it flagged
+            # word_of, mask_of, test and close — precisely the four that
+            # reached zero residuals. A reader trusting it would have chased
+            # four phantoms.
+            #
+            # Two independent facts, read from two different places:
+            #   ANALYSED  <- the "[rte:annot] annotating function <fn>" list,
+            #                which is what WP actually saw. Absence here is
+            #                the real alarm: the function never entered the
+            #                TU, or its ACSL block failed to attach.
+            #   residuals <- count of unproved goals naming it. Zero is BEST.
+            for fn in bitset_word_of bitset_mask_of bitset_clear_padding \
+                      bitset_init bitset_close bitset_set bitset_clear \
+                      bitset_toggle bitset_test bitset_assign \
+                      bitset_lifetime_open_ bitset_lifetime_close_; do
+              if grep -qE "^\[rte:annot\] annotating function ${fn}$" wp_bitset_output.txt; then
+                # Anchor on the goal-clause suffix set, NOT a bare prefix.
+                # CORRECTED 2026-08-23, the SECOND fix to this block: the
+                # first rewrite left `typed_cast_${fn}_` matching by prefix,
+                # so bitset_set_ swallowed bitset_set_all_*, and
+                # bitset_clear_ swallowed BOTH bitset_clear_all_* and
+                # bitset_clear_padding_*. CI #1252 reported set=6 and
+                # clear=8; the true counts are 2 and 2. An inverted check was
+                # replaced by a miscounting one, directly beside it.
+                N=$(grep -cE "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\] typed_cast_${fn}_(null|live|normal|exit|terminates|exits|assigns|ensures|requires|assert|call|loop|variant)" \
+                      wp_bitset_output.txt || true)
+                if [ "${N}" -eq 0 ]; then
+                  printf "    %-26s analysed, 0 residuals  (fully proved)\n" "${fn}"
+                else
+                  printf "    %-26s analysed, %s residual(s)\n" "${fn}" "${N}"
+                fi
+              else
+                printf "    %-26s NOT ANALYSED  <- real problem: absent from the\n" "${fn}"
+                echo   "                               TU, or its ACSL block did not attach"
+              fi
+            done
+            echo ""
+            echo "  --- Residual split: inherited vs bitset-own ---"
+            INH=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_(contract_|option_usize_|bits_|checked_|align_(up|down|padding)_|ptr_|bytes_|str_|mem_|borrowed_(bytes|str)_)" \
+                    wp_bitset_output.txt || true)
+            OWN=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_bitset_" \
+                    wp_bitset_output.txt || true)
+            echo "    inherited: ${INH}   (P2 predicts 92: contract 2 + bits 15 +"
+            echo "               memory 20 + slice-libc 13 + ptr 6 + checked 2 +"
+            echo "               borrow 2 + option 32; 97 since VERIFY-026 added"
+            echo "               six of ptr's and VERIFY-036 F1 closed one of"
+            echo "               memory's; 71 since VERIFY-039 G11 closed 26 of"
+            echo "               option's; 73 since G13 added borrow's two at"
+            echo "               borrowed_str_eq's call to str_equal; 55 since"
+            echo "               G14 to G17 closed the handler pair and 16 of the"
+            echo "               substrate's; 53 since G18 closed memory's two"
+            echo "               frames)"
+            echo "    bitset-own: ${OWN}"
+            # CORRECTED after CI #1260. This NOTE said "most bitset-own
+            # residuals belong to functions that are NOT YET CONTRACTED
+            # (Group 2/3) ... do not pin them". True when written at patch 1;
+            # false since Group 3 landed at #1259. ALL 32 functions are
+            # contracted and the job IS pinned. Replaced with what the 66
+            # actually are.
+            # DE-HARDCODED at CI #1267. This printed a fixed "66" and a fixed
+            # class breakdown. At #1264 AND #1266 the job printed
+            # "bitset-own: 71" and then, two lines later, "none of the 66 is
+            # pending work". The ratchet commit SAID it had fixed this; it had
+            # not. The edit was made, then lost when the file was restored
+            # after a near-miss on frama-c-deque's array, and the post-restore
+            # check only re-verified the CHECKS count and the two pins. The
+            # commit message asserted something about the tree that was not in
+            # the tree -- the same defect class the message was about.
+            # Counts are DERIVED now; only the class names are prose.
+            echo "    All 32 bitset functions are contracted (Groups 1-3"
+            echo "    complete), so none of the ${OWN} is pending work. By class:"
+            CLS_SUM=0
+            CLASSES=(
+              "array framing on and/or/xor/not:bitset_(and|or|xor|not)_(loop_invariant|live_assigns|live_ensures|assert_rte|call)" \
+                       "Group 1 single-bit family + init:bitset_(init|clear_padding|set|clear|toggle|test|assign)_(null|live|normal|exit|terminates|exits|assigns|ensures|requires|assert|call|loop|variant)" \
+                       "clear_all/set_all frames over mem_zero/mem_set:bitset_(clear_all|set_all)_" \
+                       "P4 Typed+Cast bridge at the three as_bytes sites:bitset_as_(bytes|cbytes|borrowed_bytes)_" \
+                       "queries and finds:bitset_(count|is_empty|is_full|is_disjoint|find_)"
+            )
+            for cls in "${CLASSES[@]}"; do
+              NAME="${cls%%:*}"; RE="${cls#*:}"
+              C=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_${RE}" \
+                    wp_bitset_output.txt || true)
+              printf "      %3s  %s\n" "${C}" "${NAME}"
+              CLS_SUM=$((CLS_SUM + C))
+            done
+            # SELF-BALANCING. The first version of this breakdown summed to 77
+            # (prefix collision: bitset_set_ swallowed bitset_set_all_, and
+            # bitset_clear_ swallowed clear_all_ and clear_padding_ -- the
+            # SAME bug the roll-call hit at #1252, third occurrence in this
+            # job), then to 68 once anchored (test_* and xor_call_* fell
+            # through no class at all). Both were found by summing, not by
+            # reading. So the block now sums itself and names the remainder;
+            # a class list that stops partitioning says so instead of
+            # quietly under-reporting.
+            OTHER=$((OWN - CLS_SUM))
+            if [ "${OTHER}" -ne 0 ]; then
+              printf "      %3s  UNCLASSIFIED -- the class list no longer partitions\n" "${OTHER}"
+              grep -oE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_bitset_[A-Za-z0-9_]+" \
+                wp_bitset_output.txt | awk '{print $3}' | sort -u > /tmp/bs_own.txt
+              : > /tmp/bs_cls.txt
+              for cls in "${CLASSES[@]}"; do
+                grep -oE "^typed_cast_${cls#*:}[A-Za-z0-9_]*" /tmp/bs_own.txt >> /tmp/bs_cls.txt || true
+              done
+              sort -u /tmp/bs_cls.txt -o /tmp/bs_cls.txt
+              comm -23 /tmp/bs_own.txt /tmp/bs_cls.txt | sed 's/^/           /'
+            fi 
+          fi
+          echo ""
+          echo "==============================================="
+          if [ "${FAILURES}" -gt 0 ]; then
+            echo "  ${FAILURES} check(s) reported."
+          fi
+          # CORRECTED after CI #1260. This footer was unconditional text
+          # written when the job was created and never revisited: it printed
+          # "REPORT-ONLY: this job does not gate the build. Record the
+          # baseline in VERIFY-020 before pinning" FOUR LINES BELOW a header
+          # reading "MODE: ENFORCED", on a run that gated correctly.
+          #
+          # The gate was right and the narration was lying. That is the
+          # lifetime.h shape exactly -- a false `assigns \nothing` survived
+          # eleven copies because no verified configuration ever translated
+          # it. Text nobody re-reads decays silently. Make the footer read
+          # the same variable the gate reads.
+          if [ "${ENFORCE}" -eq 1 ]; then
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "  VERIFY-020 ENFORCED PASS: ${EXPECTED_PROVED} proved, 0 Failed,"
+              echo "        count ${UNPROVED_COUNT}/${EXPECTED_UNPROVED}, and all"
+              echo "        ${EXPECTED_UNPROVED} residuals verified BY NAME in both"
+              echo "        directions (set equality). Arms: 0 handler + 6"
+              echo "        option_usize (inheritance) + 47 core substrate +"
+              echo "        ${OWN} bitset-own."
+              echo ""
+              # CORRECTED at VERIFY-039 G13's round. These lines said
+              # "${OWN} own is the smallest own-residual set of any
+              # driver-verified module in the project: vec 196, pool 119,
+              # region 114, arena 91, deque 67" -- other units' totals of
+              # unproved goals, not their own sets, and pool, region and
+              # arena are verified in place. Deque's own set is 5, and
+              # bitset's 71 at #1264 was the largest own set of any
+              # driver-verified module (VERIFY-020's reading note).
+              echo "        Bitset-own was 71 at #1264, the largest own set"
+              echo "        of any driver-verified module then: F2/F5 let"
+              echo "        five contracts admit a null words without"
+              echo "        requiring *bs readable, which their guards read"
+              echo "        (VERIFY-039 G10, repaired)."
+              echo ""
+              echo "        A residual that starts PROVING turns this job RED."
+              echo "        That is good news arriving as a red run, by design."
+              echo "        Ratchet the pin in its own commit; never delete a"
+              echo "        name to make the gate pass."
+              echo ""
+              echo "        See docs/verification.md (data/bitset.h section)"
+              echo "        and docs/deviations.md (VERIFY-020) for the full"
+              echo "        residual classification and findings F1-F5;"
+              echo "        MCDC-012 for the coverage-stream record."
+            else
+              echo "  VERIFY-020 ENFORCED FAIL: ${FAILURES} check(s) above."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              echo "        both     -> a goal oscillates across runs; the pin"
+              echo "                    is flaky and that is the finding."
+            fi
+          else
+            echo "  REPORT-ONLY: this job does not gate the build."
+            echo "  Record the baseline in VERIFY-020 before pinning."
+          fi
+          echo "==============================================="
+          # ADDED 2026-09-06 (VERIFY-023 ratchet). This job has printed
+          # "ENFORCED" since CI #1259 and has never been able to fail the
+          # build: every other accumulator-style job ends with this gate;
+          # this one did not. Found at CI #1284, when the step printed
+          # "VERIFY-020 ENFORCED FAIL: 1 check(s)" and the job went green.
+          # The name-stability evidence from #1259 onward is real -- every
+          # roll-call printed missing 0 / unpinned 0 -- but ENFORCEMENT
+          # begins at this commit, not at #1259, and VERIFY-020 must say so.
+          if [ "${ENFORCE}" -eq 1 ] && [ "${FAILURES}" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload WP bitset log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-bitset
+          path: wp_bitset_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # data/priority_queue.h — ENFORCED (VERIFY-022; runs 0-7 at CI #1281-#1289,
+  # run 6 = 7 own; commit 7 closes the last one that was pq's, run 7 pending)
+  #
+  # Shape: verified IN PLACE, no cover TU and no driver. The 40 non-macro
+  # functions carry the contracts; DEFINE_PRIORITY_QUEUE's 17 typed wrappers
+  # are PARKED, on the borrow.h and diag.h precedent (docs/vmacros.md).
+  #
+  # SCOPE, declared before the run rather than discovered in the residuals:
+  # the STRUCTURAL invariant only — validity, bounds, len <= capacity, exact
+  # accessor results, and the len arithmetic of push/pop/remove.
+  #
+  # HEAP ORDER IS NOT CLAIMED AND CANNOT BE. pq_sift_up_ and pq_sift_down_
+  # decide every swap by calling pq->cmp(a, b, ctx), an indirect call through
+  # a caller-supplied function pointer. WP follows an indirect call only
+  # through a `calls` clause listing its targets, a caller-supplied comparator
+  # has no finite list to write, and \valid_function is unimplemented, so
+  # "parent <= child" would be a statement about an uninterpreted function.
+  # (The verified configuration's `calls` clause over compare.h's 24
+  # comparators, VERIFY-022 commit 5, gives the call's frame, not the order.)
+  # Not a timeout; no budget touches it. option's and result's combinators
+  # meet the same limit: their contracts cannot state the callback's value
+  # either. (Their dispatch residuals, 32 and 28 when this was written, were
+  # taken for it; VERIFY-039 G11 found them to be run-time checks on the
+  # pointer, unproved for want of \valid_function, and claims false for some
+  # callbacks.) The limit is met here for the first time in a container whose
+  # CORRECTNESS ARGUMENT depends on it, since vec and deque are ordered by
+  # insertion and never needed the comparator. A priority queue's whole point
+  # is the ordering, and the ordering is the part that cannot be specified.
+  # Heap order is covered by the runtime suite instead: every pop sequence in
+  # priority_queue_test.c asserts ascending order, including through the
+  # byte-wise swap path for elements over CANON_MEM_SWAP_MAX.
+  #
+  # RUN-0 PREDICTIONS, scored at CI #1281/#1282 — kept as the record. The
+  # RUN-1/RUN-2 arms are the ones in the WP step below.
+  #   ARM A  Run 0 does NOT come back clean. CONFIRMED in outcome, REFUTED in
+  #          mechanism: predicted ACSL syntax/name failure; every contract
+  #          parsed and WP reached proving. What killed run 0 was the
+  #          90-minute budget, sized from lifetime.h's 4 goals.
+  #   ARM B  Behaviour-local assigns on pq_push_result fragile. REFUTED: WP
+  #          accepted them and synthesised the default frame (run 1).
+  #   ARM C  ptr_elem's void* arithmetic forces Typed+Cast. CONFIRMED: run 0
+  #          under Typed left 56 substrate goals unproved that prove at home,
+  #          all at cast sites.
+  #   ARM D  Own residuals break the descending trend upward, above 71.
+  #          CONFIRMED at 199 (run 1) — but for missing annotations rather
+  #          than heap algorithmics; see the commit-2 message.
+  #   ARM E  Inherited surface = memory.h's TU. CONFIRMED: 43/43 by name.
+  #
+  # ENFORCE=0 ON PURPOSE. Nothing is pinned until run 2 is recorded. Do not
+  # set ENFORCE=1 in the same commit that first turns this job green.
+  # -------------------------------------------------------------------------
+  frama-c-priority-queue:
+    runs-on: ubuntu-24.04
+    # 330: run 1 (CI #1282) took 3h55m against 240 — five minutes to spare —
+    # and commit 2's loop annotations add preservation and variant goals.
+    # Still under GitHub's 6h kill, same reasoning as region's 350.
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "Gate tripwire: contracts are in the analysed unit"
+        # A job that can pass while proving nothing is worse than no job.
+        # Proves the ACSL survives preprocessing BEFORE WP runs; the
+        # goal-count floor below catches the residual case.
+        run: |
+          set -e
+          gcc -std=c99 -I data -I core -I core/primitives -I semantics -I . \
+              -D__FRAMAC__ -DCANON_NO_REQUIRE -DNDEBUG -E -C \
+              -o /tmp/pq_pp.i - <<'PROBE'
+          #include "data/priority_queue.h"
+          int main(void) { return 0; }
+          PROBE
+          # Backslash-free probes on purpose: grep reads the \r in
+          # "\\result" as an escape, so a probe containing it fails on a
+          # CORRECTLY contracted header. Caught locally, before this job ran.
+          for clause in "predicate pq_wf" "requires pq_wf(pq)" \
+                        "behavior accepted" "complete behaviors" \
+                        "loop invariant pq_wf(pq)"; do
+            if ! grep -q "$clause" /tmp/pq_pp.i; then
+              echo "FAIL: '$clause' is absent from the preprocessed unit."
+              echo "      The __FRAMAC__ gate did not open, so WP would"
+              echo "      analyse an unannotated header and report success"
+              echo "      over an empty obligation set."
+              exit 1
+            fi
+          done
+          echo "  contracts present in preprocessed unit (5 probes)."
+      - name: "WP: data/priority_queue.h (VERIFY-022, report-only, Typed+Cast)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=1
+          # Typed+Cast, NOT Typed. The closure includes ptr.h, compare.h,
+          # slice.h and memory.h, all verified at home under Typed+Cast and
+          # all cast-originating (sint8* <-> uint8* at every byte-view site).
+          # deque could run on plain Typed only because its closure excludes
+          # every such header (VERIFY-019 "Model: Typed, not Typed+Cast");
+          # that exemption does not apply here. Run 0 (CI #1281) ran Typed
+          # and produced 56 substrate residuals that prove at home, all at
+          # cast sites -- recorded in VERIFY-022 as the model's negative
+          # control, not as a result about priority_queue.
+          WP_MODEL=Typed+Cast
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model ${WP_MODEL} \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I data \
+              -I core \
+              -I core/primitives \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            data/priority_queue.h 2>&1 | tee wp_pq_output.txt
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (priority_queue.h) exit: ${WP_EXIT}"
+          if [ "${ENFORCE}" -eq 1 ]; then echo "  MODE: ENFORCED (VERIFY-022, pinned at CI #1289)  MODEL: ${WP_MODEL}"; else echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"; fi
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" wp_pq_output.txt || true)
+          if [ -z "${PROVED_LINE}" ]; then
+            echo "ARM 0 (run-0 style abort): WP produced no summary."
+            echo "      Either frama-c aborted before running (ACSL syntax or"
+            echo "      an unresolved name) or the job was cancelled by the"
+            echo "      time budget. The kernel messages follow."
+            grep -E "^\[(kernel|wp)" wp_pq_output.txt | head -40 || true
+            exit 1
+          fi
+          echo "  ${PROVED_LINE}"
+          TOTAL=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \K\d+' | head -1 || true)
+          if [ -z "${TOTAL}" ] || [ "${TOTAL}" -lt 1 ]; then
+            echo "FAIL: WP ran over ZERO goals -- a vacuous pass, not a clean"
+            echo "      one, despite the gate probe succeeding."
+            exit 1
+          fi
+          TIMEOUT_COUNT=$(grep -cE "^\[wp\] \[Timeout\]" wp_pq_output.txt || true)
+          UNKNOWN_COUNT=$(grep -cE "^\[wp\] \[Unknown\]" wp_pq_output.txt || true)
+          FAILED_COUNT=$(grep -cE  "^\[wp\] \[(Failed|Failure)\]"  wp_pq_output.txt || true)
+          INVALID_COUNT=$(grep -cE "^\[wp\] \[Invalid\]" wp_pq_output.txt || true)
+          STEPOUT_COUNT=$(grep -cE "^\[wp\] \[Stepout\]" wp_pq_output.txt || true)
+          UNPROVED=$((TIMEOUT_COUNT + UNKNOWN_COUNT))
+          echo "  Total goals: ${TOTAL}"
+          echo "  Timeouts:    ${TIMEOUT_COUNT}"
+          echo "  Unknown:     ${UNKNOWN_COUNT}"
+          echo "  Failed:      ${FAILED_COUNT}"
+          echo "  Invalid:     ${INVALID_COUNT}"
+          echo "  Stepout:     ${STEPOUT_COUNT}"
+          echo "  Unproved (T+U): ${UNPROVED}"
+          # Failed / Invalid / Stepout are NOT residual verdicts. Invalid and
+          # Stepout gate even in report-only (same rule as the deque and
+          # region jobs); Failed is listed for triage on a first pass.
+          if [ "${INVALID_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${INVALID_COUNT} goal(s) INVALID -- a contract is"
+            echo "      REFUTED with a counter-example. Never pinnable, and"
+            echo "      gated even in report-only."
+            grep -E "^\[wp\] \[Invalid\]" wp_pq_output.txt
+            exit 1
+          fi
+          if [ "${STEPOUT_COUNT}" -ne 0 ]; then
+            echo "FAIL: ${STEPOUT_COUNT} goal(s) hit a prover STEP limit -- a"
+            echo "      verdict this project has never observed. Deliberately"
+            echo "      NOT pooled into the residual count; decide whether to"
+            echo "      pool it and update the definition before pinning."
+            grep -E "^\[wp\] \[Stepout\]" wp_pq_output.txt
+            exit 1
+          fi
+          if [ "${FAILED_COUNT}" -ne 0 ]; then
+            echo "NOTE: ${FAILED_COUNT} Failed goal(s). On a FIRST PASS this"
+            echo "      most likely means a contract is wrong rather than the"
+            echo "      code -- these were written without a local Frama-C."
+            echo "      Listed for triage; not gated at ENFORCE=0."
+            grep -E "^\[wp\] \[(Failed|Failure)\]" wp_pq_output.txt | head -30
+          fi
+          echo ""
+          echo "  --- ARM A: positive control -- did -wp-model Typed+Cast take effect? ---"
+          # Same discipline as VERIFY-019-M / f4-control.yml: a null result
+          # is evidence only when the instrument is known to have changed.
+          CAST_RESID=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\] typed_cast_" wp_pq_output.txt || true)
+          PLAIN_RESID=$(grep -E "^\[wp\] \[(Timeout|Unknown)\] typed_" wp_pq_output.txt | grep -vc "typed_cast_" || true)
+          echo "  typed_cast_ prefixed unproved goals: ${CAST_RESID}"
+          echo "  plain typed_ prefixed unproved goals: ${PLAIN_RESID}  (predicted 0)"
+          if [ "${UNPROVED}" -gt 0 ] && [ "${CAST_RESID}" -eq 0 ]; then
+            echo "FAIL: residuals exist but none is typed_cast_ prefixed --"
+            echo "      the model flag did not take effect. Every ARM below"
+            echo "      is VOID; do not record this run against any of them."
+            exit 1
+          fi
+          echo ""
+          echo "  --- ARM B: inheritance -- Inh(pq) == Residual(memory.h TU), mod prefix ---"
+          # Predicted BEFORE run 1 (VERIFY-022): priority_queue's core
+          # closure is memory.h's translation unit (contract, checked, ptr,
+          # slice, memory) plus compare.h and error.h. compare and error have
+          # EMPTY home residual sets. By the set-union identity the inherited
+          # set is memory.h's pinned 43, exactly, with the same prefix.
+          # CONFIRMED at CI #1282: 43/43 present, 0 missing.
+          #
+          # The baseline is read from the frama-c-memory job's CHECKS array
+          # in THIS workflow file at run time -- there is no second copy of
+          # the list to drift out of step (the fix VERIFY-016/§7 named for
+          # the arena-32 differential gate).
+          cat .github/workflows/proofs-{core,semantics,data}.yml > /tmp/proofs_all.yml   # VERIFY-050: one file per layer
+          WF=/tmp/proofs_all.yml
+          MEM_START=$(grep -n '^  frama-c-memory:' "${WF}" | head -1 | cut -d: -f1)
+          # first CHECKS=( after the job header, up to its closing paren, then stop
+          awk -v s="${MEM_START}" 'NR>=s && /CHECKS=\(/ {f=1} f {print} f && /^ *\)/ {exit}' "${WF}" \
+            | grep -o '"typed_cast_[^"]*"' | tr -d '"' | sort -u > /tmp/mem_checks.txt
+          MEM_N=$(wc -l < /tmp/mem_checks.txt)
+          # 31 since VERIFY-039 G18 (33 since G14 to G17, 48 before).
+          if [ "${MEM_N}" -ne 31 ]; then
+            echo "FAIL: parsed ${MEM_N} names from frama-c-memory's CHECKS,"
+            echo "      expected 31. The extraction is broken; ARM B is VOID."
+            exit 1
+          fi
+          grep -E "^\[wp\] \[(Timeout|Unknown)\] " wp_pq_output.txt \
+            | awk '{print $3}' | sort -u > /tmp/pq_resid.txt
+          # completeness: every memory.h residual re-appears
+          comm -23 /tmp/mem_checks.txt /tmp/pq_resid.txt > /tmp/armb_missing.txt
+          # soundness of context: no substrate goal that proves at home is
+          # residual here. Substrate = anything that is not pq's own and not
+          # the fresh result(bool, Error) instantiation.
+          #
+          # REGEX CORRECTED after CI #1282. The C identifier is
+          # result__Bool_Error (double underscore, from _Bool token-pasting),
+          # but WP emits goal names as result_Bool_Error (single). The run-1
+          # job matched the C spelling, so all 22 result goals fell through
+          # to "extra substrate" and ARM C read 0/0. ARM E still summed --
+          # the goals were counted, just misfiled -- which is how it was
+          # caught. vec's and deque's CHECKS arrays use the single form.
+          comm -13 /tmp/mem_checks.txt /tmp/pq_resid.txt \
+            | grep -vE '^typed_cast_pq_' \
+            | grep -vE '^typed_cast_result_Bool_Error_' > /tmp/armb_extra.txt || true
+          MISSING_N=$(wc -l < /tmp/armb_missing.txt)
+          EXTRA_N=$(wc -l < /tmp/armb_extra.txt)
+          INH_N=$(comm -12 /tmp/mem_checks.txt /tmp/pq_resid.txt | wc -l)
+          echo "  memory.h names present:   ${INH_N} / 31"
+          echo "  memory.h names MISSING:   ${MISSING_N}   (predicted 0 -- completeness)"
+          [ "${MISSING_N}" -gt 0 ] && sed 's/^/      /' /tmp/armb_missing.txt
+          echo "  substrate goals EXTRA:    ${EXTRA_N}   (predicted 0 -- soundness of context)"
+          [ "${EXTRA_N}" -gt 0 ] && sed 's/^/      /' /tmp/armb_extra.txt | head -60
+          echo ""
+          echo "  --- ARM C: fresh result(bool, Error) arm ---"
+          # Pre-registered as a CLASS, not a count: the instantiation is the
+          # shipped CANON_RESULT(bool, Error) with no ACSL attached, so only
+          # -wp-rte goals exist for it. Firm sub-prediction: get_ok and
+          # get_err each carry an unproved assert_rte_mem_access, because
+          # nothing states \valid(out) -- the VERIFY-018 F4 shape, met a
+          # third time.
+          # CONFIRMED at CI #1282 once the regex above was corrected: 22
+          # goals, get_ok/get_err 1/1. And 22 is EXACTLY vec's pre-F4 count
+          # for the same fresh instantiation under the same model with no
+          # driver contracts -- the second reproduction of that profile.
+          # Since VERIFY-022 commit 5 the __FRAMAC__ branch contracts _ok,
+          # _err and _is_ok, and since VERIFY-039 G12 get_ok and get_err
+          # too, with vec_verify.h's shapes (VERIFY-018 F4's fix): the arm
+          # is 20. Since VERIFY-039 G11 the five combinators carry
+          # result_verify.h's repaired contracts: predicted 6, the run-time
+          # check on the pointer at each, two at eq.
+          RES_N=$(grep -cE '^typed_cast_result_Bool_Error_' /tmp/pq_resid.txt || true)
+          GET_OK=$(grep -cE  '^typed_cast_result_Bool_Error_get_ok_assert_rte_mem_access( |$)'  /tmp/pq_resid.txt || true)
+          GET_ERR=$(grep -cE '^typed_cast_result_Bool_Error_get_err_assert_rte_mem_access( |$)' /tmp/pq_resid.txt || true)
+          echo "  result arm residuals:     ${RES_N}   (run 1: 22; vec pre-F4: 22; 20 at VERIFY-039 G12; 6 since G11)"
+          echo "  get_ok/get_err mem_access: ${GET_OK}/${GET_ERR}   (predicted 1/1 at run 1; 0/0 since G12)"
+          grep -E '^typed_cast_result_Bool_Error_' /tmp/pq_resid.txt | sed 's/^/      /' || true
+          echo ""
+          echo "  --- ARM D: priority_queue's own residuals ---"
+          # RUN 1 (CI #1282): 199. Classified in the commit-2 message: ~110
+          # from two unannotated loops (assigns-everything cascade), ~50 from
+          # the lifetime stubs having no frame (deque run-1 F1 recurring),
+          # ~20 uncontracted functions, 12 pq_swap_, 1 genuine contract
+          # error (pq_is_full), 1 ptr_elem_const \from gap.
+          #
+          # RUN 2 (CI #1283): 170 own. The run-2 prediction of < 60 was
+          # REFUTED and stays in the record. Root cause was not the cmp
+          # ceiling (41 of 170) but ptr_elem/ptr_offset having NO ensures on
+          # \result -- every element address was opaque to WP (~85), plus
+          # ptr_elem's overflow-bound requires that pq_wf did not carry
+          # (~20). VERIFY-023 closes the first in ptr.h; commit 3 closes the
+          # second in pq_wf.
+          #
+          # RUNS 2-4 (CI #1283/#1284/#1285): 170, 143, 144 own. Three count
+          # predictions (< 60, < 90, < 130) REFUTED in a row, each because a
+          # cause was inferred from a symptom and not traced in the log:
+          #   run 2  "ptr_elem opacity" -- partly right, mostly the cmp cascade
+          #   run 3  "41 cmp-ceiling"   -- a grep of goal NAMES; the cascade
+          #                               after the first pq->cmp call was ~99
+          #   run 4  "\\separated"      -- zero effect; the real cause of
+          #                               push_result's failures was the
+          #                               UNCONTRACTED result constructors at
+          #                               its return statements, and of
+          #                               pop_raw's the unconstrained `out`
+          # Run 4 also regressed heapify a second time from the same cause
+          # (a pq_wf conjunct added without following it into heapify's
+          # hand-copied requires). Commit 5 splits pq_wf_buf out so that
+          # cannot recur.
+          #
+          # NO COUNT IS PREDICTED FOR RUN 5. Counting is what kept going wrong.
+          # Instead, every remaining residual must land in one of the classes
+          # below, and the tally is printed per function so any function that
+          # does not reach the class it should is visible by name:
+          #
+          #   CEILING (the verified-configuration shape, lifetime.h precedent):
+          #     pq_cmp_*                       -- the comparator boundary. A
+          #        `calls` clause names compare.h's 24 built-in comparators
+          #        (VERIFY-005, 208/208, all `assigns \\nothing`), and pq_wf
+          #        requires pq->cmp to be one of them, so the wrapper's frame
+          #        and termination are THEOREMS, not a trusted axiom. The
+          #        verified claim narrows to the built-in family; a caller-
+          #        supplied comparator is outside it. Expected residual: 1 --
+          #        assert_rte_function_pointer, \\valid_function being
+          #        unimplemented in Frama-C 29. If assigns or terminates ALSO
+          #        appear here, the calls clause did not take and the axiom
+          #        alternative (documented in the header) is the fallback.
+          #   PROVER LIMIT:
+          #     pq_swap__call_mem_swap_requires_2 -- two element ranges are
+          #        disjoint because a != b, lifted through elem_size:
+          #        multiplication. 1 goal. Same class may appear at
+          #        remove_at_result's mem_copy (slot i vs slot len) and at
+          #        as_bytes/as_cbytes (len*es <= capacity*es). If those appear
+          #        they are THIS class, not a contract error; if they do not,
+          #        Alt-Ergo handled the monotonicity and the class is 1.
+          #   EVERYTHING ELSE: 0 per function. Every function in the header
+          #     now carries a contract. A residual outside the two classes
+          #     above is a contract error to read, not a number to record.
+          OWN_N=$(grep -cE '^typed_cast_pq_' /tmp/pq_resid.txt || true)
+          echo "  pq_* residuals:           ${OWN_N}   (run 1: 199; run 2: 170; run 3: 143; run 4: 144; run 5: 18; run 6: 7; run 7: 6; 4 since VERIFY-039 G21; 1 since VERIFY-040 round 2)"
+          # RUN 5 (CI #1287): 144 -> 18. The calls clause TOOK: pq_cmp_ carries
+          # exactly one goal, \\valid_function -- but this regex said 0, because
+          # WP names RTE goals with a SINGLE underscore (pq_cmp_assert_...) and
+          # call goals with a double (pq_swap__call_...). Third instance of
+          # the prefix/underscore class in this workflow. Anchored on the
+          # single form now; nothing else in the header starts pq_cmp_.
+          CEIL_N=$(grep -cE '^typed_cast_pq_cmp_' /tmp/pq_resid.txt || true)
+          # Bin 2 RENAMED at run 5, and CORRECTED by VERIFY-039's batch 2.
+          # mem_copy's 3rd and mem_swap's 2nd requires are
+          # !regions_overlap(a, b, size), which memory.h DEFINES by POINTER
+          # ORDERING: a < b + size && b < a + size. Three of the five sites,
+          # push_result's, pop_raw's and peek's copies between a caller's
+          # element and the buffer, order pointers into different bases,
+          # which WP leaves unrelated, so \\separated(elem, buffer) -- which
+          # pq_wf and the contracts give -- cannot discharge them (batch 1's
+          # block, "Byte ranges compared by pointer order across objects").
+          # The other two, pq_swap_'s mem_swap (slots a and b) and
+          # remove_at_result's mem_copy (slots i and len), share the
+          # buffer's base, where WP compares offsets: what is left is
+          # |a - b| * elem_size >= elem_size, products the provers do not
+          # relate -- the "multiplication" reading this bin had before the
+          # rename at run 5. A restatement of regions_overlap with \\separated
+          # would not close these two (batch 2's block, "Two slots of one
+          # buffer, apart by a multiple of the element size"). Since
+          # VERIFY-039 G21 an assertion before each of the two calls states
+          # that step, and the bin holds the three across bases. CI #1369
+          # proved pq_swap_'s goal in one attempt and not in its re-run, a
+          # goal at the 120 s limit, and remove_at_result's in neither.
+          # Since VERIFY-040's round 2 memory.h states regions_overlap by
+          # \\separated, which separate objects satisfy, and the bin is
+          # empty: the three across bases prove, push_result's with an
+          # assertion of its slot's step before the copy, as at G21.
+          MULT_N=$(grep -cE '^typed_cast_pq_(swap__call_mem_swap_requires|remove_at_result_call_mem_copy_requires|push_result_call_mem_copy_requires|pop_raw_call_mem_copy_requires|peek_call_mem_copy_requires)' /tmp/pq_resid.txt || true)
+          REST_N=$((OWN_N - CEIL_N - MULT_N))
+          echo "    comparator boundary (pq_cmp_):     ${CEIL_N}   (expected 1: \\valid_function only -- calls clause over the 24 built-ins)"
+          echo "    regions_overlap at the copies:     ${MULT_N}   (expected 0: stated by \\separated since VERIFY-040 round 2; 3 until then, pointer order across bases, VERIFY-039 batch 2; the 2 products with elem_size closed by G21's assertions)"
+          echo "    everything else:                   ${REST_N}   (expected 0 -- anything here is a contract to read)"
+          if [ "${REST_N}" -eq 0 ]; then
+            echo "  run-7 class prediction:   CONFIRMED -- every residual is in a named class"
+          else
+            echo "  run-7 class prediction:   REFUTED -- ${REST_N} residual(s) outside both classes, listed by function:"
+          fi
+          echo "  --- per-function tally (own residuals) ---"
+          # Explicit names with anchored prefixes. pq_push is a prefix of
+          # pq_push_result, pq_pop of pq_pop_raw, pq_peek of pq_peek_raw,
+          # pq_remove_at of pq_remove_at_result, pq_swap of pq_swap_ -- the
+          # bitset job miscounted twice on exactly this shape (CI #1252), so
+          # each row subtracts the longer names that share its prefix.
+          tally() {  # $1 = label, $2 = regex to count, $3 = regex to exclude (may be empty)
+            if [ -n "$3" ]; then n=$(grep -E "$2" /tmp/pq_resid.txt | grep -vcE "$3" || true)
+            else n=$(grep -cE "$2" /tmp/pq_resid.txt || true); fi
+            [ "$n" -gt 0 ] && printf '    %4d  %s\n' "$n" "$1"
+            return 0
+          }
+          tally pq_cmp_            '^typed_cast_pq_cmp_'                  ''
+          # pq_swap_'s row takes one underscore, so that its assertions,
+          # typed_cast_pq_swap_assert_* (VERIFY-039 G21), count with its
+          # calls; no function is named pq_swap since PQ-A (MCDC-014).
+          tally pq_swap_           '^typed_cast_pq_swap_'                 ''
+          tally pq_sift_up_        '^typed_cast_pq_sift_up_'              ''
+          tally pq_sift_down_      '^typed_cast_pq_sift_down_'            ''
+          tally pq_init            '^typed_cast_pq_init_'                 ''
+          tally pq_heapify         '^typed_cast_pq_heapify_'              ''
+          tally pq_push_result     '^typed_cast_pq_push_result_'          ''
+          tally pq_push            '^typed_cast_pq_push_'                 '^typed_cast_pq_push_result_'
+          tally pq_pop_raw         '^typed_cast_pq_pop_raw_'              ''
+          tally pq_pop             '^typed_cast_pq_pop_'                  '^typed_cast_pq_pop_raw_'
+          tally pq_peek_raw        '^typed_cast_pq_peek_raw_'             ''
+          tally pq_peek            '^typed_cast_pq_peek_'                 '^typed_cast_pq_peek_raw_'
+          tally pq_remove_at_result '^typed_cast_pq_remove_at_result_'   ''
+          tally pq_remove_at       '^typed_cast_pq_remove_at_'            '^typed_cast_pq_remove_at_result_'
+          tally pq_as_bytes        '^typed_cast_pq_as_bytes_'             ''
+          tally pq_as_cbytes       '^typed_cast_pq_as_cbytes_'            ''
+          tally accessors          '^typed_cast_pq_(len|capacity|remaining|is_empty|is_full|parent_|left_child_|right_child_|lifetime_)' ''
+          echo ""
+          echo "  --- ARM E: the arms must sum to the total ---"
+          # VERIFY-019's bookkeeping lesson: #1234's arms matched by
+          # cancellation. Sum before interpreting.
+          ARM_SUM=$((INH_N + EXTRA_N + RES_N + OWN_N))
+          echo "  ${INH_N} inherited + ${EXTRA_N} extra-substrate + ${RES_N} result + ${OWN_N} own = ${ARM_SUM}"
+          echo "  observed unproved (T+U):                                  ${UNPROVED}"
+          if [ "${ARM_SUM}" -ne "${UNPROVED}" ]; then
+            echo "  MISMATCH: a residual matched no arm (or two). Listing:"
+            cat /tmp/mem_checks.txt /tmp/armb_extra.txt > /tmp/covered.txt
+            grep -E '^typed_cast_(pq|result_Bool_Error)_' /tmp/pq_resid.txt >> /tmp/covered.txt || true
+            sort -u /tmp/covered.txt > /tmp/covered_s.txt
+            comm -23 /tmp/pq_resid.txt /tmp/covered_s.txt | sed 's/^/      /'
+          fi
+          echo ""
+          if [ "${ENFORCE}" -eq 1 ]; then
+            # ===============================================================
+            # ENFORCED as of VERIFY-022 commit 8, pinned at CI #1289 (run 7).
+            # Seven commits, seven runs: 199, 170, 143, 144, 18, 7, 6 own.
+            # Three count predictions refuted (< 60, < 90, < 130); the
+            # comparator-boundary and separation-class predictions held.
+            #
+            # The 38-name residual set = 31 inherited from memory.h (taken
+            # from the memory job's own list at run time, so the two pins
+            # cannot drift apart silently) + 6 result(bool, Error), the
+            # run-time checks on the combinators' pointers (20 until
+            # VERIFY-039 G11 repaired their contracts; 22 until VERIFY-039
+            # G12 contracted get_ok and get_err) + 1 own:
+            #   1  \\valid_function(pq->cmp)             -- Frama-C 29 limit
+            # Until VERIFY-040's round 2, 3 more, 41 in all:
+            #   3  !regions_overlap at mem_copy x3 -- memory.h states the
+            #      predicate by pointer ORDERING, and these order pointers
+            #      into different bases, which \\separated cannot discharge,
+            #      the VERIFY-024 candidate (regions_overlap restated with
+            #      \\separated) being their block's retirement, after which
+            #      push_result's still rests on two product terms (batch 1's
+            #      coverage note). The two that shared the buffer's base,
+            #      pq_swap_'s mem_swap and remove_at_result's mem_copy, need
+            #      products with elem_size, which that restatement would not
+            #      close (VERIFY-039 batch 2); since VERIFY-039 G21 an
+            #      assertion before each call states the step, and both
+            #      prove (5 until then; this line gave the candidate for all
+            #      five). Since VERIFY-040's round 2 the predicate is stated
+            #      by \\separated and the three prove, push_result's with
+            #      an assertion of its slot's step.
+            # THIS is the name-stability run: CI #1289 is the first
+            # measurement at this contract state, and the enforcing run is
+            # the second. If it goes red with no header change, the pin is
+            # flaky and that is the finding -- deque's run-2 shape. (#1290
+            # was green. The shape came at CI #1369's first attempt:
+            # pq_swap_'s mem_swap goal, which no change reached, proved in
+            # that attempt and not in the re-run, a goal at the 120 s
+            # limit. VERIFY-039 G21.)
+            # ===============================================================
+            EXPECTED_PROVED="4645 / 4683"   # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved (4651 / 4689 before); VERIFY-040 round 2 predicted: regions_overlap stated by \\separated, the three copies' preconditions prove, and push_result's assertion of its slot's step is added and proved (VERIFY-039 G21 predicted: three assertions added and proved, and the two slot goals prove: 4647 / 4688; G18 predicted: memory.h's two frames prove, no goal added or removed, as in memory.h's unit: 4642 / 4685; G14 to G17 predicted: 22 goals removed and 11 added: 4640 / 4685; G11 (Bool, Error) predicted: 4636 / 4696, 56 goals added, all proved, and 14 closed; G12: 4566 / 4640; G3, CI #1344: 4526 / 4602; VERIFY-036 F4: 4523 / 4599; VERIFY-036 F1: 4521 / 4597)
+            EXPECTED_UNPROVED=38   # VERIFY-040 round 2 predicted: 41 -> 38 (VERIFY-039 G21 predicted: 43 -> 41; G18 predicted: 45 -> 43; G14 to G17 predicted: 60 -> 45; G11 (Bool, Error) predicted: 74 -> 60; G12: 76 -> 74; VERIFY-036 F1 ratchet, CI #1326: 76, was 77)
+            PIN_NAMES=(
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_pq_cmp_assert_rte_function_pointer"
+            )
+            FAILURES=0
+            PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              echo "FAIL: proved-goal summary ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+              echo "      Reclassify in VERIFY-022, then ratchet this pin and the"
+              echo "      PIN_NAMES list together in one acknowledged commit."
+              FAILURES=$((FAILURES+1))
+            fi
+            if [ "${FAILED_COUNT}" -ne 0 ]; then
+              echo "FAIL: ${FAILED_COUNT} Failed goal(s) -- a REAL finding, never pinnable."
+              FAILURES=$((FAILURES+1))
+            fi
+            printf '%s\n' "${PIN_NAMES[@]}" | sort -u > /tmp/pq_pin_own.txt
+            sort -u /tmp/mem_checks.txt /tmp/pq_pin_own.txt > /tmp/pq_pin_all.txt
+            PIN_N=$(wc -l < /tmp/pq_pin_all.txt)
+            comm -23 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_missing.txt
+            comm -13 /tmp/pq_pin_all.txt /tmp/pq_resid.txt > /tmp/pq_unpinned.txt
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 31 memory + 6 result + 1 own) ---"
+            echo "    missing (pinned, now proved):    $(wc -l < /tmp/pq_missing.txt)"; sed 's/^/      /' /tmp/pq_missing.txt
+            echo "    unpinned (new, unproved):        $(wc -l < /tmp/pq_unpinned.txt)"; sed 's/^/      /' /tmp/pq_unpinned.txt
+            if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
+              echo "FAIL: pin list has ${PIN_N} names, EXPECTED_UNPROVED is ${EXPECTED_UNPROVED} -- the job is inconsistent."
+              FAILURES=$((FAILURES+1))
+            fi
+            if [ -s /tmp/pq_missing.txt ] || [ -s /tmp/pq_unpinned.txt ]; then
+              echo "FAIL: residual set differs from the pin by name."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              echo "        both     -> a goal oscillates across runs; the pin"
+              echo "                    is flaky and that is the finding."
+              FAILURES=$((FAILURES+1))
+            fi
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "PASS: priority_queue.h verified -- ${PROVED_COUNT} proved, ${EXPECTED_UNPROVED}"
+              echo "      residuals all observed by name (VERIFY-022)."
+            else
+              echo "VERIFY-022 ENFORCED FAIL: ${FAILURES} check(s) above."
+            fi
+            echo "==============================================="
+            if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+          else
+            echo "REPORT-ONLY: nothing pinned. Record this run against ARMs A-E"
+            echo "      in VERIFY-022 before interpreting any of it. Do NOT"
+            echo "      promote until name-stable across repeated runs."
+            echo "==============================================="
+          fi
+      - name: Upload WP proof output (priority_queue.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-priority-queue
+          path: wp_pq_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # data/range.h — ENFORCED (VERIFY-030), pinned from CI #1315 / #1316.
+  #
+  # Module 18 in Table 5, and the first unit verified AFTER the saturation
+  # claim was written down: a prospective test (VERIFY-028 P1). Shape A in
+  # place; vmacros/vdrivers/range_verify.h only interposes a contracted
+  # option_isize (bitset_verify.h transcribed usize -> isize).
+  #
+  # RUN 1 (c9138f4): unfixed bodies; every own unproved goal was one F1 or
+  # F2 falsifies (P3/P4/P5 held). RUN 2 (5e778b7): F1/F2/F4 fixed, 11 own
+  # residuals — P6 FALSIFIED (VERIFY-029): group A (3) from run 2's modular
+  # usize arithmetic, group B (8) the nonlinear bound n*|step| <= span-1.
+  # RUN 3: range_len/range_skip rewritten with no wraparound (sign-split
+  # span, |step| by isize negation) + two lemmas in the logic layer
+  # (range_mul_le, range_div_shift), each proved as its own goal. The 15
+  # function contracts are UNCHANGED since run 1. Per VERIFY-029 this is the
+  # LAST provability rewrite: whatever remains after run 3 is argued.
+  # RUN 3 (c3c4e64, #1315) and RUN 4 (fa05034, #1316, header unchanged):
+  # own 0, the same 36 inherited names both times. ENFORCED from VERIFY-030:
+  # the enforcing run is the third on unchanged code (range.h changed only
+  # in comments), so it is also the last name-stability check.
+  #
+  # MODEL: Typed. range.h has no pointer<->integer casts. Goal names carry the
+  # typed_ prefix, so option's residuals (32 until VERIFY-039 G11, its six
+  # run-time checks since) compare with bitset's modulo BOTH the type
+  # (usize -> isize) and the model prefix (typed_cast_ -> typed_).
+  #
+  # Nothing is gated on the predictions. The block at the end PRINTS the
+  # evidence for each one; VERIFY-029 scores it. The job fails only if WP
+  # does not produce a summary.
+  # -------------------------------------------------------------------------
+  frama-c-range:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/range.h"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=1            # VERIFY-030
+          EXPECTED_UNPROVED=""
+          EXPECTED_PROVED=""
+          WP_MODEL="Typed"
+          OUT=wp_range_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          # show FILE [EMPTY_MSG]: indented listing, or a message if empty.
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/range_verify.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (range.h) exit status: ${WP_EXIT}"
+          if [ "${ENFORCE}" -eq 1 ]; then echo "  MODE: ENFORCED (VERIFY-030)  MODEL: ${WP_MODEL}"; else echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"; fi
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      Most likely on run 1: an ACSL parse error in range.h's"
+            echo "      logic layer (term-level ?: over relations, \\old(*r)),"
+            echo "      or the option_isize interposition clashing (F3 guard)."
+            grep -E "^\[(kernel|wp)" ${OUT} | head -20 || true
+          else
+            UNPROVED_RE='^\[wp\] \[(Timeout|Unknown)\]'
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              echo ""
+              echo "  !!! Failed/Invalid present — a contract is FALSE or a"
+              echo "      prover errored. Read these before anything else:"
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E "${UNPROVED_RE}" ${OUT} | awk '{print $3}' | sort -u > /tmp/rg_all.txt
+            # Partition by owner. Anything not matched by the three inherited
+            # patterns is range.h-own — including anything unexpected.
+            grep -E 'option_isize_'                   /tmp/rg_all.txt > /tmp/rg_opt.txt || true
+            grep -E 'contract_default_handler'        /tmp/rg_all.txt > /tmp/rg_ctr.txt || true
+            grep -E '_checked_'                       /tmp/rg_all.txt > /tmp/rg_chk.txt || true
+            grep -vE 'option_isize_|contract_default_handler|_checked_' /tmp/rg_all.txt > /tmp/rg_own.txt || true
+            echo ""
+            echo "  ============ VERIFY-029 RUN-3 EVIDENCE (not gating) ============"
+            echo "  Q1  inherited: option $(wc -l < /tmp/rg_opt.txt) (pred 32; 6 since VERIFY-039 G11)" \
+                 " + handler $(wc -l < /tmp/rg_ctr.txt) (pred 2; 0 since VERIFY-039 G14)" \
+                 " + checked $(wc -l < /tmp/rg_chk.txt) (pred 2)" \
+                 " = $(cat /tmp/rg_opt.txt /tmp/rg_ctr.txt /tmp/rg_chk.txt | wc -l) (pred 36, names as runs 1-2; 10 since VERIFY-039 G11; 8 since G14)"
+            show /tmp/rg_chk.txt
+            echo "  own: $(wc -l < /tmp/rg_own.txt)   (run 1: 12, run 2: 11, run-3 pred: 0)"
+            show /tmp/rg_own.txt
+            echo ""
+            echo "  Q2  lemmas range_mul_le / range_div_shift — pred: both PROVE. Unproved:"
+            grep -E 'lemma' /tmp/rg_own.txt > /tmp/rg_q2.txt || true; show /tmp/rg_q2.txt "(none — both proved)"
+            echo "      (WP lists only UNPROVED goals, so a proved lemma does not appear."
+            echo "       A logic-layer parse error would have failed the summary above.)"
+            echo "  Q3  group A, range_len — pred: 0 unproved:"
+            grep -E 'range_len' /tmp/rg_own.txt > /tmp/rg_q3.txt || true; show /tmp/rg_q3.txt "(none)"
+            echo "  Q4  group B, range_skip — pred: 0 unproved:"
+            grep -E 'range_skip' /tmp/rg_own.txt > /tmp/rg_q4.txt || true; show /tmp/rg_q4.txt "(none)"
+            echo "  Q5  anything else own (pred 0):"
+            grep -vE 'range_len|range_skip|lemma' /tmp/rg_own.txt > /tmp/rg_q5.txt || true; show /tmp/rg_q5.txt "(none)"
+            echo "  =================================================================="
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ -n "${PROVED_LINE}" ]; then
+            # ===============================================================
+            # ENFORCED as of VERIFY-030, pinned from CI #1315 (c3c4e64) and
+            # #1316 (fa05034): 2611/2647, 36 residuals, name-identical both
+            # runs. range.h's own residual count is ZERO; all 36 are inherited:
+            #   32  option_isize combinators (function-pointer dispatch:
+            #       terminates / exits / assigns / \valid_function) -- the
+            #       same 32 bitset pins as option_usize (VERIFY-020)
+            #    2  contract_default_handler (abort path, VERIFY-002 class)
+            #    2  checked_add / checked_add_u64 overflow_ensures (VERIFY-002)
+            # VERIFY-039 G11 predicted: option_isize's combinators carry
+            # option_verify.h's repaired contracts, 26 of the 32 close and
+            # option's eq gains 7 frame goals, all proved, leaving 10: the
+            # six run-time checks on the pointers, the same six bitset pins,
+            # and the four above. VERIFY-039 G14 predicted: the handler's
+            # pair closes, leaving 8.
+            # A pinned name that starts proving is a RATCHET; a new name is a
+            # finding. Neither is ever absorbed silently.
+            # ===============================================================
+            EXPECTED_PROVED="2644 / 2652"   # VERIFY-039 G14 predicted (G11 predicted: 2644 / 2654; VERIFY-030: 2611 / 2647)
+            EXPECTED_UNPROVED=8   # VERIFY-039 G14 predicted: 10 -> 8 (G11 predicted: 36 -> 10)
+            PIN_NAMES=(
+            "typed_checked_add_overflow_ensures"
+            "typed_checked_add_u64_overflow_ensures"
+            "typed_option_isize_and_then_assert_rte_function_pointer"
+            "typed_option_isize_combine_with_assert_rte_function_pointer"
+            "typed_option_isize_eq_assert_rte_function_pointer_part2"
+            "typed_option_isize_filter_assert_rte_function_pointer"
+            "typed_option_isize_map_assert_rte_function_pointer"
+            "typed_option_isize_or_else_assert_rte_function_pointer"
+            )
+            echo ""
+            echo "==============================================="
+            echo "  MODE: ENFORCED (VERIFY-030)"
+            echo "==============================================="
+            PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved-goal summary ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              note_fail "FAIL: ${F} Failed / ${I} Invalid goal(s) -- a REAL finding, never pinnable."
+            fi
+            printf '%s\n' "${PIN_NAMES[@]}" | sort -u > /tmp/rg_pin.txt
+            PIN_N=$(wc -l < /tmp/rg_pin.txt)
+            comm -23 /tmp/rg_pin.txt /tmp/rg_all.txt > /tmp/rg_missing.txt
+            comm -13 /tmp/rg_pin.txt /tmp/rg_all.txt > /tmp/rg_unpinned.txt
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 6 option + 2 checked + 0 own; the handler pair closed at VERIFY-039 G14) ---"
+            echo "    missing (pinned, now proved):    $(wc -l < /tmp/rg_missing.txt)"; show /tmp/rg_missing.txt
+            echo "    unpinned (new, unproved):        $(wc -l < /tmp/rg_unpinned.txt)"; show /tmp/rg_unpinned.txt
+            if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: pin list has ${PIN_N} names, EXPECTED_UNPROVED is ${EXPECTED_UNPROVED} -- the job is inconsistent."
+            fi
+            if [ -s /tmp/rg_missing.txt ] || [ -s /tmp/rg_unpinned.txt ]; then
+              echo "FAIL: residual set differs from the pin by name."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              echo "        both     -> a goal oscillates across runs; the pin"
+              echo "                    is flaky and that is the finding."
+              FAILURES=$((FAILURES + 1))
+            fi
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "PASS: range.h verified -- ${PROVED_COUNT} proved, ${EXPECTED_UNPROVED}"
+              echo "      residuals, all inherited, all observed by name (VERIFY-030)."
+            else
+              echo "VERIFY-030 ENFORCED FAIL: ${FAILURES} check(s) above."
+            fi
+            echo "==============================================="
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (range.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-range
+          path: wp_range_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  frama-c-vec-range:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/vec/vec_range.h under -CC (VERIFY-041, enforced)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          # VERIFY-041: vec_range.h's contract and its loop's annotation live
+          # in the macro body, so this unit is preprocessed with -CC, the
+          # first main-CI unit to be (the record says why). Flags otherwise
+          # frama-c-vec's.
+          ENFORCE=1            # VERIFY-041 run 4: pinned from runs 2 and 3 (CI #1384, #1385)
+          OUT=wp_vec_range_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/vec_range_verify.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (vec_range.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: Typed+Cast  PREPROCESSING: -CC"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      VERIFY-041 Q1: if the merged contract is rejected, run 1b"
+            echo "      moves the int clause into a behavior of its own."
+            grep -E "^\[(kernel|wp)" ${OUT} | head -20 || true
+          else
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              echo "  !!! Failed/Invalid present -- read these first:"
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/vr_all.txt
+            grep -E 'vec_int_extend_from_range' /tmp/vr_all.txt > /tmp/vr_own.txt || true
+            grep -vE 'vec_int_extend_from_range' /tmp/vr_all.txt > /tmp/vr_rest.txt || true
+            echo ""
+            echo "  ============ VERIFY-041 EVIDENCE (not gating) ============"
+            echo "  own (vec_int_extend_from_range): $(wc -l < /tmp/vr_own.txt)   (run 1: 2; run 2 pred (P7): 0)"
+            show /tmp/vr_own.txt
+            echo "  P3 (F2): range_len's call precondition (run 1: unproved; run 2 pred: proved):"
+            grep -E 'call_range_len_requires' /tmp/vr_own.txt > /tmp/vr_p3.txt || true; show /tmp/vr_p3.txt "(none)"
+            echo "  P4 (F1): invariants and ensures unproved (run 1: the content invariant's"
+            echo "      preservation only; run 2 pred: none, fits_ok included):"
+            grep -E 'loop_invariant|_ensures|fits_ok' /tmp/vr_own.txt > /tmp/vr_p4.txt || true; show /tmp/vr_p4.txt "(none)"
+            # P2: the inherited set, computed at run time from the pins of
+            # frama-c-arena, frama-c-range and cc-vec's result names, never
+            # copied (VERIFY-041 P2). Names compared modulo the prefix map.
+            python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'tools')
+          import record_coverage as rc
+          from collections import defaultdict
+          by = defaultdict(set)
+          for n, us in rc.pinned_names().items():
+              for u in us:
+                  by[u].add(n)
+          pred = by['frama-c-arena'] | by['frama-c-range'] | {n for n in by['cc-vec'] if n.startswith('typed_result_Bool_Error_')}
+          obs = {rc.norm(l.strip()) for l in open('/tmp/vr_rest.txt') if l.strip()}
+          print('  P2  inherited and fresh: observed %d, predicted %d (pred 45)' % (len(obs), len(pred)))
+          for t, s in (('predicted, not observed', sorted(pred - obs)), ('observed, not predicted', sorted(obs - pred))):
+              print('      %s: %d' % (t, len(s)))
+              for n in s:
+                  print('        ' + n)
+          PY
+            echo "  ==========================================================="
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ -n "${PROVED_LINE}" ]; then
+            # ===============================================================
+            # ENFORCED as of VERIFY-041 run 4, pinned from runs 2 and 3
+            # (CI #1384 at 4d62cd8, CI #1385 at a78d00e): 5159 / 5204, 45
+            # residuals, name-identical in both runs. vec_range.h's own count
+            # is ZERO; all 45 are inherited or fresh, and equal by name to the
+            # union of frama-c-arena's 33 and frama-c-range's 8 (two shared)
+            # and result at (Bool, Error)'s six, as cc-vec pins them:
+            #   33  arena.h's closure (memory, ptr, slice, checked)
+            #    6  option_isize's run-time checks on its pointers (range.h)
+            #    6  result__Bool_Error's run-time checks on its pointers
+            # A pinned name that starts proving is a RATCHET; a new name is a
+            # finding. Neither is ever absorbed silently.
+            # ===============================================================
+            EXPECTED_PROVED="5159 / 5204"   # VERIFY-041 runs 2 and 3 (run 1: 4869 / 4916, 47)
+            EXPECTED_UNPROVED=45
+            PIN_NAMES=(
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_option_isize_and_then_assert_rte_function_pointer"
+            "typed_cast_option_isize_combine_with_assert_rte_function_pointer"
+            "typed_cast_option_isize_eq_assert_rte_function_pointer_part2"
+            "typed_cast_option_isize_filter_assert_rte_function_pointer"
+            "typed_cast_option_isize_map_assert_rte_function_pointer"
+            "typed_cast_option_isize_or_else_assert_rte_function_pointer"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            )
+            echo ""
+            echo "==============================================="
+            echo "  MODE: ENFORCED (VERIFY-041)"
+            echo "==============================================="
+            PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved-goal summary ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              note_fail "FAIL: ${F} Failed / ${I} Invalid goal(s) -- a REAL finding, never pinnable."
+            fi
+            printf '%s\n' "${PIN_NAMES[@]}" | sort -u > /tmp/vr_pin.txt
+            PIN_N=$(wc -l < /tmp/vr_pin.txt)
+            comm -23 /tmp/vr_pin.txt /tmp/vr_all.txt > /tmp/vr_missing.txt
+            comm -13 /tmp/vr_pin.txt /tmp/vr_all.txt > /tmp/vr_unpinned.txt
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 33 arena + 8 range - 2 shared + 6 result, 0 own) ---"
+            echo "    missing (pinned, now proved):    $(wc -l < /tmp/vr_missing.txt)"; show /tmp/vr_missing.txt
+            echo "    unpinned (new, unproved):        $(wc -l < /tmp/vr_unpinned.txt)"; show /tmp/vr_unpinned.txt
+            if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: pin list has ${PIN_N} names, EXPECTED_UNPROVED is ${EXPECTED_UNPROVED} -- the job is inconsistent."
+            fi
+            if [ -s /tmp/vr_missing.txt ] || [ -s /tmp/vr_unpinned.txt ]; then
+              echo "FAIL: residual set differs from the pin by name."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              FAILURES=$((FAILURES + 1))
+            fi
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "PASS: vec_range.h verified -- ${PROVED_COUNT} proved, ${EXPECTED_UNPROVED}"
+              echo "      residuals, all inherited or fresh, all observed by name (VERIFY-041)."
+            else
+              echo "VERIFY-041 ENFORCED FAIL: ${FAILURES} check(s) above."
+            fi
+            echo "==============================================="
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (vec_range.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-vec-range
+          path: wp_vec_range_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  frama-c-vec-fmt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/vec/vec_fmt.h under -CC (VERIFY-042, enforced)"
+        run: |
+          eval $(opam env --switch=frama-c)
+          # VERIFY-042: vec_fmt.h's contracts and loop annotations live in
+          # the macro bodies, so this unit is preprocessed with -CC, as
+          # frama-c-vec-range is. Flags otherwise frama-c-vec's.
+          ENFORCE=1            # VERIFY-042 run 3: pinned from runs 1 and 2 (CI #1388 and its re-run)
+          OUT=wp_vec_fmt_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/vec_fmt_verify.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (vec_fmt.h) exit status: ${WP_EXIT}"
+          echo "  MODE: report-only (ENFORCE=${ENFORCE})  MODEL: Typed+Cast  PREPROCESSING: -CC"
+          echo "==============================================="
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            grep -E "^\[(kernel|wp)" ${OUT} | head -20 || true
+          else
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              echo "  !!! Failed/Invalid present -- read these first:"
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/vf_all.txt
+            grep -E 'vec_int_to_stringbuf' /tmp/vf_all.txt > /tmp/vf_own.txt || true
+            grep -vE 'vec_int_to_stringbuf' /tmp/vf_all.txt > /tmp/vf_rest.txt || true
+            echo ""
+            echo "  ============ VERIFY-042 EVIDENCE (not gating) ============"
+            grep -E 'vec_int_to_stringbuf_cb_' /tmp/vf_own.txt > /tmp/vf_cb.txt || true
+            grep -vE 'vec_int_to_stringbuf_cb_' /tmp/vf_own.txt > /tmp/vf_fmt.txt || true
+            echo "  own, to_stringbuf (P5 pred 0): $(wc -l < /tmp/vf_fmt.txt)"
+            show /tmp/vf_fmt.txt
+            echo "  own, to_stringbuf_cb (P6 pred: the function-pointer check, the loop"
+            echo "      invariant's preservation, the variant's decrease, likely items[i]'s access): $(wc -l < /tmp/vf_cb.txt)"
+            show /tmp/vf_cb.txt
+            echo "  P3: stringbuf_append_fmt's preconditions at the call, unproved (pred: sb_ok, fmt_sep none; fmt_ok L):"
+            grep -E 'call_stringbuf_append_fmt_requires' /tmp/vf_own.txt > /tmp/vf_p3.txt || true; show /tmp/vf_p3.txt "(none)"
+            # P2: the inherited set, computed at run time from the pins of
+            # frama-c-stringbuf and cc-vec's result names, never copied.
+            python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'tools')
+          import record_coverage as rc
+          from collections import defaultdict
+          by = defaultdict(set)
+          for n, us in rc.pinned_names().items():
+              for u in us:
+                  by[u].add(n)
+          pred = by['frama-c-stringbuf'] | {n for n in by['cc-vec'] if n.startswith('typed_result_Bool_Error_')}
+          obs = {rc.norm(l.strip()) for l in open('/tmp/vf_rest.txt') if l.strip()}
+          print('  P2  inherited and fresh: observed %d, predicted %d (pred 43)' % (len(obs), len(pred)))
+          for t, s in (('predicted, not observed', sorted(pred - obs)), ('observed, not predicted', sorted(obs - pred))):
+              print('      %s: %d' % (t, len(s)))
+              for n in s:
+                  print('        ' + n)
+          PY
+            echo "  ==========================================================="
+          fi
+          if [ "${ENFORCE}" -eq 1 ] && [ -n "${PROVED_LINE}" ]; then
+            # ===============================================================
+            # ENFORCED as of VERIFY-042 run 3, pinned from runs 1 and 2 (CI
+            # #1388 at cf28c02 and the job's re-run, workflow run
+            # 40592358164): 5239 / 5286, 47 residuals, name-identical in
+            # both runs. 43 are inherited or fresh, equal by name to
+            # frama-c-stringbuf's 37 and result at (Bool, Error)'s six as
+            # cc-vec pins them; 4 are vec_fmt.h's own, all of
+            # to_stringbuf_cb, filed under VERIFY-042's two blocks (the
+            # callback's run-time check; the loop's state across the call).
+            # A pinned name that starts proving is a RATCHET; a new name is a
+            # finding. Neither is ever absorbed silently.
+            # ===============================================================
+            EXPECTED_PROVED="5239 / 5286"   # VERIFY-042 runs 1 and 2
+            EXPECTED_UNPROVED=47
+            PIN_NAMES=(
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_vec_int_to_stringbuf_cb_assert_rte_function_pointer"
+            "typed_cast_vec_int_to_stringbuf_cb_assert_rte_mem_access_3"
+            "typed_cast_vec_int_to_stringbuf_cb_loop_invariant_preserved"
+            "typed_cast_vec_int_to_stringbuf_cb_loop_variant_decrease"
+            )
+            echo ""
+            echo "==============================================="
+            echo "  MODE: ENFORCED (VERIFY-042)"
+            echo "==============================================="
+            PROVED_COUNT=$(printf '%s' "${PROVED_LINE}" | sed -E 's/^.*Proved goals: *//; s/[[:space:]]+$//')
+            if [ "${PROVED_COUNT}" != "${EXPECTED_PROVED}" ]; then
+              note_fail "FAIL: proved-goal summary ${PROVED_COUNT} != pinned ${EXPECTED_PROVED}."
+            fi
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ]; then
+              note_fail "FAIL: ${F} Failed / ${I} Invalid goal(s) -- a REAL finding, never pinnable."
+            fi
+            printf '%s\n' "${PIN_NAMES[@]}" | sort -u > /tmp/vf_pin.txt
+            PIN_N=$(wc -l < /tmp/vf_pin.txt)
+            comm -23 /tmp/vf_pin.txt /tmp/vf_all.txt > /tmp/vf_missing.txt
+            comm -13 /tmp/vf_pin.txt /tmp/vf_all.txt > /tmp/vf_unpinned.txt
+            echo "  --- Roll-call (set equality, ${PIN_N} pinned = 37 stringbuf + 6 result + 4 own) ---"
+            echo "    missing (pinned, now proved):    $(wc -l < /tmp/vf_missing.txt)"; show /tmp/vf_missing.txt
+            echo "    unpinned (new, unproved):        $(wc -l < /tmp/vf_unpinned.txt)"; show /tmp/vf_unpinned.txt
+            if [ "${PIN_N}" -ne "${EXPECTED_UNPROVED}" ]; then
+              note_fail "FAIL: pin list has ${PIN_N} names, EXPECTED_UNPROVED is ${EXPECTED_UNPROVED} -- the job is inconsistent."
+            fi
+            if [ -s /tmp/vf_missing.txt ] || [ -s /tmp/vf_unpinned.txt ]; then
+              echo "FAIL: residual set differs from the pin by name."
+              echo "        missing  -> a pinned residual now proves: RATCHET."
+              echo "        unpinned -> a NEW residual appeared: INVESTIGATE."
+              FAILURES=$((FAILURES + 1))
+            fi
+            if [ "${FAILURES}" -eq 0 ]; then
+              echo "PASS: vec_fmt.h verified -- ${PROVED_COUNT} proved, ${EXPECTED_UNPROVED}"
+              echo "      residuals, 43 inherited or fresh and 4 own, each filed, all observed by name (VERIFY-042)."
+            else
+              echo "VERIFY-042 ENFORCED FAIL: ${FAILURES} check(s) above."
+            fi
+            echo "==============================================="
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then exit 1; fi
+      - name: Upload WP proof output (vec_fmt.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-vec-fmt
+          path: wp_vec_fmt_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  frama-c-stringbuf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: data/stringbuf.h (VERIFY-035, ENFORCED)"
+        # stringbuf.h — module 19, Shape A in place, no driver. Typed+Cast
+        # (the header casts char* <-> u8* itself).
+        # Run 1 (CI #1319, f6e54ca) was the detection test on the unfixed
+        # bodies: 4810/4913, 81 inherited by name, 22 own (VERIFY-031
+        # "Run 1 — observed"). Run 2 applies G1-G6 plus the helper's missing
+        # \valid(sb). Its pre-registered expectation (VERIFY-031 "Run 2"):
+        #   inherited 81, same names
+        #   own exactly 3, all stringbuf_init_arena (A2 — arena_alloc has no
+        #   frame on buffer/capacity; deferred to its own arc)
+        #   every run-1 family other than A2 closes, including append_n's
+        #   three (hypothesis H-n: the cause was valid_read_nstring)
+        # Run 2 (CI #1320, 600f238): 4716/4802, 81 inherited, 5 own — A2's
+        # 3, plus the wrapper's no_buffer assigns and one append_n src_read
+        # part. Run 3 adds the wrapper guard and append_n's `readable` loop
+        # invariant; expectation: own exactly A2's 3.
+        # Run 3 (CI #1321, fc924e2): 4744/4828, 81 inherited, own exactly A2's
+        # 3 — every prediction held.
+        # VERIFY-033 run (CI #1322, b785d52): arena_alloc{,_aligned} gain
+        # frame_buffer/frame_capacity. 4767/4848, 81 inherited, own 0 — A2
+        # closed (predicted 4751/4832: the +4 was +20, VERIFY-034 F2).
+        # Name-stability: #1322 (b785d52) and #1324 (50045d2), stringbuf.h
+        # unchanged since fc924e2, report the same 81 names; Timeout/Unknown
+        # split differs (78/3 vs 76/5), the names do not.
+        # ENFORCED from VERIFY-035. Gates, all exact:
+        #   (0) a summary exists
+        #   (1) zero Failed / Invalid / Stepout
+        #   (2) proved line == 4789 / 4826   (VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved, 4795 / 4832 before; VERIFY-039 G18 predicted: memory.h's two frames prove, no goal added or removed; G14 to G17 predicted: 22 goals removed and 12 added: 4793 / 4832; G13 predicted: two goals added, both unproved: 4788 / 4842; G3 ratchet: 4788 / 4840; G2: 4785 / 4837; G3 predicted 4790 / 4840)
+        #   (3) Timeout + Unknown == 37   (VERIFY-039 G18 predicted: 39 -> 37; G14 to G17 predicted: 54 -> 39; G13 predicted: 52 -> 54; G2: 52, unchanged at G3, which predicted 50; F4: 58)
+        #   (4) roll-call: the unproved names == the 37 pinned below, by
+        #       set equality (nothing missing, nothing extra; own == 0)
+        # A ratchet edits (2), (3) and the INHERITED roll-call together.
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=1            # VERIFY-035: enforced
+          WP_MODEL="Typed+Cast"
+          OUT=wp_stringbuf_output.txt
+          FAILURES=0
+          note_fail() { echo "$1"; FAILURES=$((FAILURES + 1)); }
+          show() { if [ -s "$1" ]; then sed 's/^/      /' "$1"; else echo "      ${2:-(none)}"; fi; }
+          set +e
+          frama-c \
+            -wp -wp-rte \
+            -wp-model "${WP_MODEL}" \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            data/stringbuf.h 2>&1 | tee ${OUT}
+          WP_EXIT=${PIPESTATUS[0]}
+          set -e
+          echo ""
+          echo "==============================================="
+          echo "  WP (stringbuf.h) exit status: ${WP_EXIT}"
+          echo "  MODE: ENFORCED (ENFORCE=${ENFORCE})  MODEL: ${WP_MODEL}"
+          echo "  pinned: 4789 / 4826, 37 unproved, all inherited (VERIFY-035; VERIFY-036 F1, F3, F4, F5; VERIFY-039 G2; G3 added three proved goals; G13 two unproved; G14 to G17 closed fifteen; G18 two)"
+          echo "==============================================="
+          echo "  --- Q1/Q2: kernel messages about variadics / merged specs ---"
+          grep -nE "variadic|Variadic|va_list|two contracts|Merging" ${OUT} | head -20 || echo "      (none)"
+          PROVED_LINE=$(grep -E "^\[wp\] Proved goals:" ${OUT} || true)
+          echo "  ${PROVED_LINE}"
+          if [ -z "${PROVED_LINE}" ]; then
+            note_fail "FAIL: WP did not produce a verification summary."
+            echo "      On run 1 this is VERIFY-031 Q1 firing: the kernel or WP"
+            echo "      rejected the variadic definitions. The pre-registered"
+            echo "      rule: repeat as run 1b with -variadic-no-translation,"
+            echo "      identical contracts. First diagnostics:"
+            grep -E "^\[(kernel|wp|variadic)" ${OUT} | head -25 || true
+          else
+            T=$(grep -cE '^\[wp\] \[Timeout\]' ${OUT} || true)
+            U=$(grep -cE '^\[wp\] \[Unknown\]' ${OUT} || true)
+            F=$(grep -cE '^\[wp\] \[(Failed|Failure)\]' ${OUT} || true)
+            I=$(grep -cE '^\[wp\] \[Invalid\]' ${OUT} || true)
+            S=$(grep -cE '^\[wp\] \[Stepout\]' ${OUT} || true)
+            echo "  Timeouts: ${T}  Unknown: ${U}  Failed: ${F}  Invalid: ${I}  Stepout: ${S}"
+            echo "  Total unproved (T+U): $((T + U))"
+            if [ "${F}" -ne 0 ] || [ "${I}" -ne 0 ] || [ "${S}" -ne 0 ]; then
+              echo ""
+              echo "  !!! Failed/Invalid/Stepout present — read these first:"
+              grep -E '^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]' ${OUT} || true
+            fi
+            echo ""
+            echo "  --- All unproved goals (name-stability record) ---"
+            grep -E '^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]' ${OUT} || echo "  (none)"
+            grep -E '^\[wp\] \[(Timeout|Unknown)\]' ${OUT} | awk '{print $3}' | sort -u > /tmp/sb_all.txt
+            # P2's predicted inherited set, by name: frama-c-arena's 79 pinned
+            # names verbatim + borrow.h's 2 own memcmp-danglingness goals,
+            # 81 when written and 52 after the closures the echo below lists;
+            # 54 since VERIFY-039 G13's repair added borrow.h's 2 at
+            # borrowed_str_eq's call to str_equal; 39 since G14 to G17
+            # closed fifteen; 37 since G18 closed memory.h's two frames.
+            INHERITED=(
+            "typed_cast_align_down_ensures"
+            "typed_cast_align_padding_ensures"
+            "typed_cast_align_up_ensures"
+            "typed_cast_arena_alloc_aligned_zero_ensures_3_part1"
+            "typed_cast_arena_alloc_zero_ensures_3_part1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1"
+            "typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a"
+            "typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_b"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_mem_align_normal_ensures_2_part3"
+            "typed_cast_mem_align_normal_ensures_part3"
+            "typed_cast_mem_align_to_normal_ensures_2_part3"
+            "typed_cast_mem_align_to_normal_ensures_part3"
+            "typed_cast_mem_alloc_array_checked_nonoverflow_ensures_part3"
+            "typed_cast_mem_alloc_nonzero_size_ensures_part2"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_compare_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_bytes_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_mem_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_mem_free_call_free_requires_freeable"
+            "typed_cast_mem_get_alignment_nonnull_ensures_2_part2"
+            "typed_cast_mem_get_alignment_nonnull_ensures_part2"
+            "typed_cast_mem_is_aligned_nonnull_aligned_ensures"
+            "typed_cast_mem_is_aligned_nonnull_unaligned_ensures"
+            "typed_cast_ptr_align_padding_nonnull_ensures_part2"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+            )
+            printf '%s\n' "${INHERITED[@]}" | sort -u > /tmp/sb_inh_pred.txt
+            comm -12 /tmp/sb_inh_pred.txt /tmp/sb_all.txt > /tmp/sb_inh.txt
+            comm -23 /tmp/sb_inh_pred.txt /tmp/sb_all.txt > /tmp/sb_inh_missing.txt
+            comm -13 /tmp/sb_inh_pred.txt /tmp/sb_all.txt > /tmp/sb_own.txt
+            # Run-1 families, each predicted CLOSED in run 2 except A2.
+            grep -E '_stringbuf_append_bytes_requires_(no_overlap|add_pos)|call_mem_copy' /tmp/sb_own.txt > /tmp/sb_g16.txt || true
+            grep -E 'stringbuf_append_bytes_assert_rte'                              /tmp/sb_own.txt > /tmp/sb_rte.txt || true
+            grep -E 'stringbuf_append_fmt(_va)?_.*failure_unchanged'                 /tmp/sb_own.txt > /tmp/sb_p4.txt || true
+            grep -E 'stringbuf_append_fmt(_va)?_.*vsnprintf.*requires'               /tmp/sb_own.txt > /tmp/sb_p5.txt || true
+            grep -E 'stringbuf_append_n_'                                            /tmp/sb_own.txt > /tmp/sb_an.txt || true
+            grep -E 'stringbuf_init_arena'                                           /tmp/sb_own.txt > /tmp/sb_ia.txt || true
+            cat /tmp/sb_g16.txt /tmp/sb_rte.txt /tmp/sb_p4.txt /tmp/sb_p5.txt /tmp/sb_an.txt /tmp/sb_ia.txt | sort -u > /tmp/sb_grouped.txt
+            comm -23 /tmp/sb_own.txt /tmp/sb_grouped.txt > /tmp/sb_other.txt
+            echo ""
+            echo "  ================ EVIDENCE (families from the arc, VERIFY-031..035) ================"
+            echo "  P2  inherited observed: $(wc -l < /tmp/sb_inh.txt) of 37 pinned (run 1's 81, less VERIFY-036 F1, F3, F4, F5 and VERIFY-039 G2, plus G13's 2, less G14 to G17's 15 and G18's 2)"
+            echo "      predicted but not observed: $(wc -l < /tmp/sb_inh_missing.txt)"; show /tmp/sb_inh_missing.txt
+            echo "  own (everything outside the 37): $(wc -l < /tmp/sb_own.txt)   (run 1: 22, run 2: 5, run 3: 3, VERIFY-033 pred: 0)"
+            echo "  A2  init_arena (VERIFY-033 F3 pred: none — run 3 had 3):"
+            show /tmp/sb_ia.txt
+            echo "  G1/G6 helper seam: no_overlap, add_pos, mem_copy (pred: none):"
+            show /tmp/sb_g16.txt
+            echo "  helper rte, the missing valid(sb) requires (pred: none):"
+            show /tmp/sb_rte.txt
+            echo "  G3 failure_unchanged in the fmt pair (pred: none):"
+            show /tmp/sb_p4.txt
+            echo "  G2/G5 vsnprintf call preconditions (pred: none):"
+            show /tmp/sb_p5.txt
+            echo "  H-n append_n (pred: none — run 1 had 3, run 2 had 1):"
+            show /tmp/sb_an.txt
+            echo "  anything else own (pred: none — run 2 had the wrapper's no_buffer assigns):"
+            show /tmp/sb_other.txt
+            echo "  ========================================================================"
+            if [ "${ENFORCE}" = "1" ]; then
+              echo ""
+              echo "  ================ VERIFY-035 GATES (ENFORCED) ================"
+              BAD=$((F + I + S))
+              if [ "${BAD}" -ne 0 ]; then note_fail "FAIL (1): ${BAD} Failed/Invalid/Stepout goal(s) — a REAL finding, never ratchet this."; else echo "  (1) Failed/Invalid/Stepout: 0  OK"; fi
+              if ! echo "${PROVED_LINE}" | grep -q "Proved goals: 4789 / 4826"; then
+                note_fail "FAIL (2): proved-goal summary changed (pinned: 4789 / 4826). Reclassify in VERIFY-035, then ratchet (2), (3) and the roll-call together."
+              else echo "  (2) proved: 4789 / 4826  OK"; fi
+              if [ "$((T + U))" -ne 37 ]; then note_fail "FAIL (3): unproved count $((T + U)) != 37."; else echo "  (3) unproved count: 37  OK"; fi
+              NMISS=$(wc -l < /tmp/sb_inh_missing.txt); NOWN=$(wc -l < /tmp/sb_own.txt)
+              if [ "${NMISS}" -ne 0 ] || [ "${NOWN}" -ne 0 ]; then
+                note_fail "FAIL (4): roll-call — pinned 37, missing ${NMISS}, unpinned ${NOWN} (lists above)."
+              else echo "  (4) roll-call: pinned 37, missing 0, unpinned 0  OK"; fi
+              echo "  ============================================================="
+            fi
+          fi
+          if [ "${FAILURES}" -ne 0 ]; then echo "  VERIFY-035 ENFORCED FAIL: ${FAILURES} check(s) above."; exit 1; fi
+      - name: Upload WP proof output (stringbuf.h)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-stringbuf
+          path: wp_stringbuf_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        # Posts the WP summary as an annotation, readable through the API
+        # without the log. Reads the job's WP output files; changes no gate.
+        if: always()
+        run: |
+          for f in wp_*.txt; do
+            [ -f "$f" ] || continue
+            P=$(grep -E "^\[wp\] Proved goals:" "$f" | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+            [ -n "$P" ] || continue
+            U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" "$f" || true)
+            B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "$f" || true)
+            echo "::notice title=${{ github.job }}::${f}: proved ${P}; unproved ${U}; failed/invalid/stepout ${B}"
+          done
+
+  # -------------------------------------------------------------------------
+  # data/stack.h (VERIFY-049).
+  #
+  # The unit: vmacros/vdrivers/stack_verify.h, which is cc-vec's driver
+  # (vec_cc_experiment.h) plus DEFINE_STACK(static inline, int). stack.h's
+  # contracts are in its macro body, so the unit is preprocessed with -CC,
+  # with cc-vec's flags and model (Typed+Cast). Its unproved goals are
+  # predicted to be cc-vec's 69, by name (vmacros/vdrivers/cc_pins/vec.txt),
+  # plus the stack's own, which VERIFY-049 predicts.
+  #
+  # ENFORCED since VERIFY-049 run 3: the proved line, an empty own set and
+  # the 69 inherited names are pinned (pins from run 2). A Failed, Invalid or
+  # Stepout goal, or a missing summary, always fails it. The result is also
+  # emitted as an annotation, readable without the log.
+  # -------------------------------------------------------------------------
+  frama-c-stack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP under -CC: data/stack.h at int"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=1   # VERIFY-049: enforced at run 3; pins from run 2 (Frama-C stack #2, f5cc32d)
+          PIN_PROVED="5714 / 5783"
+          OUT=wp_stack_output.txt
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/stack_verify.h > "${OUT}" 2>&1
+          WP_EXIT=$?
+          set -e
+          echo "frama-c exit: ${WP_EXIT}   model: Typed+Cast   preprocessing: -CC"
+          PROVED=$(grep -E "^\[wp\] Proved goals:" "${OUT}" | grep -oE "[0-9]+ / [0-9]+" | tail -1)
+          if ! grep -E "^\[wp\] Proved goals:" "${OUT}"; then
+            echo "FAIL: WP produced no summary."; grep -E "^\[(kernel|wp)" "${OUT}" | head -30; exit 1
+          fi
+          BAD=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "${OUT}" || true)
+          if [ "${BAD}" -ne 0 ]; then
+            echo "FAIL: ${BAD} goal(s) Failed, Invalid or Stepout:"
+            grep -E "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" "${OUT}"; exit 1
+          fi
+          grep -oE "^\[wp\] \[(Timeout|Unknown)\] [A-Za-z0-9_]+" "${OUT}" | awk '{print $3}' | sort -u > unproved.txt
+          grep -E '_stack_int_' unproved.txt > own.txt || true
+          grep -vE '_stack_int_' unproved.txt > inherited.txt || true
+          sort -u vmacros/vdrivers/cc_pins/vec.txt > pins_vec.txt
+          echo "=== unproved: $(wc -l < unproved.txt) (inherited $(wc -l < inherited.txt), own $(wc -l < own.txt)) ==="
+          echo "=== own (stack_int_*) ==="; sed 's/^/    /' own.txt
+          echo "=== inherited, not among cc-vec's 69 ==="; comm -13 pins_vec.txt inherited.txt | sed 's/^/    /'
+          echo "=== cc-vec's 69, not unproved here ==="; comm -23 pins_vec.txt inherited.txt | sed 's/^/    /'
+          FAILS=0
+          if cmp -s pins_vec.txt inherited.txt; then
+            echo "INHERITED SAME: the 69 cc-vec names, exactly."
+          else
+            echo "DIFFERS: the inherited set is not cc-vec's (above)."; FAILS=$((FAILS + 1))
+          fi
+          if [ -s own.txt ]; then
+            echo "DIFFERS: own goals unproved (above); the pin is none."; FAILS=$((FAILS + 1))
+          else
+            echo "OWN NONE: every stack_int goal is proved."
+          fi
+          if [ "${PROVED}" = "${PIN_PROVED}" ]; then
+            echo "PROVED SAME: ${PROVED}"
+          else
+            echo "DIFFERS: proved ${PROVED}, pinned ${PIN_PROVED}."; FAILS=$((FAILS + 1))
+          fi
+          echo "::notice title=frama-c-stack::proved ${PROVED} (pin ${PIN_PROVED}); unproved $(wc -l < unproved.txt): inherited $(wc -l < inherited.txt), own $(wc -l < own.txt); ${FAILS} difference(s)"
+          if [ "${FAILS}" -ne 0 ] && [ "${ENFORCE}" -eq 1 ]; then
+            echo "FAIL: ${FAILS} difference(s) from the pins."; exit 1
+          fi
+      - name: Upload WP output (stack)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-stack
+          path: |
+            wp_stack_output.txt
+            unproved.txt
+            own.txt
+            inherited.txt
+          retention-days: 90

@@ -1,4 +1,5 @@
-name: Canon-C CC (VERIFY-025)
+name: "7 · Proofs: -CC (macro-body contracts)"
+# Was "Canon-C CC (VERIFY-025)", frama-c-cc.yml; renamed by VERIFY-050.
 
 # ---------------------------------------------------------------------------
 # What this workflow is
@@ -57,7 +58,7 @@ on:
       - 'data/**'
       - 'vmacros/vdrivers/*_cc_experiment.h'
       - 'vmacros/vdrivers/cc_pins/*.txt'
-      - '.github/workflows/frama-c-cc.yml'
+      - '.github/workflows/proofs-cc.yml'
       - '.github/actions/framac-setup/**'
   workflow_dispatch:
 
@@ -69,7 +70,7 @@ jobs:
   frama-c-cc:
     name: frama-c-cc-${{ matrix.family }}
     # Pinned, not ubuntu-latest: see the runner note in
-    # cmake-multi-platform.yml (VERIFY-039, runner pin).
+    # ci.yml (VERIFY-039, runner pin).
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ matrix.budget }}
     strategy:
@@ -202,7 +203,8 @@ jobs:
         shell: bash
         run: |
           OUT="wp_cc_${{ matrix.family }}_output.txt"
-          WF=".github/workflows/cmake-multi-platform.yml"
+          cat .github/workflows/proofs-{core,semantics,data}.yml > /tmp/proofs_all.yml   # VERIFY-050: one file per layer
+          WF=/tmp/proofs_all.yml
           FAM="${{ matrix.family }}"
           JOB="${{ matrix.driver_job }}"
 
