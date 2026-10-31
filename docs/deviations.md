@@ -26755,3 +26755,42 @@ the cost pool.h records for `pool_alloc`'s `full`.
 If R2-1 to R2-3 hold, run 3, a re-run of the same commit, checks name
 stability. Then `frama-c-stack` is enforced, pinned at run 2's line and its
 69 names.
+
+### Run 2 scored, and enforced from run 3 (2026-10-31)
+
+Run 2 ran on f5cc32d: `Frama-C stack (VERIFY-049)` #2 (57 min), `Canon-C CI`
+#1398, platforms #4, CC #69 and record coverage #131, all green. The author
+pasted the `frama-c-stack` step:
+
+    [wp] Proved goals: 5714 / 5783
+    === unproved: 69 (inherited 69, own 0) ===
+    INHERITED SAME: the 69 cc-vec names, exactly.
+
+| # | verdict |
+|---|---------|
+| R2-1 | **MATCH**. `own 0`. |
+| R2-2 | **MATCH**. The inherited set is cc-vec's 69 names, for the second run running. |
+| R2-3 | **MATCH**. 5783 = 5807 − 24: the eight removed clauses carried 24 goals. Proved 5714 = 5783 − 69. The stack's own goals are 190 (5783 − 5593), all proved. |
+| R2-4 | **MATCH on the job, the count not read.** `compcert` left no error annotation. At run 1 it left "Process completed with exit code 1", and its step exits non-zero on any unit that fails to compile or run. |
+| R2-5 | **MATCH for the jobs.** Every job of the five workflows is green. The MC/DC table and `misra` were not pasted this time. |
+
+**Enforcement, and why at run 3 rather than after it.** The protocol's
+second report-only run checks that the names are stable. Here, the 69
+inherited names have now been identical in two runs, of two different
+contract texts, and the stack's own set is empty. Run 3 is therefore made
+the first enforced run. The job is pinned on three things:
+- the proved line, 5714 / 5783;
+- an empty own set;
+- the 69 inherited names, by set equality with `cc_pins/vec.txt`.
+
+Run 3 is the stability check. A difference there fails the job, and is
+recorded as instability, not as a regression. The step also emits its
+result as an annotation, readable without the log (the first step towards
+VERIFY-050).
+
+**Status after run 2.** data/stack.h is verified at `int` under `-CC`. Its
+190 own goals are all proved, its 69 residuals are all cc-vec's, and no
+new argument block was needed. *A* stays 33 cumulative and 19 in force. S1
+to S5 are fixed. The separate-compilation path of vec, deque, stack and
+queue is built, linked and run in every CMake job and in `compcert`.
+VERIFY-049 closes when run 3 holds.
