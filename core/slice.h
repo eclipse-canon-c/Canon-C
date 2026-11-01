@@ -865,26 +865,24 @@ static inline cbytes_t str_as_bytes(str_t s) {
  *   typedef void* voidptr;
  *   DEFINE_SLICE(voidptr)
  *
- * Verification scope (VERIFY-007):
+ * Verification scope (VERIFY-007, VERIFY-025):
  * ─────────────────────────────────────────────────────────────────────────
- * The macro-generated functions are NOT WP-verified in the current baseline.
- * The C preprocessor strips comments inside #define bodies before macro
- * expansion, so ACSL annotations cannot be carried into the generated code
- * through the macro itself. The contract comments below are retained as
- * human-readable specifications and are intended to be machine-checkable
- * the day a separate slice_verify.h instantiates DEFINE_SLICE for analysis.
+ * The contracts below are in the macro body. Under Frama-C's default
+ * preprocessing (cpp -C) they are stripped before expansion, so a -C run
+ * sees no contract on the generated functions; that was VERIFY-007's
+ * finding, when they were documentation only. Under -CC, GCC keeps them
+ * through expansion (VERIFY-025): the -CC workflow
+ * (.github/workflows/proofs-cc.yml, family slice) instantiates
+ * DEFINE_SLICE(i32) through vmacros/vdrivers/slice_cc_experiment.h and
+ * proves every generated goal, its residuals being bytes_t's and str_t's
+ * (vmacros/vdrivers/cc_pins/slice.txt). Units that instantiate it at
+ * another type, such as frama-c-array at int (VERIFY-052), prove it again
+ * at theirs.
  *
- * Until then, slice_T_* functions are validated by:
- *   - Unit testing against slice_test.c (bytes_t/cbytes_t/str_t conventions
- *     give symmetric coverage)
+ * The generated functions are also exercised by:
+ *   - Unit testing against slice_test.c
  *   - Fuzzing through the slice_test fuzz harness
- *   - 100% MC/DC coverage (when measured via the i32 instantiation)
- *
- * The semantics of every macro-generated function exactly mirror its
- * bytes_t / str_t counterpart, so the WP discharge of the non-macro
- * functions provides indirect evidence for the macro-generated ones —
- * any bug in the macro body would be detectable by comparing observable
- * behavior against the verified bytes_t baseline.
+ *   - MC/DC measurement through the i32 instantiation
  * ========================================================================= */
 /* cppcheck-suppress misra-c2012-20.7 ; MISRA-DEV-012 */
 #define DEFINE_SLICE(type)                                                          \

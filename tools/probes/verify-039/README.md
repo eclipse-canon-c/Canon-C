@@ -9,13 +9,13 @@ Executable checks of filings the record makes, against the code they describe.
 Findings, predictions and scoring live in `docs/deviations.md`, VERIFY-039.
 These files are recorded probes, not tests: nothing builds them (CMake uses
 explicit targets) and the main CI ignores `tools/**`. Each becomes a
-regression test when its fix lands. The G4 probe is also run under WP, by its
-own workflow, `.github/workflows/g4-probe.yml`, and the second G11 probe by
-`.github/workflows/g11-probe.yml`, through `g11_probe.py`, which runs WP and
-reads its output against the prediction, the G13 probe by
-`.github/workflows/g13-probe.yml`, through `g13_probe.py`, which runs Eva and
-WP and reads them the same way, and the G19 probe by
-`.github/workflows/g19-probe.yml`, through `g19_probe.py`, which runs WP on
+regression test when its fix lands. Four of them are also run in CI, each by
+its own job of `.github/workflows/probes.yml` (each had a workflow file of
+its own until VERIFY-050): the G4 probe under WP by `g4-probe`, the second
+G11 probe by `g11-probe`, through `g11_probe.py`, which runs WP and reads its
+output against the prediction, the G13 probe by `g13-probe`, through
+`g13_probe.py`, which runs Eva and WP and reads them the same way, and the G19
+probe by `g19-probe`, through `g19_probe.py`, which runs WP on
 `p_loop_frame_bhv.c` and reads it the same way; its first run also wrote the
 contracts G19's and G20's decisions recommend into two copies of
 `core/region.h` and ran WP on them and on the header, before the repair

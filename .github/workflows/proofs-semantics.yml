@@ -205,7 +205,7 @@ jobs:
   #       empty frame for every callback, and the 26 other goals at the
   #       calls through the pointer were false for some admitted callbacks
   #       (tools/probes/verify-039/p_combinator_callback.c); under the new
-  #       contracts they close (g11-probe.yml run #1). Every non-combinator
+  #       contracts they close (g11-probe.yml run #1; the job is in probes.yml since VERIFY-050). Every non-combinator
   #       function proves fully.
   #
   # The residual set is name-stable: the 6 category-(b) goals are the

@@ -170,7 +170,7 @@
  * proves after a hook from that frame, or from a model in which a hook
  * frees nothing, are argued under the rule. See
  * docs/deviations.md, VERIFY-011 and VERIFY-039 G19 and G20, and the
- * frama-c-region job in .github/workflows/cmake-multi-platform.yml.
+ * frama-c-region job in .github/workflows/proofs-core.yml.
  *
  * Quick start:
  * ────────────────────────────────────────────────────────────────────────────

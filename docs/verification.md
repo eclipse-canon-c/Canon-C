@@ -16,6 +16,20 @@ Combined verification status across all annotated headers:
 | **Proved automatic** | 65413 (99.06%)                                                                 |
 | **Unproved**         | 622 (each filed by name in `docs/deviations.md`; see per-header sections)      |
 
+*Not yet recomputed 2026-11-01 (VERIFY-052, array.h report-only).*
+`frama-c-array` runs, report-only until its runs agree, and is not in the
+card. Run 1 (23bad5e) proved 2863 / 2887, with 24 unproved: 16 inherited
+and 8 own, both sets exactly the names VERIFY-052 predicted. When it is
+enforced, the card gains a twenty-fourth unit: +20 functions and its
+pinned line. See the data/array.h section below.
+
+*Not recomputed 2026-10-31 (VERIFY-050, VERIFY-051): no pin moved.*
+VERIFY-050 moved every proof job into one workflow file per layer
+(`proofs-core.yml`, `proofs-semantics.yml`, `proofs-data.yml`), with each
+pin unchanged; the dated notes below that cite
+`cmake-multi-platform.yml` refer to the file as it was. VERIFY-051 changed
+comments only.
+
 *Recomputed 2026-10-31 (VERIFY-049, stack.h enforced from its run 3).*
 `frama-c-stack` adds a twenty-third unit: +14 functions, +5783
 obligations, +5714 proved and +69 unproved, all 69 inherited (cc-vec's) and
@@ -4476,6 +4490,43 @@ failed push or pop leaves the stack unchanged; the tests show it.
 
 ---
 
+## data/array.h (in-place contracts under -CC) — report-only
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Report-only (VERIFY-052): run 1 scored, run 2 (name stability) pending; enforced after |
+| **Baseline commit**    | 23bad5e (run 1) |
+| **Functions**          | 20 (`array_int_8_*`), contracted in the macro body; loop annotations in `fill` and `fill_all` |
+| **Proof obligations**  | 2863 / 2887 discharged automatically (run 1) |
+| **Unproved**           | 24: **16 inherited** (cc-slice's 8 memcmp-danglingness names; from cc-vec's, option's 6 and checked.h's 2) and **8 own**, both sets exactly as VERIFY-052 predicted by name; 0 Failed, 0 Invalid |
+| **Own residuals**      | 6 byte views of the elements (`as_bytes`, `as_cbytes`, `memset` in `zero` and `from_ptr`, `memcmp`'s `valid_s1`/`valid_s2` in `equal`): WP's Typed+Cast does not carry an `int` range's validity to its bytes, bitset's P4 class; 2 `memcmp` danglingness goals in `equal`, which WP does not implement (VERIFY-008 Category 3, as VERIFY-039 G13 restated it). Filed by name at enforcement. |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
+| **Driver**             | `vmacros/vdrivers/array_verify.h`: option and `DEFINE_SLICE` at `int`, then `DEFINE_ARRAY(int, 8)` |
+| **CI enforcement**     | Not yet: `.github/workflows/proofs-data.yml` (job `frama-c-array`) reports the line and both sets against the prediction without failing |
+| **MC/DC coverage**     | 42/46, four outcomes dead (`checked_mul`'s failure at `from_ptr`, `size_bytes`, `as_bytes`, `as_cbytes`), measured from `vmacros/coverage/array_cover.c` — see MCDC-020 in VERIFY-052 |
+| **CI artifact**        | `wp-proof-array`                                |
+
+array.h is the fixed-size companion of vec, with code of its own. Its
+contracts name the element count as `sizeof(x.items) / sizeof(x.items[0])`,
+since ACSL in a macro body cannot name the parameter `N`. `len` and
+`size_bytes` state only `assigns \nothing`: their value is `N`.
+
+**Defects found before the prover ran** (VERIFY-052):
+- **A1:** `copy_from(&a, &a)` was `memcpy` on one object, undefined
+  behaviour. It is now a struct assignment, defined for that case.
+- **A2:** the documentation said `CANON_OPTION` and `DEFINE_SLICE` were
+  needed only to use some functions; `DEFINE_ARRAY` always needs both.
+
+**Not claimed:** anything at another element type or size; `equal`'s
+result beyond the byte comparison it states (for element types with
+padding, bytes may differ where values do not).
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -4554,8 +4605,9 @@ Why3 needs for `-wp-prover cvc5`. The Canon-C CI installs the prebuilt
 CVC5 1.2.1 binary directly from the official cvc5 GitHub release and
 registers it with Why3 using `why3 config add-prover` (Why3 1.7.2's
 auto-detection regex only recognizes CVC5 1.0.x, so manual registration
-is required). See the `frama-c` job in `.github/workflows/cmake-multi-platform.yml` for
-the complete installation and registration procedure.
+is required). See the composite action `.github/actions/framac-setup/action.yml`,
+which every proof job uses, for the complete installation and registration
+procedure.
 
 ---
 
@@ -4595,7 +4647,10 @@ pin has moved but checked.h's, compare.h's, error.h's and lifetime.h's. The
 summary card at the top is recomputed from the same pins. The per-header
 Summary cards keep their baselines' figures; under the card of each unit whose
 pin has moved, a dated note gives its pin at CI #1373. The pins in
-`.github/workflows/cmake-multi-platform.yml` are the authority.*
+`.github/workflows/cmake-multi-platform.yml` were the authority; since
+VERIFY-050 the pins are in `proofs-core.yml`, `proofs-semantics.yml` and
+`proofs-data.yml`, and the per-unit figures of record are those of
+`docs/traceability.md`'s proof table.*
 
 ### semantics/ (complete)
 
@@ -4644,7 +4699,7 @@ discipline) recorded for deque.
 > inherited were named in advance. Those 2 were contract.h's handler pair,
 > which VERIFY-039 G14 found false as written; they closed at CI #1368.
 
-### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h, stringbuf.h enforced)
+### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h enforced; array.h report-only)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
@@ -4654,6 +4709,11 @@ discipline) recorded for deque.
 | priority_queue.h | ✅ Verified | 4645/4683 | First in-place (Shape A) data/-layer module; its core operation calls a caller-supplied function pointer from inside its loops. Comparator proved as a **verified configuration**: a `calls` clause over compare.h's 24 built-ins makes `pq_cmp_`'s frame a theorem, not an axiom; caller-supplied comparators are outside the proof. Heap order NOT claimed (built-ins ensure only -1..1). 38 residuals at CI #1375: memory.h's 31 + result's 6, the run-time checks on the callbacks' pointers, + 1 own, the comparator's `\valid_function` check, the three copies between a caller's memory and the buffer proved since VERIFY-040 round 2, `regions_overlap` stated by `\separated`; 41 at CI #1373; 77 at VERIFY-035 (4521/4598); 71 when enforced (43 inherited + 22 result + 6 own), two of the six own being same-buffer slot goals, not pointer order, which VERIFY-039 G21 closed. Enforced at CI #1290, name-identical to #1289 (VERIFY-022). MC/DC 81/82, graduated to the per-line allowlist (MCDC-014). |
 | range.h      | ✅ Verified | 2644/2652 | Module 18 and the **first prospective test of the saturation claim** (VERIFY-028 pre-registered, VERIFY-029 scored runs 1–2 and pre-registered run 3, VERIFY-030 enforced at CI #1317, name-identical to #1315/#1316). Shape A in place; thin driver interposes a contracted `option_isize` (F3 guard). Exact `range_count` proved over the whole `isize` domain. 8 residuals at CI #1373, **all inherited** (option's 6 run-time checks + checked.h's 2), **0 own**; 36 when enforced (32 option + 2 handler + 2 checked), VERIFY-039 G11 and G14 closing 28. F1/F2a/F2b/F3/F4 found by reading before the prover ran; **F5** a buffer overflow in `vec_range.h` downstream of F1. P1 (zero new arguments) held; P6 failed at run 2 — closed by a no-wraparound rewrite + two proved lemmas. MC/DC 61/62, 1 justified (MCDC-015). |
 | stringbuf.h  | ✅ Verified | 4789/4826 | Module 19 and the **second prospective test of the saturation claim** (VERIFY-031 pre-registered; VERIFY-032 scored run 2; VERIFY-033/034 closed A2 through arena.h's frame; VERIFY-035 enforced). 29 functions in place, Typed+Cast, no driver, first module with variadic definitions; 37 inherited at CI #1373 (arena.h 33 + borrow.h 4), **0 own**; 81 when enforced (arena.h 79 + borrow.h 2); zero new argument blocks; third trusted axiom (`vsnprintf`). Defects G1/G2/G3/G5/G6 fixed. MCDC-016 (136/138, two environmental rows). |
+| vec_range.h  | ✅ Verified | 5159/5204 | Module 20 (VERIFY-041): in-place contracts under `-CC`, one clause in a driver; 45 unproved, none own. MCDC-017, 38/42. |
+| vec_fmt.h    | ✅ Verified | 5239/5286 | Module 21 (VERIFY-042): in-place contracts under `-CC`; 47 unproved, 4 own, filed under VERIFY-042's two blocks. MCDC-018, 26/26. |
+| stack.h      | ✅ Verified | 5714/5783 | Module 22 (VERIFY-049): 14 macro-body contracts under `-CC`, enforced from run 3; 69 unproved, all cc-vec's, none own. MCDC-019, 5/6. |
+| array.h      | Report-only | 2863/2887 | Module 23 when enforced (VERIFY-052): 20 macro-body contracts under `-CC`; run 1's 24 unproved are 16 inherited and 8 own, as predicted by name. MCDC-020, 42/46. |
+| queue.h      | Reviewed (light) | — | Wraps deque's verified functions; no WP unit of its own (VERIFY-051). |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 
 ### algo/ (longer term)

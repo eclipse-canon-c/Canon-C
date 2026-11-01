@@ -8,9 +8,10 @@
 Executable checks of what the record reads from the tools, against the code
 they describe. Findings, predictions and scoring live in `docs/deviations.md`,
 VERIFY-040. These files are recorded probes, not tests: nothing builds them
-and the main CI ignores `tools/**`. Each probe is run by a workflow of its
-own, the count probe by `.github/workflows/count-probe.yml` and the round 3
-probe by `.github/workflows/round3-probe.yml`, through its script, which
+and the main CI ignores `tools/**`. Each probe is run by a job of
+`.github/workflows/probes.yml` (a workflow file of its own until VERIFY-050),
+the count probe by `count-probe` and the round 3 probe by `round3-probe`,
+through its script, which
 runs WP and reads its output against the prediction.
 
 Run from the repository root, with the repository's history. Exact commands

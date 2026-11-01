@@ -56,6 +56,15 @@
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | 55 instrumented (`Found 55 data files`), of which 4 are Shape-B cover TUs `option_cover`, `result_cover`, `vec_cover`, `deque_cover`; ctest registers 54 |
 
+> **Note (2026-11-01, VERIFY-052 run 1).** The latest measurement is at
+> 23bad5e; its figures are in the results table below and the note under
+> it. Fields of the card above that have changed since CI #1317: the job
+> runs on `ubuntu-24.04` (pinned since 25133fe); ctest registers 56 tests;
+> the cover TUs are eight, `option_cover`, `result_cover`, `vec_cover`,
+> `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover` and
+> `array_cover`; and the job is `coverage` in
+> `.github/workflows/analysis.yml` (VERIFY-050).
+>
 > **Note (2026-10-21, VERIFY-040 round 2).** The latest measurement is
 > CI #1375's (73a7b86), read from the coverage job's log by the maintainer:
 > MC/DC 1870/2030 (92.1%), branches 1666/1818 (91.6%), lines 2727/2814
@@ -261,10 +270,22 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 96.9%      | 2727       | 2814       |
-| Functions  | 99.6%      | 672        | 675        |
-| Branches   | 91.6%      | 1666       | 1818       |
-| MC/DC      | 92.1%      | 1870       | 2030       |
+| Lines      | 97.0%      | 2853       | 2940       |
+| Functions  | 99.6%      | 718        | 721        |
+| Branches   | 91.7%      | 1726       | 1882       |
+| MC/DC      | 92.1%      | 1979       | 2148       |
+
+> **Brought up to 23bad5e (VERIFY-052 run 1), 2026-11-01.** The MC/DC row
+> is CI's, read from the coverage job's annotation: 1979 / 2148, with
+> `array_cover.c` 42/46 (MCDC-020) and `stack_cover.c` 5/6 (MCDC-019).
+> The lines, functions and branches rows were measured in this session by
+> running the coverage job's own steps (gcov-14 and lcov on Ubuntu 24.04,
+> the job's flags) on 23bad5e's tree. That reproduction gives CI's MC/DC
+> exactly, at the baseline (1937 / 2102) and here, and its percentages
+> equal the History rows' since VERIFY-041 (97.0%, 99.6%, 91.7%); its counts
+> were not compared with a CI log. Since CI #1375's transcription below the
+> table has gained vec_range.h (MCDC-017), vec_fmt.h (MCDC-018), stack.h
+> (MCDC-019) and array.h (MCDC-020), each through a cover TU.
 
 > **Transcribed from CI #1375's coverage job (run 2026-10-21), 2026-10-21.**
 > All four rows are that run's own figures, read from its log by the
@@ -765,6 +786,17 @@ by methodology):
   `test/data/vec_fmt_test.c` are filtered out of the table, like every test
   file; the cover TU stamps the conditions outside `test/`.
 
+- **stack.h: 5/6**, measured from `vmacros/coverage/stack_cover.c`
+  (MCDC-019, VERIFY-049). The six outcomes are `peek`'s two decisions and
+  `peek_option`'s one; the miss is `peek`'s `!last` true, dead (a
+  non-empty stack has a top element). The rest of stack.h is calls to vec.
+
+- **array.h: 91.3% (42/46)**, measured from
+  `vmacros/coverage/array_cover.c` (MCDC-020, VERIFY-052), as measured
+  locally before the TU was pushed. The four misses are `checked_mul`'s
+  failure at `from_ptr`, `size_bytes`, `as_bytes` and `as_cbytes`, dead:
+  the product is the size of an object that exists.
+
 - **vec_range.h: 90.5% (38/42)**, measured from
   `vmacros/coverage/vec_range_cover.c` (MCDC-017): `DEFINE_VEC_RANGE` at
   `int` and at `u64`, outside `test/`. Before it, the header had no row: its
@@ -968,6 +1000,11 @@ and after the paragraphs below say where a reading here no longer holds.
 | vec_fmt.h  | 2         |              5286 | 5239 (99.11%) | 47       | VERIFY-042   |
 | stack.h    | 14        |              5783 | 5714 (98.81%) | 69       | VERIFY-049   |
 | **Total**  | **474**   | **66039**         | **65417 (99.06%)**| **622**  |              |
+
+*array.h, 2026-11-01 (VERIFY-052).* Not in the table yet: `frama-c-array`
+is report-only. Run 1 (23bad5e) proved 2863 / 2887, with 24 unproved, 16
+inherited and 8 own, as predicted by name. Its row is added when the job is
+enforced.
 
 *Brought to the pins again 2026-10-31 (VERIFY-049; Frama-C stack #2).* stack.h's
 row is new: `frama-c-stack`, pinned at run 2 and enforced from run 3, 5714 /
@@ -1772,6 +1809,8 @@ unprovable by construction — cites the coverage stream as its
 | 2026-10-28 → 10-30 | 873ed2e → (VERIFY-047) | #1390 → #1395 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **Platform additions** (VERIFY-043 to VERIFY-047), no pin moved, coverage totals unchanged. Test matrix: musl and AArch64 Linux (043); C11, C17 and C23 (044, after fixing `CANON_RESULT(bool, …)`'s pasted name and the clash with C23's `unreachable`, now `canon_unreachable`); big-endian s390x under qemu (045, bitset's byte order documented); bare-metal Cortex-M compile check (046, `error_in_range` under short enums). WP: `memory.h` and `bits.h` at the LLP64 machine model (047): the same 31 and 12 residuals as at x86_64, by name, enforced. CI #1394 did not start (the workflow file passed GitHub's 500 KB limit); the platform jobs moved to `platforms.yml`. MISRA 54 → 55, from cppcheck's reading of `_Bool` (044). |
 | 2026-10-30 | 362df2e → 834a373 | #1396 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **VERIFY-048** — the embedded check widened: picolibc on Cortex-M0+/M4, RISC-V RV32 and RV64 (picolibc), and the platform tiers on AVR (16-bit `size_t`). Found: avr-gcc's default 4-byte `double` is refused at `types.h` while the README named AVR a Tier 0 target (docs corrected: `-mdouble=64`), and `slice.h` was listed under Tier 1 though it compiles at 16-bit. `frama-c-win64` enforced (VERIFY-047). No pin moved. |
 | 2026-10-31 | 955d49c → (VERIFY-049) | #1397 → #1398 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **stack.h** (VERIFY-049), module 22: 14 macro-body contracts, 5714/5783, all 69 residuals cc-vec's, none own (run 1 left 7 per-behaviour frames, removed at run 2). Found first: `DECLARE_VEC`/`DECLARE_DEQUE` never compiled, so separate compilation of vec, deque, stack and queue had never been built (now tested). MC/DC 1937/2102 with `stack_cover.c` 5/6 (MCDC-019). |
+| 2026-10-31 | 9328398 → 6feed52 | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **VERIFY-050 and VERIFY-051.** CI reorganised: 14 workflow files become 11, numbered in reading order, one proof file per layer, each job's result posted as an annotation; no job's gates or pins changed. queue.h on the light treatment: an aliasing precondition documented at queue's and deque's peek and pop. No pin or coverage figure moved. |
+| 2026-11-01 | 6feed52 → 23bad5e | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h** (VERIFY-052, MCDC-020), run 1, report-only: 20 macro-body contracts, 2863/2887, 24 unproved (16 inherited, 8 own), both sets as predicted by name. Found first: `copy_from(&a, &a)` was `memcpy` on one object (A1, now a struct assignment), and `DEFINE_ARRAY`'s requirements were understated (A2). MC/DC 1979/2148 with `array_cover.c` 42/46; lines, functions and branches from the job's steps run locally. |
 
 > **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** The bitset row of
 > 2026-08-27 needs three corrections. Its result (2) holds for E1 and not for

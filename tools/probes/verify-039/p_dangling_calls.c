@@ -20,7 +20,7 @@
  *
  * Each entry point frees a block, keeps its address in two pointer
  * objects, p and q, and compares their bytes. Run with Eva, one entry point
- * at a time (-main), as .github/workflows/g13-probe.yml does. On the
+ * at a time (-main), as the g13-probe job of .github/workflows/probes.yml does. On the
  * contracts before the repair the probe predicted, and run #1 found, for
  * each, that memcmp's danglingness:s1 is invalid, that every other
  * precondition Eva evaluates is valid, danglingness:s2 aside, and that the

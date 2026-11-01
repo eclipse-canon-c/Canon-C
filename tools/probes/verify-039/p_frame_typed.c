@@ -37,7 +37,7 @@
  * Expected: all three `_frame` claims VIOLATED, all three `_zero` claims
  * hold; exit 0 (exit 1 if C behaves otherwise), sanitizers clean.
  *
- * With WP: .github/workflows/g4-probe.yml, under the units' own options and
+ * With WP: the g4-probe job of .github/workflows/probes.yml, under the units' own options and
  * restricted to the six named postconditions (-wp-prop). main() is outside
  * the analysed code (Frama-C defines __FRAMAC__). The predicted result is in
  * docs/deviations.md, VERIFY-039 G4, committed before this file.

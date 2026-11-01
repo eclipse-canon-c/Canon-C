@@ -269,13 +269,17 @@ Shape-B entry in the algo layer.
 | `option_verify.h` | `semantics/option/` | B (confirmed)  | ✅ `vmacros/coverage/option_cover.c` (landed, 96.7%, MCDC-006) |
 | `result_verify.h` | `semantics/result/` | B (confirmed)  | ✅ `vmacros/coverage/result_cover.c` (landed, 100%, 28/28, MCDC-007) |
 
-### data/ (4)
+### data/ (8)
 
 | Driver              | Verifies module  | Shape            | Cover TU (MC/DC)                 |
 |---------------------|------------------|------------------|---------------------------------|
 | `vec_verify.h`      | `data/vec/`      | B (confirmed)    | ✅ `vmacros/coverage/vec_cover.c` (landed, 98.1%, 155/158, MCDC-010) |
 | `deque_verify.h`    | `data/deque/`    | B (confirmed)    | ✅ `vmacros/coverage/deque_cover.c` (landed, 100%, 82/82, MCDC-011) |
 | `bitset_verify.h`   | `data/bitset.h`  | **Interposition** — see below | — not a cover TU; `bitset.h` is measured directly (134/138 since VERIFY-040 round 2, 130/134 before, MCDC-012) |
+| `vec_range_verify.h` | `data/vec/vec_range.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_range_cover.c` (90.5%, 38/42, MCDC-017) |
+| `vec_fmt_verify.h`  | `data/vec/vec_fmt.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_fmt_cover.c` (100%, 26/26, MCDC-018) |
+| `stack_verify.h`    | `data/stack.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/stack_cover.c` (5/6, MCDC-019; the miss is dead) |
+| `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (42/46, MCDC-020; the four misses are dead); WP report-only until VERIFY-052 is enforced |
 | `hashmap_verify.h`  | `data/hashmap/`  | A (confirmed)    | — already covered via `hashmap_impl.h` |
 
 #### A third kind of driver: interposition (bitset, VERIFY-020)
@@ -378,11 +382,23 @@ the multi-file split, so they are a distinct category and their handling is an
 open decision (annotate in place where a non-macro surface exists, give them
 their own driver, or document-only per the existing macro-disposition rule):
 
-- `DEFINE_SLICE` in `core/slice.h`
+> **Note (2026-11-01).** For four of them the decision has since been made.
+> Three (slice, stack, array) have contracts written in the macro body and
+> proved under `-CC` (VERIFY-025), through a driver that instantiates the
+> family. The queue wraps deque's verified functions and was reviewed
+> without a unit of its own (VERIFY-051). The list marks which. The rest
+> are still open.
+
+- `DEFINE_SLICE` in `core/slice.h` — since VERIFY-025 its contracts are in
+  the macro body and proved under `-CC` (the `-CC` workflow, family slice)
 - `DEFINE_OWNED` / `CANON_DROP` in `core/ownership.h`
-- `DEFINE_ARRAY` in `data/array.h`
-- `DECLARE_QUEUE` in `data/queue.h`
-- `DECLARE_STACK` in `data/stack.h`
+- `DEFINE_ARRAY` in `data/array.h` — contracts in the macro body, proved
+  under `-CC` by `frama-c-array` (VERIFY-052; report-only until enforced)
+- `DEFINE_QUEUE` / `DECLARE_QUEUE` in `data/queue.h` — wrappers over deque,
+  reviewed on the light treatment (VERIFY-051); no WP unit of its own
+- `DEFINE_STACK` / `DECLARE_STACK` in `data/stack.h` — `DEFINE_STACK`'s
+  contracts are in the macro body, proved under `-CC` by `frama-c-stack`
+  (VERIFY-049, enforced)
 - `DEFINE_BORROWED_SLICE` in `semantics/borrow.h` — note: borrow.h's
   **non-macro** surface (24 functions) is now WP-verified in place
   (VERIFY-016), the same in-place-surface + parked-family structure

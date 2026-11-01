@@ -33,7 +33,7 @@
  * the frame as the loop's effect on every path. Of g()'s goals it proves all
  * but the frame's at the write, checked under nonzero's assumption, and
  * proves g()'s postcondition from the same frame. The probe runs WP 29 on
- * both (g19-probe.yml, report F), predicted before it ran (VERIFY-039, "G19
+ * both (the g19-probe job, report F), predicted before it ran (VERIFY-039, "G19
  * — committed prediction for the probe").
  *
  * main() calls each with x == 0 and with x != 0 and prints whether the

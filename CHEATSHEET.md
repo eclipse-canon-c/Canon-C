@@ -759,11 +759,12 @@ i32* p = slice_i32_at(s, i);            /* NULL if out of bounds */
 > `DEFINE_SLICE(T)` is invoked once per element type at file scope to generate
 > the `slice_T` family.
 >
-> Honesty note: the `DEFINE_SLICE`-generated functions are validated by testing
-> and fuzzing but are **not** WP-verified in the current baseline (the
-> preprocessor strips ACSL annotations from macro bodies — VERIFY-007). The
-> `bytes_t` / `cbytes_t` / `str_t` functions in case 1 *are* proved; if you need
-> the verified path specifically, prefer the byte-view form.
+> Verification note: the `DEFINE_SLICE`-generated functions carry their
+> contracts in the macro body. They are proved when the unit is preprocessed
+> with `-CC` (VERIFY-025: the `-CC` workflow proves them at `i32`, and
+> `frama-c-array` at `int`); under Frama-C's default `-C` the contracts are
+> stripped before expansion (VERIFY-007). The `bytes_t` / `cbytes_t` / `str_t`
+> functions in case 1 are proved under either.
 
 </details>
 

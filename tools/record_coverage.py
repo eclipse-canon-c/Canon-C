@@ -77,7 +77,9 @@ are no longer pending, and the push that scores the change restates the
 record. A REV that git cannot read exits 2.
 
 Sources:
-  - .github/workflows/cmake-multi-platform.yml   CHECKS=( / INHERITED=( / PIN_NAMES=( arrays,
+  - .github/workflows/proofs-{core,semantics,data}.yml (cmake-multi-platform.yml
+                                                  before VERIFY-050)
+                                                  CHECKS=( / INHERITED=( / PIN_NAMES=( arrays,
                                                   EXPECTED_GOAL_n names (frama-c-checked), and
                                                   frama-c-memory's CHECKS for
                                                   frama-c-priority-queue, which pins

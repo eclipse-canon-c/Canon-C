@@ -195,21 +195,33 @@ now excluded from the coverage *run*, and untouched files stop moving.
   the rules and is not a qualified checker. For certification, a qualified
   tool (Polyspace, LDRA, PC-lint, Parasoft) is required. The workflow says
   this at the job that produces the number.
-- **Not a defect-free library.** It claims that 54 findings remain (53 at
-  the campaign's close, plus VERIFY-031's axiom declaration), each one
+- **Not a defect-free library.** It claims that 55 findings remain (53 at
+  the campaign's close; 54 with VERIFY-031's axiom declaration; 55 since
+  VERIFY-044, see the note under the next heading), each one
   classified, and that the instrument producing that number is itself tested
   — the `canary/misra_canary.h` carries three intentional violations and the
   job fails if they are not detected, because a silently-broken addon
   otherwise reports a fake-green zero.
-- **Not that the remaining 54 are a backlog.** See below.
+- **Not that the remaining 55 are a backlog.** See below.
 
 ---
 
 ## The remaining 53, and why they are not a to-do list
 
-*Current count 54 (2026-10-02, VERIFY-031): the 53 described here plus one
-more 21.2 — the `21.2 x2` block below is `x3` today. Nothing else in this
-section changes.*
+**Current count: 55** (2026-11-01; unchanged since VERIFY-044, and the
+`misra` job's annotation reads `real 55`). Two steps from the 53 described
+here:
+- 54 (2026-10-02, VERIFY-031): one more 21.2, so the `21.2 x2` block below
+  is `x3`.
+- 55 (2026-10-29, VERIFY-044): `CANON_RESULT(_Bool, Error)` replaced
+  `bool` at eight instantiations. cppcheck does not read system headers, so
+  before it pasted `bool` as written; now it sees the compiler's names. The
+  two 5.5 went (the `5.5 x2` block below is gone), two 5.7 came at the same
+  lines (so `5.7 x12`), and one 2.3
+  came at `fold.h:164`. A 19.2 that appeared at `fold_impl.h` was deviated
+  inline (MISRA-DEV-014), as at every other instantiation.
+
+Nothing else in this section changes.
 
 The largest blocks, from the CI #1202 report:
 

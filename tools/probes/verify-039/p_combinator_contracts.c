@@ -18,7 +18,7 @@
  * recommends contracts that claim only what holds for every callback their
  * preconditions admit. WP 29 has not run on that shape and WP 25 cannot
  * stand in for it, so this probe carries the shape, for
- * .github/workflows/g11-probe.yml to run before any surface is repaired.
+ * the g11-probe job (now in .github/workflows/probes.yml) to run before any surface is repaired.
  *
  * The real shipped macro bodies, at three instantiations: option<int> as
  * vmacros/vdrivers/option_verify.h instantiates it, result<int, VErr> as
