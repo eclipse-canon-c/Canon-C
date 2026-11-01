@@ -27446,3 +27446,29 @@ C6), measured by building the new tests against the baseline headers.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Scored (2026-11-02): every prediction matched; VERIFY-053 closed
+
+Run on fd9664f: 85 jobs, all `success`, read from the annotations through
+the API.
+
+| # | result |
+|---|--------|
+| N1 | **MATCH.** Every build and test job green, Windows (MSVC, MinGW), macOS, musl, AArch64, s390x, i386, C11 to C23, Valgrind and fuzzing among them. |
+| N2 | **MATCH.** `misra` real 55. |
+| N3 | **MATCH.** Every proof job at its pin, `frama-c-array` 2863 / 2887 and `frama-c-stack` 5714 / 5783 with 0 differences among them. |
+| N4 | **MATCH.** MC/DC 1986 / 2158. |
+| N5 | **MATCH.** `embedded` 134 units at 18 configurations, 0 failed; AVR 29 / 49 / 2; `compcert` 57 / 57. |
+
+The coverage job's line, function and branch figures are not in its
+annotation. The job's steps, run here on fd9664f (they give CI's MC/DC,
+1986 / 2158), read lines 2878 / 2968 (97.0%), functions 720 / 723
+(99.6%) and branches 1734 / 1892 (91.6%).
+
+The record's baseline, 3f6099f, is the card commit as committed in this
+session; applied with `git am` it is e083310 on master, the same tree.
+
+**VERIFY-053 is closed.** The convenience layer stays unverified by WP, as
+the light treatment planned; its five memory-safety defects are fixed and
+each has a regression test. Next in the agreed order: hashmap, on the full
+treatment.

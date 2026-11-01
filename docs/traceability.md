@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-11-01                                                   |
+| **Date**           | 2026-11-02                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 0ae029f (VERIFY-052 run 2; the same figures as run 1, 23bad5e) |
-| **CI run**         | `3 · Static analysis & coverage`, run on 0ae029f             |
+| **Commit**         | fd9664f (VERIFY-053)                                         |
+| **CI run**         | `3 · Static analysis & coverage`, run on fd9664f             |
 | **CI job**         | `coverage` in `.github/workflows/analysis.yml`               |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -55,7 +55,7 @@
 | **Runner**         | ubuntu-24.04 (GitHub Actions), pinned since 25133fe          |
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | ctest registers 56 tests; 8 Shape-B cover TUs run beside them: `option_cover`, `result_cover`, `vec_cover`, `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover`, `array_cover` |
-| **Results**        | MC/DC 1979 / 2148 (92.1%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
+| **Results**        | MC/DC 1986 / 2158 (92.0%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
 
 > **Note (2026-11-01).** Until today this card described CI #1317
 > (9f7a9d0, 2026-09-29), and the notes below brought it forward one run at
@@ -270,10 +270,18 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 97.0%      | 2853       | 2940       |
-| Functions  | 99.6%      | 718        | 721        |
-| Branches   | 91.7%      | 1726       | 1882       |
-| MC/DC      | 92.1%      | 1979       | 2148       |
+| Lines      | 97.0%      | 2878       | 2968       |
+| Functions  | 99.6%      | 720        | 723        |
+| Branches   | 91.6%      | 1734       | 1892       |
+| MC/DC      | 92.0%      | 1986       | 2158       |
+
+> **Brought up to fd9664f (VERIFY-053), 2026-11-02.** MC/DC is CI's, from
+> the coverage job's annotation: 1986 / 2158. Lines, functions and
+> branches were measured by running the job's steps on the same tree, as in
+> the note below. The one row that moved is `data/convenience/dynstring.h`,
+> 84 / 110 → 91 / 120: the growth paths VERIFY-053 added, with three new
+> misses that cannot be reached (the growth arithmetic's wrap, both
+> conditions, and an allocation failure).
 
 > **Brought up to 23bad5e (VERIFY-052 run 1), 2026-11-01.** The MC/DC row
 > is CI's, read from the coverage job's annotation: 1979 / 2148, with
@@ -1814,6 +1822,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-10-31 | 9328398 → 6feed52 | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **VERIFY-050 and VERIFY-051.** CI reorganised: 14 workflow files become 11, numbered in reading order, one proof file per layer, each job's result posted as an annotation; no job's gates or pins changed. queue.h on the light treatment: an aliasing precondition documented at queue's and deque's peek and pop. No pin or coverage figure moved. |
 | 2026-11-01 | 6feed52 → 23bad5e | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h** (VERIFY-052, MCDC-020), run 1, report-only: 20 macro-body contracts, 2863/2887, 24 unproved (16 inherited, 8 own), both sets as predicted by name. Found first: `copy_from(&a, &a)` was `memcpy` on one object (A1, now a struct assignment), and `DEFINE_ARRAY`'s requirements were understated (A2). MC/DC 1979/2148 with `array_cover.c` 42/46; lines, functions and branches from the job's steps run locally. |
 | 2026-11-01 | 0ae029f → (VERIFY-052 enforced) | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h enforced** (VERIFY-052), module 23: run 2 on 0ae029f gave run 1's line and names; pinned 2863/2887 with 24 names; the 8 own filed under VERIFY-017's byte-view block (6) and VERIFY-008 Category 3 (2), no new block. Coverage as at run 1. |
+| 2026-11-02 | e083310 → fd9664f | — | v1.3.0  | 97.0%  | 99.6%     | 91.6%    | 92.0%  | **data/convenience/** (VERIFY-053), light treatment: five memory-safety defects fixed, each shown under ASan first — dynvec's unchecked size products and self-extend, smallvec's pointer into `init`'s dead frame (which the tests had patched around), dynstring's self-append and unterminated `reserve`. No proof moved. MC/DC 1986/2158, the one row moving `dynstring.h` 84/110 → 91/120. |
 
 > **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** The bitset row of
 > 2026-08-27 needs three corrections. Its result (2) holds for E1 and not for
