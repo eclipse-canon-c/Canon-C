@@ -42,28 +42,28 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-09-29                                                   |
+| **Date**           | 2026-11-01                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 9f7a9d0                                                      |
-| **CI run**         | Canon-C CI #1317                                             |
-| **CI job**         | coverage + frama-c                                           |
+| **Commit**         | 0ae029f (VERIFY-052 run 2; the same figures as run 1, 23bad5e) |
+| **CI run**         | `3 · Static analysis & coverage`, run on 0ae029f             |
+| **CI job**         | `coverage` in `.github/workflows/analysis.yml`               |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
 | **Build type**     | Debug                                                        |
 | **Flags**          | `--coverage -fcondition-coverage -DCANON_CHECKED_FORCE_FALLBACK -DCANON_BITS_FORCE_FALLBACK -DCANON_NO_REQUIRE` |
 | **Tool**           | gcov-14 --conditions (MC/DC) + lcov (branch)                |
-| **Runner**         | ubuntu-latest (GitHub Actions)                               |
+| **Runner**         | ubuntu-24.04 (GitHub Actions), pinned since 25133fe          |
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
-| **Test binaries**  | 55 instrumented (`Found 55 data files`), of which 4 are Shape-B cover TUs `option_cover`, `result_cover`, `vec_cover`, `deque_cover`; ctest registers 54 |
+| **Test binaries**  | ctest registers 56 tests; 8 Shape-B cover TUs run beside them: `option_cover`, `result_cover`, `vec_cover`, `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover`, `array_cover` |
+| **Results**        | MC/DC 1979 / 2148 (92.1%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
 
-> **Note (2026-11-01, VERIFY-052 run 1).** The latest measurement is at
-> 23bad5e; its figures are in the results table below and the note under
-> it. Fields of the card above that have changed since CI #1317: the job
-> runs on `ubuntu-24.04` (pinned since 25133fe); ctest registers 56 tests;
-> the cover TUs are eight, `option_cover`, `result_cover`, `vec_cover`,
-> `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover` and
-> `array_cover`; and the job is `coverage` in
-> `.github/workflows/analysis.yml` (VERIFY-050).
+> **Note (2026-11-01).** Until today this card described CI #1317
+> (9f7a9d0, 2026-09-29), and the notes below brought it forward one run at
+> a time. It now describes the latest run, and the notes below are history.
+> At CI #1317 it read: the CI job "coverage + frama-c", runner
+> `ubuntu-latest`, and 55 instrumented binaries (`Found 55 data files`), of
+> which 4 were cover TUs (`option_cover`, `result_cover`, `vec_cover`,
+> `deque_cover`), ctest registering 54.
 >
 > **Note (2026-10-21, VERIFY-040 round 2).** The latest measurement is
 > CI #1375's (73a7b86), read from the coverage job's log by the maintainer:
