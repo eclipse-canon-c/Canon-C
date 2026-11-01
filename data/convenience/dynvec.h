@@ -19,7 +19,9 @@
 #include <stdlib.h>
 #include "core/primitives/types.h"       /* usize, bool */
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "core/primitives/checked.h"    /* checked_mul, checked_add */
 #include "core/memory.h"                 /* mem_copy, mem_move */
+#include <stdint.h>                      /* uintptr_t */
 
 #ifdef CANON_LIFETIME_DEBUG
     #include <stdint.h>                    /* uintptr_t */
@@ -383,12 +385,18 @@ static inline void dynvec_##type##_lifetime_close_(dynvec_##type* v) { \
 static inline bool dynvec_##type##_grow(dynvec_##type* v, usize min_cap) { \
     ensure_msg(v != NULL, "dynvec_" #type "_grow: v cannot be NULL"); \
     if (!v) { return false; } \
-    usize new_cap = (v->cap == 0) \
-        ? DYNVEC_INITIAL_CAPACITY \
-        : v->cap * DYNVEC_GROWTH_FACTOR; \
+    usize new_cap = DYNVEC_INITIAL_CAPACITY; \
+    usize bytes = 0; \
+    /* VERIFY-053 C1: neither product may wrap. A wrapped byte count \
+       allocated a small buffer while cap recorded the large count. */ \
+    if ((v->cap != 0) && \
+        !checked_mul(v->cap, DYNVEC_GROWTH_FACTOR, &new_cap)) { \
+        new_cap = min_cap; \
+    } \
     if (new_cap < min_cap) { new_cap = min_cap; } \
+    if (!checked_mul(new_cap, sizeof(type), &bytes)) { return false; } \
     type* old_data = v->data; \
-    type* new_data = (type*)realloc(v->data, new_cap * sizeof(type)); \
+    type* new_data = (type*)realloc(v->data, bytes); \
     if (!new_data) { return false; } \
     v->data = new_data; \
     v->cap = new_cap; \
@@ -438,7 +446,8 @@ static inline dynvec_##type dynvec_##type##_init(void) { \
  * @return Initialized dynvec_##type with reserved capacity \
  * \
  * @post On success: result.cap == capacity, result.len == 0 \
- * @post On failure (OOM or capacity == 0): returns dynvec_##type##_init() \
+ * @post On failure (OOM, capacity == 0, or capacity * sizeof(type) beyond \
+ *       usize): returns dynvec_##type##_init() \
  * \
  * @note Call dynvec_##type##_free() when done. \
  * \
@@ -450,8 +459,11 @@ static inline dynvec_##type dynvec_##type##_init(void) { \
  */ \
 static inline dynvec_##type dynvec_##type##_with_capacity(usize capacity) { \
     dynvec_##type v = dynvec_##type##_init(); \
+    usize bytes = 0; \
     if (capacity == 0) { return v; } \
-    v.data = (type*)malloc(capacity * sizeof(type)); \
+    /* VERIFY-053 C1: a capacity whose byte count wraps is refused. */ \
+    if (!checked_mul(capacity, sizeof(type), &bytes)) { return v; } \
+    v.data = (type*)malloc(bytes); \
     if (v.data) { v.cap = capacity; } \
     return v; \
 } \
@@ -750,9 +762,12 @@ static inline void dynvec_##type##_clear(dynvec_##type* v) { \
  * @brief Appends count elements from src array, growing if needed \
  * \
  * @param v dynvec to extend \
- * @param src Source array (must point to at least count elements) \
+ * @param src Source array (must point to at least count elements). It may \
+ *            point into v's own buffer: if the buffer moves, the copy reads \
+ *            from the moved elements (VERIFY-053 C2). \
  * @param count Number of elements to append \
- * @return true on success, false on v == NULL, src == NULL, or allocation failure \
+ * @return true on success, false on v == NULL, src == NULL, len + count \
+ *         beyond usize, or allocation failure \
  * \
  * @note May allocate heap memory. \
  * @note Marked DYNVEC_NOINLINE for the same reason as push (see DYNVEC_NOINLINE \
@@ -767,10 +782,22 @@ static inline void dynvec_##type##_clear(dynvec_##type* v) { \
  */ \
 static DYNVEC_NOINLINE bool dynvec_##type##_extend( \
     dynvec_##type* v, const type* src, usize count) { \
+    usize need = 0; \
     if (!v || !src) { return false; } \
     if (count == 0) { return true; } \
-    if (v->len + count > v->cap) { \
-        if (!dynvec_##type##_grow(v, v->len + count)) { return false; } \
+    if (!checked_add(v->len, count, &need)) { return false; } \
+    if (need > v->cap) { \
+        /* VERIFY-053 C2: growth frees the old buffer, so a source inside \
+           it is re-based on the new one. The test is by address value \
+           (uintptr_t), which C defines across objects, as memory.h's \
+           mem_regions_overlap does. */ \
+        const uintptr_t s_ = (uintptr_t)src; \
+        const uintptr_t b_ = (uintptr_t)v->data; \
+        const bool inside_ = (v->data != NULL) && (s_ >= b_) && \
+            ((s_ - b_) < (uintptr_t)(v->cap * sizeof(type))); \
+        const usize off_ = inside_ ? (usize)((s_ - b_) / sizeof(type)) : 0u; \
+        if (!dynvec_##type##_grow(v, need)) { return false; } \
+        if (inside_) { src = v->data + off_; } \
     } \
     mem_copy(&v->data[v->len], src, count * sizeof(type)); \
     v->len += count; \

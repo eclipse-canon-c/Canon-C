@@ -555,6 +555,54 @@ static void dynstring_suppress_unused(void)
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
+/* ── VERIFY-053 C6: appending a string's own text, with growth ─────────── */
+/* append and append_fmt grew the buffer with realloc, which freed the old
+ * one, then read the source from it: a use after free. */
+static void test_append_from_self(void)
+{
+    DynString s = dynstring_from("abcdefg");          /* len 7, cap 8 */
+    EXPECT(dynstring_append(&s, dynstring_str(&s)));
+    EXPECT(strcmp(dynstring_str(&s), "abcdefgabcdefg") == 0);
+    dynstring_free(&s);
+
+    s = dynstring_from("abcdefg");
+    EXPECT(dynstring_append_fmt(&s, "[%s]", dynstring_str(&s)));
+    EXPECT(strcmp(dynstring_str(&s), "abcdefg[abcdefg]") == 0);
+    dynstring_free(&s);
+
+    s = dynstring_from("abcdefg");
+    EXPECT(dynstring_append_n(&s, dynstring_str(&s) + 2, 3));
+    EXPECT(strcmp(dynstring_str(&s), "abcdefgcde") == 0);
+    dynstring_free(&s);
+}
+
+/* ── VERIFY-053 C7: reserve on an empty string leaves it terminated ────── */
+static void test_reserve_then_read(void)
+{
+    DynString s = dynstring_init();
+    EXPECT(dynstring_reserve(&s, 64));
+    EXPECT(dynstring_len(&s) == 0);
+    EXPECT(dynstring_str(&s)[0] == '\0');
+    EXPECT(strlen(dynstring_str(&s)) == 0);
+    EXPECT(dynstring_append_char(&s, 'x'));
+    EXPECT(strcmp(dynstring_str(&s), "x") == 0);
+    dynstring_free(&s);
+}
+
+/* append_char grows an existing buffer through dynstring_ensure_capacity
+ * (realloc), the path the text appends no longer take (VERIFY-053). */
+static void test_append_char_grows(void)
+{
+    DynString s = dynstring_from("abc");              /* cap 4 */
+    for (int i = 0; i < 40; i++) {
+        EXPECT(dynstring_append_char(&s, (char)('a' + (i % 26))));
+    }
+    EXPECT(dynstring_len(&s) == 43);
+    EXPECT(dynstring_str(&s)[43] == '\0');
+    EXPECT(strncmp(dynstring_str(&s), "abcabcd", 7) == 0);
+    dynstring_free(&s);
+}
+
 int main(void)
 {
     (void)dynstring_suppress_unused;
@@ -562,6 +610,9 @@ int main(void)
     test_init();
     test_with_capacity();
     test_from();
+    test_append_from_self();
+    test_reserve_then_read();
+    test_append_char_grows();
     test_queries_null();
     test_append();
     test_growth();

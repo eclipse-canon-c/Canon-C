@@ -46,8 +46,12 @@
  * Memory layout:
  * ────────────────────────────────────────────────────────────────────────────
  * - inline_buf[INLINE_CAP] lives inside the struct itself
- * - data initially aliases inline_buf (using_inline == true)
- * - After spill: data points to heap or arena memory, using_inline == false
+ * - While using_inline is true the elements are in inline_buf, and data
+ *   is NULL. The active buffer is worked out from the struct at each call,
+ *   so a smallvec can be returned by value, copied and moved: a copy of an
+ *   inline smallvec is an independent copy (VERIFY-053 C3).
+ * - After spill: data points to heap or arena memory, using_inline == false.
+ *   A copy of a spilled smallvec shares that buffer; free only one of them.
  *
  * Spill rules:
  * ────────────────────────────────────────────────────────────────────────────
@@ -126,6 +130,10 @@
  * ```c
  * #include "data/convenience/smallvec.h"
  *
+ * // smallvec_##type##_as_vec names vec_##type, so the vec of the type is
+ * // defined first, with what it needs (VERIFY-053 C4):
+ * CANON_OPTION(int)
+ * DEFINE_VEC(static inline, int)
  * DEFINE_SMALLVEC(int, 8)
  *
  * // Stack-local, inline storage — zero heap allocation for <= 8 elements
@@ -272,6 +280,9 @@
  * Requirements:
  * - INLINE_CAP > 0
  * - type must be trivially copyable (mem_copy-safe)
+ * - vec_##type and vec_##type##_init must be declared first (DEFINE_VEC or
+ *   DECLARE_VEC for the type): smallvec_##type##_as_vec returns a vec_##type.
+ *   Without them DEFINE_SMALLVEC does not compile (VERIFY-053 C4).
  * - For pointer types, typedef first: typedef void* voidptr; DEFINE_SMALLVEC(voidptr, 8)
  *
  * Generated type: `smallvec_##type`
@@ -285,8 +296,8 @@
  * @brief Inline-first vector for type with INLINE_CAP elements inline \
  * \
  * Invariants: \
- * - data == inline_buf when using_inline == true \
- * - data != inline_buf when using_inline == false (heap or arena spill) \
+ * - data == NULL when using_inline == true; the elements are in inline_buf \
+ * - data is the heap or arena spill buffer when using_inline == false \
  * - len <= cap always \
  * - cap == INLINE_CAP when using_inline == true \
  * \
@@ -298,7 +309,7 @@
  * - No heap allocation unless/until a spill occurs \
  */ \
 typedef struct { \
-    type* data;             /**< Active buffer (inline_buf or heap/arena) */ \
+    type* data;             /**< Spill buffer (heap/arena); NULL while inline */ \
     usize len;              /**< Number of elements currently stored */ \
     usize cap;              /**< Capacity of active buffer in elements */ \
     Arena* arena;           /**< Spill destination (NULL = malloc) */ \
@@ -341,9 +352,9 @@ static inline void smallvec_##type##_lifetime_close_(smallvec_##type* v) { \
 /** \
  * @brief Initializes a smallvec using inline storage — no heap allocation \
  * \
- * @return Initialized smallvec_##type pointing data at inline_buf \
+ * @return Initialized smallvec_##type using its inline buffer \
  * \
- * @post v.data == v.inline_buf, v.len == 0, v.cap == (INLINE_CAP) \
+ * @post v.data == NULL, v.len == 0, v.cap == (INLINE_CAP) \
  * @post v.using_inline == true, v.arena == NULL \
  * \
  * Lifetime (CANON_LIFETIME_DEBUG): opens a fresh lifetime token. The ID \
@@ -358,7 +369,10 @@ static inline smallvec_##type smallvec_##type##_init(void) { \
     v.cap = (INLINE_CAP); \
     v.arena = NULL; \
     v.using_inline = true; \
-    v.data = v.inline_buf; \
+    /* VERIFY-053 C3: not v.inline_buf. v is returned by value, and a \
+       pointer to its inline_buf would point into this frame, gone once \
+       init returns. The active buffer is derived at each call (buf_). */ \
+    v.data = NULL; \
     smallvec_##type##_lifetime_open_(&v); \
     return v; \
 } \
@@ -385,6 +399,14 @@ static inline smallvec_##type smallvec_##type##_init_arena(Arena* arena) { \
     smallvec_##type v = smallvec_##type##_init(); \
     v.arena = arena; \
     return v; \
+} \
+\
+/* The active buffer: inline_buf while using_inline, else the spill buffer. \
+   Derived from the struct at each call, never stored (VERIFY-053 C3). The \
+   cast drops const for the accessors that return type* from a const \
+   smallvec, as data(), first() and last() did before. */ \
+static inline type* smallvec_##type##_buf_(const smallvec_##type* v) { \
+    return v->using_inline ? (type*)v->inline_buf : v->data; \
 } \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
@@ -494,7 +516,7 @@ static inline bool smallvec_##type##_using_inline(const smallvec_##type* v) { \
 static inline bool smallvec_##type##_get( \
     const smallvec_##type* v, usize i, type* out) { \
     if (!v || !out || i >= v->len) { return false; } \
-    *out = v->data[i]; \
+    *out = smallvec_##type##_buf_(v)[i]; \
     return true; \
 } \
 \
@@ -515,7 +537,7 @@ static inline type smallvec_##type##_get_unchecked( \
     const smallvec_##type* v, usize i) { \
     ensure_msg(v != NULL, "smallvec_" #type "_get_unchecked: v cannot be NULL"); \
     ensure_msg(i < v->len, "smallvec_" #type "_get_unchecked: index out of bounds"); \
-    return v->data[i]; \
+    return smallvec_##type##_buf_(v)[i]; \
 } \
 \
 /** \
@@ -525,7 +547,7 @@ static inline type smallvec_##type##_get_unchecked( \
  * @return type* — NULL if v == NULL \
  */ \
 static inline type* smallvec_##type##_data(const smallvec_##type* v) { \
-    return v ? v->data : NULL; \
+    return v ? smallvec_##type##_buf_(v) : NULL; \
 } \
 \
 /** \
@@ -534,7 +556,7 @@ static inline type* smallvec_##type##_data(const smallvec_##type* v) { \
  * @param v smallvec to query (NULL-safe) \
  */ \
 static inline type* smallvec_##type##_first(const smallvec_##type* v) { \
-    return (v && v->len > 0) ? &v->data[0] : NULL; \
+    return (v && v->len > 0) ? &smallvec_##type##_buf_(v)[0] : NULL; \
 } \
 \
 /** \
@@ -543,7 +565,7 @@ static inline type* smallvec_##type##_first(const smallvec_##type* v) { \
  * @param v smallvec to query (NULL-safe) \
  */ \
 static inline type* smallvec_##type##_last(const smallvec_##type* v) { \
-    return (v && v->len > 0) ? &v->data[v->len - 1] : NULL; \
+    return (v && v->len > 0) ? &smallvec_##type##_buf_(v)[v->len - 1] : NULL; \
 } \
 \
 /* ════════════════════════════════════════════════════════════════════════════ \
@@ -572,7 +594,7 @@ static inline bool smallvec_##type##_push( \
     if (!v) { return false; } \
     \
     if (SMALLVEC_LIKELY(v->len < v->cap)) { \
-        v->data[v->len++] = value; \
+        smallvec_##type##_buf_(v)[v->len++] = value; \
         return true; \
     } \
     \
@@ -581,7 +603,7 @@ static inline bool smallvec_##type##_push( \
     } \
     \
     if (v->len >= v->cap) { return false; } /* post-spill still full */ \
-    v->data[v->len++] = value; \
+    smallvec_##type##_buf_(v)[v->len++] = value; \
     return true; \
 } \
 \
@@ -595,7 +617,7 @@ static inline bool smallvec_##type##_push( \
 static inline bool smallvec_##type##_pop( \
     smallvec_##type* v, type* out) { \
     if (!v || !out || v->len == 0) { return false; } \
-    *out = v->data[--v->len]; \
+    *out = smallvec_##type##_buf_(v)[--v->len]; \
     return true; \
 } \
 \
@@ -627,10 +649,10 @@ static inline bool smallvec_##type##_insert( \
     } \
     \
     if (i < v->len) { \
-        mem_move(&v->data[i + 1], &v->data[i], \
+        mem_move(&smallvec_##type##_buf_(v)[i + 1], &smallvec_##type##_buf_(v)[i], \
                  (v->len - i) * sizeof(type)); \
     } \
-    v->data[i] = value; \
+    smallvec_##type##_buf_(v)[i] = value; \
     v->len++; \
     return true; \
 } \
@@ -646,9 +668,9 @@ static inline bool smallvec_##type##_insert( \
 static inline bool smallvec_##type##_remove( \
     smallvec_##type* v, usize i, type* out) { \
     if (!v || !out || i >= v->len) { return false; } \
-    *out = v->data[i]; \
+    *out = smallvec_##type##_buf_(v)[i]; \
     if (i < v->len - 1) { \
-        mem_move(&v->data[i], &v->data[i + 1], \
+        mem_move(&smallvec_##type##_buf_(v)[i], &smallvec_##type##_buf_(v)[i + 1], \
                  (v->len - i - 1) * sizeof(type)); \
     } \
     v->len--; \
@@ -683,7 +705,7 @@ static inline bool smallvec_##type##_extend( \
         } \
     } \
     \
-    mem_copy(&v->data[v->len], src, count * sizeof(type)); \
+    mem_copy(&smallvec_##type##_buf_(v)[v->len], src, count * sizeof(type)); \
     v->len += count; \
     return true; \
 } \
@@ -746,7 +768,12 @@ static inline void smallvec_##type##_free(smallvec_##type* v) { \
  * The returned vec does NOT own the buffer — do not store or outlive v. \
  * \
  * @param v smallvec to borrow from \
- * @return vec_##type backed by v->data with v->cap capacity \
+ * @return vec_##type over v's active buffer, with v->cap capacity and \
+ *         v->len elements (before VERIFY-053, C5, the view's len was 0, so \
+ *         none of v's elements were visible through it) \
+ * \
+ * @note The view's len is a copy: elements a vec function appends through \
+ *       the view are in v's buffer but not counted in v->len. \
  * \
  * @pre v != NULL — checked via require_msg() \
  * \
@@ -756,7 +783,9 @@ static inline void smallvec_##type##_free(smallvec_##type* v) { \
 static inline MANGLE_VEC_TYPE(type) smallvec_##type##_as_vec( \
     smallvec_##type* v) { \
     require_msg(v != NULL, "smallvec_" #type "_as_vec: v cannot be NULL"); \
-    return MANGLE_VEC_INIT(type)(v->data, v->cap); \
+    MANGLE_VEC_TYPE(type) w = MANGLE_VEC_INIT(type)(smallvec_##type##_buf_(v), v->cap); \
+    w.len = v->len;   /* VERIFY-053 C5: the view holds v's elements */ \
+    return w; \
 }
 
 #endif /* CANON_DATA_SMALLVEC_H */

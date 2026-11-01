@@ -23,6 +23,7 @@
 
 #include "core/primitives/types.h"       /* usize, bool */
 #include "core/primitives/contract.h"    /* require_msg, ensure_msg */
+#include "core/primitives/checked.h"    /* checked_mul */
 #include "core/memory.h"                 /* mem_copy */
 
 #ifdef CANON_LIFETIME_DEBUG
@@ -77,7 +78,9 @@
  *     copies or swaps.
  *   - dynstring_ensure_capacity() and dynstring_shrink_to_fit() RESTAMP the
  *     lifetime ID conditionally — only when realloc actually moves the
- *     buffer. Operations that don't trigger reallocation (append when cap
+ *     buffer. The text appends (append, append_fmt, append_n) restamp
+ *     whenever they grow: they allocate anew and free the old buffer after
+ *     writing, since their source may lie in it (VERIFY-053). Operations that don't trigger reallocation (append when cap
  *     is sufficient, clear, truncate) do NOT restamp because the buffer
  *     address is unchanged and existing borrows remain valid.
  *   - Restamp draws a fresh id from the per-TU counter — guaranteed
@@ -208,7 +211,8 @@ typedef struct {
 
      dynstring_lifetime_restamp_(s)
        Called by ensure_capacity and shrink_to_fit when realloc moves
-       the buffer. Draws a fresh id from the per-TU counter, guaranteed
+       the buffer, and by the text appends whenever they grow (VERIFY-053).
+       Draws a fresh id from the per-TU counter, guaranteed
        distinct from any prior id within the TU. Open flag stays true;
        DynStrings are not "closed" by reallocation — they are recycled.
 
@@ -291,6 +295,45 @@ static inline void dynstring_lifetime_close_(DynString* s) {
    Internal helper — capacity management
    ════════════════════════════════════════════════════════════════════════════ */
 
+/* The capacity a growth to at least min_cap allocates: the initial capacity,
+   or the current one multiplied by the growth factor, and min_cap if larger.
+   A product that would wrap gives min_cap (VERIFY-053). */
+static inline usize dynstring_next_cap_(const DynString* s, usize min_cap) {
+    usize new_cap = DYNSTRING_INITIAL_CAPACITY;
+    if ((s->cap != 0u) &&
+        !checked_mul(s->cap, DYNSTRING_GROWTH_FACTOR, &new_cap)) {
+        new_cap = min_cap;
+    }
+    if (new_cap < min_cap) { new_cap = min_cap; }
+    return new_cap;
+}
+
+/* Growth for the appends whose source may lie in s's own buffer
+   (VERIFY-053 C6): the new buffer is allocated and the contents copied,
+   and the old buffer is handed back in *old_out instead of freed, so that a
+   source in it stays readable until the caller has written. The caller
+   frees *old_out (free(NULL) is a no-op). The buffer always moves, so the
+   lifetime is restamped. */
+static inline bool dynstring_grow_detached_(DynString* s, usize min_cap,
+                                            char** old_out) {
+    *old_out = NULL;
+    if (s->cap >= min_cap) { return true; }
+    usize new_cap = dynstring_next_cap_(s, min_cap);
+    /* cppcheck-suppress misra-c2012-21.3 ; MISRA-DEV-015 */
+    char* new_data = (char*)malloc(new_cap);
+    if (!new_data) { return false; }
+    if (s->data != NULL) {
+        mem_copy(new_data, s->data, s->len + 1u);
+    } else {
+        new_data[0] = '\0';
+    }
+    *old_out = s->data;
+    s->data = new_data;
+    s->cap = new_cap;
+    dynstring_lifetime_restamp_(s);
+    return true;
+}
+
 /**
  * @brief Ensures the buffer has at least min_cap bytes of capacity
  *
@@ -320,17 +363,16 @@ static inline bool dynstring_ensure_capacity(DynString* s, usize min_cap) {
     if (!s) { return false; }
     if (s->cap >= min_cap) { return true; }
 
-    usize new_cap = (s->cap == 0u)
-        ? DYNSTRING_INITIAL_CAPACITY
-        : (s->cap * DYNSTRING_GROWTH_FACTOR);
-
-    if (new_cap < min_cap) { new_cap = min_cap; }
+    usize new_cap = dynstring_next_cap_(s, min_cap);
 
     char* old_data = s->data;
     /* cppcheck-suppress misra-c2012-21.3 ; MISRA-DEV-015 */
     char* new_data = (char*)realloc(s->data, new_cap);
     if (!new_data) { return false; }
 
+    /* VERIFY-053 C7: a first allocation holds the empty string, so that
+       dynstring_str() after reserve() reads a terminated string. */
+    if (old_data == NULL) { new_data[0] = '\0'; }
     s->data = new_data;
     s->cap = new_cap;
     if (new_data != old_data) {
@@ -517,9 +559,12 @@ static inline const char* dynstring_str(const DynString* s) {
  *
  * @note May allocate heap memory.
  *
- * Lifetime (CANON_LIFETIME_DEBUG): if growth was triggered AND the buffer
- * was relocated, the lifetime ID is restamped (via ensure_capacity). If
- * no growth was needed, the lifetime ID is preserved.
+ * str may point into s's own buffer (dynstring_str(s) included): when the
+ * append grows, the old buffer is freed only after the copy (VERIFY-053 C6).
+ *
+ * Lifetime (CANON_LIFETIME_DEBUG): if growth was triggered, the buffer
+ * always moves (a new allocation, the old freed after the copy) and the
+ * lifetime ID is restamped. If no growth was needed, it is preserved.
  *
  * Performance:
  * - Time: Amortized O(strlen(str)), worst-case O(len + strlen(str)) on realloc
@@ -533,13 +578,16 @@ static inline bool dynstring_append(DynString* s, const char* str) {
     if (add_len == 0u) { return true; }
 
     usize required_cap = s->len + add_len + 1u;
-    if (DYNSTRING_UNLIKELY(!dynstring_ensure_capacity(s, required_cap))) {
+    char* old_ = NULL;
+    if (DYNSTRING_UNLIKELY(!dynstring_grow_detached_(s, required_cap, &old_))) {
         return false;
     }
 
     mem_copy(s->data + s->len, str, add_len);
     s->len += add_len;
     s->data[s->len] = '\0';
+    /* cppcheck-suppress misra-c2012-21.3 ; MISRA-DEV-015 */
+    free(old_);   /* after the copy: str may have pointed into it */
     return true;
 }
 
@@ -590,8 +638,11 @@ static inline bool dynstring_append_char(DynString* s, char c) {
  *
  * @note May allocate heap memory.
  *
+ * The source may point into s's own buffer: when the append grows, the
+ * old buffer is freed only after the write (VERIFY-053 C6).
+ *
  * Lifetime (CANON_LIFETIME_DEBUG): same as dynstring_append — restamps
- * only if realloc moves the buffer.
+ * when the append grows.
  *
  * Performance:
  * - Time: O(n) where n = formatted string length — two vsnprintf passes
@@ -608,13 +659,19 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
     if (needed < 0) { return false; }
 
     usize required_cap = s->len + (usize)needed + 1u;
-    if (!dynstring_ensure_capacity(s, required_cap)) { return false; }
+    char* old_ = NULL;
+    if (!dynstring_grow_detached_(s, required_cap, &old_)) { return false; }
 
     va_start(args, fmt);
     int written = vsnprintf(s->data + s->len, s->cap - s->len, fmt, args);
     va_end(args);
+    /* cppcheck-suppress misra-c2012-21.3 ; MISRA-DEV-015 */
+    free(old_);   /* after the write: an argument may have pointed into it */
 
-    if ((written < 0) || (written != needed)) { return false; }
+    if ((written < 0) || (written != needed)) {
+        s->data[s->len] = '\0';   /* the string stays as it was */
+        return false;
+    }
 
     s->len += (usize)written;
     return true;
@@ -632,8 +689,11 @@ static inline bool dynstring_append_fmt(DynString* s, const char* fmt, ...) {
  *
  * @note May allocate heap memory.
  *
+ * The source may point into s's own buffer: when the append grows, the
+ * old buffer is freed only after the write (VERIFY-053 C6).
+ *
  * Lifetime (CANON_LIFETIME_DEBUG): same as dynstring_append — restamps
- * only if realloc moves the buffer.
+ * when the append grows.
  *
  * Performance:
  * - Time: Amortized O(min(n, strlen(str)))
@@ -649,11 +709,14 @@ static inline bool dynstring_append_n(DynString* s, const char* str, usize n) {
     if (actual_len == 0u) { return true; }
 
     usize required_cap = s->len + actual_len + 1u;
-    if (!dynstring_ensure_capacity(s, required_cap)) { return false; }
+    char* old_ = NULL;
+    if (!dynstring_grow_detached_(s, required_cap, &old_)) { return false; }
 
     mem_copy(s->data + s->len, str, actual_len);
     s->len += actual_len;
     s->data[s->len] = '\0';
+    /* cppcheck-suppress misra-c2012-21.3 ; MISRA-DEV-015 */
+    free(old_);   /* after the copy: str may have pointed into it */
     return true;
 }
 

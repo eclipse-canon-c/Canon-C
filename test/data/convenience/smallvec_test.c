@@ -136,13 +136,13 @@ static int g_failed = 0;
 static void test_init(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
 
     EXPECT(v.len          == 0);
     EXPECT(v.cap          == 4);  /* INLINE_CAP */
     EXPECT(v.arena        == NULL);
     EXPECT(v.using_inline == true);
-    EXPECT(v.data         == v.inline_buf);
+    EXPECT(v.data         == NULL);   /* VERIFY-053 C3: no stored self-pointer */
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
 
     EXPECT(smallvec_int_is_empty(&v));
     EXPECT(smallvec_int_using_inline(&v));
@@ -171,7 +171,6 @@ static void test_init_arena(void)
     arena_init(&arena, abuf, sizeof(abuf));
 
     smallvec_int v = smallvec_int_init_arena(&arena);
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     EXPECT(v.arena        == &arena);
     EXPECT(v.using_inline == true);
     EXPECT(v.len          == 0);
@@ -183,7 +182,6 @@ static void test_init_arena(void)
 static void test_push_inline(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
 
     EXPECT(smallvec_int_push(&v, 10));
     EXPECT(smallvec_int_push(&v, 20));
@@ -191,7 +189,7 @@ static void test_push_inline(void)
     EXPECT(smallvec_int_push(&v, 40));
     EXPECT(v.len == 4);
     EXPECT(v.using_inline == true);  /* still inline — exactly at capacity */
-    EXPECT(v.data == v.inline_buf);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
 
     /* NULL returns false */
     EXPECT(!smallvec_int_push(NULL, 99));
@@ -203,7 +201,6 @@ static void test_push_inline(void)
 static void test_spill_heap(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     /* Fill inline buffer */
     EXPECT(smallvec_int_push(&v, 1));
     EXPECT(smallvec_int_push(&v, 2));
@@ -235,9 +232,8 @@ static void test_spill_heap(void)
     EXPECT(v.len == 8); /* unchanged */
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     EXPECT(v.using_inline == true); /* free reinitializes inline */
-    EXPECT(v.data == v.inline_buf);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
     EXPECT(v.len  == 0);
 }
 
@@ -249,7 +245,6 @@ static void test_spill_arena(void)
     arena_init(&arena, abuf, sizeof(abuf));
 
     smallvec_int v = smallvec_int_init_arena(&arena);
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     EXPECT(smallvec_int_push(&v, 10));
     EXPECT(smallvec_int_push(&v, 20));
     EXPECT(smallvec_int_push(&v, 30));
@@ -269,7 +264,6 @@ static void test_spill_arena(void)
 
     /* free() with arena does NOT call free() — no-op for spill memory */
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     EXPECT(v.using_inline == true); /* reinitializes inline */
 }
 
@@ -277,7 +271,6 @@ static void test_spill_arena(void)
 static void test_pop(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     smallvec_int_push(&v, 100);
     smallvec_int_push(&v, 200);
     smallvec_int_push(&v, 300);
@@ -296,7 +289,6 @@ static void test_pop(void)
 static void test_get(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     for (int i = 0; i < 4; i++) smallvec_int_push(&v, i * 10);
 
     int val = 0;
@@ -314,7 +306,6 @@ static void test_get(void)
 static void test_data_first_last(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     EXPECT(smallvec_int_data(&v)  == v.inline_buf);
     EXPECT(smallvec_int_first(&v) == NULL);
     EXPECT(smallvec_int_last(&v)  == NULL);
@@ -336,7 +327,6 @@ static void test_data_first_last(void)
 static void test_insert(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     smallvec_int_push(&v, 1);
     smallvec_int_push(&v, 2);
     smallvec_int_push(&v, 4);
@@ -359,14 +349,12 @@ static void test_insert(void)
     EXPECT(!smallvec_int_insert(NULL, 0, 0));
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 }
 
 /* ── remove ──────────────────────────────────────────────────────────────── */
 static void test_remove(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     for (int i = 0; i < 4; i++) smallvec_int_push(&v, i); /* 0,1,2,3 */
 
     int out = 0;
@@ -393,7 +381,6 @@ static void test_remove(void)
 static void test_extend(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     int src3[] = {10, 20, 30};
 
     /* 3 elements fit inline */
@@ -421,14 +408,12 @@ static void test_extend(void)
     EXPECT(v.len == 5);
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 }
 
 /* ── clear ───────────────────────────────────────────────────────────────── */
 static void test_clear(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     smallvec_int_push(&v, 1);
     smallvec_int_push(&v, 2);
     smallvec_int_push(&v, 3);
@@ -450,15 +435,13 @@ static void test_clear(void)
 static void test_free(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     /* Spill to heap */
     for (int i = 0; i < 5; i++) smallvec_int_push(&v, i);
     EXPECT(v.using_inline == false);
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     EXPECT(v.using_inline == true);
-    EXPECT(v.data == v.inline_buf);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
     EXPECT(v.len  == 0);
     EXPECT(v.cap  == 4);
 
@@ -474,49 +457,83 @@ static void test_free(void)
 static void test_inline_invariant(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
 
-    /* Before spill: data always aliases inline_buf */
-    EXPECT(v.data == v.inline_buf);
+    /* Before spill: the active buffer is inline_buf */
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
     smallvec_int_push(&v, 1);
-    EXPECT(v.data == v.inline_buf);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
     smallvec_int_push(&v, 2);
-    EXPECT(v.data == v.inline_buf);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
     smallvec_int_push(&v, 3);
-    EXPECT(v.data == v.inline_buf);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
     smallvec_int_push(&v, 4); /* still inline at cap */
-    EXPECT(v.data == v.inline_buf && v.using_inline == true);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf && v.using_inline == true);
 
-    /* After spill: data no longer aliases inline_buf */
+    /* After spill: the active buffer is the spill buffer, data */
     smallvec_int_push(&v, 5);
     EXPECT(v.data != v.inline_buf && v.using_inline == false);
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 }
 
 /* ── as_vec interop ──────────────────────────────────────────────────────── */
 static void test_as_vec(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
     smallvec_int_push(&v, 10);
     smallvec_int_push(&v, 20);
     smallvec_int_push(&v, 30);
 
     vec_int vv = smallvec_int_as_vec(&v);
-    /* Borrowed view — same data pointer, same capacity */
-    EXPECT(vv.data == v.data);
+    /* Borrowed view — same buffer, same capacity */
+    EXPECT(vv.data == smallvec_int_data(&v));
     EXPECT(vv.cap  == v.cap);
-    /* len is 0 in the view (vec starts logically empty) */
-    EXPECT(vv.len  == 0);
+    /* VERIFY-053 C5: the view holds v's elements. It read len 0 before,
+       which this test asserted, contrary to the header's "pass a
+       smallvec's contents to any API that accepts a vec". */
+    EXPECT(vv.len  == 3);
+    EXPECT(vv.data[0] == 10 && vv.data[2] == 30);
+}
+
+/* ── VERIFY-053 C3: by-value construction and copies ─────────────────────── */
+/* smallvec_init() returned a struct whose data pointed at inline_buf in
+ * init's own frame: every use after return was undefined (a plain -O2 build
+ * segfaulted on the quick start), and the tests carried a "fixup" line after
+ * each init. Now the active buffer is derived from the struct. */
+static bool smallvec_int_set_check_(smallvec_int* c)
+{
+    int out = 0;
+    return smallvec_int_pop(c, &out) && out == 3 &&
+           smallvec_int_push(c, 9) && smallvec_int_push(c, 8);
+}
+
+static smallvec_int make_three_(void)
+{
+    smallvec_int v = smallvec_int_init();
+    smallvec_int_push(&v, 1);
+    smallvec_int_push(&v, 2);
+    smallvec_int_push(&v, 3);
+    return v;                                 /* returned by value, inline */
+}
+
+static void test_by_value_and_copy(void)
+{
+    smallvec_int v = make_three_();
+    int x = 0;
+    EXPECT(smallvec_int_len(&v) == 3);
+    EXPECT(smallvec_int_get(&v, 2, &x) && x == 3);
+    EXPECT(smallvec_int_data(&v) == v.inline_buf);
+
+    smallvec_int c = v;                       /* a copy of an inline smallvec */
+    EXPECT(smallvec_int_set_check_(&c));
+    EXPECT(smallvec_int_get(&v, 0, &x) && x == 1);   /* the original unchanged */
+    EXPECT(smallvec_int_data(&c) == c.inline_buf);
 }
 
 /* ── Point struct instantiation ──────────────────────────────────────────── */
 static void test_point(void)
 {
     smallvec_Point v = smallvec_Point_init();
-    v.data = v.inline_buf;
     EXPECT(v.cap == 2 && v.using_inline == true);
 
     Point p1 = {1, 2};
@@ -569,7 +586,6 @@ static void test_point(void)
 static void test_lifetime_init_opens_token(void)
 {
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup */
     EXPECT(v.lt.open == true);
     EXPECT(v.lt.id != REGION_ID_STATIC);
     /* No free needed — still inline. */
@@ -582,7 +598,6 @@ static void test_lifetime_init_arena_opens_token(void)
     arena_init(&arena, abuf, sizeof(abuf));
 
     smallvec_int v = smallvec_int_init_arena(&arena);
-    v.data = v.inline_buf; /* ASan fixup */
     EXPECT(v.lt.open == true);
     EXPECT(v.lt.id != REGION_ID_STATIC);
     EXPECT(v.arena == &arena);
@@ -594,7 +609,6 @@ static void test_lifetime_spill_restamps_id(void)
     /* Fill inline buffer, then force spill on the 5th push. spill is the
      * one and only restamp event in smallvec's lifecycle. */
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup */
     region_id_t before = v.lt.id;
 
     for (int i = 0; i < 4; i++) {
@@ -613,7 +627,6 @@ static void test_lifetime_spill_restamps_id(void)
     EXPECT(v.lt.open == true);    /* spill recycles, does not close */
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup */
 }
 
 static void test_lifetime_clear_preserves_id(void)
@@ -622,7 +635,6 @@ static void test_lifetime_clear_preserves_id(void)
      * not catch use-of-removed-element. This test documents that contract
      * — if a future refactor accidentally restamps on clear, this fires. */
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup */
     smallvec_int_push(&v, 1);
     smallvec_int_push(&v, 2);
     region_id_t before = v.lt.id;
@@ -639,7 +651,6 @@ static void test_lifetime_free_closes_then_reopens(void)
      * relative to the pre-free value — a borrow that captured the
      * pre-free id sees a different id on the next read. */
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup */
 
     /* Force spill so the heap-free path is exercised. */
     for (int i = 0; i < 5; i++) {
@@ -650,7 +661,6 @@ static void test_lifetime_free_closes_then_reopens(void)
     region_id_t before_free = v.lt.id;
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
 
     /* free → close → re-init → open: lt.open ends up true. */
     EXPECT(v.lt.open == true);
@@ -706,6 +716,7 @@ int main(void)
     (void)smallvec_suppress_unused;
 
     test_init();
+    test_by_value_and_copy();
     test_init_arena();
     test_push_inline();
     test_spill_heap();
@@ -825,7 +836,6 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     (void)smallvec_fuzz_suppress_unused;
 
     smallvec_int v = smallvec_int_init();
-    v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */
 
     int    ref[FUZZ_REF_MAX];
     usize  ref_count = 0;
@@ -887,7 +897,6 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
             case 4: { /* free + reinit */
                 smallvec_int_free(&v);
-                v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
                 v = smallvec_int_init();
                 v.data = v.inline_buf;
                 ref_count = 0;
@@ -905,7 +914,6 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     #undef FUZZ_INLINE_CAP
 
     smallvec_int_free(&v);
-    v.data = v.inline_buf; /* ASan fixup after free's internal re-init */
     return 0;
 }
 

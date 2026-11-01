@@ -564,6 +564,46 @@ static void dynvec_suppress_unused(void)
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
+/* ── VERIFY-053 C1: a capacity whose byte count wraps is refused ───────── */
+/* with_capacity and reserve computed n * sizeof(int) unchecked: the product
+ * wrapped, the buffer allocated was small, and cap recorded n, so pushes
+ * wrote past it. */
+static void test_capacity_overflow_refused(void)
+{
+    const usize n = ((usize)-1 / sizeof(int)) + 2u;   /* n * 4 wraps to 4 */
+    dynvec_int v = dynvec_int_with_capacity(n);
+    EXPECT(v.cap == 0 && v.data == NULL);             /* refused, empty */
+    EXPECT(dynvec_int_push(&v, 1));                    /* still usable */
+    EXPECT(!dynvec_int_reserve(&v, n));                /* refused */
+    EXPECT(v.cap >= 1 && v.cap < n);
+    EXPECT(dynvec_int_push(&v, 2) && dynvec_int_len(&v) == 2);
+    dynvec_int_free(&v);
+}
+
+/* ── VERIFY-053 C2: extend from the vector's own elements, with growth ──── */
+/* extend(&v, v.data, v.len) grew the buffer, which freed the old one, then
+ * copied from it: a use after free. */
+static void test_extend_from_self(void)
+{
+    dynvec_int v = dynvec_int_init();
+    for (int i = 0; i < 8; i++) { EXPECT(dynvec_int_push(&v, i)); }
+    EXPECT(v.len == v.cap);                            /* the next one grows */
+    EXPECT(dynvec_int_extend(&v, v.data, v.len));
+    EXPECT(dynvec_int_len(&v) == 16);
+    for (usize i = 0; i < 16; i++) {
+        int x = -1;
+        EXPECT(dynvec_int_get(&v, i, &x) && x == (int)(i % 8u));
+    }
+    /* a source in the middle of the buffer */
+    EXPECT(dynvec_int_shrink_to_fit(&v));
+    EXPECT(dynvec_int_extend(&v, &v.data[4], 4));
+    EXPECT(dynvec_int_len(&v) == 20);
+    int y = -1;
+    EXPECT(dynvec_int_get(&v, 16, &y) && y == 4);
+    EXPECT(dynvec_int_get(&v, 19, &y) && y == 7);
+    dynvec_int_free(&v);
+}
+
 int main(void)
 {
     (void)dynvec_suppress_unused;
@@ -582,6 +622,8 @@ int main(void)
     test_reserve();
     test_shrink_to_fit();
     test_point();
+    test_capacity_overflow_refused();
+    test_extend_from_self();
 
 #ifdef CANON_LIFETIME_DEBUG
     test_lifetime_init_opens_token();
