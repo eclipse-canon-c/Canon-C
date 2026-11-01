@@ -27181,3 +27181,34 @@ The eight names of P3:
 
 The fix and the contracts are pushed with this record, in the commit after
 it. Its hash follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-11-01): every prediction matched
+
+Run on 23bad5e: eight workflows, 85 jobs, all `success`, read from the
+annotations through the API.
+
+`frama-c-array`: **proved 2863 / 2887; unproved 24: inherited 16, own 8;
+0 differences.** The job's report compares both sets by name with the
+predicted ones, and both are the same, exactly. Every other proof job reads
+its pin (`frama-c-stack` 5714 / 5783 with 0 differences, `frama-c-vec`
+5475 / 5568, `frama-c-deque` 1653 / 1665, win64 the same at both models).
+`misra` real 55; MC/DC **1979 / 2148**, with `array_cover.c` **42 / 46**;
+`compcert` 57 / 57; `embedded` 134 units, 0 failed; AVR 29 / 49 / 2.
+
+| # | result |
+|---|--------|
+| P1 | **MATCH.** Completed, no Failed, Invalid or Stepout goal. |
+| P2 | **MATCH.** The 16 inherited names, exactly. |
+| P3 | **MATCH.** The 8 own names, exactly. CI's three provers at 120 s proved none of them. |
+| P4 | **MATCH.** No other own goal is unproved. |
+| P5 | Open until the names are filed, at enforcement. |
+| P6 | **MATCH.** Every build job green; embedded 134 of 134 at 18 configurations. |
+| P7 | **MATCH.** 55. |
+| M1 | **MATCH.** 42 / 46. |
+| M2 | **MATCH.** 1979 / 2148. |
+
+**Run 2** is the name-stability run. It is this commit's push: the job
+carries the run-1 line as `PIN_PROVED` and stays report-only, so its
+annotation shows any difference from run 1 without failing. If it reads 0
+differences, the next commit enforces it, adds the 24 names as
+`vmacros/vdrivers/cc_pins/array.txt` and files the 8 own names (P5).

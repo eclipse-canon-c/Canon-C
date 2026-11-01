@@ -3028,8 +3028,8 @@ jobs:
       - name: "WP under -CC: data/array.h at (int, 8)"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-052: report-only (run 1)
-          PIN_PROVED=""
+          ENFORCE=0   # VERIFY-052: report-only (run 2, name stability); line pinned from run 1 (23bad5e)
+          PIN_PROVED="2863 / 2887"
           PRED_OWN=(
             typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2
             typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2
