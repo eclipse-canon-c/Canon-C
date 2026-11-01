@@ -27284,3 +27284,165 @@ functions, 2863 / 2887, 8 own residuals, each filed under an existing
 block; MCDC-020 at 42 / 46, the four misses dead. Next in the agreed order:
 the convenience wrappers (`dynvec`, `smallvec`, `dynstring`), light
 treatment, then hashmap.
+
+---
+
+## VERIFY-053: Pre-registration — data/convenience/, Light Treatment: Five Memory-Safety Defects in dynvec, smallvec and dynstring
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-053 |
+| **Date**       | 2026-11-01 |
+| **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 3f6099f (the traceability card, on 7617c7a, VERIFY-052 closed) |
+| **Scope**      | `data/convenience/dynvec.h`, `smallvec.h` and `dynstring.h` (code and documentation); their three tests; one row of `docs/design-decisions.md` |
+| **Category**   | The **light treatment** agreed with the author: read and probe, fix what is wrong, test what is missing, record it briefly. No WP job: these are heap containers, and WP's allocation reasoning (`\fresh`, `\freeable`) is where it is weakest (VERIFY-008 Category 1). The probing found defects in code, not only in documentation, so this record fixes code, which the light treatment did not plan for. |
+
+**What the three are.** The convenience layer trades explicitness for
+ergonomics. `dynvec` is a heap vector that doubles on growth. `smallvec`
+keeps elements inline in the struct and spills once to the heap or an
+arena. `DynString` is a heap string builder. None is in any proof unit's
+closure, and none is WP-verified. Their tests, fuzz harnesses and the
+build matrix are their evidence.
+
+### Findings, each shown before any fix
+
+All probes: GCC 13 and 14, clang 18, with ASan and UBSan, at `-O0` and
+`-O2`; one also without sanitizers.
+
+**C1 — dynvec: a capacity whose byte count wraps gave a heap overflow.**
+`with_capacity(n)` called `malloc(n * sizeof(T))`, and `grow` (reached by
+`reserve`, `push`, `insert` and `extend`) called
+`realloc(…, new_cap * sizeof(T))`. Neither product was checked. At
+`n = SIZE_MAX / sizeof(T) + 2` the byte count wraps to a small number: the
+buffer allocated is that small, and `cap` records `n`. The next push writes
+past the buffer (ASan: heap-buffer-overflow, by both paths). `cap * 2` in
+`grow` was unchecked too. The reachable inputs are sizes computed by a
+caller, not arrays that exist: `with_capacity` and `reserve` take a count
+alone.
+- **Fix**: `checked_mul` on both products. A count whose byte count wraps
+  is refused: `with_capacity` returns the empty vector, its documented
+  failure value, and `grow` returns false. A wrapping `cap * 2` falls back
+  to the count asked for.
+
+**C2 — dynvec: `extend` from the vector's own elements was a use after
+free.** `extend(&v, v.data, v.len)` with `len == cap` grows the buffer.
+`realloc` frees the old one, and the copy then reads `src` from it (ASan:
+heap-use-after-free in `memcpy`). The documentation did not exclude a
+source in the vector.
+- **Fix**: before growing, `extend` tests whether `src` lies in the buffer,
+  by address value (`uintptr_t`, as memory.h's `mem_regions_overlap` does;
+  C defines no `<` across objects), and re-bases it on the new buffer
+  after. `len + count` is now `checked_add`. The documentation says a
+  source in the buffer is allowed.
+
+**C3 — smallvec: every smallvec pointed into a dead stack frame.**
+`smallvec_init()` set `v.data = v.inline_buf` on its local `v` and returned
+`v` by value. The caller's copy pointed at `inline_buf` in init's frame,
+gone once init returned. So the documented quick start was undefined:
+- with ASan, every probe stops at the first push: stack-use-after-return,
+  at `-O0` and `-O2`, by a direct call or through a helper returning the
+  smallvec;
+- a plain `-O2` build without sanitizers segfaults on the quick start;
+- a copy (`b = a`) shared `a`'s inline buffer, so pushing to `b` wrote `a`.
+  `free` re-initialised by the same assignment, so a freed smallvec was
+  broken again.
+
+**The tests did not catch it because they patched around it.** After every
+init and every free, `smallvec_test.c` had
+`v.data = v.inline_buf; /* ASan fixup: re-establish self-reference in caller frame */`,
+31 lines. The defect was known to the test and absent from the header.
+- **Fix**: the struct stores no pointer to itself. `data` is the spill
+  buffer, NULL while inline, and a helper, `buf_`, derives the active
+  buffer at each call: `inline_buf` while `using_inline`, else `data`. A
+  smallvec can now be returned, copied and moved. A copy of an inline one
+  is independent, and a copy of a spilled one shares the spill buffer,
+  which the documentation says. The API is unchanged; only code that read
+  the `data` field directly, which the header says not to do, sees NULL
+  where it saw `inline_buf`. The 31 fixup lines are removed, and the
+  test's checks of `v.data == v.inline_buf` now read
+  `smallvec_int_data(&v)`.
+- **Detection test**: `test_by_value_and_copy`, through a helper that
+  returns the smallvec, and a copy. With the baseline header the
+  rewritten test fails (measured); with the fix it passes under ASan with
+  `detect_stack_use_after_return=1`.
+
+**C4 — smallvec: the quick start did not compile.** `DEFINE_SMALLVEC`
+always generates `as_vec`, which names `vec_##type` and
+`vec_##type##_init`. `DEFINE_SMALLVEC(int, 8)` alone fails:
+`unknown type name 'vec_int'`. The test defines shim vec types for this.
+**Fix**: the requirement is stated, and the quick start defines option and
+vec first.
+
+**C5 — smallvec: `as_vec` gave an empty view.** It returned
+`vec_init(buffer, cap)`, whose `len` is 0, so none of the smallvec's
+elements were visible through it. The header said it "allows passing a
+smallvec's contents to any API that accepts a vec". The test asserted
+`len == 0`, with the comment "vec starts logically empty": test and
+header disagreed. **Fix**: the view's `len` is the smallvec's, as the
+header says; the test now checks the elements through the view. This
+reverses a tested behaviour; the header's statement is taken as the
+intent. The documentation notes that the view's `len` is a copy.
+
+**C6 — dynstring: appending a string's own text was a use after free.**
+`append(&s, dynstring_str(&s))` and `append_fmt(&s, "%s", dynstring_str(&s))`
+grew with `realloc`, then read the source from the freed buffer (ASan:
+heap-use-after-free in `append` and in `vsnprintf`). `append_n` had the
+same shape.
+- **Fix**: the three text appends grow through a new helper,
+  `dynstring_grow_detached_`. It allocates the new buffer, copies the
+  string, and hands back the old buffer, which the append frees after
+  writing. The lifetime is then restamped at every growth of these three,
+  since the buffer always moves; the documentation and
+  `docs/design-decisions.md`'s lifetime table say so. `append_char` and
+  `reserve` keep `realloc`, having no source. The growth arithmetic is
+  shared and checked (`dynstring_next_cap_`).
+- `append_fmt`'s failure path, a second `vsnprintf` that writes other than
+  it measured, now restores the terminator at `len`, so the string reads
+  as it was, as `@post On false` says.
+
+**C7 — dynstring: `reserve` on an empty string left it unterminated.**
+`dynstring_init()` then `dynstring_reserve(&s, 64)` allocated the buffer
+and wrote nothing. `dynstring_str(&s)` returned it, and `strlen` read past
+its end (ASan: heap-buffer-overflow; Valgrind: conditional jump on
+uninitialised value). **Fix**: a first allocation writes `'\0'`.
+
+Each of C1, C2, C6 and C7 has a regression test:
+`test_capacity_overflow_refused`, `test_extend_from_self`,
+`test_append_from_self` and `test_reserve_then_read`. With the baseline
+headers, the dynvec and dynstring tests fail (assertions for C1; ASan for
+C6), measured by building the new tests against the baseline headers.
+
+### Measured locally, with the fix
+
+- The suite, 56 of 56: Debug with sanitizers (GCC, clang), Release (GCC),
+  C23 (GCC 14). The three tests also at `-m32` and under Valgrind with
+  `--leak-check=full`, clean.
+- The three fuzz harnesses (`ENABLE_FUZZING`, clang), 60 s each: dynvec
+  0.34 M runs, smallvec 1.9 M, dynstring 2.1 M; no report.
+- `embedded`: 134 of 134 at all 18 configurations; AVR 29 / 49 / 2.
+- MISRA: the job's command on the three headers gives the same 16 findings
+  before and after, line for line by rule and file.
+- MC/DC, by the coverage job's steps (they reproduce CI's 1979 / 2148 at
+  the baseline): only `data/convenience/dynstring.h` moves, from 84 / 110
+  to 91 / 120. dynvec's and smallvec's conditions are in their macro
+  bodies, stamped to their test files, which the table filters out. The
+  three new misses are justified: `dynstring_next_cap_`'s wrap, both
+  conditions (the capacity would exceed half of `usize`), and
+  `dynstring_grow_detached_`'s allocation failure (environmental, as the
+  file's other allocation failures). `test_append_char_grows` keeps
+  `ensure_capacity`'s growth of an existing buffer covered, which the text
+  appends no longer reach.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| N1 | Every build and test job is green, the suite 56 of 56, Windows (MSVC, MinGW), macOS, musl, AArch64, s390x, i386, C11 to C23, Valgrind and fuzzing among them. | any failure | H for GCC and clang hosts (measured); M for MSVC and MinGW, not run here: `buf_`'s const cast and the `uintptr_t` test are portable C, and dynvec's MSVC inlining workaround (`DYNVEC_NOINLINE`) is unchanged |
+| N2 | `misra` prints the same 55. | another count or composition | H (measured on the three headers) |
+| N3 | No proof job moves: every pin and annotation as at 7617c7a, `frama-c-array` 2863 / 2887 among them. None of the three headers is in a proof unit's closure. | any proof line or name moves | H |
+| N4 | MC/DC 1986 / 2158; the one row that moves is `dynstring.h`, 91 / 120. | another total, or another row moving | H (measured with the job's steps) |
+| N5 | `embedded` 134 of 134 at 18 configurations; AVR 29 / 49 / 2; `compcert` 57 / 57. | another count | H for embedded and AVR (measured); M for CompCert, not run here |
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
