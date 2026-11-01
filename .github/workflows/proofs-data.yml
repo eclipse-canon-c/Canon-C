@@ -3028,17 +3028,36 @@ jobs:
       - name: "WP under -CC: data/array.h at (int, 8)"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-052: report-only (run 2, name stability); line pinned from run 1 (23bad5e)
+          ENFORCE=1   # VERIFY-052: enforced from run 3; pins from runs 1 and 2 (23bad5e, 0ae029f), identical
           PIN_PROVED="2863 / 2887"
-          PRED_OWN=(
-            typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2
-            typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2
-            typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s1
-            typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s2
-            typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1
-            typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2
-            typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s
-            typed_cast_array_int_8_zero_call_memset_requires_valid_s
+          # The 24 unproved names, by set equality: 16 inherited (cc-slice's
+          # 8; option's 6 and checked.h's 2, as cc-vec pins them) and 8 own,
+          # filed by name in docs/deviations.md (VERIFY-052, enforcement).
+          PIN_NAMES=(
+            "typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2"
+            "typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2"
+            "typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1"
+            "typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2"
+            "typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s"
+            "typed_cast_array_int_8_zero_call_memset_requires_valid_s"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_option_int_and_then_assert_rte_function_pointer"
+            "typed_cast_option_int_combine_with_assert_rte_function_pointer"
+            "typed_cast_option_int_eq_assert_rte_function_pointer_part2"
+            "typed_cast_option_int_filter_assert_rte_function_pointer"
+            "typed_cast_option_int_map_assert_rte_function_pointer"
+            "typed_cast_option_int_or_else_assert_rte_function_pointer"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
           )
           OUT=wp_array_output.txt
           set +e
@@ -3072,30 +3091,23 @@ jobs:
           grep -oE "^\[wp\] \[(Timeout|Unknown)\] [A-Za-z0-9_]+" "${OUT}" | awk '{print $3}' | sort -u > unproved.txt
           grep -E '_array_int_8_' unproved.txt > own.txt || true
           grep -vE '_array_int_8_' unproved.txt > inherited.txt || true
-          printf '%s\n' "${PRED_OWN[@]}" | sort -u > pred_own.txt
-          { cat vmacros/vdrivers/cc_pins/slice.txt
-            grep -E '^typed_cast_(option_int_|checked_add)' vmacros/vdrivers/cc_pins/vec.txt; } | sort -u > pred_inherited.txt
+          printf '%s\n' "${PIN_NAMES[@]}" | sort -u > pins.txt
           echo "=== unproved: $(wc -l < unproved.txt) (inherited $(wc -l < inherited.txt), own $(wc -l < own.txt)) ==="
           echo "=== own (array_int_8_*) ==="; sed 's/^/    /' own.txt
-          echo "=== own, not predicted ==="; comm -13 pred_own.txt own.txt | sed 's/^/    /'
-          echo "=== predicted own, proved ==="; comm -23 pred_own.txt own.txt | sed 's/^/    /'
-          echo "=== inherited, not among the closure's 16 pins ==="; comm -13 pred_inherited.txt inherited.txt | sed 's/^/    /'
-          echo "=== the closure's 16 pins, not unproved here ==="; comm -23 pred_inherited.txt inherited.txt | sed 's/^/    /'
+          echo "=== unproved, not pinned ==="; comm -13 pins.txt unproved.txt | sed 's/^/    /'
+          echo "=== pinned, not unproved ==="; comm -23 pins.txt unproved.txt | sed 's/^/    /'
           FAILS=0
-          if cmp -s pred_inherited.txt inherited.txt; then
-            echo "INHERITED SAME: the closure's 16 names, exactly."
+          if cmp -s pins.txt unproved.txt; then
+            echo "NAMES SAME: the 24 pinned names, exactly."
           else
-            echo "DIFFERS: the inherited set is not the closure's (above)."; FAILS=$((FAILS + 1))
+            echo "DIFFERS: the unproved set is not the pinned one (above)."; FAILS=$((FAILS + 1))
           fi
-          if cmp -s pred_own.txt own.txt; then
-            echo "OWN SAME: the eight predicted names, exactly."
+          if [ "${PROVED}" = "${PIN_PROVED}" ]; then
+            echo "PROVED SAME: ${PROVED}"
           else
-            echo "DIFFERS: the own set is not the predicted eight (above)."; FAILS=$((FAILS + 1))
-          fi
-          if [ -n "${PIN_PROVED}" ] && [ "${PROVED}" != "${PIN_PROVED}" ]; then
             echo "DIFFERS: proved ${PROVED}, pinned ${PIN_PROVED}."; FAILS=$((FAILS + 1))
           fi
-          echo "::notice title=frama-c-array::proved ${PROVED} (pin ${PIN_PROVED:-none, report-only}); unproved $(wc -l < unproved.txt): inherited $(wc -l < inherited.txt), own $(wc -l < own.txt); ${FAILS} difference(s)"
+          echo "::notice title=frama-c-array::proved ${PROVED} (pin ${PIN_PROVED}); unproved $(wc -l < unproved.txt): inherited $(wc -l < inherited.txt), own $(wc -l < own.txt); ${FAILS} difference(s)"
           if [ "${FAILS}" -ne 0 ] && [ "${ENFORCE}" -eq 1 ]; then
             echo "FAIL: ${FAILS} difference(s) from the pins."; exit 1
           fi

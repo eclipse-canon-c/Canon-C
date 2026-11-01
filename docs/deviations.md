@@ -888,7 +888,7 @@ underlying primitives (`align_up`, `is_power_of_two`,
 `ptr_is_aligned`) are tested independently in
 `test/core/primitives/ptr_test.c`.
 
-#### Category 3: memcmp call-site danglingness (6 — restated at VERIFY-039 G13, with twelve filed by name)
+#### Category 3: memcmp call-site danglingness (6 — restated at VERIFY-039 G13, with fourteen filed by name, two of them at VERIFY-052)
 
 | #  | Goal                                                                       |
 |----|-----------------------------------------------------------------------------|
@@ -17577,12 +17577,12 @@ prefix, which is how the record compares names.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_option_int_map_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque` | `map` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
-| 2 | `typed_option_int_and_then_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque` | `and_then` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
-| 3 | `typed_option_int_or_else_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque` | `or_else` calls `fallback` only when `!o.has_value`, and requires `\valid_function(fallback)` there |
-| 4 | `typed_option_int_filter_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque` | `filter` calls `pred` only when `o.has_value`, the guard's first conjunct, and requires `\valid_function(pred)` there |
-| 5 | `typed_option_int_combine_with_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque` | `combine_with` calls `combine` only when both have a value, and requires `\valid_function(combine)` there |
-| 6 | `typed_option_int_eq_assert_rte_function_pointer_part2` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque` | `eq` calls `eq` only when both have a value, and requires `\valid_function(eq)` there; `_part1`, on a path that does not reach the call, proves |
+| 1 | `typed_option_int_map_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque`, `frama-c-array` | `map` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
+| 2 | `typed_option_int_and_then_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque`, `frama-c-array` | `and_then` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
+| 3 | `typed_option_int_or_else_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque`, `frama-c-array` | `or_else` calls `fallback` only when `!o.has_value`, and requires `\valid_function(fallback)` there |
+| 4 | `typed_option_int_filter_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque`, `frama-c-array` | `filter` calls `pred` only when `o.has_value`, the guard's first conjunct, and requires `\valid_function(pred)` there |
+| 5 | `typed_option_int_combine_with_assert_rte_function_pointer` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque`, `frama-c-array` | `combine_with` calls `combine` only when both have a value, and requires `\valid_function(combine)` there |
+| 6 | `typed_option_int_eq_assert_rte_function_pointer_part2` | `frama-c-option`, `frama-c-vec`, `frama-c-deque`, `cc-option`, `cc-vec`, `cc-deque`, `frama-c-array` | `eq` calls `eq` only when both have a value, and requires `\valid_function(eq)` there; `_part1`, on a path that does not reach the call, proves |
 | 7 | `typed_cast_option_Rec_map_assert_rte_function_pointer` | `cc-vec_struct` | `map` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
 | 8 | `typed_cast_option_Rec_and_then_assert_rte_function_pointer` | `cc-vec_struct` | `and_then` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
 | 9 | `typed_cast_option_Rec_or_else_assert_rte_function_pointer` | `cc-vec_struct` | `or_else` calls `fallback` only when `!o.has_value`, and requires `\valid_function(fallback)` there |
@@ -18812,14 +18812,14 @@ VERIFY-012 get dated notes. G13 is closed.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
-| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
-| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
-| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_b` |
-| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
-| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
-| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
-| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
+| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
+| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
+| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
+| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_b` |
+| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
+| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
+| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
+| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
 | 9 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | memcmp is reached with equal lengths above 0 and distinct non-null pointers, inside `no_dangling_a`'s guard; its quantifier is `non_escaping(a.bytes.ptr, a.bytes.len)` |
 | 10 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | the same, by `no_dangling_b`, `b.bytes.len` being `a.bytes.len` |
 | 11 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | `str_equal`'s `no_dangling_a` on `a.str` and `b.str`, which `borrowed_str_eq`'s own `no_dangling_a` states of the same views under the same guard |
@@ -27212,3 +27212,75 @@ carries the run-1 line as `PIN_PROVED` and stays report-only, so its
 annotation shows any difference from run 1 without failing. If it reads 0
 differences, the next commit enforces it, adds the 24 names as
 `vmacros/vdrivers/cc_pins/array.txt` and files the 8 own names (P5).
+
+### Run 2 scored, and enforced (2026-11-01): VERIFY-052 closed
+
+**Run 2** ran on 0ae029f, the documentation commit, which contains f5ef624.
+f5ef624's own proof runs were cancelled when 0ae029f was pushed during them;
+the workflows cancel a run in progress when a newer push arrives. Nothing
+was red. On 0ae029f, 92 jobs: 90 `success` and 2 `skipped` (the count and
+round 3 probes, whose paths did not change; G4, G11, G13 and G19 ran, their
+files' comments having changed, and matched as before).
+
+`frama-c-array`: **proved 2863 / 2887 (pin 2863 / 2887); unproved 24:
+inherited 16, own 8; 0 differences**, the same line and names as run 1.
+MC/DC 1979 / 2148, `misra` 55, `compcert` 57 / 57, `embedded` and AVR as at
+run 1.
+
+Two jobs stalled on 0ae029f's first attempt and were re-run by the author;
+both passed on the re-run. `frama-c-result`, usually about six minutes, ran
+for 2 h 0 min and was cancelled (its log is not readable here; it uploaded
+no WP output); its re-run took 5 min 52 s and read its pin, 207 / 213. The
+`g13-probe` job ran for 1 h and was cancelled; its re-run took 13 min and
+matched every prediction, as before. Neither stall repeated on the same
+commit, and the only change to either job's inputs in this range was a
+comment (in `p_dangling_calls.c`, for G13), so they are read as a hang of
+the runner or a prover, not a result. The four other semantics/ jobs were not
+re-run, and their annotations are on the first attempt (the API reads the
+latest): `frama-c-error` 65 / 65, `-option` 222 / 228, `-borrow`
+2451 / 2465 and `-diag` 3050 / 3058, each its pin.
+
+**Enforced.** From this commit `frama-c-array` fails on any difference: the
+proved line `2863 / 2887` and the 24 names, by set equality, are pinned in
+the job as `PIN_NAMES`. Runs 1 and 2 agreed on both.
+
+**P5: MATCH.** No new argument block. The eight own names are filed below,
+six under VERIFY-017's byte-view block and two under VERIFY-008's
+Category 3. The sixteen inherited names were already filed; their rows'
+Units cells gain `frama-c-array` (option's six under VERIFY-014's block,
+the eight danglingness names under Category 3). checked.h's two are in
+VERIFY-002's own table, which has no Units column. *A* stays 33 cumulative
+and 19 in force.
+
+**Filed by name**: VERIFY-017, diag-own residuals
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_array_int_8_as_bytes_call_bytes_from_requires_2` | `frama-c-array` | validity of the elements' bytes for `bytes_from`: `(u8 *)a->items + (0 .. sizeof(a->items) - 1)`, the footprint of `a->items`, valid by `\valid(a)` |
+| 2 | `typed_cast_array_int_8_as_cbytes_call_cbytes_from_requires_2` | `frama-c-array` | readability of the same bytes for `cbytes_from`, by `\valid_read(a)` |
+| 3 | `typed_cast_array_int_8_zero_call_memset_requires_valid_s` | `frama-c-array` | validity of the local array's bytes for `memset`: `a.items`, a local object of `sizeof(a.items)` bytes |
+| 4 | `typed_cast_array_int_8_from_ptr_call_memset_requires_valid_s` | `frama-c-array` | the same, at `from_ptr`'s local array |
+| 5 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s1` | `frama-c-array` | readability of `a`'s elements' bytes for `memcmp`, `sizeof(a->items)` of them: on the path that compares `a` is not null, and `\valid_read(a)` holds |
+| 6 | `typed_cast_array_int_8_equal_call_memcmp_requires_valid_s2` | `frama-c-array` | the same, of `b`'s, by `\valid_read(b)`; `b->items` has `a->items`'s size, the type being one |
+
+These are the block's class at array.h: the bytes of a valid typed range
+are valid and lie in its footprint. WP's Typed+Cast model does not carry an
+`int` range's validity to its bytes, as at bitset's views and fills. The
+contracts do not require the byte ranges' validity, by bitset's reasoning
+(its P4 note): that would move the bridge onto every caller.
+
+**Filed by name**: VERIFY-008, Category 3
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s1` | `frama-c-array` | memcmp is reached with `a` and `b` non-null and distinct, `no_dangling_a`'s guard; its quantifier over `(char *)a->items + k`, `0 <= k < sizeof(a->items)`, is `non_escaping(a->items, sizeof(a->items))`, the bytes memcmp reads |
+| 2 | `typed_cast_array_int_8_equal_call_memcmp_requires_danglingness_s2` | `frama-c-array` | the same, by `no_dangling_b`, of `b->items`, of the same size |
+
+As at `bytes_equal`, WP 29 does not implement `\dangling`, so the goals
+stay unproved though the requirement states them.
+
+**VERIFY-052 is closed.** data/array.h is verified (module 23): 20
+functions, 2863 / 2887, 8 own residuals, each filed under an existing
+block; MCDC-020 at 42 / 46, the four misses dead. Next in the agreed order:
+the convenience wrappers (`dynvec`, `smallvec`, `dynstring`), light
+treatment, then hashmap.

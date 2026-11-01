@@ -999,12 +999,14 @@ and after the paragraphs below say where a reading here no longer holds.
 | vec_range.h | 1        |              5204 | 5159 (99.14%) | 45       | VERIFY-041   |
 | vec_fmt.h  | 2         |              5286 | 5239 (99.11%) | 47       | VERIFY-042   |
 | stack.h    | 14        |              5783 | 5714 (98.81%) | 69       | VERIFY-049   |
-| **Total**  | **474**   | **66039**         | **65417 (99.06%)**| **622**  |              |
+| array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
+| **Total**  | **494**   | **68926**         | **68280 (99.06%)**| **646**  |              |
 
-*array.h, 2026-11-01 (VERIFY-052).* Not in the table yet: `frama-c-array`
-is report-only. Run 1 (23bad5e) proved 2863 / 2887, with 24 unproved, 16
-inherited and 8 own, as predicted by name. Its row is added when the job is
-enforced.
+*Brought to the pins again 2026-11-01 (VERIFY-052).* array.h's row is new:
+`frama-c-array`, the same line and names at runs 1 and 2 (23bad5e,
+0ae029f), enforced from run 3, 2863 / 2887 with 24 unproved, 16 inherited
+and 8 own, filed by name. The total is 68926 obligations, 68280 proved and
+646 unproved, from 66039, 65417 and 622.
 
 *Brought to the pins again 2026-10-31 (VERIFY-049; Frama-C stack #2).* stack.h's
 row is new: `frama-c-stack`, pinned at run 2 and enforced from run 3, 5714 /
@@ -1811,6 +1813,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-10-31 | 955d49c → (VERIFY-049) | #1397 → #1398 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **stack.h** (VERIFY-049), module 22: 14 macro-body contracts, 5714/5783, all 69 residuals cc-vec's, none own (run 1 left 7 per-behaviour frames, removed at run 2). Found first: `DECLARE_VEC`/`DECLARE_DEQUE` never compiled, so separate compilation of vec, deque, stack and queue had never been built (now tested). MC/DC 1937/2102 with `stack_cover.c` 5/6 (MCDC-019). |
 | 2026-10-31 | 9328398 → 6feed52 | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.2%  | **VERIFY-050 and VERIFY-051.** CI reorganised: 14 workflow files become 11, numbered in reading order, one proof file per layer, each job's result posted as an annotation; no job's gates or pins changed. queue.h on the light treatment: an aliasing precondition documented at queue's and deque's peek and pop. No pin or coverage figure moved. |
 | 2026-11-01 | 6feed52 → 23bad5e | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h** (VERIFY-052, MCDC-020), run 1, report-only: 20 macro-body contracts, 2863/2887, 24 unproved (16 inherited, 8 own), both sets as predicted by name. Found first: `copy_from(&a, &a)` was `memcpy` on one object (A1, now a struct assignment), and `DEFINE_ARRAY`'s requirements were understated (A2). MC/DC 1979/2148 with `array_cover.c` 42/46; lines, functions and branches from the job's steps run locally. |
+| 2026-11-01 | 0ae029f → (VERIFY-052 enforced) | — | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h enforced** (VERIFY-052), module 23: run 2 on 0ae029f gave run 1's line and names; pinned 2863/2887 with 24 names; the 8 own filed under VERIFY-017's byte-view block (6) and VERIFY-008 Category 3 (2), no new block. Coverage as at run 1. |
 
 > **Correction (2026-10-20, VERIFY-039 batch 3 and G10).** The bitset row of
 > 2026-08-27 needs three corrections. Its result (2) holds for E1 and not for

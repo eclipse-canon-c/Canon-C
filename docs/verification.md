@@ -10,18 +10,19 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 23 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h) — lifetime.h is a 24th unit of narrower scope, see VERIFY-021 |
-| **Functions**        | 473 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14; lifetime.h's 1 counted separately) |
-| **Total obligations**| 66035 (summed over the 23 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 65413 (99.06%)                                                                 |
-| **Unproved**         | 622 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Headers verified** | 24 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
+| **Functions**        | 493 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20; lifetime.h's 1 counted separately) |
+| **Total obligations**| 68922 (summed over the 24 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 68276 (99.06%)                                                                 |
+| **Unproved**         | 646 (each filed by name in `docs/deviations.md`; see per-header sections)      |
 
-*Not yet recomputed 2026-11-01 (VERIFY-052, array.h report-only).*
-`frama-c-array` runs, report-only until its runs agree, and is not in the
-card. Run 1 (23bad5e) proved 2863 / 2887, with 24 unproved: 16 inherited
-and 8 own, both sets exactly the names VERIFY-052 predicted. When it is
-enforced, the card gains a twenty-fourth unit: +20 functions and its
-pinned line. See the data/array.h section below.
+*Recomputed 2026-11-01 (VERIFY-052, array.h enforced from its run 3).*
+`frama-c-array` adds a twenty-fourth unit: +20 functions, +2887
+obligations, +2863 proved and +24 unproved, 16 inherited (cc-slice's 8;
+option's 6 and checked.h's 2) and 8 own, filed under VERIFY-017's
+byte-view block and VERIFY-008's Category 3. Runs 1 and 2 (23bad5e,
+0ae029f) gave the same line and names. The card previously read 23 / 473 /
+66035 / 65413 / 622.
 
 *Not recomputed 2026-10-31 (VERIFY-050, VERIFY-051): no pin moved.*
 VERIFY-050 moved every proof job into one workflow file per layer
@@ -4490,27 +4491,27 @@ failed push or pop leaves the stack unchanged; the tests show it.
 
 ---
 
-## data/array.h (in-place contracts under -CC) — report-only
+## data/array.h (in-place contracts under -CC)
 
 ### Summary
 
 | Property               | Value                                          |
 |------------------------|-------------------------------------------------|
-| **Status**             | Report-only (VERIFY-052): run 1 scored, run 2 (name stability) pending; enforced after |
-| **Baseline commit**    | 23bad5e (run 1) |
+| **Status**             | Verified (8 own residuals, each filed under an existing block) |
+| **Baseline commit**    | 23bad5e (run 1) → 0ae029f (run 2, the same line and names) → enforced from run 3 |
 | **Functions**          | 20 (`array_int_8_*`), contracted in the macro body; loop annotations in `fill` and `fill_all` |
-| **Proof obligations**  | 2863 / 2887 discharged automatically (run 1) |
-| **Unproved**           | 24: **16 inherited** (cc-slice's 8 memcmp-danglingness names; from cc-vec's, option's 6 and checked.h's 2) and **8 own**, both sets exactly as VERIFY-052 predicted by name; 0 Failed, 0 Invalid |
-| **Own residuals**      | 6 byte views of the elements (`as_bytes`, `as_cbytes`, `memset` in `zero` and `from_ptr`, `memcmp`'s `valid_s1`/`valid_s2` in `equal`): WP's Typed+Cast does not carry an `int` range's validity to its bytes, bitset's P4 class; 2 `memcmp` danglingness goals in `equal`, which WP does not implement (VERIFY-008 Category 3, as VERIFY-039 G13 restated it). Filed by name at enforcement. |
+| **Proof obligations**  | 2863 / 2887 discharged automatically (99.17%) |
+| **Unproved**           | 24: **16 inherited** (cc-slice's 8 memcmp-danglingness names; from cc-vec's, option's 6 and checked.h's 2) and **8 own**, both sets exactly as VERIFY-052 predicted by name, at both runs; 0 Failed, 0 Invalid |
+| **Own residuals**      | 6 byte views of the elements (`as_bytes`, `as_cbytes`, `memset` in `zero` and `from_ptr`, `memcmp`'s `valid_s1`/`valid_s2` in `equal`): WP's Typed+Cast does not carry an `int` range's validity to its bytes, bitset's P4 class; 2 `memcmp` danglingness goals in `equal`, which WP does not implement (VERIFY-008 Category 3, as VERIFY-039 G13 restated it). Filed by name (VERIFY-052, enforcement). |
 | **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
 | **Frama-C version**    | 29.0 (Copper)                                   |
 | **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
 | **Driver**             | `vmacros/vdrivers/array_verify.h`: option and `DEFINE_SLICE` at `int`, then `DEFINE_ARRAY(int, 8)` |
-| **CI enforcement**     | Not yet: `.github/workflows/proofs-data.yml` (job `frama-c-array`) reports the line and both sets against the prediction without failing |
+| **CI enforcement**     | Yes, in `.github/workflows/proofs-data.yml` (job `frama-c-array`): pinned `2863 / 2887` + the 24 unproved names (`PIN_NAMES`, set equality) |
 | **MC/DC coverage**     | 42/46, four outcomes dead (`checked_mul`'s failure at `from_ptr`, `size_bytes`, `as_bytes`, `as_cbytes`), measured from `vmacros/coverage/array_cover.c` — see MCDC-020 in VERIFY-052 |
 | **CI artifact**        | `wp-proof-array`                                |
 
-array.h is the fixed-size companion of vec, with code of its own. Its
+array.h is **module 23**, the fixed-size companion of vec, with code of its own. Its
 contracts name the element count as `sizeof(x.items) / sizeof(x.items[0])`,
 since ACSL in a macro body cannot name the parameter `N`. `len` and
 `size_bytes` state only `assigns \nothing`: their value is `N`.
@@ -4699,7 +4700,7 @@ discipline) recorded for deque.
 > inherited were named in advance. Those 2 were contract.h's handler pair,
 > which VERIFY-039 G14 found false as written; they closed at CI #1368.
 
-### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h enforced; array.h report-only)
+### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h enforced)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
@@ -4712,7 +4713,7 @@ discipline) recorded for deque.
 | vec_range.h  | ✅ Verified | 5159/5204 | Module 20 (VERIFY-041): in-place contracts under `-CC`, one clause in a driver; 45 unproved, none own. MCDC-017, 38/42. |
 | vec_fmt.h    | ✅ Verified | 5239/5286 | Module 21 (VERIFY-042): in-place contracts under `-CC`; 47 unproved, 4 own, filed under VERIFY-042's two blocks. MCDC-018, 26/26. |
 | stack.h      | ✅ Verified | 5714/5783 | Module 22 (VERIFY-049): 14 macro-body contracts under `-CC`, enforced from run 3; 69 unproved, all cc-vec's, none own. MCDC-019, 5/6. |
-| array.h      | Report-only | 2863/2887 | Module 23 when enforced (VERIFY-052): 20 macro-body contracts under `-CC`; run 1's 24 unproved are 16 inherited and 8 own, as predicted by name. MCDC-020, 42/46. |
+| array.h      | ✅ Verified | 2863/2887 | Module 23 (VERIFY-052): 20 macro-body contracts under `-CC`, enforced from run 3; 24 unproved, 16 inherited and 8 own, as predicted by name, filed under VERIFY-017's byte-view block and VERIFY-008 Category 3. MCDC-020, 42/46. |
 | queue.h      | Reviewed (light) | — | Wraps deque's verified functions; no WP unit of its own (VERIFY-051). |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 

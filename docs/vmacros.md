@@ -279,7 +279,7 @@ Shape-B entry in the algo layer.
 | `vec_range_verify.h` | `data/vec/vec_range.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_range_cover.c` (90.5%, 38/42, MCDC-017) |
 | `vec_fmt_verify.h`  | `data/vec/vec_fmt.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_fmt_cover.c` (100%, 26/26, MCDC-018) |
 | `stack_verify.h`    | `data/stack.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/stack_cover.c` (5/6, MCDC-019; the miss is dead) |
-| `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (42/46, MCDC-020; the four misses are dead); WP report-only until VERIFY-052 is enforced |
+| `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (42/46, MCDC-020; the four misses are dead) |
 | `hashmap_verify.h`  | `data/hashmap/`  | A (confirmed)    | — already covered via `hashmap_impl.h` |
 
 #### A third kind of driver: interposition (bitset, VERIFY-020)
@@ -393,7 +393,7 @@ their own driver, or document-only per the existing macro-disposition rule):
   the macro body and proved under `-CC` (the `-CC` workflow, family slice)
 - `DEFINE_OWNED` / `CANON_DROP` in `core/ownership.h`
 - `DEFINE_ARRAY` in `data/array.h` — contracts in the macro body, proved
-  under `-CC` by `frama-c-array` (VERIFY-052; report-only until enforced)
+  under `-CC` by `frama-c-array` (VERIFY-052, enforced)
 - `DEFINE_QUEUE` / `DECLARE_QUEUE` in `data/queue.h` — wrappers over deque,
   reviewed on the light treatment (VERIFY-051); no WP unit of its own
 - `DEFINE_STACK` / `DECLARE_STACK` in `data/stack.h` — `DEFINE_STACK`'s
