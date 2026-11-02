@@ -27472,3 +27472,164 @@ session; applied with `git am` it is e083310 on master, the same tree.
 the light treatment planned; its five memory-safety defects are fixed and
 each has a regression test. Next in the agreed order: hashmap, on the full
 treatment.
+
+---
+
+## VERIFY-054: Pre-registration — data/hashmap/, Before Any Proof: an Unchecked Alignment, and Four Documented Paths That Never Compiled
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-054 |
+| **Date**       | 2026-11-02 |
+| **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | 31e6d3e (VERIFY-053 closed) |
+| **Scope**      | `data/hashmap/` (`hashmap.h`, `hashmap_impl.h`, `hashmap_decl.h`, `hashmap_defn.h`, `hashmap_mangle.h`, `hashmap_range.h`: code and documentation); `test/data/hashmap_test.c` and `test/semantics/borrow_test.c` (aligned buffers, new names, new tests); new tests `hashmap_multi_test` and `hashmap_separate_test`, with `test/support/hashmap_vecs.h`; `CMakeLists.txt`; the coverage job's exclusion list; a comment in `tools/embedded_compile_check.sh`; one row of `docs/vmacros.md` |
+| **Category**   | The first step of hashmap's **full treatment**, agreed with the author: read and probe first. The probing found defects that come before any contract, so this record fixes them, with the author's two decisions (2026-11-02): fix the broken paths in code, and make `hashmap_init` refuse a misaligned buffer. The WP unit is the next record's. |
+
+**What hashmap is.** A Robin Hood open-addressed map over a caller-owned
+flat buffer of slots, configured by macros (`HASHMAP_KEY_TYPE`,
+`HASHMAP_VAL_TYPE`, a hash and an equality function) and generated per
+inclusion of `hashmap.h`. Three paths are documented beside the header-only
+one: several maps in one translation unit, separate compilation
+(`hashmap_decl.h` and `hashmap_defn.h`), and two extensions
+(`hashmap_range.h`, `hashmap_fmt.h`). Before this record the only test,
+`hashmap_test.c`, built one map, header-only, and neither extension.
+
+### Findings, each shown before any fix
+
+Probes: GCC 13 and 14 and clang 18, with ASan and UBSan.
+
+**H1 — `hashmap_init` accepted a buffer not aligned for its slots.** It
+casts `buf.ptr` (a `u8*`) to the slot type, which holds a `u64`. Given
+`raw + 1`, with `raw` 16-aligned, init succeeds and the first insert is
+undefined: UBSan, "member access within misaligned address … which requires
+8 byte alignment". The quick start declared the buffer as
+`u8 buf[hashmap_buffer_size(cap)]`, whose alignment is the compiler's
+choice, and so did every test. **Fix** (the author's choice): init refuses
+a buffer misaligned for the slot type, with `ERR_INVALID_ARG`, tested by
+address value (`uintptr_t`) after the size check, so a buffer too small
+still reports `ERR_BUFFER_TOO_SMALL`. The alignment is read as
+`offsetof` of a slot after a `char`, in a per-map helper struct. The quick
+start and the tests declare `hashmap_slot` arrays.
+
+**H2 — the documented load cap is not the code's at capacities 1 and 2.**
+The documentation said insert refuses "when len >= cap * 3 / 4". The code
+refuses at `len >= capacity - capacity / 4`, which is 75% from capacity 4
+on, but lets capacities 1 and 2 fill every slot (probe: capacity 2 takes
+two entries, load 1.00). Lookups stay correct at 100%: every loop is
+bounded by the capacity. **Fix**: the documentation states the code's rule;
+a test checks capacities 1, 2 and 4.
+
+**H3 — two maps in one translation unit did not compile.** The header
+documents it, and it failed on the second include: `typedef … hm_val_t`
+redefined with another type, `struct option_hm_val_t_s` redefined, and,
+with two maps of one value type, the option functions redefined. The
+internal helpers `_hm_home`, `_hm_wrap` and `_hm_normalize_hash` were
+redefined too, and `HASHMAP_SLOT_NAME` defaulted to `hashmap_slot` once per
+translation unit, behind an include guard. **Fix**:
+- the key and value types get per-map aliases, `HASHMAP_FN(key_t)` and
+  `HASHMAP_FN(val_t)`, and the option and result types are named after the
+  value's: `option_hashmap_val_t` and `result_hashmap_val_t_Error` by
+  default, `option_map_u32_u64_val_t` for a map named `map_u32_u64`;
+- `hashmap_mangle.h` re-evaluates its three defaults at every include, and
+  `HASHMAP_SLOT_NAME` defaults to `HASHMAP_FN(slot)`;
+- the internal helpers are defined once per translation unit.
+
+**H4 — the quick start named types that do not exist.** It used
+`result_bool_Error`, `option_int` and `result_int_Error`. The generated
+types were `result__Bool_Error`, `option_hm_val_t` and
+`result_hm_val_t_Error`, as the test used. **Fix**: the quick start uses the
+names the header generates. **This renames a public type**:
+`option_hm_val_t` and `result_hm_val_t_Error`, the names that compiled
+before, are now `option_hashmap_val_t` and `result_hashmap_val_t_Error`.
+Code that spelled the old names changes; the test and `borrow_test.c` did.
+
+**H5 — the separate-compilation recipe did not compile, and its two halves
+named different types.** `hashmap_decl.h`'s example has the definitions file
+include the shared header and then `hashmap_defn.h`: both generate the slot
+and map typedefs, which C99 forbids repeating (probe: "conflicting types
+for 'hashmap_slot'"). It is stack's S2 (VERIFY-049) in hashmap. With the
+definitions file not including the header, it compiles and runs (probe),
+but the declarations named the option and result types
+`option_hm_decl_val_t` and `result_hm_decl_val_t_Error`, and the
+definitions `option_hm_val_t` and `result_hm_val_t_Error`: two struct types
+of one layout, not one type, across the two files. **Fix**: decl and impl
+use the same per-map names (H3's), and both examples show the recipe the new
+test builds: the definitions file does not include the shared header, and
+the hash and equality functions have external linkage.
+
+**H6 — `hashmap_range.h` never compiled.** It pasted the macro names, not
+their values (`vec_##type` with `type` being `HASHMAP_KEY_TYPE` gives
+`vec_HASHMAP_KEY_TYPE`), and passed `vec_push` a pointer where it takes the
+element. It also had an include guard, so only one map per translation unit
+could use it. No test included it. **Fix**: pasting after expansion, push of
+the element, no include guard (`HASHMAP_FOR_EACH` is defined once).
+
+`hashmap_fmt.h` compiled and gave correct text (probe), but no test
+included it either; it is tested now.
+
+### What the tests now build
+
+- `hashmap_test.c`: one map, as before, with aligned buffers and the new
+  names, plus `hashmap_range.h` and `hashmap_fmt.h` (their results and every
+  refusal, the formatter at each buffer size from 2 bytes up), the alignment
+  refusal and the load cap at capacities 1, 2 and 4.
+- `hashmap_multi_test.c` (new): two maps, `u64 → int` and `u32 → u64`, in
+  one translation unit, each with `hashmap_range.h`, through the per-map
+  names.
+- `hashmap_separate_test.c` (new), with `hashmap_separate_defs.c` and
+  `hashmap_separate_map.h`: the separate-compilation recipe, every declared
+  function used through the declarations.
+
+Against the baseline headers (measured): `hashmap_multi_test.c` does not
+build (H3, H6, and H4's names); `hashmap_separate_test.c` does not build,
+through H4's and H5's names (the recipe itself, H5, was shown failing by the
+probe above); `hashmap_test.c`'s new names do not exist there.
+
+**The coverage job leaves `hashmap_multi_test` out**, as it does the two
+integration guards. With two instantiations every `hashmap_impl.h` function
+is emitted twice, so its row has more outcomes than `hashmap_test.c`'s, and
+the table, which keeps per file the translation unit with the most
+outcomes, would show it instead.
+
+### Measured locally, with the fix
+
+- The suite, 58 of 58 (56 and the two new tests): Debug with sanitizers (GCC,
+  clang), Release (GCC), C11 (clang), C23 (GCC 14). The three hashmap tests
+  and `borrow_test` also at `-m32`; `hashmap_multi_test` under Valgrind.
+  The hashmap fuzzer, 30 s, 0.6 M runs, no report.
+- `embedded`: 136 of 136 at all 18 configurations.
+- MISRA, the job's full command (cppcheck 2.13, as the runner): 55 → **60**.
+  The five new findings, line for line:
+  - rule 11.4 at `hashmap_init`'s alignment test, the pointer converted to
+    `uintptr_t`: the conversion is the test, and C defines it;
+  - rule 5.7, four more: `hashmap_decl.h` and `hashmap_impl.h` now give the
+    option and result tags the same names, as they must (H5), and cppcheck,
+    scanning each header standalone, reports each tag twice. It is the
+    `result_bool_Error` pattern the campaign classified (`5.7 x10`, now
+    more): one definition per translation unit, seen twice by a scan of
+    headers that are never both included.
+
+  The other hashmap findings are the baseline's, at moved lines.
+- MC/DC, by the coverage job's steps: 1986 / 2158 → **2021 / 2194**.
+  `hashmap_impl.h` 61 / 88 → 63 / 90, the alignment test's two outcomes,
+  both covered; two new rows, `hashmap_range.h` 16 / 16 and `hashmap_fmt.h`
+  17 / 18, whose one miss is `capacity > 0` false, unreachable after a
+  successful init. Lines 2917 / 3007, functions 750 / 753, branches
+  1769 / 1928.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| K1 | Every build and test job is green, the suite 58 of 58, Windows (MSVC, MinGW), macOS, musl, AArch64, s390x, i386, C11 to C23, Valgrind and fuzzing among them. | any failure | H for GCC and clang hosts (measured); M for MSVC, MinGW and the 32-bit Arm and s390x legs, not run here |
+| K2 | `misra` real **60**: the 55, and the five above. | another count or composition | H (measured with the job's command) |
+| K3 | No proof job moves: no proof unit includes a hashmap header. | any proof line or name moves | H |
+| K4 | MC/DC **2021 / 2194**: `hashmap_impl.h` 63 / 90, `hashmap_range.h` 16 / 16, `hashmap_fmt.h` 17 / 18, no other row moving. | another total or row | H (measured with the job's steps) |
+| K5 | `embedded` 136 units at 18 configurations, 0 failed; AVR 29 / 49 / 2; `compcert` 59 / 59, `hashmap_separate_test` linked with its `_defs.c`. | another count | H for embedded and AVR (measured); M for CompCert, not run here |
+
+**Next**: hashmap's WP unit, pre-registered in its own record, once this one
+has run.
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
