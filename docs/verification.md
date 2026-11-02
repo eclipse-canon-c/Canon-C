@@ -4715,6 +4715,9 @@ discipline) recorded for deque.
 | stack.h      | ✅ Verified | 5714/5783 | Module 22 (VERIFY-049): 14 macro-body contracts under `-CC`, enforced from run 3; 69 unproved, all cc-vec's, none own. MCDC-019, 5/6. |
 | array.h      | ✅ Verified | 2863/2887 | Module 23 (VERIFY-052): 20 macro-body contracts under `-CC`, enforced from run 3; 24 unproved, 16 inherited and 8 own, as predicted by name, filed under VERIFY-017's byte-view block and VERIFY-008 Category 3. MCDC-020, 42/46. |
 | queue.h      | Reviewed (light) | — | Wraps deque's verified functions; no WP unit of its own (VERIFY-051). |
+| convenience/dynvec.h | Reviewed (light), not WP-verified | — | Heap vector (VERIFY-053). Not WP-verified by design: heap allocation is where WP's reasoning is weakest (VERIFY-008 Category 1). Fixed: unchecked byte-count products (heap overflow) and `extend` from its own buffer (use after free). Evidence: tests, fuzzing, sanitizers, Valgrind. |
+| convenience/smallvec.h | Reviewed (light), not WP-verified | — | Inline-first vector (VERIFY-053). Fixed: a pointer into `init`'s dead stack frame, which the tests had patched around; the quick start's missing vec requirement; `as_vec`'s empty view. Evidence as dynvec. |
+| convenience/dynstring.h | Reviewed (light), not WP-verified | — | Heap string builder (VERIFY-053). Fixed: appending its own text (use after free) and `reserve` leaving it unterminated. Evidence as dynvec; MC/DC 91/120. |
 | hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
 
 ### algo/ (longer term)
