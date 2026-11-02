@@ -3122,3 +3122,78 @@ jobs:
             own.txt
             inherited.txt
           retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # data/hashmap/ (VERIFY-055).
+  #
+  # The unit: vmacros/vdrivers/hashmap_verify.h, hashmap.h at u64 -> int with
+  # the quick start's hash and equality functions, contracted. hashmap's
+  # contracts are in hashmap_impl.h's functions; option and result carry
+  # theirs in macro bodies, so the unit is preprocessed with -CC. Typed+Cast,
+  # as the other data/ units.
+  #
+  # REPORT-ONLY (run 1): it lists every unproved goal, split own (names
+  # containing hashmap_ or _hm_) and inherited, and any Failed, Invalid or
+  # Stepout goal, and fails only on a missing summary. VERIFY-055 predicts
+  # the own set by class; the run gives the list the pins will come from.
+  # -------------------------------------------------------------------------
+  frama-c-hashmap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP under -CC: data/hashmap/ at u64 -> int"
+        run: |
+          eval $(opam env --switch=frama-c)
+          ENFORCE=0   # VERIFY-055: report-only (run 1)
+          OUT=wp_hashmap_output.txt
+          set +e
+          frama-c -wp -wp-rte \
+            -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" \
+              -CC \
+              -I core/primitives \
+              -I core \
+              -I semantics \
+              -I data \
+              -I . \
+              -DCANON_NO_REQUIRE \
+              -DNDEBUG" \
+            vmacros/vdrivers/hashmap_verify.h > "${OUT}" 2>&1
+          WP_EXIT=$?
+          set -e
+          echo "frama-c exit: ${WP_EXIT}   model: Typed+Cast   preprocessing: -CC"
+          PROVED=$(grep -E "^\[wp\] Proved goals:" "${OUT}" | grep -oE "[0-9]+ / [0-9]+" | tail -1)
+          if ! grep -E "^\[wp\] Proved goals:" "${OUT}"; then
+            echo "FAIL: WP produced no summary."; grep -E "^\[(kernel|wp)" "${OUT}" | head -30; exit 1
+          fi
+          grep -oE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\] [A-Za-z0-9_]+" "${OUT}" | awk '{print $2, $3}' | sort -u > bad.txt || true
+          grep -oE "^\[wp\] \[(Timeout|Unknown)\] [A-Za-z0-9_]+" "${OUT}" | awk '{print $3}' | sort -u > unproved.txt
+          grep -E '(hashmap_|_hm_)' unproved.txt | grep -vE '_(option|result)_hashmap_val_t_' > own.txt || true
+          grep -vxFf own.txt unproved.txt > inherited.txt || true
+          echo "=== unproved: $(wc -l < unproved.txt) (own $(wc -l < own.txt), inherited $(wc -l < inherited.txt)) ==="
+          echo "=== own ==="; sed 's/^/    /' own.txt
+          echo "=== inherited ==="; sed 's/^/    /' inherited.txt
+          echo "=== Failed / Invalid / Stepout: $(wc -l < bad.txt) ==="; sed 's/^/    /' bad.txt
+          echo "::notice title=frama-c-hashmap::proved ${PROVED} (report-only); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt)"
+          echo "::notice title=frama-c-hashmap own::$(tr '\n' ' ' < own.txt)"
+          echo "::notice title=frama-c-hashmap bad::$(tr '\n' ' ' < bad.txt)"
+          if [ "${ENFORCE}" -eq 1 ] && [ -s bad.txt ]; then
+            echo "FAIL: Failed, Invalid or Stepout goals (above)."; exit 1
+          fi
+      - name: Upload WP output (hashmap)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: wp-proof-hashmap
+          path: |
+            wp_hashmap_output.txt
+            unproved.txt
+            own.txt
+            inherited.txt
+            bad.txt
+          retention-days: 90

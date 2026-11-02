@@ -119,7 +119,6 @@
     #include "core/primitives/lifetime.h"     /* region_id_t, lifetime_t */
 #endif
 
-#include <string.h>  /* memset */
 #include <stddef.h>  /* offsetof */
 #include <stdint.h>  /* uintptr_t */
 
@@ -211,6 +210,33 @@ typedef struct {
     HM_LIFETIME_FIELD_
 } HASHMAP_TYPE_NAME;
 
+/* VERIFY-055: the map's representation invariant, per map (the name is
+   mangled, so two maps in one translation unit define two predicates).
+   - capacity: at least 1, at most 2^30, so that insert's probe distance,
+     a u32 at most twice the capacity, cannot overflow (a contract limit:
+     the code does not refuse a larger capacity; the verified unit does not
+     admit one);
+   - len: at most capacity;
+   - slots: capacity of them, valid, apart from the map struct;
+   - every slot's probe distance is below the capacity, and an occupied
+     slot's cached hash is not 0 (insert normalises 0 to 1).
+   Not stated, and not claimed: the Robin Hood order (that every key lies at
+   its probe distance from its home slot), on which "get finds what insert
+   stored" rests. */
+/*@ predicate HASHMAP_FN(shape_)(HASHMAP_TYPE_NAME* m) =
+      \valid(m) &&
+      1 <= m->capacity <= 1073741824 &&
+      m->len <= m->capacity &&
+      \valid(m->slots + (0 .. m->capacity - 1)) &&
+      \separated(m, m->slots + (0 .. m->capacity - 1));
+    predicate HASHMAP_FN(dist_)(HASHMAP_TYPE_NAME* m) =
+      \forall integer j; 0 <= j < m->capacity ==>
+        m->slots[j].psl < m->capacity &&
+        (m->slots[j].occupied ==> m->slots[j].hash != 0);
+    predicate HASHMAP_FN(inv_)(HASHMAP_TYPE_NAME* m) =
+      HASHMAP_FN(shape_)(m) && HASHMAP_FN(dist_)(m);
+*/
+
 /* ============================================================================
  * Internal: TU-wide lifetime counter helper
  * ============================================================================
@@ -259,7 +285,9 @@ typedef struct {
         /* lt.open stays true — restamp is not destruction */
     }
 #else
+    /*@ assigns \nothing; */
     HASHMAP_LINKAGE void HM_LIFETIME_OPEN_(HASHMAP_TYPE_NAME* map)    { (void)map; }
+    /*@ assigns \nothing; */
     HASHMAP_LINKAGE void HM_LIFETIME_RESTAMP_(HASHMAP_TYPE_NAME* map) { (void)map; }
 #endif
 
@@ -271,14 +299,23 @@ typedef struct {
    map's types, and a second map redefined them. */
 #ifndef CANON_HM_INTERNAL_HELPERS_DEFINED
 #define CANON_HM_INTERNAL_HELPERS_DEFINED
+/*@ requires capacity >= 1;
+    assigns \nothing;
+    ensures \result < capacity; */
 static inline usize _hm_home(u64 hash, usize capacity) {
     return (usize)(hash & (u64)(capacity - 1u));
 }
 
+/*@ requires capacity >= 1;
+    assigns \nothing;
+    ensures \result < capacity; */
 static inline usize _hm_wrap(usize index, usize capacity) {
     return index & (capacity - 1u);
 }
 
+/*@ assigns \nothing;
+    ensures \result != 0;
+    ensures h != 0 ==> \result == h; */
 static inline u64 _hm_normalize_hash(u64 h) {
     return (h == 0u) ? 1u : h;
 }
@@ -288,6 +325,31 @@ static inline u64 _hm_normalize_hash(u64 h) {
  * hashmap_buffer_size
  * ========================================================================= */
 
+/* Empties every slot, a typed store per slot (VERIFY-055). It replaces a
+   memset of the slot array: WP's typed model does not carry a byte fill to
+   the slots' fields, so with memset no clause about the emptied slots could
+   be proved. The fields read afterwards are the same: occupied false,
+   hash 0, psl 0. Key and value are left as they were, as they are when a
+   remove empties a slot; they are never read from an unoccupied slot. */
+/*@ requires \valid(slots + (0 .. capacity - 1));
+    assigns slots[0 .. capacity - 1];
+    ensures \forall integer k; 0 <= k < capacity ==>
+            !slots[k].occupied && slots[k].hash == 0 && slots[k].psl == 0; */
+static inline void HASHMAP_FN(empty_slots_)(HASHMAP_SLOT_NAME* slots, usize capacity) {
+    /*@ loop invariant 0 <= j <= capacity;
+        loop invariant \forall integer k; 0 <= k < j ==>
+            !slots[k].occupied && slots[k].hash == 0 && slots[k].psl == 0;
+        loop assigns j, slots[0 .. capacity - 1];
+        loop variant capacity - j; */
+    for (usize j = 0; j < capacity; j++) {
+        slots[j].occupied = false;
+        slots[j].hash     = 0u;
+        slots[j].psl      = 0u;
+    }
+}
+
+/*@ assigns \nothing;
+    ensures \result == 0 || \result == capacity * sizeof(HASHMAP_SLOT_NAME); */
 HASHMAP_LINKAGE usize HM_BUFFER_SIZE_(usize capacity) {
     usize total = 0;
     if (!checked_mul(capacity, sizeof(HASHMAP_SLOT_NAME), &total)) { return 0; }
@@ -298,6 +360,16 @@ HASHMAP_LINKAGE usize HM_BUFFER_SIZE_(usize capacity) {
  * hashmap_init
  * ========================================================================= */
 
+/*@ requires map == \null || \valid(map);
+    requires buf.ptr == \null || buf.len == 0 || \valid(buf.ptr + (0 .. buf.len - 1));
+    requires map == \null || buf.ptr == \null || buf.len == 0 ||
+             \separated(map, buf.ptr + (0 .. buf.len - 1));
+    requires capacity <= 1073741824;
+    assigns *map, buf.ptr[0 .. buf.len - 1];
+    ensures \result.is_ok ==> HASHMAP_FN(inv_)(map) && map->len == 0 &&
+            map->capacity == capacity && map->ctx == ctx;
+    ensures !\result.is_ok ==>
+            (\result.val.err == ERR_INVALID_ARG || \result.val.err == ERR_BUFFER_TOO_SMALL); */
 HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     bytes_t                      buf,
@@ -330,7 +402,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     map->len      = 0;
     map->ctx      = ctx;
 
-    (void)memset(map->slots, 0, required);
+    HASHMAP_FN(empty_slots_)(map->slots, capacity);
 
     HM_LIFETIME_OPEN_(map);
 
@@ -341,10 +413,14 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
  * hashmap_clear
  * ========================================================================= */
 
+/*@ requires HASHMAP_FN(inv_)(map);
+    assigns map->len, map->slots[0 .. map->capacity - 1];
+    ensures HASHMAP_FN(inv_)(map);
+    ensures map->len == 0; */
 HASHMAP_LINKAGE void HM_CLEAR_(borrowed(HASHMAP_TYPE_NAME*) map) {
     require_msg(map != NULL, "hashmap_clear: map cannot be NULL");
     require_msg(map->slots != NULL, "hashmap_clear: map is uninitialized");
-    (void)memset(map->slots, 0, map->capacity * sizeof(HASHMAP_SLOT_NAME));
+    HASHMAP_FN(empty_slots_)(map->slots, map->capacity);
     map->len = 0;
     HM_LIFETIME_RESTAMP_(map);
 }
@@ -353,21 +429,32 @@ HASHMAP_LINKAGE void HM_CLEAR_(borrowed(HASHMAP_TYPE_NAME*) map) {
  * State queries
  * ========================================================================= */
 
+/*@ requires \valid_read(map);
+    assigns \nothing;
+    ensures \result == map->len; */
 HASHMAP_LINKAGE usize HM_LEN_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_len: map cannot be NULL");
     return map->len;
 }
 
+/*@ requires \valid_read(map);
+    assigns \nothing;
+    ensures \result == map->capacity; */
 HASHMAP_LINKAGE usize HM_CAPACITY_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_capacity: map cannot be NULL");
     return map->capacity;
 }
 
+/*@ requires \valid_read(map);
+    assigns \nothing;
+    ensures \result <==> map->len == 0; */
 HASHMAP_LINKAGE bool HM_IS_EMPTY_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_is_empty: map cannot be NULL");
     return map->len == 0u;
 }
 
+/*@ requires HASHMAP_FN(inv_)(map);
+    assigns \nothing; */
 HASHMAP_LINKAGE f64 HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map) {
     require_msg(map != NULL, "hashmap_load_factor: map cannot be NULL");
     if (map->capacity == 0u) { return 0.0; }
@@ -378,6 +465,27 @@ HASHMAP_LINKAGE f64 HM_LOAD_FACTOR_(const HASHMAP_TYPE_NAME* map) {
  * hashmap_insert — Robin Hood insertion
  * ========================================================================= */
 
+/*@ requires map == \null || HASHMAP_FN(inv_)(map);
+    requires key == \null || \valid_read(key);
+    requires val == \null || \valid_read(val);
+    assigns map->len, map->slots[0 .. map->capacity - 1];
+    behavior invalid:
+      assumes map == \null || key == \null || val == \null;
+      ensures !\result.is_ok && \result.val.err == ERR_INVALID_ARG;
+    behavior full:
+      assumes map != \null && key != \null && val != \null &&
+              map->len >= map->capacity - map->capacity / 4;
+      ensures !\result.is_ok && \result.val.err == ERR_CAPACITY_EXCEEDED;
+      ensures map->len == \old(map->len);
+    behavior room:
+      assumes map != \null && key != \null && val != \null &&
+              map->len < map->capacity - map->capacity / 4;
+      ensures HASHMAP_FN(inv_)(map);
+      ensures \result.is_ok ==>
+              (\result.val.ok ? map->len == \old(map->len) + 1 : map->len == \old(map->len));
+      ensures !\result.is_ok ==> \result.val.err == ERR_CAPACITY_EXCEEDED;
+    complete behaviors;
+    disjoint behaviors; */
 HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
     borrowed(HASHMAP_TYPE_NAME*)   map,
     const hm_key_t*                key,
@@ -407,6 +515,16 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
 
     bool is_new_key = true;
 
+    /*@ loop invariant 0 <= i <= map->capacity;
+    loop invariant probe_idx < map->capacity;
+    loop invariant psl <= map->capacity + i;
+    loop invariant incoming.psl == psl;
+    loop invariant incoming.hash != 0;
+    loop invariant HASHMAP_FN(shape_)(map);
+        loop invariant HASHMAP_FN(dist_)(map);
+    loop invariant map->len == \at(map->len, Pre);
+    loop assigns i, probe_idx, psl, incoming, map->slots[0 .. map->capacity - 1];
+    loop variant map->capacity - i; */
     for (usize i = 0; i < map->capacity; i++) {
         HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
@@ -462,6 +580,9 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
  * hashmap_get — lookup by key, returns Option<VAL>
  * ========================================================================= */
 
+/*@ requires HASHMAP_FN(inv_)(map);
+    requires \valid_read(key);
+    assigns \nothing; */
 HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
     const HASHMAP_TYPE_NAME* map,
     const hm_key_t*          key
@@ -474,6 +595,11 @@ HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
     usize probe_idx = _hm_home(h, map->capacity);
     u32   psl       = 0;
 
+    /*@ loop invariant 0 <= i <= map->capacity;
+    loop invariant probe_idx < map->capacity;
+    loop invariant psl == i;
+    loop assigns i, probe_idx, psl;
+    loop variant map->capacity - i; */
     for (usize i = 0; i < map->capacity; i++) {
         const HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
@@ -495,6 +621,11 @@ HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
  * hashmap_get_or_null
  * ========================================================================= */
 
+/*@ requires HASHMAP_FN(inv_)(map);
+    requires \valid_read(key);
+    assigns \nothing;
+    ensures \result == \null ||
+            (\exists integer j; 0 <= j < map->capacity && \result == &map->slots[j].value); */
 HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_key_t*              key
@@ -507,6 +638,11 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
     usize probe_idx = _hm_home(h, map->capacity);
     u32   psl       = 0;
 
+    /*@ loop invariant 0 <= i <= map->capacity;
+    loop invariant probe_idx < map->capacity;
+    loop invariant psl == i;
+    loop assigns i, probe_idx, psl;
+    loop variant map->capacity - i; */
     for (usize i = 0; i < map->capacity; i++) {
         HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
@@ -528,6 +664,9 @@ HASHMAP_LINKAGE borrowed(hm_val_t*) HM_GET_OR_NULL_(
  * hashmap_contains_key
  * ========================================================================= */
 
+/*@ requires HASHMAP_FN(inv_)(map);
+    requires \valid_read(key);
+    assigns \nothing; */
 HASHMAP_LINKAGE bool HM_CONTAINS_KEY_(
     const HASHMAP_TYPE_NAME* map,
     const hm_key_t*          key
@@ -541,6 +680,19 @@ HASHMAP_LINKAGE bool HM_CONTAINS_KEY_(
  * hashmap_remove — remove by key, backward shift deletion
  * ========================================================================= */
 
+/*@ requires map == \null || HASHMAP_FN(inv_)(map);
+    requires key == \null || \valid_read(key);
+    assigns map->len, map->slots[0 .. map->capacity - 1];
+    behavior invalid:
+      assumes map == \null || key == \null;
+      ensures !\result.is_ok && \result.val.err == ERR_INVALID_ARG;
+    behavior valid:
+      assumes map != \null && key != \null;
+      ensures HASHMAP_FN(inv_)(map);
+      ensures \result.is_ok ==> map->len == \old(map->len) - 1;
+      ensures !\result.is_ok ==> \result.val.err == ERR_NOT_FOUND && map->len == \old(map->len);
+    complete behaviors;
+    disjoint behaviors; */
 HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_key_t*              key
@@ -555,6 +707,11 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
     usize found_idx = map->capacity; /* sentinel: not found */
 
     /* Phase 1: find the slot */
+    /*@ loop invariant 0 <= i <= map->capacity;
+    loop invariant probe_idx < map->capacity;
+    loop invariant psl == i;
+    loop assigns i, probe_idx, psl;
+    loop variant map->capacity - i; */
     for (usize i = 0; i < map->capacity; i++) {
         HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
@@ -578,6 +735,13 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
 
     /* Phase 2: backward shift deletion */
     usize curr = found_idx;
+    /*@ loop invariant 0 <= i <= map->capacity - 1;
+    loop invariant curr < map->capacity;
+    loop invariant HASHMAP_FN(shape_)(map);
+        loop invariant HASHMAP_FN(dist_)(map);
+    loop invariant map->len == \at(map->len, Pre);
+    loop assigns i, curr, map->slots[0 .. map->capacity - 1];
+    loop variant map->capacity - 1 - i; */
     for (usize i = 0u; i < (map->capacity - 1u); i++) {
         usize next = _hm_wrap(curr + 1u, map->capacity);
         HASHMAP_SLOT_NAME* next_slot = &map->slots[next];
@@ -603,6 +767,19 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
  * hashmap_iter_next
  * ========================================================================= */
 
+/*@ requires HASHMAP_FN(inv_)(map);
+    requires \valid(iter);
+    requires key_out == \null || \valid(key_out);
+    requires val_out == \null || \valid(val_out);
+    requires \separated(iter, key_out, val_out);
+    requires \separated(map, iter) &&
+             (key_out == \null || \separated(map, key_out)) &&
+             (val_out == \null || \separated(map, val_out));
+    assigns *iter, *key_out, *val_out;
+    ensures \result ==> *iter <= map->capacity &&
+            (key_out != \null ==> *key_out == &map->slots[*iter - 1].key) &&
+            (val_out != \null ==> *val_out == &map->slots[*iter - 1].value);
+    ensures !\result ==> *iter == \max(\old(*iter), map->capacity); */
 HASHMAP_LINKAGE bool HM_ITER_NEXT_(
     const HASHMAP_TYPE_NAME* map,
     usize*                   iter,
@@ -613,6 +790,10 @@ HASHMAP_LINKAGE bool HM_ITER_NEXT_(
     require_msg(map->slots != NULL, "hashmap_iter_next: map is uninitialized");
     require_msg(iter != NULL,       "hashmap_iter_next: iter cannot be NULL");
 
+    /*@ loop invariant \at(*iter, Pre) <= *iter;
+    loop invariant *iter <= map->capacity || *iter == \at(*iter, Pre);
+    loop assigns *iter;
+    loop variant map->capacity - *iter; */
     while (*iter < map->capacity) {
         const HASHMAP_SLOT_NAME* slot = &map->slots[*iter];
         (*iter)++;

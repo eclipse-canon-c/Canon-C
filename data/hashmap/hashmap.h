@@ -192,12 +192,15 @@
  *
  * Lifecycle:
  *   hashmap_init(&map, buf, capacity, ctx)  → result__Bool_Error
- *     Initializes map over caller-owned buf. Zeroes all slots. O(capacity).
+ *     Initializes map over caller-owned buf. Marks every slot empty
+ *     (occupied, hash and probe distance set; key and value bytes left as
+ *     they were, never read from an empty slot; VERIFY-055). O(capacity).
  *     Err(ERR_INVALID_ARG): NULL map or buf, capacity 0 or not a power of 2,
  *     or buf not aligned for the slots. Err(ERR_BUFFER_TOO_SMALL).
  *
  *   hashmap_clear(&map)                     → void
- *     Removes all entries. Buffer and capacity unchanged. O(capacity).
+ *     Removes all entries, as init marks the slots. Buffer and capacity
+ *     unchanged. O(capacity).
  *
  * Queries:
  *   hashmap_len(&map)              → usize   — number of stored entries
@@ -278,6 +281,18 @@
  * Before VERIFY-054 this did not compile (H3): the second include redefined
  * the internal value typedef and the option and result types named after
  * it. test/data/hashmap_multi_test.c builds it.
+ *
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * VERIFICATION (VERIFY-055)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ *
+ * hashmap_impl.h's functions carry ACSL contracts, proved by WP at u64 -> int
+ * (vmacros/vdrivers/hashmap_verify.h, job frama-c-hashmap). They state the
+ * map's shape (capacity 1 to 2^30, len at most capacity, valid slots apart
+ * from the struct), memory safety, frames, len bookkeeping and that the
+ * probe loops terminate. They do not state the Robin Hood order, so "get
+ * finds what insert stored" is tested, not proved. The verified contract
+ * admits capacities up to 2^30, which the code does not itself refuse.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * DESIGN NOTES
