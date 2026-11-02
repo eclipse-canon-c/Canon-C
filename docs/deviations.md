@@ -27722,3 +27722,122 @@ Run on 5f0387d: 85 jobs, all `success`, read from the annotations.
 **VERIFY-054 is closed.** hashmap's documented paths now compile and are
 tested, and a misaligned buffer is refused. hashmap is not WP-verified yet:
 its WP unit is the next record, pre-registered once this one is on master.
+
+---
+
+## VERIFY-055: Pre-registration — data/hashmap/, the Twenty-Fifth Unit: Contracts for Safety, Frames and len; the Robin Hood Order Not Claimed
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-055 |
+| **Date**       | 2026-11-02 |
+| **Status**     | PREDICTED. This record and the rebuilt catalogue are committed before the contract commit, which is pushed with them; neither has run in CI. |
+| **Baseline**   | f4c713b (VERIFY-054 closed) |
+| **Scope**      | `data/hashmap/hashmap_impl.h` (contracts, loop annotations, the slot-emptying helper), `hashmap.h` (documentation); a new driver `vmacros/vdrivers/hashmap_verify.h`; a new job `frama-c-hashmap` in `proofs-data.yml`, report-only |
+| **Category**   | hashmap's full treatment, its second step: the WP unit. Decided with the author (2026-11-02): pre-register now with the expected residual stated by class, and let CI's first run, with its three provers, give the list, rather than iterate on local runs whose prover set differs; and let run 1 report a goal a prover fails on (Failed) without failing. |
+
+### What is claimed, and what is not
+
+**Claimed** (stated in contracts, to be proved):
+- **The map's shape**, a predicate per map, `HASHMAP_FN(inv_)`:
+  - capacity from 1 to 2^30;
+  - `len` at most the capacity;
+  - `capacity` valid slots, apart from the map struct;
+  - every slot's probe distance below the capacity, and an occupied slot's
+    cached hash not 0.
+
+  `init` establishes it on success; every mutator keeps it.
+- **Memory safety**: every runtime-error goal (`-wp-rte`): index bounds,
+  pointer validity, the hash and equality functions called with valid
+  pointers, no u32 overflow of a probe distance.
+- **Frames**: `insert`, `remove` and `clear` write only `len` and the
+  slots; the queries write nothing; `iter_next` writes only its outputs.
+- **`len` bookkeeping**: `insert` on room adds 1 for a new key and 0 for an
+  update; `remove` subtracts 1 when it finds the key and changes nothing
+  when it does not; `clear` sets 0; the errors are the documented ones.
+- **Termination**: every loop has a variant.
+
+**Not claimed**:
+- **The Robin Hood order**: that every key lies at its probe distance from
+  its home slot, with distances non-decreasing along a run. On it rests
+  "get finds what insert stored" and "remove removes that key". No contract
+  states it, so the unit says nothing about which value `get` returns. The
+  tests and the fuzzer are that property's evidence.
+- **Capacities above 2^30**. `insert`'s probe distance is a u32 that a
+  swap can raise to the capacity plus the probe count; the bound keeps it
+  below 2^32. The code does not refuse a larger capacity; the contract does
+  not admit one.
+- **`load_factor`'s value**: its contract is the shape and no frame
+  beyond `\nothing`.
+
+### One code change, for the proof
+
+`init` and `clear` emptied the slots with `memset`. WP's typed model does
+not carry a byte fill to the slots' fields, so no clause about the emptied
+slots could be proved (the local runs showed it: `clear`'s frame and
+postcondition, `init`'s). They now call `HASHMAP_FN(empty_slots_)`, a typed
+loop that sets each slot's `occupied`, `hash` and `psl` to false, 0 and 0,
+the fields any read of an empty slot consults. Key and value bytes are left
+as they were, as a `remove` already leaves them in the slot it empties.
+`hashmap.h` says so. Measured: the suite, 58 of 58 in Debug (GCC, clang)
+and Release; clang-tidy and Cppcheck clean on the hashmap tests; MISRA 66,
+the same composition; `embedded` 136; MC/DC 2021 / 2194 → **2023 / 2196**,
+`hashmap_impl.h` 63 / 90 → 65 / 92 (the loop's two outcomes, covered).
+
+### The unit
+
+**The driver** includes `hashmap.h` at `u64 → int` with the quick start's
+hash and equality functions, each contracted: it reads the key(s), writes
+nothing, and the hash is not 0, equality is `==`. **Preprocessing**: `-CC`,
+for option's and result's macro-body contracts. **Model**: Typed+Cast.
+**The job** `frama-c-hashmap`, 300-minute budget, report-only: it lists
+the unproved goals split own (names with `hashmap_` or `_hm_`, option's and
+result's at the map's value type excepted) and inherited, and the Failed,
+Invalid and Stepout goals, in annotations, and fails only on a missing
+summary.
+
+**n(*P*) = 4**: layer A, `\max` (in `iter_next`'s postcondition), not
+used by any verified unit; layer C, `hashmap.h`, `hashmap_impl.h` and
+`hashmap_mangle.h`. Measured by `tools/idioms/extract.py measure` against
+the catalogue rebuilt at f4c713b, committed with this record: the rebuild
+adds `frama-c-array` to the units (26), and its 42 A, 22 B and 9 C features
+are unchanged.
+
+### Local runs, stated with their limits
+
+WP 25, Z3 4.8 only, 20 s: not CI's WP 29 with Alt-Ergo, Z3 and CVC5 at
+120 s. Three rounds: 26 own goals unproved without contracts are not
+comparable; with the contracts as committed, **24 own unproved** of
+4622 goals in all:
+
+| class | goals (local names, `typed_cast_` dropped) |
+|-------|------|
+| A. bitwise: the home and the wrap below the capacity | `hm_home_ensures`, `hm_wrap_ensures` |
+| B. the probe distance bound (Robin Hood) | `hashmap_insert_loop_invariant_7_established`, `_7_preserved_part1`, `_7_preserved_part3`; `hashmap_remove_loop_invariant_7_established_part3`, `_7_preserved_part3`; and what rests on it: `hashmap_insert_room_ensures_part5`, `_part7`, `_part8`; `hashmap_remove_valid_ensures_part12` to `_14`, `hashmap_remove_valid_ensures_2_part12` to `_14`; `hashmap_insert_assigns_exit_part14`, `_normal_part22`; `hashmap_remove_assigns_exit_part20`, `_normal_part30` |
+| C. the slots from the byte buffer | `hashmap_init_ensures_part28` |
+| D. the emptied table | `hashmap_clear_ensures` |
+| E. `iter_next`'s pointers | `hashmap_iter_next_ensures_part02` |
+| F. floating point | `hashmap_load_factor_assert_rte_is_nan_or_infinite`: **Failed** (the prover gave up with an error), not unproved |
+
+Class B's "established" goals are puzzling: at loop entry the invariant is
+the precondition's. They may be Z3 at 20 s on a quantified clause; CI's
+provers will say. No runtime-error goal of hashmap's own is in the list.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | `frama-c-hashmap` completes within 300 minutes, with a summary. | otherwise | M (no CI run of the unit yet; the local run took about 25 minutes with one prover) |
+| Q2 | **No own runtime-error goal is unproved**: every `assert_rte` goal of hashmap's functions is proved, F excepted. | any own `assert_rte` name unproved, F aside | M–H (all proved locally) |
+| Q3 | Every own unproved goal is in classes A to F; there are at most the 24 above (CI's provers may prove some, of B to E most likely). | an own name outside A to F, or more than 24 | M |
+| Q4 | Class A's two stay unproved. | either proved | M (bitwise bounds, the VERIFY-006 family) |
+| Q5 | The float goal F is Failed or unproved; it is reported either way and run 1 does not fail on it. | the job fails on it | H for the job's behaviour; L for which of the two |
+| Q6 | The inherited set is the closure's known residuals at this unit's types: option's and result's combinators at `hashmap_val_t` (their function-pointer goals), and residuals of `checked.h`, `bits.h` and `slice.h` as other units pin them. Not predicted by name. | an inherited goal of another kind | M |
+| Q7 | Nothing else moves: every other proof job at its pin; the suite 58 of 58 everywhere; `static-analysis` green; `misra` 66; MC/DC **2023 / 2196**; `embedded` 136; `compcert` 59 / 59. | any change | H (each measured here, but CompCert and the non-Linux legs) |
+
+After run 1, a scored record names the residual, argues each class, and
+pins it; class B is expected to need an argument block of its own, the
+Robin Hood distance bound.
+
+The contracts are pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.

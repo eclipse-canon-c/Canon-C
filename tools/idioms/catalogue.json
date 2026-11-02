@@ -1,7 +1,7 @@
 {
  "meta": {
   "tool_version": "1",
-  "substrate_commit": "2acb55c",
+  "substrate_commit": "f4c713b",
   "clang": "Ubuntu clang version 18.1.3 (1ubuntu1)",
   "workflow": ".github/workflows/proofs-core.yml .github/workflows/proofs-semantics.yml .github/workflows/proofs-data.yml"
  },
@@ -477,6 +477,28 @@
     "-DNDEBUG"
    ],
    "features": 59
+  },
+  {
+   "job": "frama-c-array",
+   "files": [
+    "vmacros/vdrivers/array_verify.h"
+   ],
+   "cpp": [
+    "-CC",
+    "-I",
+    "core/primitives",
+    "-I",
+    "core",
+    "-I",
+    "semantics",
+    "-I",
+    "data",
+    "-I",
+    ".",
+    "-DCANON_NO_REQUIRE",
+    "-DNDEBUG"
+   ],
+   "features": 39
   }
  ],
  "verified_closure": [
@@ -494,6 +516,7 @@
   "core/primitives/types.h",
   "core/region.h",
   "core/slice.h",
+  "data/array.h",
   "data/bitset.h",
   "data/deque/deque_defn.h",
   "data/deque/deque_impl.h",
@@ -519,6 +542,7 @@
   "semantics/result/result_defn.h",
   "semantics/result/result_impl.h",
   "semantics/result/result_mangle.h",
+  "vmacros/vdrivers/array_verify.h",
   "vmacros/vdrivers/bitset_verify.h",
   "vmacros/vdrivers/deque_verify.h",
   "vmacros/vdrivers/option_verify.h",
@@ -555,6 +579,7 @@
   "acsl-builtin:\\dangling": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-memory",
@@ -574,6 +599,7 @@
   "acsl-builtin:\\false": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-checked",
@@ -597,6 +623,7 @@
   "acsl-builtin:\\forall": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-diag",
@@ -646,6 +673,7 @@
   "acsl-builtin:\\initialized": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-memory",
@@ -684,6 +712,7 @@
   "acsl-builtin:\\nothing": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -709,6 +738,7 @@
   "acsl-builtin:\\null": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -730,6 +760,7 @@
   "acsl-builtin:\\old": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-deque",
    "frama-c-diag",
@@ -748,6 +779,7 @@
   "acsl-builtin:\\result": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -791,6 +823,7 @@
   "acsl-builtin:\\true": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-checked",
@@ -813,6 +846,7 @@
   "acsl-builtin:\\valid": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-checked",
@@ -834,6 +868,7 @@
    "frama-c-vec-range"
   ],
   "acsl-builtin:\\valid_function": [
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-deque",
    "frama-c-option",
@@ -849,6 +884,7 @@
   "acsl-builtin:\\valid_read": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-compare",
@@ -884,6 +920,7 @@
   "acsl-clause:assigns": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -910,6 +947,7 @@
   "acsl-clause:assumes": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -937,6 +975,7 @@
   "acsl-clause:behavior": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -964,6 +1003,7 @@
   "acsl-clause:complete behaviors": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -988,6 +1028,7 @@
   "acsl-clause:disjoint behaviors": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -1012,6 +1053,7 @@
   "acsl-clause:ensures": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -1039,6 +1081,7 @@
   "acsl-clause:exits": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1084,6 +1127,7 @@
   "acsl-clause:loop assigns": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1106,6 +1150,7 @@
   "acsl-clause:loop invariant": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-diag",
    "frama-c-memory",
@@ -1121,6 +1166,7 @@
   "acsl-clause:loop variant": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-diag",
    "frama-c-memory",
@@ -1136,6 +1182,7 @@
   "acsl-clause:predicate": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1155,6 +1202,7 @@
   "acsl-clause:requires": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bits",
    "frama-c-bitset",
    "frama-c-borrow",
@@ -1180,6 +1228,7 @@
   "acsl-clause:terminates": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1272,6 +1321,7 @@
    "frama-c-priority-queue"
   ],
   "c:indirect call": [
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-deque",
    "frama-c-option",
@@ -1302,6 +1352,7 @@
   "c:loop": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-diag",
    "frama-c-memory",
@@ -1315,6 +1366,7 @@
    "frama-c-vec-range"
   ],
   "c:loop in a macro body": [
+   "frama-c-array",
    "frama-c-stack",
    "frama-c-vec",
    "frama-c-vec-fmt",
@@ -1323,6 +1375,7 @@
   "c:nonlinear arithmetic": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-checked",
@@ -1367,6 +1420,7 @@
   "c:variadic call": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1393,6 +1447,7 @@
   "libc:abort": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1415,6 +1470,7 @@
   "libc:fflush": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1437,6 +1493,7 @@
   "libc:fprintf": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-deque",
@@ -1459,6 +1516,7 @@
   "libc:memcmp": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-memory",
@@ -1475,6 +1533,7 @@
   "libc:memcpy": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-diag",
    "frama-c-memory",
@@ -1505,6 +1564,7 @@
   "libc:memset": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-diag",
    "frama-c-memory",
@@ -1523,6 +1583,7 @@
   "libc:strlen": [
    "frama-c-arena",
    "frama-c-arena-32",
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-borrow",
    "frama-c-memory",
@@ -1549,6 +1610,7 @@
    "frama-c-deque"
   ],
   "family:option": [
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-deque",
    "frama-c-option",
@@ -1557,6 +1619,7 @@
    "frama-c-vec"
   ],
   "family:option@integer": [
+   "frama-c-array",
    "frama-c-bitset",
    "frama-c-deque",
    "frama-c-option",
