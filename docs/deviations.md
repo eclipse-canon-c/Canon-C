@@ -27841,3 +27841,39 @@ Robin Hood distance bound.
 
 The contracts are pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-11-03): the residual is two classes, 15 goals
+
+Run on 173b7a2: 86 jobs, all `success`, read from the annotations.
+`frama-c-hashmap`: **proved 4585 / 4640; unproved 55: own 15, inherited
+40; Failed, Invalid or Stepout: 0.**
+
+The 15 own, all in two of the six local classes:
+
+| class | goals (`typed_cast_` dropped) |
+|-------|------|
+| A. bitwise | `hm_home_ensures`, `hm_wrap_ensures` |
+| B. the probe distance bound, and what rests on it | `hashmap_insert_loop_invariant_7_preserved_part1`, `_part3`; `hashmap_insert_room_ensures_part5`; `hashmap_insert_assigns_exit_part10`, `hashmap_insert_assigns_normal_part18`; `hashmap_remove_valid_ensures_part12` to `_14`; `hashmap_remove_valid_ensures_2_part12` to `_14`; `hashmap_remove_assigns_exit_part12`, `hashmap_remove_assigns_normal_part22` |
+
+CI's provers closed classes C to F: `init`'s slots from the byte buffer,
+`clear`'s postcondition, `iter_next`'s pointers and the float check, and
+class B's "established" goals and two of its `insert` postconditions. The
+split numbers of the assigns goals differ from the local run's (part10 and
+part18 for part14 and part22): WP 29 splits these goals differently.
+
+| # | result |
+|---|--------|
+| Q1 | **MATCH.** Completed, with a summary. |
+| Q2 | **MATCH.** No own runtime-error goal unproved. |
+| Q3 | **MATCH.** 15 own, all in classes A and B. |
+| Q4 | **MATCH.** Class A's two unproved. |
+| Q5 | **Partly MISS.** The job did not fail, as predicted; but the float goal was neither Failed nor unproved: it was proved. The prediction offered two outcomes and it was a third. |
+| Q6 | **Open.** 40 inherited; the annotation gave the count, not the names, and the log and artifact are not readable here. Run 2 posts the names. |
+| Q7 | **MATCH.** Every other proof job at its pin; `static-analysis` green; `misra` 66; MC/DC 2023 / 2196; `embedded` 136 units, 0 failed; `compcert` 59 / 59. |
+
+**Run 2** (this commit's push) is the name-stability run. It stays
+report-only, compares its line with run 1's, and posts the inherited names
+as well. The record then files the 55: class A under VERIFY-006's bitwise
+block if its argument covers a mask below its modulus, class B under a new
+block on the probe distance bound, and the 40 inherited by name; and the
+job is enforced.

@@ -3146,7 +3146,8 @@ jobs:
       - name: "WP under -CC: data/hashmap/ at u64 -> int"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-055: report-only (run 1)
+          ENFORCE=0   # VERIFY-055: report-only (run 2, name stability); run 1 on 173b7a2
+          PIN_PROVED="4585 / 4640"   # run 1's line, compared and reported, not enforced
           OUT=wp_hashmap_output.txt
           set +e
           frama-c -wp -wp-rte \
@@ -3179,8 +3180,12 @@ jobs:
           echo "=== own ==="; sed 's/^/    /' own.txt
           echo "=== inherited ==="; sed 's/^/    /' inherited.txt
           echo "=== Failed / Invalid / Stepout: $(wc -l < bad.txt) ==="; sed 's/^/    /' bad.txt
-          echo "::notice title=frama-c-hashmap::proved ${PROVED} (report-only); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt)"
+          if [ "${PROVED}" = "${PIN_PROVED}" ]; then SAME="same as run 1"; else SAME="run 1 read ${PIN_PROVED}"; fi
+          echo "::notice title=frama-c-hashmap::proved ${PROVED} (report-only; ${SAME}); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt)"
           echo "::notice title=frama-c-hashmap own::$(tr '\n' ' ' < own.txt)"
+          # VERIFY-055 run 2: the inherited names too, which the pins need and
+          # the session cannot read from the log or the artifact.
+          echo "::notice title=frama-c-hashmap inherited::$(tr '\n' ' ' < inherited.txt)"
           echo "::notice title=frama-c-hashmap bad::$(tr '\n' ' ' < bad.txt)"
           if [ "${ENFORCE}" -eq 1 ] && [ -s bad.txt ]; then
             echo "FAIL: Failed, Invalid or Stepout goals (above)."; exit 1
