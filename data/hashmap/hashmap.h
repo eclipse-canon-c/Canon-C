@@ -54,26 +54,29 @@
  *
  * Step 3 — Use:
  * ```c
- * // Size your buffer: at minimum capacity * sizeof(hashmap_slot)
- * // Use bits_next_power_of_two() to round up to a power of 2
- * // Use hashmap_buffer_size(cap) to get exact byte count
- * usize cap = bits_next_power_of_two(100 * 4 / 3 + 1);  // 100 elements at 75% load → 256
- * u8 buf[hashmap_buffer_size(cap)];                       // stack or static allocation
- * // or: u8* buf = malloc(hashmap_buffer_size(cap));      // heap allocation
+ * // The buffer holds capacity slots and must be aligned for hashmap_slot:
+ * // hashmap_init refuses a misaligned one with ERR_INVALID_ARG (VERIFY-054).
+ * // An array of hashmap_slot is aligned; so is malloc's result. A u8 array
+ * // is not, in general.
+ * // 100 elements at 75% load: bits_next_power_of_two(100 * 4 / 3 + 1) = 256
+ * hashmap_slot buf[256];                                  // stack or static
+ * // or: void* buf = malloc(hashmap_buffer_size(256));    // heap
  *
  * hashmap map;
- * result_bool_Error init_res = hashmap_init(&map, bytes_from(buf, sizeof(buf)), cap, NULL);
- * if (result_bool_Error_is_err(init_res)) { ... handle error ... }
+ * result__Bool_Error init_res = hashmap_init(&map, bytes_from(buf, sizeof(buf)), 256, NULL);
+ * if (result__Bool_Error_is_err(init_res)) { ... handle error ... }
  *
  * // Insert
  * u64 key = 42; int val = 100;
- * result_bool_Error ins = hashmap_insert(&map, &key, &val);
+ * result__Bool_Error ins = hashmap_insert(&map, &key, &val);
  * // ins is Ok(true) if new key, Ok(false) if key already existed (value updated)
  *
  * // Lookup (returns copy)
- * option_int found = hashmap_get(&map, &key);
- * if (option_int_is_some(found)) {
- *     int v = option_int_unwrap(found);
+ * // The option and result types are named after the map, not after int:
+ * // option_hashmap_val_t and result_hashmap_val_t_Error (hashmap_mangle.h)
+ * option_hashmap_val_t found = hashmap_get(&map, &key);
+ * if (option_hashmap_val_t_is_some(found)) {
+ *     int v = option_hashmap_val_t_unwrap(found);
  * }
  *
  * // Lookup (returns pointer — valid until next mutation)
@@ -81,9 +84,9 @@
  * if (vptr) { printf("%d\n", *vptr); }
  *
  * // Remove
- * result_int_Error rem = hashmap_remove(&map, &key);
- * if (result_int_Error_is_ok(rem)) {
- *     int old = result_int_Error_unwrap(rem);
+ * result_hashmap_val_t_Error rem = hashmap_remove(&map, &key);
+ * if (result_hashmap_val_t_Error_is_ok(rem)) {
+ *     int old = result_hashmap_val_t_Error_unwrap(rem);
  * }
  *
  * // Iterate
@@ -120,7 +123,9 @@
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  *
  * - Capacity must be a power of 2 (checked at init time)
- * - hashmap_insert() returns ERR_CAPACITY_EXCEEDED when len >= cap * 3 / 4
+ * - hashmap_insert() returns ERR_CAPACITY_EXCEEDED when
+ *   len >= capacity - capacity / 4: 75% from capacity 4 on; at capacities 1
+ *   and 2 every slot can be filled (VERIFY-054 H2)
  * - To store N elements safely: capacity >= bits_next_power_of_two(N * 4 / 3 + 1)
  * - hashmap_buffer_size(cap) gives the exact byte count for a given slot count
  *
@@ -183,11 +188,13 @@
  * Sizing:
  *   hashmap_buffer_size(capacity)  → usize
  *     Returns the byte count for a flat buffer that can hold `capacity` slots.
- *     Call this to size your u8 array before hashmap_init().
+ *     The buffer must also be aligned for hashmap_slot (see the quick start).
  *
  * Lifecycle:
- *   hashmap_init(&map, buf, capacity, ctx)  → result_bool_Error
+ *   hashmap_init(&map, buf, capacity, ctx)  → result__Bool_Error
  *     Initializes map over caller-owned buf. Zeroes all slots. O(capacity).
+ *     Err(ERR_INVALID_ARG): NULL map or buf, capacity 0 or not a power of 2,
+ *     or buf not aligned for the slots. Err(ERR_BUFFER_TOO_SMALL).
  *
  *   hashmap_clear(&map)                     → void
  *     Removes all entries. Buffer and capacity unchanged. O(capacity).
@@ -199,19 +206,19 @@
  *   hashmap_load_factor(&map)      → f64     — len / capacity in [0.0, 1.0]
  *
  * Mutation:
- *   hashmap_insert(&map, &key, &val)  → result_bool_Error
+ *   hashmap_insert(&map, &key, &val)  → result__Bool_Error
  *     Ok(true):  new key inserted
  *     Ok(false): key existed, value overwritten
- *     Err(ERR_CAPACITY_EXCEEDED): load >= 75%, no insertion performed
+ *     Err(ERR_CAPACITY_EXCEEDED): len >= capacity - capacity / 4, no insertion
  *     Err(ERR_INVALID_ARG): any pointer is NULL
  *
- *   hashmap_remove(&map, &key)        → result_VAL_Error
+ *   hashmap_remove(&map, &key)        → result_hashmap_val_t_Error
  *     Ok(old_value): key found and removed, old value returned
  *     Err(ERR_NOT_FOUND): key does not exist
  *     Err(ERR_INVALID_ARG): any pointer is NULL
  *
  * Lookup:
- *   hashmap_get(&map, &key)           → option_VAL
+ *   hashmap_get(&map, &key)           → option_hashmap_val_t
  *     Some(value): key found, returns a copy of the value
  *     None:        key not found
  *
@@ -249,7 +256,12 @@
  * #include "data/hashmap/hashmap.h"
  * #undef HASHMAP_KEY_TYPE
  * #undef HASHMAP_VAL_TYPE
- * // ... undef all, then:
+ * #undef HASHMAP_HASH_FN
+ * #undef HASHMAP_EQ_FN
+ * #undef HASHMAP_TYPE_NAME
+ * #undef HASHMAP_FN
+ * #undef HASHMAP_SLOT_NAME   // defaulted to HASHMAP_FN(slot); undef it too
+ * // then:
  *
  * // Second instantiation: str_t → u32
  * #define HASHMAP_KEY_TYPE  str_t
@@ -259,7 +271,13 @@
  * #define HASHMAP_TYPE_NAME map_str_u32
  * #define HASHMAP_FN(name)  map_str_u32_##name
  * #include "data/hashmap/hashmap.h"
+ * // Types: map_str_u32, map_str_u32_slot, option_map_str_u32_val_t,
+ * // result_map_str_u32_val_t_Error.
  * ```
+ *
+ * Before VERIFY-054 this did not compile (H3): the second include redefined
+ * the internal value typedef and the option and result types named after
+ * it. test/data/hashmap_multi_test.c builds it.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * DESIGN NOTES

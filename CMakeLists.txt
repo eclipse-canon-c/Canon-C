@@ -375,6 +375,15 @@ canon_c_test(
     FUZZABLE
 )
 
+# VERIFY-054: two maps in one translation unit, the per-map option and
+# result names, hashmap_range.h, hashmap_fmt.h, the alignment refusal and
+# the load cap at small capacities; none of these was built before.
+canon_c_test(
+    NAME     hashmap_multi_test
+    SRC      test/data/hashmap_multi_test.c
+    INCLUDES core/primitives core semantics data .
+)
+
 canon_c_test(
     NAME     array_test
     SRC      test/data/array_test.c
@@ -416,6 +425,16 @@ canon_c_test(
     NAME     separate_compilation_test
     SRC      test/integration/separate_compilation_test.c
              test/integration/separate_compilation_defs.c
+    INCLUDES core/primitives core semantics data test/integration .
+)
+
+# VERIFY-054: hashmap's separate-compilation path (hashmap_decl.h in a
+# shared header, hashmap_defn.h in a definitions file that does not include
+# it), used through the declarations alone.
+canon_c_test(
+    NAME     hashmap_separate_test
+    SRC      test/integration/hashmap_separate_test.c
+             test/integration/hashmap_separate_defs.c
     INCLUDES core/primitives core semantics data test/integration .
 )
 

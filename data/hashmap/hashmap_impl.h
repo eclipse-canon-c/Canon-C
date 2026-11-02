@@ -120,6 +120,8 @@
 #endif
 
 #include <string.h>  /* memset */
+#include <stddef.h>  /* offsetof */
+#include <stdint.h>  /* uintptr_t */
 
 /* ============================================================================
  * Required user definitions (must be #defined before including hashmap_impl.h)
@@ -140,8 +142,16 @@
 /* ============================================================================
  * Type aliases for readability inside impl
  * ========================================================================= */
-typedef HASHMAP_KEY_TYPE hm_key_t;
-typedef HASHMAP_VAL_TYPE hm_val_t;
+/* VERIFY-054: hm_key_t and hm_val_t are macros, not typedefs. As typedefs
+   of a fixed name, a second map in the translation unit redefined them, and
+   the option and result types named after hm_val_t, so two maps did not
+   compile. The key and value types get per-map aliases, HASHMAP_FN(key_t)
+   and HASHMAP_FN(val_t), and the option and result types are named after
+   the value's (hashmap_mangle.h). */
+typedef HASHMAP_KEY_TYPE HM_KEY_ALIAS_;
+#define hm_key_t HM_KEY_ALIAS_
+typedef HASHMAP_VAL_TYPE HM_VAL_ALIAS_;
+#define hm_val_t HM_VAL_ALIAS_
 
 /* ============================================================================
  * Result and Option instantiations needed by the API
@@ -150,14 +160,14 @@ typedef HASHMAP_VAL_TYPE hm_val_t;
  * in every standard: _Bool is pasted as written.
  * ========================================================================= */
 
-CANON_OPTION(hm_val_t)
+HM_CANON_OPTION_(HM_VAL_ALIAS_)
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
     #define CANON_RESULT_BOOL_ERROR_DEFINED
     /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
     CANON_RESULT(_Bool, Error)
 #endif
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-CANON_RESULT(hm_val_t, Error)
+HM_CANON_RESULT_(HM_VAL_ALIAS_, Error)
 
 /* ============================================================================
  * Internal: lifetime field macro
@@ -181,6 +191,13 @@ typedef struct {
     hm_key_t  key;     /**< Stored key */
     hm_val_t  value;   /**< Stored value */
 } HASHMAP_SLOT_NAME;
+
+/* For the slot's alignment, read by hashmap_init (VERIFY-054): offsetof of a
+   member that follows a char is the member type's alignment requirement. */
+typedef struct {
+    char              c_;
+    HASHMAP_SLOT_NAME s_;
+} HASHMAP_FN(slot_align_);
 
 /* ============================================================================
  * Hashmap struct
@@ -250,6 +267,10 @@ typedef struct {
  * Internal helpers (not part of public API)
  * ========================================================================= */
 
+/* Defined once per translation unit (VERIFY-054): they do not depend on the
+   map's types, and a second map redefined them. */
+#ifndef CANON_HM_INTERNAL_HELPERS_DEFINED
+#define CANON_HM_INTERNAL_HELPERS_DEFINED
 static inline usize _hm_home(u64 hash, usize capacity) {
     return (usize)(hash & (u64)(capacity - 1u));
 }
@@ -261,6 +282,7 @@ static inline usize _hm_wrap(usize index, usize capacity) {
 static inline u64 _hm_normalize_hash(u64 h) {
     return (h == 0u) ? 1u : h;
 }
+#endif /* CANON_HM_INTERNAL_HELPERS_DEFINED */
 
 /* ============================================================================
  * hashmap_buffer_size
@@ -293,6 +315,14 @@ HASHMAP_LINKAGE result__Bool_Error HM_INIT_(
     usize required = HM_BUFFER_SIZE_(capacity);
     if ((required == 0u) || (buf.len < required)) {
         return result__Bool_Error_err(ERR_BUFFER_TOO_SMALL);
+    }
+
+    /* VERIFY-054 H1: the slots are accessed as HASHMAP_SLOT_NAME, so the
+       buffer must be aligned for it. A byte buffer is not, in general; one
+       accepted here made the first insert undefined. Tested by address
+       value, which C defines for any pointer. */
+    if (((uintptr_t)buf.ptr % (uintptr_t)offsetof(HASHMAP_FN(slot_align_), s_)) != 0u) {
+        return result__Bool_Error_err(ERR_INVALID_ARG);
     }
 
     map->slots    = (HASHMAP_SLOT_NAME*)buf.ptr;
@@ -432,7 +462,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
  * hashmap_get — lookup by key, returns Option<VAL>
  * ========================================================================= */
 
-HASHMAP_LINKAGE option_hm_val_t HM_GET_(
+HASHMAP_LINKAGE HM_OPT_T_ HM_GET_(
     const HASHMAP_TYPE_NAME* map,
     const hm_key_t*          key
 ) {
@@ -447,18 +477,18 @@ HASHMAP_LINKAGE option_hm_val_t HM_GET_(
     for (usize i = 0; i < map->capacity; i++) {
         const HASHMAP_SLOT_NAME* slot = &map->slots[probe_idx];
 
-        if (!slot->occupied) { return option_hm_val_t_none(); }
-        if (slot->psl < psl) { return option_hm_val_t_none(); }
+        if (!slot->occupied) { return HM_OPT_FN_(_none)(); }
+        if (slot->psl < psl) { return HM_OPT_FN_(_none)(); }
 
         if (slot->hash == h && HASHMAP_EQ_FN(&slot->key, key, map->ctx)) {
-            return option_hm_val_t_some(slot->value);
+            return HM_OPT_FN_(_some)(slot->value);
         }
 
         psl++;
         probe_idx = _hm_wrap(probe_idx + 1u, map->capacity);
     }
 
-    return option_hm_val_t_none();
+    return HM_OPT_FN_(_none)();
 }
 
 /* ============================================================================
@@ -504,19 +534,19 @@ HASHMAP_LINKAGE bool HM_CONTAINS_KEY_(
 ) {
     require_msg(map != NULL, "hashmap_contains_key: map cannot be NULL");
     require_msg(key != NULL, "hashmap_contains_key: key cannot be NULL");
-    return option_hm_val_t_is_some(HM_GET_(map, key));
+    return HM_OPT_FN_(_is_some)(HM_GET_(map, key));
 }
 
 /* ============================================================================
  * hashmap_remove — remove by key, backward shift deletion
  * ========================================================================= */
 
-HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
+HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_key_t*              key
 ) {
-    if (!map) { return result_hm_val_t_Error_err(ERR_INVALID_ARG); }
-    if (!key) { return result_hm_val_t_Error_err(ERR_INVALID_ARG); }
+    if (!map) { return HM_RES_FN_(_err)(ERR_INVALID_ARG); }
+    if (!key) { return HM_RES_FN_(_err)(ERR_INVALID_ARG); }
     require_msg(map->slots != NULL, "hashmap_remove: map is uninitialized");
 
     u64   h         = _hm_normalize_hash(HASHMAP_HASH_FN(key, map->ctx));
@@ -541,7 +571,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
     }
 
     if (found_idx == map->capacity) {
-        return result_hm_val_t_Error_err(ERR_NOT_FOUND);
+        return HM_RES_FN_(_err)(ERR_NOT_FOUND);
     }
 
     hm_val_t old_value = map->slots[found_idx].value;
@@ -566,7 +596,7 @@ HASHMAP_LINKAGE result_hm_val_t_Error HM_REMOVE_(
 
     map->len--;
     HM_LIFETIME_RESTAMP_(map);
-    return result_hm_val_t_Error_ok(old_value);
+    return HM_RES_FN_(_ok)(old_value);
 }
 
 /* ============================================================================

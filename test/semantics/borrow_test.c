@@ -1493,7 +1493,7 @@ static void test_lifetime_hashmap_borrow_open_is_silent(void)
 {
     lt_setup_handler_only();
 
-    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
 
@@ -1512,7 +1512,7 @@ static void test_lifetime_hashmap_insert_restamps_fires(void)
 {
     lt_setup_handler_only();
 
-    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
 
@@ -1540,7 +1540,7 @@ static void test_lifetime_hashmap_remove_restamps_fires(void)
      * prior pointers. Substrate restamps on every successful remove. */
     lt_setup_handler_only();
 
-    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
 
@@ -1563,7 +1563,7 @@ static void test_lifetime_hashmap_clear_fires(void)
 {
     lt_setup_handler_only();
 
-    u8 buf[8 * sizeof(hashmap_slot)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
 

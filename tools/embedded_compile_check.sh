@@ -15,8 +15,15 @@
 #                                         the headers that include them
 #   data/hashmap/{hashmap,hashmap_decl,hashmap_defn,hashmap_range,
 #   hashmap_fmt}.h                      — need HASHMAP_KEY_TYPE (and a key
-#                                         formatter); compiled through
-#                                         test/data/hashmap_test.c
+#                                         formatter); compiled through the
+#                                         tests that define one. Before
+#                                         VERIFY-054 no test included
+#                                         hashmap_range.h, hashmap_fmt.h,
+#                                         hashmap_decl.h or hashmap_defn.h, so
+#                                         only hashmap.h was compiled; now
+#                                         hashmap_test.c, hashmap_multi_test.c
+#                                         and hashmap_separate_test.c reach
+#                                         all five.
 #
 # Targets (VERIFY-046; picolibc and RISC-V added by VERIFY-048). Each entry
 # is a compiler and its flags; every one is run at -O0, -Os and -O2.

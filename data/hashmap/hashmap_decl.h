@@ -34,12 +34,23 @@
  * #include "data/hashmap/hashmap_decl.h"
  * ```
  *
- * In map_u64_int.c (your implementation unit):
+ * In map_u64_int.c (your implementation unit), which does NOT include
+ * map_u64_int.h: hashmap_defn.h generates the types too, and C99 forbids a
+ * repeated typedef. (Before VERIFY-054 this example included the header,
+ * and did not compile.) The hash and equality functions have external
+ * linkage, declared in the header and defined here:
  * ```c
- * #include "map_u64_int.h"
- * #define HASHMAP_LINKAGE  // (empty = external linkage)
+ * u64  hash_u64(const u64* k, void* ctx) { ... }
+ * bool eq_u64(const u64* a, const u64* b, void* ctx) { ... }
+ * #define HASHMAP_KEY_TYPE u64            // the same configuration
+ * #define HASHMAP_VAL_TYPE int
+ * #define HASHMAP_HASH_FN  hash_u64
+ * #define HASHMAP_EQ_FN    eq_u64
+ * #define HASHMAP_TYPE_NAME map_u64_int
+ * #define HASHMAP_FN(name)  map_u64_int_##name
  * #include "data/hashmap/hashmap_defn.h"
  * ```
+ * test/integration/hashmap_separate_test.c builds this recipe.
  *
  * For header-only usage with static linkage, just use hashmap.h directly.
  *
@@ -52,8 +63,9 @@
  * It is a typed-instantiation header — like hashmap_impl.h and hashmap.h —
  * and must be re-includable with different HASHMAP_KEY_TYPE / HASHMAP_VAL_TYPE
  * configurations to produce distinct type declarations in the same translation
- * unit. The internal hm_decl_key_t / hm_decl_val_t aliases are #undef'd at
- * the bottom of this file, making re-inclusion safe.
+ * unit. The internal hm_decl_key_t / hm_decl_val_t macros are #undef'd at
+ * the bottom of this file, and the value alias, option and result names are
+ * per map (hashmap_mangle.h), making re-inclusion safe.
  *
  * Note on result__Bool_Error:
  * ────────────────────────────────────────────────────────────────────────────
@@ -104,17 +116,23 @@
     #error "hashmap_decl.h: define HASHMAP_VAL_TYPE before including"
 #endif
 
-typedef HASHMAP_KEY_TYPE hm_decl_key_t;
-typedef HASHMAP_VAL_TYPE hm_decl_val_t;
+/* VERIFY-054: the same per-map names as hashmap_impl.h, so that the types
+   declared here are the ones the definitions return. They were
+   option_hm_decl_val_t here and option_hm_val_t there: two struct types of
+   one layout, not one type. */
+typedef HASHMAP_KEY_TYPE HM_KEY_ALIAS_;
+#define hm_decl_key_t HM_KEY_ALIAS_
+typedef HASHMAP_VAL_TYPE HM_VAL_ALIAS_;
+#define hm_decl_val_t HM_VAL_ALIAS_
 
-CANON_OPTION(hm_decl_val_t)
+HM_CANON_OPTION_(HM_VAL_ALIAS_)
 #ifndef CANON_RESULT_BOOL_ERROR_DEFINED
 #define CANON_RESULT_BOOL_ERROR_DEFINED
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
 CANON_RESULT(_Bool, Error)
 #endif /* CANON_RESULT_BOOL_ERROR_DEFINED */
 /* cppcheck-suppress misra-c2012-19.2 ; MISRA-DEV-014 */
-CANON_RESULT(hm_decl_val_t, Error)
+HM_CANON_RESULT_(HM_VAL_ALIAS_, Error)
 
 /* ============================================================================
  * Lifetime field macro — must match hashmap_impl.h exactly
@@ -184,7 +202,7 @@ extern result__Bool_Error HM_INSERT_(
     const hm_decl_val_t*         val
 );
 
-extern option_hm_decl_val_t HM_GET_(
+extern HM_OPT_T_ HM_GET_(
     const HASHMAP_TYPE_NAME* map,
     const hm_decl_key_t*     key
 );
@@ -199,7 +217,7 @@ extern bool HM_CONTAINS_KEY_(
     const hm_decl_key_t*     key
 );
 
-extern result_hm_decl_val_t_Error HM_REMOVE_(
+extern HM_RES_T_ HM_REMOVE_(
     borrowed(HASHMAP_TYPE_NAME*) map,
     const hm_decl_key_t*         key
 );

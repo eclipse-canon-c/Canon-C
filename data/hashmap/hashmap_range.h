@@ -37,10 +37,18 @@
  * function names manually. They are derived directly from HASHMAP_KEY_TYPE
  * and HASHMAP_VAL_TYPE using the vec naming convention:
  *
- *   push fn = vec_##HASHMAP_KEY_TYPE##_push
+ *   push fn = vec_<HASHMAP_KEY_TYPE>_push, e.g. vec_u64_push
  *
  * This works because DEFINE_VEC always generates functions with this exact
- * naming pattern. No HASHMAP_KEY_PUSH_FN or HASHMAP_VAL_PUSH_FN needed.
+ * naming pattern. No HASHMAP_KEY_PUSH_FN or HASHMAP_VAL_PUSH_FN needed. So
+ * the key and value types must each be a single identifier (typedef a
+ * pointer or a qualified type first), as for DEFINE_VEC.
+ *
+ * Before VERIFY-054 this header did not compile: it pasted the macro names
+ * themselves (vec_HASHMAP_KEY_TYPE), and passed push a pointer where vec
+ * takes the element. No test included it. It is now tested, and it can be
+ * included once per map (it has no include guard; HASHMAP_FOR_EACH is
+ * defined once).
  *
  * Required user definitions (must be set before including this file):
  * ────────────────────────────────────────────────────────────────────────────
@@ -95,8 +103,8 @@
  * @sa data/vec/vec.h — required dependency (DEFINE_VEC)
  */
 
-#ifndef CANON_DATA_HASHMAP_RANGE_H
-#define CANON_DATA_HASHMAP_RANGE_H
+/* No include guard (VERIFY-054): re-includable, one set of collect
+   functions per map configuration, like hashmap.h. */
 
 #include "hashmap_mangle.h"
 #include "data/vec/vec.h"
@@ -121,11 +129,11 @@
  * ========================================================================= */
 
 /** @brief Expands to the vec type for a given element type */
-#define HM_RANGE_VEC_(type)  vec_##type
+#define HM_RANGE_VEC_(type)  HM_PASTE_(vec_, type)
 
 /** @brief Calls the vec push function for a given element type */
 #define HM_RANGE_PUSH_(type, vec_ptr, elem_ptr) \
-    vec_##type##_push((vec_ptr), (elem_ptr))
+    HM_PASTE_(HM_RANGE_VEC_(type), _push)((vec_ptr), *(elem_ptr))
 
 /* ============================================================================
  * hashmap_collect_keys
@@ -239,6 +247,7 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
  * @note Uses __LINE__ to generate unique iterator variable names,
  *       allowing nested HASHMAP_FOR_EACH loops without name collisions
  */
+#ifndef HASHMAP_FOR_EACH
 #define HM_ITER_VAR2_(line)  hm_iter_##line
 #define HM_ITER_VAR_(line)   HM_ITER_VAR2_(line)
 
@@ -250,6 +259,7 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
              (const HASHMAP_KEY_TYPE**)&(key_var),            \
              (const HASHMAP_VAL_TYPE**)&(val_var)             \
          ); )
+#endif /* HASHMAP_FOR_EACH */
 
 /* ============================================================================
  * Clean up internal macros
@@ -257,4 +267,4 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
 #undef HM_RANGE_VEC_
 #undef HM_RANGE_PUSH_
 
-#endif /* CANON_DATA_HASHMAP_RANGE_H */
+/* (no include guard: see the top of the file) */

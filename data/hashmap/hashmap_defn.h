@@ -27,16 +27,22 @@
  *
  * The generated functions use external linkage (no static, no inline).
  *
+ * The file that includes this must not also include a header that includes
+ * hashmap_decl.h for the same map: both generate the types, and C99 forbids
+ * a repeated typedef (VERIFY-054). Functions that other files call, the hash
+ * and equality functions among them, need external linkage.
+ *
  * Example (map_u64_int.c):
  * ────────────────────────────────────────────────────────────────────────────
  * ```c
- * // Step 1: provide the hash and equality functions
- * static u64  hash_u64(const u64* k, void* ctx) {
+ * // Step 1: provide the hash and equality functions (external linkage, if a
+ * // header declares them for other files; static if only this file uses them)
+ * u64  hash_u64(const u64* k, void* ctx) {
  *     (void)ctx;
  *     u64 h = *k * 11400714819323198485ULL;
  *     return h == 0 ? 1 : h;
  * }
- * static bool eq_u64(const u64* a, const u64* b, void* ctx) {
+ * bool eq_u64(const u64* a, const u64* b, void* ctx) {
  *     (void)ctx; return *a == *b;
  * }
  *

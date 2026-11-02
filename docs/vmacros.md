@@ -280,7 +280,7 @@ Shape-B entry in the algo layer.
 | `vec_fmt_verify.h`  | `data/vec/vec_fmt.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_fmt_cover.c` (100%, 26/26, MCDC-018) |
 | `stack_verify.h`    | `data/stack.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/stack_cover.c` (5/6, MCDC-019; the miss is dead) |
 | `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (42/46, MCDC-020; the four misses are dead) |
-| `hashmap_verify.h`  | `data/hashmap/`  | A (confirmed)    | — already covered via `hashmap_impl.h` |
+| (no driver yet)     | `data/hashmap/`  | A (confirmed)    | — measured in place via `hashmap_test.c`; since VERIFY-054 the table also has `hashmap_range.h` and `hashmap_fmt.h`, which no test built before |
 
 #### A third kind of driver: interposition (bitset, VERIFY-020)
 

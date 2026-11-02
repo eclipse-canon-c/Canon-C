@@ -72,6 +72,16 @@ static bool eq_u64(const u64* a, const u64* b, void* ctx)
 #define HASHMAP_EQ_FN    eq_u64
 #include "data/hashmap/hashmap.h"
 
+/* VERIFY-054: the range and fmt extensions, untested before */
+#include "test/support/hashmap_vecs.h"
+#include "data/hashmap/hashmap_range.h"
+#include "data/stringbuf.h"
+static bool fmt_u64(StringBuf* sb, const u64* k) { return stringbuf_append_fmt(sb, "%llu", (unsigned long long)*k); }
+static bool fmt_int(StringBuf* sb, const int* v) { return stringbuf_append_fmt(sb, "%d", *v); }
+#define HASHMAP_FMT_KEY_FN fmt_u64
+#define HASHMAP_FMT_VAL_FN fmt_int
+#include "data/hashmap/hashmap_fmt.h"
+
 #include <stdio.h>
 
 /* ── Buffer sizing helper ────────────────────────────────────────────────── */
@@ -113,7 +123,7 @@ static int g_failed = 0;
     } while (0)
 
 /* Helper: initialize a map over a stack buffer, assert success */
-static void init_map(hashmap* m, u8* buf, usize buf_len, usize cap)
+static void init_map(hashmap* m, void* buf, usize buf_len, usize cap)
 {
     *m = (hashmap){0}; /* ensure slots is NULL if init fails — prevents garbage reads */
     result__Bool_Error r = hashmap_init(m, bytes_from(buf, buf_len), cap, NULL);
@@ -136,7 +146,7 @@ static void test_buffer_size(void)
 
 static void test_init_valid(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     result__Bool_Error r = hashmap_init(&m, bytes_from(buf, sizeof(buf)), 8, NULL);
     EXPECT(result__Bool_Error_is_ok(r));
@@ -150,7 +160,7 @@ static void test_init_valid(void)
 
 static void test_init_null_map(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     result__Bool_Error r = hashmap_init(NULL, bytes_from(buf, sizeof(buf)), 8, NULL);
     EXPECT(!result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
@@ -178,7 +188,7 @@ static void test_init_zero_capacity(void)
 
 static void test_init_non_power_of_two(void)
 {
-    u8 buf[HM_BUF(16)];
+    hashmap_slot buf[16];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     /* 6 is not a power of 2 */
     result__Bool_Error r = hashmap_init(&m, bytes_from(buf, sizeof(buf)), 6, NULL);
@@ -199,7 +209,7 @@ static void test_init_buf_too_small(void)
 
 static void test_insert_new_key(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -215,7 +225,7 @@ static void test_insert_new_key(void)
 
 static void test_insert_update(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -227,9 +237,9 @@ static void test_insert_update(void)
     EXPECT(!result__Bool_Error_unwrap(r)); /* false = existing key updated */
     EXPECT(hashmap_len(&m) == 1);        /* no new entry */
 
-    option_hm_val_t o = hashmap_get(&m, &key);
-    EXPECT(option_hm_val_t_is_some(o));
-    EXPECT(option_hm_val_t_unwrap(o) == 99);
+    option_hashmap_val_t o = hashmap_get(&m, &key);
+    EXPECT(option_hashmap_val_t_is_some(o));
+    EXPECT(option_hashmap_val_t_unwrap(o) == 99);
 }
 
 /* ── insert — capacity exceeded at 75% load ─────────────────────────────── */
@@ -240,7 +250,7 @@ static void test_insert_capacity_exceeded(void)
      * cap=4, load limit = cap - cap/4 = 3.
      * Insert 3 elements (allowed), 4th must fail.
      */
-    u8 buf[HM_BUF(4)];
+    hashmap_slot buf[4];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 4);
 
@@ -260,7 +270,7 @@ static void test_insert_capacity_exceeded(void)
 
 static void test_insert_null_errors(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
     u64 k = 1; int v = 0;
@@ -284,32 +294,32 @@ static void test_insert_null_errors(void)
 
 static void test_get_found(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
     u64 k = 7; int v = 42;
     hashmap_insert(&m, &k, &v);
 
-    option_hm_val_t o = hashmap_get(&m, &k);
-    EXPECT(option_hm_val_t_is_some(o));
-    EXPECT(option_hm_val_t_unwrap(o) == 42);
+    option_hashmap_val_t o = hashmap_get(&m, &k);
+    EXPECT(option_hashmap_val_t_is_some(o));
+    EXPECT(option_hashmap_val_t_unwrap(o) == 42);
 }
 
 static void test_get_not_found(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
     u64 k = 99;
-    option_hm_val_t o = hashmap_get(&m, &k);
-    EXPECT(option_hm_val_t_is_none(o));
+    option_hashmap_val_t o = hashmap_get(&m, &k);
+    EXPECT(option_hashmap_val_t_is_none(o));
 }
 
 static void test_get_multiple_keys(void)
 {
-    u8 buf[HM_BUF(16)];
+    hashmap_slot buf[16];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 16);
 
@@ -320,20 +330,20 @@ static void test_get_multiple_keys(void)
     }
 
     for (int i = 0; i < 4; i++) {
-        option_hm_val_t o = hashmap_get(&m, &keys[i]);
-        EXPECT(option_hm_val_t_is_some(o));
-        EXPECT(option_hm_val_t_unwrap(o) == vals[i]);
+        option_hashmap_val_t o = hashmap_get(&m, &keys[i]);
+        EXPECT(option_hashmap_val_t_is_some(o));
+        EXPECT(option_hashmap_val_t_unwrap(o) == vals[i]);
     }
 
     u64 absent = 999;
-    EXPECT(option_hm_val_t_is_none(hashmap_get(&m, &absent)));
+    EXPECT(option_hashmap_val_t_is_none(hashmap_get(&m, &absent)));
 }
 
 /* ── hashmap_get_or_null ─────────────────────────────────────────────────── */
 
 static void test_get_or_null_found(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -346,13 +356,13 @@ static void test_get_or_null_found(void)
 
     /* Mutate in-place and verify via get */
     *ptr = 99;
-    option_hm_val_t o = hashmap_get(&m, &k);
-    EXPECT(option_hm_val_t_unwrap(o) == 99);
+    option_hashmap_val_t o = hashmap_get(&m, &k);
+    EXPECT(option_hashmap_val_t_unwrap(o) == 99);
 }
 
 static void test_get_or_null_not_found(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -364,7 +374,7 @@ static void test_get_or_null_not_found(void)
 
 static void test_contains_key(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -379,16 +389,16 @@ static void test_contains_key(void)
 
 static void test_remove_found(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
     u64 k = 3; int v = 33;
     hashmap_insert(&m, &k, &v);
 
-    result_hm_val_t_Error r = hashmap_remove(&m, &k);
-    EXPECT(result_hm_val_t_Error_is_ok(r));
-    EXPECT(result_hm_val_t_Error_unwrap(r) == 33);
+    result_hashmap_val_t_Error r = hashmap_remove(&m, &k);
+    EXPECT(result_hashmap_val_t_Error_is_ok(r));
+    EXPECT(result_hashmap_val_t_Error_unwrap(r) == 33);
     EXPECT(hashmap_len(&m) == 0);
     EXPECT(hashmap_is_empty(&m));
     EXPECT(!hashmap_contains_key(&m, &k));
@@ -396,37 +406,37 @@ static void test_remove_found(void)
 
 static void test_remove_not_found(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
     u64 k = 77;
-    result_hm_val_t_Error r = hashmap_remove(&m, &k);
-    EXPECT(!result_hm_val_t_Error_is_ok(r));
-    EXPECT(result_hm_val_t_Error_unwrap_err(r) == ERR_NOT_FOUND);
+    result_hashmap_val_t_Error r = hashmap_remove(&m, &k);
+    EXPECT(!result_hashmap_val_t_Error_is_ok(r));
+    EXPECT(result_hashmap_val_t_Error_unwrap_err(r) == ERR_NOT_FOUND);
 }
 
 static void test_remove_null_errors(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
     u64 k = 1;
 
-    result_hm_val_t_Error r;
+    result_hashmap_val_t_Error r;
 
     r = hashmap_remove(NULL, &k);
-    EXPECT(!result_hm_val_t_Error_is_ok(r));
-    EXPECT(result_hm_val_t_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result_hashmap_val_t_Error_is_ok(r));
+    EXPECT(result_hashmap_val_t_Error_unwrap_err(r) == ERR_INVALID_ARG);
 
     r = hashmap_remove(&m, NULL);
-    EXPECT(!result_hm_val_t_Error_is_ok(r));
-    EXPECT(result_hm_val_t_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    EXPECT(!result_hashmap_val_t_Error_is_ok(r));
+    EXPECT(result_hashmap_val_t_Error_unwrap_err(r) == ERR_INVALID_ARG);
 }
 
 static void test_remove_then_reinsert(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -437,14 +447,14 @@ static void test_remove_then_reinsert(void)
     result__Bool_Error r = hashmap_insert(&m, &k, &v2);
     EXPECT(result__Bool_Error_is_ok(r));
     EXPECT(result__Bool_Error_unwrap(r)); /* true = new key again */
-    EXPECT(option_hm_val_t_unwrap(hashmap_get(&m, &k)) == 2);
+    EXPECT(option_hashmap_val_t_unwrap(hashmap_get(&m, &k)) == 2);
 }
 
 /* ── hashmap_clear ───────────────────────────────────────────────────────── */
 
 static void test_clear(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -475,7 +485,7 @@ static void test_clear(void)
 
 static void test_load_factor(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -492,7 +502,7 @@ static void test_load_factor(void)
 
 static void test_iter_visits_all(void)
 {
-    u8 buf[HM_BUF(16)];
+    hashmap_slot buf[16];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 16);
 
@@ -524,7 +534,7 @@ static void test_iter_visits_all(void)
 
 static void test_iter_empty_map(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -536,7 +546,7 @@ static void test_iter_empty_map(void)
 
 static void test_iter_after_remove(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -565,7 +575,7 @@ static void test_robin_hood_stress(void)
      * Insert 12 elements into a cap=16 map (75% load exactly triggers
      * the cap check on the 13th attempt). Then remove evens, verify odds.
      */
-    u8 buf[HM_BUF(16)];
+    hashmap_slot buf[16];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 16);
 
@@ -580,18 +590,18 @@ static void test_robin_hood_stress(void)
     /* Remove even indices */
     for (u64 i = 0; i < 12; i += 2) {
         u64 k = i * 13 + 7;
-        result_hm_val_t_Error r = hashmap_remove(&m, &k);
-        EXPECT(result_hm_val_t_Error_is_ok(r));
-        EXPECT(result_hm_val_t_Error_unwrap(r) == (int)(i * 100));
+        result_hashmap_val_t_Error r = hashmap_remove(&m, &k);
+        EXPECT(result_hashmap_val_t_Error_is_ok(r));
+        EXPECT(result_hashmap_val_t_Error_unwrap(r) == (int)(i * 100));
     }
     EXPECT(hashmap_len(&m) == 6);
 
     /* Odd-indexed keys still present with correct values */
     for (u64 i = 1; i < 12; i += 2) {
         u64 k = i * 13 + 7;
-        option_hm_val_t o = hashmap_get(&m, &k);
-        EXPECT(option_hm_val_t_is_some(o));
-        EXPECT(option_hm_val_t_unwrap(o) == (int)(i * 100));
+        option_hashmap_val_t o = hashmap_get(&m, &k);
+        EXPECT(option_hashmap_val_t_is_some(o));
+        EXPECT(option_hashmap_val_t_unwrap(o) == (int)(i * 100));
     }
 
     /* Even-indexed keys gone */
@@ -621,7 +631,7 @@ static void test_robin_hood_stress(void)
 
 static void test_lifetime_init_opens_token(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
     EXPECT(m.lt.open == true);
@@ -630,7 +640,7 @@ static void test_lifetime_init_opens_token(void)
 
 static void test_lifetime_insert_restamps(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
     region_id_t id_before = m.lt.id;
@@ -657,7 +667,7 @@ static void test_lifetime_insert_restamps(void)
 static void test_lifetime_insert_error_paths_preserve_id(void)
 {
     /* Capacity exceeded does NOT restamp — nothing changed. */
-    u8 buf[HM_BUF(4)];
+    hashmap_slot buf[4];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 4);
 
@@ -681,7 +691,7 @@ static void test_lifetime_insert_error_paths_preserve_id(void)
 
 static void test_lifetime_remove_restamps(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -689,8 +699,8 @@ static void test_lifetime_remove_restamps(void)
     hashmap_insert(&m, &k, &v);
 
     region_id_t id_before = m.lt.id;
-    result_hm_val_t_Error r = hashmap_remove(&m, &k);
-    EXPECT(result_hm_val_t_Error_is_ok(r));
+    result_hashmap_val_t_Error r = hashmap_remove(&m, &k);
+    EXPECT(result_hashmap_val_t_Error_is_ok(r));
     EXPECT(m.lt.id != id_before);
     EXPECT(m.lt.open == true);
 
@@ -698,13 +708,13 @@ static void test_lifetime_remove_restamps(void)
     region_id_t id_stable = m.lt.id;
     u64 absent = 999;
     r = hashmap_remove(&m, &absent);
-    EXPECT(!result_hm_val_t_Error_is_ok(r));
+    EXPECT(!result_hashmap_val_t_Error_is_ok(r));
     EXPECT(m.lt.id == id_stable);
 }
 
 static void test_lifetime_clear_restamps(void)
 {
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -722,7 +732,7 @@ static void test_lifetime_read_only_ops_preserve_id(void)
     /* get, get_or_null, contains_key, iter_next, and all queries
      * must NOT touch lt. This documents the contract — if any read-only
      * op accidentally restamps, this fires. */
-    u8 buf[HM_BUF(8)];
+    hashmap_slot buf[8];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
     init_map(&m, buf, sizeof(buf), 8);
 
@@ -764,18 +774,18 @@ static void test_lifetime_read_only_ops_preserve_id(void)
 
 static void hashmap_suppress_unused(void)
 {
-    /* option_hm_val_t — only is_some, is_none, unwrap used in tests */
-    (void)option_hm_val_t_get;
-    (void)option_hm_val_t_unwrap_or;
-    (void)option_hm_val_t_expect;
-    (void)option_hm_val_t_map;
-    (void)option_hm_val_t_and_then;
-    (void)option_hm_val_t_or_else;
-    (void)option_hm_val_t_filter;
-    (void)option_hm_val_t_combine_with;
-    (void)option_hm_val_t_replace;
-    (void)option_hm_val_t_take;
-    (void)option_hm_val_t_eq;
+    /* option_hashmap_val_t — only is_some, is_none, unwrap used in tests */
+    (void)option_hashmap_val_t_get;
+    (void)option_hashmap_val_t_unwrap_or;
+    (void)option_hashmap_val_t_expect;
+    (void)option_hashmap_val_t_map;
+    (void)option_hashmap_val_t_and_then;
+    (void)option_hashmap_val_t_or_else;
+    (void)option_hashmap_val_t_filter;
+    (void)option_hashmap_val_t_combine_with;
+    (void)option_hashmap_val_t_replace;
+    (void)option_hashmap_val_t_take;
+    (void)option_hashmap_val_t_eq;
 
     /* result__Bool_Error — combinators not tested here (covered by result_test) */
     (void)result__Bool_Error_get_ok;
@@ -791,19 +801,19 @@ static void hashmap_suppress_unused(void)
     (void)result__Bool_Error_or;
     (void)result__Bool_Error_eq;
 
-    /* result_hm_val_t_Error — combinators not tested here */
-    (void)result_hm_val_t_Error_is_err;
-    (void)result_hm_val_t_Error_get_ok;
-    (void)result_hm_val_t_Error_get_err;
-    (void)result_hm_val_t_Error_unwrap_or;
-    (void)result_hm_val_t_Error_expect;
-    (void)result_hm_val_t_Error_map;
-    (void)result_hm_val_t_Error_map_err;
-    (void)result_hm_val_t_Error_and_then;
-    (void)result_hm_val_t_Error_or_else;
-    (void)result_hm_val_t_Error_and;
-    (void)result_hm_val_t_Error_or;
-    (void)result_hm_val_t_Error_eq;
+    /* result_hashmap_val_t_Error — combinators not tested here */
+    (void)result_hashmap_val_t_Error_is_err;
+    (void)result_hashmap_val_t_Error_get_ok;
+    (void)result_hashmap_val_t_Error_get_err;
+    (void)result_hashmap_val_t_Error_unwrap_or;
+    (void)result_hashmap_val_t_Error_expect;
+    (void)result_hashmap_val_t_Error_map;
+    (void)result_hashmap_val_t_Error_map_err;
+    (void)result_hashmap_val_t_Error_and_then;
+    (void)result_hashmap_val_t_Error_or_else;
+    (void)result_hashmap_val_t_Error_and;
+    (void)result_hashmap_val_t_Error_or;
+    (void)result_hashmap_val_t_Error_eq;
 
     /* Lifetime helpers — exercised under CANON_LIFETIME_DEBUG only.
      * Reference unconditionally so release builds don't warn about
@@ -813,6 +823,112 @@ static void hashmap_suppress_unused(void)
 }
 
 /* ── Unit test entry point ───────────────────────────────────────────────── */
+
+/* ── VERIFY-054 ──────────────────────────────────────────────────────────── */
+
+static void test_range_and_fmt(void)
+{
+    hashmap_slot b[16];
+    hashmap m;
+    EXPECT(result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof b), 16, NULL)));
+    for (u64 k = 1; k <= 5; k++) {
+        int v = (int)(k * 10u);
+        EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k, &v)));
+    }
+
+    u64 kb[8]; int vb[8];
+    vec_u64 keys = vec_u64_init(kb, 8);
+    vec_int vals = vec_int_init(vb, 8);
+    EXPECT(result__Bool_Error_is_ok(hashmap_collect_keys(&m, &keys)));
+    EXPECT(result__Bool_Error_is_ok(hashmap_collect_values(&m, &vals)));
+    EXPECT(vec_u64_len(&keys) == 5 && vec_int_len(&vals) == 5);
+    u64 ksum = 0; int vsum = 0;
+    for (usize i = 0; i < 5; i++) { ksum += kb[i]; vsum += vb[i]; }
+    EXPECT(ksum == 15u && vsum == 150);
+
+    /* a vec too small for the keys */
+    u64 small[2];
+    vec_u64 few = vec_u64_init(small, 2);
+    EXPECT(result__Bool_Error_is_err(hashmap_collect_keys(&m, &few)));
+
+    char text[256];
+    StringBuf sb;
+    stringbuf_init_buffer(&sb, text, sizeof text);
+    EXPECT(hashmap_to_stringbuf(&sb, &m));
+    EXPECT(strstr(stringbuf_str(&sb), "len=5") != NULL);
+    EXPECT(strstr(stringbuf_str(&sb), "[3] => 30") != NULL);
+}
+
+/* VERIFY-054: the extensions' refusals. range: NULL arguments, and a vec too
+ * small for the values. fmt: a StringBuf too small at each point of the
+ * text, every size from 2 bytes (stringbuf_init_buffer's least) up to one
+ * that fits. */
+static void test_range_fmt_refusals(void)
+{
+    hashmap_slot b[8];
+    hashmap m;
+    EXPECT(result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof b), 8, NULL)));
+    u64 k = 3; int v = 44;
+    EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k, &v)));
+    u64 k2 = 4; int v2 = 55;
+    EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k2, &v2)));
+
+    u64 kb[4]; int vb[1];
+    vec_u64 keys = vec_u64_init(kb, 4);
+    vec_int vals = vec_int_init(vb, 1);
+    EXPECT(result__Bool_Error_is_err(hashmap_collect_keys(NULL, &keys)));
+    EXPECT(result__Bool_Error_is_err(hashmap_collect_keys(&m, NULL)));
+    EXPECT(result__Bool_Error_is_err(hashmap_collect_values(NULL, &vals)));
+    EXPECT(result__Bool_Error_is_err(hashmap_collect_values(&m, NULL)));
+    EXPECT(result__Bool_Error_is_err(hashmap_collect_values(&m, &vals)));   /* 2 values, room for 1 */
+
+    bool fitted = false;
+    for (usize size = 2; size <= 128u && !fitted; size++) {   /* init requires 2 */
+        char text[128];
+        StringBuf sb;
+        stringbuf_init_buffer(&sb, text, size);
+        fitted = hashmap_to_stringbuf(&sb, &m);
+    }
+    EXPECT(fitted);
+}
+
+/* H1: a buffer misaligned for the slots is refused */
+static void test_misaligned_buffer_refused(void)
+{
+    static hashmap_slot store[9];
+    u8* raw = (u8*)(void*)store;
+    hashmap m;
+    result__Bool_Error r = hashmap_init(&m, bytes_from(raw + 1, 8 * sizeof(hashmap_slot)), 8, NULL);
+    EXPECT(result__Bool_Error_is_err(r));
+    EXPECT(result__Bool_Error_unwrap_err(r) == ERR_INVALID_ARG);
+    r = hashmap_init(&m, bytes_from(raw, 8 * sizeof(hashmap_slot)), 8, NULL);
+    EXPECT(result__Bool_Error_is_ok(r));
+}
+
+/* H2: the cap is capacity - capacity / 4 entries: 75% from capacity 4 on;
+   at capacities 1 and 2 every slot can be filled. */
+static void test_load_cap_small(void)
+{
+    const usize caps[3] = {1u, 2u, 4u};
+    const usize most[3] = {1u, 2u, 3u};
+    for (usize c = 0; c < 3u; c++) {
+        hashmap_slot b[4];
+        hashmap m;
+        if (!result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, caps[c] * sizeof(hashmap_slot)), caps[c], NULL))) {
+            EXPECT(!"init");
+            continue;
+        }
+        usize stored = 0;
+        for (u64 k = 1; k <= 5u; k++) {
+            int v = (int)k;
+            if (result__Bool_Error_is_ok(hashmap_insert(&m, &k, &v))) { stored++; }
+        }
+        EXPECT(stored == most[c]);
+        for (u64 k = 1; k <= stored; k++) {
+            EXPECT(hashmap_contains_key(&m, &k));
+        }
+    }
+}
 
 int main(void)
 {
@@ -870,6 +986,12 @@ int main(void)
     /* stress */
     test_robin_hood_stress();
 
+    /* VERIFY-054 */
+    test_range_and_fmt();
+    test_range_fmt_refusals();
+    test_misaligned_buffer_refused();
+    test_load_cap_small();
+
 #ifdef CANON_LIFETIME_DEBUG
     test_lifetime_init_opens_token();
     test_lifetime_insert_restamps();
@@ -898,19 +1020,19 @@ int main(void)
  */
 static void hashmap_fuzz_suppress_unused(void)
 {
-    /* option_hm_val_t */
-    (void)option_hm_val_t_is_none;
-    (void)option_hm_val_t_get;
-    (void)option_hm_val_t_unwrap_or;
-    (void)option_hm_val_t_expect;
-    (void)option_hm_val_t_map;
-    (void)option_hm_val_t_and_then;
-    (void)option_hm_val_t_or_else;
-    (void)option_hm_val_t_filter;
-    (void)option_hm_val_t_combine_with;
-    (void)option_hm_val_t_replace;
-    (void)option_hm_val_t_take;
-    (void)option_hm_val_t_eq;
+    /* option_hashmap_val_t */
+    (void)option_hashmap_val_t_is_none;
+    (void)option_hashmap_val_t_get;
+    (void)option_hashmap_val_t_unwrap_or;
+    (void)option_hashmap_val_t_expect;
+    (void)option_hashmap_val_t_map;
+    (void)option_hashmap_val_t_and_then;
+    (void)option_hashmap_val_t_or_else;
+    (void)option_hashmap_val_t_filter;
+    (void)option_hashmap_val_t_combine_with;
+    (void)option_hashmap_val_t_replace;
+    (void)option_hashmap_val_t_take;
+    (void)option_hashmap_val_t_eq;
 
     /* result__Bool_Error */
     (void)result__Bool_Error_is_err;
@@ -928,19 +1050,19 @@ static void hashmap_fuzz_suppress_unused(void)
     (void)result__Bool_Error_or;
     (void)result__Bool_Error_eq;
 
-    /* result_hm_val_t_Error */
-    (void)result_hm_val_t_Error_is_err;
-    (void)result_hm_val_t_Error_get_ok;
-    (void)result_hm_val_t_Error_get_err;
-    (void)result_hm_val_t_Error_unwrap_or;
-    (void)result_hm_val_t_Error_expect;
-    (void)result_hm_val_t_Error_map;
-    (void)result_hm_val_t_Error_map_err;
-    (void)result_hm_val_t_Error_and_then;
-    (void)result_hm_val_t_Error_or_else;
-    (void)result_hm_val_t_Error_and;
-    (void)result_hm_val_t_Error_or;
-    (void)result_hm_val_t_Error_eq;
+    /* result_hashmap_val_t_Error */
+    (void)result_hashmap_val_t_Error_is_err;
+    (void)result_hashmap_val_t_Error_get_ok;
+    (void)result_hashmap_val_t_Error_get_err;
+    (void)result_hashmap_val_t_Error_unwrap_or;
+    (void)result_hashmap_val_t_Error_expect;
+    (void)result_hashmap_val_t_Error_map;
+    (void)result_hashmap_val_t_Error_map_err;
+    (void)result_hashmap_val_t_Error_and_then;
+    (void)result_hashmap_val_t_Error_or_else;
+    (void)result_hashmap_val_t_Error_and;
+    (void)result_hashmap_val_t_Error_or;
+    (void)result_hashmap_val_t_Error_eq;
 
     /* hashmap functions not used in fuzz path */
     (void)hashmap_capacity;
@@ -981,7 +1103,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
     static const usize cap_table[4] = {4, 8, 16, 32};
 
     /* Max capacity is 32 — size the buffer for that */
-    u8 buf[HM_BUF(32)];
+    hashmap_slot buf[32];  /* aligned for the slots (VERIFY-054) */
     hashmap m;
 
     (void)hashmap_fuzz_suppress_unused;
@@ -1037,12 +1159,12 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
             }
 
             case 1: { /* get */
-                option_hm_val_t o = hashmap_get(&m, &key);
+                option_hashmap_val_t o = hashmap_get(&m, &key);
                 if (ref_present[key]) {
-                    if (!option_hm_val_t_is_some(o))       __builtin_trap();
-                    if (option_hm_val_t_unwrap(o) != ref[key]) __builtin_trap();
+                    if (!option_hashmap_val_t_is_some(o))       __builtin_trap();
+                    if (option_hashmap_val_t_unwrap(o) != ref[key]) __builtin_trap();
                 } else {
-                    if (option_hm_val_t_is_some(o))        __builtin_trap();
+                    if (option_hashmap_val_t_is_some(o))        __builtin_trap();
                 }
                 break;
             }
@@ -1066,19 +1188,19 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
             case 4: { /* remove */
                 usize before = hashmap_len(&m);
-                result_hm_val_t_Error r = hashmap_remove(&m, &key);
+                result_hashmap_val_t_Error r = hashmap_remove(&m, &key);
                 if (ref_present[key]) {
-                    if (!result_hm_val_t_Error_is_ok(r))
+                    if (!result_hashmap_val_t_Error_is_ok(r))
                         __builtin_trap();
-                    if (result_hm_val_t_Error_unwrap(r) != ref[key])
+                    if (result_hashmap_val_t_Error_unwrap(r) != ref[key])
                         __builtin_trap();
                     if (hashmap_len(&m) != before - 1)
                         __builtin_trap();
                     ref_present[key] = false;
                 } else {
-                    if (result_hm_val_t_Error_is_ok(r))
+                    if (result_hashmap_val_t_Error_is_ok(r))
                         __builtin_trap();
-                    if (result_hm_val_t_Error_unwrap_err(r) != ERR_NOT_FOUND)
+                    if (result_hashmap_val_t_Error_unwrap_err(r) != ERR_NOT_FOUND)
                         __builtin_trap();
                 }
                 break;
