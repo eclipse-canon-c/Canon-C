@@ -4718,7 +4718,7 @@ discipline) recorded for deque.
 | convenience/dynvec.h | Reviewed (light), not WP-verified | — | Heap vector (VERIFY-053). Not WP-verified by design: heap allocation is where WP's reasoning is weakest (VERIFY-008 Category 1). Fixed: unchecked byte-count products (heap overflow) and `extend` from its own buffer (use after free). Evidence: tests, fuzzing, sanitizers, Valgrind. |
 | convenience/smallvec.h | Reviewed (light), not WP-verified | — | Inline-first vector (VERIFY-053). Fixed: a pointer into `init`'s dead stack frame, which the tests had patched around; the quick start's missing vec requirement; `as_vec`'s empty view. Evidence as dynvec. |
 | convenience/dynstring.h | Reviewed (light), not WP-verified | — | Heap string builder (VERIFY-053). Fixed: appending its own text (use after free) and `reserve` leaving it unterminated. Evidence as dynvec; MC/DC 91/120. |
-| hashmap      | Planned          |           | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed |
+| hashmap      | Planned (WP); reviewed | — | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed. VERIFY-054 fixed what came before a proof: an unchecked buffer alignment, and three documented paths that never compiled (two maps per file, separate compilation, `hashmap_range.h`). The WP unit is the next record. |
 
 ### algo/ (longer term)
 

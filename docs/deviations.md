@@ -27708,3 +27708,17 @@ the text they were committed with; this table is the correction.
 `traceability.md`'s rows are corrected in place, with a note. From here on
 a record cites only commits on master: a baseline is the synced master, and
 a commit not yet pushed is named by its subject.
+
+### Run 2 scored (2026-11-02): every prediction matched; VERIFY-054 closed
+
+Run on 5f0387d: 85 jobs, all `success`, read from the annotations.
+
+| # | result |
+|---|--------|
+| R1 | **MATCH.** `static-analysis` green on Linux, macOS and Windows. |
+| R2 | **MATCH.** `misra` real 66. |
+| R3 | **MATCH.** The suite 58 of 58 in every leg; every proof job at its pin (`frama-c-array` 2863 / 2887, `frama-c-stack` 5714 / 5783, 0 differences each); MC/DC 2021 / 2194; `embedded` 136 units at 18 configurations, 0 failed; AVR 29 / 49 / 2; `compcert` 59 / 59. |
+
+**VERIFY-054 is closed.** hashmap's documented paths now compile and are
+tested, and a misaligned buffer is refused. hashmap is not WP-verified yet:
+its WP unit is the next record, pre-registered once this one is on master.

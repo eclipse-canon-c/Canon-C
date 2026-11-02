@@ -44,8 +44,8 @@
 |--------------------|--------------------------------------------------------------|
 | **Date**           | 2026-11-02                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | fd9664f (VERIFY-053)                                         |
-| **CI run**         | `3 · Static analysis & coverage`, run on fd9664f             |
+| **Commit**         | 5f0387d (VERIFY-054 run 2)                                   |
+| **CI run**         | `3 · Static analysis & coverage`, run on 5f0387d             |
 | **CI job**         | `coverage` in `.github/workflows/analysis.yml`               |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -54,8 +54,8 @@
 | **Tool**           | gcov-14 --conditions (MC/DC) + lcov (branch)                |
 | **Runner**         | ubuntu-24.04 (GitHub Actions), pinned since 25133fe          |
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
-| **Test binaries**  | ctest registers 56 tests; 8 Shape-B cover TUs run beside them: `option_cover`, `result_cover`, `vec_cover`, `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover`, `array_cover` |
-| **Results**        | MC/DC 1986 / 2158 (92.0%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
+| **Test binaries**  | ctest registers 58 tests (the coverage run leaves out four: `contract_test`, the two integration guards and `hashmap_multi_test`); 8 Shape-B cover TUs run beside them: `option_cover`, `result_cover`, `vec_cover`, `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover`, `array_cover` |
+| **Results**        | MC/DC 2021 / 2194 (92.1%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
 
 > **Note (2026-11-01).** Until today this card described CI #1317
 > (9f7a9d0, 2026-09-29), and the notes below brought it forward one run at
@@ -270,10 +270,18 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 97.0%      | 2878       | 2968       |
-| Functions  | 99.6%      | 720        | 723        |
-| Branches   | 91.6%      | 1734       | 1892       |
-| MC/DC      | 92.0%      | 1986       | 2158       |
+| Lines      | 97.0%      | 2917       | 3007       |
+| Functions  | 99.6%      | 750        | 753        |
+| Branches   | 91.8%      | 1769       | 1928       |
+| MC/DC      | 92.1%      | 2021       | 2194       |
+
+> **Brought up to 5f0387d (VERIFY-054), 2026-11-02.** MC/DC is CI's,
+> 2021 / 2194, from the coverage job's annotation; lines, functions and
+> branches from the job's steps run on the same tree. The rows that moved:
+> `hashmap_impl.h` 61 / 88 → 63 / 90 (the alignment test), and two new rows,
+> `hashmap_range.h` 16 / 16 and `hashmap_fmt.h` 17 / 18 (the one miss,
+> `capacity > 0` false, unreachable after a successful init). No test
+> included either header before VERIFY-054.
 
 > **Brought up to fd9664f (VERIFY-053), 2026-11-02.** MC/DC is CI's, from
 > the coverage job's annotation: 1986 / 2158. Lines, functions and
@@ -1823,6 +1831,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-11-01 | 2acb55c → 23bad5e | B&T #3 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h** (VERIFY-052, MCDC-020), run 1, report-only: 20 macro-body contracts, 2863/2887, 24 unproved (16 inherited, 8 own), both sets as predicted by name. Found first: `copy_from(&a, &a)` was `memcpy` on one object (A1, now a struct assignment), and `DEFINE_ARRAY`'s requirements were understated (A2). MC/DC 1979/2148 with `array_cover.c` 42/46; lines, functions and branches from the job's steps run locally. |
 | 2026-11-01 | 0ae029f → 7617c7a | B&T #5 → #6 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h enforced** (VERIFY-052), module 23: run 2 on 0ae029f gave run 1's line and names; pinned 2863/2887 with 24 names; the 8 own filed under VERIFY-017's byte-view block (6) and VERIFY-008 Category 3 (2), no new block. Coverage as at run 1. |
 | 2026-11-02 | e083310 → fd9664f | B&T #7 | v1.3.0  | 97.0%  | 99.6%     | 91.6%    | 92.0%  | **data/convenience/** (VERIFY-053), light treatment: five memory-safety defects fixed, each shown under ASan first — dynvec's unchecked size products and self-extend, smallvec's pointer into `init`'s dead frame (which the tests had patched around), dynstring's self-append and unterminated `reserve`. No proof moved. MC/DC 1986/2158, the one row moving `dynstring.h` 84/110 → 91/120. |
+| 2026-11-02 | 31e6d3e → 5f0387d | B&T #8 → #9 | v1.3.0  | 97.0%  | 99.6%     | 91.8%    | 92.1%  | **data/hashmap/** before its proof (VERIFY-054): `hashmap_init` refuses a buffer misaligned for its slots; two maps in one TU, the separate-compilation recipe and `hashmap_range.h`, documented but never compiled, now built and tested; per-map option and result names. Run 1 left `static-analysis` red (a test path and a macro cppcheck could not expand), fixed at run 2. MISRA 55 → 66, each finding classified. MC/DC 2021/2194. No proof moved. |
 
 > **Note (2026-11-02): the commit and CI columns of the rows above.**
 > - **CI numbers since VERIFY-050.** VERIFY-050 split the one CI workflow
