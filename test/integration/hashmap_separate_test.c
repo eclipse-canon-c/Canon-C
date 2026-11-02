@@ -42,7 +42,10 @@ int main(void)
 {
     map_u64_int_slot buf[8];
     map_u64_int m;
-    EXPECT(result__Bool_Error_is_ok(map_u64_int_init(&m, bytes_from(buf, sizeof buf), 8, NULL)));
+    if (!result__Bool_Error_is_ok(map_u64_int_init(&m, bytes_from(buf, sizeof buf), 8, NULL))) {
+        EXPECT(false);   /* init failed */
+        return 1;
+    }
     for (u64 k = 1; k <= 4; k++) {
         int v = (int)k * 2;
         EXPECT(result__Bool_Error_is_ok(map_u64_int_insert(&m, &k, &v)));

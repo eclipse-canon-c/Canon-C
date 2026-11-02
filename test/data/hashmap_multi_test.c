@@ -99,8 +99,13 @@ static void test_two_maps(void)
     map_u32_u64_slot b2[8];
     hashmap     m1;
     map_u32_u64 m2;
-    EXPECT(result__Bool_Error_is_ok(hashmap_init(&m1, bytes_from(b1, sizeof b1), 8, NULL)));
-    EXPECT(result__Bool_Error_is_ok(map_u32_u64_init(&m2, bytes_from(b2, sizeof b2), 8, NULL)));
+    /* Stop if either init fails: the maps are then not initialised (the
+       analyzer follows that path otherwise). */
+    if (!result__Bool_Error_is_ok(hashmap_init(&m1, bytes_from(b1, sizeof b1), 8, NULL)) ||
+        !result__Bool_Error_is_ok(map_u32_u64_init(&m2, bytes_from(b2, sizeof b2), 8, NULL))) {
+        EXPECT(false);   /* init failed */
+        return;
+    }
 
     u64 k1 = 7; int v1 = -3;
     u32 k2 = 7; u64 v2 = 900000000000ULL;
@@ -123,7 +128,10 @@ static void test_second_map_range(void)
 {
     map_u32_u64_slot b[8];
     map_u32_u64 m;
-    EXPECT(result__Bool_Error_is_ok(map_u32_u64_init(&m, bytes_from(b, sizeof b), 8, NULL)));
+    if (!result__Bool_Error_is_ok(map_u32_u64_init(&m, bytes_from(b, sizeof b), 8, NULL))) {
+        EXPECT(false);   /* init failed */
+        return;
+    }
     for (u32 k = 1; k <= 3; k++) {
         u64 v = (u64)k + 100u;
         EXPECT(result__Bool_Error_is_ok(map_u32_u64_insert(&m, &k, &v)));

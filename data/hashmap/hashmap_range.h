@@ -132,8 +132,11 @@
 #define HM_RANGE_VEC_(type)  HM_PASTE_(vec_, type)
 
 /** @brief Calls the vec push function for a given element type */
+/* The push function's name in one HM_PASTE_ chain of its own: cppcheck's
+   preprocessor does not expand HM_PASTE_(HM_RANGE_VEC_(type), _push). */
+#define HM_RANGE_PUSH_FN_(type) HM_PASTE_(HM_PASTE_(vec_, type), _push)
 #define HM_RANGE_PUSH_(type, vec_ptr, elem_ptr) \
-    HM_PASTE_(HM_RANGE_VEC_(type), _push)((vec_ptr), *(elem_ptr))
+    HM_RANGE_PUSH_FN_(type)((vec_ptr), *(elem_ptr))
 
 /* ============================================================================
  * hashmap_collect_keys
@@ -162,8 +165,8 @@ static inline result__Bool_Error HASHMAP_FN(collect_keys)(
     const HASHMAP_TYPE_NAME*                   map,
     borrowed(HM_RANGE_VEC_(HASHMAP_KEY_TYPE)*) out
 ) {
-    if (!map) return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (!out) return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (!map) { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (!out) { return result__Bool_Error_err(ERR_INVALID_ARG); }
     require_msg(map->slots != NULL, "hashmap_collect_keys: map is uninitialized");
 
     usize iter = 0;
@@ -173,8 +176,9 @@ static inline result__Bool_Error HASHMAP_FN(collect_keys)(
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
         (void)v; /* only collecting keys */
         result__Bool_Error push_res = HM_RANGE_PUSH_(HASHMAP_KEY_TYPE, out, k);
-        if (result__Bool_Error_is_err(push_res))
+        if (result__Bool_Error_is_err(push_res)) {
             return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
+        }
     }
 
     return result__Bool_Error_ok(true);
@@ -206,8 +210,8 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
     const HASHMAP_TYPE_NAME*                   map,
     borrowed(HM_RANGE_VEC_(HASHMAP_VAL_TYPE)*) out
 ) {
-    if (!map) return result__Bool_Error_err(ERR_INVALID_ARG);
-    if (!out) return result__Bool_Error_err(ERR_INVALID_ARG);
+    if (!map) { return result__Bool_Error_err(ERR_INVALID_ARG); }
+    if (!out) { return result__Bool_Error_err(ERR_INVALID_ARG); }
     require_msg(map->slots != NULL, "hashmap_collect_values: map is uninitialized");
 
     usize iter = 0;
@@ -217,8 +221,9 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
     while (HASHMAP_FN(iter_next)(map, &iter, &k, &v)) {
         (void)k; /* only collecting values */
         result__Bool_Error push_res = HM_RANGE_PUSH_(HASHMAP_VAL_TYPE, out, v);
-        if (result__Bool_Error_is_err(push_res))
+        if (result__Bool_Error_is_err(push_res)) {
             return result__Bool_Error_err(ERR_CAPACITY_EXCEEDED);
+        }
     }
 
     return result__Bool_Error_ok(true);
@@ -266,5 +271,6 @@ static inline result__Bool_Error HASHMAP_FN(collect_values)(
  * ========================================================================= */
 #undef HM_RANGE_VEC_
 #undef HM_RANGE_PUSH_
+#undef HM_RANGE_PUSH_FN_
 
 /* (no include guard: see the top of the file) */

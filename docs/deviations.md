@@ -27633,3 +27633,56 @@ has run.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-11-02): one job red that no prediction covered
+
+Run on a790335 (the VERIFY-054 commits and a documentation commit after
+them). Every prediction holds:
+
+| # | result |
+|---|--------|
+| K1 | **MATCH.** Every build and test job green: the suite 58 of 58 on Linux, Windows (MSVC, MinGW), macOS, musl, AArch64, s390x, i386, C11 to C23, Valgrind and fuzzing. |
+| K2 | **MATCH.** `misra` real 60. |
+| K3 | **MATCH.** No proof job moved. |
+| K4 | **MATCH.** MC/DC 2021 / 2194. |
+| K5 | **MATCH.** `embedded` 136 units at 18 configurations, 0 failed; AVR 29 / 49 / 2; `compcert` 59 / 59. |
+
+**But `static-analysis` failed, on all three systems**, and no prediction
+spoke of it. The record's local checks ran the build, the tests, the
+sanitizers, MISRA and coverage, and not that job's two tools. Run here
+since, as the job runs them:
+- **clang-tidy** (`clang-analyzer-core.UndefinedBinaryOperatorResult`):
+  in `hashmap_multi_test.c`, a test went on to insert after an `EXPECT` on
+  `init`'s result, so the analyzer followed the path where init fails and
+  the map is never initialised. A test defect: the new tests now stop when
+  init fails.
+- **Cppcheck** (`--enable=warning`, the test tree), two errors:
+  - `preprocessorErrorDirective`: cppcheck's preprocessor does not expand
+    `HM_PASTE_(HM_RANGE_VEC_(type), _push)`, a paste whose argument is a
+    function-like macro call. GCC and clang do. The push function's name now
+    has a paste chain of its own (`HM_RANGE_PUSH_FN_`), which both expand.
+  - `incorrectStringBooleanError` at `EXPECT(!"init")`: now `EXPECT(false)`.
+
+With these, both tools pass over the whole test tree as the job runs them.
+
+**What the cppcheck fix does to MISRA.** The `misra` job, run on the same
+headers, used to fail on that macro without a word, so `hashmap_range.h`'s
+two collect functions were never analysed: 60 counted nothing from them.
+Expanded, they give eight findings:
+- six 15.6, `if` bodies without braces: fixed (the ifs are braced);
+- two 17.3 and four `misra-config` at the two `while (iter_next(…))`
+  loops: the iterator function and the key and value types come from
+  `hashmap.h`, which a standalone scan of `hashmap_range.h` does not
+  include. They are the scan's view of a header that is a fragment, not
+  code to change. They are reported, not deviated.
+
+The job's command, run here on this commit: real **66**. The job's
+expected-count text says so.
+
+### Run 2 predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | `static-analysis` is green on all three systems. | any leg red | H (both tools run here as the job runs them) |
+| R2 | `misra` real **66**: run 1's 60 and the six `hashmap_range.h` findings above. | another count or composition | H (measured with the job's command) |
+| R3 | Everything else as at run 1: the suite 58 of 58 in every leg, no proof moving, MC/DC 2021 / 2194 (the changes are in tests, which the table filters, and in a macro's spelling), `embedded` 136, `compcert` 59 / 59. | any change | H |

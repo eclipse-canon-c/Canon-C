@@ -830,7 +830,10 @@ static void test_range_and_fmt(void)
 {
     hashmap_slot b[16];
     hashmap m;
-    EXPECT(result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof b), 16, NULL)));
+    if (!result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof b), 16, NULL))) {
+        EXPECT(false);   /* init failed */
+        return;
+    }
     for (u64 k = 1; k <= 5; k++) {
         int v = (int)(k * 10u);
         EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k, &v)));
@@ -867,7 +870,10 @@ static void test_range_fmt_refusals(void)
 {
     hashmap_slot b[8];
     hashmap m;
-    EXPECT(result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof b), 8, NULL)));
+    if (!result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof b), 8, NULL))) {
+        EXPECT(false);   /* init failed */
+        return;
+    }
     u64 k = 3; int v = 44;
     EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k, &v)));
     u64 k2 = 4; int v2 = 55;
@@ -915,7 +921,7 @@ static void test_load_cap_small(void)
         hashmap_slot b[4];
         hashmap m;
         if (!result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, caps[c] * sizeof(hashmap_slot)), caps[c], NULL))) {
-            EXPECT(!"init");
+            EXPECT(false);   /* init failed */
             continue;
         }
         usize stored = 0;
