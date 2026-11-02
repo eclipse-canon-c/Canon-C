@@ -27686,3 +27686,25 @@ expected-count text says so.
 | R1 | `static-analysis` is green on all three systems. | any leg red | H (both tools run here as the job runs them) |
 | R2 | `misra` real **66**: run 1's 60 and the six `hashmap_range.h` findings above. | another count or composition | H (measured with the job's command) |
 | R3 | Everything else as at run 1: the suite 58 of 58 in every leg, no proof moving, MC/DC 2021 / 2194 (the changes are in tests, which the table filters, and in a macro's spelling), `embedded` 136, `compcert` 59 / 59. | any change | H |
+
+### Hashes (2026-11-02): five citations that are not on master
+
+The author asked why some hashes in `docs/traceability.md` were not shown.
+Reading every hash cited since VERIFY-049 against master found five that are
+not on it. Each was a commit as made in the assistant's session, cited
+before the author applied the patch: `git am` makes a new commit, with a new
+hash, from the same change. The commits on master, matched by subject:
+
+| cited | on master | where |
+|-------|-----------|-------|
+| 258d61d | 955d49c | VERIFY-049's baseline, and the catalogue's `meta.substrate_commit` then |
+| 362df2e | 35c2e3d | `traceability.md`'s VERIFY-048 row |
+| 9328398 | 7d4234a | VERIFY-050's baseline |
+| 6feed52 | 2acb55c | VERIFY-052's baseline, and the catalogue's `meta.substrate_commit`, which now reads 2acb55c |
+| 3f6099f | e083310 | VERIFY-053's baseline (its score already says so) |
+
+The trees are the same in each pair; only the names differ. The records keep
+the text they were committed with; this table is the correction.
+`traceability.md`'s rows are corrected in place, with a note. From here on
+a record cites only commits on master: a baseline is the synced master, and
+a commit not yet pushed is named by its subject.
