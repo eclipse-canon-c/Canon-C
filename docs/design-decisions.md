@@ -834,6 +834,9 @@ the named-goal enforcement.
 > pins 3691 / 3730 with 39 unproved, region.h's six own among them, each named
 > in its roll-call; see the correction under §2.
 
+> **Note (2026-11-03).** Since the VERIFY-008 overlap fix (6fb8442, held at
+> CI #1380) the job pins 3685 / 3724, with the same 39.
+
 ### 5. Cross-references
 
 - **VERIFY-011** — the proof-side companion. Category 1 enumerates the

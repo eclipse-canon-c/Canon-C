@@ -20,6 +20,15 @@
 > modules get which artifact. The remaining 12 multi-file modules are still
 > pending — see the Status table.
 
+> **Note (2026-11-03).** The status above is as of result's landing. Of the
+> 14 multi-file macro modules, five now have verified drivers: option,
+> result, vec, deque and hashmap (VERIFY-055; a defect in its `remove` is
+> open, VERIFY-056). The nine algo/ modules are pending. Beside them the
+> tree holds two interposition drivers (bitset, range.h), four drivers for
+> contracts written in place under `-CC` (vec_range.h, vec_fmt.h, stack.h,
+> array.h) and eight cover TUs. The tables under "Which modules get which
+> artifact" list each.
+
 ## Why this exists: macro modules are the exception
 
 Canon-C's verified core stack (`checked.h` through `region.h`, plus
@@ -60,7 +69,9 @@ module tree (`core/primitives/ → core/ → semantics/ → data/ → algo/ → 
 
 One driver exists per multi-file macro module. There are **14** such modules
 across three layers, listed in the tables below — `option` and `result` have
-landed; the other 12 are pending.
+landed; the other 12 are pending. (As of result's landing. Since VERIFY-055,
+five have landed and the nine algo/ modules are pending: see the note at
+the top.)
 
 ---
 
@@ -269,7 +280,7 @@ Shape-B entry in the algo layer.
 | `option_verify.h` | `semantics/option/` | B (confirmed)  | ✅ `vmacros/coverage/option_cover.c` (landed, 96.7%, MCDC-006) |
 | `result_verify.h` | `semantics/result/` | B (confirmed)  | ✅ `vmacros/coverage/result_cover.c` (landed, 100%, 28/28, MCDC-007) |
 
-### data/ (8)
+### data/ (9)
 
 | Driver              | Verifies module  | Shape            | Cover TU (MC/DC)                 |
 |---------------------|------------------|------------------|---------------------------------|
@@ -280,7 +291,8 @@ Shape-B entry in the algo layer.
 | `vec_fmt_verify.h`  | `data/vec/vec_fmt.h` | B, in-place under `-CC` | ✅ `vmacros/coverage/vec_fmt_cover.c` (100%, 26/26, MCDC-018) |
 | `stack_verify.h`    | `data/stack.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/stack_cover.c` (5/6, MCDC-019; the miss is dead) |
 | `array_verify.h`    | `data/array.h`   | B, in-place under `-CC` | ✅ `vmacros/coverage/array_cover.c` (42/46, MCDC-020; the four misses are dead) |
-| `hashmap_verify.h`  | `data/hashmap/`  | A (confirmed)    | — measured in place via `hashmap_test.c`; since VERIFY-054 the table also has `hashmap_range.h` and `hashmap_fmt.h`, which no test built before |
+| `hashmap_verify.h`  | `data/hashmap/`  | A (confirmed)    | — measured in place via `hashmap_test.c` (`hashmap_impl.h` 65/92); since VERIFY-054 the table also has `hashmap_range.h` and `hashmap_fmt.h`, which no test built before, and which the driver does not include |
+| `range_verify.h`    | `data/range.h`   | **Interposition**, as bitset: it supplies a contracted `option_isize` (VERIFY-028 F3) | — not a cover TU; `range.h` is measured directly (61/62, MCDC-015) |
 
 #### A third kind of driver: interposition (bitset, VERIFY-020)
 
@@ -345,6 +357,14 @@ same count the capacity check used) and regression-tested in `vec_test.c`,
 but the extension is still outside every WP translation unit. range.h itself
 is now verified (VERIFY-030), which removes the dependency's side of the
 risk; the extension's own side remains deferred.
+
+> **Note (2026-11-03).** Both of vec's extensions have since become units of
+> their own: `vec_range.h` (VERIFY-041, `frama-c-vec-range`), whose
+> `extend_from_range` is now proved, and `vec_fmt.h` (VERIFY-042). The
+> paragraph above is as of the deferral. hashmap's decision (VERIFY-055):
+> its driver includes `hashmap.h` alone, so `hashmap_range.h` and
+> `hashmap_fmt.h` are deferred. They are tested and measured (MC/DC 16/16
+> and 17/18), not proved.
 
 ### Instantiation-identity rule (from the VERIFY-018 reconciliation)
 
@@ -734,7 +754,7 @@ routing alone.
 | vec      | `vec_verify.h`     | data/      | ✅ Verified 5475/5568 at CI #1380, since the VERIFY-008 overlap fix; 5481/5574 at CI #1375, since VERIFY-040 round 2; 5475/5569 at CI #1374, since VERIFY-040 round 1; 5474/5569 at CI #1373, since VERIFY-039 G18; 5466/5578 at CI #1365; earlier 5285/5473 — 5271/5467 before VERIFY-023 (VERIFY-018, enforced CI #1154; ratcheted CI #1187 Commit 9/9b, CI #1202 API-001, and CI #1247/43a46b1 for the F4 closure measured at CI #1246/c427548; baseline CI #1152; report-only #1150–#1151) | ✅ `vec_cover.c` — landed, 98.1% (155/158), MCDC-010 (CI #1146); attribution confirmed (third variant: direct instantiation, conditions on the cover TU) | Third driver; first data/-layer module; first Typed+Cast driver; STRUCTS/FUNCTIONS split (F3) landed first; new macro-body-loop residual class (g) forward-flagged for deque; F4 closed by contract at CI #1247 (198 → 196, fresh-result arm 22 → 20); Shape B (confirmed) |
 | deque    | `deque_verify.h`   | data/      | ✅ Verified 1653/1665 at CI #1374, since VERIFY-040 round 1; 1656/1673 at CI #1373, since VERIFY-039 G14; 1656/1675 at CI #1365, after G11; 1601/1668 when enforced (VERIFY-019, CI #1238; baseline #1234; name-stable #1237; re-confirmed #1239–#1240) | ✅ `deque_cover.c` — landed, 100% (82/82), MCDC-011 (CI #1234); attribution confirmed (third variant: direct instantiation) | Fourth driver; second data/-layer module; first data/-layer driver on plain Typed; STRUCTS/FUNCTIONS split (F3 checklist) landed first at CI #1225; **zero core-substrate inheritance** — first inherited surface smaller than its predecessor's; class (g) withdrawn (a ring shifts nothing); memory-model invariant (VERIFY-019-M); closed VERIFY-018 F4 by elimination — confirming fix landed in `vec_verify.h`, measured CI #1246 (c427548) and ratcheted CI #1247 (43a46b1), vec 198 → 196; Shape B (confirmed) |
 | bitset   | `bitset_verify.h`  | data/      | ✅ Verified 4972/5046 at CI #1380, since the VERIFY-008 overlap fix; 4978/5052 at CI #1375, since VERIFY-040 round 2; 4967/5043 at CI #1374, since VERIFY-040 round 1; 4963/5041 at CI #1373, since VERIFY-039 G18; 4953/5049 at CI #1365; earlier 4845/5008 — 4839/5002 before VERIFY-023; gate wired at CI #1285, see VERIFY-020 reading note (VERIFY-020, enforced CI #1260 at 158; ratcheted CI #1265 to 163 after F2/F5; re-confirmed CI #1266; report-only #1249–#1259) | — not a cover TU; `data/bitset.h` measured directly, 97.1% (134/138) since VERIFY-040 round 2, 97.0% (130/134) before, MCDC-012 | Fifth driver, third data/-layer module; **interposition driver, not Shape B** — contracts none of bitset's functions, exists only to supply a contracted `option_usize`; contracts live in `data/bitset.h` in place; 71 own residuals at CI #1266, the most of any driver-verified module, not the fewest (VERIFY-020's note of 2026-10-16); F4 specification-strength inheritance (new residual shape); E1/F5 both instances of a logically-redundant clause being load-bearing for the prover |
-| hashmap  | `hashmap_verify.h` | data/      | ✅ Verified 4585/4640 (VERIFY-055; runs 1–2 173b7a2 and 978e4de, enforced from run 3) | — (Shape A; `hashmap_impl.h` measured in place, 65/92) | Contracts in place, under `-CC`; the driver supplies contracted hash and equality functions at `u64 → int`; 15 own residuals, two classes, each argued |
+| hashmap  | `hashmap_verify.h` | data/      | ✅ Verified 4585/4640 (VERIFY-055; runs 1–2 173b7a2 and 978e4de, enforced from run 3) | — (Shape A; `hashmap_impl.h` measured in place, 65/92) | Contracts in place, under `-CC`; **a defect in `remove` at capacities 1 and 2, found after enforcement, is open** (VERIFY-055's correction, VERIFY-056); the driver supplies contracted hash and equality functions at `u64 → int`; 15 own residuals: two masks, argued, and 13 whose argument was found wrong, six of them false |
 | map      | `map_verify.h`     | algo/      | Not started  | — (Shape A; via `_impl.h`)          | Distinct in/out types          |
 | filter   | `filter_verify.h`  | algo/      | Not started  | — (Shape A; via `_impl.h`)          |                                |
 | fold     | `fold_verify.h`    | algo/      | Not started  | `fold_cover.c` — not started (pattern confirmed on option; confirm own attribution)   | Infallible & fallible variants; Shape B (absent from MC/DC table) |
@@ -755,7 +775,9 @@ routing alone.
 
 The `vmacros/` tree now holds four driver + cover-TU pairs (`option`,
 `result`, `vec`, `deque`) and one interposition driver with no cover TU
-(`bitset`). Update each remaining row's WP status as its driver is
+(`bitset`). (As of bitset's landing. Since then: hashmap's driver, range.h's
+interposition driver, four in-place `-CC` drivers with their cover TUs;
+see the note at the top.) Update each remaining row's WP status as its driver is
 written, and the Cover-TU column as each Shape-B cover TU lands (and as
 provisional Shape classifications are confirmed by the per-module
 attribution debug run); record each module's generated-vs-scaffolding

@@ -143,6 +143,15 @@ macro (`CANON_LIFETIME_ATOMIC` or similar) would be a Category B
 entry — it extends the substrate to a domain (concurrent
 construction) that the current design explicitly excludes.
 
+> **Note (2026-11-03).** That entry has been made. Since 5b45aeb
+> (2026-08-17) every container draws its token from one generator,
+> `canon_lifetime_next_id_` in `core/primitives/lifetime.h`. Its increment
+> is atomic at three of its four ladder levels (C11, GCC and Clang, MSVC);
+> the fourth, a plain increment, is not race-free (`docs/thread-safety.md`
+> §3). The container headers' comments that still say the counter "may
+> race and collide" describe that fourth level only; they are owed a
+> correction with each file's next change.
+
 The same shape applies to any future substrate extension whose
 semantics differ from what's in the OWN-001 §3 contract table:
 

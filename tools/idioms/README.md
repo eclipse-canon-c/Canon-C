@@ -28,7 +28,8 @@ instances of known ones.
 
 builds `catalogue.json` from **every Frama-C job in the CI workflow**, each with
 its own translation unit and preprocessor flags, so the catalogue covers exactly
-what CI verifies (22 jobs, 21 units). Each entry lists the jobs it comes from.
+what CI verifies (22 jobs, 21 units at the first build; 26 jobs at f4c713b,
+below). Each entry lists the jobs it comes from.
 At 2d36ca1 (CI #1375): 42 ACSL features, 22 C features and 8 family features,
 over the 41 repository files the verified units include. The first build, at
 6290f4a (CI #1337), had 37 ACSL features; VERIFY-039 G11's repair of option's
@@ -48,6 +49,14 @@ kind was added. VERIFY-041's `frama-c-vec-range`, the first job preprocessed
 with `-CC` (whose comment flags `clang_flags` drops, clang rejecting them
 without `-E`), added the family feature `vec@other+integer`, as that record's
 P9 predicted (43 files and 9 family features at 42a89ad, CI #1382).
+VERIFY-042's `frama-c-vec-fmt` added no kind (45 files at cf28c02). Since
+then the catalogue is rebuilt with each unit's pre-registration, before the
+unit has a job: at 955d49c (VERIFY-049, the commit only), at 2acb55c
+(VERIFY-052, adding `frama-c-stack`) and at f4c713b (VERIFY-055, adding
+`frama-c-array`). At f4c713b it covers 26 jobs and 50 files, with 42 ACSL,
+22 C and 9 family features. `frama-c-hashmap` is not in it yet: VERIFY-055
+measured hashmap against it. (Added 2026-11-03; read from
+`catalogue.json` as each of those commits holds it.)
 
     python3 tools/idioms/extract.py crosscheck
 

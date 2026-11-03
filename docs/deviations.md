@@ -5804,6 +5804,7 @@ costs one read of each contract to check.
 | **ID**         | VERIFY-026 |
 | **Date**       | 2026-09-18 |
 | **Status**     | PRE-REGISTERED — no contract touched; predictions committed before any change |
+| **Status update** | 2026-11-03 — scored by VERIFY-027 (row 1) and closed there, in "VERIFY-026 closed: what the eight-function pre-registration measured". The Status above is the record as committed. |
 | **Baseline**   | CI #1298 (986d5ad) — pins identical to #1290 |
 | **Scope**      | ptr.h, slice.h, memory.h, arena.h, pool.h, borrow.h |
 | **Category**   | Prospective test of the VERIFY-023 mechanism (§5.7 of the paper: "a lead, not a prediction") |
@@ -8996,6 +8997,7 @@ it as one, not in the sense that CI turns red.
 | **ID**         | VERIFY-028 *(renumber if 028 was taken by the loop-annotation pre-registration)* |
 | **Date**       | 2026-09-26 |
 | **Status**     | PRE-REGISTERED — no contract written, no source changed; findings demonstrated by probe only |
+| **Status update** | 2026-11-03 — scored by VERIFY-029 (runs 1 and 2) and VERIFY-030 (run 3; range.h enforced at CI #1317). The Status above is the record as committed. |
 | **Baseline**   | 4e2eb2b (CI #____ — author fills) |
 | **Scope**      | `data/range.h` (15 functions, Shape A in place) + a thin interposition driver for `option_isize` |
 | **Category**   | Prospective test of the Table 5 saturation claim (module 18); prospective test of prover detection on known defects |
@@ -9182,6 +9184,7 @@ enforcement.
 | **ID**         | VERIFY-029 |
 | **Date**       | 2026-09-28 |
 | **Status**     | SCORES runs 1–2 of VERIFY-028 (bd1da17); PRE-REGISTERS run 3 |
+| **Status update** | 2026-11-03 — its run 3 scored by VERIFY-030 (range.h enforced at CI #1317). The Status above is the record as committed. |
 | **Commits**    | pre-registration bd1da17 · run 1 c9138f4 (CI #1312) · run 2 source 4cf7f90 (CI #1313, build failed — see below) · run 2 evidence 5e778b7 (CI #1314) |
 | **Scope**      | `data/range.h` (module 18), plus `data/vec/vec_range.h` (F5) |
 | **Category**   | Prospective scoring; new finding; pre-registration of a remediation run |
@@ -9528,6 +9531,7 @@ other per-line step does.
 | **ID**         | VERIFY-031 |
 | **Date**       | 2026-10-02 |
 | **Status**     | PRE-REGISTERED — no contract written, no source changed; findings demonstrated by probe only |
+| **Status update** | 2026-11-03 — scored by VERIFY-032 (run 2); closed by VERIFY-035 (stringbuf.h enforced). The Status above is the record as committed. |
 | **Baseline**   | 21fe8d9 (CI #____ — author fills) |
 | **Scope**      | `data/stringbuf.h` (29 functions in the verified configuration, Shape A in place, no driver) + one `__FRAMAC__`-gated trusted `vsnprintf` axiom |
 | **Category**   | Second prospective test of the Table 5 saturation claim (module 19); prospective test of prover detection on known defects; first test of a defect class the trusted base is predicted to hide |
@@ -10142,6 +10146,7 @@ it would have moved two of three failures into the predicted column.
 | **ID**         | VERIFY-033 |
 | **Date**       | 2026-10-03 |
 | **Status**     | PRE-REGISTERED — no contract touched; predictions committed before any change |
+| **Status update** | 2026-11-03 — scored by VERIFY-034. The Status above is the record as committed. |
 | **Baseline**   | fc924e2 (CI #1321): stringbuf 4744 / 4828, 84 unproved, 3 own |
 | **Scope**      | `core/arena.h`: `arena_alloc`, `arena_alloc_aligned` |
 | **Category**   | Callee specification-strength fix (the VERIFY-023 / VERIFY-026 shape), cross-job ratchet |
@@ -10583,6 +10588,7 @@ printed by the per-line step is a regression.
 | **ID**         | VERIFY-036 |
 | **Date**       | 2026-10-05 |
 | **Status**     | OPEN — F1 fixed (f1ba2de) and scored exact at CI #1326 / CC #15; F2 fixed (8163f06) and scored at CI #1328 / CC #17 (exact on names, count estimate missed); F5 fixed (c5281dc) and scored exact at CI #1330 / CC #18; F6 fixed (c069881) and scored exact at CI #1332 / CC #20; F3 fixed (baf8ee9) and scored at CI #1334 / CC #21 (exact on names; count and job-set misses recorded); F4 fixed (e953219) and scored exact at CI #1336 / CC #23. All six fixes landed; the arguments of arena Cat 2c and pool Cat 2d still need rewriting. Each fix is preceded by a committed prediction and followed by its scoring, in the VERIFY-026/027 form |
+| **Status update** | 2026-11-03 — nothing on its list is open: the two arguments it left to rewrite were retired instead, arena.h's Category 2c at VERIFY-039 batch 5 and pool.h's Category 2d at VERIFY-039 G7. The Status above is the record as committed. |
 | **Scope**      | argument blocks VERIFY-008 Cat 2; VERIFY-009 Cat 2a and Cat 2b (Cat 2c by dependency); VERIFY-010 Cat 2b |
 | **Method**     | each block's central claim read against the body and contract it describes; each doubtful claim tested by an executable probe in `tools/probes/verify-036/`. Reading and probes produced with AI assistance (Claude) and reviewed by the author before commit |
 
@@ -11276,6 +11282,7 @@ probe unless a sanitizer job adopts it.
 | **ID**         | VERIFY-037 |
 | **Date**       | 2026-10-08 |
 | **Status**     | PRE-REGISTERED — the driver is not yet in CI; the predicted pin is committed with this entry |
+| **Status update** | 2026-11-03 — scored by VERIFY-038: unscorable, its premise refuted, and re-registered there. The Status above is the record as committed. |
 | **Baseline**   | da323da (CI #1337 substrate; `tools/idioms` catalogue at 6290f4a) |
 | **Scope**      | a bare `-CC` driver, `vmacros/vdrivers/vec_struct_cc_experiment.h`, instantiating `option(Rec)`, `result(bool, Error)` and `vec(Rec)` with `Rec = struct { u32 id; i64 due; }`; verified as a new `-CC` family `vec_struct` (Typed+Cast, the `cc-vec` flags) |
 | **Category**   | Catalogue extension for the §4.3 test; a third prospective test of P1 (zero new argument blocks) |
@@ -25049,6 +25056,7 @@ module 19.
 | **ID**         | MCDC-017 |
 | **Date**       | 2026-10-26 |
 | **Status**     | PRE-REGISTERED — the cover TU is written after this commit; no MC/DC measurement of `vec_range.h` exists |
+| **Status update** | 2026-11-03 — closed 2026-10-27, in "MCDC-017, scored (2026-10-27)" below. The Status above is the record as committed. |
 | **Baseline**   | 4d62cd8 (CI #1384): `vec_range.h` absent from the table (VERIFY-041, "Run 2, scored") |
 | **Scope**      | `vmacros/coverage/vec_range_cover.c`, `DEFINE_VEC_RANGE` at `int` and at `u64`, built and run as the four existing cover TUs are |
 | **Category**   | Coverage completeness; run alongside VERIFY-041 |
@@ -25694,6 +25702,7 @@ bullet). The paper, frozen at 96a8c5d, is not changed.
 | **ID**         | VERIFY-043 |
 | **Date**       | 2026-10-28 |
 | **Status**     | PREDICTED — the jobs and this prediction in one commit, before either job has run in CI |
+| **Status update** | 2026-11-03 — closed 2026-10-29, in "Scored (2026-10-29)" below. The Status above is the record as committed. |
 | **Baseline**   | a503bf6 (CI #1389's tree, VERIFY-042 closed) |
 | **Scope**      | Two test jobs in `.github/workflows/cmake-multi-platform.yml`: `musl` (Alpine 3.20, GCC, Release and Debug, no sanitizers) and `build-arm64` (`ubuntu-24.04-arm`, GCC and clang, Release and Debug, sanitizers in Debug). No source changes. |
 | **Category**   | Test-matrix extension, decided with the author on 2026-10-26: the first two of five platform additions, after vec_range.h and vec_fmt.h |
@@ -25767,6 +25776,7 @@ VERIFY-043 is closed. The remaining platform additions follow, C23 first
 | **ID**         | VERIFY-044 |
 | **Date**       | 2026-10-29 |
 | **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Status update** | 2026-11-03 — closed 2026-10-29: scored below, "Scored (2026-10-29)", its S4 in VERIFY-045's score. The Status above is the record as committed. |
 | **Baseline**   | 873ed2e (CI #1390) |
 | **Scope**      | `core/primitives/contract.h`, eight `CANON_RESULT(bool, Error)` instantiations and the comments that explained their name, `CMakeLists.txt` (the standard made overridable), `test/core/primitives/contract_test.c`, the `misra` job's expected-count text, and a CI job `c-standards` (C11, C17 and C23, GCC 14 and clang 18, Debug with sanitizers) |
 | **Category**   | Portability defect in the shipped headers, found by a compile check while weighing the platform additions; an API addition decided with the author |
@@ -25940,6 +25950,7 @@ until the coverage figures are read.
 | **ID**         | VERIFY-045 |
 | **Date**       | 2026-10-29 |
 | **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Status update** | 2026-11-03 — closed 2026-10-29, in "Scored (2026-10-29)" below, which closes VERIFY-044 too. The Status above is the record as committed. |
 | **Baseline**   | 1a3a9f0 |
 | **Scope**      | `test/data/bitset_test.c`, `test/semantics/option_test.c`, `data/bitset.h` (documentation only, no ACSL), and a CI job `big-endian` (Linux s390x, GCC cross-compiled, tests run under qemu-user, Release and Debug) |
 | **Category**   | Portability: one test defect observed on the new target, one found by inspection, and an undocumented byte-order property of a public view |
@@ -26073,6 +26084,7 @@ completes VERIFY-045 E2: **MATCH**.
 | **ID**         | VERIFY-046 |
 | **Date**       | 2026-10-29 |
 | **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Status update** | 2026-11-03 — closed 2026-10-30, in "Scored (2026-10-30)" below. The Status above is the record as committed. |
 | **Baseline**   | 459c6e6 |
 | **Scope**      | `semantics/error.h` (`error_in_range`'s body; the contract unchanged), `test/data/priority_queue_test.c`, `README.md` (the bare-metal section), a script `tools/embedded_compile_check.sh`, and a CI job `embedded` |
 | **Category**   | Portability defect in a shipped header, found by a compile check; one test defect it had masked; a documentation gap |
@@ -26206,6 +26218,7 @@ is the optional item: WP at `x86_win64`.
 | **ID**         | VERIFY-047 |
 | **Date**       | 2026-10-30 |
 | **Status**     | PREDICTED. This record is committed before the fix commit. Both are pushed together, before any CI run of either. The new job is report-only on its first run. |
+| **Status update** | 2026-11-03 — closed 2026-10-30, in "Run 2 scored, and enforced (2026-10-30)" below. The Status above is the record as committed. |
 | **Baseline**   | 661bb8e |
 | **Scope**      | `core/memory.h` (one ACSL predicate), `core/primitives/bits.h` (one preprocessor guard), a CI job `frama-c-win64`, and the documentation the author asked to be brought up to date with VERIFY-043 to VERIFY-047: `README.md`, `CHEATSHEET.md`, `docs/verification.md`, `docs/traceability.md`, `docs/thread-safety.md`, and the workflow's job index |
 | **Category**   | One specification defect at a supported data model, found by reading; one tooling defect that blocked analysis at an MSVC model; a new machine model for two units |
@@ -26399,6 +26412,7 @@ x86_64, and CI holds that. What it does not cover, as the record says:
 | **ID**         | VERIFY-048 |
 | **Date**       | 2026-10-30 |
 | **Status**     | PREDICTED — this record is committed before the fix commit, which is pushed with it; both before any CI run of either |
+| **Status update** | 2026-11-03 — closed 2026-10-30, in "Scored (2026-10-30)" below; its baseline, edbb638, is 8603f59 on master (VERIFY-054, "Hashes"). The Status above is the record as committed. |
 | **Baseline**   | edbb638 (VERIFY-047 enforced) |
 | **Scope**      | `tools/embedded_compile_check.sh` (four targets added), a new `tools/avr_tier_check.sh`, the `embedded` job in `platforms.yml`, `README.md` (Tier 0 and Tier 1 text, the CI table), `CONTRIBUTING.md` (the tier rules), and one comment in `core/primitives/types.h` |
 | **Category**   | Two README claims found false or unchecked on a target they named; checks widened to a second C library and a second architecture |
@@ -26538,6 +26552,7 @@ VERIFY-048 is closed.
 | **ID**         | VERIFY-049 (with MCDC-019) |
 | **Date**       | 2026-10-31 |
 | **Status**     | PREDICTED. This record and the rebuilt catalogue are committed before the contract and fix commit, which is pushed with them. Neither has run in CI. No WP run of the contracts was made. |
+| **Status update** | 2026-11-03 — closed 2026-10-31, in "Run 3 scored: the first enforced run holds; VERIFY-049 closed (2026-10-31)" below. The Status above is the record as committed. |
 | **Baseline**   | 258d61d (`actions/cache@v5` in `compcert`, pushed with this series; the last CI run is #1396, at 834a373) |
 | **Scope**      | `data/stack.h` (14 macro-body contracts and documentation); `data/vec/vec_decl.h` and `data/deque/deque_decl.h` (S1); `data/queue.h` (examples); a new driver `vmacros/vdrivers/stack_verify.h`; a new workflow `.github/workflows/frama-c-stack.yml`; a new test `test/integration/separate_compilation_test.c` with its header and second source; a cover TU `vmacros/coverage/stack_cover.c` with `test/support/stack_cover_vec.c`; `CMakeLists.txt` (`canon_c_test` takes several sources) |
 | **Category**   | Next data/ unit in the agreed order; a defect class found by compiling a header's documented example: a documented API path that no build had ever compiled |
@@ -26841,6 +26856,7 @@ dead, with its per-line debug step in the coverage job.
 | **ID**         | VERIFY-050 |
 | **Date**       | 2026-10-31 |
 | **Status**     | PREDICTED. This record is committed before the reorganisation commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-03 — closed 2026-10-31, in "Scored (2026-10-31): every prediction matched; VERIFY-050 closed" below. The Status above is the record as committed. |
 | **Baseline**   | 9328398 (VERIFY-049 closed) |
 | **Scope**      | `.github/workflows/` (14 files become 11), `tools/record_coverage.py` and `tools/idioms/extract.py` (they read the proof files), `tools/embedded_compile_check.sh` and `tools/avr_tier_check.sh` (an annotation line each), the probe scripts' and READMEs' references, a new `.github/workflows/README.md`, `README.md`, `CONTRIBUTING.md`, one line of `docs/verification.md` |
 | **Category**   | Infrastructure, asked for by the author: "a person shouldn't get lost", and it must "easily adapt" when a unit is added. No source, contract, test or pin changes. |
@@ -26973,6 +26989,7 @@ treatment.
 | **ID**         | VERIFY-051 |
 | **Date**       | 2026-10-31 |
 | **Status**     | PREDICTED. This record is committed before the documentation commit, pushed with it. |
+| **Status update** | 2026-11-03 — closed 2026-10-31, in "Scored (2026-10-31): L1 matched; VERIFY-051 closed" below. The Status above is the record as committed. |
 | **Baseline**   | 0b308c3 (VERIFY-050 closed) |
 | **Scope**      | `data/queue.h` and `data/deque/deque_impl.h`, comments only |
 | **Category**   | The **light treatment** agreed with the author for thin wrappers (2026-10-31): read and probe, fix the documentation, test what is missing, and record it briefly. No WP job is added unless the probing finds something a contract should state. |
@@ -27058,6 +27075,7 @@ treatment. Next in the agreed order is array.h, on the full treatment.
 | **ID**         | VERIFY-052 (with MCDC-020) |
 | **Date**       | 2026-10-31 |
 | **Status**     | PREDICTED. This record and the rebuilt catalogue are committed before the contract and fix commit, which is pushed with them. Neither has run in CI. |
+| **Status update** | 2026-11-03 — closed 2026-11-01, in "Run 2 scored, and enforced (2026-11-01): VERIFY-052 closed" below. The Status above is the record as committed. |
 | **Baseline**   | 6feed52 (VERIFY-051 closed) |
 | **Scope**      | `data/array.h` (20 macro-body contracts, two loop annotations, `copy_from`'s body, documentation); a new driver `vmacros/vdrivers/array_verify.h`; a new job `frama-c-array` in `proofs-data.yml`; a cover TU `vmacros/coverage/array_cover.c` with `test/support/array_cover_option.c`, registered in `CMakeLists.txt` and run, with a per-line debug step, by `coverage`; one test in `test/data/array_test.c`; the CI map |
 | **Category**   | Next data/ unit in the agreed order, on the full treatment: array.h has code of its own, not wrappers |
@@ -27309,6 +27327,7 @@ treatment, then hashmap.
 | **ID**         | VERIFY-053 |
 | **Date**       | 2026-11-01 |
 | **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-03 — closed 2026-11-02, in "Scored (2026-11-02): every prediction matched; VERIFY-053 closed" below. The Status above is the record as committed. |
 | **Baseline**   | 3f6099f (the traceability card, on 7617c7a, VERIFY-052 closed) |
 | **Scope**      | `data/convenience/dynvec.h`, `smallvec.h` and `dynstring.h` (code and documentation); their three tests; one row of `docs/design-decisions.md` |
 | **Category**   | The **light treatment** agreed with the author: read and probe, fix what is wrong, test what is missing, record it briefly. No WP job: these are heap containers, and WP's allocation reasoning (`\fresh`, `\freeable`) is where it is weakest (VERIFY-008 Category 1). The probing found defects in code, not only in documentation, so this record fixes code, which the light treatment did not plan for. |
@@ -27497,6 +27516,7 @@ treatment.
 | **ID**         | VERIFY-054 |
 | **Date**       | 2026-11-02 |
 | **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-03 — closed 2026-11-02, in "Run 2 scored (2026-11-02): every prediction matched; VERIFY-054 closed" below; H2 missed a defect in `remove`, found 2026-11-03 (the correction under H2). The Status above is the record as committed. |
 | **Baseline**   | 31e6d3e (VERIFY-053 closed) |
 | **Scope**      | `data/hashmap/` (`hashmap.h`, `hashmap_impl.h`, `hashmap_decl.h`, `hashmap_defn.h`, `hashmap_mangle.h`, `hashmap_range.h`: code and documentation); `test/data/hashmap_test.c` and `test/semantics/borrow_test.c` (aligned buffers, new names, new tests); new tests `hashmap_multi_test` and `hashmap_separate_test`, with `test/support/hashmap_vecs.h`; `CMakeLists.txt`; the coverage job's exclusion list; a comment in `tools/embedded_compile_check.sh`; one row of `docs/vmacros.md` |
 | **Category**   | The first step of hashmap's **full treatment**, agreed with the author: read and probe first. The probing found defects that come before any contract, so this record fixes them, with the author's two decisions (2026-11-02): fix the broken paths in code, and make `hashmap_init` refuse a misaligned buffer. The WP unit is the next record's. |
@@ -27534,6 +27554,11 @@ on, but lets capacities 1 and 2 fill every slot (probe: capacity 2 takes
 two entries, load 1.00). Lookups stay correct at 100%: every loop is
 bounded by the capacity. **Fix**: the documentation states the code's rule;
 a test checks capacities 1, 2 and 4.
+
+> **Correction (2026-11-03).** "Lookups stay correct at 100%" holds for the
+> lookups. It does not hold for `remove`, which H2 did not try: on a map
+> with every slot occupied, which only capacities 1 and 2 allow, it leaves
+> its last slot occupied. See VERIFY-055, "Correction (2026-11-03)".
 
 **H3 — two maps in one translation unit did not compile.** The header
 documents it, and it failed on the second include: `typedef … hm_val_t`
@@ -27717,12 +27742,22 @@ hash, from the same change. The commits on master, matched by subject:
 | 9328398 | 7d4234a | VERIFY-050's baseline |
 | 6feed52 | 2acb55c | VERIFY-052's baseline, and the catalogue's `meta.substrate_commit`, which now reads 2acb55c |
 | 3f6099f | e083310 | VERIFY-053's baseline (its score already says so) |
+| edbb638 | 8603f59 | VERIFY-048's baseline (added 2026-11-03) |
 
 The trees are the same in each pair; only the names differ. The records keep
 the text they were committed with; this table is the correction.
 `traceability.md`'s rows are corrected in place, with a note. From here on
 a record cites only commits on master: a baseline is the synced master, and
 a commit not yet pushed is named by its subject.
+
+*Added 2026-11-03.* A sweep of every hash-like token in the documentation
+against master found one more, before VERIFY-049: edbb638, the last row
+above. VERIFY-048's pre-registration is a child of 8603f59, `frama-c-win64
+enforced (VERIFY-047)`, and its Baseline row, "VERIFY-047 enforced", names
+that commit by the hash it had before `git am` applied it. The other
+tokens not on master are 2de51d2, which VERIFY-039 already corrects in
+place; three trees that VERIFY-040 names as trees (b7c6d3b7, ab5ed95b and
+7bb100be); and two binary literals.
 
 ### Run 2 scored (2026-11-02): every prediction matched; VERIFY-054 closed
 
@@ -27747,6 +27782,7 @@ its WP unit is the next record, pre-registered once this one is on master.
 | **ID**         | VERIFY-055 |
 | **Date**       | 2026-11-02 |
 | **Status**     | CLOSED (2026-11-03) — predicted at d04130c, before the contract commit 173b7a2; run 1 on 173b7a2 (Q1–Q4 and Q7 matched, Q5 partly missed: the float goal proved), run 2 on 978e4de (name-identical, Q6 matched); enforced at 4585 / 4640 with 55 names; one new argument block, verifier-bound (*A* 34 cumulative and 20 in force, *V* 22 and 17) |
+| **Status update** | 2026-11-03 — REOPENED: `remove` is defective at capacities 1 and 2, and the argument for the probe distance bound is wrong, six of its goals false; see "Correction (2026-11-03)" at the end of this record. VERIFY-056 is the repair. The Status above is the record as committed. |
 | **Baseline**   | f4c713b (VERIFY-054 closed) |
 | **Scope**      | `data/hashmap/hashmap_impl.h` (contracts, loop annotations, the slot-emptying helper), `hashmap.h` (documentation); a new driver `vmacros/vdrivers/hashmap_verify.h`; a new job `frama-c-hashmap` in `proofs-data.yml`, report-only |
 | **Category**   | hashmap's full treatment, its second step: the WP unit. Decided with the author (2026-11-02): pre-register now with the expected residual stated by class, and let CI's first run, with its three provers, give the list, rather than iterate on local runs whose prover set differs; and let run 1 report a goal a prover fails on (Failed) without failing. |
@@ -28019,5 +28055,74 @@ pinned names", "PROVED SAME", 0 differences; the job succeeded in 56 min.
 twenty-fifth unit with lifetime.h's): safety, frames, `len` and termination,
 4585 / 4640, 15 own residuals, two classes, each argued. *A* gains one
 block, verifier-bound: *A* 34 cumulative and 20 in force, *V* 22 and 17.
-The agreed order of the data/ layer is
-done.
+The agreed order of the data/ layer is done.
+
+### Correction (2026-11-03): a defect in `remove`, and the probe distance argument wrong
+
+An independent review found both on the day the unit was enforced. A
+separate agent was given the code and the argument above and asked to break
+the argument. Each point below was then checked against the code here, and
+the defect was reproduced through the public API.
+
+**The defect.** `remove`'s backward shift empties a slot only when the next
+slot is empty or at its home (`psl == 0`). Its loop runs at most
+`capacity - 1` steps. When it runs out, the last slot it copied from keeps
+its element. It runs out only when every slot is occupied, which the load
+cap allows at capacities 1 and 2 alone (VERIFY-054 H2). Reproduced:
+- capacity 1: insert 7, then remove 7. The remove returns 7's value and
+  sets `len` to 0, and 7 is still found. A second remove of 7 succeeds
+  too, and `len` wraps from 0 to 18446744073709551615;
+- capacity 2: with 2 and 4 in one probe run, removing 2 leaves 4 in both
+  slots and `len` 1. Inserting 3 then returns `ERR_CAPACITY_EXCEEDED`
+  after storing 3.
+
+No access leaves the slots, since every loop is bounded by the capacity;
+the answers are wrong. From capacity 4 on, the load cap keeps a slot empty,
+and the shift ends there.
+
+VERIFY-054 H2 looked at capacities 1 and 2 when full, and said lookups stay
+correct. It did not try `remove`. The suite tests the load cap at
+capacities 1, 2 and 4, and never removes at 1 or 2. The fuzz target in
+`test/data/hashmap_test.c` draws capacities 4, 8, 16 and 32 only.
+
+**The thirteen goals.**
+- `remove`'s six `ensures` goals are false for a call the contracts admit:
+  `valid`'s `ensures` (the invariant after the call) and its `ensures_2`
+  (`len` one less), parts 12 to 14 of each. The invariant does not tie
+  `len` to the occupied slots, so it admits `len` 0 with the key present,
+  and then `len` wraps. The API reaches that state at capacity 1, as
+  above. The part numbers are WP's splits, and which path each part holds
+  was not read; the wrap is on every path that finds the key. These goals
+  are a defect, not residuals.
+- `remove`'s two frame goals and `insert`'s five are true. The argument's
+  reason for `insert`'s is wrong: it reads a stored `psl` as a distance
+  from a home slot, which needs the Robin Hood order the contracts do not
+  state. At a capacity that is not a power of two, which `shape_` admits,
+  the probe does not even visit every slot. The reason is simpler.
+  `psl <= i` holds at each step of `insert`'s loop: a swap replaces `psl`
+  with a smaller one before the step adds 1, so `psl` never grows faster
+  than `i`. Every stored `psl` is then at most `i`, below the capacity.
+  The loop states only `psl <= capacity + i`, so these goals lack a loop
+  invariant: a gap in the specification, not the verifier's.
+- The argument's root cause for `remove` is wrong too. It says WP loses the
+  slots' separation from the map, but `remove`'s loop keeps `shape_` and
+  `dist_`, and both are proved.
+
+**What stands.** The masks (class A), and their paragraph under VERIFY-039's
+fixed-width block. Its words "WP writes the result as `land(...)`" give
+WP's usual reading of `&`, not a line read from this run's log. The pins
+stand too. CI pins what WP proves, not what the record argues, so the line
+`4585 / 4640` and the 55 names do not move. What does not stand is
+"verifier-bound" and "every clause holds for every call the contracts
+admit" for this block. *A* stays 34 cumulative and 20 in force. The block
+is counted in *V* (22 and 17), but as written it is not verifier-bound, as
+VERIFY-039 said of VERIFY-008's Category 1 while G18 was open.
+
+"data/hashmap/ is verified" above is also too wide. The unit is
+`hashmap.h`'s surface. `hashmap_range.h` (`collect_keys`,
+`collect_values`, `HASHMAP_FOR_EACH`) and `hashmap_fmt.h`
+(`to_stringbuf`) are not in it: they are tested and measured (MC/DC
+16 / 16 and 17 / 18), not proved.
+
+**VERIFY-055 is reopened.** VERIFY-056 is the repair: the fix to `remove`,
+and what it does to the thirteen, predicted before the code changes.

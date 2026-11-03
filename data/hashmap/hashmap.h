@@ -126,6 +126,12 @@
  * - hashmap_insert() returns ERR_CAPACITY_EXCEEDED when
  *   len >= capacity - capacity / 4: 75% from capacity 4 on; at capacities 1
  *   and 2 every slot can be filled (VERIFY-054 H2)
+ * - KNOWN DEFECT (found 2026-11-03; docs/deviations.md, VERIFY-055's
+ *   correction; VERIFY-056 is the repair): when every slot is filled,
+ *   hashmap_remove() leaves its last slot occupied. The key stays in the
+ *   map, len falls below the occupied count, and a second remove of the
+ *   key wraps len. Only capacities 1 and 2 can fill every slot: use
+ *   capacity 4 or more if you remove.
  * - To store N elements safely: capacity >= bits_next_power_of_two(N * 4 / 3 + 1)
  * - hashmap_buffer_size(cap) gives the exact byte count for a given slot count
  *
@@ -293,9 +299,12 @@
  * probe loops terminate. They do not state the Robin Hood order, so "get
  * finds what insert stored" is tested, not proved. The verified contract
  * admits capacities up to 2^30, which the code does not itself refuse.
- * WP leaves 15 of the unit's own goals unproved (two bit masks, and 13 that
- * rest on the probe distance staying below the capacity); each is argued by
- * hand in docs/deviations.md (VERIFY-055).
+ * WP leaves 15 of the unit's own goals unproved. The two bit masks are
+ * argued by hand in docs/deviations.md (VERIFY-055). The argument for the
+ * other 13 was found wrong after the unit was enforced: six of them, in
+ * remove, are false through the defect above, and insert's lack a loop
+ * invariant. hashmap_range.h and hashmap_fmt.h are not in the unit: they
+ * are tested, not proved.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * DESIGN NOTES
