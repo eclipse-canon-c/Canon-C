@@ -15,7 +15,7 @@ cite.
 | 4 | `proofs-core.yml` | 4 · Proofs: core/ | Frama-C WP, one job per unit of core/ and core/primitives/, plus arena at 32-bit and memory/bits at LLP64 | yes, each job on its pins |
 | 5 | `proofs-semantics.yml` | 5 · Proofs: semantics/ | WP for error, option, result, borrow, diag | yes |
 | 6 | `proofs-data.yml` | 6 · Proofs: data/ | WP for vec, deque, bitset, priority_queue, range, vec_range, vec_fmt, stringbuf, stack, array, hashmap | yes |
-| 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family | per family's gates |
+| 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family, for the six families whose driver jobs above run under `-C` (slice, option, result, borrow, vec, deque). The units written since (vec_range, vec_fmt, stack, array, hashmap) are preprocessed with `-CC` in their own jobs in `proofs-data.yml`, so their macro-body contracts are proved there and they have no job here | per family's gates |
 | 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls) and the workflow-size guard | yes |
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3). Each runs only when its own paths change | a probe's MISS fails it |
 | 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
@@ -49,7 +49,10 @@ still there for detail.
 
   Give it a "Result annotation" step like the others. Add an MC/DC cover
   file (`vmacros/coverage/`, registered in `CMakeLists.txt` and run by the
-  coverage job), and a per-line debug step for it.
+  coverage job) when its conditions would otherwise land in a test file; a
+  header with written-out bodies is measured in place and needs none. Either
+  way, add a per-line debug step for it in the coverage job (VERIFY-055 left
+  hashmap's out; VERIFY-056 added it).
 - **A new platform or portability check**: a job in `platforms.yml`.
 - **Something experimental**: a job in `probes.yml`, with its paths added to
   the `changes` job's filter.

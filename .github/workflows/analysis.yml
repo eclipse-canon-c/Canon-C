@@ -1887,6 +1887,39 @@ jobs:
           else
             echo "No stringbuf.h.gcov file generated"
           fi
+      - name: "Debug: per-line MC/DC detail for hashmap"
+        # Added with VERIFY-056; VERIFY-055 omitted it. hashmap is Shape A,
+        # measured in place: hashmap_impl.h 72/94 at VERIFY-056 (65/92
+        # before its fix and tests), hashmap_range.h 16/16, hashmap_fmt.h
+        # 17/18. The misses are not yet analysed (no MCDC entry); this dump
+        # is the input to one. One miss is known dead: remove's len guard's
+        # false outcome, len 0 with the key found (VERIFY-056). The three
+        # headers are also compiled into hashmap_multi_test and the
+        # separate-compilation test; this step reads hashmap_test's data, the
+        # unit's own tests. Report-only, like the steps above. Never fails.
+        run: |
+          cd build
+          GCDA=$(find . -name "hashmap_test*.gcda" | head -1)
+          if [ -z "$GCDA" ]; then
+            echo "ERROR: could not locate hashmap_test gcda file"
+            find . -name "*.gcda" | head -20
+            exit 0   # report-only -- do not fail the coverage job
+          fi
+          echo "Running gcov on: $GCDA"
+          gcov-14 --conditions --all-blocks "$GCDA" > /dev/null 2>&1
+          for H in hashmap_impl.h hashmap_range.h hashmap_fmt.h; do
+            GCOV=$(find . -name "${H}.gcov" | head -1)
+            echo ""
+            if [ -n "$GCOV" ]; then
+              echo "=== Full contents of $GCOV ==="
+              cat "$GCOV"
+              echo ""
+              echo "=== Condition outcomes not fully covered in ${H} ==="
+              grep -nE "condition outcomes covered [0-9]+/[0-9]+" "$GCOV" | awk -F'[ /]' '$(NF-1)!=$NF' || echo "  (none -- every condition fully covered)"
+            else
+              echo "No ${H}.gcov file generated"
+            fi
+          done
 
   # -------------------------------------------------------------------------
   # 12. CompCert — Linux only, INFORMATIONAL, upstream repository only
