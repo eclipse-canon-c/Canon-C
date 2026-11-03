@@ -28425,3 +28425,123 @@ done, now with the defect found after VERIFY-055's enforcement repaired.
 annotations): 86 jobs, all `success`. `frama-c-hashmap`: proved 4738 / 4784,
 unproved 46, own 6, inherited 40, Failed / Invalid / Stepout 0, 0
 differences from its pins.
+
+## VERIFY-057: Pre-registration — Pointer Arithmetic Outside Its Object: Every Unit Run With -warn-invalid-pointer, as a Probe
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-057 |
+| **Date**       | 2026-11-03 |
+| **Status**     | PREDICTED. This record is committed before the probe commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | `VERIFY-056 run 3: the first enforced run holds`, on 81220e7 (named by its subject: it is pushed with this record) |
+| **Scope**      | A probe, `pointer-probe` in `.github/workflows/probes.yml`, and its script `tools/probes/verify-057/pointer_probe.py`. No unit's source, contract, job or pin changes. |
+| **Category**   | A gap in what the proofs check, measured before anything is changed. Decided with the author (2026-11-03): probe every unit first, then tighten `ptr_offset`'s contract, each under its own predictions. |
+
+### The gap
+
+The records say the units are free of runtime errors as far as `-wp-rte`
+checks them. `-wp-rte` checks memory accesses, signed overflow, division,
+shifts, calls through pointers and float conversions. It does not check the
+pointers a program computes. C leaves a pointer computed outside its object,
+or more than one past its end, undefined, dereferenced or not (C11
+6.5.6p8), and reading a pointer whose object has ended is undefined too
+(C11 6.2.4p2). Frama-C checks both only under the kernel option
+`-warn-invalid-pointer`, which adds a `pointer_value` assertion,
+`\object_pointer(p)`, at each pointer computed or read. No job of this
+repository sets it. Measured here (WP 25, Z3): `\object_pointer` holds of
+`\null`, of a valid pointer and of one past a valid range, and is not proved
+of a pointer the contract says nothing about.
+
+So a unit's proof says nothing about the pointers it computes. The question
+was raised in a review of the Frama-C-plus-CompCert argument with the
+author: the chain's first link, "WP proves no undefined behaviour", holds
+only for what `-wp-rte` checks.
+
+### The probe
+
+`pointer-probe` runs each of the 26 units as its job runs it (its file,
+preprocessing and memory model), with `-warn-invalid-pointer` added, and
+proves only the `pointer_value` goals (`-wp-prop pointer_value`), with the
+CI's provers, Alt-Ergo, Z3 and CVC5 at 120 s, `-wp-split`. One matrix job per
+unit; each posts a notice: the line, and the unproved names, or "no
+pointer_value goal". The two machine-model variants, `frama-c-arena-32` and
+`frama-c-win64`, are left out. It is an experiment: it fails only when WP
+writes no summary, and its result is scored here. It runs when its script,
+`probes.yml` or the toolchain pins change, and on demand. Editing
+`probes.yml` also runs the six earlier probes, whose filters list it.
+
+### Local runs, stated with their limits
+
+WP 25 with Z3 4.8 alone, the probe's flags but 10 s, each unit with its
+job's preprocessing and the Typed+Cast model (the probe uses each job's
+model). The eleven units with unproved goals of their own or of ptr.h's
+were run again at 60 s (deque with its own model, Typed): the sets were the
+same, but for priority_queue (36 / 48 at 60 s, 29 / 48 at 10 s) and vec_fmt
+(71 / 86, from 70 / 86). One of `pq_cmp`'s two goals ended Failed at 60 s,
+Z3 out of memory on this machine; at 10 s it timed out. The local tool
+proves less than CI's. Per unit, `pointer_value` goals proved / all, and the
+functions whose goals stay unproved, at 60 s where it was run:
+
+| unit | local | unproved in |
+|------|-------|-------------|
+| checked, bits, compare, lifetime, error | no goal | — |
+| ptr | 1 / 6 | `ptr_offset`, `ptr_offset_const`, `ptr_retreat`, `ptr_align_up`, `ptr_align_down` |
+| slice | 9 / 9 | — |
+| memory | 11 / 16 | ptr.h's five |
+| arena | 22 / 27 | ptr.h's five |
+| pool | 49 / 54 | ptr.h's five |
+| region | 24 / 33 | ptr.h's five; `region_end`, `region_has_parent` |
+| option, result, range | 1 / 1 each | — |
+| borrow | 11 / 15 | `borrowed_ptr_get`, `borrowed_ptr_is_valid`, `borrowed_str_is_valid`, `borrowed_bytes_is_valid` |
+| diag | 158 / 160 | `diag_push` |
+| vec | 70 / 88 | ptr.h's five; `vec_int_` `append_array`, `data`, `fill`, `free`, `insert`, `pop`, `push`, `remove`, `slice_init`, `try_push` |
+| deque | 31 / 37 | `deque_int_` `push_back`, `push_front`, `pop_back`, `pop_front`, `try_push_back`, `try_push_front` |
+| bitset | 103 / 112 | ptr.h's five; borrow's four |
+| priority_queue | 36 / 48 | ptr.h's five; `pq_as_bytes`, `pq_as_cbytes`, `pq_cmp`, `pq_pop_raw`, `pq_swap` (at 10 s also `pq_push_result`, `pq_remove_at_result`, `pq_sift_down`, `pq_sift_up`) |
+| vec_range | 30 / 36 | ptr.h's five; `vec_int_extend_from_range` |
+| vec_fmt | 71 / 86 | ptr.h's five; borrow's four; `stringbuf_append_bytes`, `stringbuf_append_n`, `stringbuf_is_arena_backed`; `vec_int_to_stringbuf`, `vec_int_to_stringbuf_cb` |
+| stringbuf | 69 / 81 | ptr.h's five; borrow's four; `stringbuf_append_bytes`, `stringbuf_append_n`, `stringbuf_is_arena_backed` |
+| stack | 72 / 88 | ptr.h's five; vec's ten |
+| array | 29 / 29 | — |
+| hashmap | 141 / 145 | `hashmap_get`, `hashmap_get_or_null`, `hashmap_insert`, `hashmap_remove` |
+
+Read against the code, three kinds:
+- **P, arithmetic with no bound.** `ptr_offset`, `ptr_offset_const` and
+  `ptr_retreat` compute `p + n` or `p - n` and state no bound on `n`: for
+  an admitted call the result can leave its object. False, not unproved.
+- **I, an integer made a pointer.** `ptr_align_up` and `ptr_align_down`
+  compute the aligned address as an integer and convert it back. WP cannot
+  tie the converted integer to an object.
+- **R, a stored pointer read.** Where a function reads a pointer field, the
+  probe asks for `\object_pointer` of the value read; where the contract
+  does not say the field is null, valid or one past, it is not proved. The
+  vec, deque and borrow goals are of this form where read here (e.g.
+  `vec_int_free` reads `v->items` before testing it); a pointer left to
+  dangle after its object ended is the case C leaves undefined. Which of
+  them CI's provers prove, and which the contracts leave open, is what the
+  probe is for.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | Every probe job ends with a summary or with no goal generated, and posts its notice. | a job without either | H |
+| Q2 | checked, bits, compare, lifetime and error have no `pointer_value` goal. | any goal there | M–H (local; WP 29's RTE may annotate more) |
+| Q3 | **P is unproved wherever it is emitted**: `ptr_offset`'s, `ptr_offset_const`'s and `ptr_retreat`'s goals in ptr, memory, arena, pool, region, vec, bitset, priority_queue, vec_range, vec_fmt, stringbuf and stack. | any of them proved | H (false for an admitted call) |
+| Q4 | **I is unproved wherever it is emitted**: `ptr_align_up`'s and `ptr_align_down`'s, in the same twelve units. | any of them proved | M–H |
+| Q5 | slice, option, result, range and array: every `pointer_value` goal proved. | any unproved | M–H (local: all proved) |
+| Q6 | Every other unproved goal is in a function the table names for its unit, the 10 s lists included: no new function. CI's provers may prove some of those named; that is not a miss. | an unproved goal in a function not named | M |
+| Q7 | No `pointer_value` goal is Failed or Invalid. | any | M–H (the one local Failed was the machine's memory) |
+| Q8 | Nothing else moves: every proof job at its pin; the six earlier probes green, as at their last run (0ae029f). | any change | H for the jobs (no source changes); M–H for the probes |
+
+**What follows.** The scoring classifies every unproved goal as P, I, R or
+true-but-unproved, against its code. Then, with the author, a second step,
+predicted on its own before it changes anything: tighten `ptr_offset`'s
+contract, and `ptr_offset_const`'s and `ptr_retreat`'s, so that the result
+stays in its object. The functions' signatures stay; their callers owe the
+new precondition, so their units' goals move, and that step predicts how.
+The I and R goals are decided after the scoring, each by what its code
+shows.
+
+The probe is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
