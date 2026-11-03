@@ -4,9 +4,10 @@ This document exists because the per-record files (`deviations.md`,
 `verification.md`, `traceability.md`) answer *"what is the status of finding
 X?"* but not *"what happened here, and what is it worth?"* Sixteen commits
 moved the advisory count from 1672 to 53, and a reader arriving cold cannot
-reconstruct from the records alone what that number means. (The count has
-been **54** since VERIFY-031 added one verifier-only declaration; see the
-dated note at the end. Every "53" below describes the campaign's close.)
+reconstruct from the records alone what that number means. (The count is
+**66** today: 54 from VERIFY-031, 55 from VERIFY-044, 60 and 66 from
+VERIFY-054, and unmoved by VERIFY-055; see "Current count" below and the
+dated notes at the end. Every "53" below describes the campaign's close.)
 
 It is written to be read by someone deciding whether to trust this work.
 
@@ -45,12 +46,13 @@ kept in two segments for that reason:
 
 ```
 pre-2026-07-25 surface (114 headers):  1672 → 108
-corrected surface       (86 headers):    98 →  53 → 54
+corrected surface       (86 headers):    98 →  53 → 54 → 55 → 60 → 66
 ```
 
-The last step is not part of the campaign: it is VERIFY-031's `__FRAMAC__`-only
-`vsnprintf` declaration, the third rule-21.2 site of the same shape as
-diag.h's two (see "2026-10-02 — 53 → 54" below).
+The steps after 53 are not part of the campaign. The first is VERIFY-031's
+`__FRAMAC__`-only `vsnprintf` declaration, the third rule-21.2 site of the
+same shape as diag.h's two (see "2026-10-02 — 53 → 54" below); the others
+are listed under "Current count" below.
 
 Anyone quoting "1672 → 53" as a single reduction is quoting across an
 instrument change.
@@ -71,16 +73,34 @@ then-active suppression set.
 ### 3. A large share of the reduction is classification, not change
 
 The current suppression set is 12 project-wide command-line rules
-(`MISRA-DEV-001..010`) plus **153 inline per-site suppressions**:
+(`MISRA-DEV-001..010`) plus **165 inline per-site suppressions** (153 at
+the campaign's close; counted 2026-11-03 at f855a66, every
+`cppcheck-suppress misra-c2012-*` comment outside `canary/`):
 
-| rule | sites | record | what it is |
-|---|---|---|---|
-| 20.7 | 117 | MISRA-DEV-012 | macro parameter parenthesisation in template machinery |
-| 19.2 | 13 | MISRA-DEV-014 | unions — the tagged union *is* the Result type |
-| 21.3 | 9 | MISRA-DEV-015 | `mem_alloc`/`mem_free` wrappers |
-| 21.6 | 6 | MISRA-DEV-016 | `<stdio.h>` at the two documented entry points |
-| 2.3 | 5 | MISRA-DEV-017 | the C99 static-assertion idiom — being declared *is* the assertion |
-| 21.1 | 3 | — | reserved-identifier idiom |
+| rule | sites | at the close | record | what it is |
+|---|---|---|---|---|
+| 20.7 | 119 | 117 | MISRA-DEV-012 | macro parameter parenthesisation in template machinery |
+| 19.2 | 17 | 13 | MISRA-DEV-014 | unions — the tagged union *is* the Result type |
+| 21.3 | 13 | 9 | MISRA-DEV-015 | `mem_alloc`/`mem_free` wrappers and dynstring's allocation |
+| 21.6 | 6 | 6 | MISRA-DEV-016 | `<stdio.h>` at the two documented entry points |
+| 2.3 | 5 | 5 | MISRA-DEV-017 | the C99 static-assertion idiom — being declared *is* the assertion |
+| 21.1 | 3 | 3 | MISRA-DEV-011 | the `_POSIX_C_SOURCE` feature-test protocol in `util/time.h` |
+| 1.2 | 2 | 0 | MISRA-DEV-018 | compiler atomic intrinsics for lifetime tokens, under `CANON_LIFETIME_DEBUG` |
+
+> **Note (2026-11-03): the table was stale.** Until today it gave the
+> close's 153 as current, and its 21.1 row cited no record. The twelve
+> added since, each a new site of an existing kind, found by reading the
+> history of every suppression:
+> - 1.2 ×2, MISRA-DEV-018, `lifetime.h` (5b45aeb, 2026-08-17);
+> - 19.2 ×4, one each at `bitset.h` (19febec), `priority_queue.h`
+>   (ce9c73b), `range.h` (c9138f4, VERIFY-028) and `fold_impl.h`
+>   (21506e4, VERIFY-044);
+> - 20.7 ×2, `option_defn.h`'s aggregate variants (98b5283, VERIFY-038);
+> - 21.3 ×4, `dynstring.h`'s growth paths (fd9664f, VERIFY-053).
+>
+> Suppressed findings are not counted, so none of the twelve is among the
+> 66; each is a new site of a kind its record already deviated. The records' own scope lines (MISRA-DEV-012, 014
+> and 015 in `deviations.md`) carry the same note.
 
 None of these changed code. They record *why the code is the way it is*.
 That has real value — it is the difference between an unknown and a known,
@@ -230,6 +250,11 @@ now excluded from the coverage *run*, and untouched files stop moving.
   were real (unbraced `if`s) and are fixed; six remain, two 17.3 and four
   `misra-config`, at loops whose iterator and types come from `hashmap.h`,
   which a standalone scan of the header does not include.
+- Still 66 (2026-11-03, VERIFY-055): hashmap's contracts are comments to
+  cppcheck, and the typed loop that replaced `memset` in `init` and `clear`
+  added no finding. Predicted (Q7), measured locally with the job's command
+  (the same composition), and read from the job's annotation at 173b7a2,
+  978e4de and f855a66: `real 66; canary 3; total 69`.
 
 Nothing else in this section changes.
 
@@ -328,8 +353,8 @@ each was established after a specific failure:
 
 | question | file |
 |---|---|
-| Why is finding X acceptable? | `deviations.md` — MISRA-DEV-001..017, MISRA-SCAN-001, MISRA-CFG-001 |
-| What does WP prove, and what does it not? | `verification.md`, `deviations.md` VERIFY-001..018 |
+| Why is finding X acceptable? | `deviations.md` — MISRA-DEV-001..018, MISRA-SCAN-001, MISRA-CFG-001 |
+| What does WP prove, and what does it not? | `verification.md`, `deviations.md` VERIFY-001..055 |
 | What is the coverage, and when did it move? | `traceability.md` — including the History table |
 | Why is the API shaped this way? | `design-decisions.md` — API-001, OWN-001..003 |
 | What happened across the campaign? | this file |
@@ -351,3 +376,13 @@ cannot be avoided without moving the axiom out of the header it specifies.
 First seen at CI #1319 (f6e54ca), reproduced locally with Cppcheck 2.13.0,
 and pinned in the job's ledger from the next commit. `21.2 x2` in the table
 above is now `x3`.
+
+## 2026-10-29 to 2026-11-03 — 54 → 66 (VERIFY-044, VERIFY-054), held at VERIFY-055
+
+Three steps, each predicted from a local scan with the job's command
+before the push, except the last, which run 2 of VERIFY-054 showed:
+54 → 55 (VERIFY-044, `_Bool` in `CANON_RESULT`), 55 → 60 (VERIFY-054,
+hashmap's alignment test and shared tag names) and 60 → 66 (VERIFY-054 run
+2, `hashmap_range.h` read for the first time). Each is described under
+"Current count" above, and in the job's log. VERIFY-055 moved nothing: 66
+at f855a66.

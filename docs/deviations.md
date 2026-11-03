@@ -8431,6 +8431,8 @@ via `--suppress=misra-c2012-11.6` in the misra CI job.
 |----|------|-------|----------|
 | MISRA-DEV-012 | 2026-07-22 | 117 macro definitions across 26 headers (each carries an inline suppression) | Per-site deviation (inline suppressions) |
 
+> **Sites today (2026-11-03):** 119. Two were added at `option_defn.h`'s aggregate variants (98b5283, VERIFY-038). The scope above is the record's as written.
+
 **Description**: Rule 20.7 requires macro-parameter expansions to be parenthesized. Canon-C's type-instantiation machinery (`DEFINE_*` / `DECLARE_*` / `IMPL_*` / `MANGLE_*` families and the container `*_defn.h` / `*_decl.h` / `*_impl.h` headers) necessarily uses parameters as type names (`_t v`, `type* ptr`, `typedef struct DequeTag`), as declaration specifiers (`_linkage`), and as operands of `##` token composition — positions where C grammar forbids parenthesization outright (`(_t) v` is a cast or a syntax error, never a declaration).
 
 **Rationale**: The parameter-as-type/identifier usage *is* the library's template mechanism, the same design identity already recorded for the `##` operator itself (MISRA-DEV-003) and for instantiation-header identifier artifacts (MISRA-DEV-005). Additionally, the reference checker (cppcheck 2.13.0 `misra.py`) implements 20.7 as neighbor-character text analysis that (a) cannot distinguish type positions from expression positions and (b) reaches into string literals, flagging parameter names appearing in `require_msg` diagnostic text (probe-verified against the shipped addon). A rule-wide suppression would therefore silence a check whose expression-position findings ARE actionable; the per-site form keeps exactly those live.
@@ -8580,6 +8582,8 @@ classification is corrected accordingly.
 |----|------|-------|----------|
 | MISRA-DEV-014 | 2026-07-26 | 13 `CANON_RESULT` / `CANON_OPTION` instantiations (inline suppressions) | Design-identity deviation |
 
+> **Sites today (2026-11-03):** 17. One each was added at `bitset.h` (19febec), `priority_queue.h` (ce9c73b), `range.h` (c9138f4, VERIFY-028) and `fold_impl.h` (21506e4, VERIFY-044). The scope above is the record's as written.
+
 **Description**: Rule 19.2 advises against `union`. Every cited site is an
 instantiation of the library's discriminated-union types — `CANON_RESULT(T, E)`
 and `CANON_OPTION(T)` — whose payload is a tagged union selected by an
@@ -8611,6 +8615,8 @@ other union in the tree.
 | ID | Date | Scope | Category |
 |----|------|-------|----------|
 | MISRA-DEV-015 | 2026-07-26 | 9 sites: `core/memory.h` x2, `data/convenience/dynstring.h` x7 | Design-identity deviation |
+
+> **Sites today (2026-11-03):** 13: `core/memory.h` x2, `data/convenience/dynstring.h` x11. Four were added at dynstring's growth paths (fd9664f, VERIFY-053). The scope above is the record's as written.
 
 **Description**: Rule 21.3 prohibits the `<stdlib.h>` allocation functions.
 Two sites are the library's allocation boundary itself (`mem_alloc` wrapping
@@ -28003,6 +28009,11 @@ distance from its hash's home slot, modulo the capacity, and an empty slot
 ends every run) as part of the map's invariant, and prove it; that would
 also give "get finds what insert stored", which VERIFY-055 does not claim.
 A change with its own prediction.
+
+**Run 3, the first enforced** (f855a66, `6 · Proofs: data/` #12, read
+from the job's log by the maintainer): `[wp] Proved goals: 4585 / 4640`,
+own 15, inherited 40, Failed / Invalid / Stepout 0, "NAMES SAME: the 55
+pinned names", "PROVED SAME", 0 differences; the job succeeded in 56 min.
 
 **VERIFY-055 is closed.** data/hashmap/ is verified (module 24, the
 twenty-fifth unit with lifetime.h's): safety, frames, `len` and termination,
