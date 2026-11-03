@@ -17,7 +17,7 @@ cite.
 | 6 | `proofs-data.yml` | 6 · Proofs: data/ | WP for vec, deque, bitset, priority_queue, range, vec_range, vec_fmt, stringbuf, stack, array, hashmap | yes |
 | 7 | `proofs-cc.yml` | 7 · Proofs: -CC | The macro-body contracts proved under `-CC` (VERIFY-025), per family, for the six families whose driver jobs above run under `-C` (slice, option, result, borrow, vec, deque). The units written since (vec_range, vec_fmt, stack, array, hashmap) are preprocessed with `-CC` in their own jobs in `proofs-data.yml`, so their macro-body contracts are proved there and they have no job here | per family's gates |
 | 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls) and the workflow-size guard | yes |
-| 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3). Each runs only when its own paths change | a probe's MISS fails it |
+| 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3), and VERIFY-057's pointer probe (every unit with `-warn-invalid-pointer`, report-only). Each runs only when its own paths change | a probe's MISS fails it; the pointer probe fails only without a summary |
 | 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
 
 ## Reading results

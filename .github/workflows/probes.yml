@@ -1,6 +1,7 @@
 name: "9 · Probes (closed experiments)"
 # The probes of VERIFY-039 and VERIFY-040, merged into one workflow by
-# VERIFY-050: G4, G11, G13, G19, Count and Round 3. Each is an experiment,
+# VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
+# probe, added since. Each is an experiment,
 # not a gate; its result is scored in docs/deviations.md. Each job still runs
 # only when its own paths change, as its workflow did: the `changes` job
 # compares the push with the commit it moved master from and sets one output
@@ -26,6 +27,7 @@ on:
       - 'tools/probes/verify-040/count_probe.py'
       - 'tools/probes/verify-040/round3_probe.py'
       - 'tools/probes/verify-040/p_padding_lemmas.h'
+      - 'tools/probes/verify-057/pointer_probe.py'
   workflow_dispatch:
 
 concurrency:
@@ -47,6 +49,7 @@ jobs:
       g19: ${{ steps.f.outputs.g19 }}
       count: ${{ steps.f.outputs.count }}
       round3: ${{ steps.f.outputs.round3 }}
+      pointer: ${{ steps.f.outputs.pointer }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -55,7 +58,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -557,4 +560,63 @@ jobs:
         with:
           name: round3-probe
           path: wp_*
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # Pointer probe (VERIFY-057, pointer arithmetic outside its object)
+  #
+  # VERIFY-057 — an experiment, not a gate. It runs when its script, this
+  # file or the toolchain pins change, and on demand; it never touches the
+  # enforced jobs, and its results are scored in docs/deviations.md,
+  # VERIFY-057.
+  #
+  # QUESTION: -wp-rte does not check the pointers a unit computes or reads;
+  # C leaves one outside its object (or past one-past-the-end) undefined.
+  # Frama-C checks it only under -warn-invalid-pointer, which adds a
+  # pointer_value assertion, \object_pointer(p). No enforced job sets it.
+  #
+  # PROBE: tools/probes/verify-057/pointer_probe.py runs each unit as its
+  # job runs it (file, preprocessing, memory model), with the option added,
+  # proving only the pointer_value goals (-wp-prop pointer_value), with the
+  # CI's provers at 120 s. One matrix job per unit; each posts a notice with
+  # its line and unproved names. PREDICTED before it ran (VERIFY-057). It
+  # fails only when WP writes no summary.
+  # -------------------------------------------------------------------------
+  pointer-probe:
+    needs: changes
+    if: needs.changes.outputs.pointer == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: [frama-c-checked, frama-c-bits, frama-c-compare, frama-c-ptr,
+               frama-c-slice, frama-c-memory, frama-c-arena, frama-c-pool,
+               frama-c-region, frama-c-lifetime, frama-c-error, frama-c-option,
+               frama-c-result, frama-c-borrow, frama-c-diag, frama-c-vec,
+               frama-c-deque, frama-c-bitset, frama-c-priority-queue,
+               frama-c-range, frama-c-vec-range, frama-c-vec-fmt,
+               frama-c-stringbuf, frama-c-stack, frama-c-array,
+               frama-c-hashmap]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "WP with -warn-invalid-pointer: ${{ matrix.unit }}'s pointer_value goals"
+        run: |
+          eval $(opam env --switch=frama-c)
+          python3 tools/probes/verify-057/pointer_probe.py run ${{ matrix.unit }}
+
+      - name: "Report: the line and the unproved names"
+        if: ${{ !cancelled() }}
+        run: python3 tools/probes/verify-057/pointer_probe.py report ${{ matrix.unit }}
+
+      - name: Upload WP output (pointer probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pointer-probe-${{ matrix.unit }}
+          path: wp_*.txt
           retention-days: 90
