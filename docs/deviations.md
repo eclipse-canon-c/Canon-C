@@ -28420,3 +28420,8 @@ functions 753 / 756, branches 1777 / 1932.
 
 **VERIFY-055 and VERIFY-056 are closed.** The data layer's agreed order is
 done, now with the defect found after VERIFY-055's enforcement repaired.
+
+**Run 3, the first enforced** (81220e7, `1 · Build & test` #15; read from the
+annotations): 86 jobs, all `success`. `frama-c-hashmap`: proved 4738 / 4784,
+unproved 46, own 6, inherited 40, Failed / Invalid / Stepout 0, 0
+differences from its pins.
