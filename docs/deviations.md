@@ -28126,3 +28126,133 @@ VERIFY-039 said of VERIFY-008's Category 1 while G18 was open.
 
 **VERIFY-055 is reopened.** VERIFY-056 is the repair: the fix to `remove`,
 and what it does to the thirteen, predicted before the code changes.
+
+## VERIFY-056: Pre-registration — hashmap's remove: the Last Slot of a Full Map, a Decrement Below Zero, and insert's Missing Loop Invariant
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-056 |
+| **Date**       | 2026-11-03 |
+| **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | the docs sweep, `Docs sweep: hashmap remove defect recorded; stale statuses and figures corrected`, on f855a66 (named by its subject: it is pushed with this record) |
+| **Scope**      | `data/hashmap/hashmap_impl.h` (`remove`'s shift and `len`, its `len` clause; `insert`'s loop invariant), `hashmap.h` (documentation), `test/data/hashmap_test.c` (a test; the fuzz target's capacities), `.github/workflows/proofs-data.yml` (`frama-c-hashmap` report-only for run 1, its differences annotated by name) |
+| **Category**   | The repair VERIFY-055's correction opened: a defect found after enforcement, and an argument found wrong. Decided with the author (2026-11-03): empty the slot the shift ends at; guard the decrement. |
+
+### The defect, and what was decided
+
+VERIFY-055, "Correction (2026-11-03)", gives the defect and its
+reproduction. `remove`'s backward shift empties a slot only on its `break`;
+when every slot is occupied, which capacities 1 and 2 allow, the loop runs
+out of steps first, and the last slot it copied from keeps its element.
+Separately, the map's invariant does not tie `len` to the occupied slots, so
+it admits `len` 0 with the key present, where `remove`'s `len--` wraps.
+
+The author's choices, of the options put to the author:
+- **Empty the slot the shift ends at**, after the loop, whether the loop
+  broke or ran out. Not chosen: refusing capacities 1 and 2 at `init`,
+  which changes the API and leaves the shift's fault in place.
+- **Guard the decrement**: `len` is decremented only when it is above 0.
+  Once the shift is right, `len` is at least 1 there for every map the API
+  builds, so the guard's false outcome is dead through the API; it makes
+  the contract true for every state the invariant admits. Not chosen:
+  stating in the invariant that `len` counts the occupied slots, the fuller
+  contract, at much more proof work.
+
+### The changes
+
+1. **`remove`'s shift.** The three stores that empty a slot move from
+   inside the `break` to after the loop, on `curr`, the slot the shift ends
+   at. When the loop breaks, that is the slot the old code emptied; when it
+   runs out, it is the last slot copied from, which the old code left
+   occupied.
+2. **`remove`'s `len`.** `if (map->len > 0u) { map->len--; }`. The `valid`
+   behaviour's second `ensures` becomes
+   `\result.is_ok ==> map->len == (\old(map->len) == 0 ? 0 : \old(map->len) - 1)`;
+   the clause keeps its place, so its goals keep their names but for WP's
+   part numbers.
+3. **`insert`'s loop invariant.** The third, `psl <= map->capacity + i`,
+   becomes `psl <= i`, the review's: a swap replaces `psl` with a smaller
+   one before the step adds 1, so `psl` never grows faster than `i`. It
+   keeps its place, so the seventh is still `dist_`. The bound still keeps
+   `psl++` from overflowing a u32: `psl <= i < capacity <= 2^30`.
+4. **A test**, `test_remove_full_small`: capacity 1 (insert, remove, the key
+   gone, `len` 0, a second remove `ERR_NOT_FOUND`, `len` still 0, insert
+   again), and at capacity 2 every ordered pair of keys 1 to 8, both
+   inserted and both removed, the key, `len` and an iteration count checked
+   after each. Measured here: on the code before the fix it fails at its
+   first check after the first remove (`!hashmap_contains_key`), and two
+   more before the run aborts; on the fixed code it passes.
+5. **The fuzz target** draws its capacity from 1, 2, 4, 8, 16 and 32; it drew
+   4 to 32, and so never reached a full map. It checks every operation
+   against a reference, so it would have found the defect.
+6. **The job.** `frama-c-hashmap` is report-only for run 1 (`ENFORCE=0`). Its
+   pins stay VERIFY-055's, as the reference the run reports its differences
+   from. Two more annotations name the own unproved goals and the
+   differences, so that the run is scored from its annotations.
+7. **`hashmap.h`**: the known-defect note becomes a fixed note, and the
+   verification note says what VERIFY-056 changes.
+
+### Local runs, stated with their limits
+
+WP 25 with Z3 4.8 alone, at 10 s, not CI's WP 29 with Alt-Ergo, Z3 and
+CVC5 at 120 s; the same command on the tree before the fix and after it,
+each run alone (a first run of the fixed tree beside other jobs timed out
+on seven of `checked.h`'s goals that the clean run proves):
+- before: 4528 / 4622, 94 unproved, 24 of them hashmap's own;
+- after: 4684 / 4778, 94 unproved, 24 own. The 156 goals added are the
+  new paths through `remove` and the new invariant, all proved. The
+  inherited set is the same, name for name.
+
+What moves among the own, here:
+- `remove`'s `len` clause (`valid`'s `ensures_2`): its parts 12 to 14 were
+  unproved; all 30 of its parts are proved;
+- `remove`'s invariant after the call (`valid`'s `ensures`): parts 12 to 14
+  unproved before, parts 18 to 23 unproved after (more paths, so more
+  parts);
+- `insert`'s new third invariant, `psl <= i`: established, and preserved in
+  all four parts;
+- nothing else: `insert`'s seventh invariant and `room` postcondition stay
+  unproved here, as before.
+
+The local run is weaker than CI's. In VERIFY-055 it left 24 own goals
+where CI left 15: it does not prove `insert`'s seventh invariant even at
+loop entry, which CI proves. So it says what the fix proves at least, not
+what CI's provers leave.
+
+### Predictions
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | `frama-c-hashmap` completes with a summary, and, report-only, does not fail. Its annotations name the own unproved goals and the differences from VERIFY-055's pins. | no summary, the job fails, or the names are not in the annotations | H |
+| Q2 | No own runtime-error goal is unproved, and no goal is Failed, Invalid or Stepout. | any | M–H (local: none but the float check, which CI proved at VERIFY-055 and whose code is unchanged) |
+| Q3 | **`remove`'s `len` clause is proved**: no `typed_cast_hashmap_remove_valid_ensures_2` name is unproved. | any | H (local: all 30 parts proved) |
+| Q4 | **`remove`'s invariant after the call is proved**: no `typed_cast_hashmap_remove_valid_ensures_part` name is unproved. True now; CI proves `remove`'s loop keeping `dist_` (its seventh invariant), which the local run does not. | any | L–M (local: six parts unproved) |
+| Q5 | **`insert`'s are proved**: no `typed_cast_hashmap_insert_loop_invariant_7` and no `typed_cast_hashmap_insert_room_ensures` name is unproved, with `psl <= i` stated. | any | M (the local run cannot tell: it fails these before and after) |
+| Q6 | The four frame goals, `insert`'s and `remove`'s `assigns_exit` and `assigns_normal`, stay unproved, perhaps under other part numbers. Why WP leaves them is not known; the review found them true. | any of them proved, or more than four frame goals unproved | L–M |
+| Q7 | The two masks stay unproved, `typed_cast_hm_home_ensures` and `typed_cast_hm_wrap_ensures`. | either proved | H (code and contract unchanged) |
+| Q8 | The 40 inherited goals are the same 40 names. | any change | H (local: identical) |
+| Q9 | So the own unproved are the masks and at most the four frames, between 2 and 6 names, where VERIFY-055 pinned 15. | an own name outside Q6 and Q7, or Q3 to Q5 falsified | M (follows Q3 to Q7) |
+| Q10 | Nothing else moves: every other proof job at its pin; the suite 58 of 58 everywhere; `static-analysis` green; `misra` 66 with the same findings; MC/DC **2030 / 2198** (from 2023 / 2196), `hashmap_impl.h` **72 / 94** (from 65 / 92); `embedded` 136; `compcert` 59 / 59. | any change | H for the suite, `misra` and MC/DC (each measured here with the job's commands); M–H for the rest |
+
+Measured here for Q10: the suite passes 58 of 58 (GCC, Debug); the new test
+passes on the fixed code under ASan and UBSan (GCC and clang) and in
+Release, and fails on the code before the fix. The fuzz target, with the
+new capacities, traps on the code before the fix within its first few
+hundred inputs, and runs 60 seconds (5.6 million inputs) clean on the
+fixed code. clang-tidy and Cppcheck report nothing on `hashmap_test.c`.
+MISRA: 66, the
+same findings by file and rule. MC/DC moves on five lines of
+`hashmap_impl.h`: the shift's loop condition 1 → 2 of 2 and its exit test
+2 → 4 of 4 (a full map reaches them now), `insert`'s key test 2 → 3 of 4
+and its swap test 0 → 1 of 2, and the new guard, 1 of 2: its false
+outcome, `len` 0 with the key found, is the dead one.
+
+**How it is scored.** Run 1 is report-only. Its annotations give the line
+and the names. A scored record then files every own goal still unproved,
+under a block whose argument is checked against the code; run 2 must give
+the same line and names; the job is then enforced on them. If every goal
+of the probe distance bound closes, its block retires; if the frames stay,
+the block keeps them, with an argument of its own.
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
