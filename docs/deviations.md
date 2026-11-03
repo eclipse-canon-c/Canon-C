@@ -27982,23 +27982,29 @@ block, below: no existing argument covers the probe distance bound.
 | 1 | `typed_cast_hm_home_ensures` | `frama-c-hashmap` | `hash & (capacity - 1u) < capacity`: the block's paragraph added at VERIFY-055 |
 | 2 | `typed_cast_hm_wrap_ensures` | `frama-c-hashmap` | `index & (capacity - 1u) < capacity`: the same |
 
-#### The probe distance bound (13)
+#### The probe distance bound (0 — RETIRED at VERIFY-056; was 13)
 
 | # | Goal | Units |
 |---|---|---|
 | 1 | `typed_cast_hashmap_insert_loop_invariant_7_preserved_part1` | `frama-c-hashmap` |
 | 2 | `typed_cast_hashmap_insert_loop_invariant_7_preserved_part3` | `frama-c-hashmap` |
 | 3 | `typed_cast_hashmap_insert_room_ensures_part5` | `frama-c-hashmap` |
-| 4 | `typed_cast_hashmap_insert_assigns_exit_part10` | `frama-c-hashmap` |
-| 5 | `typed_cast_hashmap_insert_assigns_normal_part18` | `frama-c-hashmap` |
-| 6 | `typed_cast_hashmap_remove_valid_ensures_part12` | `frama-c-hashmap` |
-| 7 | `typed_cast_hashmap_remove_valid_ensures_part13` | `frama-c-hashmap` |
-| 8 | `typed_cast_hashmap_remove_valid_ensures_part14` | `frama-c-hashmap` |
-| 9 | `typed_cast_hashmap_remove_valid_ensures_2_part12` | `frama-c-hashmap` |
-| 10 | `typed_cast_hashmap_remove_valid_ensures_2_part13` | `frama-c-hashmap` |
-| 11 | `typed_cast_hashmap_remove_valid_ensures_2_part14` | `frama-c-hashmap` |
-| 12 | `typed_cast_hashmap_remove_assigns_exit_part12` | `frama-c-hashmap` |
-| 13 | `typed_cast_hashmap_remove_assigns_normal_part22` | `frama-c-hashmap` |
+| 4 | `typed_cast_hashmap_remove_valid_ensures_part12` | `frama-c-hashmap` |
+| 5 | `typed_cast_hashmap_remove_valid_ensures_part13` | `frama-c-hashmap` |
+| 6 | `typed_cast_hashmap_remove_valid_ensures_part14` | `frama-c-hashmap` |
+| 7 | `typed_cast_hashmap_remove_valid_ensures_2_part12` | `frama-c-hashmap` |
+| 8 | `typed_cast_hashmap_remove_valid_ensures_2_part13` | `frama-c-hashmap` |
+| 9 | `typed_cast_hashmap_remove_valid_ensures_2_part14` | `frama-c-hashmap` |
+
+> **Retired at VERIFY-056 (2026-11-03).** The nine above closed at
+> VERIFY-056's run 1: `insert`'s three with the loop invariant `psl <= i`,
+> `remove`'s six with the fix to its shift and its `len`. The four frame
+> goals this table also listed did not close and were never about the probe
+> distance; they are filed by name under VERIFY-056's block on the frames
+> of the probe loops, `remove`'s `assigns_normal` part 22 as part 022 (WP
+> numbers parts with three digits once there are more than 99). The text
+> below is the block as VERIFY-055 wrote it; its argument is wrong (see
+> VERIFY-055, "Correction (2026-11-03)").
 
 **Functions affected**: `hashmap_insert`, `hashmap_remove`.
 
@@ -28256,3 +28262,121 @@ the block keeps them, with an argument of its own.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-11-03): the defect fixed, nine goals closed, four frames left
+
+Run 1 ran on 8152928, the fix commit; the record is 80f623f, the docs sweep
+4a4572b, and the MISRA record 1226498, all pushed together.
+`frama-c-hashmap`, read from its three annotations: **proved 4738 / 4784;
+unproved 46: own 6, inherited 40; Failed, Invalid or Stepout: 0.** Against
+VERIFY-055's pins, two differences: ten pinned names are proved now, and
+one name is new, `remove`'s `assigns_normal` part 22 renumbered as part 022.
+
+The own six:
+- `typed_cast_hashmap_insert_assigns_exit_part10`
+- `typed_cast_hashmap_insert_assigns_normal_part18`
+- `typed_cast_hashmap_remove_assigns_exit_part12`
+- `typed_cast_hashmap_remove_assigns_normal_part022`
+- `typed_cast_hm_home_ensures`
+- `typed_cast_hm_wrap_ensures`
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** A summary, the job green (report-only), and the own names and the differences in its annotations. |
+| Q2 | **MATCH.** No own runtime-error goal unproved; no Failed, Invalid or Stepout goal. |
+| Q3 | **MATCH.** No `remove_valid_ensures_2` name unproved: the `len` clause is proved. |
+| Q4 | **MATCH.** No `remove_valid_ensures_part` name unproved: the invariant after `remove` is proved, as CI's provers proved its loop keeping `dist_`; the local run had left six parts. Its confidence was L–M. |
+| Q5 | **MATCH.** `insert`'s seventh invariant and its `room` postcondition are proved, with `psl <= i` stated. |
+| Q6 | **MATCH.** The four frame goals stay unproved, three under their names and `remove`'s `assigns_normal` as part 022. |
+| Q7 | **MATCH.** The two masks stay unproved. |
+| Q8 | **MATCH.** The 40 inherited are the same names: no difference outside the own set. |
+| Q9 | **MATCH.** Six own, the masks and the four frames. |
+| Q10 | **MATCH.** Every job green, 86 of 86. Every other proof job at its pin: among the last seven to finish, `frama-c-vec` 5475 / 5568, `frama-c-vec-fmt` 5239 / 5286, `frama-c-stack` 5714 / 5783, `frama-c-bitset` 4972 / 5046, `frama-c-win64 (memory)` 2842 / 2873, and the two `-CC` vec families on their gates. MC/DC **2030 / 2198**, `hashmap_impl.h` 72 / 94, as measured here before the push; `misra` 66, real 66 of 69 with the canary's 3; `static-analysis` green; `embedded` 136 units, 0 failed; `compcert` 59 / 59; every build job green, so the suite passes everywhere. |
+
+**Filing.** Nine of the probe distance bound's thirteen goals closed, and
+that block retires: what it was about, the probe distance, is now proved.
+Its four frame goals did not close, and they are not about the probe
+distance. They are filed under a block of their own, below. The masks stay
+under VERIFY-039's fixed-width block. *A*: one block retires and one is
+written, so *A* is 35 cumulative and 20 in force, *V* 23 and 17, *S* 12
+and 3. The retired block stays counted in *V*'s cumulative figure, as
+VERIFY-055 counted it.
+
+#### The frames of insert and remove across their probe loops (4)
+
+| # | Goal | Units |
+|---|---|---|
+| 1 | `typed_cast_hashmap_insert_assigns_exit_part10` | `frama-c-hashmap` |
+| 2 | `typed_cast_hashmap_insert_assigns_normal_part18` | `frama-c-hashmap` |
+| 3 | `typed_cast_hashmap_remove_assigns_exit_part12` | `frama-c-hashmap` |
+| 4 | `typed_cast_hashmap_remove_assigns_normal_part022` | `frama-c-hashmap` |
+
+**Functions affected**: `hashmap_insert`, `hashmap_remove`.
+
+**Root cause**: not read. Each goal is one part of the clause
+`assigns map->len, map->slots[0 .. map->capacity - 1]`, on the normal exit
+or on an exit WP allows through a call; which write and which path each
+part holds needs the goal's text, which the job's log does not print, and
+the log is not readable here. The other functions' frames are proved, among
+them `empty_slots_`'s, whose loop writes the slots too. One difference the
+source shows: these two loops name the slots in their `loop assigns`
+through `map->capacity`, a field of the map, where `empty_slots_`'s names
+them through its parameter `capacity`.
+
+**Manual proof argument**: every write the two functions make is to
+`map->len` or to a slot `map->slots[k]` with `k < map->capacity`. In
+`insert`, the stores are `*slot = incoming` and `slot->value = ...` with
+`slot = &map->slots[probe_idx]`, and `probe_idx < map->capacity` is the
+loop's second invariant, proved; and `map->len++`. In `remove`, the shift
+stores `map->slots[curr]` and its `psl`, the emptying after the loop stores
+three fields of `map->slots[curr]`, with `curr < map->capacity` the shift
+loop's second invariant, proved; and `map->len--`. Neither function writes
+`map->capacity` or `map->slots`, and every slot lies apart from the map
+struct (`HASHMAP_FN(shape_)`, required, and kept by both loops, proved), so
+no store to a slot changes either field: the range
+`map->slots[0 .. map->capacity - 1]` is the same at every point as before
+the call. The functions they call write nothing: `_hm_home`, `_hm_wrap`,
+`_hm_normalize_hash`, the driver's hash and equality functions, the
+lifetime no-op and the result constructors each state `assigns \nothing`.
+So at every exit, normal or through a call, everything written is in the
+frame. Verifier-bound as far as the source shows: the argument uses only
+clauses the contracts state.
+
+**Retirement.** Read the four goals (WP's `-wp-out` keeps each goal's text)
+and try what they show: an `exits \false` clause on the callees, if the
+exit parts are WP's allowance for a call that may not return, or a loop
+frame stated against `\at(map->capacity, Pre)`. A change with its own
+prediction.
+
+**Two gaps VERIFY-055 left, which the author asked about (2026-11-03).**
+- *No per-line MC/DC step for hashmap.* Every other verified header has
+  one in the coverage job; VERIFY-055 added none. Added now, report-only,
+  in the commit after this one: it prints `hashmap_impl.h`'s,
+  `hashmap_range.h`'s and `hashmap_fmt.h`'s conditions from
+  `hashmap_test`'s data, the input to the MCDC entry hashmap still lacks.
+  Run here on the coverage job's own build, it lists 20 lines of
+  `hashmap_impl.h` with an outcome missed, none of `hashmap_range.h` and
+  one of `hashmap_fmt.h`.
+- *Why hashmap has no job in `7 · Proofs: -CC`.* Not a gap, but it was not
+  written down. That workflow proves the macro-body contracts of the six
+  families whose driver jobs run under `-C` (slice, option, result,
+  borrow, vec, deque). hashmap's own contracts are not in macro bodies:
+  its functions are written out in `hashmap_impl.h`. The macro bodies it
+  instantiates, option's and result's at `hashmap_val_t`, are proved in
+  `frama-c-hashmap` itself, which is preprocessed with `-CC`, as are the
+  other units written since VERIFY-041 (vec_range, vec_fmt, stack,
+  array). The CI map now says so.
+
+### Run 2 predictions (pre-registered, before the run)
+
+Run 2 is the push of this scoring commit and the next, the per-line MC/DC
+step; neither changes the unit's sources. The job stays report-only, its
+pins now run 1's: `4738 / 4784` and the 46 names.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| R1 | The same line, `4738 / 4784`, and the same 46 names: the job reports 0 differences. | any difference | H (no source of the unit changes; VERIFY-055's two runs agreed) |
+| R2 | Every other job as in run 1. | any change | H |
+
+If R1 holds, the next commit enforces the job on these pins, and VERIFY-055
+and VERIFY-056 close.

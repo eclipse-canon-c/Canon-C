@@ -3146,12 +3146,9 @@ jobs:
       - name: "WP under -CC: data/hashmap/ at u64 -> int"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-056 run 1, report-only: remove's fix and insert's loop invariant change the goals.
-                      # The pins below are VERIFY-055's (runs 1 and 2, 173b7a2 and 978e4de), kept as the reference;
-                      # the run reports its differences from them by name, and VERIFY-056 pins anew after two runs agree.
-          PIN_PROVED="4585 / 4640"
-          # The 55 unproved names, by set equality: 15 own (VERIFY-055's two
-          # classes) and 40 inherited, each filed by name in docs/deviations.md.
+          ENFORCE=0   # VERIFY-056 run 2, report-only: pins from run 1 (8152928), 4738 / 4784 with 46 names.
+                      # Enforced from run 3 if run 2 gives the same line and names.
+          PIN_PROVED="4738 / 4784"
           PIN_NAMES=(
             "typed_cast_bits_bswap16_assert_rte_signed_overflow"
             "typed_cast_bits_bswap32_ensures"
@@ -3171,17 +3168,8 @@ jobs:
             "typed_cast_checked_add_u64_overflow_ensures"
             "typed_cast_hashmap_insert_assigns_exit_part10"
             "typed_cast_hashmap_insert_assigns_normal_part18"
-            "typed_cast_hashmap_insert_loop_invariant_7_preserved_part1"
-            "typed_cast_hashmap_insert_loop_invariant_7_preserved_part3"
-            "typed_cast_hashmap_insert_room_ensures_part5"
             "typed_cast_hashmap_remove_assigns_exit_part12"
-            "typed_cast_hashmap_remove_assigns_normal_part22"
-            "typed_cast_hashmap_remove_valid_ensures_2_part12"
-            "typed_cast_hashmap_remove_valid_ensures_2_part13"
-            "typed_cast_hashmap_remove_valid_ensures_2_part14"
-            "typed_cast_hashmap_remove_valid_ensures_part12"
-            "typed_cast_hashmap_remove_valid_ensures_part13"
-            "typed_cast_hashmap_remove_valid_ensures_part14"
+            "typed_cast_hashmap_remove_assigns_normal_part022"
             "typed_cast_hm_home_ensures"
             "typed_cast_hm_wrap_ensures"
             "typed_cast_option_hashmap_val_t_and_then_assert_rte_function_pointer"
@@ -3243,7 +3231,7 @@ jobs:
           echo "=== pinned, not unproved ==="; comm -23 pins.txt unproved.txt | sed 's/^/    /'
           echo "=== Failed / Invalid / Stepout: $(wc -l < bad.txt) ==="; sed 's/^/    /' bad.txt
           FAILS=0
-          if cmp -s pins.txt unproved.txt; then echo "NAMES SAME: the 55 pinned names."; else echo "DIFFERS: the unproved set (above)."; FAILS=$((FAILS + 1)); fi
+          if cmp -s pins.txt unproved.txt; then echo "NAMES SAME: the $(wc -l < pins.txt) pinned names."; else echo "DIFFERS: the unproved set (above)."; FAILS=$((FAILS + 1)); fi
           if [ "${PROVED}" = "${PIN_PROVED}" ]; then echo "PROVED SAME: ${PROVED}"; else echo "DIFFERS: proved ${PROVED}, pinned ${PIN_PROVED}."; FAILS=$((FAILS + 1)); fi
           if [ -s bad.txt ]; then echo "DIFFERS: Failed, Invalid or Stepout goals (above)."; FAILS=$((FAILS + 1)); fi
           echo "::notice title=frama-c-hashmap::proved ${PROVED} (pin ${PIN_PROVED}); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt); ${FAILS} difference(s)"
