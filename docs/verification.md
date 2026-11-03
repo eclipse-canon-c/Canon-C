@@ -4597,7 +4597,10 @@ padding, bytes may differ where values do not).
 > admit. The other seven are true, but not for the argument's reason:
 > `insert`'s loop lacks the invariant `psl <= i`. The pins do not move:
 > they count what WP proves. VERIFY-055 is reopened; VERIFY-056 is the
-> repair. Until then, use capacity 4 or more with `remove`.
+> repair. *Since VERIFY-056's fix commit:* `remove` empties the slot its
+> shift ends at, decrements `len` only above 0, and `insert`'s loop states
+> `psl <= i`; `frama-c-hashmap` is report-only until two runs agree, and
+> this section is brought to its new pins then.
 
 hashmap is **module 24**. Its contracts state a shape invariant per map,
 `HASHMAP_FN(inv_)`: a capacity from 1 to 2^30, `len` at most the

@@ -936,6 +936,74 @@ static void test_load_cap_small(void)
     }
 }
 
+/* Counts the occupied slots by iterating. */
+static usize hashmap_count_by_iter(const hashmap* m)
+{
+    usize iter = 0;
+    usize n    = 0;
+    const u64* k;
+    const int* v;
+    while (hashmap_iter_next(m, &iter, &k, &v)) { n++; }
+    return n;
+}
+
+/* VERIFY-056: remove from a map with every slot occupied, which only
+   capacities 1 and 2 allow. The shift used to run out of steps and leave
+   its last slot occupied: the removed key stayed, and a second remove of it
+   wrapped len. Capacity 1, then every pair of keys at capacity 2, removed
+   in both orders, so that both placements (one home, two homes) occur. */
+static void test_remove_full_small(void)
+{
+    hashmap_slot b[2];
+    hashmap m;
+    u64 k1 = 1;
+    int v1 = 10;
+
+    if (!result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, sizeof(hashmap_slot)), 1u, NULL))) {
+        EXPECT(false);   /* init failed */
+        return;
+    }
+    EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k1, &v1)));
+    EXPECT(result_hashmap_val_t_Error_is_ok(hashmap_remove(&m, &k1)));
+    EXPECT(!hashmap_contains_key(&m, &k1));
+    EXPECT(hashmap_len(&m) == 0u);
+    EXPECT(hashmap_count_by_iter(&m) == 0u);
+    result_hashmap_val_t_Error again = hashmap_remove(&m, &k1);
+    EXPECT(result_hashmap_val_t_Error_is_err(again));
+    EXPECT(result_hashmap_val_t_Error_unwrap_err(again) == ERR_NOT_FOUND);
+    EXPECT(hashmap_len(&m) == 0u);
+    EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &k1, &v1)));
+    EXPECT(hashmap_len(&m) == 1u);
+
+    for (u64 a = 1; a <= 8u; a++) {
+        for (u64 c = 1; c <= 8u; c++) {
+            if (a == c) { continue; }
+            if (!result__Bool_Error_is_ok(hashmap_init(&m, bytes_from(b, 2u * sizeof(hashmap_slot)), 2u, NULL))) {
+                EXPECT(false);   /* init failed */
+                continue;
+            }
+            int va = (int)a;
+            int vc = (int)c;
+            EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &a, &va)));
+            EXPECT(result__Bool_Error_is_ok(hashmap_insert(&m, &c, &vc)));
+            EXPECT(hashmap_len(&m) == 2u);
+
+            EXPECT(result_hashmap_val_t_Error_is_ok(hashmap_remove(&m, &a)));
+            EXPECT(!hashmap_contains_key(&m, &a));
+            EXPECT(hashmap_contains_key(&m, &c));
+            EXPECT(hashmap_len(&m) == 1u);
+            EXPECT(hashmap_count_by_iter(&m) == 1u);
+
+            EXPECT(result_hashmap_val_t_Error_is_ok(hashmap_remove(&m, &c)));
+            EXPECT(!hashmap_contains_key(&m, &c));
+            EXPECT(hashmap_len(&m) == 0u);
+            EXPECT(hashmap_count_by_iter(&m) == 0u);
+            EXPECT(result_hashmap_val_t_Error_is_err(hashmap_remove(&m, &c)));
+            EXPECT(hashmap_len(&m) == 0u);
+        }
+    }
+}
+
 int main(void)
 {
     (void)hashmap_suppress_unused;
@@ -997,6 +1065,7 @@ int main(void)
     test_range_fmt_refusals();
     test_misaligned_buffer_refused();
     test_load_cap_small();
+    test_remove_full_small();
 
 #ifdef CANON_LIFETIME_DEBUG
     test_lifetime_init_opens_token();
@@ -1106,7 +1175,9 @@ static void hashmap_fuzz_suppress_unused(void)
 
 int LLVMFuzzerTestOneInput(const u8* data, usize size)
 {
-    static const usize cap_table[4] = {4, 8, 16, 32};
+    /* 1 and 2 since VERIFY-056: the only capacities at which every slot can
+       be occupied, where remove's shift ran out of steps. */
+    static const usize cap_table[6] = {1, 2, 4, 8, 16, 32};
 
     /* Max capacity is 32 — size the buffer for that */
     hashmap_slot buf[32];  /* aligned for the slots (VERIFY-054) */
@@ -1116,7 +1187,7 @@ int LLVMFuzzerTestOneInput(const u8* data, usize size)
 
     if (size < 2) return 0;
 
-    usize cap       = cap_table[data[0] % 4u];
+    usize cap       = cap_table[data[0] % 6u];
     usize buf_bytes = cap * sizeof(hashmap_slot);
 
     result__Bool_Error init_r = hashmap_init(

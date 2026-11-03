@@ -3146,7 +3146,9 @@ jobs:
       - name: "WP under -CC: data/hashmap/ at u64 -> int"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=1   # VERIFY-055: enforced from run 3; pins from runs 1 and 2 (173b7a2, 978e4de), identical
+          ENFORCE=0   # VERIFY-056 run 1, report-only: remove's fix and insert's loop invariant change the goals.
+                      # The pins below are VERIFY-055's (runs 1 and 2, 173b7a2 and 978e4de), kept as the reference;
+                      # the run reports its differences from them by name, and VERIFY-056 pins anew after two runs agree.
           PIN_PROVED="4585 / 4640"
           # The 55 unproved names, by set equality: 15 own (VERIFY-055's two
           # classes) and 40 inherited, each filed by name in docs/deviations.md.
@@ -3245,6 +3247,9 @@ jobs:
           if [ "${PROVED}" = "${PIN_PROVED}" ]; then echo "PROVED SAME: ${PROVED}"; else echo "DIFFERS: proved ${PROVED}, pinned ${PIN_PROVED}."; FAILS=$((FAILS + 1)); fi
           if [ -s bad.txt ]; then echo "DIFFERS: Failed, Invalid or Stepout goals (above)."; FAILS=$((FAILS + 1)); fi
           echo "::notice title=frama-c-hashmap::proved ${PROVED} (pin ${PIN_PROVED}); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt); ${FAILS} difference(s)"
+          # VERIFY-056: the names as well, so that a run is scored from its annotations.
+          echo "::notice title=frama-c-hashmap own::$(paste -sd ' ' own.txt)"
+          echo "::notice title=frama-c-hashmap differences::unproved, not pinned: $(comm -13 pins.txt unproved.txt | paste -sd ' ' -); pinned, not unproved: $(comm -23 pins.txt unproved.txt | paste -sd ' ' -); failed/invalid/stepout: $(paste -sd ' ' bad.txt)"
           if [ "${FAILS}" -ne 0 ] && [ "${ENFORCE}" -eq 1 ]; then
             echo "FAIL: ${FAILS} difference(s) from the pins."; exit 1
           fi

@@ -213,9 +213,10 @@ typedef struct {
 /* VERIFY-055: the map's representation invariant, per map (the name is
    mangled, so two maps in one translation unit define two predicates).
    - capacity: at least 1, at most 2^30, so that insert's probe distance,
-     a u32 at most twice the capacity, cannot overflow (a contract limit:
-     the code does not refuse a larger capacity; the verified unit does not
-     admit one);
+     a u32, cannot overflow (a contract limit: the code does not refuse a
+     larger capacity; the verified unit does not admit one). Since
+     VERIFY-056 the loop states the distance at most the step count, so
+     below the capacity;
    - len: at most capacity;
    - slots: capacity of them, valid, apart from the map struct;
    - every slot's probe distance is below the capacity, and an occupied
@@ -517,7 +518,7 @@ HASHMAP_LINKAGE result__Bool_Error HM_INSERT_(
 
     /*@ loop invariant 0 <= i <= map->capacity;
     loop invariant probe_idx < map->capacity;
-    loop invariant psl <= map->capacity + i;
+    loop invariant psl <= i;
     loop invariant incoming.psl == psl;
     loop invariant incoming.hash != 0;
     loop invariant HASHMAP_FN(shape_)(map);
@@ -689,7 +690,8 @@ HASHMAP_LINKAGE bool HM_CONTAINS_KEY_(
     behavior valid:
       assumes map != \null && key != \null;
       ensures HASHMAP_FN(inv_)(map);
-      ensures \result.is_ok ==> map->len == \old(map->len) - 1;
+      ensures \result.is_ok ==>
+              map->len == (\old(map->len) == 0 ? 0 : \old(map->len) - 1);
       ensures !\result.is_ok ==> \result.val.err == ERR_NOT_FOUND && map->len == \old(map->len);
     complete behaviors;
     disjoint behaviors; */
@@ -747,9 +749,6 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
         HASHMAP_SLOT_NAME* next_slot = &map->slots[next];
 
         if (!next_slot->occupied || (next_slot->psl == 0u)) {
-            map->slots[curr].occupied = false;
-            map->slots[curr].hash     = 0;
-            map->slots[curr].psl      = 0;
             break;
         }
 
@@ -758,7 +757,20 @@ HASHMAP_LINKAGE HM_RES_T_ HM_REMOVE_(
         curr = next;
     }
 
-    map->len--;
+    /* VERIFY-056: empty the slot the shift ends at, whether the loop broke
+       or ran out. It ran out when every slot was occupied (capacities 1 and
+       2 allow that), and the emptying used to sit inside the break only: the
+       last slot kept its element, so a removed key stayed in the map. */
+    map->slots[curr].occupied = false;
+    map->slots[curr].hash     = 0;
+    map->slots[curr].psl      = 0;
+
+    /* VERIFY-056: len is not decremented below 0. The invariant does not tie
+       len to the occupied slots, so it admits len 0 with the key present;
+       through the API, once the shift above is right, len is at least 1 here. */
+    if (map->len > 0u) {
+        map->len--;
+    }
     HM_LIFETIME_RESTAMP_(map);
     return HM_RES_FN_(_ok)(old_value);
 }
