@@ -16,6 +16,20 @@ Combined verification status across all annotated headers:
 | **Proved automatic** | 73014 (99.06%)                                                                 |
 | **Unproved**         | 692 (each filed by name in `docs/deviations.md`; see per-header sections)      |
 
+*Not recomputed 2026-11-04 (VERIFY-057): no pin moved.* "Absence of
+runtime errors" in the sections below means what `-wp-rte` checks under the
+proof jobs' options. Those do not include the pointers a unit computes or
+reads, which C leaves undefined outside their object (C11 6.5.6p8) or after
+it ends (6.2.4p2); Frama-C checks them only under `-warn-invalid-pointer`,
+which no proof job sets. A probe ran every unit with it once, report-only
+(`9 · Probes` #3 on 9207897): 1073 such goals in 21 units, 951 proved and
+122 unproved, 44 names. Three are false: ptr.h's `ptr_offset`,
+`ptr_offset_const` and `ptr_retreat` admit a result outside its object, and
+VERIFY-058 is their repair. The other 41 are read by kind in VERIFY-057's
+score: the alignment helpers' integer-to-pointer conversion, stored pointers
+the contracts leave free, `\valid_function`, which WP 29 does not implement,
+and three true but unproved.
+
 *Recomputed 2026-11-03 (VERIFY-056, hashmap enforced from its run 3).*
 `frama-c-hashmap`'s pin moves from 4585 / 4640 to 4738 / 4784: +144
 obligations, +153 proved and -9 unproved. `remove`'s fix and `insert`'s

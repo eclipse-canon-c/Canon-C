@@ -28433,6 +28433,7 @@ differences from its pins.
 | **ID**         | VERIFY-057 |
 | **Date**       | 2026-11-03 |
 | **Status**     | PREDICTED. This record is committed before the probe commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. The Status above is the record as committed. |
 | **Baseline**   | `VERIFY-056 run 3: the first enforced run holds`, on 81220e7 (named by its subject: it is pushed with this record) |
 | **Scope**      | A probe, `pointer-probe` in `.github/workflows/probes.yml`, and its script `tools/probes/verify-057/pointer_probe.py`. No unit's source, contract, job or pin changes. |
 | **Category**   | A gap in what the proofs check, measured before anything is changed. Decided with the author (2026-11-03): probe every unit first, then tighten `ptr_offset`'s contract, each under its own predictions. |
@@ -28545,3 +28546,125 @@ shows.
 
 The probe is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Scored (2026-11-04): every prediction matched; 122 goal-instances unproved, 44 names, five kinds
+
+The push of 5db7436 and 9207897 ran 112 jobs, all `success`: the seven main
+workflows' 79, and 33 in `9 · Probes (closed experiments)` #3, its `changes`
+job, the six earlier probes and the 26 of `pointer-probe`. Read from the
+probe's 26 notices: **1073 `pointer_value` goals over the 21 units that have
+any, 951 proved, 122 unproved, 44 distinct names; none Failed or Invalid.**
+A name inherited by several units is counted once in each.
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** Every job wrote its summary or "No goal generated" and posted its notice. |
+| Q2 | **MATCH.** checked, bits, compare, lifetime and error: no goal. |
+| Q3 | **MATCH.** `ptr_offset`, `ptr_offset_const` and `ptr_retreat` unproved in each of the twelve units named, and emitted in no other. |
+| Q4 | **MATCH.** `ptr_align_up` and `ptr_align_down` the same. |
+| Q5 | **MATCH.** slice 9 / 9; option, result and range 1 / 1; array 29 / 29. |
+| Q6 | **MATCH.** Every other unproved goal is in a function the table names for its unit. CI proved more than the local run in six units and less in none: diag 160 / 160 (local 158, `diag_push`'s), the queue 39 / 48 (36; `pq_pop_raw`'s and `pq_swap`'s proved), stringbuf 71 / 81 and vec_fmt 73 / 86 (69 and 71; `stringbuf_append_bytes`'s and `stringbuf_append_n`'s proved), vec 71 / 88 (70) and stack 73 / 88 (72). |
+| Q7 | **MATCH.** No goal Failed or Invalid. |
+| Q8 | **MATCH.** Every proof job green, so at its pin; the six earlier probes green. |
+
+Per unit, proved / all, and the unproved by kind (the kinds below):
+
+| unit | proved | unproved |
+|------|--------|----------|
+| ptr, memory, arena, pool | 1 / 6, 11 / 16, 22 / 27, 49 / 54 | ptr.h's five (P 3, I 2) |
+| region | 24 / 33 | ptr.h's five; 2 R, 2 T |
+| vec | 71 / 88 | ptr.h's five; 10 R, 2 V |
+| stack | 73 / 88 | ptr.h's five; 10 R (vec's) |
+| vec_range | 30 / 36 | ptr.h's five; 1 R |
+| vec_fmt | 73 / 86 | ptr.h's five; 7 R, 1 V |
+| stringbuf | 71 / 81 | ptr.h's five; 5 R |
+| bitset | 103 / 112 | ptr.h's five; 4 R (borrow's) |
+| priority_queue | 39 / 48 | ptr.h's five; 3 R, 1 T |
+| borrow | 11 / 15 | 4 R |
+| deque | 31 / 37 | 6 R |
+| hashmap | 141 / 145 | 4 R |
+| slice, option, result, range, array, diag | all | — |
+| checked, bits, compare, lifetime, error | no goal | — |
+
+**The kinds**, each read against its code, the asserted expression read from
+the unit's annotated print. The pre-registration named P, I, R and true but
+unproved; the reading found a fifth, T.
+- **P, arithmetic with no bound (3 names, in 12 units).** `ptr_offset`,
+  `ptr_offset_const` and `ptr_retreat` compute `(u8*)p + n` or `- n`; their
+  contracts admit any `n`, so for an admitted call the result leaves its
+  object. These goals are false, a defect of the contracts. The library
+  calls them in `arena.h`, six times, and `pool.h`, eight; `ptr_retreat`
+  has no caller but its tests.
+- **I, an integer made a pointer (2 names, in 12 units).** `ptr_align_up`
+  and `ptr_align_down` compute the aligned address as a `uintptr_t` and
+  convert it back; C leaves the conversion's result implementation-defined
+  (6.3.2.3p5), and WP's model does not tie the integer to an object. No
+  library function calls them; tests and three probes do.
+- **R, a stored pointer read, which the contract leaves free (33 names).**
+  With the option, reading a pointer asks that its value be null, or point
+  into or one past an object. Each goal below is the function's first read
+  of the field; its later reads are proved, but for two in `fill`'s loop in
+  vec (V, below).
+  - *a container's own pointer, free in a state the predicate admits (23):*
+    vec's `items`, in `append_array`, `data`, `fill`, `free`, `insert`,
+    `pop`, `push`, `remove`, `slice_init` and `try_push` (in vec and in
+    stack), in `extend_from_range`, and in `to_stringbuf` and
+    `to_stringbuf_cb`; deque's `buffer`, in its six push and pop functions.
+    Both predicates state `pointer == \null ==> capacity == 0` and, when the
+    capacity is above 0, the elements valid; at capacity 0 a non-null
+    pointer may be anything. vec's struct comment says "NULL iff capacity
+    == 0", the converse included; `deque_init` requires a buffer and a
+    capacity above 0. Then the queue's `data`, in `pq_as_bytes` and
+    `pq_as_cbytes`, read in their null-or-empty test, where the contract
+    asks only that `pq` be readable (`pq_wf` is required in the live
+    behaviour); `stringbuf_is_arena_backed`'s `sb->arena` and
+    `region_has_parent`'s `r->parent`, null-tolerant queries that require
+    only `\valid_read`.
+  - *a caller's pointer, stored and passed back (6):* the hash map's
+    `ctx`, passed to its hash and equality functions, in `get`,
+    `get_or_null`, `insert` and `remove`; the queue's `ctx`, passed to its
+    comparator, in `pq_cmp_`; a region hook's `ctx`, passed to the hook, in
+    `region_end` (its fifth). No contract states anything of a `ctx`.
+  - *borrow's handles (4):* `borrowed_ptr_get` and the three `_is_valid`
+    checks read the stored pointer, under a contract that asks only that the
+    handle be readable; the checks test it for null. As with `ctx`, its value
+    is the caller's. Particular to a borrow: it may be kept while its source
+    changes, and C makes a pointer's value indeterminate when the object it
+    points to reaches the end of its lifetime (6.2.4p2), and its use
+    undefined (J.2). An arena's reset ends no C object, so a handle over
+    arena storage may still be read; storage freed, or a local out of scope,
+    ends it, and a handle over it may then not be read at all, a check
+    included.
+- **T, the tool (3).** `\valid_function` of a function pointer read: the
+  queue's comparator in `pq_cmp_` (its first) and a hook's function in
+  `region_end` (its third and fourth). WP 29 does not implement
+  `\valid_function` (the warning VERIFY-011 quotes), the limit already
+  pinned in these functions' `function_pointer` goals. Where the call is
+  made, each is true under the contract: `pq_cmp_` requires a builtin
+  comparator, `region_end` a valid function for each non-null hook. The
+  third is read in the test `h->fn != NULL`, where the value may be null;
+  whether `\valid_function` admits null is not settled here.
+- **V, true but unproved (3).** `vec_int_to_stringbuf_cb`'s second, `items +
+  i` at the call through the callback: in range, since `i < len <=
+  capacity` and the elements are valid, and unproved as VERIFY-042's
+  `mem_access_3` on the same `items[i]` is, WP losing the loop's locals
+  across a call no `calls` clause can name. And `vec_int_fill`'s second, in
+  two parts, in vec only: `v->items` read at the store in the loop, which
+  runs only below the capacity, where the elements are valid. That unit's
+  preprocessing strips the loop's annotations from the macro body, and the
+  block "Loop without annotations in a macro body" (VERIFY-039) files the
+  same loop's goals; stack, which keeps them, proves this one.
+
+**What it means.** The proofs' "no runtime error" did not cover the pointers
+a unit computes or reads. This probe measured that part once; it is not
+gated, and its goals are in no pin. Of the 44, the three P goals are
+defects of the contracts, and they are the next change, as decided:
+VERIFY-058 states that the result of `ptr_offset`, `ptr_offset_const` and
+`ptr_retreat` stays in its object, with predictions for the callers'
+units, whose pins move. The rest are decided after it, each by its code and
+under its own predictions: I by how the functions compute the address; R's
+containers by whether their predicates state the converse; R's caller
+pointers and borrow's handles by what their callers are to owe; T and V
+stay with their blocks' arguments.
+
+**VERIFY-057 is closed.**
