@@ -3146,8 +3146,7 @@ jobs:
       - name: "WP under -CC: data/hashmap/ at u64 -> int"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-056 run 2, report-only: pins from run 1 (8152928), 4738 / 4784 with 46 names.
-                      # Enforced from run 3 if run 2 gives the same line and names.
+          ENFORCE=1   # VERIFY-056: enforced from run 3; pins from runs 1 and 2 (8152928, 2bad3cd), identical
           PIN_PROVED="4738 / 4784"
           PIN_NAMES=(
             "typed_cast_bits_bswap16_assert_rte_signed_overflow"

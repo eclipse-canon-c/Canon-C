@@ -298,13 +298,13 @@
  * probe loops terminate. They do not state the Robin Hood order, so "get
  * finds what insert stored" is tested, not proved. The verified contract
  * admits capacities up to 2^30, which the code does not itself refuse.
- * WP left 15 of the unit's own goals unproved at VERIFY-055. The two bit
- * masks are argued by hand in docs/deviations.md. The argument for the
- * other 13 was found wrong after the unit was enforced: six of them, in
- * remove, were false through the defect above, and insert's lacked a loop
- * invariant. VERIFY-056 fixes remove, states the invariant, and says which
- * goals stay unproved. hashmap_range.h and hashmap_fmt.h are not in the
- * unit: they are tested, not proved.
+ * WP left 15 of the unit's own goals unproved at VERIFY-055, and the
+ * argument for 13 of them was found wrong after the unit was enforced: six,
+ * in remove, were false through the defect above. Since VERIFY-056, which
+ * fixed remove and stated insert's loop invariant, six stay unproved: the
+ * two bit masks and four frame goals of insert and remove, each argued by
+ * hand in docs/deviations.md. hashmap_range.h and hashmap_fmt.h are not in
+ * the unit: they are tested, not proved.
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * DESIGN NOTES

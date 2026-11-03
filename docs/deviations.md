@@ -27782,7 +27782,7 @@ its WP unit is the next record, pre-registered once this one is on master.
 | **ID**         | VERIFY-055 |
 | **Date**       | 2026-11-02 |
 | **Status**     | CLOSED (2026-11-03) — predicted at d04130c, before the contract commit 173b7a2; run 1 on 173b7a2 (Q1–Q4 and Q7 matched, Q5 partly missed: the float goal proved), run 2 on 978e4de (name-identical, Q6 matched); enforced at 4585 / 4640 with 55 names; one new argument block, verifier-bound (*A* 34 cumulative and 20 in force, *V* 22 and 17) |
-| **Status update** | 2026-11-03 — REOPENED: `remove` is defective at capacities 1 and 2, and the argument for the probe distance bound is wrong, six of its goals false; see "Correction (2026-11-03)" at the end of this record. VERIFY-056 is the repair. The Status above is the record as committed. |
+| **Status update** | 2026-11-03 — REOPENED: `remove` is defective at capacities 1 and 2, and the argument for the probe distance bound is wrong, six of its goals false; see "Correction (2026-11-03)" at the end of this record. VERIFY-056 is the repair; closed again with VERIFY-056's enforcement, the same day (VERIFY-056, "Run 2 scored, and enforced"). The Status above is the record as committed. |
 | **Baseline**   | f4c713b (VERIFY-054 closed) |
 | **Scope**      | `data/hashmap/hashmap_impl.h` (contracts, loop annotations, the slot-emptying helper), `hashmap.h` (documentation); a new driver `vmacros/vdrivers/hashmap_verify.h`; a new job `frama-c-hashmap` in `proofs-data.yml`, report-only |
 | **Category**   | hashmap's full treatment, its second step: the WP unit. Decided with the author (2026-11-02): pre-register now with the expected residual stated by class, and let CI's first run, with its three provers, give the list, rather than iterate on local runs whose prover set differs; and let run 1 report a goal a prover fails on (Failed) without failing. |
@@ -28140,6 +28140,7 @@ and what it does to the thirteen, predicted before the code changes.
 | **ID**         | VERIFY-056 |
 | **Date**       | 2026-11-03 |
 | **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-03 — CLOSED: run 1 on 8152928 and run 2 on 2bad3cd gave the same line and names, and every prediction matched; enforced from run 3 at 4738 / 4784 with 46 names. See "Run 2 scored, and enforced" below. The Status above is the record as committed. |
 | **Baseline**   | the docs sweep, `Docs sweep: hashmap remove defect recorded; stale statuses and figures corrected`, on f855a66 (named by its subject: it is pushed with this record) |
 | **Scope**      | `data/hashmap/hashmap_impl.h` (`remove`'s shift and `len`, its `len` clause; `insert`'s loop invariant), `hashmap.h` (documentation), `test/data/hashmap_test.c` (a test; the fuzz target's capacities), `.github/workflows/proofs-data.yml` (`frama-c-hashmap` report-only for run 1, its differences annotated by name) |
 | **Category**   | The repair VERIFY-055's correction opened: a defect found after enforcement, and an argument found wrong. Decided with the author (2026-11-03): empty the slot the shift ends at; guard the decrement. |
@@ -28380,3 +28381,42 @@ pins now run 1's: `4738 / 4784` and the 46 names.
 
 If R1 holds, the next commit enforces the job on these pins, and VERIFY-055
 and VERIFY-056 close.
+
+### Run 2 scored, and enforced (2026-11-03): VERIFY-055 and VERIFY-056 closed
+
+Run 2 ran on 2bad3cd, the push of the scoring commit (7730835) and the
+per-line MC/DC step: 79 jobs, all `success`. `7 · Proofs: -CC` did not run,
+since none of its paths changed. `frama-c-hashmap`: **proved 4738 / 4784;
+unproved 46: own 6, inherited 40; 0 Failed, Invalid or Stepout; 0
+differences** from run 1's pins.
+
+| # | scored |
+|---|--------|
+| R1 | **MATCH.** The same line and the same 46 names. |
+| R2 | **MATCH.** Every other job as in run 1: MC/DC 2030 / 2198, `misra` 66, `embedded` 136, `compcert` 59 / 59, every proof job that ran at its pin. |
+
+**Enforced.** From this commit `frama-c-hashmap` fails on any difference:
+the line `4738 / 4784`, the 46 names by set equality, and any Failed,
+Invalid or Stepout goal.
+
+**What VERIFY-055 and VERIFY-056 leave.** hashmap is verified, module 24,
+for what VERIFY-055 claimed: the map's shape invariant, memory safety under
+`-wp-rte`, frames, `len` bookkeeping, the documented errors and
+termination. `remove`'s `len` clause reads "one less, or 0 if it was 0",
+and `remove` empties the slot its shift ends at. The own residuals are six:
+the two masks, filed under VERIFY-039's fixed-width block, and the four
+frame goals, under VERIFY-056's block, each argued. Not claimed: the Robin
+Hood order, so not which value `get` returns; `hashmap_range.h` and
+`hashmap_fmt.h`, which are tested and measured, not proved; capacities
+above 2^30; `load_factor`'s value.
+
+**Measured.** MC/DC `hashmap_impl.h` 72 / 94: 22 outcomes missed, not yet
+analysed, which the new per-line step prints. With the coverage job's steps
+run here on 2bad3cd's tree, whose MC/DC matches CI's: lines 2932 / 3013,
+functions 753 / 756, branches 1777 / 1932.
+
+*A* is 35 cumulative and 20 in force, *V* 23 and 17, *S* 12 and 3, as run
+1's score said.
+
+**VERIFY-055 and VERIFY-056 are closed.** The data layer's agreed order is
+done, now with the defect found after VERIFY-055's enforcement repaired.

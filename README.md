@@ -191,33 +191,32 @@ For current numbers, see:
 All currently unproved goals resist Alt-Ergo, Z3 and CVC5 at a 120-second
 timeout and are pinned in their CI jobs, and each is listed in
 `docs/deviations.md` under a block that argues it holds for every call the
-contracts admit, but for one block of hashmap's, which is being redone
-(below). Until VERIFY-040, five clauses whose value C leaves undefined at some
-admitted calls were among them: four stated by pointer order across objects,
-and one about a struct exchange whose operands may overlap. VERIFY-040
-restated those contracts, and since its round 2 (CI #1375) no such goal is
-unproved. The record coverage job fails a push that leaves a pinned goal
-unlisted. Most blocks name the verifier's obstacle, among them fixed-width
-arithmetic that ACSL states over unbounded integers, bit-level identities,
-ACSL predicates WP does not implement (`\dangling`, `\fresh`, `\freeable`,
-`\valid_function`), and bytes written through one type and read through
-another. Three blocks name the specification's: a clause the code establishes
-and the contract omits, a loop in a macro body that carries no annotations,
-and what a cleanup hook behind a pointer must keep, which no ACSL clause can
-state. Two more did until VERIFY-040 restated the contracts they named: a
-predicate stated by pointer order across objects, and a struct exchange whose
-operands may overlap. Goals found false for some call the contracts admitted
-were specification defects, not residuals, and were repaired (VERIFY-039 in
-`docs/deviations.md`).
+contracts admit. Until VERIFY-040, five clauses whose value C leaves undefined
+at some admitted calls were among them: four stated by pointer order across
+objects, and one about a struct exchange whose operands may overlap.
+VERIFY-040 restated those contracts, and since its round 2 (CI #1375) no such
+goal is unproved. The record coverage job fails a push that leaves a pinned
+goal unlisted. Most blocks name the verifier's obstacle, among them
+fixed-width arithmetic that ACSL states over unbounded integers, bit-level
+identities, ACSL predicates WP does not implement (`\dangling`, `\fresh`,
+`\freeable`, `\valid_function`), and bytes written through one type and read
+through another. Three blocks name the specification's: a clause the code
+establishes and the contract omits, a loop in a macro body that carries no
+annotations, and what a cleanup hook behind a pointer must keep, which no ACSL
+clause can state. Two more did until VERIFY-040 restated the contracts they
+named: a predicate stated by pointer order across objects, and a struct
+exchange whose operands may overlap. Goals found false for some call the
+contracts admitted were specification defects, not residuals, and were
+repaired (VERIFY-039 in `docs/deviations.md`).
 
 One block was wrong: hashmap's probe distance bound (VERIFY-055). After
 the unit was enforced, a review found a defect in `hashmap_remove`: on a
 map with every slot occupied, which only capacities 1 and 2 allow, it left
 its last slot occupied. Six of the block's goals were false through it,
-and the argument for the other seven was wrong. VERIFY-056 fixes the code
-and states the loop invariant the argument lacked; until its runs are
-scored, the unit's pins are VERIFY-055's, and its job reports rather than
-enforces.
+and the argument for the other seven was wrong. VERIFY-056 fixed the code
+and stated the loop invariant the argument lacked: nine of the goals are
+proved, the block is retired, and the four frame goals left are filed
+under a block of their own.
 
 The same code that WP proves is the code that runs in production. The
 CI build uses `-DCANON_CHECKED_FORCE_FALLBACK` and
