@@ -42,10 +42,10 @@
 
 | Field              | Value                                                        |
 |--------------------|--------------------------------------------------------------|
-| **Date**           | 2026-11-02                                                   |
+| **Date**           | 2026-11-03                                                   |
 | **Version**        | v1.3.0                                                       |
-| **Commit**         | 5f0387d (VERIFY-054 run 2)                                   |
-| **CI run**         | `3 · Static analysis & coverage`, run on 5f0387d             |
+| **Commit**         | 978e4de (VERIFY-055 run 2)                                   |
+| **CI run**         | `3 · Static analysis & coverage`, run on 978e4de             |
 | **CI job**         | `coverage` in `.github/workflows/analysis.yml`               |
 | **Branch**         | master                                                       |
 | **Compiler**       | GCC 14.2.0                                                   |
@@ -55,7 +55,7 @@
 | **Runner**         | ubuntu-24.04 (GitHub Actions), pinned since 25133fe          |
 | **Scope**          | Library headers + Shape-B cover TUs — test files excluded    |
 | **Test binaries**  | ctest registers 58 tests (the coverage run leaves out four: `contract_test`, the two integration guards and `hashmap_multi_test`); 8 Shape-B cover TUs run beside them: `option_cover`, `result_cover`, `vec_cover`, `deque_cover`, `vec_range_cover`, `vec_fmt_cover`, `stack_cover`, `array_cover` |
-| **Results**        | MC/DC 2021 / 2194 (92.1%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
+| **Results**        | MC/DC 2023 / 2196 (92.1%), from the job's annotation; lines, functions and branches in the results table below, and how they were read in the note under it |
 
 > **Note (2026-11-01).** Until today this card described CI #1317
 > (9f7a9d0, 2026-09-29), and the notes below brought it forward one run at
@@ -270,10 +270,18 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 97.0%      | 2917       | 3007       |
-| Functions  | 99.6%      | 750        | 753        |
-| Branches   | 91.8%      | 1769       | 1928       |
-| MC/DC      | 92.1%      | 2021       | 2194       |
+| Lines      | 97.0%      | 2923       | 3013       |
+| Functions  | 99.6%      | 752        | 755        |
+| Branches   | 91.8%      | 1771       | 1930       |
+| MC/DC      | 92.1%      | 2023       | 2196       |
+
+> **Brought up to 978e4de (VERIFY-055), 2026-11-03.** MC/DC is CI's,
+> 2023 / 2196, from the coverage job's annotation; lines, functions and
+> branches from the job's steps run on the same tree, whose MC/DC matched
+> CI's. The one row that moved is `hashmap_impl.h`, 63 / 90 → 65 / 92: the
+> typed loop that empties the slots, both outcomes covered. Lines +6,
+> functions +2 and branches +2, all covered; the new helper is their likely
+> source, not traced line by line.
 
 > **Brought up to 5f0387d (VERIFY-054), 2026-11-02.** MC/DC is CI's,
 > 2021 / 2194, from the coverage job's annotation; lines, functions and
@@ -1016,7 +1024,14 @@ and after the paragraphs below say where a reading here no longer holds.
 | vec_fmt.h  | 2         |              5286 | 5239 (99.11%) | 47       | VERIFY-042   |
 | stack.h    | 14        |              5783 | 5714 (98.81%) | 69       | VERIFY-049   |
 | array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
-| **Total**  | **494**   | **68926**         | **68280 (99.06%)**| **646**  |              |
+| hashmap    | 19        |              4640 | 4585 (98.81%) | 55       | VERIFY-054/55 |
+| **Total**  | **513**   | **73566**         | **72865 (99.05%)**| **701**  |              |
+
+*Brought to the pins again 2026-11-03 (VERIFY-055).* hashmap's row is new:
+`frama-c-hashmap`, the same line and names at runs 1 and 2 (173b7a2,
+978e4de), enforced from run 3, 4585 / 4640 with 55 unproved, 40 inherited
+and 15 own, filed by name. The total is 73566 obligations, 72865 proved and
+701 unproved, from 68926, 68280 and 646.
 
 *Brought to the pins again 2026-11-01 (VERIFY-052).* array.h's row is new:
 `frama-c-array`, the same line and names at runs 1 and 2 (23bad5e,
@@ -1832,6 +1847,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-11-01 | 0ae029f → 7617c7a | B&T #5 → #6 | v1.3.0  | 97.0%  | 99.6%     | 91.7%    | 92.1%  | **array.h enforced** (VERIFY-052), module 23: run 2 on 0ae029f gave run 1's line and names; pinned 2863/2887 with 24 names; the 8 own filed under VERIFY-017's byte-view block (6) and VERIFY-008 Category 3 (2), no new block. Coverage as at run 1. |
 | 2026-11-02 | e083310 → fd9664f | B&T #7 | v1.3.0  | 97.0%  | 99.6%     | 91.6%    | 92.0%  | **data/convenience/** (VERIFY-053), light treatment: five memory-safety defects fixed, each shown under ASan first — dynvec's unchecked size products and self-extend, smallvec's pointer into `init`'s dead frame (which the tests had patched around), dynstring's self-append and unterminated `reserve`. No proof moved. MC/DC 1986/2158, the one row moving `dynstring.h` 84/110 → 91/120. |
 | 2026-11-02 | 31e6d3e → 5f0387d | B&T #8 → #9 | v1.3.0  | 97.0%  | 99.6%     | 91.8%    | 92.1%  | **data/hashmap/** before its proof (VERIFY-054): `hashmap_init` refuses a buffer misaligned for its slots; two maps in one TU, the separate-compilation recipe and `hashmap_range.h`, documented but never compiled, now built and tested; per-map option and result names. Run 1 left `static-analysis` red (a test path and a macro cppcheck could not expand), fixed at run 2. MISRA 55 → 66, each finding classified. MC/DC 2021/2194. No proof moved. |
+| 2026-11-03 | 5f0387d → 978e4de | B&T #10 → #11 | v1.3.0  | 97.0%  | 99.6%     | 91.8%    | 92.1%  | **hashmap** (VERIFY-055), module 24, and the agreed order of the data/ layer done. Predicted at d04130c before the contracts (173b7a2): a shape invariant per map, memory safety, frames, `len` bookkeeping and termination; the Robin Hood order not claimed. `init` and `clear` empty the slots by a typed loop, not `memset`. Run 1 on 173b7a2, 4585/4640, 15 own (two masks; 13 that rest on the probe distance bound) and 40 inherited, 0 Failed; five predictions matched, one partly missed (the float goal proved, a third outcome). Run 2 on 978e4de: the same line and names. Enforced at 4585/4640 with 55 names; the masks filed under VERIFY-039's fixed-width block, the 13 under a new block. MC/DC 2021/2194 → 2023/2196 (the typed loop's two outcomes, covered); lines, functions and branches measured locally with CI's commands, as its MC/DC matched. |
 
 > **Note (2026-11-02): the commit and CI columns of the rows above.**
 > - **CI numbers since VERIFY-050.** VERIFY-050 split the one CI workflow

@@ -10,11 +10,20 @@ Combined verification status across all annotated headers:
 
 | Metric               | Value                                                                          |
 |----------------------|--------------------------------------------------------------------------------|
-| **Headers verified** | 24 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
-| **Functions**        | 493 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20; lifetime.h's 1 counted separately) |
-| **Total obligations**| 68922 (summed over the 24 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
-| **Proved automatic** | 68276 (99.06%)                                                                 |
-| **Unproved**         | 646 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+| **Headers verified** | 25 (checked.h, bits.h, compare.h, ptr.h, slice.h, memory.h, arena.h, pool.h, region.h, error.h, option, result, borrow.h, diag.h, vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h, hashmap) — lifetime.h is a 25th unit of narrower scope, see VERIFY-021 |
+| **Functions**        | 512 annotated and verified (371 + priority_queue.h's 41 + range.h's 15 + stringbuf.h's 29 + vec_range.h's 1 + vec_fmt.h's 2 + stack.h's 14 + array.h's 20 + hashmap's 19; lifetime.h's 1 counted separately) |
+| **Total obligations**| 73562 (summed over the 25 verification units; substrate goals are re-emitted in each downstream unit, so this counts goal-instances, not distinct obligations) |
+| **Proved automatic** | 72861 (99.05%)                                                                 |
+| **Unproved**         | 701 (each filed by name in `docs/deviations.md`; see per-header sections)      |
+
+*Recomputed 2026-11-03 (VERIFY-055, hashmap enforced from its run 3).*
+`frama-c-hashmap` adds a twenty-fifth unit: +19 functions (13 public, four
+internal helpers and the two lifetime no-ops; the driver's hash and
+equality functions not counted), +4640 obligations, +4585 proved and +55
+unproved, 40 inherited and 15 own. The own are filed under VERIFY-039's
+fixed-width block (2) and a new block, the probe distance bound (13).
+Runs 1 and 2 (173b7a2, 978e4de) gave the same line and names. The card
+previously read 24 / 493 / 68922 / 68276 / 646.
 
 *Recomputed 2026-11-01 (VERIFY-052, array.h enforced from its run 3).*
 `frama-c-array` adds a twenty-fourth unit: +20 functions, +2887
@@ -4528,6 +4537,52 @@ padding, bytes may differ where values do not).
 
 ---
 
+## data/hashmap/ (in-place contracts under -CC)
+
+### Summary
+
+| Property               | Value                                          |
+|------------------------|-------------------------------------------------|
+| **Status**             | Verified (15 own residuals: 2 under an existing block, 13 under a new one) |
+| **Baseline commit**    | 173b7a2 (run 1) → 978e4de (run 2, the same line and names) → enforced from run 3 |
+| **Functions**          | 19, at `u64 → int`: 13 public (`buffer_size`, `init`, `clear`, `len`, `capacity`, `is_empty`, `load_factor`, `insert`, `get`, `get_or_null`, `contains_key`, `remove`, `iter_next`), four helpers (`_hm_home`, `_hm_wrap`, `_hm_normalize_hash`, `empty_slots_`) and the two lifetime no-ops; loop annotations in every loop |
+| **Proof obligations**  | 4585 / 4640 discharged automatically (98.81%) |
+| **Unproved**           | 55: **40 inherited** (bits.h's 12, checked.h's 2, slice.h's 8 memcmp-danglingness, result's 6 at `(Bool, Error)`, and option's 6 and result's 6 at `hashmap_val_t`) and **15 own**; 0 Failed, 0 Invalid, 0 Stepout |
+| **Own residuals**      | 2 masks (`_hm_home`, `_hm_wrap`: `x & (capacity - 1u) < capacity`), filed under VERIFY-039's fixed-width block; 13 goals of `insert` and `remove` that rest on the probe distance bound, a new block in VERIFY-055 |
+| **Prover setup**       | Alt-Ergo 2.6.3 + Z3 4.15.2 + CVC5 1.2.1        |
+| **Frama-C version**    | 29.0 (Copper)                                   |
+| **WP flags**           | `-wp -wp-rte -wp-split -wp-timeout 120 -wp-model Typed+Cast`, preprocessed with `-CC` |
+| **Driver**             | `vmacros/vdrivers/hashmap_verify.h`: `hashmap.h` at `u64 → int`, with the quick start's hash and equality functions, each contracted |
+| **CI enforcement**     | Yes, in `.github/workflows/proofs-data.yml` (job `frama-c-hashmap`): pinned `4585 / 4640` + the 55 unproved names (`PIN_NAMES`, set equality); fails on any Failed, Invalid or Stepout goal |
+| **CI artifact**        | `wp-proof-hashmap`                              |
+
+hashmap is **module 24**. Its contracts state a shape invariant per map,
+`HASHMAP_FN(inv_)`: a capacity from 1 to 2^30, `len` at most the
+capacity, `capacity` valid slots apart from the map struct, each slot's
+probe distance below the capacity, and an occupied slot's hash not 0.
+`init` establishes it and every mutator keeps it. Also claimed: memory
+safety (`-wp-rte`), frames (`insert`, `remove` and `clear` write only `len`
+and the slots; the queries nothing), `len` bookkeeping, the documented
+errors, and termination.
+
+**Defects found before the prover ran** (VERIFY-054):
+- `hashmap_init` accepted a buffer misaligned for its slots. It now
+  refuses one with `ERR_INVALID_ARG`.
+- Two maps in one file, the separate-compilation recipe and
+  `hashmap_range.h` were documented and never compiled. Each is now built
+  by a test.
+
+**One change for the proof** (VERIFY-055): `init` and `clear` empty the
+slots with a typed loop, not `memset`, which WP's typed model does not carry
+to the slots' fields.
+
+**Not claimed:** the Robin Hood order, so nothing about which value `get`
+returns or that `remove` removes the key asked for (the tests and the fuzzer
+are that evidence); capacities above 2^30; `load_factor`'s value; anything
+at another key or value type.
+
+---
+
 ## Triple-prover rationale
 
 Canon-C's verification baseline uses three SMT provers in sequence:
@@ -4700,7 +4755,7 @@ discipline) recorded for deque.
 > inherited were named in advance. Those 2 were contract.h's handler pair,
 > which VERIFY-039 G14 found false as written; they closed at CI #1368.
 
-### data/ (in progress — vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h enforced)
+### data/ (vec, deque, bitset, priority_queue.h, range.h, stringbuf.h, vec_range.h, vec_fmt.h, stack.h, array.h, hashmap enforced; queue.h and convenience/ reviewed)
 
 | Header       | Status           | Proved    | Notes                                                                  |
 |--------------|------------------|-----------|------------------------------------------------------------------------|
@@ -4718,7 +4773,7 @@ discipline) recorded for deque.
 | convenience/dynvec.h | Reviewed (light), not WP-verified | — | Heap vector (VERIFY-053). Not WP-verified by design: heap allocation is where WP's reasoning is weakest (VERIFY-008 Category 1). Fixed: unchecked byte-count products (heap overflow) and `extend` from its own buffer (use after free). Evidence: tests, fuzzing, sanitizers, Valgrind. |
 | convenience/smallvec.h | Reviewed (light), not WP-verified | — | Inline-first vector (VERIFY-053). Fixed: a pointer into `init`'s dead stack frame, which the tests had patched around; the quick start's missing vec requirement; `as_vec`'s empty view. Evidence as dynvec. |
 | convenience/dynstring.h | Reviewed (light), not WP-verified | — | Heap string builder (VERIFY-053). Fixed: appending its own text (use after free) and `reserve` leaving it unterminated. Evidence as dynvec; MC/DC 91/120. |
-| hashmap      | Planned (WP); reviewed | — | Shape A (confirmed) — in-place surface via `hashmap_impl.h`, no cover TU needed. VERIFY-054 fixed what came before a proof: an unchecked buffer alignment, and three documented paths that never compiled (two maps per file, separate compilation, `hashmap_range.h`). The WP unit is the next record. |
+| hashmap      | ✅ Verified | 4585/4640 | Module 24 (VERIFY-054 fixed it first; VERIFY-055 proved it): 19 functions contracted in place under `-CC`, a shape invariant per map; enforced from run 3; 55 unproved, 40 inherited and 15 own (two masks, VERIFY-039's fixed-width block; 13 the probe distance bound, a new block). The Robin Hood order, and so what `get` returns, is not claimed. |
 
 ### algo/ (longer term)
 

@@ -2965,7 +2965,7 @@ no invariant; the invariant's goals are gone and the termination is proved, so
 option inherits no residual since. The step pins 222 / 228 and 6, all own, at
 CI #1368 and at CC #51.
 
-### option-own residuals (24 — 6 at each of `int`, `Rec`, `usize` and `isize`; 32 at each before VERIFY-039 G11)
+### option-own residuals (30 — 6 at each of `int`, `Rec`, `usize`, `isize` and, from VERIFY-055, `hashmap_val_t`; 32 at each before VERIFY-039 G11)
 
 **Category 1 — combinator function-pointer dispatch (24 — 6 at each of `int`, `Rec`, `usize` and `isize`; 32 at each before VERIFY-039 G11)**
 
@@ -3151,7 +3151,7 @@ fifteen non-handler-related, non-combinator obligations surfaces prove
 fully (see the own-residual section for the twelve fully-proved
 functions).
 
-### result-own residuals (12 — 6 at `int`/`VErr` and 6 at `Bool`/`Error`; 28 at `int`/`VErr` before VERIFY-039 G11)
+### result-own residuals (18 — 6 at each of `int`/`VErr`, `Bool`/`Error` and, from VERIFY-055, `hashmap_val_t`/`Error`; 28 at `int`/`VErr` before VERIFY-039 G11)
 
 **Category 1 — combinator function-pointer dispatch (12 — 6 at `int`/`VErr` and 6 at `Bool`/`Error`; 28 at `int`/`VErr` before VERIFY-039 G11)**
 
@@ -17804,12 +17804,12 @@ is how the record compares names.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_result_Bool_Error_map_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
-| 2 | `typed_result_Bool_Error_map_err_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `map_err` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
-| 3 | `typed_result_Bool_Error_and_then_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `and_then` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
-| 4 | `typed_result_Bool_Error_or_else_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `or_else` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
-| 5 | `typed_result_Bool_Error_eq_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_ok` only when both are Ok, and requires `\valid_function(eq_ok)` there |
-| 6 | `typed_result_Bool_Error_eq_assert_rte_function_pointer_2` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct` | `eq` calls `eq_err` only when both are Err, and requires `\valid_function(eq_err)` there |
+| 1 | `typed_result_Bool_Error_map_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct`, `frama-c-hashmap` | `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 2 | `typed_result_Bool_Error_map_err_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct`, `frama-c-hashmap` | `map_err` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
+| 3 | `typed_result_Bool_Error_and_then_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct`, `frama-c-hashmap` | `and_then` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 4 | `typed_result_Bool_Error_or_else_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct`, `frama-c-hashmap` | `or_else` calls `f` only when `!r.is_ok`, and requires `\valid_function(f)` there |
+| 5 | `typed_result_Bool_Error_eq_assert_rte_function_pointer` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct`, `frama-c-hashmap` | `eq` calls `eq_ok` only when both are Ok, and requires `\valid_function(eq_ok)` there |
+| 6 | `typed_result_Bool_Error_eq_assert_rte_function_pointer_2` | `frama-c-deque`, `frama-c-vec`, `frama-c-priority-queue`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-deque`, `cc-vec`, `cc-vec_struct`, `frama-c-hashmap` | `eq` calls `eq_err` only when both are Err, and requires `\valid_function(eq_err)` there |
 
 ### G11 — repair at option's copies in bitset and range: committed prediction (before the fix commit)
 
@@ -18812,14 +18812,14 @@ VERIFY-012 get dated notes. G13 is closed.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
-| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
-| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
-| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_b` |
-| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
-| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
-| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
-| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
+| 1 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | on the path to memcmp `a.len == b.len` and the pointers are distinct and non-null; for `a.len > 0` that is `no_dangling_a`'s guard, and its quantifier is `non_escaping(a.ptr, a.len)`; for `a.len == 0` the requirement is empty |
+| 2 | `typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | the same, by `no_dangling_b`, of `b.ptr[0 .. b.len - 1]`, `b.len` being `a.len` |
+| 3 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | as `bytes_equal`'s, for two `str_t` views: `no_dangling_a` under `init_ab`'s guard, and an empty requirement at length 0 |
+| 4 | `typed_cast_str_equal_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | the same, by `no_dangling_b` |
+| 5 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | memcmp is reached with `prefix.len <= s.len`, `prefix.ptr` non-null and `prefix.len > 0`, `no_dangling_s`'s guard; its quantifier is `non_escaping(s.ptr, prefix.len)` |
+| 6 | `typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | the same, by `no_dangling_prefix`, of `prefix.ptr[0 .. prefix.len - 1]` |
+| 7 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | memcmp is reached under `no_dangling_s`'s guard, and its quantifier, over `s.ptr[s.len - suffix.len .. s.len - 1]`, is `non_escaping(s.ptr + (s.len - suffix.len), suffix.len)`, the bytes memcmp reads |
+| 8 | `typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2` | `frama-c-slice`, `frama-c-memory`, `frama-c-arena`, `frama-c-arena-32`, `frama-c-pool`, `frama-c-region`, `frama-c-vec`, `frama-c-borrow`, `frama-c-bitset`, `frama-c-priority-queue`, `frama-c-stringbuf`, `frama-c-vec-range`, `frama-c-vec-fmt`, `cc-slice`, `cc-borrow`, `cc-vec`, `cc-vec_struct`, `frama-c-array`, `frama-c-hashmap` | the same, by `no_dangling_suffix`, of `suffix.ptr[0 .. suffix.len - 1]` |
 | 9 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s1` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | memcmp is reached with equal lengths above 0 and distinct non-null pointers, inside `no_dangling_a`'s guard; its quantifier is `non_escaping(a.bytes.ptr, a.bytes.len)` |
 | 10 | `typed_cast_borrowed_bytes_eq_call_memcmp_requires_danglingness_s2` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | the same, by `no_dangling_b`, `b.bytes.len` being `a.bytes.len` |
 | 11 | `typed_cast_borrowed_str_eq_call_str_equal_requires_no_dangling_a` | `frama-c-borrow`, `frama-c-bitset`, `frama-c-stringbuf`, `frama-c-vec-fmt`, `cc-borrow` | `str_equal`'s `no_dangling_a` on `a.str` and `b.str`, which `borrowed_str_eq`'s own `no_dangling_a` states of the same views under the same guard |
@@ -18970,6 +18970,15 @@ which is what C keeps of a left shift of a `u64`. In `normal`,
 `(u64)(src << start)` its `src << start`, and the all-ones value XOR
 `shifted_mask` its `~mask`, by the complement above. Each term of the
 postcondition is the C term it names.
+
+*Added at VERIFY-055 (2026-11-03), for hashmap's `_hm_home` and `_hm_wrap`,
+filed by name under this block:* each returns `x & (capacity - 1u)`, for a
+`u64` hash or a `usize` index `x`, with `capacity >= 1` by its precondition.
+For unsigned operands, every bit set in `a & b` is set in `b`, so
+`a & b <= b`; here `b = capacity - 1u` with no wrap (`capacity >= 1`), so the
+result is at most `capacity - 1`, below `capacity`, which is each
+postcondition. WP writes the result as `land(x, capacity - 1)` and does not
+bound it within 120 s.
 
 **Retirement.** ACSL lemmas for the identities, each with a goal of its own,
 or a prover that reasons on bit vectors; neither was tried. A change with its
@@ -19799,7 +19808,7 @@ that states it, dated today, after the text batch 6 wrote.
 
 | # | Goal | Units | Reading |
 |---|---|---|---|
-| 1 | `typed_cast_bits_insert_normal_ensures_part3` | `frama-c-bitset` | `normal`, `0 < count < 64`: `(u64)(m << start)` is the code's `mask`, `(u64)(src << start)` its `src << start`, and `0xFFFFFFFFFFFFFFFF ^ shifted_mask` its `~mask`, so the two sides are the same terms |
+| 1 | `typed_cast_bits_insert_normal_ensures_part3` | `frama-c-bitset`, `frama-c-hashmap` | `normal`, `0 < count < 64`: `(u64)(m << start)` is the code's `mask`, `(u64)(src << start)` its `src << start`, and `0xFFFFFFFFFFFFFFFF ^ shifted_mask` its `~mask`, so the two sides are the same terms |
 | 2 | `typed_bits_insert_normal_ensures` | `frama-c-bits` | the bits job's sample name; its roll-call matches it unanchored, so it stands for row 1's part, which WP splits the same way there (WP 25, run locally) |
 
 **VERIFY-008's Category 2, its two rows restated.** Since G16 `align_padding`
@@ -27731,7 +27740,7 @@ its WP unit is the next record, pre-registered once this one is on master.
 |----------------|-------|
 | **ID**         | VERIFY-055 |
 | **Date**       | 2026-11-02 |
-| **Status**     | PREDICTED. This record and the rebuilt catalogue are committed before the contract commit, which is pushed with them; neither has run in CI. |
+| **Status**     | CLOSED (2026-11-03) — predicted at d04130c, before the contract commit 173b7a2; run 1 on 173b7a2 (Q1–Q4 and Q7 matched, Q5 partly missed: the float goal proved), run 2 on 978e4de (name-identical, Q6 matched); enforced at 4585 / 4640 with 55 names; one new argument block, verifier-bound (*A* 34 cumulative and 20 in force, *V* 22 and 17) |
 | **Baseline**   | f4c713b (VERIFY-054 closed) |
 | **Scope**      | `data/hashmap/hashmap_impl.h` (contracts, loop annotations, the slot-emptying helper), `hashmap.h` (documentation); a new driver `vmacros/vdrivers/hashmap_verify.h`; a new job `frama-c-hashmap` in `proofs-data.yml`, report-only |
 | **Category**   | hashmap's full treatment, its second step: the WP unit. Decided with the author (2026-11-02): pre-register now with the expected residual stated by class, and let CI's first run, with its three provers, give the list, rather than iterate on local runs whose prover set differs; and let run 1 report a goal a prover fails on (Failed) without failing. |
@@ -27877,3 +27886,127 @@ as well. The record then files the 55: class A under VERIFY-006's bitwise
 block if its argument covers a mask below its modulus, class B under a new
 block on the probe distance bound, and the 40 inherited by name; and the
 job is enforced.
+
+### Run 2 scored, and enforced (2026-11-03): VERIFY-055 closed
+
+**Run 2** ran on 978e4de: 79 jobs, all `success`. `frama-c-hashmap` read
+**4585 / 4640, the same as run 1**, with the same 15 own names and 40
+inherited, now posted by name, and no Failed, Invalid or Stepout goal.
+
+**Q6: MATCH.** The 40 inherited are the closure's known residuals:
+- `bits.h`'s 12, as `frama-c-bitset` pins them (`bits_is_power_of_two`
+  is called by `hashmap_init`, so the header is in the unit);
+- `checked.h`'s 2 and `slice.h`'s 8 memcmp-danglingness;
+- result at `(Bool, Error)`'s 6 combinators, as the data/ units pin them;
+- option's 6 and result's 6 at the map's value type, `hashmap_val_t`:
+  the combinators' function-pointer goals, filed below as `int`'s are.
+
+**Enforced.** From this commit `frama-c-hashmap` fails on any difference:
+the line `4585 / 4640` and the 55 names, by set equality (`PIN_NAMES`), and
+any Failed, Invalid or Stepout goal.
+
+**Filing.** The 28 inherited already filed gain `frama-c-hashmap` in their
+rows' Units cells. The other 12, at the new type, are filed below beside
+`int`'s. Class A, the two masks, is filed under VERIFY-039's fixed-width
+block, which gains a paragraph on a mask below its modulus. Class B is a new
+block, below: no existing argument covers the probe distance bound.
+
+**Filed by name**: VERIFY-014, option-own residuals
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_option_hashmap_val_t_map_assert_rte_function_pointer` | `frama-c-hashmap` | as `option_int`'s row 1: `map` calls `f` only when `o.has_value`, and requires `\valid_function(f)` there |
+| 2 | `typed_cast_option_hashmap_val_t_and_then_assert_rte_function_pointer` | `frama-c-hashmap` | as row 2, `and_then` |
+| 3 | `typed_cast_option_hashmap_val_t_or_else_assert_rte_function_pointer` | `frama-c-hashmap` | as row 3, `or_else` and `fallback` |
+| 4 | `typed_cast_option_hashmap_val_t_filter_assert_rte_function_pointer` | `frama-c-hashmap` | as row 4, `filter` and `pred` |
+| 5 | `typed_cast_option_hashmap_val_t_combine_with_assert_rte_function` | `frama-c-hashmap` | as row 5, `combine_with`; WP shortens the name at this type |
+| 6 | `typed_cast_option_hashmap_val_t_eq_assert_rte_function_pointer_part2` | `frama-c-hashmap` | as row 6, `eq` |
+
+**Filed by name**: VERIFY-015, result-own residuals
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_result_hashmap_val_t_Error_map_assert_rte_function_pointer` | `frama-c-hashmap` | as `result_Bool_Error`'s row 1: `map` calls `f` only when `r.is_ok`, and requires `\valid_function(f)` there |
+| 2 | `typed_cast_result_hashmap_val_t_Error_map_err_assert_rte_function` | `frama-c-hashmap` | as row 2, `map_err`; WP shortens the name at this type |
+| 3 | `typed_cast_result_hashmap_val_t_Error_and_then_assert_rte_function` | `frama-c-hashmap` | as row 3, `and_then`; shortened likewise |
+| 4 | `typed_cast_result_hashmap_val_t_Error_or_else_assert_rte_function` | `frama-c-hashmap` | as row 4, `or_else`; shortened likewise |
+| 5 | `typed_cast_result_hashmap_val_t_Error_eq_assert_rte_function_pointer` | `frama-c-hashmap` | as row 5, `eq` and `eq_ok` |
+| 6 | `typed_cast_result_hashmap_val_t_Error_eq_assert_rte_function_pointer_2` | `frama-c-hashmap` | as row 6, `eq` and `eq_err` |
+
+**Filed by name**: VERIFY-039, Fixed-width arithmetic stated over unbounded integers
+
+| # | Goal | Units | Reading |
+|---|---|---|---|
+| 1 | `typed_cast_hm_home_ensures` | `frama-c-hashmap` | `hash & (capacity - 1u) < capacity`: the block's paragraph added at VERIFY-055 |
+| 2 | `typed_cast_hm_wrap_ensures` | `frama-c-hashmap` | `index & (capacity - 1u) < capacity`: the same |
+
+#### The probe distance bound (13)
+
+| # | Goal | Units |
+|---|---|---|
+| 1 | `typed_cast_hashmap_insert_loop_invariant_7_preserved_part1` | `frama-c-hashmap` |
+| 2 | `typed_cast_hashmap_insert_loop_invariant_7_preserved_part3` | `frama-c-hashmap` |
+| 3 | `typed_cast_hashmap_insert_room_ensures_part5` | `frama-c-hashmap` |
+| 4 | `typed_cast_hashmap_insert_assigns_exit_part10` | `frama-c-hashmap` |
+| 5 | `typed_cast_hashmap_insert_assigns_normal_part18` | `frama-c-hashmap` |
+| 6 | `typed_cast_hashmap_remove_valid_ensures_part12` | `frama-c-hashmap` |
+| 7 | `typed_cast_hashmap_remove_valid_ensures_part13` | `frama-c-hashmap` |
+| 8 | `typed_cast_hashmap_remove_valid_ensures_part14` | `frama-c-hashmap` |
+| 9 | `typed_cast_hashmap_remove_valid_ensures_2_part12` | `frama-c-hashmap` |
+| 10 | `typed_cast_hashmap_remove_valid_ensures_2_part13` | `frama-c-hashmap` |
+| 11 | `typed_cast_hashmap_remove_valid_ensures_2_part14` | `frama-c-hashmap` |
+| 12 | `typed_cast_hashmap_remove_assigns_exit_part12` | `frama-c-hashmap` |
+| 13 | `typed_cast_hashmap_remove_assigns_normal_part22` | `frama-c-hashmap` |
+
+**Functions affected**: `hashmap_insert`, `hashmap_remove`.
+
+**Root cause**: the clause is `HASHMAP_FN(dist_)`: every slot's probe
+distance `psl` is below the capacity, and an occupied slot's hash is not 0.
+Insert's loop invariant 7 is that clause; its `preserved` parts are the
+step after a Robin Hood swap, which stores the incoming element with its
+running distance. The contracts do not state why that distance stays below
+the capacity: it is the element's distance from its home slot, which the
+Robin Hood order, not stated, bounds. `insert`'s and `remove`'s
+postconditions that need the clause after the loop (`room` part 5;
+`remove`'s `valid` clauses, `HASHMAP_FN(inv_)` and the `len` clause, parts
+12 to 14), and the frame goals of the paths through the loop, rest on the
+same unproved step: with the invariant open at the loop, WP has no
+separation of the slots from the map struct after the loop's writes. The
+part numbers are WP's splits; which conjunct each part holds was not read
+(the log is not readable here). The argument below covers every conjunct
+of each clause.
+
+**Manual proof argument**: in `insert`, by the load check, `len` is below
+`capacity - capacity / 4`, at most `capacity - 1`, so at least one slot is
+empty. An element's `psl` is the number of steps from its home slot to its
+slot: it is 0 when placed at home; each step of the probe moves it one slot
+on and adds 1; a swap places the incoming element at the current slot with
+its running count, and takes up the resident with the resident's own count,
+which then grows by one per step as it moves on. So every count is a
+distance travelled from a home slot, forward, without passing an empty slot,
+since the first empty slot reached ends the probe. The longest run of
+occupied slots has fewer than `capacity` slots, one being empty, so no
+distance reaches `capacity`: every stored `psl` is below it, which is the
+clause, and an element is stored occupied with its normalised hash, not 0.
+In `remove`'s backward shift, each step copies the next slot into the
+current one with its `psl` less 1, past a check that it is not 0, so it
+stays below the capacity, and the last slot of the run is emptied with
+`psl` 0 and `occupied` false; no other slot is written. The map struct is
+apart from the slots (`HASHMAP_FN(shape_)`, kept, its parts proved), so
+`len` is written once, at the end: `remove`'s `len` clause is
+`\old(len) - 1`, and every write is in the frame, `len` and the slots,
+which is each assigns goal. Verifier-bound: every clause holds for every
+call the contracts admit.
+
+**Retirement.** State the Robin Hood order (each slot's `psl` equals the
+distance from its hash's home slot, modulo the capacity, and an empty slot
+ends every run) as part of the map's invariant, and prove it; that would
+also give "get finds what insert stored", which VERIFY-055 does not claim.
+A change with its own prediction.
+
+**VERIFY-055 is closed.** data/hashmap/ is verified (module 24, the
+twenty-fifth unit with lifetime.h's): safety, frames, `len` and termination,
+4585 / 4640, 15 own residuals, two classes, each argued. *A* gains one
+block, verifier-bound: *A* 34 cumulative and 20 in force, *V* 22 and 17.
+The agreed order of the data/ layer is
+done.

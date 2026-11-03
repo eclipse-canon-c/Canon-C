@@ -3146,8 +3146,67 @@ jobs:
       - name: "WP under -CC: data/hashmap/ at u64 -> int"
         run: |
           eval $(opam env --switch=frama-c)
-          ENFORCE=0   # VERIFY-055: report-only (run 2, name stability); run 1 on 173b7a2
-          PIN_PROVED="4585 / 4640"   # run 1's line, compared and reported, not enforced
+          ENFORCE=1   # VERIFY-055: enforced from run 3; pins from runs 1 and 2 (173b7a2, 978e4de), identical
+          PIN_PROVED="4585 / 4640"
+          # The 55 unproved names, by set equality: 15 own (VERIFY-055's two
+          # classes) and 40 inherited, each filed by name in docs/deviations.md.
+          PIN_NAMES=(
+            "typed_cast_bits_bswap16_assert_rte_signed_overflow"
+            "typed_cast_bits_bswap32_ensures"
+            "typed_cast_bits_bswap64_ensures"
+            "typed_cast_bits_clear_ensures"
+            "typed_cast_bits_insert_normal_ensures_part3"
+            "typed_cast_bits_next_power_of_two_normal_ensures_2_part3"
+            "typed_cast_bits_next_power_of_two_normal_ensures_3_part3"
+            "typed_cast_bits_next_power_of_two_normal_ensures_4_part3"
+            "typed_cast_bits_next_power_of_two_normal_ensures_part3"
+            "typed_cast_bits_popcount_ensures"
+            "typed_cast_bits_rotl_assert_rte_shift_2"
+            "typed_cast_bits_rotr_assert_rte_shift_2"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_checked_add_overflow_ensures"
+            "typed_cast_checked_add_u64_overflow_ensures"
+            "typed_cast_hashmap_insert_assigns_exit_part10"
+            "typed_cast_hashmap_insert_assigns_normal_part18"
+            "typed_cast_hashmap_insert_loop_invariant_7_preserved_part1"
+            "typed_cast_hashmap_insert_loop_invariant_7_preserved_part3"
+            "typed_cast_hashmap_insert_room_ensures_part5"
+            "typed_cast_hashmap_remove_assigns_exit_part12"
+            "typed_cast_hashmap_remove_assigns_normal_part22"
+            "typed_cast_hashmap_remove_valid_ensures_2_part12"
+            "typed_cast_hashmap_remove_valid_ensures_2_part13"
+            "typed_cast_hashmap_remove_valid_ensures_2_part14"
+            "typed_cast_hashmap_remove_valid_ensures_part12"
+            "typed_cast_hashmap_remove_valid_ensures_part13"
+            "typed_cast_hashmap_remove_valid_ensures_part14"
+            "typed_cast_hm_home_ensures"
+            "typed_cast_hm_wrap_ensures"
+            "typed_cast_option_hashmap_val_t_and_then_assert_rte_function_pointer"
+            "typed_cast_option_hashmap_val_t_combine_with_assert_rte_function"
+            "typed_cast_option_hashmap_val_t_eq_assert_rte_function_pointer_part2"
+            "typed_cast_option_hashmap_val_t_filter_assert_rte_function_pointer"
+            "typed_cast_option_hashmap_val_t_map_assert_rte_function_pointer"
+            "typed_cast_option_hashmap_val_t_or_else_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_and_then_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_result_Bool_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_map_err_assert_rte_function_pointer"
+            "typed_cast_result_Bool_Error_or_else_assert_rte_function_pointer"
+            "typed_cast_result_hashmap_val_t_Error_and_then_assert_rte_function"
+            "typed_cast_result_hashmap_val_t_Error_eq_assert_rte_function_pointer"
+            "typed_cast_result_hashmap_val_t_Error_eq_assert_rte_function_pointer_2"
+            "typed_cast_result_hashmap_val_t_Error_map_assert_rte_function_pointer"
+            "typed_cast_result_hashmap_val_t_Error_map_err_assert_rte_function"
+            "typed_cast_result_hashmap_val_t_Error_or_else_assert_rte_function"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_equal_call_memcmp_requires_danglingness_s2"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1"
+            "typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2"
+          )
           OUT=wp_hashmap_output.txt
           set +e
           frama-c -wp -wp-rte \
@@ -3176,19 +3235,18 @@ jobs:
           grep -oE "^\[wp\] \[(Timeout|Unknown)\] [A-Za-z0-9_]+" "${OUT}" | awk '{print $3}' | sort -u > unproved.txt
           grep -E '(hashmap_|_hm_)' unproved.txt | grep -vE '_(option|result)_hashmap_val_t_' > own.txt || true
           grep -vxFf own.txt unproved.txt > inherited.txt || true
+          printf '%s\n' "${PIN_NAMES[@]}" | sort -u > pins.txt
           echo "=== unproved: $(wc -l < unproved.txt) (own $(wc -l < own.txt), inherited $(wc -l < inherited.txt)) ==="
-          echo "=== own ==="; sed 's/^/    /' own.txt
-          echo "=== inherited ==="; sed 's/^/    /' inherited.txt
+          echo "=== unproved, not pinned ==="; comm -13 pins.txt unproved.txt | sed 's/^/    /'
+          echo "=== pinned, not unproved ==="; comm -23 pins.txt unproved.txt | sed 's/^/    /'
           echo "=== Failed / Invalid / Stepout: $(wc -l < bad.txt) ==="; sed 's/^/    /' bad.txt
-          if [ "${PROVED}" = "${PIN_PROVED}" ]; then SAME="same as run 1"; else SAME="run 1 read ${PIN_PROVED}"; fi
-          echo "::notice title=frama-c-hashmap::proved ${PROVED} (report-only; ${SAME}); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt)"
-          echo "::notice title=frama-c-hashmap own::$(tr '\n' ' ' < own.txt)"
-          # VERIFY-055 run 2: the inherited names too, which the pins need and
-          # the session cannot read from the log or the artifact.
-          echo "::notice title=frama-c-hashmap inherited::$(tr '\n' ' ' < inherited.txt)"
-          echo "::notice title=frama-c-hashmap bad::$(tr '\n' ' ' < bad.txt)"
-          if [ "${ENFORCE}" -eq 1 ] && [ -s bad.txt ]; then
-            echo "FAIL: Failed, Invalid or Stepout goals (above)."; exit 1
+          FAILS=0
+          if cmp -s pins.txt unproved.txt; then echo "NAMES SAME: the 55 pinned names."; else echo "DIFFERS: the unproved set (above)."; FAILS=$((FAILS + 1)); fi
+          if [ "${PROVED}" = "${PIN_PROVED}" ]; then echo "PROVED SAME: ${PROVED}"; else echo "DIFFERS: proved ${PROVED}, pinned ${PIN_PROVED}."; FAILS=$((FAILS + 1)); fi
+          if [ -s bad.txt ]; then echo "DIFFERS: Failed, Invalid or Stepout goals (above)."; FAILS=$((FAILS + 1)); fi
+          echo "::notice title=frama-c-hashmap::proved ${PROVED} (pin ${PIN_PROVED}); unproved $(wc -l < unproved.txt): own $(wc -l < own.txt), inherited $(wc -l < inherited.txt); failed/invalid/stepout $(wc -l < bad.txt); ${FAILS} difference(s)"
+          if [ "${FAILS}" -ne 0 ] && [ "${ENFORCE}" -eq 1 ]; then
+            echo "FAIL: ${FAILS} difference(s) from the pins."; exit 1
           fi
       - name: Upload WP output (hashmap)
         if: always()

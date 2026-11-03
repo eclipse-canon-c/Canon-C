@@ -293,6 +293,9 @@
  * probe loops terminate. They do not state the Robin Hood order, so "get
  * finds what insert stored" is tested, not proved. The verified contract
  * admits capacities up to 2^30, which the code does not itself refuse.
+ * WP leaves 15 of the unit's own goals unproved (two bit masks, and 13 that
+ * rest on the probe distance staying below the capacity); each is argued by
+ * hand in docs/deviations.md (VERIFY-055).
  *
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * DESIGN NOTES
