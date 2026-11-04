@@ -143,7 +143,10 @@ jobs:
           # and arena.h's six in_object calls, all proved. Before: vec
           # 5524 / 5593, vec_struct 5522 / 5591. Held at runs 1 and 2 (a32639e, CC #12;
           # 6102084, CC #13), enforced from run 3.
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5532 / 5601", unproved: 69  }
+          # VERIFY-059 predicted pins: vec and vec_struct +12 each,
+          # ptr_in_range's and ptr_range_in_range's result postconditions,
+          # all proved. Before: vec 5532 / 5601, vec_struct 5530 / 5599.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5544 / 5613", unproved: 69  }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
@@ -154,7 +157,7 @@ jobs:
           # and 97.
           # VERIFY-040 round 3: predicted pin, as cc-vec's. Before:
           # 5488 / 5581 and 93.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5530 / 5599", unproved: 69  }
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5542 / 5611", unproved: 69  }
     steps:
       - uses: actions/checkout@v6
 
@@ -265,6 +268,7 @@ jobs:
           echo "==============================================================="
 
       - name: "Gates 0-3: proved line, zero refutations, exact count, roll-call (ENFORCED)"
+        continue-on-error: ${{ matrix.family == 'vec' || matrix.family == 'vec_struct' }}   # VERIFY-059 runs 1 and 2, report-only for the two families whose pins move; run 3 removes this line
         shell: bash
         run: |
           OUT="wp_cc_${{ matrix.family }}_output.txt"

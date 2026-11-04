@@ -8414,6 +8414,18 @@ correctness arguments are recorded in VERIFY-006/-008 and enforced by
 the frama-c-ptr / frama-c-memory pinned baselines; the computations
 are centralized in `ptr.h` rather than repeated ad hoc. Suppressed
 via `--suppress=misra-c2012-11.6` in the misra CI job.
+
+**Note (2026-11-04, VERIFY-059).** The suppression also covers sites
+the Scope above does not name, the same conversion for other reasons:
+address comparisons, which compare two pointers' addresses as
+`uintptr_t` values where comparing the pointers is undefined unless they
+point into one object (C11 6.5.8p5): `mem_regions_overlap`'s two casts
+(memory.h, since 6fb8442) and the six of `ptr_in_range` and
+`ptr_range_in_range` (ptr.h, since VERIFY-059); and lifetime.h's token,
+which takes the owner's address into its ID. The misra job's command
+without this suppression finds 11 Rule 11.6 casts at VERIFY-059's
+baseline (ptr.h 7, memory.h 3, lifetime.h 1) and 17 after it, the six
+added in ptr.h.
 ## MISRA-DEV-011: Rule 21.1 — _POSIX_C_SOURCE feature-test macro protocol (util/time.h)
 
 | ID | Date | Scope | Category |

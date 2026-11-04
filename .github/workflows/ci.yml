@@ -342,8 +342,9 @@ jobs:
   #           would fail roughly one run in five and would assert that UB is
   #           reliable. It is printed for the record and nothing more.
   #
-  # This job does not gate any proof baseline and cannot: every WP job runs
-  # with CANON_LIFETIME off, so none of this code is in any verified TU.
+  # This job does not gate any proof baseline and cannot: every WP job but
+  # frama-c-lifetime runs without CANON_LIFETIME_DEBUG, and frama-c-lifetime
+  # proves level 4 alone, so no atomic level (1 to 3) is in any verified TU.
   # See MISRA-DEV-018 for the rule 1.2 deviation the atomic intrinsics need.
   # -------------------------------------------------------------------------
   lifetime-token-concurrency:

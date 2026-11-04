@@ -61,10 +61,12 @@
  *   program. All other TUs see the extern declaration and link against it.
  *
  * CANON_STRICT (define to enable)
- *   Promotes ensure() and ensure_msg() to always-on — identical to
- *   require() and require_msg(). Use for certified builds (DO-178C,
+ *   Promotes ensure() and ensure_msg() to always-on: they check their
+ *   condition in every build, as require() and require_msg() do unless
+ *   CANON_NO_REQUIRE is defined. Use for certified builds (DO-178C,
  *   ISO 26262) where debug-only checks must survive into production.
- *   Takes precedence over NDEBUG for ensure variants.
+ *   Takes precedence over NDEBUG, and over CANON_NO_REQUIRE, for ensure
+ *   variants.
  *
  *   #define CANON_STRICT
  *   #include "core/primitives/contract.h"
@@ -79,6 +81,8 @@
  *   checks. Only for environments where contract violations have been
  *   proved impossible by formal verification (Frama-C, SPARK) and the
  *   panic handler overhead is unacceptable (bare metal, ISR).
+ *   Without CANON_STRICT it disables ensure() and ensure_msg() too: in a
+ *   debug build they expand to require() and require_msg().
  *
  *   WARNING: Disabling require() removes Canon-C's last line of defense
  *   against null pointer dereference, overflow, and invariant violations.
@@ -102,7 +106,7 @@
  *   NDEBUG                            ON          OFF
  *   CANON_STRICT                      ON          ON (always)
  *   CANON_STRICT + NDEBUG             ON          ON (STRICT wins)
- *   CANON_NO_REQUIRE                  OFF         debug only
+ *   CANON_NO_REQUIRE                  OFF         OFF (debug: ensure is require)
  *   CANON_NO_REQUIRE + NDEBUG         OFF         OFF
  *   CANON_NO_REQUIRE + CANON_STRICT   OFF         ON
  *
@@ -111,7 +115,7 @@
  *   Development:       default — require ON, ensure debug-only
  *   Release:           NDEBUG  — require ON, ensure OFF
  *   Certified build:   CANON_STRICT — require ON, ensure ON (always)
- *   Formal proof done: CANON_NO_REQUIRE — require OFF (proved impossible)
+ *   Formal proof done: CANON_NO_REQUIRE — require and ensure OFF (proved impossible)
  *   Strict C99:        CANON_NO_GNU_EXTENSIONS — no compiler extensions
  *
  * Performance:
@@ -442,11 +446,12 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * @brief Debug-only contract check — always-on with CANON_STRICT
  *
  * Default behavior:
- * - Debug builds (NDEBUG not defined): ON
+ * - Debug builds (NDEBUG not defined): ON, as require(), so
+ *   CANON_NO_REQUIRE turns it off
  * - Release builds (NDEBUG defined):   OFF
  *
  * With CANON_STRICT defined:
- * - Always ON regardless of NDEBUG — identical to require()
+ * - Always ON, regardless of NDEBUG and of CANON_NO_REQUIRE
  * - Use for certified builds (DO-178C, ISO 26262) where debug
  *   assertions must survive into production
  *
@@ -482,7 +487,8 @@ static inline void contract_set_handler(contract_handler_fn handler) {
  * Like ensure(), but includes a custom error message.
  *
  * With CANON_STRICT: always-on regardless of NDEBUG.
- * Without CANON_STRICT: compiled out when NDEBUG is defined.
+ * Without CANON_STRICT: compiled out when NDEBUG is defined; otherwise
+ * require_msg(), so compiled out by CANON_NO_REQUIRE too.
  *
  * @param cond Condition that should be true
  * @param msg  Custom error message (string literal)

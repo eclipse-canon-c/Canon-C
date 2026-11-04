@@ -59,9 +59,12 @@
  *   ptr_diff()            — positive, negative, zero distances (no NULL)
  *   ptr_span()            — unsigned distance, equal pointers (no NULL)
  *   ptr_in_range()        — NULL args, inside, at start, at end, outside,
- *                           pointer-before-region (MC/DC)
+ *                           pointer-before-region (MC/DC), past the end,
+ *                           inverted region, another object (VERIFY-059)
  *   ptr_range_in_range()  — NULL args, fits, overflow-safe boundary,
- *                           pointer-before-region (MC/DC)
+ *                           pointer-before-region (MC/DC), starting past
+ *                           the end, inverted region, another object
+ *                           (VERIFY-059)
  *   ptr_elem()            — index 0, 1, last; elem_size 1, N (no NULL base)
  *   ptr_elem_const()      — same as ptr_elem for const pointers
  *   ptr_or()              — non-NULL returns p, NULL returns fallback
@@ -549,7 +552,11 @@ static CANON_MAYBE_UNUSED void test_bounds_checking(void) {
  * test_bounds_checking above). We use a single stack buffer and address
  * a sub-range inside it to stay within a single allocation — pointer
  * comparisons across distinct allocations are undefined behavior in C,
- * so two separate arrays would not be a valid test.
+ * so two separate arrays would not be a valid test. (That held until
+ * VERIFY-059, when both functions came to compare addresses as uintptr_t
+ * values; the two conditions named above are now ptr_in_range's up >= us
+ * and ptr_range_in_range's up < us, and test_ptr_range_past_end passes a
+ * pointer into another object.)
  *
  * After adding this test, ptr.h reaches 100% MC/DC (42/42), up from
  * 95.24% (40/42).
@@ -589,6 +596,53 @@ static CANON_MAYBE_UNUSED void test_ptr_range_before_start(void) {
      * circuiting on some unrelated precondition. */
     EXPECT_TRUE(ptr_in_range(inside, region_start, region_end));
     EXPECT_TRUE(ptr_range_in_range(inside, 2, region_start, region_end));
+}
+
+/* =========================================================================
+ * test_ptr_range_past_end (VERIFY-059)
+ *
+ * Before VERIFY-059, ptr_range_in_range returned true for a range that
+ * starts past region_end: it tested p against region_start only, and
+ * region_end - p, negative there, wrapped to a large usize. Both functions
+ * also compared pointers, which C leaves undefined across objects. They now
+ * compare the addresses as uintptr_t values, so a pointer into another
+ * object is a valid argument, and the result is stated in their contracts.
+ *
+ * The region [buf, buf + 64) is a sub-range of a 128-byte buffer, so that a
+ * pointer past the region's end is still inside buf.
+ * ====================================================================== */
+
+static CANON_MAYBE_UNUSED void test_ptr_range_past_end(void) {
+    unsigned char buf[128];
+    unsigned char other[8];
+    const void* start;
+    const void* end;
+    memset(buf, 0, sizeof(buf));
+    memset(other, 0, sizeof(other));
+    start = (const void*)(buf);
+    end   = (const void*)(buf + 64);
+
+    /* A range starting past the region's end: false (true before VERIFY-059) */
+    EXPECT_FALSE(ptr_range_in_range(buf + 100, 1, start, end));
+    EXPECT_FALSE(ptr_range_in_range(buf + 65, 10, start, end));
+    EXPECT_FALSE(ptr_range_in_range(buf + 65,  0, start, end));
+    EXPECT_FALSE(ptr_in_range(buf + 100, start, end));
+
+    /* At the end: the empty range is inside, a byte is not */
+    EXPECT_TRUE(ptr_range_in_range(buf + 64, 0, start, end));
+    EXPECT_FALSE(ptr_range_in_range(buf + 64, 1, start, end));
+
+    /* A length that would wrap the address space */
+    EXPECT_FALSE(ptr_range_in_range(buf + 63, (usize)-1, start, end));
+
+    /* An inverted region contains nothing */
+    EXPECT_FALSE(ptr_in_range(buf + 10, end, start));
+    EXPECT_FALSE(ptr_range_in_range(buf + 10, 0, end, start));
+
+    /* A pointer into another object: defined now, and outside */
+    EXPECT_FALSE(ptr_in_range(other, start, end));
+    EXPECT_FALSE(ptr_range_in_range(other, 1, start, end));
+    EXPECT_TRUE(ptr_in_range(other + 3, other, other + 8));
 }
 
 /* =========================================================================
@@ -869,6 +923,23 @@ int LLVMFuzzerTestOneInput(const unsigned char *data, size_t size) {
             if (!ptr_in_range(pb, base, bend)) __builtin_trap();
         }
 
+        /* Both bounds checks agree with the offsets (VERIFY-059: before
+         * it, ptr_range_in_range was true for a range starting past the
+         * region's end). Every pointer here is inside buf. */
+        {
+            usize lo    = (offset_a < offset_b) ? offset_a : offset_b;
+            usize hi    = (offset_a < offset_b) ? offset_b : offset_a;
+            usize off_p = (usize)(data[3] & 0x7f);
+            usize len   = (size > 4) ? (usize)(data[4] & 0x7f) : (usize)0;
+            const void* rs = ptr_offset_const(base, lo);
+            const void* re = ptr_offset_const(base, hi);
+            const void* pp = ptr_offset_const(base, off_p);
+            bool in_want  = (lo <= off_p) && (off_p < hi);
+            bool rng_want = (lo <= off_p) && (off_p + len <= hi);
+            if (ptr_in_range(pp, rs, re) != in_want)            __builtin_trap();
+            if (ptr_range_in_range(pp, len, rs, re) != rng_want) __builtin_trap();
+        }
+
         /* Null-tolerant NULL passthrough invariants */
         if (ptr_offset(NULL, offset_a)     != NULL)     __builtin_trap();
         if (ptr_align_up(NULL, align)      != NULL)     __builtin_trap();
@@ -894,6 +965,7 @@ int main(void) {
     test_ptr_diff_span();
     test_bounds_checking();
     test_ptr_range_before_start();
+    test_ptr_range_past_end();
     test_ptr_elem();
     test_ptr_null_safety();
     test_offset_of();

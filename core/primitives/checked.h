@@ -139,8 +139,13 @@
  *
  * In debug builds (NDEBUG not defined), CHECKED_ASSERT_RESULT fires if the
  * caller passes a NULL output pointer. In release builds it compiles away
- * completely. Uses contract.h's require_msg when available; falls back to
- * a plain assert so the header stays self-contained.
+ * completely. Uses contract.h's require_msg when contract.h was included
+ * first, as ptr.h includes it, so that the failure goes to the contract
+ * handler; falls back to a plain assert so the header stays self-contained.
+ * (Until VERIFY-059 the test named CANON_CONTRACT_H, which nothing defines,
+ * so the require_msg branch was never taken; contract.h's guard is
+ * CANON_CORE_PRIMITIVES_CONTRACT_H. The branch is for debug builds only,
+ * since require_msg itself is on in release builds too.)
  *
  * Under Frama-C, the ACSL `requires \valid(result)` clause makes runtime
  * checks unnecessary — WP proves the precondition statically.
@@ -164,7 +169,7 @@
      * `requires \valid(result)` clause provides the corresponding
      * static guarantee under Frama-C. */
     #define CHECKED_ASSERT_RESULT(ptr) ((void)0)
-#elif defined(CANON_CONTRACT_H)        /* contract.h already included */
+#elif defined(CANON_CORE_PRIMITIVES_CONTRACT_H) && !defined(NDEBUG)   /* contract.h already included */
     #define CHECKED_ASSERT_RESULT(ptr) \
         require_msg((ptr) != (void*)0, "checked: result pointer must not be NULL")
 #elif !defined(NDEBUG)

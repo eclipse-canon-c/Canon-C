@@ -454,13 +454,13 @@ goals are filed as residuals.
   `9 · Probes` #4, 987 of its 1073 goals are proved; the 86 unproved are
   VERIFY-057's four other kinds.
 - **Relational comparison and subtraction of pointers into different
-  objects** (6.5.8p5, 6.5.6p9). ptr.h's `ptr_in_range` and
-  `ptr_range_in_range` document that their pointers must be in one
-  allocation, and their contracts do not state it: the proofs admit calls
-  that compare pointers into different objects, and in the second subtract
-  them, and no goal checks it. `mem_regions_overlap` has compared
-  `uintptr_t` addresses since 6fb8442, so its result is
-  implementation-defined (6.3.2.3p6), not undefined.
+  objects** (6.5.8p5, 6.5.6p9): no goal checks them. Until VERIFY-059,
+  ptr.h's `ptr_in_range` and `ptr_range_in_range` documented that their
+  pointers must be in one allocation and their contracts did not state it,
+  so the proofs admitted calls that compared pointers into different
+  objects, and in the second subtracted them. They now compare `uintptr_t`
+  addresses, as `mem_regions_overlap` has since 6fb8442, so their results
+  are implementation-defined (6.3.2.3p6), not undefined.
 - **Reads of uninitialised objects**: `-rte-initialized` is off unless a
   function is named to it. Some reads are covered by the C library's
   specifications: Frama-C's `memcmp` requires both ranges initialised.
@@ -488,8 +488,11 @@ its contract states non-overlap with `\separated`. In shipped builds:
   `CANON_NO_REQUIRE`;
 - `ensure` and `ensure_msg` run with `CANON_STRICT`, and otherwise in
   builds with neither `NDEBUG` nor `CANON_NO_REQUIRE`;
-- `CHECKED_ASSERT_RESULT` is `<assert.h>`'s `assert` in builds with neither
-  `CANON_NO_REQUIRE` nor `NDEBUG`, and nothing in the others.
+- `CHECKED_ASSERT_RESULT` checks in builds with neither `CANON_NO_REQUIRE`
+  nor `NDEBUG`, and is nothing in the others. It checks with contract.h's
+  `require_msg` where contract.h was included first, as ptr.h includes it,
+  and with `<assert.h>`'s `assert` otherwise; before VERIFY-059, with
+  `assert` alone.
 
 A check that holds lets the proved code run after it. A check that fails
 calls the contract handler. The default handler aborts. A handler of the

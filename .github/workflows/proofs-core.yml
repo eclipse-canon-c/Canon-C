@@ -532,8 +532,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/primitives/ptr.h"
+        continue-on-error: true   # VERIFY-059 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # ptr.h uses Typed+Cast memory model for the same reason as
-        # compare.h. Expected result: 1954 / 1960 (1952 / 1958 before VERIFY-058) proved (VERIFY-039 G14
+        # compare.h. Expected result: 1966 / 1972 (1954 / 1960 before VERIFY-059) proved (VERIFY-039 G14
         # to G17), exactly 6 unproved, all true: checked.h's overflow
         # postconditions (2), align_up's and align_down's formulas (2),
         # align_padding's formula and ptr_align_padding's bound (2). Any
@@ -617,8 +618,9 @@ jobs:
           # VERIFY-039 G14 to G17 predicted: 22 goals removed and 5 added
           # (1959 / 1975 before).
           # VERIFY-058 predicted: +2 goals, the in_object calls in ptr_elem and ptr_elem_const, all proved (1952 / 1958 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          if [ "${PROVED_COUNT}" != "1954 / 1960" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 1954 / 1960)."
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (1954 / 1960 before).
+          if [ "${PROVED_COUNT}" != "1966 / 1972" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 1966 / 1972)."
             echo "      The goal surface drifted — reclassify in VERIFY-006"
             echo "      (VERIFY-039 for the alignment parts), then ratchet"
             echo "      this pin, EXPECTED_UNPROVED, and CHECKS together in"
@@ -878,7 +880,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/memory.h"
-        # memory.h — Typed+Cast. Expected: 2844 / 2875 (2842 / 2873 before VERIFY-058) proved, exactly 31
+        continue-on-error: true   # VERIFY-059 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
+        # memory.h — Typed+Cast. Expected: 2856 / 2887 (2844 / 2875 before VERIFY-059) proved, exactly 31
         # unproved (VERIFY-008, VERIFY-039 G14 to G18): 14 inherited from
         # the substrate (checked.h 2, ptr.h 4, slice.h's memcmp
         # danglingness 8) + 17 own: \fresh and \freeable, which WP does
@@ -973,8 +976,9 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (2848 / 2879 before).
           # VERIFY-058 predicted: +2 goals, ptr.h's two in_object calls, all proved (2842 / 2873 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          if [ "${PROVED_COUNT}" != "2844 / 2875" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 2844 / 2875)."
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (2844 / 2875 before).
+          if [ "${PROVED_COUNT}" != "2856 / 2887" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 2856 / 2887)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1048,7 +1052,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: memory.h verified — 2844/2875 proved, 31 documented"
+          echo "PASS: memory.h verified — 2856/2887 proved, 31 documented"
           echo "      residuals all observed (VERIFY-008): 14 inherited"
           echo "      from ptr.h/slice.h/checked.h substrate + 17"
           echo "      memory.h-own. Composable verification claim holds:"
@@ -1081,7 +1085,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/arena.h"
-        # arena.h — Typed+Cast. Expected: 3525 / 3558 (3517 / 3550 before VERIFY-058) proved, exactly 33
+        continue-on-error: true   # VERIFY-059 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
+        # arena.h — Typed+Cast. Expected: 3537 / 3570 (3525 / 3558 before VERIFY-059) proved, exactly 33
         # unproved (VERIFY-009, VERIFY-039 G14 to G18): 31 inherited
         # (memory.h's full surface) + 2 own (arena_alloc_zero's and
         # arena_alloc_aligned_zero's third postcondition, VERIFY-039 G4).
@@ -1175,8 +1180,9 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
           # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          if [ "${PROVED_COUNT}" != "3525 / 3558" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3525 / 3558)."
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3525 / 3558 before).
+          if [ "${PROVED_COUNT}" != "3537 / 3570" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3537 / 3570)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1252,7 +1258,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: arena.h verified — 3525/3558 proved, 33 documented"
+          echo "PASS: arena.h verified — 3537/3570 proved, 33 documented"
           echo "      residuals all observed (VERIFY-009): 31 inherited +"
           echo "      2 arena.h-own. Composable verification claim holds:"
           echo "      zero new substrate residuals introduced."
@@ -1284,9 +1290,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/pool.h"
+        continue-on-error: true   # VERIFY-059 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # pool.h — Typed+Cast. Expected: the Proved line and
-        # EXPECTED_UNPROVED pinned below: 4055 / 4089 and 34 as VERIFY-058
-        # predicts (19 goals added, all proved); 4036 / 4070 and 34 since the
+        # EXPECTED_UNPROVED pinned below: 4067 / 4101 and 34 as VERIFY-059
+        # predicts (12 goals added, all proved); 4055 / 4089 and 34 since
+        # VERIFY-058 (19 goals added); 4036 / 4070 and 34 since the
         # VERIFY-008 overlap fix (4042 / 4076 since VERIFY-039 G18)
         # (VERIFY-010): 33 inherited from the substrate
         # + 1 own; G18 added pool_alloc_zero's and the two try wrappers'
@@ -1384,8 +1392,9 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (4042 / 4076 before).
           # VERIFY-058 predicted: +19 goals, ptr.h's two in_object calls, arena.h's six and pool.h's eleven, all proved (4036 / 4070 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          if [ "${PROVED_COUNT}" != "4055 / 4089" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 4055 / 4089)."
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (4055 / 4089 before).
+          if [ "${PROVED_COUNT}" != "4067 / 4101" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 4067 / 4101)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1462,7 +1471,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: pool.h verified — 4055/4089 proved, 34 documented"
+          echo "PASS: pool.h verified — 4067/4101 proved, 34 documented"
           echo "      residuals all observed by name (VERIFY-010): 33"
           echo "      inherited from the substrate + 1 pool.h-own (VERIFY-039"
           echo "      G7). Full set equality enforced. Composable"
@@ -1521,8 +1530,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/region.h"
+        continue-on-error: true   # VERIFY-059 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
-        # Expected: 3693 / 3732 (3685 / 3724 before VERIFY-058) proved, exactly 39 unproved (VERIFY-011,
+        # Expected: 3705 / 3744 (3693 / 3732 before VERIFY-059) proved, exactly 39 unproved (VERIFY-011,
         # VERIFY-039 G14 to G20): 33 inherited (arena.h's full surface,
         # two-hop transitive) + 6 region.h-own: region_begin's invariant,
         # and in region_end the check that a hook is a valid function, the
@@ -1629,8 +1639,9 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3691 / 3730 before).
           # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3685 / 3724 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          if [ "${PROVED_COUNT}" != "3693 / 3732" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3693 / 3732)."
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3693 / 3732 before).
+          if [ "${PROVED_COUNT}" != "3705 / 3744" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3705 / 3744)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
             echo "      then ratchet this pin, EXPECTED_UNPROVED, and CHECKS"
             echo "      together in one acknowledged commit."
@@ -1712,7 +1723,7 @@ jobs:
             echo "      Prover AVAILABILITY is what matters, and it is hard-"
             echo "      gated in .github/actions/framac-setup."
           fi
-          echo "PASS: region.h verified — 3693/3732 proved, 39 documented"
+          echo "PASS: region.h verified — 3705/3744 proved, 39 documented"
           echo "      residuals all observed by name (VERIFY-011): 33"
           echo "      inherited (arena.h's full surface, verbatim) + 6"
           echo "      region.h-own. Full set equality enforced. Composable"
@@ -1820,6 +1831,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/arena.h at 32-bit (ENFORCED — set equality with 64-bit)"
+        continue-on-error: true   # VERIFY-059 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
 
@@ -1914,7 +1926,7 @@ jobs:
           echo "==============================================="
           echo "  WP (arena.h, ${MACHDEP}) exit status: ${WP_EXIT}"
           echo "  MODE: ENFORCED — gate is SET EQUALITY with the 64-bit residuals."
-          echo "  64-bit baseline for comparison: 3525 / 3558 proved,"
+          echo "  64-bit baseline for comparison: 3537 / 3570 proved,"
           echo "  33 residuals (VERIFY-009, ratcheted by VERIFY-023, VERIFY-036 F1, F3, F4, F5 and VERIFY-039 G2; G3 added three proved goals; G14 to G17 closed fifteen; G18 two)."
           echo "==============================================="
 
@@ -2077,8 +2089,9 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
           # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          if [ "${PROVED_COUNT}" != "3525 / 3558" ]; then
-            echo "FAIL: proved-goal summary changed (pinned: 3525 / 3558)."
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3525 / 3558 before).
+          if [ "${PROVED_COUNT}" != "3537 / 3570" ]; then
+            echo "FAIL: proved-goal summary changed (pinned: 3537 / 3570)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"
             echo "      and this job's embedded baseline in one commit."
             FAILURES=$((FAILURES + 1))
@@ -2098,7 +2111,7 @@ jobs:
 
           if [ "${FAILURES}" -eq 0 ]; then
             echo "PASS: arena.h proves identically at 32-bit and 64-bit —"
-            echo "      3525/3558, 33 residuals, same 33 names, zero delta."
+            echo "      3537/3570, 33 residuals, same 33 names, zero delta."
             echo "      Machdep control established. Tier 1's minimum width"
             echo "      is evidenced, not asserted."
           else
@@ -2594,6 +2607,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: ${{ matrix.unit }} at x86_64 and at msvc_x86_64"
+        continue-on-error: ${{ matrix.unit == 'memory' }}   # VERIFY-059 runs 1 and 2, report-only for memory, whose goals move (twelve added at each model, predicted proved); run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           ENFORCE=1   # VERIFY-047: enforced after runs 1 and 2 (platforms #1, attempts 1 and 2) gave equal sets

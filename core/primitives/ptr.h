@@ -116,13 +116,15 @@
  *
  * NOT suitable for:
  * ----------------------------------------------------------------------------
- * - Pointer comparisons across different allocations (UB in C)
+ * - Pointer differences across different allocations (ptr_diff, ptr_span:
+ *   UB in C). The bounds checks compare addresses instead (VERIFY-059)
  * - Raw pointer arithmetic in performance-critical SIMD code (use intrinsics)
  * - Cross-segment addressing on segmented architectures (flat-address
  *   assumption does not hold)
- * - Security-sensitive bounds checks where a malicious caller supplies
- *   region_start and region_end (the comparison semantics assume same
- *   allocation)
+ * - Security-sensitive bounds checks where an untrusted caller supplies
+ *   region_start and region_end: the checks compare addresses with the
+ *   region given, and say nothing of whether that region is memory the
+ *   caller may use
  *
  * @sa types.h
  * @sa limits.h
@@ -905,6 +907,25 @@ static inline usize ptr_span(const void* to, const void* from) {
  * All functions return false on any NULL argument.
  * ========================================================================= */
 
+/* ════════════════════════════════════════════════════════════════════════════
+ * VERIFY-059 — the bounds checks compare ADDRESSES and STATE THEIR RESULT.
+ *
+ * ptr_in_range and ptr_range_in_range compared the pointers with < and >=,
+ * which C leaves undefined unless they point into one object (C11 6.5.8p5),
+ * and ptr_range_in_range also subtracted them (6.5.6p9). Their documentation
+ * required one allocation and their contracts did not; and their use, asking
+ * whether a pointer from elsewhere lies in a buffer, is the case that rules
+ * out. ptr_range_in_range also returned true for a range starting past
+ * region_end: it tested p against region_start only, and region_end - p,
+ * negative there, wrapped to a large usize. Their contracts stated no result
+ * for non-null arguments, so no goal could see it. Both now compare the
+ * addresses as uintptr_t values, as memory.h's mem_regions_overlap does:
+ * defined for any valid pointer (C11 7.20.1.4), implementation-defined only
+ * through the conversion (6.3.2.3p6), which is the address on the
+ * flat-memory targets the CI builds for. Each states its result in those
+ * addresses.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
 /**
  * @brief Test if pointer p lies within [region_start, region_end)
  *
@@ -912,16 +933,18 @@ static inline usize ptr_span(const void* to, const void* from) {
  * @param region_start Region start (inclusive)
  * @param region_end   Region end (exclusive, one-past-last)
  *
- * @return true if p is inside the half-open range, false otherwise
- *         (including when any argument is NULL)
+ * @return true if p's address is in the half-open range of addresses,
+ *         false otherwise (including when any argument is NULL)
  *
- * @pre All three pointers are in the same allocation for defined behavior.
- *      Pointer comparisons across allocations are undefined in C - Canon-C
- *      cannot enforce this at runtime.
- *
+ * @remark Compares the addresses as uintptr_t values (VERIFY-059), so p
+ *         may be any valid pointer: into the region, into another object,
+ *         or past the region's end. C makes the conversion
+ *         implementation-defined (C11 6.3.2.3p6); on flat memory it is
+ *         the address.
  * @remark Null-tolerant: any NULL argument -> false
  * @remark Half-open range: region_end itself is NOT included (standard
  *         C convention for iterator-like endpoints)
+ * @remark A region with region_end <= region_start contains no pointer
  *
  * Example:
  * @code
@@ -930,7 +953,7 @@ static inline usize ptr_span(const void* to, const void* from) {
  *   }
  * @endcode
  *
- * @sa ptr_range_in_range(), ptr_span()
+ * @sa ptr_range_in_range(), ptr_span(), mem_regions_overlap()
  */
 /*@
     assigns  \nothing;
@@ -939,6 +962,9 @@ static inline usize ptr_span(const void* to, const void* from) {
         ensures \result == \false;
     behavior all_nonnull:
         assumes p != \null && region_start != \null && region_end != \null;
+        ensures \result <==>
+            ((uintptr_t)region_start <= (uintptr_t)p &&
+             (uintptr_t)p < (uintptr_t)region_end);
     complete behaviors;
     disjoint behaviors;
  */
@@ -946,8 +972,10 @@ static inline bool ptr_in_range(const void*  p,
                                  const void*  region_start,
                                  const void*  region_end) {
     if (!p || !region_start || !region_end) { return false; }
-    return (const u8*)p >= (const u8*)region_start &&
-           (const u8*)p <  (const u8*)region_end;
+    const uintptr_t up = (uintptr_t)p;
+    const uintptr_t us = (uintptr_t)region_start;
+    const uintptr_t ue = (uintptr_t)region_end;
+    return (up >= us) && (up < ue);
 }
 
 /**
@@ -958,16 +986,18 @@ static inline bool ptr_in_range(const void*  p,
  * @param region_start Region start (inclusive)
  * @param region_end   Region end (exclusive)
  *
- * @return true if [p, p+len) is fully inside the region, false otherwise
- *         (including when any pointer is NULL)
+ * @return true if the addresses [p, p+len) are inside the region's,
+ *         false otherwise (including when any pointer is NULL)
  *
- * @pre All pointers are in the same allocation for defined behavior.
- *
+ * @remark Compares the addresses as uintptr_t values (VERIFY-059), as
+ *         ptr_in_range does: p may be any valid pointer.
  * @remark Null-tolerant: any NULL pointer argument -> false
- * @remark Overflow-safe: never computes p + len directly. Uses
- *         len > (region_end - p) to avoid pointer overflow.
- * @remark A zero-length range at an in-range pointer returns true
- *         (consistent with half-open interval semantics)
+ * @remark Overflow-safe: never computes p + len. Once p's address is
+ *         known to be in [region_start, region_end], it tests
+ *         len <= region_end - p, which cannot wrap.
+ * @remark A zero-length range at an address in [region_start, region_end]
+ *         returns true, region_end included: the empty range at the end
+ *         is inside, as in half-open interval arithmetic
  *
  * Example:
  * @code
@@ -985,6 +1015,9 @@ static inline bool ptr_in_range(const void*  p,
         ensures \result == \false;
     behavior all_nonnull:
         assumes p != \null && region_start != \null && region_end != \null;
+        ensures \result <==>
+            ((uintptr_t)region_start <= (uintptr_t)p &&
+             (uintptr_t)p + len <= (uintptr_t)region_end);
     complete behaviors;
     disjoint behaviors;
  */
@@ -993,13 +1026,11 @@ static inline bool ptr_range_in_range(const void*  p,
                                        const void*  region_start,
                                        const void*  region_end) {
     if (!p || !region_start || !region_end) { return false; }
-    const u8* pb = (const u8*)p;
-    const u8* rs = (const u8*)region_start;
-    const u8* re = (const u8*)region_end;
-    if (pb < rs)               { return false; }  /* starts before region */
-    const isize avail = re - pb;
-    if (len > (usize)avail) { return false; }  /* overflow-safe: no pb+len */
-    return true;
+    const uintptr_t up = (uintptr_t)p;
+    const uintptr_t us = (uintptr_t)region_start;
+    const uintptr_t ue = (uintptr_t)region_end;
+    if ((up < us) || (up > ue)) { return false; }  /* starts outside [start, end] */
+    return len <= (ue - up);                       /* up <= ue: cannot wrap */
 }
 
 /* ============================================================================
