@@ -28433,7 +28433,7 @@ differences from its pins.
 | **ID**         | VERIFY-057 |
 | **Date**       | 2026-11-03 |
 | **Status**     | PREDICTED. This record is committed before the probe commit, which is pushed with it; neither has run in CI. |
-| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. The Status above is the record as committed. |
+| **Status update** | 2026-11-04 — CLOSED: the probe's run on 9207897 (`9 · Probes` #3) matched every prediction; 122 of 1073 goals unproved, 44 names in five kinds. See "Scored (2026-11-04)" below. Kind P repaired by VERIFY-058 (closed 2026-11-04): the probe at a32639e (`9 · Probes` #4) reads 987 / 1073, 86 unproved, 41 names. The Status above is the record as committed. |
 | **Baseline**   | `VERIFY-056 run 3: the first enforced run holds`, on 81220e7 (named by its subject: it is pushed with this record) |
 | **Scope**      | A probe, `pointer-probe` in `.github/workflows/probes.yml`, and its script `tools/probes/verify-057/pointer_probe.py`. No unit's source, contract, job or pin changes. |
 | **Category**   | A gap in what the proofs check, measured before anything is changed. Decided with the author (2026-11-03): probe every unit first, then tighten `ptr_offset`'s contract, each under its own predictions. |
@@ -28676,6 +28676,7 @@ stay with their blocks' arguments.
 | **ID**         | VERIFY-058 |
 | **Date**       | 2026-11-04 |
 | **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-04 — CLOSED: runs 1 (a32639e) and 2 (6102084) gave the same lines and names, and every prediction matched; enforced from run 3. See "Run 2 scored, and enforced" below. The Status above is the record as committed. |
 | **Baseline**   | `VERIFY-057 scored: every prediction matched; 122 of 1073 pointer goals unproved, 44 names in five kinds`, on 9207897 (named by its subject: it may be pushed with this record) |
 | **Scope**      | `core/primitives/ptr.h` (five contracts and their documentation); `.github/workflows/proofs-core.yml`, `proofs-data.yml` and `proofs-cc.yml` (the predicted pins of the jobs whose units include ptr.h, their WP steps, and -CC's gate step, report-only for runs 1 and 2); `.github/workflows/probes.yml` and `tools/probes/verify-057/README.md` (the pointer probe runs when ptr.h changes) |
 | **Category**   | The repair VERIFY-057's score names first: a defect of the contracts, found by a probe. Decided with the author (2026-11-03): tighten `ptr_offset`'s contract, its signature unchanged, its callers owing the new precondition, under its own predictions. |
@@ -28874,3 +28875,34 @@ code identical to a32639e's; the `continue-on-error` lines stay. Q6 is
 scored from it: the fifteen and `frama-c-win64` give the same lines and
 names as run 1. Run 3 then removes the fifteen lines, and the docs are
 brought to the pins.
+
+### Run 2 scored, and enforced (2026-11-04)
+
+The push of 6102084 ran 86 jobs, all `success`: the seven main workflows'
+79 (`4 · Proofs: core/` #18, `6 · Proofs: data/` #18, `5 · Proofs:
+semantics/` #18, `1 · Build & test` #18) and `7 · Proofs: -CC` #13's 7. No
+probe ran: no probe's paths changed.
+
+| # | scored |
+|---|--------|
+| Q6 | **MATCH.** Each of the fifteen, and `frama-c-win64`, gives run 1's proved line and run 1's unproved names, compared name by name from the two runs' logs; none Failed or Invalid, no FAIL line. `frama-c-win64`: "SAME: 31 unproved, the same names at both models" for memory, 12 for bits. `frama-c-stack`: "INHERITED SAME: the 69 cc-vec names, exactly", "OWN NONE". |
+
+Every prediction of this record matched: Q1 to Q5 at run 1, Q6 at run 2.
+
+**Enforced.** The commit carrying this score removes the fifteen
+`continue-on-error` lines, so each job fails on its pin again; the pin
+comments say the pins held at runs 1 and 2. Run 3 is its push.
+
+**The docs** are brought to the pins in the same commit:
+`docs/verification.md`'s card, now 25 / 512 / 73810 / 73118 (99.06%) / 692
+from 73706 and 73014, with a dated note; the expected outputs, summaries and
+roadmap rows of the twelve units; a note in ptr.h's section on the
+`in_object` clauses; `docs/traceability.md`'s proof table, 73814 / 73122
+(99.06%) / 692, and its history; `docs/vmacros.md`'s vec and bitset rows.
+No unproved goal was added or closed, so no block in this file changes, and
+every pinned name keeps its table.
+
+**VERIFY-058 is closed.** Of VERIFY-057's 44 names, the three P goals are
+repaired. The integer conversions (I), the stored pointers (R), the tool's
+`\valid_function` (T) and the three true but unproved (V) remain, to be
+decided each by its code, under its own predictions.

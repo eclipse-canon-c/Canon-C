@@ -532,7 +532,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/primitives/ptr.h"
-        continue-on-error: true   # VERIFY-058 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # ptr.h uses Typed+Cast memory model for the same reason as
         # compare.h. Expected result: 1954 / 1960 (1952 / 1958 before VERIFY-058) proved (VERIFY-039 G14
         # to G17), exactly 6 unproved, all true: checked.h's overflow
@@ -617,7 +616,7 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-039 G14 to G17 predicted: 22 goals removed and 5 added
           # (1959 / 1975 before).
-          # VERIFY-058 predicted: +2 goals, the in_object calls in ptr_elem and ptr_elem_const, all proved (1952 / 1958 before), held at run 1 (a32639e).
+          # VERIFY-058 predicted: +2 goals, the in_object calls in ptr_elem and ptr_elem_const, all proved (1952 / 1958 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
           if [ "${PROVED_COUNT}" != "1954 / 1960" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 1954 / 1960)."
             echo "      The goal surface drifted — reclassify in VERIFY-006"
@@ -879,7 +878,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/memory.h"
-        continue-on-error: true   # VERIFY-058 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # memory.h — Typed+Cast. Expected: 2844 / 2875 (2842 / 2873 before VERIFY-058) proved, exactly 31
         # unproved (VERIFY-008, VERIFY-039 G14 to G18): 14 inherited from
         # the substrate (checked.h 2, ptr.h 4, slice.h's memcmp
@@ -974,7 +972,7 @@ jobs:
           # added or removed (2846 / 2879 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (2848 / 2879 before).
-          # VERIFY-058 predicted: +2 goals, ptr.h's two in_object calls, all proved (2842 / 2873 before), held at run 1 (a32639e).
+          # VERIFY-058 predicted: +2 goals, ptr.h's two in_object calls, all proved (2842 / 2873 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
           if [ "${PROVED_COUNT}" != "2844 / 2875" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 2844 / 2875)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
@@ -1083,7 +1081,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/arena.h"
-        continue-on-error: true   # VERIFY-058 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # arena.h — Typed+Cast. Expected: 3525 / 3558 (3517 / 3550 before VERIFY-058) proved, exactly 33
         # unproved (VERIFY-009, VERIFY-039 G14 to G18): 31 inherited
         # (memory.h's full surface) + 2 own (arena_alloc_zero's and
@@ -1177,7 +1174,7 @@ jobs:
           # added or removed (3521 / 3556 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
-          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at run 1 (a32639e).
+          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
           if [ "${PROVED_COUNT}" != "3525 / 3558" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3525 / 3558)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
@@ -1287,7 +1284,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/pool.h"
-        continue-on-error: true   # VERIFY-058 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # pool.h — Typed+Cast. Expected: the Proved line and
         # EXPECTED_UNPROVED pinned below: 4055 / 4089 and 34 as VERIFY-058
         # predicts (19 goals added, all proved); 4036 / 4070 and 34 since the
@@ -1387,7 +1383,7 @@ jobs:
           # (3998 / 4034 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (4042 / 4076 before).
-          # VERIFY-058 predicted: +19 goals, ptr.h's two in_object calls, arena.h's six and pool.h's eleven, all proved (4036 / 4070 before), held at run 1 (a32639e).
+          # VERIFY-058 predicted: +19 goals, ptr.h's two in_object calls, arena.h's six and pool.h's eleven, all proved (4036 / 4070 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
           if [ "${PROVED_COUNT}" != "4055 / 4089" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 4055 / 4089)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
@@ -1525,7 +1521,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/region.h"
-        continue-on-error: true   # VERIFY-058 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         # region.h — Typed+Cast, 120s / -wp-split, in its own isolated job.
         # Expected: 3693 / 3732 (3685 / 3724 before VERIFY-058) proved, exactly 39 unproved (VERIFY-011,
         # VERIFY-039 G14 to G20): 33 inherited (arena.h's full surface,
@@ -1633,7 +1628,7 @@ jobs:
           # prove and 4 name none (3671 / 3727 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3691 / 3730 before).
-          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3685 / 3724 before), held at run 1 (a32639e).
+          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3685 / 3724 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
           if [ "${PROVED_COUNT}" != "3693 / 3732" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3693 / 3732)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
@@ -1825,7 +1820,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: core/arena.h at 32-bit (ENFORCED — set equality with 64-bit)"
-        continue-on-error: true   # VERIFY-058 runs 1 and 2, report-only: a missed pin fails this step, not the job; run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
 
@@ -2082,7 +2076,7 @@ jobs:
           # frames prove, no goal added or removed (3521 / 3556 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
-          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at run 1 (a32639e).
+          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
           if [ "${PROVED_COUNT}" != "3525 / 3558" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3525 / 3558)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"
@@ -2600,7 +2594,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "WP: ${{ matrix.unit }} at x86_64 and at msvc_x86_64"
-        continue-on-error: ${{ matrix.unit == 'memory' }}   # VERIFY-058 runs 1 and 2, report-only for memory, whose goals move (two added at each model, predicted proved); run 3 removes this line
         run: |
           eval $(opam env --switch=frama-c)
           ENFORCE=1   # VERIFY-047: enforced after runs 1 and 2 (platforms #1, attempts 1 and 2) gave equal sets
