@@ -28913,3 +28913,200 @@ data/` #19, `7 · Proofs: -CC` #14; read from the logs): 86 jobs, all
 the fifteen, and `frama-c-win64`, gives the proved line and the unproved
 names of runs 1 and 2, compared name by name; Failed / Invalid / Stepout 0.
 The pins hold enforced.
+
+## VERIFY-059: Pre-registration — ptr.h's Bounds Checks Compare Addresses and State Their Result; checked.h's Dead Branch; contract.h's Table
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-059 |
+| **Date**       | 2026-11-04 |
+| **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | `docs: the proved configuration, stated; README's claim corrected`, on 530381c (named by its subject: it may be pushed with this record) |
+| **Scope**      | `core/primitives/ptr.h` (`ptr_in_range` and `ptr_range_in_range`: code, contracts, documentation, a banner; the file header's list of unsuitable uses); `test/core/primitives/ptr_test.c` (a test of the cases the old code got wrong, and a check in the fuzz twin); `core/primitives/checked.h` (`CHECKED_ASSERT_RESULT`'s guard and comment); `core/primitives/contract.h` (comments only: its enforcement table, the descriptions of `CANON_STRICT`, `CANON_NO_REQUIRE`, `ensure` and `ensure_msg`, and the recommended configurations); `.github/workflows/proofs-core.yml`, `proofs-data.yml` and `proofs-cc.yml` (the predicted pins of the jobs whose units include ptr.h, report-only for runs 1 and 2); `.github/workflows/ci.yml` (one comment); `docs/verification.md` (two statements of the proved configuration that the change makes stale); a note in MISRA-DEV-010 |
+| **Category**   | Four errors found while stating the proved configuration (`docs/verification.md`): a wrong result that no contract stated, behaviour C leaves undefined that the contracts admitted, a dead branch, and a wrong table. Decided with the author (2026-11-04): compare addresses as `uintptr_t` values and state the results; test contract.h's real guard; correct the table, not the code; before the machine-model proofs. |
+
+### The errors, and what was decided
+
+**F1. `ptr_range_in_range` returned true for a range starting past the
+region's end.** In a 128-byte `buf`, with the region `[buf, buf + 64)`,
+`ptr_range_in_range(buf + 100, 1, buf, buf + 64)` was true, and so were
+`(buf + 65, 10, ...)` and `(buf + 65, 0, ...)`, measured here. The code
+tested `p` against `region_start` only. `region_end - p` was then negative,
+and as a `usize` close to `SIZE_MAX`, so the length test failed only for a
+length close to `SIZE_MAX` too. The contract stated the result only for a
+null argument: WP proved the function with no goal about its result. No
+function of the library calls it, and no test passed a pointer past the
+region's end.
+
+**F2. Both compared pointers that may point into different objects.**
+`ptr_in_range` and `ptr_range_in_range` compared the pointers with `<` and
+`>=`, which C leaves undefined unless they point into one object (C11
+6.5.8p5), and `ptr_range_in_range` subtracted them (6.5.6p9). Their
+documentation required one allocation; their contracts did not, so the
+proofs admitted such calls. Neither `-wp-rte` nor the pointer probe checks
+a comparison. And the question they answer, whether a pointer lies in a
+buffer, is mostly asked of a pointer that may come from elsewhere: the case
+the documented precondition excluded.
+
+**F3. `CHECKED_ASSERT_RESULT`'s `require_msg` branch was dead.** checked.h
+tests `defined(CANON_CONTRACT_H)` to use contract.h's `require_msg` when
+contract.h was included first. Nothing defines that name; contract.h's
+guard is `CANON_CORE_PRIMITIVES_CONTRACT_H`. So the check was `assert` in
+builds with neither `CANON_NO_REQUIRE` nor `NDEBUG`, and nothing in the
+others, whatever the header's comment said.
+
+**F4. contract.h's enforcement table was wrong for `CANON_NO_REQUIRE`.** It
+gave `ensure()` as "debug only" there. In a debug build `ensure()` expands
+to `require()`, which `CANON_NO_REQUIRE` makes `((void)0)`: it is off. The
+descriptions of `ensure()` and `ensure_msg()` left the case out.
+
+The author's decisions: F1 and F2 by one change, the addresses compared as
+`uintptr_t` values, as `mem_regions_overlap` has done since 6fb8442
+(VERIFY-008), with postconditions that state each result; F3 by testing
+contract.h's guard, so that the check works as the header documents it, in
+debug builds only; F4 by correcting the table and the descriptions, not
+the code, whose behaviour is what the coverage job, Debug with
+`CANON_NO_REQUIRE`, measures. All of it before the machine-model proofs.
+
+### The change
+
+1. **`ptr_in_range`** and **`ptr_range_in_range`** convert their three
+   pointers to `uintptr_t` and compare the values, which is defined for any
+   valid pointer (C11 7.20.1.4): C makes the conversion's result
+   implementation-defined (6.3.2.3p6), and on the flat-memory targets the CI
+   builds for it is the address. `ptr_range_in_range` returns false unless
+   `p`'s address is in `[region_start, region_end]`, and then tests
+   `len <= region_end - p`, which cannot wrap. The signatures stay. Each contract's `all_nonnull`
+   behaviour gains its result:
+   `\result <==> ((uintptr_t)region_start <= (uintptr_t)p && (uintptr_t)p < (uintptr_t)region_end)`
+   and
+   `\result <==> ((uintptr_t)region_start <= (uintptr_t)p && (uintptr_t)p + len <= (uintptr_t)region_end)`,
+   over the mathematical integers. The `@pre` requiring one allocation goes;
+   a `@remark` says what the conversion is; a banner opens the section, and
+   the file header no longer lists the bounds checks' comparisons among the
+   undefined uses. A zero-length range at `region_end` is inside, as before.
+2. **The tests.** `test_ptr_range_past_end` in `ptr_test.c`: the three
+   ranges past the end above, the end itself, a length that would wrap, an
+   inverted region, and a pointer into another object. The fuzz twin checks
+   both functions against the offsets of pointers into its buffer. On the
+   old ptr.h three of the new test's checks fail, four where the other
+   array lies above `buf` (as under Clang with ASan: the old code took that
+   range for inside too), and the fuzz check traps; on the new one both
+   pass. Over all 128^4 regions, pointers and lengths the fuzz check can
+   draw, the new functions agree with the offsets everywhere, and the old
+   `ptr_range_in_range` disagrees in 88432640 cases (run here).
+3. **checked.h** tests `defined(CANON_CORE_PRIMITIVES_CONTRACT_H) &&
+   !defined(NDEBUG)`, and its comment says why. The second test keeps the
+   check a debug one, as the header documents it: `require_msg` itself is
+   on in release builds. Under `CANON_NO_REQUIRE`, which every proof job and
+   the coverage job set, the first branch is taken, as before, and builds
+   with `NDEBUG` are unchanged. In a build with neither, a unit that
+   includes contract.h before checked.h, as every unit that reaches
+   checked.h through ptr.h does, checks a null result pointer with
+   `require_msg`, which calls the contract handler, where it called
+   `assert`. Such a unit then needs the handler's definition linked, which
+   contract.h requires of a program that includes it (`CANON_CONTRACT_IMPL`)
+   and which every test links. Measured here with `checked_add` and a null
+   result pointer in a unit that includes ptr.h: in a debug build the old
+   code's `assert` fails and the new code's handler reports the violation;
+   with `NDEBUG`, neither checks.
+4. **contract.h**, comments only: the table's row reads OFF, and the
+   descriptions of `CANON_NO_REQUIRE`, `ensure()` and `ensure_msg()`, and
+   the recommended configurations, say that without `CANON_STRICT`
+   `CANON_NO_REQUIRE` turns `ensure` off too. The descriptions of
+   `CANON_STRICT` no longer call `ensure` identical to `require`, which
+   under `CANON_NO_REQUIRE` it is not: `ensure` on, `require` off.
+5. **The jobs.** Each job whose unit includes ptr.h gets its predicted pin,
+   its WP step report-only for runs 1 and 2 (`continue-on-error: true`), as
+   in VERIFY-058; -CC's gate step for vec and vec_struct, and
+   `frama-c-win64`'s step for memory, likewise. Run 3 removes the lines. No
+   unproved count and no roll-call changes, as predicted below.
+6. **ci.yml**: the comment of `lifetime-token-concurrency` said that every
+   WP job runs with `CANON_LIFETIME` off; `frama-c-lifetime` runs
+   `CANON_LIFETIME_DEBUG`, at level 4, and no atomic level is in a verified
+   unit.
+7. **The docs.** `docs/verification.md`'s proved configuration: its
+   statements on comparisons across objects and on `CHECKED_ASSERT_RESULT`
+   are brought to the change. MISRA-DEV-010, whose suppression of Rule 11.6
+   covers the new casts, gains a note naming them (see below).
+
+### Local runs, stated with their limits
+
+WP 25 with Z3 4.8 and CVC4 1.8 at 10 s, where CI runs WP 29 with Alt-Ergo,
+Z3 and CVC5 at 120 s; each unit with its job's file, preprocessing, model
+and machine model; `-wp-fct ptr_in_range,ptr_range_in_range`; the
+baseline's code before, the change's after.
+
+| units | functions run | before | after | added | added, unproved here |
+|-------|---------------|--------|-------|-------|----------------------|
+| ptr, memory, arena, pool, region, vec, bitset, priority_queue, vec_range, vec_fmt, stringbuf, stack; -CC's vec and vec_struct; arena at `gcc_x86_32`; memory at `msvc_x86_64` | the two | 31 / 31 each | 43 / 43 each | 12 | — |
+
+The twelve are the two new postconditions, which WP 25 splits by the
+functions' paths into six parts each. Each proves in under 0.1 s. No goal
+of the two functions present before is removed or changes status.
+
+**The units' text.** Each job's unit, preprocessed with its flags before
+and after, was compared. In the fourteen units that hold ptr.h, the code
+differs in the two functions' bodies alone and the ACSL in their two
+contracts alone. In the other nineteen, the fourteen main units without
+ptr.h and -CC's slice, result, option, borrow and deque, both are the same.
+checked.h's and contract.h's changes reach no proof unit: their comments
+are not ACSL, and the branch that changed lies behind `CANON_NO_REQUIRE`'s.
+No function of the library calls the two, so no other goal can change.
+
+**Whole units, counting only** (`-wp-prover qed`, Qed alone, as VERIFY-058
+counted): ptr 1864 goals before and 1876 after; memory 2688 and 2700, at
+`msvc_x86_64` as at the default model; arena at `gcc_x86_32` 3327 and 3339.
+Each unit's total moves by the twelve and by nothing else. WP 25 does not
+count as WP 29 does (CI counts 1960 goals in ptr), so Q2 predicts the
+change, from the pins, not WP 25's totals.
+
+**The probe's flags** (`-warn-invalid-pointer -wp-prop pointer_value`) on
+the two functions: no goal, before or after. Their pointers are converted
+and compared, not computed.
+
+**Measured with the CI's tools, here.** The tests: 58 of 58 pass under
+GCC 13 and Clang 18 in Debug with ASan and UBSan, and in Release, and under
+GCC at `-m32`; the 98 tests of the fuzzing build pass, `fuzz_ptr_test` for
+its 25 s; `ptr_test.c` compiles under MinGW GCC 13 at `-O3 -DNDEBUG
+-Werror`. MISRA (cppcheck 2.13.0, the misra job's command): 66 real
+violations before and after, the same file and rule pairs. The job
+suppresses Rule 11.6, casts between a pointer to void and an arithmetic
+type, under MISRA-DEV-010, whose Scope names alignment round-trips; its
+command without that suppression finds 11 such casts before and 17 after,
+the six added in the two functions. MISRA-DEV-010's note names them, with
+`mem_regions_overlap`'s two and lifetime.h's one, also outside its Scope's
+words. Coverage (the coverage job's steps, GCC 14.2): before, CI's figures
+exactly; after, 2933 of 3014 lines, 753 of 756 functions, 1777 of 1932
+branches, 2030 of 2198 MC/DC outcomes, ptr.h's 42 of 42 before and after. The new code has as many
+conditions as the old: `ptr_range_in_range`'s two decisions of one condition
+became one of two, and its length test a returned comparison.
+
+### Predictions
+
+Run 1 is the fix commit's push, report-only; run 2 the next push that runs
+these jobs; run 3 removes the `continue-on-error` lines. Each part is scored
+from the jobs' logs and annotations.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **Every added goal is proved, and no other goal changes status**, in the thirteen jobs and the two -CC families whose units include ptr.h (`frama-c-win64` is Q3): each keeps its unproved count and its roll-call. | an added goal unproved; a pinned name gone or new; any Failed or Invalid | M–H |
+| Q2 | **The counts**, as WP 25 makes them: +12 in each of the fifteen, no goal removed. The predicted pins: ptr 1966 / 1972; memory 2856 / 2887; arena and arena-32 3537 / 3570; pool 4067 / 4101; region 3705 / 3744; vec 5495 / 5588; bitset 4986 / 5060; priority_queue 4680 / 4718; vec_range 5179 / 5224; vec_fmt 5259 / 5306; stringbuf 4809 / 4846; stack 5734 / 5803; -CC's vec 5544 / 5613 and vec_struct 5542 / 5611. | another count in any of them | M: the count rests on WP 25's split of each postcondition into six parts, and WP 29 has split clauses otherwise (VERIFY-008's overlap probe, two goals more on both trees; VERIFY-040 round 2) |
+| Q3 | **The machine-model jobs**: `frama-c-win64`'s memory at 2856 / 2887 at both models, the same 31 names; `frama-c-arena-32` at 3537 / 3570, the same 33 names as its 64-bit set. | another line, or the sets differ | M–H |
+| Q4 | **The pointer probe** runs (ptr.h changed): every unit's line and names as at `9 · Probes` #4, 987 / 1073 in all, 86 unproved, 41 names. | any change | H |
+| Q5 | **Nothing else moves**: the jobs whose units do not include ptr.h, and -CC's slice, result, option, borrow and deque, at their pins; the build, the tests and the fuzz targets green, the new test included; the six earlier probes do not run; `misra` at 66 real violations; coverage at 2933 of 3014 lines, 753 of 756 functions, 1777 of 1932 branches and 2030 of 2198 MC/DC outcomes; record coverage passes. | any change | H for the pins and the probes; M–H for the builds, since MSVC, macOS, CompCert and the platform jobs were not run here |
+| Q6 | **Run 2** gives each of them, and `frama-c-win64`, the same line and names as run 1. | a difference | M–H |
+
+**What follows.** If every part matches, run 3 enforces the pins, and the
+docs are brought to them: `docs/verification.md`'s card (73954 / 73262, from
+73810 / 73118, twelve goals in each of the twelve main units), its rows,
+and a dated note in ptr.h's section, whose "Functional correctness" named
+the bounds checks while their contracts stated a result only for a null
+argument; `docs/traceability.md`'s proof table and its coverage figures;
+`docs/vmacros.md`'s rows. A MISS in Q2 alone changes the
+pins, after run 2 confirms the measured line; an added goal unproved (Q1)
+is read against its code, filed or repaired, before anything is enforced.
+Then the machine-model proofs.
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
