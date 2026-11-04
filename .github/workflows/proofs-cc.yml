@@ -141,7 +141,7 @@ jobs:
           # (vec 5530 / 5599, vec_struct 5528 / 5597 before).
           # VERIFY-058 predicted pins: vec and vec_struct +8 each, ptr.h's two
           # and arena.h's six in_object calls, all proved. Before: vec
-          # 5524 / 5593, vec_struct 5522 / 5591.
+          # 5524 / 5593, vec_struct 5522 / 5591. Held at run 1 (a32639e, CC #12).
           - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5532 / 5601", unproved: 69  }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).

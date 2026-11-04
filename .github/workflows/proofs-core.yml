@@ -617,7 +617,7 @@ jobs:
           PROVED_COUNT=$(echo "${PROVED_LINE}" | grep -oP '\d+ / \d+' | head -1 || true)
           # VERIFY-039 G14 to G17 predicted: 22 goals removed and 5 added
           # (1959 / 1975 before).
-          # VERIFY-058 predicted: +2 goals, the in_object calls in ptr_elem and ptr_elem_const, all proved (1952 / 1958 before).
+          # VERIFY-058 predicted: +2 goals, the in_object calls in ptr_elem and ptr_elem_const, all proved (1952 / 1958 before), held at run 1 (a32639e).
           if [ "${PROVED_COUNT}" != "1954 / 1960" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 1954 / 1960)."
             echo "      The goal surface drifted — reclassify in VERIFY-006"
@@ -974,7 +974,7 @@ jobs:
           # added or removed (2846 / 2879 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (2848 / 2879 before).
-          # VERIFY-058 predicted: +2 goals, ptr.h's two in_object calls, all proved (2842 / 2873 before).
+          # VERIFY-058 predicted: +2 goals, ptr.h's two in_object calls, all proved (2842 / 2873 before), held at run 1 (a32639e).
           if [ "${PROVED_COUNT}" != "2844 / 2875" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 2844 / 2875)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
@@ -1177,7 +1177,7 @@ jobs:
           # added or removed (3521 / 3556 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
-          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before).
+          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at run 1 (a32639e).
           if [ "${PROVED_COUNT}" != "3525 / 3558" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3525 / 3558)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
@@ -1387,7 +1387,7 @@ jobs:
           # (3998 / 4034 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (4042 / 4076 before).
-          # VERIFY-058 predicted: +19 goals, ptr.h's two in_object calls, arena.h's six and pool.h's eleven, all proved (4036 / 4070 before).
+          # VERIFY-058 predicted: +19 goals, ptr.h's two in_object calls, arena.h's six and pool.h's eleven, all proved (4036 / 4070 before), held at run 1 (a32639e).
           if [ "${PROVED_COUNT}" != "4055 / 4089" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 4055 / 4089)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
@@ -1633,7 +1633,7 @@ jobs:
           # prove and 4 name none (3671 / 3727 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3691 / 3730 before).
-          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3685 / 3724 before).
+          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3685 / 3724 before), held at run 1 (a32639e).
           if [ "${PROVED_COUNT}" != "3693 / 3732" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3693 / 3732)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
@@ -2082,7 +2082,7 @@ jobs:
           # frames prove, no goal added or removed (3521 / 3556 before).
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
-          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before).
+          # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at run 1 (a32639e).
           if [ "${PROVED_COUNT}" != "3525 / 3558" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3525 / 3558)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"

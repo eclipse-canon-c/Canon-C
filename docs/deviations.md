@@ -28822,3 +28822,55 @@ and V are decided after this record closes.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-11-04): every prediction matched
+
+The push of 91b2470, d058104 and a32639e ran 119 jobs, all `success`: the
+seven main workflows' 79 (`1 · Build & test` #17, `4 · Proofs: core/` #17,
+`6 · Proofs: data/` #17, `5 · Proofs: semantics/` #17, the rest at their
+next numbers), `7 · Proofs: -CC` #12's 7, and `9 · Probes` #4's 33. Run 1
+was report-only, so green says nothing about the pins; each part below is
+read from the jobs' logs and annotations. No step failed under
+`continue-on-error`: every gate in the fifteen printed its PASS or OK, and
+no log carries a FAIL line or an error annotation.
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** Every added goal proved and no other goal changed status: each job's unproved count and roll-call as pinned, none Failed or Invalid; no `in_object` goal among the unproved. |
+| Q2 | **MATCH.** Every count as predicted, the queue's +23 included: WP 29 splits the new clause at the queue's four calls as WP 25 does. |
+| Q3 | **MATCH.** `frama-c-win64`: memory at 2844 / 2875 at both models, "SAME: 31 unproved, the same names"; `frama-c-arena-32` at 3525 / 3558, its 33 names those of the 64-bit set. |
+| Q4 | **MATCH.** The probe's 26 notices: the three P goals proved in each of the twelve units, every unit's names those of `9 · Probes` #3 less the three; 987 / 1073, 86 unproved, 41 names. |
+| Q5 | **MATCH.** Every other job at its pin; -CC's slice, result, option, borrow and deque at theirs; build and tests green; the six earlier probes green; `misra` at 66 real violations; coverage at 2932 of 3013 lines, 1777 of 1932 branches and 2030 of 2198 MC/DC outcomes. |
+| Q6 | Run 2, below. |
+
+The lines, each the predicted pin:
+
+| job | proved | unproved |
+|-----|--------|----------|
+| `frama-c-ptr` | 1954 / 1960 | 6 |
+| `frama-c-memory` (and at `msvc_x86_64`) | 2844 / 2875 | 31 |
+| `frama-c-arena`, `frama-c-arena-32` | 3525 / 3558 | 33 |
+| `frama-c-pool` | 4055 / 4089 | 34 |
+| `frama-c-region` | 3693 / 3732 | 39 |
+| `frama-c-vec` | 5483 / 5576 | 93 |
+| `frama-c-bitset` | 4974 / 5048 | 74 |
+| `frama-c-priority-queue` | 4668 / 4706 | 38 |
+| `frama-c-vec-range` | 5167 / 5212 | 45 |
+| `frama-c-vec-fmt` | 5247 / 5294 | 47 |
+| `frama-c-stringbuf` | 4797 / 4834 | 37 |
+| `frama-c-stack` | 5722 / 5791 | 69 |
+| -CC vec, vec_struct | 5532 / 5601, 5530 / 5599 | 69, 69 |
+
+**What it means.** The three contract defects VERIFY-057 found are repaired:
+`ptr_offset`, `ptr_offset_const` and `ptr_retreat` keep their result in its
+object, and every caller in a verified unit proves it: 104 goals in the
+twelve verification units, 8 in `frama-c-arena-32` and 16 in -CC's two
+families. The two `pq_pop_raw` goals WP 25
+left unproved here are proved in CI, as their 20 siblings are.
+
+**Run 2** is the push of this score. It changes the jobs' pin comments only,
+to say the pins held at run 1, so that the proof workflows run again on
+code identical to a32639e's; the `continue-on-error` lines stay. Q6 is
+scored from it: the fifteen and `frama-c-win64` give the same lines and
+names as run 1. Run 3 then removes the fifteen lines, and the docs are
+brought to the pins.
