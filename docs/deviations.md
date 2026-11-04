@@ -28668,3 +28668,157 @@ pointers and borrow's handles by what their callers are to owe; T and V
 stay with their blocks' arguments.
 
 **VERIFY-057 is closed.**
+
+## VERIFY-058: Pre-registration — Pointer Arithmetic Kept in Its Object: ptr.h's Offsets State Their Bound, and Their Callers Owe It
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-058 |
+| **Date**       | 2026-11-04 |
+| **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Baseline**   | `VERIFY-057 scored: every prediction matched; 122 of 1073 pointer goals unproved, 44 names in five kinds`, on 9207897 (named by its subject: it may be pushed with this record) |
+| **Scope**      | `core/primitives/ptr.h` (five contracts and their documentation); `.github/workflows/proofs-core.yml`, `proofs-data.yml` and `proofs-cc.yml` (the predicted pins of the jobs whose units include ptr.h, their WP steps, and -CC's gate step, report-only for runs 1 and 2); `.github/workflows/probes.yml` and `tools/probes/verify-057/README.md` (the pointer probe runs when ptr.h changes) |
+| **Category**   | The repair VERIFY-057's score names first: a defect of the contracts, found by a probe. Decided with the author (2026-11-03): tighten `ptr_offset`'s contract, its signature unchanged, its callers owing the new precondition, under its own predictions. |
+
+### The defect, and what was decided
+
+VERIFY-057's score, kind P: `ptr_offset`, `ptr_offset_const` and
+`ptr_retreat` compute `(u8*)p + n` or `- n`, and their contracts admit any
+`n`. For an admitted call the result leaves `p`'s object, which C leaves
+undefined whether or not the result is used (C11 6.5.6p8). The probe's
+goal on each result is false. `-wp-rte`, which the proof jobs run, does not
+check a computed pointer, so no pin shows it.
+
+The author's decision: the contracts state the bound, the functions'
+signatures and code stay, and their callers owe the bound and prove it.
+
+### The change
+
+1. **`ptr_offset`** and **`ptr_offset_const`** require
+   `in_object: p == \null || \object_pointer((u8*)p + n)` (`const u8*` for
+   the second); **`ptr_retreat`** requires
+   `in_object: p == \null || \object_pointer((char*)p - n)`, its `ensures`'
+   type. `\object_pointer(q)` holds of a pointer into an object or one past
+   its end, which is C's rule for the result. That `p` itself is in its
+   object is not restated: it is checked where `p` is computed, and the
+   probe checks it there.
+2. **`ptr_elem`** and **`ptr_elem_const`** return
+   `ptr_offset(base, index * elem_size)` and its `const` twin. Without a
+   clause of their own their call would owe what their contracts do not
+   give, and its new goal would be false for an admitted call (an index past
+   the array). They require
+   `in_object: \object_pointer((u8*)base + index * elem_size)` (`const u8*`).
+   This is the decision applied one level up, not a second one: it is the
+   only way for their call to stay true.
+3. **Documentation**: a `@pre` for each of the five; `ptr_retreat`'s
+   `@warning` says the bound is required, and that no run-time check can
+   test it; a banner beside VERIFY-023's.
+4. **No code changes.** No run-time check is added: none can test an object
+   bound.
+5. **The jobs.** Each job whose unit includes ptr.h gets its predicted pin.
+   Its WP step is report-only for runs 1 and 2 (`continue-on-error: true`):
+   a pin that misses fails the step, which the log and an error annotation
+   show, and not the job. Run 3 removes it. No unproved count and no
+   roll-call changes, as predicted below.
+6. **The probe.** `pointer-probe`'s filter gains `core/primitives/ptr.h`, so
+   that it runs on the fix commit and whenever ptr.h changes. Editing
+   `probes.yml` also runs the six earlier probes.
+
+### The callers, and what each owes
+
+| caller | calls | what gives the bound |
+|--------|-------|----------------------|
+| `ptr_elem`, `ptr_elem_const` (ptr.h) | 1 each | their own new clause |
+| `arena_alloc`, `arena_alloc_aligned` | 2 each | `arena_invariant`: `offset <= capacity` and the buffer valid for `capacity` bytes; after the pad, the fit test |
+| `arena_free_bytes`, `arena_free_cbytes` | 1 each | `arena_invariant`, `offset < capacity` |
+| `pool_alloc`, `pool_get`, `pool_get_const` | 2 each (`ptr_offset` and `ptr_elem`) | `pool_invariant`: `base_mark <= end_mark`, `end_mark` within the arena's `capacity`, `end_mark - base_mark == capacity * object_size`; the index below `used` or `capacity` |
+| `pool_as_bytes`, `pool_as_cbytes`, `pool_reserved_bytes`, `pool_reserved_cbytes`, `pool_reset_secure` | 1 each | `pool_invariant` |
+| `pq_swap_` 2, `pq_sift_up_` 2, `pq_sift_down_` 4, `pq_push_result` 1, `pq_pop_raw` 3, `pq_peek_raw` 1, `pq_remove_at_result` 2 | 15 | `pq_wf` (or the function's own `\valid` range): `data` valid for `capacity * elem_size` bytes; each index at most `len <= capacity` |
+
+`algo/`'s sort, search, map, filter, find, unique, reverse and any_all call
+`ptr_elem` and `ptr_elem_const` 29 times. No job verifies them; for them the
+clause is a stated obligation, not a proved one. The tests call the five
+within their buffers.
+
+### Local runs, stated with their limits
+
+WP 25 with Z3 4.8 and CVC4 1.8 at 10 s, where CI runs WP 29 with Alt-Ergo,
+Z3 and CVC5 at 120 s; each unit with its job's file, preprocessing, model
+and machine model. Each run was limited with `-wp-fct` to the functions
+whose goals the change can reach: ptr.h's five, arena.h's four callers,
+pool.h's eight and the queue's seven. The same flags before (9207897's code)
+and after. The runs were made one at a time, but for the 60 s run below,
+which overlapped the runs after only; a loaded machine proves less, not more.
+
+| unit | functions run | before | after | added | added, unproved here |
+|------|---------------|--------|-------|-------|----------------------|
+| ptr | ptr.h's five | 32 / 32 | 34 / 34 | 2 | — |
+| memory, bitset; memory at `msvc_x86_64` | ptr.h's five | not run | 34 / 34 each | 2 | — |
+| arena | and arena.h's four | 278 / 288 | 286 / 296 | 8 | — |
+| arena at `gcc_x86_32`, region, vec, vec_range, vec_fmt, stringbuf, stack; -CC's vec and vec_struct | and arena.h's four | not run | 286 / 296 each | 8 | — |
+| pool | and arena.h's four, pool.h's eight | 501 / 516 | 520 / 535 | 19 | — |
+| priority_queue | and the queue's seven | 768 / 819 | 789 / 842 | 23 | 2 |
+
+Where both runs were made, no goal present before changed status. The
+units run only after leave unproved exactly the ten the arena unit leaves,
+before the change and after: `arena_alloc`'s, which CI proves. One goal
+slowed: `arena_alloc_aligned`'s `does_not_fit` postcondition, part 5, which
+Z3 proved in 1.6 s before and not in 60 s after, and CVC4 proves after in
+0.2 s. The call's precondition is a hypothesis after the call.
+
+**The splits.** WP splits a call's preconditions by the paths that reach the
+call, all of them the same way. WP 25 splits the new clause at four of the
+queue's calls: at `pq_pop_raw`'s second and third, which follow
+`if (out != NULL)`, in two, and at `pq_sift_down_`'s third and fourth, in
+the loop, in three. So the queue's 23 are its fifteen calls with those
+splits, and ptr.h's two.
+
+**The two unproved here** are the first parts of `pq_pop_raw`'s second and
+third calls, the path on which `out` has been written. Run on that function
+at 60 s, WP 25 still leaves them, and 20 of the function's other goals: the
+second call's other three preconditions on the same part, `base != \null`
+included; `mem_copy`'s and `pq_sift_down_`'s preconditions; frames and
+postconditions of both behaviours. CI proves all 20: no goal of
+`pq_pop_raw` is pinned.
+
+**Whole units, counting only** (`-wp-prover qed`, Qed alone, as VERIFY-040's
+count probe counts): each unit's total moves by its count above and by
+nothing else, so no other function gains or loses a goal. WP 25 does not
+count as WP 29 does: before the change it makes 1862 goals in ptr where CI
+counts 1958, 3319 in arena where 3550 and 4374 in the queue where 4683. WP 29
+makes more goals in each unit, and how it splits the new clause is not
+measured here.
+
+**The probe's flags** (`-warn-invalid-pointer -wp-prop pointer_value`),
+before and after: in each of the twelve units the three P goals go
+from unproved to proved, and no other `pointer_value` goal changes status:
+ptr 1 / 6 to 4 / 6, memory 11 / 16 to 14 / 16, arena 22 / 27 to 25 / 27,
+pool 49 / 54 to 52 / 54, region 24 / 33 to 27 / 33, bitset 103 / 112 to
+106 / 112, the queue 38 / 48 to 41 / 48, vec 70 / 88 to 73 / 88, vec_range
+30 / 36 to 33 / 36, vec_fmt 72 / 86 to 75 / 86, stringbuf 70 / 81 to
+73 / 81, stack 72 / 88 to 75 / 88. The I goals stay unproved. (CI proved a
+few more than this tool at `9 · Probes` #3; Q4 counts from CI's.)
+
+### Predictions
+
+Run 1 is the fix commit's push, report-only; run 2 the next push that runs
+these jobs; run 3 removes the `continue-on-error` lines. Each part is scored
+from the jobs' logs and annotations.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| Q1 | **Every added goal is proved, and no other goal changes status**, in the thirteen jobs and the two -CC families whose units include ptr.h (`frama-c-win64` is Q3): each keeps its unproved count and its roll-call. | an added goal unproved; a pinned name gone or new; any Failed or Invalid | M–H; M for `pq_pop_raw`'s two first parts, unproved here, on a path where WP 25 leaves unproved 20 goals CI proves |
+| Q2 | **The counts**, as WP 25 makes them: ptr, memory and bitset +2; arena, arena-32, region, vec, vec_range, vec_fmt, stringbuf, stack, and -CC's vec and vec_struct +8; pool +19; priority_queue +23; no goal removed. The predicted pins are these. | another count in any of them | M; L–M for the queue, whose count rests on WP 25's splits at four calls (VERIFY-040 round 2 found WP 29 splitting a frame otherwise than WP 25) |
+| Q3 | **The machine-model jobs**: `frama-c-win64`'s memory sets equal at both models; `frama-c-arena-32` the same 33 names as its 64-bit set. | the sets differ | M–H |
+| Q4 | **The pointer probe** runs (`probes.yml` and ptr.h changed): `ptr_offset`'s, `ptr_offset_const`'s and `ptr_retreat`'s goals proved in each of the twelve units, three more proved in each, and every other goal's status as at `9 · Probes` #3: 987 / 1073 in all, 86 unproved, 41 names. | a P goal unproved, or any other goal's status changed | M–H |
+| Q5 | **Nothing else moves**: the jobs whose units do not include ptr.h, and -CC's slice, result, option, borrow and deque, at their pins; build and tests green (no code changes); the six earlier probes green; `misra` at 66 real violations; coverage at 2932 of 3013 lines, 1777 of 1932 branches and 2030 of 2198 MC/DC outcomes, as at 9207897. | any change | H |
+| Q6 | **Run 2** gives each of them, and `frama-c-win64`, the same line and names as run 1. | a difference | M–H (G21 found a goal at the 120 s limit) |
+
+**What follows.** If every part matches, run 3 enforces the pins, and the
+docs are brought to them. A MISS in Q2 alone changes the pins, after run 2
+confirms the measured line; an added goal unproved (Q1) is read against its
+code, filed or repaired, before anything is enforced. VERIFY-057's I, R, T
+and V are decided after this record closes.
+
+The fix is pushed with this record, in the commit after it. Its hash
+follows this one, and neither has run in CI.
