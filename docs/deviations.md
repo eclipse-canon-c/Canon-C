@@ -28906,3 +28906,10 @@ every pinned name keeps its table.
 repaired. The integer conversions (I), the stored pointers (R), the tool's
 `\valid_function` (T) and the three true but unproved (V) remain, to be
 decided each by its code, under its own predictions.
+
+**Run 3, the first enforced** (9aade0d, `4 · Proofs: core/` #19, `6 · Proofs:
+data/` #19, `7 · Proofs: -CC` #14; read from the logs): 86 jobs, all
+`success`, with no `continue-on-error` left in the proof workflows. Each of
+the fifteen, and `frama-c-win64`, gives the proved line and the unproved
+names of runs 1 and 2, compared name by name; Failed / Invalid / Stepout 0.
+The pins hold enforced.
