@@ -618,7 +618,7 @@ jobs:
           # VERIFY-039 G14 to G17 predicted: 22 goals removed and 5 added
           # (1959 / 1975 before).
           # VERIFY-058 predicted: +2 goals, the in_object calls in ptr_elem and ptr_elem_const, all proved (1952 / 1958 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (1954 / 1960 before).
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (1954 / 1960 before), held at run 1 (afabc7d).
           if [ "${PROVED_COUNT}" != "1966 / 1972" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 1966 / 1972)."
             echo "      The goal surface drifted — reclassify in VERIFY-006"
@@ -976,7 +976,7 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (2848 / 2879 before).
           # VERIFY-058 predicted: +2 goals, ptr.h's two in_object calls, all proved (2842 / 2873 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (2844 / 2875 before).
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (2844 / 2875 before), held at run 1 (afabc7d).
           if [ "${PROVED_COUNT}" != "2856 / 2887" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 2856 / 2887)."
             echo "      The goal surface drifted — reclassify in VERIFY-008,"
@@ -1180,7 +1180,7 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
           # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3525 / 3558 before).
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3525 / 3558 before), held at run 1 (afabc7d).
           if [ "${PROVED_COUNT}" != "3537 / 3570" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3537 / 3570)."
             echo "      The goal surface drifted — reclassify in VERIFY-009,"
@@ -1392,7 +1392,7 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (4042 / 4076 before).
           # VERIFY-058 predicted: +19 goals, ptr.h's two in_object calls, arena.h's six and pool.h's eleven, all proved (4036 / 4070 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (4055 / 4089 before).
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (4055 / 4089 before), held at run 1 (afabc7d).
           if [ "${PROVED_COUNT}" != "4067 / 4101" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 4067 / 4101)."
             echo "      The goal surface drifted — reclassify in VERIFY-010,"
@@ -1639,7 +1639,7 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3691 / 3730 before).
           # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3685 / 3724 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3693 / 3732 before).
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3693 / 3732 before), held at run 1 (afabc7d).
           if [ "${PROVED_COUNT}" != "3705 / 3744" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3705 / 3744)."
             echo "      The goal surface drifted — reclassify in VERIFY-011,"
@@ -2089,7 +2089,7 @@ jobs:
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37
           # -> 31, all proved (3523 / 3556 before).
           # VERIFY-058 predicted: +8 goals, ptr.h's two in_object calls and arena.h's six, all proved (3517 / 3550 before), held at runs 1 and 2 (a32639e, 6102084), enforced from run 3.
-          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3525 / 3558 before).
+          # VERIFY-059 predicted: +12 goals, ptr_in_range's and ptr_range_in_range's result postconditions, all proved (3525 / 3558 before), held at run 1 (afabc7d).
           if [ "${PROVED_COUNT}" != "3537 / 3570" ]; then
             echo "FAIL: proved-goal summary changed (pinned: 3537 / 3570)."
             echo "      If arena's 64-bit pin also moved, ratchet BOTH jobs"

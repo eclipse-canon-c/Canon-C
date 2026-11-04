@@ -29122,3 +29122,56 @@ Then the machine-model proofs.
 
 The fix is pushed with this record, in the commit after it. Its hash
 follows this one, and neither has run in CI.
+
+### Run 1 scored (2026-11-05): every prediction matched
+
+The push of 97503e0, cc08e1b and afabc7d ran 119 jobs: the seven main
+workflows' 79 (`1 · Build & test` #20, `4 · Proofs: core/` #20,
+`6 · Proofs: data/` #20, `5 · Proofs: semantics/` #20, the rest at their
+next numbers), `7 · Proofs: -CC` #15's 7, and `9 · Probes` #5's 33, of
+which the six earlier probes were skipped, as predicted; the other 113 are
+`success`. Run 1 was report-only, so green says nothing about the pins;
+each part below is read from the jobs' logs. No step failed under
+`continue-on-error`: every gate in the fifteen printed its PASS or OK, and
+no log carries a FAIL line or an error annotation.
+
+| # | scored |
+|---|--------|
+| Q1 | **MATCH.** Every added goal proved and no other goal changed status: each job's unproved count and roll-call as pinned, none Failed, Invalid or Stepout. |
+| Q2 | **MATCH.** Every count as predicted, +12 in each of the fifteen: WP 29 splits the two postconditions as WP 25 does. |
+| Q3 | **MATCH.** `frama-c-win64`: memory at 2856 / 2887 at both models, "SAME: 31 unproved, the same names at both models"; `frama-c-arena-32` at 3537 / 3570, "arena.h proves identically at 32-bit and 64-bit". |
+| Q4 | **MATCH.** The probe's 26 units: the 21 notices with `pointer_value` goals identical, line and names, to those of `9 · Probes` #4, and the other five with none; 987 / 1073, 86 unproved. |
+| Q5 | **MATCH.** Every other job at its pin; -CC's slice, result, option, borrow and deque at theirs; build, tests and fuzz targets green, MSVC, macOS, CompCert and the platform jobs included; the six earlier probes skipped; `misra` at 66 real violations; coverage at 2933 of 3014 lines, 753 of 756 functions, 1777 of 1932 branches and 2030 of 2198 MC/DC outcomes; record coverage `success`. |
+| Q6 | Run 2, below. |
+
+The lines, each the predicted pin:
+
+| job | proved | unproved |
+|-----|--------|----------|
+| `frama-c-ptr` | 1966 / 1972 | 6 |
+| `frama-c-memory` (and at `msvc_x86_64`) | 2856 / 2887 | 31 |
+| `frama-c-arena`, `frama-c-arena-32` | 3537 / 3570 | 33 |
+| `frama-c-pool` | 4067 / 4101 | 34 |
+| `frama-c-region` | 3705 / 3744 | 39 |
+| `frama-c-vec` | 5495 / 5588 | 93 |
+| `frama-c-bitset` | 4986 / 5060 | 74 |
+| `frama-c-priority-queue` | 4680 / 4718 | 38 |
+| `frama-c-vec-range` | 5179 / 5224 | 45 |
+| `frama-c-vec-fmt` | 5259 / 5306 | 47 |
+| `frama-c-stringbuf` | 4809 / 4846 | 37 |
+| `frama-c-stack` | 5734 / 5803 | 69 |
+| -CC vec, vec_struct | 5544 / 5613, 5542 / 5611 | 69, 69 |
+
+**What it means.** `ptr_in_range` and `ptr_range_in_range` are proved to
+return what their contracts now state, in every unit that holds them and
+at the three machine models proved: 144 goals in the twelve verification
+units, 12 in `frama-c-arena-32` and 24 in -CC's two families. The result
+that was wrong, a range starting past the region's end, is now outside by
+the proof as well as by the test.
+
+**Run 2** is the push of this score. It changes the jobs' pin comments only,
+to say the pins held at run 1, so that the proof workflows run again on
+code identical to afabc7d's; the `continue-on-error` lines stay. Q6 is
+scored from it: the fifteen and `frama-c-win64` give the same lines and
+names as run 1. Run 3 then removes the fifteen lines, and the docs are
+brought to the pins.
