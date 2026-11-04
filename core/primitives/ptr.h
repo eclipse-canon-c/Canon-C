@@ -665,6 +665,21 @@ static inline usize ptr_align_padding(const void* p, usize align) {
  * arena-32, pool, region, vec, bitset, priority_queue — and is
  * pre-registered as such in the frama-c-ptr job banner.
  * ════════════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * VERIFY-058 — the offsets STATE THEIR BOUND.
+ *
+ * ptr_offset, ptr_offset_const and ptr_retreat admitted any n, so for an
+ * admitted call the result could leave its object, which C leaves undefined
+ * whether or not the result is used (C11 6.5.6p8). -wp-rte does not check a
+ * computed pointer; VERIFY-057's probe, run with -warn-invalid-pointer, found
+ * the three goals on these results false. Each now requires, as in_object,
+ * that its result be null, in p's object or one past its end. ptr_elem and
+ * ptr_elem_const call them, and require the same of base + index * elem_size.
+ * Signatures and code are unchanged; the callers owe the clause and prove it
+ * from their own invariants (arena.h, pool.h, priority_queue.h). That p
+ * itself is in its object is checked where p is computed.
+ * ════════════════════════════════════════════════════════════════════════════ */
 /**
  * @brief Advance pointer p forward by n bytes
  *
@@ -674,6 +689,8 @@ static inline usize ptr_align_padding(const void* p, usize align) {
  * @return p + n (byte-wise), or NULL if p == NULL
  *
  * @pre (uintptr_t)p + n does not overflow the address space
+ * @pre p + n is within p's object, or one past its end (C11 6.5.6p8):
+ *      required as in_object (VERIFY-058); no run-time check can test it
  *
  * @remark Null-tolerant: NULL in -> NULL out
  * @remark Byte-wise advance regardless of pointed-to type - use ptr_elem
@@ -692,6 +709,7 @@ static inline usize ptr_align_padding(const void* p, usize align) {
  * @sa ptr_offset_const(), ptr_retreat(), ptr_elem()
  */
 /*@
+    requires in_object: p == \null || \object_pointer((u8*)p + n);
     assigns  \nothing;
     behavior null:
         assumes p == \null;
@@ -718,6 +736,8 @@ static inline void* ptr_offset(void* p, usize n) {
  * @return p + n (byte-wise), or NULL if p == NULL
  *
  * @pre (uintptr_t)p + n does not overflow the address space
+ * @pre p + n is within p's object, or one past its end (in_object,
+ *      VERIFY-058), as for ptr_offset
  *
  * @remark Null-tolerant: NULL in -> NULL out
  * @remark Use on read-only buffers to preserve const-correctness
@@ -732,6 +752,7 @@ static inline void* ptr_offset(void* p, usize n) {
  * @sa ptr_offset()
  */
 /*@
+    requires in_object: p == \null || \object_pointer((const u8*)p + n);
     assigns  \nothing;
     behavior null:
         assumes p == \null;
@@ -758,10 +779,13 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
  * @return p - n (byte-wise), or NULL if p == NULL
  *
  * @pre (uintptr_t)p >= n prevents address-space underflow
+ * @pre p - n is within p's object, or one past its end (C11 6.5.6p8):
+ *      required as in_object (VERIFY-058)
  *
- * @warning This checks only that the raw address does not underflow zero.
- *          It does NOT verify that the result stays within the same
- *          allocation. The caller is responsible for that invariant.
+ * @warning The run-time check is only that the raw address does not
+ *          underflow zero. That the result stays within p's object is the
+ *          caller's to ensure: the contract requires it, and no run-time
+ *          check can test it.
  *
  * @remark Null-tolerant: NULL in -> NULL out
  * @remark Underflow is caught by ensure_msg() in debug builds
@@ -776,6 +800,7 @@ static inline const void* ptr_offset_const(const void* p, usize n) {
  * @sa ptr_offset(), ptr_diff()
  */
 /*@
+    requires in_object: p == \null || \object_pointer((char*)p - n);
     assigns  \nothing;
     behavior null:
         assumes p == \null;
@@ -1003,6 +1028,8 @@ static inline bool ptr_range_in_range(const void*  p,
  *                          nonexistent array has no meaningful answer)
  * @pre elem_size > 0
  * @pre index * elem_size does not overflow usize
+ * @pre base + index * elem_size is within base's object, or one past its
+ *      end (in_object, VERIFY-058): ptr_offset requires it
  *
  * @remark Null-intolerant: NULL base is a contract violation
  * @remark Useful for iterating generic containers without type-punning
@@ -1019,6 +1046,7 @@ static inline bool ptr_range_in_range(const void*  p,
     requires base      != \null;
     requires elem_size >  0;
     requires index     <= CANON_USIZE_MAX / elem_size;
+    requires in_object: \object_pointer((u8*)base + index * elem_size);
     assigns  \nothing;
     ensures  (u8*)\result == (u8*)base + index * elem_size;
  */
@@ -1042,6 +1070,8 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
  * @pre base      != NULL (contract violation if NULL)
  * @pre elem_size > 0
  * @pre index * elem_size does not overflow usize
+ * @pre base + index * elem_size is within base's object, or one past its
+ *      end (in_object, VERIFY-058)
  *
  * @remark Null-intolerant: NULL base is a contract violation
  * @remark Use for read-only access to const arrays
@@ -1057,6 +1087,7 @@ static inline void* ptr_elem(void* base, usize index, usize elem_size) {
     requires base      != \null;
     requires elem_size >  0;
     requires index     <= CANON_USIZE_MAX / elem_size;
+    requires in_object: \object_pointer((const u8*)base + index * elem_size);
     assigns  \nothing;
     ensures  (const u8*)\result == (const u8*)base + index * elem_size;
  */

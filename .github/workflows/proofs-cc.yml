@@ -139,7 +139,10 @@ jobs:
           # 5488 / 5581 and 93.
           # VERIFY-008 overlap fix predicted: mem_regions_overlap's goals 37 -> 31, all proved, in vec and vec_struct
           # (vec 5530 / 5599, vec_struct 5528 / 5597 before).
-          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5524 / 5593", unproved: 69  }
+          # VERIFY-058 predicted pins: vec and vec_struct +8 each, ptr.h's two
+          # and arena.h's six in_object calls, all proved. Before: vec
+          # 5524 / 5593, vec_struct 5522 / 5591.
+          - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5532 / 5601", unproved: 69  }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
           # First pinned as a prediction (38404b9); measured at CC #27; ratcheted
@@ -150,7 +153,7 @@ jobs:
           # and 97.
           # VERIFY-040 round 3: predicted pin, as cc-vec's. Before:
           # 5488 / 5581 and 93.
-          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5522 / 5591", unproved: 69  }
+          - { family: vec_struct, model: "Typed+Cast", budget: 300, driver_job: frama-c-vec, proved: "5530 / 5599", unproved: 69  }
     steps:
       - uses: actions/checkout@v6
 
@@ -261,6 +264,7 @@ jobs:
           echo "==============================================================="
 
       - name: "Gates 0-3: proved line, zero refutations, exact count, roll-call (ENFORCED)"
+        continue-on-error: ${{ matrix.family == 'vec' || matrix.family == 'vec_struct' }}   # VERIFY-058 runs 1 and 2, report-only for the two families whose pins move; run 3 removes this line
         shell: bash
         run: |
           OUT="wp_cc_${{ matrix.family }}_output.txt"
