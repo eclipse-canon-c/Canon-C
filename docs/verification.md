@@ -384,6 +384,253 @@ above; double-counting them would inflate the aggregate.
 
 ---
 
+## The proved configuration
+
+Every claim in this record, "verified", "proved", "no run-time error", is
+about the code Frama-C sees: each unit's file as its job preprocesses it,
+analysed by the tools below. This section states that configuration and the
+differences from shipped builds known when it was written (2026-11-04, at
+530381c). A change to a job's flags, to a `__FRAMAC__` branch or to the
+toolchain pins changes it.
+
+### The tools, and what is trusted
+
+- **Pinned** in `.github/actions/framac-setup` and overridden by no job:
+  Frama-C 29.0 with WP, Alt-Ergo 2.6.3, Z3 4.15.2 and CVC5 1.2.1 through
+  Why3 1.7.2, on OCaml 4.14.2.
+- **Every proof job** runs `-wp -wp-rte -wp-split -wp-prover
+  alt-ergo,z3,cvc5 -wp-timeout 120` on every function of its unit (no job
+  sets `-wp-fct`), with the memory model Typed (checked, bits, lifetime,
+  error, option, result, deque, range) or Typed+Cast (the other units).
+  `frama-c-diag` adds `-variadic-no-translation`, without which diag.h's
+  stdio declarations do not bind. A goal counts as proved if WP's
+  simplifier, Qed, closes it or one prover proves it.
+- **Trusted, not proved:**
+  - the Frama-C kernel, its RTE and Variadic plugins, and WP's generation of
+    the goals and its memory models;
+  - Why3 and its prover drivers, and the three provers. Why3 1.7.2 registers
+    the pinned Alt-Ergo and Z3 with a "version not recognized" warning, and
+    CVC5 is registered by hand (`action.yml` says why);
+  - the preprocessor: Frama-C runs `gcc -E` on the runner, with its own libc
+    headers in place of the system's (`-nostdinc`);
+  - Frama-C's specifications of the C library functions the units call,
+    `memcpy`, `memmove`, `memset`, `memcmp`, `strlen`, `malloc` and `free`
+    among them;
+  - three declarations the project adds for Frama-C only: the trusted
+    axioms of diag.h's `snprintf` and `fprintf` (VERIFY-017) and
+    stringbuf.h's `vsnprintf` (VERIFY-031), which merges with Frama-C's own
+    specification of it.
+
+### What "no run-time error" covers
+
+`-wp-rte` adds a goal at each operation its options name. The jobs set none
+of the kernel's `-warn-*` or `-rte-*` options, so Frama-C's defaults apply.
+The lists below are those defaults as `frama-c -kernel-h` and `-rte-h` print
+them; they were read from Frama-C 25, and the jobs run 29.0.
+
+**Checked:**
+- memory accesses through pointers and arrays;
+- division and modulo by zero;
+- signed overflow;
+- shifts by a negative or too wide amount, and left shifts of negative values;
+- conversions from floating point to integer;
+- calls through function pointers;
+- reads of `_Bool` objects holding other values;
+- non-finite floating-point results;
+- conversions of a pointer to an integer type too narrow for it.
+
+A goal added is not a goal proved: the goal at a call through a function
+pointer states `\valid_function`, which WP 29 does not implement, and those
+goals are filed as residuals.
+
+**Not checked**, among the behaviours C leaves undefined:
+- **Pointer values** computed or read outside their object (6.5.6p8) or
+  after it ends (6.2.4p2). Only `-warn-invalid-pointer` checks them, and no
+  proof job sets it. The pointer probe of VERIFY-057, an experiment and not
+  a gate, sets it for the 26 units of the main proof jobs, not the -CC
+  families or the machine-model jobs, when its script, `probes.yml`, the
+  toolchain setup or ptr.h changes. VERIFY-058 repaired the false goals its
+  first run found in ptr.h's three offsets, in twelve units. At
+  `9 · Probes` #4, 987 of its 1073 goals are proved; the 86 unproved are
+  VERIFY-057's four other kinds.
+- **Relational comparison and subtraction of pointers into different
+  objects** (6.5.8p5, 6.5.6p9). ptr.h's `ptr_in_range` and
+  `ptr_range_in_range` document that their pointers must be in one
+  allocation, and their contracts do not state it: the proofs admit calls
+  that compare pointers into different objects, and in the second subtract
+  them, and no goal checks it. `mem_regions_overlap` has compared
+  `uintptr_t` addresses since 6fb8442, so its result is
+  implementation-defined (6.3.2.3p6), not undefined.
+- **Reads of uninitialised objects**: `-rte-initialized` is off unless a
+  function is named to it. Some reads are covered by the C library's
+  specifications: Frama-C's `memcmp` requires both ranges initialised.
+- **Unsequenced side effects** (6.5p2): `-unspecified-access` is off.
+- **Concurrency.** WP models none. `docs/thread-safety.md` states the
+  library's concurrency contract, and no proof covers it. One part, the
+  generation of lifetime tokens, is tested by `lifetime-token-concurrency`:
+  no duplicate token at atomic levels 1 and 2, no ThreadSanitizer race at
+  level 2, and the race reported at level 4, its positive control.
+
+Not undefined, and not checked: unsigned wraparound, defined by C;
+conversions to an unsigned type, which reduce modulo 2^N (6.3.1.3p2);
+conversions out of range to a signed type, and right shifts of negative
+values, which are implementation-defined (6.3.1.3p3, 6.5.7p5).
+
+### What the preprocessor gives Frama-C
+
+**`-DCANON_NO_REQUIRE -DNDEBUG`, in every job.** `require`, `require_msg`,
+`ensure` and `ensure_msg` expand to `((void)0)`, and so does checked.h's
+`CHECKED_ASSERT_RESULT`. The checks are not part of what is proved. The
+ACSL contracts state the conditions the proofs assume, not always in the
+form the checks test: `mem_copy`'s check tests the `uintptr_t` overlap, and
+its contract states non-overlap with `\separated`. In shipped builds:
+- `require` and `require_msg` run in every build without
+  `CANON_NO_REQUIRE`;
+- `ensure` and `ensure_msg` run with `CANON_STRICT`, and otherwise in
+  builds with neither `NDEBUG` nor `CANON_NO_REQUIRE`;
+- `CHECKED_ASSERT_RESULT` is `<assert.h>`'s `assert` in builds with neither
+  `CANON_NO_REQUIRE` nor `NDEBUG`, and nothing in the others.
+
+A check that holds lets the proved code run after it. A check that fails
+calls the contract handler. The default handler aborts. A handler of the
+caller's own is required not to return, and nothing enforces it: if it
+returns, the function runs on with its precondition false, outside the
+proof. No job proves that a check's condition follows from its function's
+precondition, so a check stricter than its contract would stop a call the
+proof admits.
+
+**`__FRAMAC__`, which Frama-C defines,** selects code no compiler build sees:
+- **checked.h, bits.h:** the portable fallbacks. A GCC or Clang build uses
+  the compiler's builtins unless `CANON_CHECKED_FORCE_FALLBACK` and
+  `CANON_BITS_FORCE_FALLBACK` are set. An MSVC build takes checked.h's
+  fallback, whose builtin test names only GCC and Clang, and bits.h's MSVC
+  intrinsics.
+- **limits.h:** `CANON_DEFAULT_ALIGN` is 16, as in a C99 build, because
+  Frama-C does not support `_Alignof`. A C11 or later build uses
+  `_Alignof(max_align_t)`, which is 16 on x86_64 and need not be elsewhere.
+- **memory.h:** `mem_secure_zero`'s volatile loop. A build whose C library
+  provides `memset_s` (`__STDC_LIB_EXT1__`) calls that instead; glibc does
+  not provide it.
+- **contract.h:** the default handler's body is a loop with no exit in place
+  of its `fprintf`, `fflush` and `abort`, so that WP proves its
+  `ensures \false` and `exits \false`.
+- **priority_queue.h:** the queue instantiates `result__Bool_Error` from the
+  same three macros a build's `CANON_RESULT(_Bool, Error)` expands to, with
+  contracted prototypes of the type's ten functions placed before their
+  definitions; it calls three of them. A `calls` clause names compare.h's
+  24 comparators: the queue is proved for those, and a comparator of the
+  caller's own is outside the proof. Its function contracts are gated on
+  `__FRAMAC__` too, which changes nothing for a compiler.
+- **diag.h, stringbuf.h:** the three trusted declarations above.
+- **lifetime.h:** one postcondition, at level 4 only.
+
+**The standard and the compiler.** Frama-C's preprocessor is GCC at its
+default standard, where the CMake builds are C99. Under Frama-C,
+`__STDC_VERSION__` is C11 or later (limits.h records it; Frama-C 25 with
+GCC 13, the runner's version, gives 201710L), and `__GNUC__` is defined. A
+branch on either that is not also gated on `__FRAMAC__` takes its C11 or
+its GCC arm under Frama-C. The C11 arms reached are compile-time only:
+`static_require` and vec.h's `VEC_ASSERT_TYPE` become `_Static_assert`.
+
+**`-CC`** keeps the comments of macro bodies, so the annotations written
+inside the macros reach Frama-C. The main jobs of vec_range, vec_fmt,
+stack, array and hashmap use it, and so prove the macro-body contracts of
+the macros their drivers instantiate (stack's instantiates vec, option and
+result; array's, option and slice). The main jobs of slice, option,
+result, borrow, deque and vec do not use it: those of option, result, deque
+and vec prove the contracts their drivers state, and those of slice and
+borrow the functions outside the macros. The -CC workflow proves the
+macro-body contracts of these six families through drivers of its own, and
+is the only proof of deque's, the borrowed slice's and the struct
+instantiations'. It runs on pushes to master that change its paths, and on
+demand, not on pull requests. In `frama-c-vec` the vec macro's loop
+annotations are stripped (VERIFY-039's block "Loop without annotations in
+a macro body").
+
+**Lifetime.** `frama-c-lifetime` runs `-DCANON_LIFETIME_DEBUG
+-DCANON_LIFETIME_NO_ATOMICS`, lifetime.h's level 4, with no atomics. Levels
+1 to 3 (C11 atomics, GCC builtins, MSVC intrinsics) are what most
+lifetime-debug builds select, level 2 at C99 with GCC or Clang, and none is
+proved; `lifetime-token-concurrency` tests levels 1 and 2. The other units
+run without `CANON_LIFETIME_DEBUG`, so the containers' lifetime plumbing is
+compiled out of them. A lifetime-debug build's `lt` fields and borrow
+checks (CMake's `CANON_LIFETIME=debug`) are outside the proofs; the
+`lifetime-debug` job tests them.
+
+**Configuration macros no proof job sets:** `CANON_STRICT`,
+`CANON_ARENA_DEBUG` (the arena's allocation statistics),
+`CANON_NO_REGION_PARENT`, `CANON_RESULT_ANON_UNION`, and
+`CANON_NO_GNU_EXTENSIONS`, which the CompCert job sets, and two of
+`lifetime-token-concurrency`'s runs. Overridable bounds are proved at their
+defaults (in memory.h, region.h, deque_impl.h, diag.h and limits.h).
+
+### Generic code: the instantiations proved
+
+A macro-generated type is proved at the types its drivers instantiate:
+- vec, deque, stack, vec_range and vec_fmt at `int`;
+- array at `int` and 8, with a slice of `int`;
+- slice and borrowed slice at `i32` (-CC);
+- option at `int`, at `usize` within bitset, at `isize` within range, and
+  at a struct through `DEFINE_OPTION_FUNCTIONS_AGGREGATE` (-CC's
+  vec_struct);
+- result at `int` with a test error type, and at `bool` with `Error`;
+- the hash map with `u64` keys and `int` values, its option and result
+  types, and the driver's `hash_u64` and `eq_u64`; a hash or equality
+  function of the caller's own is outside the proof, as for the queue's
+  comparators;
+- vec at a two-field struct of 16 bytes (-CC's vec_struct).
+
+An instantiation at another type is not proved separately. The element's
+size and alignment enter the goals, and an aggregate option uses another
+macro.
+
+### Machine models
+
+The jobs pass no `-machdep` but in two cases, so Frama-C's default applies:
+x86_64, little-endian, with 64-bit pointers and `long` and a signed `char`.
+Two jobs add a model, and are enforced to leave the same unproved names as
+at x86_64:
+- `frama-c-arena-32`: arena.h at `gcc_x86_32` (ILP32);
+- `frama-c-win64`: memory.h and bits.h at `msvc_x86_64` (LLP64, 32-bit
+  `long`).
+
+Tested, not proved:
+- AArch64 Linux, where `char` is unsigned (`build-arm64`);
+- big-endian s390x, under qemu (`big-endian`);
+- i386 (`build-32bit`): every unit but arena.h is tested at ILP32 and not
+  proved there.
+
+Compiled only, with nothing run (`embedded`): Cortex-M0+ and Cortex-M4 with
+newlib and picolibc, where enums are short and `int32_t` is `long`; RV32
+and RV64 with picolibc; and AVR, at a 16-bit `size_t`, for the platform
+tiers.
+
+Planned: proofs at 32-bit ARM, RV32 and RV64.
+
+### The other builds, and what each is evidence for
+
+| build | configuration | evidence for |
+|-------|---------------|--------------|
+| the proof jobs | as above | the contracts, in this configuration |
+| `coverage` | GCC 14, Debug, `-DCANON_NO_REQUIRE` and both `FORCE_FALLBACK` flags | MC/DC of the proved paths (`docs/traceability.md`) |
+| `compcert` | CompCert 3.17 on x86_64, `-fall -DCANON_NO_GNU_EXTENSIONS` and both `FORCE_FALLBACK` flags; `require` on | the portable C99 paths compile under CompCert, a verified compiler, and pass the tests; informational (`continue-on-error`) and on the upstream repository only, so a failure blocks nothing |
+| `build` (GCC, Clang, MSVC), sanitizers, `fuzzing`, `valgrind`, `mingw` | compiler defaults, `require` on | the shipped configurations, on the tests and fuzz inputs. GCC and Clang run checked.h's and bits.h's builtins, not the proved paths; MSVC runs checked.h's fallback and bits.h's intrinsics |
+| `build-32bit`, `musl`, `build-arm64`, `big-endian` | i386, Alpine's musl, AArch64, s390x under qemu | the tests on those platforms |
+| `c-standards` | C11, C17 and C23 with GCC 14 and Clang, Debug, sanitizers on | the tests at those standards, where the C11 arms are compiled (`_Alignof(max_align_t)`, `_Static_assert`) |
+| `embedded` | Cortex-M, RV32, RV64 and AVR, bare metal | that the headers and tests compile there; nothing runs |
+| `lifetime-debug`, `lifetime-token-concurrency` | `CANON_LIFETIME_DEBUG`; the atomic levels, with ThreadSanitizer | the lifetime plumbing and the token generation, by tests |
+
+**Reading a status.** In the roadmap:
+- "✅ Verified" and "✅ Fully verified" (compare.h, no residual) mean that in
+  this configuration WP proves every goal of the unit but the residuals
+  named in `docs/deviations.md`, each with its argument;
+- "✅ Verified at level 4 only" (lifetime.h) claims that for level 4 alone;
+- "✅ Annotated" (contract.h), "N/A" and "Reviewed (light)" mark headers
+  with no unit of their own.
+
+Issue #12, foundational verification, records what it would take to check
+the trusted base above against a formal semantics of C.
+
 ## core/primitives/checked.h
 
 ### Summary

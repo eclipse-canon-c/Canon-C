@@ -218,12 +218,21 @@ and stated the loop invariant the argument lacked: nine of the goals are
 proved, the block is retired, and the four frame goals left are filed
 under a block of their own.
 
-The same code that WP proves is the code that runs in production. The
-CI build uses `-DCANON_CHECKED_FORCE_FALLBACK` and
-`-DCANON_BITS_FORCE_FALLBACK` to keep MC/DC coverage measurement aligned
-with the verified path, and fuzzed binaries exercise the same fallback
-paths under ASan + UBSan. Proof, coverage, and runtime instrumentation
-measure one code path under three different lenses.
+The proofs cover the code as Frama-C sees it, which is close to a
+shipped build but not the same. They are made at Frama-C's x86_64 machine
+model (arena.h also at ILP32, memory.h and bits.h also at LLP64), and on
+other platforms the library is tested or compiled, not proved. They
+compile the run-time `require` and `ensure` checks out, and take the
+portable fallbacks of `checked.h` and `bits.h`, where a GCC or Clang
+build uses compiler builtins unless
+`-DCANON_CHECKED_FORCE_FALLBACK` and `-DCANON_BITS_FORCE_FALLBACK` are set
+(an MSVC build takes checked.h's fallback and bits.h's MSVC intrinsics).
+The coverage job sets both flags, so MC/DC is measured on the proved
+paths; the CompCert job sets both and keeps the checks on; the GCC and
+Clang default, sanitizer and fuzz builds use the builtins.
+`docs/verification.md`, "The proved configuration", lists the known
+differences, the tools the proofs trust, and which run-time errors they
+check and which they do not.
 
 ### Translation table
 
