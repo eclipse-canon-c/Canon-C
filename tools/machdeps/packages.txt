@@ -1,0 +1,8 @@
+gcc-arm-none-eabi
+libnewlib-arm-none-eabi
+gcc-riscv64-unknown-elf
+picolibc-riscv64-unknown-elf
+gcc-arm-linux-gnueabihf
+gcc-riscv64-linux-gnu
+gcc-aarch64-linux-gnu
+gcc-powerpc-linux-gnu

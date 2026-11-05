@@ -19,7 +19,7 @@ cite.
 | 8 | `records.yml` | 8 · Records | Record coverage (argument blocks against roll-calls) and the workflow-size guard | yes |
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3), and VERIFY-057's pointer probe (every unit with `-warn-invalid-pointer`, report-only). Each runs only when its own paths change | a probe's MISS fails it; the pointer probe fails only without a summary |
 | 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
-| 10 | `machdeps.yml` | 10 · Machine models | VERIFY-060's machine models for 32-bit Arm and RISC-V: generated with Frama-C's make-machdep from the cross-compilers, and what Frama-C sees at each (`tools/machdeps/`). Runs when its own paths change | no: report-only during phase A |
+| 10 | `machdeps.yml` | 10 · Machine models | VERIFY-060's machine models for Arm, RISC-V and big-endian PowerPC: generated with Frama-C's make-machdep from the cross-compilers, compared with the committed copies in `tools/machdeps/`; what Frama-C sees at each, whether the core/ units parse, and whether GCC mode changes their code. Runs when its own paths change | no: report-only until phase C |
 
 ## Reading results
 

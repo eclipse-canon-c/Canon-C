@@ -1,14 +1,15 @@
 name: "10 · Machine models"
-# VERIFY-060, phase A (docs/deviations.md). Frama-C ships no machine model for
-# 32-bit Arm or RISC-V. This job generates the five the core/ proofs are to use
-# (Cortex-M4, RV32 and RV64 bare metal, 32-bit Arm Linux and RV64 Linux), with
-# Frama-C 29's make-machdep and the cross-compilers of the embedded job and of
-# Ubuntu's Linux cross toolchains, and reads what Frama-C sees at each: sizes,
-# alignments and compiler macros (tools/machdeps/check.c), and whether each
-# core/ unit parses. Report-only, an experiment and not a gate: the models are
-# printed in the log and uploaded. Once reviewed they are committed under
-# tools/machdeps/ (phase A2), and this job then checks that they regenerate the
-# same. Map: .github/workflows/README.md.
+# VERIFY-060, phases A and A2 (docs/deviations.md). Frama-C ships no machine
+# model for Arm or RISC-V. This job generates the seven the core/ proofs are
+# to use (Cortex-M4, RV32 and RV64 bare metal; 32-bit Arm, RV64, AArch64 and
+# big-endian 32-bit PowerPC Linux) with Frama-C 29's make-machdep and the
+# cross-compilers of tools/machdeps/packages.txt, compares each with its
+# committed copy in tools/machdeps/ (the drift check), and reads what Frama-C
+# sees at each, and at its own x86_64, gcc_x86_32, ppc_32 and msvc_x86_64:
+# sizes, alignments, typedefs and compiler macros (tools/machdeps/check.c),
+# whether each core/ unit parses, and whether a unit's code changes in GCC
+# mode. Report-only until phase C makes the drift check a gate.
+# Map: .github/workflows/README.md.
 on:
   push:
     branches: [ "master" ]
@@ -23,7 +24,7 @@ permissions:
 
 jobs:
   machdeps:
-    name: "machine models (VERIFY-060 phase A, report-only)"
+    name: "machine models (VERIFY-060, report-only)"
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -31,11 +32,9 @@ jobs:
       - name: "Install the cross-compilers"
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi \
-            gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf \
-            gcc-arm-linux-gnueabihf gcc-riscv64-linux-gnu
-          for cc in arm-none-eabi-gcc riscv64-unknown-elf-gcc \
-                    arm-linux-gnueabihf-gcc riscv64-linux-gnu-gcc; do
+          xargs -a tools/machdeps/packages.txt sudo apt-get install -y
+          for cc in arm-none-eabi-gcc riscv64-unknown-elf-gcc arm-linux-gnueabihf-gcc \
+                    riscv64-linux-gnu-gcc aarch64-linux-gnu-gcc powerpc-linux-gnu-gcc; do
             "$cc" --version | head -1
           done
       - name: "Frama-C's own machine models, and make-machdep's interface"
@@ -45,16 +44,28 @@ jobs:
           frama-c -machdep help
           frama-c -enums help || true
           frama-c-script make-machdep --help || true
-      - name: "Generate the five models"
-        continue-on-error: true   # VERIFY-060 phase A: report-only
+          share=$(frama-c -print-share-path)
+          for m in ppc_32 msvc_x86_64 gcc_x86_32 x86_64; do
+            echo "-- Frama-C's own machdep_${m}.yaml:"
+            cat "${share}/machdeps/machdep_${m}.yaml" || true
+          done
+      - name: "Generate the seven models"
+        continue-on-error: true   # VERIFY-060 phases A and A2: report-only
         run: |
           eval $(opam env --switch=frama-c)
           tools/machdeps/generate.sh out
-      - name: "What Frama-C sees at each model, and whether each core/ unit parses"
-        continue-on-error: true   # VERIFY-060 phase A: report-only
+      - name: "Drift check: each committed model regenerates the same"
+        continue-on-error: true   # VERIFY-060 phase A2: report-only; phase C makes it a gate
+        run: python3 tools/machdeps/compare.py tools/machdeps out
+      - name: "What Frama-C sees at each model, whether each core/ unit parses, and the mode control"
+        continue-on-error: true   # VERIFY-060 phases A and A2: report-only
         run: |
           eval $(opam env --switch=frama-c)
-          tools/machdeps/check.sh out
+          models=(tools/machdeps/machdep_*.yaml)
+          for g in out/machdep_*.yaml; do
+            [ -e "tools/machdeps/$(basename "$g")" ] || models+=("$g")
+          done
+          tools/machdeps/check.sh out/check "${models[@]}"
       - uses: actions/upload-artifact@v6
         if: always()
         with:

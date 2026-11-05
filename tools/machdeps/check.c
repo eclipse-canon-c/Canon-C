@@ -62,6 +62,12 @@ int probe_macro_sizeof_pointer = __SIZEOF_POINTER__;
 #if defined(__GNUC__)
 int probe_macro_gnuc = __GNUC__;
 #endif
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+int probe_macro_big_endian = 1;
+#endif
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+int probe_macro_little_endian = 1;
+#endif
 #if defined(__STDC_VERSION__)
 long probe_macro_stdc_version = __STDC_VERSION__;
 #endif
