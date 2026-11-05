@@ -29667,3 +29667,90 @@ pins (its proved line and unproved names, the x86_64 job's style), the
 drift check made a gate, each difference from x86_64 filed and argued, and
 the docs: the proved configuration's machine models, the trusted base, and
 the two targets whose C11 default alignment is not proved.
+
+### Phase B run 1 scored (2026-11-05)
+
+The push of 48bcc9d and ad592db ran nine workflows, 170 jobs:
+`11 · Proofs: machine models` #1, 90 jobs, all `success`, and the eight
+usual ones, all `success` but `4 · Proofs: core/` #25, `cancelled` (B8).
+Scored from the 90 jobs' logs against the x86_64 jobs' (`4 · Proofs: core/`
+#25, and #24 for lifetime, with the same core/).
+
+| # | scored |
+|---|--------|
+| B1 | **MATCH.** 90 proved lines, one per job. |
+| B2 | **MATCH.** No Failed, Invalid or Stepout verdict. |
+| B3 | **MATCH.** The five ILP32 models agree on every unit's proved line and unproved names, the two big-endian ones with the three little-endian ones. |
+| B4 | **MISS.** The three LP64 models agree with each other but not with x86_64: arena, pool and region each prove two goals more there, the first part of the zeroing ensures of `arena_alloc_zero` and of `arena_alloc_aligned_zero` (`typed_cast_arena_alloc_zero_ensures_3_part1`, `typed_cast_arena_alloc_aligned_zero_ensures_3_part1`): arena 3539 / 3570 for 3537 / 3570, pool 4069 / 4101 for 4067, region 3707 / 3744 for 3705. The other seven units as at x86_64. |
+| B5 | **MATCH.** `msvc_x86_64` as x86_64 for all ten units. |
+| B6 | **MISS.** At the ILP32 models arena proves the same two goals more, 3539 / 3570. Measured: pool proves three more there, 4070 / 4101 (the two, and `typed_cast_pool_init_ensures_part4`), region the two, 3707 / 3744; the other seven units as at x86_64. |
+| B7 | **Pending:** run 2. |
+| B8 | **MISS.** `4 · Proofs: core/` #25 was cancelled: `frama-c-lifetime` ran out of its 15-minute limit in the Frama-C setup, before WP started. Every other job of the eight workflows as in phase A2's run: the proved lines and unproved counts, `misra` 66, MC/DC 2030 / 2198. `10 · Machine models` #4: the seven models SAME, `check.sh` 0 failed. |
+| B9 | **Measured.** 1544 runner-minutes, 25.7 hours, close to nine times x86_64's 161 minutes; 74 minutes from the first job's start to the last one's end. Setup aside, each unit took about its x86_64 time at every model. |
+
+**No goal is unproved at a model that x86_64 proves.** At every model and
+unit the unproved names are x86_64's, or x86_64's without the goals listed
+above.
+
+**The two arena goals follow the signedness of `char`.** The eight models
+where `char` is unsigned prove them. x86_64, `msvc_x86_64` and, by
+`frama-c-arena-32`'s pins, `gcc_x86_32` leave them unproved, and at all
+three `char` is signed. The likely mechanism: the contract's `assigns`
+clause names the buffer as `char` (`((char *)arena->buffer)[...]`) and its
+`ensures` reads it as `u8`. WP's typed memory models keep memory apart by
+the type it is accessed at, and `char` is a signed byte where it is signed
+and an unsigned byte, `u8`'s kind, where it is not. Run 2's control tests
+the dependence on `char`, not the mechanism. If it holds, the two residuals
+at x86_64 come from the contract's choice of `char`, and naming the buffer
+as `u8` there might prove them at x86_64 too. That is a lead for after
+VERIFY-060, not a change here. `pool_init_ensures_part4`, proved at 32-bit
+`usize` only, is argued in phase C.
+
+**The cancellation.** `frama-c-lifetime` has a 15-minute limit. It spent 15
+minutes 11 seconds in the Frama-C setup, slowly downloading the packages
+the setup installs with apt on every job, cache hit or not: graphviz, GTK
+and others. In this push 120 Frama-C setups ran at once, the 90 new jobs
+among them, and 8 took 15 to 47 minutes; at phase A2's push, 30 setups,
+none took over 3 minutes. The load phase B adds is the likely cause, and it
+would come back at every core/ change.
+
+**Decided with the author (2026-11-05), from this run.**
+
+- **The fix, pushed as run 2:** `frama-c-lifetime`'s limit 15 → 60
+  minutes; phase B's limits raised; phase B capped at 30 jobs at once.
+  Slimming the setup's apt list on a cache hit, which would cut the
+  downloads, was offered and left for later.
+- **The `char` control, in run 2:** arena at x86_64 with `char` made
+  unsigned, and at AArch64 with `char` made signed.
+
+### Phase B run 2: pre-registration
+
+**The change.**
+
+1. **proofs-core.yml:** `frama-c-lifetime`'s `timeout-minutes` 60, and 15
+   on its WP step. Its comment gave 15 as the hang guard on a unit that
+   proves in seconds ("a 60-minute ceiling ... would let a hang look like
+   slowness for an hour"); the step keeps that guard, and the job's 60
+   leaves room for the setup.
+2. **proofs-machdeps.yml:** `max-parallel: 30`; each unit's limit raised
+   to between 120 and 300 minutes; and a job, `char-control`, arena at two
+   models made by `tools/machdeps/flip_char.py`. It copies a model with
+   `char_is_unsigned` and the macro `__CHAR_UNSIGNED__` changed, line by
+   line, and nothing else; the job prints the diff, and the `CHAR_MIN`
+   that `check.c` reads at the copy.
+3. **The CI map's** row 11 names the control.
+
+A workflow file changes, so the eight usual workflows run, and phase B's,
+92 jobs: run 2.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B7 | **Run 2 reproduces run 1** at all 90 jobs: the same proved line and unproved names. | any job differs | M–H |
+| B10 | **The control.** At x86_64 with `char` unsigned, arena proves the two goals: 3539 / 3570, its unproved names x86_64's but the two. At AArch64 with `char` signed, it does not: 3537 / 3570, x86_64's names. Each diff shows the field and the macro only, and `check.c` reads `CHAR_MIN` 0 and -128 at the two copies. | either one does not flip, or a diff shows more | M |
+| B11 | **No job is cancelled,** and `frama-c-lifetime` is at its pins. How many setups take over 3 minutes with 30 phase B jobs at once is measured. | a job cancelled | M–H |
+| B12 | **Nothing else moves:** every other job at its pins, and the machine-models job as in run 1. | any change | H |
+| B13 | **The cost:** runner-minutes and wall time with 30 at once, measured. | — | — |
+
+**What follows.** Phase C, pre-registered from runs 1 and 2 and the
+control: each job's pins, the drift check made a gate, each difference
+from x86_64 filed and argued, and the docs.
