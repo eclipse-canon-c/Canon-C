@@ -2219,10 +2219,13 @@ jobs:
   # -------------------------------------------------------------------------
   frama-c-lifetime:
     runs-on: ubuntu-24.04
-    # 15, not the 60 every other WP job carries. Run 0 (CI #1271) analysed
-    # 4 goals in seconds. A 60-minute ceiling on a unit this size would let
-    # a hang look like slowness for an hour before failing.
-    timeout-minutes: 15
+    # The WP step keeps 15 minutes, not the 60 every other WP job carries:
+    # run 0 (CI #1271) analysed 4 goals in seconds, and a 60-minute ceiling
+    # on a unit this size would let a hang look like slowness for an hour
+    # before failing. The job carries 60 (VERIFY-060): at a push with 120
+    # Frama-C jobs, this one's setup alone took 15 minutes and the job was
+    # cancelled before WP started (4 · Proofs: core/ #25).
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
@@ -2280,6 +2283,7 @@ jobs:
           # recorded as a refuted prediction.
           echo "  contract present in preprocessed unit (ensures clause)."
       - name: "WP: core/primitives/lifetime.h (VERIFY-021, enforced)"
+        timeout-minutes: 15   # the hang guard; the job's 60 is for the setup
         run: |
           eval $(opam env --switch=frama-c)
           # ENFORCED as of CI #1275. Three name-identical JOB results:
