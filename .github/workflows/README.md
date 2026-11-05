@@ -20,6 +20,7 @@ cite.
 | 9 | `probes.yml` | 9 · Probes | The closed experiments of VERIFY-039/040 (G4, G11, G13, G19, Count, Round 3), and VERIFY-057's pointer probe (every unit with `-warn-invalid-pointer`, report-only). Each runs only when its own paths change | a probe's MISS fails it; the pointer probe fails only without a summary |
 | 9 | `f4-control.yml`, `vc-identity.yml` | 9 · Probes (manual): … | Two experiments run only by hand | n/a |
 | 10 | `machdeps.yml` | 10 · Machine models | VERIFY-060's machine models for Arm, RISC-V and big-endian PowerPC: generated with Frama-C's make-machdep from the cross-compilers, compared with the committed copies in `tools/machdeps/`; what Frama-C sees at each, whether the core/ units parse, and whether GCC mode changes their code. Runs when its own paths change | no: report-only until phase C |
+| 11 | `proofs-machdeps.yml` | 11 · Proofs: machine models | VERIFY-060's proofs of the ten core/ units at nine machine models besides x86_64: the seven of `tools/machdeps/` (Cortex-M4 with short enums, RV32 and RV64 bare metal, 32-bit Arm, RV64 and AArch64 Linux, big-endian 32-bit PowerPC Linux) and Frama-C's `ppc_32` and `msvc_x86_64`; ninety jobs, a matrix of model and unit. Runs when core/, the models, its own file or the Frama-C setup change, and by hand | no: report-only until phase C |
 
 ## Reading results
 

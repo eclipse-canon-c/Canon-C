@@ -1,0 +1,104 @@
+name: "11 · Proofs: machine models"
+# VERIFY-060, phase B (docs/deviations.md). The ten core/ units, proved at
+# nine machine models besides Frama-C's default x86_64, at which
+# proofs-core.yml proves them:
+#   - from tools/machdeps/, generated from the targets' compilers, committed
+#     and drift-checked by machdeps.yml: Cortex-M4 (read with -enums
+#     gcc-short-enums, arm-none-eabi's enum layout), RV32 and RV64 bare
+#     metal, 32-bit Arm, RV64 and AArch64 Linux, and big-endian 32-bit
+#     PowerPC Linux;
+#   - Frama-C's own ppc_32 (big-endian) and msvc_x86_64 (LLP64).
+# Each job runs its unit's x86_64 proof command from proofs-core.yml with the
+# model added, and reports the proved line and the unproved goals by name.
+# Report-only: no job fails on its result until phase C pins each and files
+# every difference from x86_64. Ninety jobs, about 24 runner-hours a run if
+# each takes as long as at x86_64, so it runs only when core/, the models,
+# this file or the Frama-C setup change, and by hand.
+# Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'core/**'
+      - 'tools/machdeps/**'
+      - '.github/workflows/proofs-machdeps.yml'
+      - '.github/actions/framac-setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wp:
+    name: "frama-c-${{ matrix.unit.name }} @ ${{ matrix.model.name }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.unit.minutes }}
+    continue-on-error: true   # VERIFY-060 phase B: report-only
+    strategy:
+      fail-fast: false
+      matrix:
+        model:
+          - { name: cortex_m4,           args: "-machdep tools/machdeps/machdep_cortex_m4.yaml -enums gcc-short-enums" }
+          - { name: rv32_ilp32,          args: "-machdep tools/machdeps/machdep_rv32_ilp32.yaml" }
+          - { name: rv64_lp64,           args: "-machdep tools/machdeps/machdep_rv64_lp64.yaml" }
+          - { name: arm_linux_gnueabihf, args: "-machdep tools/machdeps/machdep_arm_linux_gnueabihf.yaml" }
+          - { name: rv64_linux_gnu,      args: "-machdep tools/machdeps/machdep_rv64_linux_gnu.yaml" }
+          - { name: aarch64_linux_gnu,   args: "-machdep tools/machdeps/machdep_aarch64_linux_gnu.yaml" }
+          - { name: ppc32_linux_gnu,     args: "-machdep tools/machdeps/machdep_ppc32_linux_gnu.yaml" }
+          - { name: ppc_32,              args: "-machdep ppc_32" }
+          - { name: msvc_x86_64,         args: "-machdep msvc_x86_64" }
+        # Each unit's memory model and extra definitions are its x86_64 job's
+        # (proofs-core.yml); minutes is about four times its x86_64 run.
+        unit:
+          - { name: checked,  file: core/primitives/checked.h,  wp_model: "",                     defs: "", minutes: 60 }
+          - { name: bits,     file: core/primitives/bits.h,     wp_model: "",                     defs: "", minutes: 90 }
+          - { name: compare,  file: core/primitives/compare.h,  wp_model: "-wp-model Typed+Cast", defs: "", minutes: 60 }
+          - { name: ptr,      file: core/primitives/ptr.h,      wp_model: "-wp-model Typed+Cast", defs: "", minutes: 60 }
+          - { name: slice,    file: core/slice.h,               wp_model: "-wp-model Typed+Cast", defs: "", minutes: 90 }
+          - { name: memory,   file: core/memory.h,              wp_model: "-wp-model Typed+Cast", defs: "", minutes: 180 }
+          - { name: arena,    file: core/arena.h,               wp_model: "-wp-model Typed+Cast", defs: "", minutes: 180 }
+          - { name: pool,     file: core/pool.h,                wp_model: "-wp-model Typed+Cast", defs: "", minutes: 180 }
+          - { name: region,   file: core/region.h,              wp_model: "-wp-model Typed+Cast", defs: "", minutes: 240 }
+          - { name: lifetime, file: core/primitives/lifetime.h, wp_model: "-wp-model Typed",      defs: "-DCANON_LIFETIME_DEBUG -DCANON_LIFETIME_NO_ATOMICS", minutes: 60 }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "WP: ${{ matrix.unit.file }} at ${{ matrix.model.name }} (report-only)"
+        env:
+          MODEL_ARGS: ${{ matrix.model.args }}
+          WP_MODEL: ${{ matrix.unit.wp_model }}
+          DEFS: ${{ matrix.unit.defs }}
+          UNIT: ${{ matrix.unit.file }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          # The unit's x86_64 command (proofs-core.yml), with the model added.
+          # shellcheck disable=SC2086
+          frama-c -wp -wp-rte ${MODEL_ARGS} ${WP_MODEL} \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" -I core/primitives -I core -I . ${DEFS} -DCANON_NO_REQUIRE -DNDEBUG" \
+            "${UNIT}" 2>&1 | tee wp_output.txt
+          echo "WP exit status: ${PIPESTATUS[0]}"
+          exit 0
+      - name: "The proved line, and the unproved goals by name"
+        if: always()
+        run: |
+          echo "== ${{ matrix.unit.name }} at ${{ matrix.model.name }}"
+          grep -E "^\[wp\] Proved goals:" wp_output.txt || echo "NO WP SUMMARY"
+          grep -E "^\[wp\] \[(Timeout|Unknown|Failed|Failure|Invalid|Stepout)\]" wp_output.txt \
+            | sed -E 's/^\[wp\] \[([A-Za-z]+)\] (Goal )?([^ ]+).*/UNPROVED \3 \1/' | sort || true
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: wp-${{ matrix.unit.name }}-${{ matrix.model.name }}
+          path: wp_output.txt
+          retention-days: 90
+      - name: "Result annotation (VERIFY-050)"
+        if: always()
+        run: |
+          P=$(grep -E "^\[wp\] Proved goals:" wp_output.txt | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+          U=$(grep -cE "^\[wp\] \[(Timeout|Unknown)\]" wp_output.txt || true)
+          B=$(grep -cE "^\[wp\] \[(Failed|Failure|Invalid|Stepout)\]" wp_output.txt || true)
+          echo "::notice title=frama-c-${{ matrix.unit.name }} @ ${{ matrix.model.name }}::proved ${P:-none}; unproved ${U:-?}; failed/invalid/stepout ${B:-?}"

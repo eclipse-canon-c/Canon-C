@@ -1,14 +1,15 @@
 name: "10 · Machine models"
-# VERIFY-060, phases A and A2 (docs/deviations.md). Frama-C ships no machine
-# model for Arm or RISC-V. This job generates the seven the core/ proofs are
-# to use (Cortex-M4, RV32 and RV64 bare metal; 32-bit Arm, RV64, AArch64 and
-# big-endian 32-bit PowerPC Linux) with Frama-C 29's make-machdep and the
-# cross-compilers of tools/machdeps/packages.txt, compares each with its
-# committed copy in tools/machdeps/ (the drift check), and reads what Frama-C
-# sees at each, and at its own x86_64, gcc_x86_32, ppc_32 and msvc_x86_64:
-# sizes, alignments, typedefs and compiler macros (tools/machdeps/check.c),
-# whether each core/ unit parses, and whether a unit's code changes in GCC
-# mode. Report-only until phase C makes the drift check a gate.
+# VERIFY-060, phases A to B (docs/deviations.md). Frama-C ships no machine
+# model for Arm or RISC-V. This job generates the seven the core/ proofs of
+# proofs-machdeps.yml use (Cortex-M4, RV32 and RV64 bare metal; 32-bit Arm,
+# RV64, AArch64 and big-endian 32-bit PowerPC Linux) with Frama-C 29's
+# make-machdep and the cross-compilers of tools/machdeps/packages.txt,
+# compares each with its committed copy in tools/machdeps/ (the drift check),
+# and reads what Frama-C sees at each, and at its own x86_64, gcc_x86_32,
+# ppc_32 and msvc_x86_64: sizes, alignments, typedefs and compiler macros
+# (tools/machdeps/check.c), whether each core/ unit parses, and whether a
+# unit's code changes in GCC mode. Report-only until phase C makes the drift
+# check a gate.
 # Map: .github/workflows/README.md.
 on:
   push:

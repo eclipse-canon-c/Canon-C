@@ -1,0 +1,526 @@
+alignof_aligned: 16
+alignof_double: 8
+alignof_float: 4
+alignof_fun: 4
+alignof_int: 4
+alignof_long: 4
+alignof_longdouble: 16
+alignof_longlong: 8
+alignof_ptr: 4
+alignof_short: 2
+alignof_str: 1
+bufsiz: '8192'
+char_is_unsigned: true
+compiler: gcc
+cpp_arch_flags: []
+custom_defs:
+    __SSP_STRONG__: '3'
+    __DBL_MIN_EXP__: (-1021)
+    __LDBL_MANT_DIG__: '106'
+    __builtin_vsx_xvmsubmsp: __builtin_vsx_xvmsubsp
+    __ATOMIC_ACQUIRE: '2'
+    __GCC_IEC_559_COMPLEX: '2'
+    __SIZEOF_LONG__: '4'
+    __UINT_LEAST8_TYPE__: unsigned char
+    __INTMAX_C(c): 'c ## LL'
+    __FLT32X_IS_IEC_60559__: '1'
+    __CHAR_BIT__: '8'
+    __UINT8_MAX__: '0xff'
+    __builtin_vsx_xvmsubmdp: __builtin_vsx_xvmsubdp
+    __builtin_vsx_xvnmaddadp: __builtin_vsx_xvnmadddp
+    __WINT_MAX__: 0xffffffffU
+    __FLT32_MIN_EXP__: (-125)
+    __builtin_vsx_xvnmsubmdp: __builtin_vsx_xvnmsubdp
+    __ORDER_LITTLE_ENDIAN__: '1234'
+    __SIZE_MAX__: 0xffffffffU
+    __WCHAR_MAX__: 0x7fffffffL
+    __GCC_HAVE_SYNC_COMPARE_AND_SWAP_1: '1'
+    __GCC_HAVE_SYNC_COMPARE_AND_SWAP_2: '1'
+    __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4: '1'
+    __DBL_DENORM_MIN__: ((double)4.94065645841246544176568792868221e-324L)
+    __GCC_ATOMIC_CHAR_LOCK_FREE: '2'
+    __GCC_IEC_559: '2'
+    __FLT32X_DECIMAL_DIG__: '17'
+    __FLT_EVAL_METHOD__: '0'
+    __FLT64_DECIMAL_DIG__: '17'
+    __GCC_ATOMIC_CHAR32_T_LOCK_FREE: '2'
+    __UINT_FAST64_MAX__: 0xffffffffffffffffULL
+    __SIG_ATOMIC_TYPE__: int
+    __UINT_LEAST64_MAX__: 0xffffffffffffffffULL
+    __GNUC_PATCHLEVEL__: '0'
+    __FLT32_HAS_DENORM__: '1'
+    __builtin_vsx_xvnmaddasp: __builtin_vsx_xvnmaddsp
+    __UINT_FAST8_MAX__: '0xff'
+    __FLT32_MAX_10_EXP__: '38'
+    __DEC64_MAX_EXP__: '385'
+    __INT8_C(c): c
+    __INT_LEAST8_WIDTH__: '8'
+    __SHRT_MAX__: '0x7fff'
+    __LDBL_MAX__: 1.79769313486231580793728971405301e+308L
+    __LDBL_IS_IEC_60559__: '0'
+    __UINT_LEAST8_MAX__: '0xff'
+    __GCC_ATOMIC_BOOL_LOCK_FREE: '2'
+    __linux: '1'
+    __DEC32_EPSILON__: 1E-6DF
+    __FLT_EVAL_METHOD_TS_18661_3__: '0'
+    __UINT32_MAX__: 0xffffffffU
+    __LDBL_MAX_EXP__: '1024'
+    __WINT_MIN__: 0U
+    __builtin_vsx_xvmaddmdp: __builtin_vsx_xvmadddp
+    __builtin_vsx_vperm: __builtin_vec_perm
+    __INT_LEAST16_WIDTH__: '16'
+    __SCHAR_MAX__: '0x7f'
+    __WCHAR_MIN__: (-__WCHAR_MAX__ - 1)
+    __builtin_vsx_xvnmsubmsp: __builtin_vsx_xvnmsubsp
+    __GCC_ATOMIC_POINTER_LOCK_FREE: '2'
+    __FLT32X_MAX_EXP__: '1024'
+    __unix: '1'
+    __UINT_LEAST16_MAX__: '0xffff'
+    __SIZEOF_INT__: '4'
+    __FLT32X_MANT_DIG__: '53'
+    __DEC64_MIN_EXP__: (-382)
+    __builtin_vsx_xvmaddmsp: __builtin_vsx_xvmaddsp
+    __INT64_C(c): 'c ## LL'
+    __DBL_DIG__: '15'
+    __FLT_EPSILON__: 1.19209289550781250000000000000000e-7F
+    __powerpc__: '1'
+    __SHRT_WIDTH__: '16'
+    __FLT32_IS_IEC_60559__: '1'
+    _CALL_SYSV: '1'
+    __LDBL_MIN__: 2.00416836000897277799610805135016e-292L
+    __DBL_IS_IEC_60559__: '1'
+    __DEC32_MAX__: 9.999999E96DF
+    __FP_FAST_FMA: '1'
+    __LONG_MAX__: 0x7fffffffL
+    __SIZEOF_IBM128__: '16'
+    __INT32_MAX__: '0x7fffffff'
+    __unix__: '1'
+    __INT_WIDTH__: '32'
+    __DECIMAL_DIG__: '33'
+    __FLT64_EPSILON__: 2.22044604925031308084726333618164e-16F64
+    __gnu_linux__: '1'
+    __INT16_MAX__: '0x7fff'
+    __LDBL_HAS_QUIET_NAN__: '1'
+    __FLT64_MANT_DIG__: '53'
+    __FLT_MIN__: 1.17549435082228750796873653722225e-38F
+    __GNUC__: '13'
+    __FLT_HAS_DENORM__: '1'
+    __SIZEOF_LONG_DOUBLE__: '16'
+    __LDBL_MIN_EXP__: (-968)
+    __BIGGEST_ALIGNMENT__: '16'
+    __FLT64_MAX_10_EXP__: '308'
+    __WCHAR_TYPE__: long int
+    __DBL_MAX__: ((double)1.79769313486231570814527423731704e+308L)
+    __INT_FAST32_MAX__: '0x7fffffff'
+    __DBL_HAS_INFINITY__: '1'
+    __FLT64_DENORM_MIN__: 4.94065645841246544176568792868221e-324F64
+    __builtin_vsx_xvnmaddmdp: __builtin_vsx_xvnmadddp
+    __HAVE_SPECULATION_SAFE_VALUE: '1'
+    __DEC32_MIN_EXP__: (-94)
+    __builtin_vsx_xxlandc: __builtin_vec_andc
+    __INTPTR_WIDTH__: '32'
+    __UINT_LEAST32_MAX__: 0xffffffffU
+    __FLT32X_HAS_DENORM__: '1'
+    __INT_FAST16_TYPE__: int
+    __STRICT_ANSI__: '1'
+    __LDBL_HAS_DENORM__: '1'
+    __DEC128_MAX__: 9.999999999999999999999999999999999E6144DL
+    __INT_LEAST32_MAX__: '0x7fffffff'
+    __DEC32_MIN__: 1E-95DF
+    __DBL_MAX_EXP__: '1024'
+    __WCHAR_WIDTH__: '32'
+    __FLT32_MAX__: 3.40282346638528859811704183484517e+38F32
+    __DEC128_EPSILON__: 1E-33DL
+    __GCC_ATOMIC_LONG_LOCK_FREE: '2'
+    __PTRDIFF_MAX__: '0x7fffffff'
+    __FLT32_HAS_QUIET_NAN__: '1'
+    __LONG_LONG_MAX__: 0x7fffffffffffffffLL
+    __SIZEOF_SIZE_T__: '4'
+    __builtin_vsx_xvnmaddmsp: __builtin_vsx_xvnmaddsp
+    __PPC__: '1'
+    __SIZEOF_WINT_T__: '4'
+    __LONG_LONG_WIDTH__: '64'
+    __FLT32_MAX_EXP__: '128'
+    __ATOMIC_SEQ_CST: '5'
+    __GXX_ABI_VERSION: '1018'
+    __FLT_MIN_EXP__: (-125)
+    __GCC_HAVE_DWARF2_CFI_ASM: '1'
+    __FP_FAST_FMAF: '1'
+    __DBL_MIN__: ((double)2.22507385850720138309023271733240e-308L)
+    __FP_FAST_FMAF64: '1'
+    __LONGDOUBLE128: '1'
+    __DBL_HAS_QUIET_NAN__: '1'
+    __pixel: __attribute__((altivec(pixel__))) unsigned short
+    __FLT32X_EPSILON__: 2.22044604925031308084726333618164e-16F32x
+    __FLT64_MIN_EXP__: (-1021)
+    __GNUC_WIDE_EXECUTION_CHARSET_NAME: '"UTF-32BE"'
+    __FLT64_MIN_10_EXP__: (-307)
+    __REGISTER_PREFIX__: ''
+    __INTMAX_WIDTH__: '64'
+    __INTPTR_MAX__: '0x7fffffff'
+    __BUILTIN_CPU_SUPPORTS__: '1'
+    __LDBL_HAS_INFINITY__: '1'
+    __builtin_vsx_xxland: __builtin_vec_and
+    __FLT32_MIN__: 1.17549435082228750796873653722225e-38F32
+    __UINT8_TYPE__: unsigned char
+    __FLT_DIG__: '6'
+    __NO_INLINE__: '1'
+    __DEC_EVAL_METHOD__: '2'
+    __FLT_MANT_DIG__: '24'
+    __LDBL_DECIMAL_DIG__: '33'
+    __VERSION__: '"13.3.0"'
+    __UINT64_C(c): 'c ## ULL'
+    _STDC_PREDEF_H: '1'
+    __BIG_ENDIAN__: '1'
+    __GCC_ATOMIC_INT_LOCK_FREE: '2'
+    __UINTMAX_TYPE__: long long unsigned int
+    __FLT32_MANT_DIG__: '24'
+    __DEC128_MIN__: 1E-6143DL
+    __FLOAT_WORD_ORDER__: __ORDER_BIG_ENDIAN__
+    __SCHAR_WIDTH__: '8'
+    __UINT16_MAX__: '0xffff'
+    __INT32_C(c): c
+    __DEC64_EPSILON__: 1E-15DD
+    __ORDER_PDP_ENDIAN__: '3412'
+    __DEC128_MIN_EXP__: (-6142)
+    __FLT32X_HAS_INFINITY__: '1'
+    __INT_FAST32_TYPE__: int
+    __UINT_LEAST16_TYPE__: short unsigned int
+    __DBL_HAS_DENORM__: '1'
+    __SIZE_TYPE__: unsigned int
+    __UINT64_MAX__: 0xffffffffffffffffULL
+    __FLT_IS_IEC_60559__: '1'
+    __INT8_TYPE__: signed char
+    __ELF__: '1'
+    __HAVE_BSWAP__: '1'
+    __FLT_RADIX__: '2'
+    __INT_LEAST16_TYPE__: short int
+    __LDBL_EPSILON__: 4.94065645841246544176568792868221e-324L
+    __UINTMAX_C(c): 'c ## ULL'
+    __UINT_FAST64_TYPE__: long long unsigned int
+    __SIG_ATOMIC_MAX__: '0x7fffffff'
+    __GCC_ATOMIC_WCHAR_T_LOCK_FREE: '2'
+    __USER_LABEL_PREFIX__: ''
+    __SIZEOF_PTRDIFF_T__: '4'
+    __DBL_MIN_10_EXP__: (-307)
+    __LDBL_DIG__: '31'
+    __FLT64_IS_IEC_60559__: '1'
+    __FLT32X_MIN_EXP__: (-1021)
+    __DEC32_SUBNORMAL_MIN__: 0.000001E-95DF
+    __INT_FAST16_MAX__: '0x7fffffff'
+    __vector: __attribute__((altivec(vector__)))
+    __FLT64_DIG__: '15'
+    __UINT_FAST32_MAX__: 0xffffffffU
+    __UINT_LEAST64_TYPE__: long long unsigned int
+    __builtin_vsx_xvmsubadp: __builtin_vsx_xvmsubdp
+    __builtin_vsx_xxsel: __builtin_vec_sel
+    __FLT_HAS_QUIET_NAN__: '1'
+    __bool: __attribute__((altivec(bool__))) unsigned
+    __FLT_MAX_10_EXP__: '38'
+    __FINITE_MATH_ONLY__: '0'
+    __DEC128_SUBNORMAL_MIN__: 0.000000000000000000000000000000001E-6143DL
+    __builtin_vsx_xxlxor: __builtin_vec_xor
+    __FLT_HAS_INFINITY__: '1'
+    __GNUC_EXECUTION_CHARSET_NAME: '"UTF-8"'
+    __CHAR_UNSIGNED__: '1'
+    __UINT_FAST16_TYPE__: unsigned int
+    __DEC64_MAX__: 9.999999999999999E384DD
+    __INT_FAST32_WIDTH__: '32'
+    __CHAR16_TYPE__: short unsigned int
+    __PRAGMA_REDEFINE_EXTNAME: '1'
+    __SIZE_WIDTH__: '32'
+    __WINT_WIDTH__: '32'
+    __INT_LEAST16_MAX__: '0x7fff'
+    __LONG_DOUBLE_IBM128__: '1'
+    __DEC64_MANT_DIG__: '16'
+    __INT64_MAX__: 0x7fffffffffffffffLL
+    __FLT32_DENORM_MIN__: 1.40129846432481707092372958328992e-45F32
+    __SIG_ATOMIC_WIDTH__: '32'
+    __INT_LEAST64_TYPE__: long long int
+    __builtin_vsx_xvmsubasp: __builtin_vsx_xvmsubsp
+    __INT16_TYPE__: short int
+    __INT_LEAST8_TYPE__: signed char
+    __DEC32_MAX_EXP__: '97'
+    _BIG_ENDIAN: '1'
+    __INT_FAST8_MAX__: '0x7f'
+    __SIZEOF_POINTER__: '4'
+    __FLT64_HAS_QUIET_NAN__: '1'
+    __PPC: '1'
+    __FLT32_MIN_10_EXP__: (-37)
+    __FLT32X_DIG__: '15'
+    __UINT16_C(c): c
+    __PTRDIFF_WIDTH__: '32'
+    __builtin_vsx_xvmaddadp: __builtin_vsx_xvmadddp
+    __FLT64_HAS_INFINITY__: '1'
+    __SIG_ATOMIC_MIN__: (-__SIG_ATOMIC_MAX__ - 1)
+    __INTPTR_TYPE__: int
+    __UINT16_TYPE__: short unsigned int
+    __SIZEOF_FLOAT__: '4'
+    __UINTPTR_MAX__: 0xffffffffU
+    __FLT32X_DENORM_MIN__: 4.94065645841246544176568792868221e-324F32x
+    __INT_FAST64_WIDTH__: '64'
+    __FLT32_DECIMAL_DIG__: '9'
+    __INT_FAST64_MAX__: 0x7fffffffffffffffLL
+    __GCC_ATOMIC_TEST_AND_SET_TRUEVAL: '1'
+    __FLT_NORM_MAX__: 3.40282346638528859811704183484517e+38F
+    __FLT32_HAS_INFINITY__: '1'
+    __powerpc: '1'
+    __INT_MAX__: '0x7fffffff'
+    __linux__: '1'
+    __LONG_DOUBLE_128__: '1'
+    __FLT64_MAX_EXP__: '1024'
+    __INT64_TYPE__: long long int
+    __FLT_MAX_EXP__: '128'
+    __builtin_vsx_xxlor: __builtin_vec_or
+    __INT_FAST64_TYPE__: long long int
+    __DBL_MANT_DIG__: '53'
+    _TIME_BITS: '64'
+    __INT_LEAST64_MAX__: 0x7fffffffffffffffLL
+    __GCC_ATOMIC_CHAR16_T_LOCK_FREE: '2'
+    __FP_FAST_FMAF32: '1'
+    __DEC64_MIN__: 1E-383DD
+    __WINT_TYPE__: unsigned int
+    __UINT_LEAST32_TYPE__: unsigned int
+    __SIZEOF_SHORT__: '2'
+    __FLT32_NORM_MAX__: 3.40282346638528859811704183484517e+38F32
+    __FLT64_MAX__: 1.79769313486231570814527423731704e+308F64
+    __INT_LEAST8_MAX__: '0x7f'
+    __INT_LEAST64_WIDTH__: '64'
+    __FLT32X_MAX_10_EXP__: '308'
+    __LDBL_MAX_10_EXP__: '308'
+    __ATOMIC_RELAXED: '0'
+    __DBL_EPSILON__: ((double)2.22044604925031308084726333618164e-16L)
+    __INT_LEAST32_TYPE__: int
+    __UINT8_C(c): c
+    __SIZEOF_WCHAR_T__: '4'
+    __builtin_vsx_xvmaddasp: __builtin_vsx_xvmaddsp
+    __FLT64_NORM_MAX__: 1.79769313486231570814527423731704e+308F64
+    __INTMAX_MAX__: 0x7fffffffffffffffLL
+    __INT_FAST8_TYPE__: signed char
+    _ARCH_PPC: '1'
+    __GNUC_STDC_INLINE__: '1'
+    __FLT64_HAS_DENORM__: '1'
+    __FLT32_EPSILON__: 1.19209289550781250000000000000000e-7F32
+    __FP_FAST_FMAF32x: '1'
+    __DBL_DECIMAL_DIG__: '17'
+    __INT_FAST8_WIDTH__: '8'
+    __FLT32X_MAX__: 1.79769313486231570814527423731704e+308F32x
+    __DBL_NORM_MAX__: ((double)1.79769313486231570814527423731704e+308L)
+    __BYTE_ORDER__: __ORDER_BIG_ENDIAN__
+    __VEC_ELEMENT_REG_ORDER__: __ORDER_BIG_ENDIAN__
+    _FILE_OFFSET_BITS: '64'
+    __ORDER_BIG_ENDIAN__: '4321'
+    __FLT32_DIG__: '6'
+    __UINT64_TYPE__: long long unsigned int
+    __UINT32_C(c): 'c ## U'
+    __FLT32X_MIN__: 2.22507385850720138309023271733240e-308F32x
+    __FLT_DENORM_MIN__: 1.40129846432481707092372958328992e-45F
+    __builtin_vsx_xvnmsubasp: __builtin_vsx_xvnmsubsp
+    __INT8_MAX__: '0x7f'
+    __LONG_WIDTH__: '32'
+    __UINT_FAST32_TYPE__: unsigned int
+    __FLT32X_NORM_MAX__: 1.79769313486231570814527423731704e+308F32x
+    __CHAR32_TYPE__: unsigned int
+    __FLT_MAX__: 3.40282346638528859811704183484517e+38F
+    __builtin_vsx_xvnmsubadp: __builtin_vsx_xvnmsubdp
+    __builtin_vsx_xxlnor: __builtin_vec_nor
+    __INT32_TYPE__: int
+    __SIZEOF_DOUBLE__: '8'
+    __FLT_MIN_10_EXP__: (-37)
+    __FLT64_MIN__: 2.22507385850720138309023271733240e-308F64
+    __INT_LEAST32_WIDTH__: '32'
+    __INTMAX_TYPE__: long long int
+    __DEC128_MAX_EXP__: '6145'
+    __INT16_C(c): c
+    __FLT32X_HAS_QUIET_NAN__: '1'
+    __ATOMIC_CONSUME: '1'
+    __GNUC_MINOR__: '3'
+    __INT_FAST16_WIDTH__: '32'
+    __UINTMAX_MAX__: 0xffffffffffffffffULL
+    __DEC32_MANT_DIG__: '7'
+    __DBL_MAX_10_EXP__: '308'
+    __LDBL_DENORM_MIN__: 4.94065645841246544176568792868221e-324L
+    __PTRDIFF_TYPE__: int
+    __UINT32_TYPE__: unsigned int
+    __FLT32X_MIN_10_EXP__: (-307)
+    __UINTPTR_TYPE__: unsigned int
+    __DEC64_SUBNORMAL_MIN__: 0.000000000000001E-383DD
+    __DEC128_MANT_DIG__: '34'
+    __LDBL_MIN_10_EXP__: (-291)
+    __SIZEOF_LONG_LONG__: '8'
+    __GCC_ATOMIC_LLONG_LOCK_FREE: '1'
+    __FLT_DECIMAL_DIG__: '9'
+    __UINT_FAST16_MAX__: 0xffffffffU
+    __LDBL_NORM_MAX__: 8.98846567431157953864652595394501e+307L
+    __GCC_ATOMIC_SHORT_LOCK_FREE: '2'
+    __UINT_FAST8_TYPE__: unsigned char
+    __ATOMIC_ACQ_REL: '4'
+    __ATOMIC_RELEASE: '3'
+eof: (-1)
+errno:
+    edom: '33'
+    eilseq: '84'
+    erange: '34'
+    e2big: '7'
+    eacces: '13'
+    eaddrinuse: '98'
+    eaddrnotavail: '99'
+    eafnosupport: '97'
+    eagain: '11'
+    ealready: '114'
+    ebade: '52'
+    ebadf: '9'
+    ebadfd: '77'
+    ebadmsg: '74'
+    ebadr: '53'
+    ebadrqc: '56'
+    ebadslt: '57'
+    ebusy: '16'
+    ecanceled: '125'
+    echild: '10'
+    echrng: '44'
+    ecomm: '70'
+    econnaborted: '103'
+    econnrefused: '111'
+    econnreset: '104'
+    edeadlk: '35'
+    edeadlock: '58'
+    edestaddrreq: '89'
+    edquot: '122'
+    eexist: '17'
+    efault: '14'
+    efbig: '27'
+    ehostdown: '112'
+    ehostunreach: '113'
+    eidrm: '43'
+    einprogress: '115'
+    eintr: '4'
+    einval: '22'
+    eio: '5'
+    eisconn: '106'
+    eisdir: '21'
+    eisnam: '120'
+    ekeyexpired: '127'
+    ekeyrejected: '129'
+    ekeyrevoked: '128'
+    el2hlt: '51'
+    el2nsync: '45'
+    el3hlt: '46'
+    el3rst: '47'
+    elibacc: '79'
+    elibbad: '80'
+    elibmax: '82'
+    elibscn: '81'
+    elibexec: '83'
+    eloop: '40'
+    emediumtype: '124'
+    emfile: '24'
+    emlink: '31'
+    emsgsize: '90'
+    emultihop: '72'
+    enametoolong: '36'
+    enetdown: '100'
+    enetreset: '102'
+    enetunreach: '101'
+    enfile: '23'
+    enobufs: '105'
+    enodata: '61'
+    enodev: '19'
+    enoent: '2'
+    enoexec: '8'
+    enokey: '126'
+    enolck: '37'
+    enolink: '67'
+    enomedium: '123'
+    enomem: '12'
+    enomsg: '42'
+    enonet: '64'
+    enopkg: '65'
+    enoprotoopt: '92'
+    enospc: '28'
+    enosr: '63'
+    enostr: '60'
+    enosys: '38'
+    enotblk: '15'
+    enotconn: '107'
+    enotdir: '20'
+    enotempty: '39'
+    enotrecoverable: '131'
+    enotsock: '88'
+    enotsup: '95'
+    enotty: '25'
+    enotuniq: '76'
+    enxio: '6'
+    eopnotsupp: '95'
+    eoverflow: '75'
+    eownerdead: '130'
+    eperm: '1'
+    epfnosupport: '96'
+    epipe: '32'
+    eproto: '71'
+    eprotonosupport: '93'
+    eprototype: '91'
+    eremchg: '78'
+    eremote: '66'
+    eremoteio: '121'
+    erestart: '85'
+    erofs: '30'
+    eshutdown: '108'
+    espipe: '29'
+    esocktnosupport: '94'
+    esrch: '3'
+    estale: '116'
+    estrpipe: '86'
+    etime: '62'
+    etimedout: '110'
+    etxtbsy: '26'
+    euclean: '117'
+    eunatch: '49'
+    eusers: '87'
+    ewouldblock: '11'
+    exdev: '18'
+    exfull: '54'
+filename_max: '4096'
+fopen_max: '16'
+has__builtin_va_list: true
+host_name_max: '64'
+int_fast8_t: signed char
+int_fast16_t: int
+int_fast32_t: int
+int_fast64_t: long long
+intptr_t: int
+l_tmpnam: '20'
+little_endian: false
+machdep_name: machdep_ppc32_linux_gnu
+mb_cur_max: ((size_t) 16 )
+nsig: (64 + 1)
+path_max: '4096'
+posix_version: 200809L
+ptrdiff_t: int
+rand_max: '2147483647'
+sig_atomic_t: int
+size_t: unsigned int
+sizeof_double: 8
+sizeof_float: 4
+sizeof_fun: 1
+sizeof_int: 4
+sizeof_long: 4
+sizeof_longdouble: 16
+sizeof_longlong: 8
+sizeof_ptr: 4
+sizeof_short: 2
+sizeof_void: 1
+ssize_t: int
+time_t: long long
+tmp_max: '238328'
+tty_name_max: '32'
+uint_fast8_t: unsigned char
+uint_fast16_t: unsigned int
+uint_fast32_t: unsigned int
+uint_fast64_t: unsigned long long
+uintptr_t: unsigned int
+version: powerpc-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+wchar_t: long
+weof: (0xffffffffu)
+wint_t: unsigned int
+wordsize: '32'

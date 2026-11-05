@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # tools/machdeps/generate.sh OUTDIR
 #
-# VERIFY-060, phases A to A3: generate the Frama-C machine models
+# VERIFY-060, phases A to B: generate the Frama-C machine models
 # ("machdeps") of the seven targets the core/ proofs are to run at. Frama-C
 # ships none for Arm or RISC-V; since Frama-C 28 its make-machdep script
 # derives one from a C compiler by compiling small test files, without
@@ -27,9 +27,9 @@
 # includes <stdbool.h> first (VERIFY-060, phase A2). The model's other
 # fields stay in GNU mode, as at the other models: in full ISO mode glibc's
 # headers also leave out NSIG, PATH_MAX, HOST_NAME_MAX and TTY_NAME_MAX,
-# which make-machdep reads into the model's library constants.
-# ppc32_linux_gnu_gnumode, the same compiler wholly in GNU mode, is generated
-# in phase A3 only, uncommitted, to test that diagnosis.
+# which make-machdep reads into the model's library constants. (Phase A3
+# also generated the model wholly in GNU mode, and arena.h and lifetime.h
+# failed there at a use of bool, as diagnosed.)
 #
 # Each model is written to OUTDIR/machdep_<name>.yaml and printed, so that the
 # job's log carries it. Exit status: the number of targets that failed.
@@ -47,7 +47,6 @@ TARGETS=(
   "rv64_linux_gnu|riscv64-linux-gnu-gcc|"
   "aarch64_linux_gnu|aarch64-linux-gnu-gcc|"
   "ppc32_linux_gnu|powerpc-linux-gnu-gcc||-std=c11"
-  "ppc32_linux_gnu_gnumode|powerpc-linux-gnu-gcc|"
 )
 
 FAILS=0
