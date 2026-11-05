@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # tools/machdeps/check.sh OUTDIR [MODEL.yaml ...]
 #
-# VERIFY-060, phases A and A2. For each model given (machdep_<name>.yaml),
+# VERIFY-060, phases A to A3. For each model given (machdep_<name>.yaml),
 # and for Frama-C's own x86_64, gcc_x86_32, ppc_32 and msvc_x86_64:
 #   1. Frama-C reads check.c at the model with -constfold, and the probe_
 #      lines of the code it prints are shown: sizes, alignments, CHAR_MIN,
 #      the libc typedefs, and the compiler macros its preprocessing defines.
 #   2. Each of the ten core/ units is parsed and typed at the model, with its
 #      proof job's preprocessing flags, without running WP; the warnings
-#      Frama-C gives are counted and shown, once each.
+#      Frama-C gives are counted and shown, once each, and the errors of a
+#      unit that does not parse are shown.
 # The Cortex-M4 model is also read with -enums gcc-short-enums, the enum
 # layout of arm-none-eabi.
 #   3. The mode control. A model is in Frama-C's GCC mode when its compiler
 #      field is "gcc"; Frama-C's x86_64, the proofs' default, is not a GCC
 #      model in Frama-C 25 (VERIFY-060). The code Frama-C prints for each
 #      unit, the input WP is given, is compared at x86_64 and gcc_x86_64,
-#      and at the Cortex-M4 model with its compiler field "generic" and
-#      "gcc". The printer's #include lines are left out of the comparison.
+#      at the Cortex-M4 model with its compiler field "generic" and "gcc",
+#      and at Frama-C's ppc_32 with its field "clang" and "gcc". The
+#      printer's #include lines are left out of the comparison.
 # Outputs go to OUTDIR. Run from the repository root. Exit status: the
 # number of reads that failed; a difference in part 3 is reported, not
 # counted.
@@ -73,6 +75,7 @@ for m in "${MODELS[@]}"; do
   IFS='|' read -r name args <<< "$m"
   bad=""
   logs=()
+  badlogs=()
   for u in "${UNITS[@]}"; do
     IFS='|' read -r file extra <<< "$u"
     log="$D/parse_${name}_$(basename "$file" .h).log"
@@ -81,6 +84,7 @@ for m in "${MODELS[@]}"; do
     if ! frama-c $args -cpp-extra-args="${BASE} ${extra} -DCANON_NO_REQUIRE -DNDEBUG" \
          "$file" > "$log" 2>&1; then
       bad="${bad} $(basename "$file")"
+      badlogs+=("$log")
       FAILS=$((FAILS + 1))
     fi
   done
@@ -88,6 +92,10 @@ for m in "${MODELS[@]}"; do
     echo "== ${name}: all ${#UNITS[@]} units parsed"
   else
     echo "FAIL: ${name}: not parsed:${bad}"
+    for log in "${badlogs[@]}"; do
+      echo "-- ${log##*/}: the errors"
+      grep -i -E -A6 "error|failure|abort" "$log" | head -24 | sed 's/^/   /'
+    done
   fi
   # Each distinct warning once, with the number of units giving it.
   grep -h -i -E "warning" "${logs[@]}" | sed -E 's/^[^ ]*:[0-9]+:[ ]*//' \
@@ -96,6 +104,11 @@ done
 
 echo "=== 3. the mode control: each unit's code outside and in GCC mode"
 PAIRS=("x86_64|-machdep x86_64|-machdep gcc_x86_64")
+share=$(frama-c -print-share-path 2>/dev/null)
+if [ -f "${share}/machdeps/machdep_ppc_32.yaml" ]; then
+  sed 's/^compiler: .*/compiler: gcc/' "${share}/machdeps/machdep_ppc_32.yaml" > "$D/machdep_ppc_32_gcc.yaml"
+  PAIRS+=("ppc_32|-machdep ppc_32|-machdep $D/machdep_ppc_32_gcc.yaml")
+fi
 for y in "$@"; do
   if [ "$(basename "$y")" = machdep_cortex_m4.yaml ]; then
     sed 's/^compiler: .*/compiler: generic/' "$y" > "$D/machdep_cortex_m4_generic.yaml"

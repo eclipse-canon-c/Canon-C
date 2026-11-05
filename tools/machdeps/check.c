@@ -1,7 +1,7 @@
 /* tools/machdeps/check.c — what Frama-C's front end sees at a machine model
- * (VERIFY-060, phase A). check.sh reads it at each model with -constfold
- * and prints every probe_ variable: the sizes and alignments the model
- * gives, and which compiler macros the preprocessing defines. */
+ * (VERIFY-060, phases A to A3). check.sh reads it at each model with
+ * -constfold and prints every probe_ variable: the sizes and alignments the
+ * model gives, and which compiler macros the preprocessing defines. */
 
 #include <stddef.h>
 #include <stdint.h>
@@ -67,6 +67,9 @@ int probe_macro_big_endian = 1;
 #endif
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 int probe_macro_little_endian = 1;
+#endif
+#if defined(__STRICT_ANSI__)
+int probe_macro_strict_ansi = 1;
 #endif
 #if defined(__STDC_VERSION__)
 long probe_macro_stdc_version = __STDC_VERSION__;
