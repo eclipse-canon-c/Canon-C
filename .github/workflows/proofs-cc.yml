@@ -146,7 +146,8 @@ jobs:
           # VERIFY-059 predicted pins: vec and vec_struct +12 each,
           # ptr_in_range's and ptr_range_in_range's result postconditions,
           # all proved. Before: vec 5532 / 5601, vec_struct 5530 / 5599.
-          # Held at run 1 (afabc7d).
+          # Held at runs 1 and 2 (afabc7d, CC #15; db4509d, CC #16),
+          # enforced from run 3.
           - { family: vec,    model: "Typed+Cast", budget: 300, driver_job: frama-c-vec,    proved: "5544 / 5613", unproved: 69  }
           - { family: deque,  model: "Typed",      budget: 300, driver_job: frama-c-deque,  proved: "1653 / 1665", unproved: 12  }
           # vec_struct: VERIFY-037/038 — vec and option at a struct type (Rec).
@@ -269,7 +270,6 @@ jobs:
           echo "==============================================================="
 
       - name: "Gates 0-3: proved line, zero refutations, exact count, roll-call (ENFORCED)"
-        continue-on-error: ${{ matrix.family == 'vec' || matrix.family == 'vec_struct' }}   # VERIFY-059 runs 1 and 2, report-only for the two families whose pins move; run 3 removes this line
         shell: bash
         run: |
           OUT="wp_cc_${{ matrix.family }}_output.txt"

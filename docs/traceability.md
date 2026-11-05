@@ -270,10 +270,17 @@
 
 | Metric     | Percentage | Covered    | Total      |
 |------------|------------|------------|------------|
-| Lines      | 97.3%      | 2932       | 3013       |
+| Lines      | 97.3%      | 2933       | 3014       |
 | Functions  | 99.6%      | 753        | 756        |
 | Branches   | 92.0%      | 1777       | 1932       |
 | MC/DC      | 92.4%      | 2030       | 2198       |
+
+> **Brought up to afabc7d and db4509d (VERIFY-059), 2026-11-05.** The
+> coverage job's logs read the same at both: lines 2933 / 3014, functions
+> 753 / 756, branches 1777 / 1932 and MC/DC 2030 / 2198. The push changed
+> the code of ptr.h's two bounds checks, which keep as many conditions as
+> before, and added a test of the cases the old code got wrong: one line
+> more, covered; ptr.h's MC/DC 42 / 42 as before.
 
 > **Re-read at a32639e and 6102084 (VERIFY-058), 2026-11-04.** The
 > coverage job's logs read the same at both: lines 2932 / 3013, functions
@@ -1018,30 +1025,38 @@ and after the paragraphs below say where a reading here no longer holds.
 | checked.h  | 30        |              1755 | 1753 (99.89%) | 2        | VERIFY-002   |
 | bits.h     | 18        |               757 | 745 (98.41%) | 12       | VERIFY-003/4 |
 | compare.h  | 28        |               208 | 208 (100.00%) | 0        | VERIFY-005   |
-| ptr.h      | 21        |              1960 | 1954 (99.69%) | 6        | VERIFY-006/23/58 |
+| ptr.h      | 21        |              1972 | 1966 (99.70%) | 6        | VERIFY-006/23/58/59 |
 | slice.h    | 22        |               398 | 390 (97.99%) | 8        | VERIFY-007/12 |
-| memory.h   | 27        |              2875 | 2844 (98.92%) | 31       | VERIFY-008/12/23/58 |
-| arena.h    | 25        |              3558 | 3525 (99.07%) | 33       | VERIFY-009/12/23/33/58 |
-| pool.h     | 21        |              4089 | 4055 (99.17%) | 34       | VERIFY-010/12/23/33/58 |
-| region.h   | 12        |              3732 | 3693 (98.95%) | 39       | VERIFY-011/12/23/33/58 |
+| memory.h   | 27        |              2887 | 2856 (98.93%) | 31       | VERIFY-008/12/23/58/59 |
+| arena.h    | 25        |              3570 | 3537 (99.08%) | 33       | VERIFY-009/12/23/33/58/59 |
+| pool.h     | 21        |              4101 | 4067 (99.17%) | 34       | VERIFY-010/12/23/33/58/59 |
+| region.h   | 12        |              3744 | 3705 (98.96%) | 39       | VERIFY-011/12/23/33/58/59 |
 | error.h    | 4         |                65 | 65 (100.00%) | 0        | VERIFY-013   |
 | option     | 16        |               228 | 222 (97.37%) | 6        | VERIFY-014   |
 | result     | 17        |               213 | 207 (97.18%) | 6        | VERIFY-015   |
 | borrow.h   | 24        |              2465 | 2451 (99.43%) | 14       | VERIFY-016   |
 | diag.h     | 13        |              3058 | 3050 (99.74%) | 8        | VERIFY-017   |
-| vec        | 37        |              5576 | 5483 (98.33%) | 93       | VERIFY-018/23/33/40/58 |
+| vec        | 37        |              5588 | 5495 (98.34%) | 93       | VERIFY-018/23/33/40/58/59 |
 | deque      | 24        |              1665 | 1653 (99.28%) | 12       | VERIFY-019/40 |
-| bitset     | 32        |              5048 | 4974 (98.53%) | 74       | VERIFY-020/23/40/58 |
+| bitset     | 32        |              5060 | 4986 (98.54%) | 74       | VERIFY-020/23/40/58/59 |
 | lifetime.h | 1         |                 4 | 4 (100.00%)  | 0        | VERIFY-021   |
-| priority_queue.h | 41  |              4706 | 4668 (99.19%) | 38       | VERIFY-022/40/58 |
+| priority_queue.h | 41  |              4718 | 4680 (99.19%) | 38       | VERIFY-022/40/58/59 |
 | range.h    | 15        |              2652 | 2644 (99.70%) | 8        | VERIFY-028/29/30 |
-| stringbuf.h | 29       |              4834 | 4797 (99.23%) | 37       | VERIFY-031..35, 58 |
-| vec_range.h | 1        |              5212 | 5167 (99.14%) | 45       | VERIFY-041/58 |
-| vec_fmt.h  | 2         |              5294 | 5247 (99.11%) | 47       | VERIFY-042/58 |
-| stack.h    | 14        |              5791 | 5722 (98.81%) | 69       | VERIFY-049/58 |
+| stringbuf.h | 29       |              4846 | 4809 (99.24%) | 37       | VERIFY-031..35, 58, 59 |
+| vec_range.h | 1        |              5224 | 5179 (99.14%) | 45       | VERIFY-041/58/59 |
+| vec_fmt.h  | 2         |              5306 | 5259 (99.11%) | 47       | VERIFY-042/58/59 |
+| stack.h    | 14        |              5803 | 5734 (98.81%) | 69       | VERIFY-049/58/59 |
 | array.h    | 20        |              2887 | 2863 (99.17%) | 24       | VERIFY-052   |
 | hashmap    | 19        |              4784 | 4738 (99.04%) | 46       | VERIFY-054/55/56 |
-| **Total**  | **513**   | **73814**         | **73122 (99.06%)**| **692**  |              |
+| **Total**  | **513**   | **73958**         | **73266 (99.06%)**| **692**  |              |
+
+*Brought to the pins again 2026-11-05 (VERIFY-059).* Twelve rows move,
++12 each: ptr.h's `ptr_in_range` and `ptr_range_in_range` compare
+`uintptr_t` addresses and their contracts state their result, which every
+unit that includes ptr.h proves; every added goal proved, no unproved goal
+added or closed. Runs 1 and 2 (afabc7d, db4509d) gave the same lines and
+names; enforced from run 3. The total is 73958 obligations, 73266 proved
+and 692 unproved, from 73814, 73122 and 692.
 
 *Brought to the pins again 2026-11-04 (VERIFY-058).* Twelve rows move:
 ptr.h's `ptr_offset`, `ptr_offset_const` and `ptr_retreat` require their
@@ -1890,6 +1905,7 @@ unprovable by construction — cites the coverage stream as its
 | 2026-11-03 | 5f0387d → 978e4de | B&T #10 → #11 | v1.3.0  | 97.0%  | 99.6%     | 91.8%    | 92.1%  | **hashmap** (VERIFY-055), module 24, and the agreed order of the data/ layer done. Predicted at d04130c before the contracts (173b7a2): a shape invariant per map, memory safety, frames, `len` bookkeeping and termination; the Robin Hood order not claimed. `init` and `clear` empty the slots by a typed loop, not `memset`. Run 1 on 173b7a2, 4585/4640, 15 own (two masks; 13 that rest on the probe distance bound) and 40 inherited, 0 Failed; five predictions matched, one partly missed (the float goal proved, a third outcome). Run 2 on 978e4de: the same line and names. Enforced at 4585/4640 with 55 names; the masks filed under VERIFY-039's fixed-width block, the 13 under a new block. MC/DC 2021/2194 → 2023/2196 (the typed loop's two outcomes, covered); lines, functions and branches from the job's log at f855a66, the same as a local run of its steps. Enforced from run 3 (f855a66, Proofs: data/ #12): the job read "NAMES SAME" and "PROVED SAME", 4585/4640. **Corrected the same day:** `remove` is defective on a full map (capacities 1 and 2 only), and six of the 13 goals argued under the new block are false; VERIFY-055 is reopened, VERIFY-056 is the repair. |
 | 2026-11-03 | 8152928 → 2bad3cd | B&T #13 → #14 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **hashmap repaired** (VERIFY-056): an independent review of VERIFY-055's argument found `remove` defective on a full map, possible at capacities 1 and 2 only (the last slot kept its element; a second remove wrapped `len`), and the argument wrong. Fixed under a pre-registration (80f623f before 8152928): the shift empties the slot it ends at, `len` is decremented only above 0, `insert`'s loop states `psl <= i`; a test at capacities 1 and 2, and the fuzz target draws them. Run 1: 4738/4784, own 15 → 6 (the masks and four frame goals), every prediction matched; run 2 (2bad3cd) the same; enforced. MC/DC 2023/2196 → 2030/2198, `hashmap_impl.h` 65/92 → 72/94, from CI's annotation; lines, functions and branches measured with the job's steps here, as its MC/DC matched. The docs sweep of the same day (4a4572b) recorded the defect and corrected stale statuses and figures across the docs. |
 | 2026-11-04 | a32639e → 6102084 | B&T #17 → #18 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **pointer arithmetic kept in its object** (VERIFY-057, VERIFY-058): a probe (9207897, `9 · Probes` #3) ran every unit once with `-warn-invalid-pointer`, which `-wp-rte` lacks: 1073 pointer goals, 122 unproved, 44 names in five kinds, three of them false: `ptr_offset`, `ptr_offset_const` and `ptr_retreat` admitted a result outside its object. Repaired under a pre-registration (d058104 before a32639e): the three, and `ptr_elem` and `ptr_elem_const` which call them, require `in_object`; every call in a verified unit proves it, +104 goals over twelve units, all proved; the probe at 987 / 1073. Runs 1 and 2 report-only and identical, enforced from run 3. No code or test changed; coverage unchanged. |
+| 2026-11-05 | afabc7d → db4509d | B&T #20 → #21 | v1.3.0  | 97.3%  | 99.6%     | 92.0%    | 92.4%  | **the bounds checks compare addresses** (VERIFY-059): stating the proved configuration found `ptr_range_in_range` true for a range starting past the region's end, a result its contract left unstated, and both bounds checks comparing pointers their contracts let lie in different objects. Repaired under a pre-registration (cc08e1b before afabc7d): both compare `uintptr_t` addresses and state their result, +12 goals in each unit that includes ptr.h, all proved, every prediction matched at runs 1 and 2; a test and a fuzz check of the old cases. checked.h's `CHECKED_ASSERT_RESULT` reaches `require_msg` in debug builds, as documented; contract.h's table corrected. Lines 2933/3014, MC/DC 2030/2198. |
 
 > **Note (2026-11-02): the commit and CI columns of the rows above.**
 > - **CI numbers since VERIFY-050.** VERIFY-050 split the one CI workflow

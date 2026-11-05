@@ -28933,6 +28933,7 @@ The pins hold enforced.
 | **ID**         | VERIFY-059 |
 | **Date**       | 2026-11-04 |
 | **Status**     | PREDICTED. This record is committed before the fix commit, which is pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-05 — CLOSED: runs 1 (afabc7d) and 2 (db4509d) gave the same lines and names, and every prediction matched; enforced from run 3. See "Run 2 scored, and enforced" below. The Status above is the record as committed. |
 | **Baseline**   | `docs: the proved configuration, stated; README's claim corrected`, on 530381c (named by its subject: it may be pushed with this record) |
 | **Scope**      | `core/primitives/ptr.h` (`ptr_in_range` and `ptr_range_in_range`: code, contracts, documentation, a banner; the file header's list of unsuitable uses); `test/core/primitives/ptr_test.c` (a test of the cases the old code got wrong, and a check in the fuzz twin); `core/primitives/checked.h` (`CHECKED_ASSERT_RESULT`'s guard and comment); `core/primitives/contract.h` (comments only: its enforcement table, the descriptions of `CANON_STRICT`, `CANON_NO_REQUIRE`, `ensure` and `ensure_msg`, and the recommended configurations); `.github/workflows/proofs-core.yml`, `proofs-data.yml` and `proofs-cc.yml` (the predicted pins of the jobs whose units include ptr.h, report-only for runs 1 and 2); `.github/workflows/ci.yml` (one comment); `docs/verification.md` (two statements of the proved configuration that the change makes stale); a note in MISRA-DEV-010 |
 | **Category**   | Four errors found while stating the proved configuration (`docs/verification.md`): a wrong result that no contract stated, behaviour C leaves undefined that the contracts admitted, a dead branch, and a wrong table. Decided with the author (2026-11-04): compare addresses as `uintptr_t` values and state the results; test contract.h's real guard; correct the table, not the code; before the machine-model proofs. |
@@ -29175,3 +29176,36 @@ code identical to afabc7d's; the `continue-on-error` lines stay. Q6 is
 scored from it: the fifteen and `frama-c-win64` give the same lines and
 names as run 1. Run 3 then removes the fifteen lines, and the docs are
 brought to the pins.
+
+### Run 2 scored, and enforced (2026-11-05)
+
+The push of db4509d ran 86 jobs, all `success`: the seven main workflows'
+79 (`4 · Proofs: core/` #21, `6 · Proofs: data/` #21, `5 · Proofs:
+semantics/` #21, `1 · Build & test` #21) and `7 · Proofs: -CC` #16's 7. No
+probe ran: no probe's paths changed.
+
+| # | scored |
+|---|--------|
+| Q6 | **MATCH.** Each of the fifteen, and `frama-c-win64`, gives run 1's proved line and run 1's unproved names, compared name by name from the two runs' logs; none Failed or Invalid, no FAIL line. `frama-c-win64`: "SAME: 31 unproved, the same names at both models" for memory, 12 for bits. `frama-c-stack`: "INHERITED SAME: the 69 cc-vec names, exactly", "OWN NONE". |
+
+Every prediction of this record matched: Q1 to Q5 at run 1, Q6 at run 2.
+
+**Enforced.** The commit carrying this score removes the fifteen
+`continue-on-error` lines, so each job fails on its pin again; the pin
+comments say the pins held at runs 1 and 2. Run 3 is its push.
+
+**The docs** are brought to the pins in the same commit:
+`docs/verification.md`'s card, now 25 / 512 / 73954 / 73262 (99.06%) / 692
+from 73810 and 73118, with a dated note; the expected outputs, summaries and
+roadmap rows of the twelve units; a note in ptr.h's section on what its
+"functional correctness" covered of the two bounds checks before;
+`docs/traceability.md`'s proof table, 73958 / 73266 (99.06%) / 692, its
+coverage table and its history; `docs/vmacros.md`'s vec and bitset rows.
+No unproved goal was added or closed, so no block in this file changes, and
+every pinned name keeps its table.
+
+**VERIFY-059 is closed.** F1 to F4 are repaired: the bounds checks compare
+addresses, and their contracts state the results the proofs now check;
+`CHECKED_ASSERT_RESULT`'s debug check reaches `require_msg` as documented;
+contract.h's table says what its macros do. Next, as decided with the
+author: the machine-model proofs.
