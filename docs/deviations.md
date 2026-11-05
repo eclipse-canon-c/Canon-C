@@ -29581,3 +29581,89 @@ still says "seven models" while it generates eight.
 **What follows.** Phase B, pre-registered from this run: nine models, 90
 jobs, report-only, in a workflow of their own with the paths above; the
 ISO-mode PowerPC model committed in its push, and the GNU-mode one dropped.
+
+### Phase A3 scored (2026-11-05): every prediction matched
+
+The push of 1aadd14 and 02fdfe5 ran three workflows, 18 jobs, all
+`success`: `10 · Machine models` #3, `2 · Platforms` #31 and `8 · Records`
+#30. `check.sh` exited 2, its two failed parses being A19's, in a
+report-only step.
+
+| # | scored |
+|---|--------|
+| A17 | **MATCH.** "generate.sh: 8 targets, 0 failed". The ISO-mode PowerPC model's fields are #2's GNU-mode model's but for `custom_defs`, 342 entries for 349: without `PPC`, `_Bool`, `bool`, `linux`, `pixel`, `powerpc`, `unix` and `vector`, with `__STRICT_ANSI__` 1, and no value changed. The GNU-mode copy regenerated #2's model field for field, but its name. |
+| A18 | **MATCH.** All ten units parse at it, with no warning; `check.c` reads there as at #2's model, with `__STRICT_ANSI__` defined and `__STDC_VERSION__` 201710. |
+| A19 | **MATCH.** At the GNU-mode copy, `arena.h` and `lifetime.h` fail again and the other eight parse. Both fail at a use of `bool` as a type: arena.h's parse at `static inline bool checked_add(...)`, in checked.h, which arena.h's includes bring in after `<stdbool.h>`; lifetime.h's at a struct member, `bool open;`. The `"bool" redefined` warnings come back, 16 of them. The diagnosis stands. |
+| A20 | **MATCH.** The six committed models SAME, 62 fields each. |
+| A21 | **MATCH.** `check.c` read at the eleven other models exactly as in phase A2; the ten units parsed at each, 110 parses; the mode control finds the same code for all ten at `x86_64`, Cortex-M4 and `ppc_32`. |
+| A22 | **MATCH.** `2 · Platforms` 15 of 15 `success`, `8 · Records` `success`. |
+
+So the nine models phase B proves at are settled: the six committed
+models (Cortex-M4 read with `-enums gcc-short-enums`), the ISO-mode
+PowerPC model, which phase B's push commits as #3's log prints it, and
+Frama-C's own `ppc_32` and `msvc_x86_64`.
+
+### Phase B: pre-registration
+
+**The change.**
+
+1. **`.github/workflows/proofs-machdeps.yml`, `11 · Proofs: machine
+   models`:** a matrix of the nine models and the ten units, 90 jobs. Each
+   runs its unit's x86_64 command from proofs-core.yml (the same provers,
+   timeout, memory model and definitions) with the model added: `-machdep`
+   and the model's file or Frama-C's name, and `-enums gcc-short-enums` at
+   Cortex-M4. It prints the proved line and each unproved goal by name,
+   uploads WP's output and posts an annotation. Report-only: no step fails
+   on the result, and a failed job does not fail the run. Each job's time
+   limit is about four times its unit's x86_64 run.
+2. **The PowerPC model committed,** copied unchanged from
+   `10 · Machine models` #3's log. `generate.sh` drops the GNU-mode copy.
+3. **The CI map** gains row 11; `tools/machdeps/README.md` and
+   machdeps.yml's header name the new workflow.
+
+It runs when `core/**`, `tools/machdeps/**`, its own file or the Frama-C
+setup change, and by hand. This push adds a workflow file, so the eight
+usual workflows run too: about 170 jobs. **Run 1** is this push. **Run 2**,
+the name-stability run, is started by hand ("Run workflow" on
+`11 · Proofs: machine models`), which runs this workflow alone. **Run 3**,
+enforced, comes with phase C's pins.
+
+**The baseline** is each unit's x86_64 proved line and unproved names: the
+pins in proofs-core.yml, which its jobs check at every push.
+
+**What the models leave the units to differ on.** Measured here and in
+phases A to A3, so that the predictions say why:
+
+- No unit uses `long double`, an enum (bits.h's and contract.h's are in
+  comments), `wchar_t`, or the library constants; plain `char` appears
+  only in ACSL validity casts in compare.h; `long` only in bits.h's MSVC
+  branch, which `__FRAMAC__` excludes. No proved header tests an
+  architecture or byte-order macro (phase A).
+- **`CANON_DEFAULT_ALIGN` is 16 at every model:** limits.h takes its C99
+  value under `__FRAMAC__` (Frama-C 25 here gives 16 at `x86_64`,
+  `gcc_x86_32`, `ppc_32` and `msvc_x86_64`). The targets' compilers give
+  `_Alignof(max_align_t)` 8 at Cortex-M4 and 32-bit Arm Linux and 16 at the
+  RISC-V, AArch64, PowerPC and x86_64 ones (measured here), so at Cortex-M4
+  and 32-bit Arm a C11 or later build uses 8, which no proof here covers:
+  phase B proves those targets' C99 configuration. docs/verification.md
+  states the general case ("need not be elsewhere"); phase C names these
+  two.
+- WP's Typed and Typed+Cast models do not represent byte order.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| B1 | **Every job ends with a WP summary** within its time limit: 90 proved lines. | a job without one | M–H: all ten parse at all nine models (A13, A18, A21); the times at the models are unmeasured |
+| B2 | **No Failed, Invalid or Stepout verdict** at any model. | any one | M: none at `gcc_x86_32` (arena) or `msvc_x86_64` (memory, bits) |
+| B3 | **The five ILP32 models agree**, unit by unit, on the proved line and the unproved names: Cortex-M4 with short enums, 32-bit Arm Linux, RV32 and the two big-endian PowerPC models. They differ only in what the list above says no unit uses, and in byte order. | a unit's line or names differ among them | M–H |
+| B4 | **The three LP64 models agree** with each other and with x86_64's pins, unit by unit: RV64 bare metal, RV64 Linux and AArch64 Linux. They differ from x86_64 in the signedness of `char`, Frama-C's mode, which changes no unit's code (A16, A21), and what no unit uses. | a unit's line or names differ | M |
+| B5 | **`msvc_x86_64` agrees with x86_64's pins**, unit by unit: `long` is 4 bytes there, and no unit's proved code uses `long`; `size_t`, `ptrdiff_t` and `intptr_t` are `long long` types of the same width. | a unit differs | M; H for memory and bits, which `frama-c-win64` checks at every push |
+| B6 | **At the ILP32 models, arena agrees with x86_64's pins**, as `frama-c-arena-32` does at `gcc_x86_32`. The other nine units' lines and names there are measured, not predicted: `usize` is 32 bits. Each difference from x86_64 is listed in the score and argued in phase C. | arena differs | M |
+| B7 | **Run 2 reproduces run 1** at every job: the same proved line and names. | any job differs | M–H |
+| B8 | **Nothing else moves:** the eight other workflows at their pins and green; at `10 · Machine models`, the seven committed models SAME and every read and parse succeeds, so `check.sh` exits 0. | any change | H |
+| B9 | **The cost,** each job's time and the run's, is measured. | — | — |
+
+**What follows.** Phase C, pre-registered from runs 1 and 2: each job's
+pins (its proved line and unproved names, the x86_64 job's style), the
+drift check made a gate, each difference from x86_64 filed and argued, and
+the docs: the proved configuration's machine models, the trusted base, and
+the two targets whose C11 default alignment is not proved.
