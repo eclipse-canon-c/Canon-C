@@ -29477,3 +29477,107 @@ again; `7 · Proofs: -CC` and `9 · Probes` do not.
 eighty proof jobs, report-only, with AArch64's and PowerPC's models
 committed in its push and the big-endian model chosen. Should A16 fail, the
 mode is settled before phase B.
+
+### Phase A2 scored (2026-11-05): A13 missed at the PowerPC model
+
+The push of bf286e1 and c1cada5 ran the same eight workflows, 80 jobs, all
+`success`: `10 · Machine models` #2, `1 · Build & test` #24, `2 · Platforms`
+#30, `3 · Static analysis & coverage` #24, `4 · Proofs: core/`,
+`5 · Proofs: semantics/` and `6 · Proofs: data/` #24 each, and
+`8 · Records` #29. In the machine-models job, `generate.sh` and the drift
+check exited 0 and `check.sh` exited 2 (A13), a report-only step.
+
+| # | scored |
+|---|--------|
+| A9 | **MATCH.** `compare.py`: the five committed models SAME, 62 fields each; AArch64's and PowerPC's reported NEW. |
+| A10 | **MATCH.** "generate.sh: 7 targets, 0 failed". AArch64: `long` and pointers 8, `char` unsigned, little-endian, `long double` 16, largest alignment 16. PowerPC: `long` and pointers 4, `char` unsigned, `little_endian: false`, `long double` 16, `long long` aligned to 8, largest alignment 16. |
+| A11 | **MATCH.** `check.c` read at all twelve, each with its model's sizes and alignments; `__BYTE_ORDER__` big-endian at the generated PowerPC model, little-endian at the six other generated ones and at Frama-C's `x86_64`, `gcc_x86_32` and `msvc_x86_64`. |
+| A12 | **Measured.** Frama-C 29's `x86_64` reads `compiler: generic` (and `sizeof_void: -1`): the proofs' default model is not a GCC model in 29 either. Its `ppc_32` was made with clang 17.0.6 (`-target powerpc-apple-linux -mcpu=603`), reads `compiler: clang`, and states what `powerpc-linux-gnu-gcc` does on every field the core units use: ILP32, `char` unsigned, `little_endian: false`, `long long` and `double` aligned to 8, `long double` 16, largest alignment 16. It differs in `wchar_t` (`int`; GCC's `long`), `time_t` (`long`; `long long`), one errno value (`EDEADLOCK` 35; 58) and its macros; its preprocessing gives the big-endian `__BYTE_ORDER__`, and `__GNUC__` 4, clang's. Its `msvc_x86_64` has 13 macros, `_MSC_VER` 1600 among them. |
+| A13 | **MISS.** 118 of 120 parses: `arena.h` and `lifetime.h` not parsed at the generated PowerPC model. All ten parsed at the eleven other reads. |
+| A14 | **Measured.** No warning at eleven reads. At the PowerPC model, 16 of `"bool" redefined`, and 16 of the note on `-Wno-unknown-warning-option` that GCC adds when it has warned. |
+| A15 | **MATCH.** Every proof job's proved line and unproved count as in phase A's run, at its pins; `misra` 66; coverage 2933 / 3014, 1777 / 1932 and 2030 / 2198. |
+| A16 | **MATCH.** At `x86_64` and `gcc_x86_64`, and at the Cortex-M4 model with its `compiler` field `generic` and `gcc`, all ten units print the same code. |
+
+**A13's miss, and its likely cause.** `powerpc-linux-gnu-gcc` in GNU mode
+predefines `bool`, `vector`, `pixel` and `_Bool` as themselves, macros its
+preprocessor expands only in AltiVec vector declarations, with AltiVec off
+too, and `PPC`, `powerpc`, `linux` and `unix`. `make-machdep` copies them
+into `custom_defs`, its copy of the compiler's `-dM` output without the
+`__STDC` macros, and Frama-C defines them as plain macros. `arena.h` and
+`lifetime.h` are the only units whose first include is `<stdbool.h>`.
+Frama-C's `stdbool.h` defines `bool` as `_Bool`; if the model's macros come
+in after it, with the next library header, `bool` is defined back as
+itself and is no longer a type. The other units include another library
+header first. This is the diagnosis A19 tests, not yet a measurement.
+GCC itself compiles `arena.h` for PowerPC in gnu17 and in c11 (checked
+here). In ISO mode (`-std=c11`), which the project's builds use
+(`CMAKE_C_EXTENSIONS OFF`), the compiler defines none of the eight, and
+defines `__STRICT_ANSI__`. The code is not at fault; the model, taken in
+GNU mode, is read by Frama-C in a way GCC does not read it.
+
+**Two findings for phase B.**
+
+1. **Frama-C 29's `ppc_32` is the 32-bit PowerPC Linux ABI** on every fact
+   the core units use (A12), where Frama-C 25's is not (the amendment).
+2. **The host's macros at an LLP64 model.** At `msvc_x86_64` the host's
+   `__GNUC__` and `__SIZEOF_LONG__`, 8, stay defined where `long` is 4:
+   phase A's first finding at a model whose `long` is not the host's. No
+   proved header tests `__SIZEOF_LONG__`. `__GNUC__` is tested by checked.h,
+   bits.h, contract.h, lifetime.h and ptr.h, and their GNU branches reach
+   no proof: under `__FRAMAC__` checked.h and bits.h take their portable
+   paths, lifetime.h's proof has no atomics, contract.h's
+   `__builtin_unreachable` hint and ptr.h's attribute macros are used by no
+   unit, and contract.h's `#pragma message` needs `CANON_STRICT`. A builtin
+   reached at `msvc_x86_64`, not a GCC model, would have drawn a warning
+   (A14: none).
+
+**Decided with the author (2026-11-05), from this run.**
+
+- **Big-endian: both.** Phase B proves at Frama-C 29's `ppc_32` and at the
+  PowerPC model generated in ISO mode (`-std=c11`), which phase A3 applies
+  to the model's predefined macros only (its first change says why). Phase
+  B is then nine models, 90 jobs.
+- **When phase B runs:** its workflow runs when `core/**`,
+  `tools/machdeps/**`, its own file or the Frama-C setup change, and by
+  hand. The ten core jobs took 161 runner-minutes at x86_64 in this run
+  (`4 · Proofs: core/` #24): about 24 runner-hours a run at nine models,
+  if each takes as long as at x86_64.
+
+### Phase A3: pre-registration
+
+**The change.**
+
+1. **`generate.sh`** takes the PowerPC model's predefined macros in ISO
+   mode: its wrapper adds `-std=c11` when make-machdep reads them
+   (`gcc -c -dM -E -`, in #2's log), and only then. In full ISO mode
+   glibc's headers also leave out `NSIG`, `PATH_MAX`, `HOST_NAME_MAX` and
+   `TTY_NAME_MAX`, and give `_POSIX_VERSION` 199009L for 200809L (checked
+   here with the same compiler), and make-machdep reads those into the
+   model's library fields. They stay as in GNU mode, as at the other
+   models. An eighth target, `ppc32_linux_gnu_gnumode`, the same compiler
+   wholly in GNU mode, is generated in this run only and not committed: it
+   tests A13's diagnosis.
+2. **The AArch64 model committed,** copied from `10 · Machine models` #2's
+   log, unchanged: its `compiler` field reads `gcc` already.
+3. **`check.sh`** prints the error lines of a unit that does not parse, and
+   its mode control adds Frama-C's `ppc_32`, with its `compiler` field
+   `clang` and `gcc`. `check.c` also reads `__STRICT_ANSI__`.
+4. **`tools/machdeps/README.md`** lists the six committed models.
+
+Only `tools/machdeps/` and this record change, so `10 · Machine models`,
+`2 · Platforms` (which does not skip `tools/**`) and `8 · Records` run;
+the other workflows skip the push. The workflow is unchanged, so its step
+still says "seven models" while it generates eight.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A17 | **The ISO-mode PowerPC model** generates, `--check` accepts it, and it differs from #2's GNU-mode one only in `custom_defs`: without `PPC`, `_Bool`, `bool`, `linux`, `pixel`, `powerpc`, `unix` and `vector`, with `__STRICT_ANSI__`, 342 entries for 349. | another field differs, or the macros differ otherwise | M–H: the compiler's `-dM` output here differs in exactly these, and #2's model is that output without the `__STDC` macros |
+| A18 | **All ten units parse at it,** with no `"bool" redefined`; `check.c` reads there as at #2's model, with `__STRICT_ANSI__` defined, and `__STDC_VERSION__` 201710, Frama-C's own, since the model leaves the `__STDC` macros out. | a unit not parsed, or a value differs | M–H |
+| A19 | **The diagnosis:** at the GNU-mode model, `arena.h` and `lifetime.h` fail again, each at a use of `bool` as a type; the other eight units parse. | another unit fails, or an error is elsewhere | M |
+| A20 | **The drift check:** the six committed models regenerate the same. | a field differs | M–H |
+| A21 | **Every other read as in phase A2:** `check.c` at each model, the ten units at the eleven other reads (110 parses), and the mode control the same code for all ten at `x86_64`, Cortex-M4 and `ppc_32`. | a read or a parse fails, or code differs | M–H |
+| A22 | **Nothing else moves:** `2 · Platforms` green, `8 · Records` `success`. | any change | H |
+
+**What follows.** Phase B, pre-registered from this run: nine models, 90
+jobs, report-only, in a workflow of their own with the paths above; the
+ISO-mode PowerPC model committed in its push, and the GNU-mode one dropped.
