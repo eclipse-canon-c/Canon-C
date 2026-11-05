@@ -29342,3 +29342,138 @@ it.
 
 Phase A's workflow and scripts are pushed with this record, in the commit
 after it. Neither has run in CI.
+
+### Phase A scored (2026-11-05): every prediction matched, and A6 measured
+
+The push of 1b1a4c1 and ff5db3b ran eight workflows, 80 jobs, all
+`success`: `10 · Machine models` #1 and, a workflow file having changed,
+`1 · Build & test` #23, `2 · Platforms` #29, `3 · Static analysis &
+coverage` #23, `4 · Proofs: core/`, `5 · Proofs: semantics/` and
+`6 · Proofs: data/` #23 each, and `8 · Records` #28. `7 · Proofs: -CC` and
+`9 · Probes` run only when their own paths change, and did not run. Scored
+from the machine-models job's log, which prints the models in full; its
+artifact cannot be downloaded in this session.
+
+| # | scored |
+|---|--------|
+| A1 | **MATCH.** Frama-C 29.0 (Copper), `-machdep help`: x86_32, x86_16, x86_64, avr_8, msvc_x86_64, avr_16, gcc_x86_64, ppc_32, gcc_x86_16 and gcc_x86_32. No Arm or RISC-V model. |
+| A2 | **MATCH.** All five generated and accepted by `--check` ("generate.sh: 5 targets, 0 failed"), 62 fields each. |
+| A3 | **MATCH.** Each model states the table's facts: `long` and pointers 4 bytes at the three ILP32 targets and 8 at the two LP64 ones, `char_is_unsigned` and `little_endian` true at all five, `long double` 8 at the two Arm targets and 16 at the three RISC-V ones, `long long` and `double` aligned to 8 everywhere, the largest alignment 8 at the Arm targets and 16 at the RISC-V ones. |
+| A4 | **MATCH.** Frama-C read `check.c` at every model, and the sizes, alignments and `CHAR_MIN` (0 at all five) it printed are the table's. |
+| A5 | **MATCH.** At the Cortex-M4 model the two enums take 4 and 4 bytes by default, 1 and 2 with `-enums gcc-short-enums`. |
+| A6 | **Measured.** At each generated model, Frama-C's preprocessing defines the target's macros with the target's values: `__arm__` or `__riscv`, `__riscv_xlen` 32 or 64, `__CHAR_UNSIGNED__`, and `__SIZEOF_LONG__` and `__SIZEOF_POINTER__` the target's. At every model, Frama-C's own included, it also keeps the host's `__x86_64__` defined, at `gcc_x86_32` beside `__i386__`. `__GNUC__` is 13 and `__STDC_VERSION__` 201710 at all eight reads. |
+| A7 | **MATCH.** All ten core/ units parsed at every read: the five models, the Cortex-M4 with short enums, and x86_64 and `gcc_x86_32`. |
+| A8 | **MATCH.** Every other job at its pins and green; `misra` at 66; coverage at 2933 / 3014 lines, 1777 / 1932 branches and 2030 / 2198 MC/DC; `8 · Records` `success`. |
+
+**Three findings for phase B.**
+
+1. **The host's `__x86_64__` stays defined under every model.** No proved
+   header tests it, nor any other architecture, data-model or byte-order
+   macro (searched for `__x86_64__`, `__i386__`, `__arm__`, `__aarch64__`,
+   `__riscv`, `__powerpc`, `__LP64__`, `__ILP32__`, `__BYTE_ORDER__`,
+   `__SIZEOF_*__` and the MSVC ones), so it changes nothing proved. A
+   proved header that came to test one would, under Frama-C, read the
+   host's branch beside the target's.
+2. **`int32_t` is `int` under Frama-C at every model,** where the
+   bare-metal Cortex-M4 and RV32 toolchains make it `long`: Frama-C's libc
+   derives the exact-width types from the sizes, not from the compiler. The
+   size and signedness are the same, so WP's arithmetic is too. What
+   differs is C's type compatibility (on those targets an `int32_t *` is a
+   `long *`, under Frama-C an `int *`), which a proof at those models does
+   not see. Stated, not repaired.
+3. **The `compiler` field read the wrapper's path,** `out/cortex_m4-gcc`
+   and the like, where Frama-C's `gcc_x86_32` and `gcc_x86_64` read `gcc`.
+   A model is in Frama-C's GCC mode when that field is `gcc` (Frama-C 30's
+   documentation of `Machdep.gccMode`: "Short for
+   `machdep.compiler = "gcc"`"; we take it to hold of 29), so phase A's
+   reads at the generated models ran outside GCC mode. Most proof jobs may
+   run outside it too. They run at Frama-C's default `x86_64`, and Frama-C
+   25's here is not a GCC model: it rejects an empty struct and warns that
+   `__builtin_expect` is "only allowed for GCC-based machdeps", where
+   `gcc_x86_64` takes both. Frama-C 29's is read in phase A2 (A12).
+   `frama-c-arena-32` runs at `gcc_x86_32`, a GCC model. The mode decides
+   which GCC extensions and builtins Frama-C accepts, and the proved code
+   uses none under `__FRAMAC__`: checked.h and bits.h take their portable
+   paths, lifetime.h's proof runs without atomics, and no unit uses ptr.h's
+   attribute macros. Here, Frama-C 25
+   prints the same code for each of the ten units at `x86_64` and at
+   `gcc_x86_64`, but for an `#include` line its printer adds in two, and
+   warns at neither. `generate.sh` now names each wrapper `gcc`, so the
+   models take GCC mode, their compilers' own; phase A2 checks at Frama-C
+   29 that the mode changes no unit's code.
+
+### Amendment (2026-11-05): three more models
+
+Decided with the author after phase A's push and before its score, on what
+a proof at a model can show: whether `long` is 64 bits, whether `char` is
+signed, the enum layout, the alignments and the byte order.
+
+- **AArch64 Linux**, generated from `aarch64-linux-gnu-gcc`: 64-bit Arm
+  Linux, which `build-arm64` builds and tests and no proof covers. Its
+  compiler here (GCC 13.3) states LP64, unsigned `char`, little-endian,
+  `long double` 16, `int`-sized enums and a largest alignment of 16.
+- **Big-endian**, which no proved model is. Frama-C ships `ppc_32`, but
+  Frama-C 25's here has a signed `char` and `long long` aligned to 4, where
+  32-bit PowerPC Linux (`powerpc-linux-gnu-gcc`, GCC 13.3, measured here)
+  has an unsigned `char`, `long long` aligned to 8, `long double` 16 and a
+  largest alignment of 16. A model generated from that compiler is added.
+  Which of the two phase B proves at is decided from Frama-C 29's `ppc_32`,
+  which phase A2 prints.
+- **LLP64 at all ten units:** Frama-C's `msvc_x86_64`, where so far
+  `frama-c-win64` proves memory.h and bits.h only.
+
+Phase B is then eight models: Cortex-M4, RV32 and RV64 bare metal; 32-bit
+Arm, RV64 and AArch64 Linux; big-endian 32-bit PowerPC; and
+`msvc_x86_64`. Eighty jobs.
+
+### Phase A2: pre-registration
+
+**The change.**
+
+1. **The five models committed** under `tools/machdeps/`, copied from
+   `10 · Machine models` #1's log, with one field changed: `compiler`, from
+   the wrapper's path to `gcc`. `tools/machdeps/README.md` says so, and
+   what each model is.
+2. **`generate.sh`** names each wrapper `gcc` and puts its directory first
+   on `PATH`, so that it generates the `compiler` field itself, and adds
+   AArch64 and PowerPC Linux. `tools/machdeps/packages.txt` lists the
+   compilers' packages, which the workflow installs from it.
+3. **`compare.py`, the drift check**: each committed model against a fresh
+   generation, compared as YAML data, so that the order of the macros does
+   not matter. Report-only; phase C makes it a gate.
+4. **`check.sh`** reads `check.c` and parses the ten units at the committed
+   models, at the two new ones, and at Frama-C's x86_64, `gcc_x86_32`,
+   `ppc_32` and `msvc_x86_64`, and prints each distinct warning the parses
+   give once. `check.c` also reads the byte-order macros.
+5. **The mode control,** `check.sh`'s third part: the code Frama-C prints
+   for each unit, the input WP is given, compared at `x86_64` and
+   `gcc_x86_64`, and at the Cortex-M4 model with its `compiler` field
+   `generic` and `gcc`, leaving out the printer's `#include` lines.
+6. **The workflow** prints Frama-C's own `ppc_32`, `msvc_x86_64`,
+   `gcc_x86_32` and `x86_64` models.
+
+`check.sh` was run here against the four built-in models with Frama-C 25
+(and `-c11`), which reads no YAML model: every read succeeds, the ten units
+parse at each, and at `x86_64` the mode control finds the same code for
+all ten. At Frama-C 25's `ppc_32`, big-endian (Eva reads 0 from the first
+byte of an `unsigned int` 1), the preprocessing defines `__i386__` and the
+little-endian `__BYTE_ORDER__`: the host's macros, in its 32-bit mode.
+
+A workflow file changes, so the eight workflows that ran for phase A run
+again; `7 · Proofs: -CC` and `9 · Probes` do not.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A9 | **The drift check**: each of the five committed models regenerates the same, `compiler: gcc` included. | a field differs | M–H: the same compilers from the same packages; a package update between the runs would change `version` and be reported |
+| A10 | **AArch64 and PowerPC Linux generate**, `--check` accepts each, and they state what their compilers state here: AArch64 LP64, unsigned `char`, little-endian, `long double` 16, largest alignment 16; PowerPC ILP32, unsigned `char`, big-endian (`little_endian: false`), `long double` 16, `long long` aligned to 8, largest alignment 16. | a model fails, or a fact differs | M–H |
+| A11 | **Frama-C reads `check.c` at every model**, with the sizes and alignments of its model; `__BYTE_ORDER__` big-endian at the generated PowerPC model, and little-endian at the six other generated ones and at Frama-C's `x86_64`, `gcc_x86_32` and `msvc_x86_64`. | a read fails, or a value differs | M |
+| A12 | **Frama-C 29's own models**, printed and read: whether its `ppc_32` is 32-bit PowerPC Linux's ABI and which byte order its preprocessing gives there, and whether its `x86_64`, the proofs' default, is a GCC model, are measured, not predicted. | — | — |
+| A13 | **All ten units parse at every read**: the seven generated models, the Cortex-M4 with short enums, and the four built-in ones, 120 parses. | a unit not parsed | M–H |
+| A14 | **The warnings** each read gives, in GCC mode now, are measured, not predicted: phase A's were not printed. | — | — |
+| A15 | **Nothing else moves**: every other workflow at its pins and green. | any change | H |
+| A16 | **The mode control**: at `x86_64` and `gcc_x86_64`, and at the Cortex-M4 model outside and in GCC mode, each of the ten units prints the same code, `#include` lines aside. | a unit's code differs | M–H: so with Frama-C 25 at `x86_64` here |
+
+**What follows.** Phase B, pre-registered from what this run shows: the
+eighty proof jobs, report-only, with AArch64's and PowerPC's models
+committed in its push and the big-endian model chosen. Should A16 fail, the
+mode is settled before phase B.
