@@ -1,0 +1,62 @@
+name: "10 · Machine models"
+# VERIFY-060, phase A (docs/deviations.md). Frama-C ships no machine model for
+# 32-bit Arm or RISC-V. This job generates the five the core/ proofs are to use
+# (Cortex-M4, RV32 and RV64 bare metal, 32-bit Arm Linux and RV64 Linux), with
+# Frama-C 29's make-machdep and the cross-compilers of the embedded job and of
+# Ubuntu's Linux cross toolchains, and reads what Frama-C sees at each: sizes,
+# alignments and compiler macros (tools/machdeps/check.c), and whether each
+# core/ unit parses. Report-only, an experiment and not a gate: the models are
+# printed in the log and uploaded. Once reviewed they are committed under
+# tools/machdeps/ (phase A2), and this job then checks that they regenerate the
+# same. Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - '.github/workflows/machdeps.yml'
+      - 'tools/machdeps/**'
+      - '.github/actions/framac-setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  machdeps:
+    name: "machine models (VERIFY-060 phase A, report-only)"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "Install the cross-compilers"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi \
+            gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf \
+            gcc-arm-linux-gnueabihf gcc-riscv64-linux-gnu
+          for cc in arm-none-eabi-gcc riscv64-unknown-elf-gcc \
+                    arm-linux-gnueabihf-gcc riscv64-linux-gnu-gcc; do
+            "$cc" --version | head -1
+          done
+      - name: "Frama-C's own machine models, and make-machdep's interface"
+        run: |
+          eval $(opam env --switch=frama-c)
+          frama-c -version
+          frama-c -machdep help
+          frama-c -enums help || true
+          frama-c-script make-machdep --help || true
+      - name: "Generate the five models"
+        continue-on-error: true   # VERIFY-060 phase A: report-only
+        run: |
+          eval $(opam env --switch=frama-c)
+          tools/machdeps/generate.sh out
+      - name: "What Frama-C sees at each model, and whether each core/ unit parses"
+        continue-on-error: true   # VERIFY-060 phase A: report-only
+        run: |
+          eval $(opam env --switch=frama-c)
+          tools/machdeps/check.sh out
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: machdeps
+          path: out/
