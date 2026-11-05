@@ -29209,3 +29209,11 @@ addresses, and their contracts state the results the proofs now check;
 `CHECKED_ASSERT_RESULT`'s debug check reaches `require_msg` as documented;
 contract.h's table says what its macros do. Next, as decided with the
 author: the machine-model proofs.
+
+**Run 3, the first enforced** (ecb0389, `4 · Proofs: core/` #22, `6 · Proofs:
+data/` #22, `7 · Proofs: -CC` #17; read from the logs): 86 jobs, all
+`success`, with no `continue-on-error` left in the proof workflows. Each of
+the fifteen, and `frama-c-win64`, gives the proved line and the unproved
+names of runs 1 and 2, compared name by name; Failed / Invalid / Stepout 0;
+`misra` at 66 real violations and MC/DC at 2030 / 2198. The pins hold
+enforced.
