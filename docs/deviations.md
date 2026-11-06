@@ -29225,6 +29225,7 @@ enforced.
 | **ID**         | VERIFY-060 |
 | **Date**       | 2026-11-05 |
 | **Status**     | PREDICTED (phase A). This record is committed before phase A's workflow and scripts, which are pushed with it; neither has run in CI. |
+| **Status update** | 2026-11-06 — CLOSED: phase C's push (`11 · Proofs: machine models` #4, enforced) matched every prediction. The ten core/ units are proved at nine machine models besides x86_64, each job on its class's pins. See "VERIFY-060 closed (2026-11-06)" below. The Status above is the record as committed. |
 | **Baseline**   | 2003fa6 (`VERIFY-059 run 3: the first enforced run holds`) |
 | **Scope**      | Phase A: `tools/machdeps/generate.sh`, `check.c` and `check.sh`; `.github/workflows/machdeps.yml` ("10 · Machine models", new, report-only); its row in `.github/workflows/README.md`. Phases A2, B and C, below, are pre-registered each before its push. |
 | **Category**   | The proofs extended to new machine models. Decided with the author (2026-11-05): five targets, bare metal and Linux; the ten core/ units at each; the models generated once in CI, reviewed and committed; each target's own pins, its differences from x86_64 filed. |
@@ -29906,3 +29907,54 @@ the leads it leaves:
   two zeroing goals at x86_64 too;
 - bits' x86_64 roll-call completion;
 - the C11 default alignment at Cortex-M4 and 32-bit Arm, unproved.
+
+### Phase C scored (2026-11-06): every prediction matched
+
+The push of 32ff620 and 9902e06 ran ten workflows, all but
+`7 · Proofs: -CC`, 205 jobs, all `success` at their first attempt.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** All 90 phase B jobs passed their gates: phase B's run 3, enforced. |
+| C2 | **MATCH.** The cross-compilers installed without recommended packages: 78 packages and 491 MB, against 955 MB, in under a minute. The seven models generated, and the drift check, enforced, found all seven SAME. `check.sh` reported 0 failed: the 120 parses, and the mode control at x86_64, `ppc_32` and Cortex-M4, as before. |
+| C3 | **MATCH.** The char probe: 3539 / 3570 at x86_64 with `char` unsigned, the two goals proved; 3537 / 3570 at AArch64 with `char` signed, both unproved. |
+| C4 | **MATCH.** `check_pins.py`, in `8 · Records`: 0 problems, and bits' three names listed as not joined at each class. |
+| C5 | **MATCH.** Every other job as at the setup fix's push: its proved line and unproved count; `misra` 66; MC/DC 2030 / 2198; the 33 other probe jobs `success`. `7 · Proofs: -CC` did not run, as expected. |
+| C6 | **Measured.** Phase B took 1349 runner-minutes, 67 of them setup, from 04:44 to 05:53 UTC. The push's 154 Frama-C setups took 28 seconds at the median, and one took over 3 minutes (3.1). |
+
+### VERIFY-060 closed (2026-11-06)
+
+**What it shows.** The ten core/ units are proved at nine machine models
+besides x86_64, each job enforced on the pins of its class
+(`11 · Proofs: machine models`):
+
+- **ILP32:** Cortex-M4 with short enums, 32-bit Arm Linux and RV32 bare
+  metal, and two big-endian models, 32-bit PowerPC Linux and Frama-C's
+  `ppc_32`;
+- **LP64:** RV64 bare metal and Linux, and AArch64 Linux;
+- **LLP64:** `msvc_x86_64`.
+
+At each, every unit leaves x86_64's unproved goals or fewer. Two goals of
+arena's zeroing postconditions follow the signedness of `char`, which the
+char probe measures; `pool_init`'s fourth part closes at 32-bit `usize`. No
+model leaves unproved a goal that x86_64 proves (`check_pins.py`). The
+generated models are committed and drift-checked; the limits the proofs
+carry are in docs/verification.md, "Machine models".
+
+**Along the way.** The Frama-C setup now installs opam alone on a cache
+hit, 4.3 MB where the full list was 173 MB. `frama-c-lifetime`'s job has 60
+minutes, its WP step keeps its 15. The machine-models job installs its
+cross-compilers without recommended packages.
+
+**Left, as leads, not as owed work.**
+
+- **Arena's `assigns` clause** names the buffer as `char`. Naming it as
+  `u8` might prove the two zeroing goals at x86_64 too.
+- **bits' x86_64 roll-call** names a sample of its 12 residuals, so three
+  names are not joined to an argument by name, there or at the models.
+- **A C11 or later build for Cortex-M4 or 32-bit Arm** uses 8 as its
+  default alignment; the proofs are of the C99 value, 16.
+- **`int32_t` is `long` at Cortex-M4 and RV32 bare metal**, and `int` under
+  Frama-C: the type compatibility there is not proved.
+- **The CI still reads the apt index and opam from the Ubuntu mirror** at
+  every Frama-C job, so a slow mirror can still slow a setup by minutes.
