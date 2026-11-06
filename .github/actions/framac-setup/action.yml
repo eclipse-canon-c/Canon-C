@@ -41,29 +41,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install system dependencies for opam and Frama-C
-      # The opam cvc5 package is removed from this install list (see
-      # the separate CVC5 CLI installation step below for rationale).
-      # python3-tomli was a cvc5-opam-specific build dep — also removed.
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          opam \
-          m4 \
-          pkg-config \
-          libgmp-dev \
-          zlib1g-dev \
-          autoconf \
-          autotools-dev \
-          graphviz \
-          libcairo2-dev \
-          libgtk-3-dev \
-          libgtksourceview-3.0-dev \
-          cmake \
-          wget
-
     - name: Cache opam switch
+      # Restored first (VERIFY-060), so that the next step knows a hit.
       id: cache-opam
       uses: actions/cache@v5
       with:
@@ -77,6 +56,43 @@ runs:
         # produces the identical key string the monolithic job used, so
         # the existing cache entry is reused.
         key: opam-${{ runner.os }}-ocaml-${{ inputs.ocaml-version }}-framac-${{ inputs.framac-version }}-ae${{ inputs.altergo-version }}-why3${{ inputs.why3-version }}-z3${{ inputs.z3-version }}-v9
+
+    - name: Install system dependencies for opam and Frama-C
+      # The opam cvc5 package is removed from this install list (see
+      # the separate CVC5 CLI installation step below for rationale).
+      # python3-tomli was a cvc5-opam-specific build dep — also removed.
+      #
+      # VERIFY-060: on a cache hit, only opam's own binary, without the
+      # packages apt recommends with it. The full list is for building the
+      # switch: it is 136 packages and 173 MB, among them Ubuntu's own OCaml
+      # (the switch has its own) and the GTK libraries of the GUI, which no
+      # job runs. With every Frama-C job downloading it, the Ubuntu mirror
+      # stalled: setups of 40 to 185 minutes, and frama-c-lifetime cancelled
+      # twice inside this step (4 · Proofs: core/ #25 and #26). A cache miss
+      # still installs the full list.
+      shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache-opam.outputs.cache-hit }}
+      run: |
+        sudo apt-get update
+        if [ "${CACHE_HIT}" = "true" ]; then
+          sudo apt-get install -y --no-install-recommends opam
+        else
+          sudo apt-get install -y \
+            opam \
+            m4 \
+            pkg-config \
+            libgmp-dev \
+            zlib1g-dev \
+            autoconf \
+            autotools-dev \
+            graphviz \
+            libcairo2-dev \
+            libgtk-3-dev \
+            libgtksourceview-3.0-dev \
+            cmake \
+            wget
+        fi
 
     - name: Initialise opam (cache miss only)
       # cvc5 is NO LONGER installed via opam here. The opam cvc5.1.3.0
