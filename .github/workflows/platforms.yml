@@ -189,9 +189,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install the Arm, RISC-V and AVR toolchains, newlib and picolibc
+        # Without the packages apt recommends, as machdeps.yml installs its
+        # cross-compilers (VERIFY-060): with them apt had 844 MB to get, 463
+        # MB of it the Arm C++ library, which these C compile checks do not
+        # use, and the step took 2 h 48 min at a stalled Ubuntu mirror
+        # (2 · Platforms #37; VERIFY-061, phase A's run 2). Every package the
+        # checks use is named here. The limit fails a stalled install in 30
+        # minutes; a re-run usually takes one.
+        timeout-minutes: 30
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi \
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi \
             picolibc-arm-none-eabi gcc-riscv64-unknown-elf \
             picolibc-riscv64-unknown-elf gcc-avr avr-libc
       - name: Compile for Cortex-M (newlib, picolibc) and RISC-V RV32, RV64 (picolibc)
