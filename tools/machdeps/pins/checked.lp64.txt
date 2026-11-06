@@ -1,0 +1,6 @@
+# frama-c-checked at the three LP64 models: rv64_lp64, rv64_linux_gnu, aarch64_linux_gnu.
+# VERIFY-060, phase C: what phase B's runs 1, 2 and 3 gave, alike.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 1753 / 1755
+typed_checked_add_overflow_ensures
+typed_checked_add_u64_overflow_ensures

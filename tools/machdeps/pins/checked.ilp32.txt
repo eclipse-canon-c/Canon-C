@@ -1,0 +1,6 @@
+# frama-c-checked at the five ILP32 models: cortex_m4, arm_linux_gnueabihf, rv32_ilp32, ppc32_linux_gnu, ppc_32.
+# VERIFY-060, phase C: what phase B's runs 1, 2 and 3 gave, alike.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 1753 / 1755
+typed_checked_add_overflow_ensures
+typed_checked_add_u64_overflow_ensures

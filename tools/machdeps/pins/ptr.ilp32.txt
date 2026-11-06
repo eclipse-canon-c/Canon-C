@@ -1,0 +1,10 @@
+# frama-c-ptr at the five ILP32 models: cortex_m4, arm_linux_gnueabihf, rv32_ilp32, ppc32_linux_gnu, ppc_32.
+# VERIFY-060, phase C: what phase B's runs 1, 2 and 3 gave, alike.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 1966 / 1972
+typed_cast_align_down_ensures
+typed_cast_align_padding_ensures
+typed_cast_align_up_ensures
+typed_cast_checked_add_overflow_ensures
+typed_cast_checked_add_u64_overflow_ensures
+typed_cast_ptr_align_padding_nonnull_ensures_part2

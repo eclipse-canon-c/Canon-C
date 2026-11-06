@@ -1,6 +1,7 @@
 name: "8 · Records"
 # The bookkeeping gates: record coverage (each argument block in
-# docs/deviations.md joined to the roll-calls that pin its goals) and the
+# docs/deviations.md joined to the roll-calls that pin its goals), the
+# machine models' pins checked against x86_64's (VERIFY-060) and the
 # workflow-size guard. Map: .github/workflows/README.md.
 on:
   push:
@@ -10,6 +11,8 @@ on:
       - '.github/workflows/**'
       - 'vmacros/vdrivers/cc_pins/*.txt'
       - 'tools/record_coverage.py'
+      - 'tools/machdeps/pins/*.txt'
+      - 'tools/machdeps/check_pins.py'
   pull_request:
     branches: [ "master" ]
   workflow_dispatch:
@@ -43,6 +46,11 @@ jobs:
           fi
           echo "python3 tools/record_coverage.py ${ARGS[*]}"
           python3 tools/record_coverage.py "${ARGS[@]}"
+      - name: "The machine models' residuals are x86_64's (VERIFY-060)"
+        # Each goal tools/machdeps/pins/ leaves unproved at a machine model
+        # must be one the unit's x86_64 job pins, so that it is argued where
+        # that one is (tools/machdeps/check_pins.py says how bits is read).
+        run: python3 tools/machdeps/check_pins.py
 
   # -------------------------------------------------------------------------
   # Workflow size guard (VERIFY-047). GitHub runs no workflow file of 500 KB

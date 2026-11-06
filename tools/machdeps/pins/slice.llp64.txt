@@ -1,0 +1,12 @@
+# frama-c-slice at the LLP64 model: msvc_x86_64.
+# VERIFY-060, phase C: what phase B's runs 1, 2 and 3 gave, alike.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 390 / 398
+typed_cast_bytes_equal_call_memcmp_requires_danglingness_s1
+typed_cast_bytes_equal_call_memcmp_requires_danglingness_s2
+typed_cast_str_ends_with_call_memcmp_requires_danglingness_s1
+typed_cast_str_ends_with_call_memcmp_requires_danglingness_s2
+typed_cast_str_equal_call_memcmp_requires_danglingness_s1
+typed_cast_str_equal_call_memcmp_requires_danglingness_s2
+typed_cast_str_starts_with_call_memcmp_requires_danglingness_s1
+typed_cast_str_starts_with_call_memcmp_requires_danglingness_s2

@@ -1,7 +1,7 @@
 name: "9 · Probes (closed experiments)"
 # The probes of VERIFY-039 and VERIFY-040, merged into one workflow by
 # VERIFY-050: G4, G11, G13, G19, Count and Round 3; and VERIFY-057's pointer
-# probe, added since. Each is an experiment,
+# probe and VERIFY-060's char probe, added since. Each is an experiment,
 # not a gate; its result is scored in docs/deviations.md. Each job still runs
 # only when its own paths change, as its workflow did: the `changes` job
 # compares the push with the commit it moved master from and sets one output
@@ -29,6 +29,9 @@ on:
       - 'tools/probes/verify-040/p_padding_lemmas.h'
       - 'tools/probes/verify-057/pointer_probe.py'
       - 'core/primitives/ptr.h'
+      - 'tools/machdeps/flip_char.py'
+      - 'tools/machdeps/machdep_aarch64_linux_gnu.yaml'
+      - 'core/arena.h'
   workflow_dispatch:
 
 concurrency:
@@ -51,6 +54,7 @@ jobs:
       count: ${{ steps.f.outputs.count }}
       round3: ${{ steps.f.outputs.round3 }}
       pointer: ${{ steps.f.outputs.pointer }}
+      char: ${{ steps.f.outputs.char }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -59,7 +63,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h"]}'
+          FILTERS: '{"g4": ["tools/probes/verify-039/p_frame_typed.c", ".github/workflows/probes.yml", "core/memory.h", ".github/actions/framac-setup/**"], "g11": ["tools/probes/verify-039/p_combinator_contracts.c", "tools/probes/verify-039/g11_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "g13": ["tools/probes/verify-039/p_dangling_calls.c", "tools/probes/verify-039/p_dangling_forms.c", "tools/probes/verify-039/g13_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/memory.h", "core/slice.h", "semantics/borrow.h"], "g19": ["tools/probes/verify-039/p_loop_frame_bhv.c", "tools/probes/verify-039/g19_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "count": ["tools/probes/verify-040/count_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "round3": ["tools/probes/verify-040/round3_probe.py", "tools/probes/verify-040/p_padding_lemmas.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"], "pointer": ["tools/probes/verify-057/pointer_probe.py", ".github/workflows/probes.yml", ".github/actions/framac-setup/**", "core/primitives/ptr.h"], "char": ["tools/machdeps/flip_char.py", "tools/machdeps/machdep_aarch64_linux_gnu.yaml", "core/arena.h", ".github/workflows/probes.yml", ".github/actions/framac-setup/**"]}'
         run: |
           python3 - <<'PY'
           import json, os, subprocess, fnmatch
@@ -621,4 +625,117 @@ jobs:
         with:
           name: pointer-probe-${{ matrix.unit }}
           path: wp_*.txt
+          retention-days: 90
+
+  # -------------------------------------------------------------------------
+  # Char probe (VERIFY-060, the dependence of two arena goals on char)
+  #
+  # VERIFY-060 phase B's control, a probe since phase C: an experiment, not a
+  # gate on the proofs. It runs when flip_char.py, the AArch64 model,
+  # core/arena.h, this file or the toolchain pins change, and on demand.
+  #
+  # QUESTION: arena proves the first part of the zeroing ensures of
+  # arena_alloc_zero and arena_alloc_aligned_zero at every model where char
+  # is unsigned, and not at x86_64, msvc_x86_64 or gcc_x86_32, where it is
+  # signed. Is char's signedness what decides it? (The likely mechanism is
+  # VERIFY-039 G3's: a write stated through `char *` changes only WP's
+  # `sint8` array where char is signed, and u8 is `uint8`.)
+  #
+  # PROBE: tools/machdeps/flip_char.py copies a model with char_is_unsigned
+  # and __CHAR_UNSIGNED__ changed and nothing else: Frama-C's x86_64 with
+  # char unsigned, the AArch64 model with char signed. arena is proved at
+  # each by frama-c-arena's command.
+  #
+  # PINNED at phase B's runs 2 and 3 (VERIFY-060): at x86_64 with char
+  # unsigned, 3539 / 3570, the two goals proved; at AArch64 with char signed,
+  # 3537 / 3570, both unproved. The verdict step prints MATCH or MISS for the
+  # line and for the two goals, and exits 0 only if both match. A red run
+  # means the two goals no longer follow char: read the log and record it.
+  # -------------------------------------------------------------------------
+  char-probe:
+    needs: changes
+    if: needs.changes.outputs.char == 'true'
+    # Pinned, not ubuntu-latest: see the runner note in
+    # ci.yml (VERIFY-039, runner pin).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        control:
+          - { name: x86_64_unsigned_char, frama_c_model: x86_64, file: "",                                             char: unsigned, proved: "3539 / 3570", two: proved }
+          - { name: aarch64_signed_char,  frama_c_model: "",     file: tools/machdeps/machdep_aarch64_linux_gnu.yaml, char: signed,   proved: "3537 / 3570", two: unproved }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+
+      - name: "The control model: char's signedness changed, nothing else"
+        env:
+          FRAMA_C_MODEL: ${{ matrix.control.frama_c_model }}
+          FILE: ${{ matrix.control.file }}
+          CHAR: ${{ matrix.control.char }}
+        run: |
+          eval $(opam env --switch=frama-c)
+          src="${FILE}"
+          if [ -n "${FRAMA_C_MODEL}" ]; then
+            src="$(frama-c -print-share-path)/machdeps/machdep_${FRAMA_C_MODEL}.yaml"
+          fi
+          python3 tools/machdeps/flip_char.py "${src}" machdep_control.yaml "${CHAR}"
+          echo "== diff ${src} machdep_control.yaml"
+          diff "${src}" machdep_control.yaml || true
+          frama-c -machdep machdep_control.yaml tools/machdeps/check.c \
+            -constfold -print -print-libc -ocode check_control.c > check_control.log 2>&1 || true
+          grep -E "probe_(char_min|macro_char_unsigned) *=" check_control.c || echo "check.c not read"
+
+      - name: "WP: core/arena.h at the control model"
+        run: |
+          eval $(opam env --switch=frama-c)
+          set +e
+          # frama-c-arena's command (proofs-core.yml), at the control model.
+          frama-c -wp -wp-rte -machdep machdep_control.yaml -wp-model Typed+Cast \
+            -wp-prover alt-ergo,z3,cvc5 \
+            -wp-timeout 120 \
+            -wp-split \
+            -cpp-extra-args=" -I core/primitives -I core -I . -DCANON_NO_REQUIRE -DNDEBUG" \
+            core/arena.h 2>&1 | tee wp_output.txt
+          echo "WP exit status: ${PIPESTATUS[0]}"
+          exit 0
+
+      - name: "Verdict: MATCH or MISS"
+        env:
+          WANT_PROVED: ${{ matrix.control.proved }}
+          WANT_TWO: ${{ matrix.control.two }}
+        run: |
+          got=$(grep -E "^\[wp\] Proved goals:" wp_output.txt | tail -1 | grep -oE "[0-9]+ / [0-9]+" || true)
+          fail=0
+          if [ "${got}" = "${WANT_PROVED}" ]; then
+            echo "MATCH: proved ${got}"
+          else
+            echo "MISS: proved ${got:-none}, pinned ${WANT_PROVED}"
+            fail=1
+          fi
+          for g in typed_cast_arena_alloc_zero_ensures_3_part1 \
+                   typed_cast_arena_alloc_aligned_zero_ensures_3_part1; do
+            if grep -qE "^\[wp\] \[(Timeout|Unknown)\] (Goal )?${g}( |$)" wp_output.txt; then
+              state=unproved
+            else
+              state=proved
+            fi
+            if [ "${state}" = "${WANT_TWO}" ]; then
+              echo "MATCH: ${g} ${state}"
+            else
+              echo "MISS: ${g} ${state}, pinned ${WANT_TWO}"
+              fail=1
+            fi
+          done
+          exit "${fail}"
+
+      - name: Upload WP output (char probe)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: char-probe-${{ matrix.control.name }}
+          path: |
+            wp_output.txt
+            machdep_control.yaml
           retention-days: 90

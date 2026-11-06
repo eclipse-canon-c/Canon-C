@@ -39,17 +39,26 @@ prints each in full; the job's artifact cannot be downloaded in the session
 that committed them. One field was changed: `compiler`, which read the path
 of the wrapper `generate.sh` then used and now reads `gcc`. The AArch64
 model was copied, unchanged, from `10 · Machine models` #2's log (phase A2),
-and the PowerPC one from #3's (phase A3). A model is in Frama-C's GCC mode when that field is `gcc`, as Frama-C's
-`gcc_x86_32` and `gcc_x86_64` are; its default `x86_64`, at which most proofs
-run, reads `generic` (Frama-C 29), and its `ppc_32` reads `clang`.
-`generate.sh` names each wrapper `gcc`, so that it generates that field
-itself, and `check.sh` checks that the mode changes no unit's code. The job
-compares each committed model with a fresh generation (`compare.py`); a
-model that does not regenerate the same is reported.
+and the PowerPC one from #3's (phase A3). A model is in Frama-C's GCC mode
+when that field is `gcc`, as Frama-C's `gcc_x86_32` and `gcc_x86_64` are;
+its default `x86_64`, at which most proofs run, reads `generic` (Frama-C
+29), and its `ppc_32` reads `clang`. `generate.sh` names each wrapper `gcc`,
+so that it generates that field itself, and `check.sh` checks that the mode
+changes no unit's code. The job compares each committed model with a fresh
+generation (`compare.py`), and fails if one differs (since phase C): a
+model that no longer regenerates the same is regenerated, reviewed and
+committed again, as these were.
 
 `check.c` and `check.sh` read what Frama-C sees at each model, parse the ten
 core/ units at each, and compare each unit's code outside and in GCC mode.
-`packages.txt` lists the Ubuntu packages of the compilers. The proofs at
-these models are `.github/workflows/proofs-machdeps.yml`, whose `char`
-control proves arena at copies made by `flip_char.py`: a model with only the
-signedness of `char` changed.
+`packages.txt` lists the Ubuntu packages of the compilers and of the Linux
+targets' C library headers, installed without the packages apt recommends.
+
+The proofs at these models are `.github/workflows/proofs-machdeps.yml`,
+enforced on `pins/<unit>.<class>.txt`: for each core/ unit and class of
+models (ilp32, lp64, llp64), the proved line and the unproved goals, which
+phase B's three runs gave alike at every model of the class.
+`check_pins.py` checks that each of those goals is one the unit's x86_64 job
+pins. The char probe (`.github/workflows/probes.yml`) proves arena at copies
+made by `flip_char.py`: a model with only the signedness of `char`
+changed.

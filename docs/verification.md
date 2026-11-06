@@ -16,6 +16,11 @@ Combined verification status across all annotated headers:
 | **Proved automatic** | 73262 (99.06%)                                                                 |
 | **Unproved**         | 692 (each filed by name in `docs/deviations.md`; see per-header sections)      |
 
+*Not recomputed 2026-11-06 (VERIFY-060): no pin moved.* The card counts
+each unit at x86_64. VERIFY-060 proves the ten core/ units at nine more
+machine models, each job enforced on its own pins: 90 jobs, and at no model
+an unproved goal that x86_64 proves ("Machine models", below).
+
 *Recomputed 2026-11-05 (VERIFY-059, enforced from its run 3).* ptr.h's
 `ptr_in_range` and `ptr_range_in_range` now compare addresses as
 `uintptr_t` values, and each contract states its result for non-null
@@ -605,26 +610,84 @@ macro.
 
 ### Machine models
 
-The jobs pass no `-machdep` but in two cases, so Frama-C's default applies:
-x86_64, little-endian, with 64-bit pointers and `long` and a signed `char`.
-Two jobs add a model, and are enforced to leave the same unproved names as
-at x86_64:
+The jobs of `proofs-core.yml`, `proofs-semantics.yml` and
+`proofs-data.yml` pass no `-machdep` but in two cases, so Frama-C's default
+applies: x86_64, little-endian, with 64-bit pointers and `long` and a
+signed `char`. Two of them add a model, and are enforced to leave the same
+unproved names as at x86_64:
 - `frama-c-arena-32`: arena.h at `gcc_x86_32` (ILP32);
 - `frama-c-win64`: memory.h and bits.h at `msvc_x86_64` (LLP64, 32-bit
   `long`).
 
+**The core/ units at nine more models (VERIFY-060).** The ten units of
+core/ and core/primitives/ are proved at each of these, by their x86_64
+commands with the model added (`11 · Proofs: machine models`, 90 jobs, run
+when core/ or the models change):
+
+| class | models | pins |
+|-------|--------|------|
+| ILP32 | Cortex-M4, read with `-enums gcc-short-enums`; 32-bit Arm Linux; RV32 bare metal; big-endian 32-bit PowerPC Linux; Frama-C's `ppc_32`, big-endian | `tools/machdeps/pins/<unit>.ilp32.txt` |
+| LP64 | RV64 bare metal, RV64 Linux, AArch64 Linux | `<unit>.lp64.txt` |
+| LLP64 | Frama-C's `msvc_x86_64` | `<unit>.llp64.txt` |
+
+All but Frama-C's two are generated from the targets' cross-compilers with
+Frama-C's `make-machdep` and committed in `tools/machdeps/`
+(`tools/machdeps/README.md` gives each one's compiler and flags). Each job
+is enforced on its class's pins: the proved line and the unproved names.
+At each class, each unit leaves x86_64's unproved goals or fewer:
+
+- where `char` is unsigned, at every model here but `msvc_x86_64`, arena,
+  pool and region prove the first part of `arena_alloc_zero`'s and
+  `arena_alloc_aligned_zero`'s zeroing postcondition, which x86_64 leaves.
+  The char probe (`9 · Probes`) changes `char`'s signedness alone, at
+  x86_64 and at AArch64, and the two goals follow it both ways;
+- at ILP32, pool also proves `pool_init`'s `ensures_part4`.
+
+No goal x86_64 proves is unproved at a model. `tools/machdeps/check_pins.py`
+(`8 · Records`) checks that each goal a model leaves unproved is one the
+unit's x86_64 job pins, and so is argued where that one is.
+
+What these proofs rest on, and what they do not show:
+- **The model files are trusted.** A size or an alignment `make-machdep`
+  got wrong would make a proof at that model wrong too. The files were
+  generated from the compilers, reviewed against them, and committed;
+  `10 · Machine models` regenerates each and fails if one differs
+  (VERIFY-060, phases A to C).
+- **Frama-C keeps the host's macros.** Its preprocessing defines the
+  target's macros with the target's values and keeps the host's
+  `__x86_64__` defined beside them at every model; at `msvc_x86_64` also
+  `__GNUC__` and a `__SIZEOF_LONG__` of 8. No proved header tests an
+  architecture, data-model or byte-order macro, so nothing proved depends
+  on them.
+- **`int32_t` is `int` under Frama-C at every model,** where the Cortex-M4
+  and RV32 bare-metal compilers make it `long`: the same size and sign, so
+  the same arithmetic, but not the same type compatibility (an `int32_t *`
+  there is a `long *`), which the proofs do not see.
+- **The default alignment is a C99 build's.** Under `__FRAMAC__` limits.h
+  gives `CANON_DEFAULT_ALIGN` its C99 value, 16, at every model (see "What
+  the preprocessor gives Frama-C"). A C11 or later build uses
+  `_Alignof(max_align_t)`, which is 8 for Cortex-M4 and 32-bit Arm Linux
+  (and 16 at the other targets here): that value is not proved.
+- **Byte order is not modelled.** WP's Typed and Typed+Cast memory models
+  do not represent it, so the big-endian models prove what the
+  little-endian ILP32 ones do; what they show is the ABI's other facts.
+- **The mode.** The generated models are in Frama-C's GCC mode; its own
+  x86_64 is not, nor its `ppc_32` (`clang`). Each unit's code, as Frama-C
+  gives it to WP, is the same in both modes (checked by
+  `10 · Machine models`).
+- As at x86_64: the proofs do not cover the compiler, concurrency or
+  atomics.
+
 Tested, not proved:
-- AArch64 Linux, where `char` is unsigned (`build-arm64`);
 - big-endian s390x, under qemu (`big-endian`);
-- i386 (`build-32bit`): every unit but arena.h is tested at ILP32 and not
-  proved there.
+- the data/ and semantics/ units at any model but x86_64, and at i386
+  (`build-32bit`) every unit but arena.h; AArch64 Linux (`build-arm64`) is
+  tested for all and proved for core/.
 
 Compiled only, with nothing run (`embedded`): Cortex-M0+ and Cortex-M4 with
 newlib and picolibc, where enums are short and `int32_t` is `long`; RV32
 and RV64 with picolibc; and AVR, at a 16-bit `size_t`, for the platform
 tiers.
-
-Planned: proofs at 32-bit ARM, RV32 and RV64.
 
 ### The other builds, and what each is evidence for
 

@@ -8,8 +8,9 @@ name: "10 · Machine models"
 # and reads what Frama-C sees at each, and at its own x86_64, gcc_x86_32,
 # ppc_32 and msvc_x86_64: sizes, alignments, typedefs and compiler macros
 # (tools/machdeps/check.c), whether each core/ unit parses, and whether a
-# unit's code changes in GCC mode. Report-only until phase C makes the drift
-# check a gate.
+# unit's code changes in GCC mode. The drift check is a gate since phase C:
+# a model that no longer regenerates the same fails the job, and is
+# regenerated, reviewed and committed again. The reads stay report-only.
 # Map: .github/workflows/README.md.
 on:
   push:
@@ -25,15 +26,22 @@ permissions:
 
 jobs:
   machdeps:
-    name: "machine models (VERIFY-060, report-only)"
+    name: "machine models (VERIFY-060, drift check enforced)"
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/framac-setup
       - name: "Install the cross-compilers"
+        # Without the packages apt recommends (VERIFY-060, phase C): with them
+        # this step downloaded 955 MB, a 463 MB Arm C++ library among them,
+        # and stalled at the Ubuntu mirror for 3 hours 40 minutes (10 · Machine
+        # models #6, attempt 1). packages.txt lists the C library headers the
+        # Linux compilers recommend, which make-machdep reads. The limit fails
+        # a stalled install in 30 minutes; a re-run usually takes one.
+        timeout-minutes: 30
         run: |
           sudo apt-get update
-          xargs -a tools/machdeps/packages.txt sudo apt-get install -y
+          xargs -a tools/machdeps/packages.txt sudo apt-get install -y --no-install-recommends
           for cc in arm-none-eabi-gcc riscv64-unknown-elf-gcc arm-linux-gnueabihf-gcc \
                     riscv64-linux-gnu-gcc aarch64-linux-gnu-gcc powerpc-linux-gnu-gcc; do
             "$cc" --version | head -1
@@ -51,15 +59,15 @@ jobs:
             cat "${share}/machdeps/machdep_${m}.yaml" || true
           done
       - name: "Generate the seven models"
-        continue-on-error: true   # VERIFY-060 phases A and A2: report-only
+        continue-on-error: true   # a model it fails to make is MISSING at the drift check
         run: |
           eval $(opam env --switch=frama-c)
           tools/machdeps/generate.sh out
-      - name: "Drift check: each committed model regenerates the same"
-        continue-on-error: true   # VERIFY-060 phase A2: report-only; phase C makes it a gate
+      - name: "Drift check: each committed model regenerates the same (enforced)"
         run: python3 tools/machdeps/compare.py tools/machdeps out
       - name: "What Frama-C sees at each model, whether each core/ unit parses, and the mode control"
-        continue-on-error: true   # VERIFY-060 phases A and A2: report-only
+        if: ${{ !cancelled() }}
+        continue-on-error: true   # report-only
         run: |
           eval $(opam env --switch=frama-c)
           models=(tools/machdeps/machdep_*.yaml)

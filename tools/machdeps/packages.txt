@@ -6,3 +6,7 @@ gcc-arm-linux-gnueabihf
 gcc-riscv64-linux-gnu
 gcc-aarch64-linux-gnu
 gcc-powerpc-linux-gnu
+libc6-dev-armhf-cross
+libc6-dev-riscv64-cross
+libc6-dev-arm64-cross
+libc6-dev-powerpc-cross

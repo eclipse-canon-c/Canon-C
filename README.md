@@ -220,8 +220,10 @@ under a block of their own.
 
 The proofs cover the code as Frama-C sees it, which is close to a
 shipped build but not the same. They are made at Frama-C's x86_64 machine
-model (arena.h also at ILP32, memory.h and bits.h also at LLP64), and on
-other platforms the library is tested or compiled, not proved. They
+model, and the ten core/ units also at nine more: Cortex-M4, 32-bit Arm,
+RV32 and RV64, AArch64, big-endian 32-bit PowerPC and LLP64 (arena.h also
+at `gcc_x86_32`); elsewhere the library is tested or compiled, not proved.
+They
 compile the run-time `require` and `ensure` checks out, and take the
 portable fallbacks of `checked.h` and `bits.h`, where a GCC or Clang
 build uses compiler builtins unless
@@ -960,10 +962,14 @@ checked. Which workflow file holds which job, and where a new one goes:
 | AVR (16-bit `size_t`) | avr-gcc 7 | **compile only**: the platform tiers' guards, see Tier 0 above |
 
 **Formal verification** (Frama-C WP, `docs/verification.md`): every
-verified unit at the x86-64 (LP64) machine model. `arena.h` is also proved
-at 32-bit, with the same residuals. `memory.h` and `bits.h` are also run
-at 64-bit Windows' LLP64 model, where `long` is 32 bits, and compared with
-their x86-64 runs: the same goals unproved, by name (VERIFY-047).
+verified unit at the x86-64 (LP64) machine model. The ten core/ units are
+also proved at nine more models (VERIFY-060): Cortex-M4 bare metal, read
+with short enums; 32-bit Arm Linux; RV32 and RV64 bare metal; RV64 and
+AArch64 Linux; big-endian 32-bit PowerPC Linux, at a generated model and at
+Frama-C's `ppc_32`; and 64-bit Windows' LLP64 model. Each leaves the
+x86-64 run's unproved goals or fewer, and is enforced on its own pins.
+`arena.h` is also proved at `gcc_x86_32`, and `memory.h` and `bits.h` at
+LLP64 in `frama-c-win64` too (VERIFY-047).
 
 ---
 

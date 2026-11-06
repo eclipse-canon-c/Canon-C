@@ -1,0 +1,16 @@
+# frama-c-bits at the LLP64 model: msvc_x86_64.
+# VERIFY-060, phase C: what phase B's runs 1, 2 and 3 gave, alike.
+# The proved line, then each unproved goal (Timeout or Unknown).
+proved 745 / 757
+typed_bits_bswap16_assert_rte_signed_overflow
+typed_bits_bswap32_ensures
+typed_bits_bswap64_ensures
+typed_bits_clear_ensures
+typed_bits_insert_normal_ensures_part3
+typed_bits_next_power_of_two_normal_ensures_2_part3
+typed_bits_next_power_of_two_normal_ensures_3_part3
+typed_bits_next_power_of_two_normal_ensures_4_part3
+typed_bits_next_power_of_two_normal_ensures_part3
+typed_bits_popcount_ensures
+typed_bits_rotl_assert_rte_shift_2
+typed_bits_rotr_assert_rte_shift_2
