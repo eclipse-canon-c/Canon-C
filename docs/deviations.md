@@ -30051,3 +30051,41 @@ checks share the runner with the three automatic provers.
 **What follows.** Phase B, pre-registered from what phase A shows: the
 proofs that could be written, each checked here, and which goals could
 not be done, and why.
+
+### Phase A scored (2026-11-06)
+
+The push of 3cc07a5 and 729f981 ran eight workflows, all `success`:
+`12 · Coq: bits.h` #1 and the seven usual ones (`1 · Build & test` #29,
+`2 · Platforms` #36, `3 · Static analysis & coverage` #29, the three proof
+workflows #29, `8 · Records` #36). The Coq job took 14 minutes, and its
+report-only step exited 12 (A3).
+
+| # | scored |
+|---|--------|
+| A1 | **MATCH.** opam's plan added coq-core, coqide-server, coq-stdlib, coq 8.18.0 and why3-coq 1.7.2, and nothing else; the install took 253 seconds. opam warned that conf-cairo, conf-graphviz, conf-gtk3 and conf-gtksourceview3 depend on system packages no longer installed: the setup leaves the GUI's packages out on a cache hit (VERIFY-060). |
+| A2 | **MATCH.** "Found prover Coq version 8.18.0, OK." Why3 1.7.2 lists Coq 8.18.0 beside Alt-Ergo 2.6.3, CVC5 1.2.1 and Z3 4.15.2. |
+| A3 | **MISS.** WP wrote a script for each of the twelve and for no other goal: `session/interactive/bits_clear_ensures.v` and the like, each named after its goal without `typed_`. `phase_a.sh` looked for the names with the prefix and found none, so the log carries none of the scripts; and its search for the Coq sources looked in two directories that held none. The fault is the script's, not WP's. |
+| A4 | **MATCH.** The twelve stay unproved: 88 / 100 at the nine functions, each with its x86_64 verdict (eleven Timeout, insert's Unknown). |
+| A5 | **MATCH.** Every other job as at phase C's push: the proved lines and unproved counts, `misra` 66, MC/DC 2030 / 2198. |
+
+### Phase A, run 2: pre-registration
+
+**The change,** to `tools/coq/phase_a.sh` alone. It finds each script by
+the name WP gives it. Its last part prints:
+
+- the Coq prover's entry in Why3's detection data, with its command;
+- every Coq source in the switch whose path names why3, frama-c or wp,
+  Coq's own library aside;
+- the Coq drivers;
+- if Why3's Coq library is installed only compiled, its sources from
+  why3-coq's source archive (`opam source`).
+
+Only `tools/coq/` and this record change, so `12 · Coq: bits.h` and
+`8 · Records` run, and the other workflows skip the push.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A6 | **The twelve scripts are printed in full.** | one is not | H |
+| A7 | **The sources the scripts require are printed:** for each module a script requires outside Coq's own library, its source is in the log. | a required module whose source the log lacks | M |
+| A8 | **The run is otherwise run 1's:** 88 / 100, the same twelve. | any change | H |
+| A9 | **Nothing else moves:** `8 · Records` `success`. | a failure | H |
