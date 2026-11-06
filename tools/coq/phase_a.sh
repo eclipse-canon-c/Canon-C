@@ -15,11 +15,14 @@
 #      in full: WP names each after its goal without the "typed_" prefix
 #      (session/interactive/bits_clear_ensures.v; phase A's run #1);
 #   4. what the scripts can require: the Coq prover's entry in Why3's
-#      detection data (its command), every Coq source of the switch whose
-#      path names why3, frama-c or wp, Coq's own library aside, and the
-#      Coq drivers; if Why3's Coq library was installed compiled only, its
-#      sources from why3-coq's source archive.
-# Exit status: the number of the twelve goals with no script found.
+#      detection data (its command, `-R %l/coq Why3`), Why3's Coq drivers,
+#      and the source of each module of Why3's Coq library. The scripts
+#      require that library alone, WP's theories being written into each
+#      script (run #2). why3-coq installs it compiled only, in Why3's
+#      libdir/coq (run #2), so the sources come from why3-coq's source
+#      archive: for each compiled module there, the .v of the same path.
+# Exit status: the number of the twelve goals with no script found, plus
+# the number of the library's compiled modules with no source found.
 
 set -u
 OUT="${1:?usage: phase_a.sh OUTDIR}"
@@ -84,26 +87,38 @@ why3data=$(why3 --print-datadir)
 echo "why3 libdir: $(why3 --print-libdir); datadir: ${why3data}"
 echo "-- Coq in ${why3data}/provers-detection-data.conf:"
 awk '/^\[/{p=0} /^\[ATP coq\]|^\[ITP coq\]/{p=1} p' "${why3data}/provers-detection-data.conf" | sed 's/^/   /'
-lib=$(opam var lib)
-share=$(opam var share)
-srcs=$( { find "$lib" "$share" -type f -name '*.v' 2>/dev/null \
-            | grep -E 'why3|frama-c|/wp/'
-          find "$lib" "$share" -type f \( -name '*.drv' -o -name '*.gen' \) 2>/dev/null \
-            | grep -i coq; } \
-        | grep -v -E '/lib/coq/(theories|plugins)/|/coq-core/' | sort -u)
-echo "-- the compiled Coq files there, by name:"
-find "$lib" "$share" -type f -name '*.vo' 2>/dev/null | grep -E 'why3|frama-c|/wp/' | sort | sed 's/^/   /'
-if ! echo "$srcs" | grep -q '\.v$'; then
-  echo "-- no Coq source installed beside them: why3-coq's sources instead"
-  opam source why3-coq.1.7.2 --dir "$OUT/why3-src" > /dev/null 2>&1 || echo "   opam source failed"
-  srcs="${srcs}
-$(find "$OUT/why3-src/lib/coq" -type f -name '*.v' 2>/dev/null | sort)"
+echo "-- Why3's Coq drivers:"
+for f in $(find "${why3data}/drivers" -type f \( -name 'coq*.drv' -o -name 'coq*.gen' \) | sort); do
+  echo "-- FILE ${f}"
+  cat "$f"
+  echo "-- END ${f}"
+done
+why3coq="$(why3 --print-libdir)/coq"
+mods=$(cd "$why3coq" && find . -type f -name '*.vo' | sed 's#^\./##; s#\.vo$##' | sort)
+echo "-- Why3's Coq library: $(echo "$mods" | grep -c .) compiled modules in ${why3coq}:"
+for m in $mods; do echo "   ${m}"; done
+src=""
+if ! find "$why3coq" -type f -name '*.v' | grep -q .; then
+  echo "-- installed compiled only: the sources from why3-coq 1.7.2's source archive"
+  opam source why3-coq.1.7.2 --dir "$OUT/why3-src" > "$OUT/opam-source.log" 2>&1 \
+    || { echo "   opam source failed:"; tail -5 "$OUT/opam-source.log"; }
+  src=$(find "$OUT/why3-src" -type d -path '*/lib/coq' 2>/dev/null | head -1)
+  echo "   the archive's lib/coq: ${src:-none}"
 fi
-for f in $srcs; do
+NOSRC=0
+for m in $mods; do
+  f="${why3coq}/${m}.v"
+  [ -f "$f" ] || f="${src:-/nonexistent}/${m}.v"
+  if [ ! -f "$f" ]; then
+    echo "-- ${m}: no source found"
+    NOSRC=$((NOSRC + 1))
+    continue
+  fi
   echo "-- FILE ${f}"
   cat "$f"
   echo "-- END ${f}"
 done
 
-echo "phase_a.sh: ${#GOALS[@]} goals, ${MISSING} with no script found"
-exit "$MISSING"
+echo "phase_a.sh: ${#GOALS[@]} goals, ${MISSING} with no script found;" \
+  "$(echo "$mods" | grep -c .) library modules, ${NOSRC} with no source found"
+exit $((MISSING + NOSRC))
