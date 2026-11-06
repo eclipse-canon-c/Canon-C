@@ -29819,3 +29819,90 @@ B's, report-only, for the third time.
 
 **What follows.** Phase C, pre-registered from runs 1 to 3 and the
 control.
+
+### The setup fix scored (2026-11-06)
+
+The push of 86f636f and b8d935c ran all eleven workflows, 212 jobs, all
+`success` but `10 · Machine models` #6. The author cancelled its first
+attempt after 3 hours 40 minutes in its cross-compiler install (S4), and
+its re-run (attempt 2) succeeded.
+
+| # | scored |
+|---|--------|
+| S1 | **MISS, on the time.** Of the 162 Frama-C setups, the 154 whose logs were read hit the cache and installed 8 packages, 4.3 MB, where the full list is 136 packages and 173 MB. The median setup took 30 seconds; two took 5 minutes, their 4.3 MB arriving at 13.6 kB/s, the mirror's trickle again. |
+| S2 | **MATCH.** Every proof job at its pins, `frama-c-lifetime` among them (4 / 4): the core/, semantics/ and data/ jobs as in phase A2's run; `7 · Proofs: -CC` #18, 7 jobs, and `9 · Probes` #6, 33 jobs, `success`; no proof job cancelled. |
+| S3 | **MATCH.** Phase B's third run: all 90 jobs give runs 1 and 2's proved line and unproved names. The control gives run 2's lines and names; one goal's status in each is Unknown for Timeout or the reverse, the two pooled as everywhere. |
+| S4 | **MATCH, at the re-run.** The build, platform, analysis and records jobs as before. `10 · Machine models` #6's first attempt stalled in "Install the cross-compilers", not in the Frama-C setup: 80 packages and 955 MB, among them a 463 MB Arm C++ library that apt adds as `libnewlib-arm-none-eabi`'s recommended package, fetched for 3 hours 40 minutes until the author cancelled. The re-run took 2 minutes 30 seconds and gave #5's results: the seven models SAME, `check.sh` 0 failed. |
+| S5 | **Measured.** Phase B's run took 1435 runner-minutes, 77 of them setup (run 2: 2375 and 1066; run 1: 1544), and ran from 00:40 to 01:50 UTC. |
+
+Phase B's three runs gave all 90 jobs the same proved line and unproved
+names, and the control the same at runs 2 and 3.
+
+**Decided with the author (2026-11-06):** the `char` control moves to
+`9 · Probes` as a closed experiment.
+
+### Phase C: pre-registration
+
+**The change.**
+
+1. **The pins.** `tools/machdeps/pins/<unit>.<class>.txt`, thirty files.
+   For each core/ unit and class of models they hold the proved line and
+   the unproved names that phase B's three runs gave alike at every model
+   of the class. The classes are ilp32 (Cortex-M4, 32-bit Arm, RV32 and
+   the two PowerPC models), lp64 (RV64 bare metal and Linux, AArch64) and
+   llp64 (`msvc_x86_64`).
+2. **proofs-machdeps.yml enforced.** Each job fails unless its proved line
+   and unproved names are its class's pins, Unknown pooled with Timeout as
+   everywhere, and no verdict is Failed, Invalid or Stepout. The control
+   job leaves it.
+3. **The char probe** in probes.yml. It runs when `flip_char.py`, the
+   AArch64 model, core/arena.h, the workflow or the setup change, and a
+   MISS fails it.
+4. **`tools/machdeps/check_pins.py`**, in `8 · Records`. Each goal a pin
+   file leaves unproved must be pinned by the unit's x86_64 job, as
+   record_coverage.py reads the pins. `frama-c-bits` pins its 12 by count
+   and a six-name prefix sample, so three bits names are listed as not
+   joined: bswap32's `ensures` and rotl's and rotr's second shift
+   assertion. These are x86_64 residuals that its own job does not name
+   either.
+5. **The drift check a gate** in machdeps.yml. The cross-compilers are
+   installed without recommended packages under a 30-minute step limit,
+   and packages.txt adds the four Linux targets' C library headers, which
+   the compilers recommend and make-machdep reads. The reads stay
+   report-only.
+6. **The docs:** verification.md's "Machine models" (the classes, the
+   results, what the proofs rest on and do not show) and its card note,
+   README's two proof notes, the CI map and `tools/machdeps/README.md`.
+
+**The differences from x86_64, filed and argued.**
+
+- **`arena_alloc_zero`'s and `arena_alloc_aligned_zero`'s `ensures_3_part1`**
+  are proved at the eight unsigned-`char` models in arena, pool and region.
+  The control (runs 2 and 3) measures the cause, the signedness of `char`;
+  VERIFY-039 G3's finding, that a write through `char *` changes only WP's
+  `sint8` array, is the likely mechanism.
+- **`pool_init`'s `ensures_part4`** is proved at the ILP32 models, where
+  `usize` is 32 bits. The goal states the same thing at every model, and
+  at x86_64 it is a residual that `frama-c-pool` pins and that is argued
+  with x86_64's. A residual that closes at 32 bits needs no new argument,
+  and the x86_64 one stands.
+- **No residual at any model is new;** `check_pins.py` checks this.
+
+This push changes workflow files and tools/machdeps/: every workflow runs
+but `7 · Proofs: -CC`, and phase B's run is its run 3, enforced.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C1 | **Every phase B job passes its gate:** 90 of 90. | a job fails | H: three runs alike |
+| C2 | **The drift check passes** with the cross-compilers installed without recommended packages: the seven models regenerate the same, and the install takes under 30 minutes. | a model differs, or the install fails or runs out of time | M–H: the recommended packages are C++ libraries and documentation besides the C headers now listed; a header the list misses would show at the drift check |
+| C3 | **The char probe runs and matches** at both models: 3539 / 3570 with the two goals proved, and 3537 / 3570 with both unproved. | a MISS | H |
+| C4 | **`check_pins.py` passes** in `8 · Records`: 0 problems, with bits' three names listed as not joined. | a problem | H: run here |
+| C5 | **Nothing else moves:** every other job at its pins and green, and every other probe as at #6. | any change | H |
+| C6 | **The cost,** measured. | — | — |
+
+**What follows.** After run 3, VERIFY-060 is closed in this record, with
+the leads it leaves:
+- arena's `assigns` clause naming the buffer as `u8`, which might prove the
+  two zeroing goals at x86_64 too;
+- bits' x86_64 roll-call completion;
+- the C11 default alignment at Cortex-M4 and 32-bit Arm, unproved.
