@@ -29754,3 +29754,68 @@ A workflow file changes, so the eight usual workflows run, and phase B's,
 **What follows.** Phase C, pre-registered from runs 1 and 2 and the
 control: each job's pins, the drift check made a gate, each difference
 from x86_64 filed and argued, and the docs.
+
+### Phase B run 2 scored (2026-11-06)
+
+The push of dca98e5 and ab5cab1 ran nine workflows, 172 jobs.
+`11 · Proofs: machine models` #2 ran 92 jobs: 91 `success` at the first
+attempt, and `frama-c-region @ ppc32_linux_gnu`, cancelled by the author
+after 3 hours in the Frama-C setup and re-run alone (attempt 2):
+`success`, its setup 55 seconds. `4 · Proofs: core/` #26 was `cancelled`, `frama-c-lifetime`
+again (B11); the other seven workflows `success`.
+
+| # | scored |
+|---|--------|
+| B7 | **MATCH.** All 90 jobs give run 1's proved line and unproved names: 89 at the first attempt, and `frama-c-region @ ppc32_linux_gnu`, 3707 / 3744, at its re-run. |
+| B10 | **MATCH.** At x86_64 with `char` unsigned, arena proves 3539 / 3570, its unproved names x86_64's 33 but the two zeroing goals; at AArch64 with `char` signed, 3537 / 3570, x86_64's 33 names exactly. Each diff shows the field, and the macro added or removed, and nothing else; `check.c` reads `CHAR_MIN` 0, with `__CHAR_UNSIGNED__` defined, and -128. |
+| B11 | **MISS.** `frama-c-lifetime` was cancelled again at its new 60-minute limit, again inside the Frama-C setup, and the region job above ran 3 hours in it. 26 of the push's 122 Frama-C setups took over 3 minutes, most of them 40 to 75, in all four proof workflows that ran. |
+| B12 | **MATCH.** Every other job as in phase A2's run: the proved lines and unproved counts, `misra` 66, MC/DC 2030 / 2198. `10 · Machine models` #5 as #4. |
+| B13 | **Measured.** Phase B's first attempt took 2375 runner-minutes, 39.6 hours, of which 1066 minutes were setup, and ran from 20:26 to 00:01 UTC; the region job's re-run took 33 minutes. |
+
+**The dependence on `char` is measured.** With nothing but the signedness
+of `char` changed, the two zeroing goals follow it both ways: proved where
+`char` is unsigned, unproved where it is signed. The mechanism given at run
+1, WP's typed memory separating a signed `char` from `u8`, remains the
+likely one; it is not what the control measures.
+
+**The setup, measured.** Each Frama-C job's setup installs 136 packages
+with apt, 173 MB of downloads and 622 MB installed, at every job, cache hit
+or not. Among them are Ubuntu's own OCaml, 81 MB, and its compiler
+libraries, 38 MB, which apt adds as `opam`'s recommended packages (the
+switch has its own OCaml), and the GTK and graphviz packages for building
+Frama-C's GUI, which no job runs. With phase B capped at 30 jobs at once,
+the setups were slower than in run 1 (26 over 3 minutes, against 8), so
+the number of jobs at once was not the cause by itself. The downloads
+stalled at the Ubuntu mirror: in `frama-c-lifetime`'s log, an 81 MB package
+was fetched for 16 minutes and dropped. The other workflows' apt steps,
+which download little, took under a minute each, and the region job, re-run
+alone at midnight, set up in 55 seconds.
+
+**Decided with the author (2026-11-06):** on a cache hit the setup installs
+`opam` alone, without the packages apt recommends with it; a cache miss
+keeps the full list.
+
+### The setup fix: pre-registration
+
+**The change.** `.github/actions/framac-setup/action.yml` restores the opam
+cache first. On a hit, the apt step installs `opam` with
+`--no-install-recommends`: with Ubuntu 24.04 here, `opam`, `opam-installer`,
+`bubblewrap`, `libglpk40` and `libamd3`, a few MB, the runner having the
+rest. On a miss, it installs the full list, as before. The cache key is
+unchanged, so every job hits. Frama-C, the provers and the switch are the
+cached ones, unchanged.
+
+Every workflow that uses the action runs: the eight usual ones,
+`7 · Proofs: -CC` and `9 · Probes`, whose paths name the action, and phase
+B's, report-only, for the third time.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| S1 | **Every Frama-C setup hits the cache and installs a handful of packages,** not 136, and takes under 3 minutes. | a setup installs the full list, or takes 3 minutes or more | M–H: the apt index itself still comes from the mirror, about 10 MB |
+| S2 | **Every proof job at its pins,** `frama-c-lifetime` among them: the core/, semantics/ and data/ jobs with phase A2's proved lines and unproved counts, `7 · Proofs: -CC` and `9 · Probes` `success`, and nothing cancelled. | a job off its pins, failing or cancelled | H: what the jobs run is unchanged, only what is installed beside it |
+| S3 | **Phase B's third run reproduces runs 1 and 2** at all 90 jobs, and the control gives run 2's result. | any difference | M–H |
+| S4 | **Nothing else moves:** the build, platform, analysis and records jobs as before; `10 · Machine models` as #5. | any change | H |
+| S5 | **The cost** of phase B's run, with the setups at a few MB, is measured against run 2's 2375 runner-minutes. | — | — |
+
+**What follows.** Phase C, pre-registered from runs 1 to 3 and the
+control.
