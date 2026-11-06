@@ -30089,3 +30089,49 @@ Only `tools/coq/` and this record change, so `12 · Coq: bits.h` and
 | A7 | **The sources the scripts require are printed:** for each module a script requires outside Coq's own library, its source is in the log. | a required module whose source the log lacks | M |
 | A8 | **The run is otherwise run 1's:** 88 / 100, the same twelve. | any change | H |
 | A9 | **Nothing else moves:** `8 · Records` `success`. | a failure | H |
+
+### Phase A, run 2: scored (2026-11-07)
+
+The push of 0eb400b and 74183ee ran three workflows, all `success`:
+`12 · Coq: bits.h` #2 (16 minutes), `8 · Records` #37 and
+`2 · Platforms` #37. The record said the other workflows would skip the
+push. `2 · Platforms` does not skip it, because its paths-ignore does not
+cover `tools/**` (A9).
+
+| # | scored |
+|---|--------|
+| A6 | **MATCH.** The twelve scripts are printed in full, 1,077 to 1,093 lines each. Each holds WP's theories for its goal, written out as Coq definitions and axioms, and then the goal. Each requires the same ten modules of Why3's Coq library and no WP library. The ten are `BuiltIn`, `HighOrd`, `bool.Bool`, `int.Int`, `int.Abs`, `int.ComputerDivision`, `real.Real`, `real.RealInfix`, `real.FromInt` and `map.Map`. |
+| A7 | **MISS.** None of the ten modules' sources is in the log. The script had two faults. First, its search kept every Coq source whose path names why3, frama-c or wp. Every path in the switch names frama-c, the switch's own name, so the search printed Coq's own Ltac2 sources and the four Coq drivers. Second, because it had found `.v` files, it never fell back to the source archive. Why3's Coq library is installed compiled only: 64 modules, as `.vo` files alone, in Why3's libdir (`lib/why3/coq`). Why3 runs Coq as `coqtop -batch -R %l/coq Why3 -l %f`, so the library's name is `Why3`. |
+| A8 | **MATCH.** 88 / 100, the same twelve. One verdict changed kind: the insert goal is a Timeout here and was Unknown at run 1, both from Alt-Ergo. The pins hold the goals' names and counts, not their kinds. |
+| A9 | **MATCH.** `8 · Records` #37 is `success`. `2 · Platforms` #37 ran too and is `success`, but its embedded job took 2 hours 51 minutes, 2 hours 48 of them installing the toolchains. apt had 844 MB to get, 463 MB of it the Arm C++ library, which the C compile checks do not use. The downloads from the Azure mirror stalled, package after package, until apt fell back to archive.ubuntu.com: "Fetched 634 MB in 2h 46min 53s (63.3 kB/s)". It is the kind of stall VERIFY-060's machine-model job had (`10 · Machine models` #6). The checks passed: 6 targets × 3 levels, 136 units each, 0 failed; AVR: 80 headers, 29 compile, 49 refused by Tier 1, 2 other, 0 checks failed. |
+
+### Phase A, run 3: pre-registration
+
+**The change.**
+
+1. The last part of `tools/coq/phase_a.sh` no longer searches the switch
+   at large. It lists the modules of Why3's Coq library as installed (the
+   `.vo` files in Why3's libdir). It fetches why3-coq 1.7.2's source
+   archive with `opam source`, and for each module prints the `.v` file of
+   the same path in the archive's `lib/coq`. It prints the four Coq
+   drivers again, so that one log holds everything phase B needs. Its exit
+   status now counts the modules with no source found, as well as the
+   goals with no script.
+2. An aside, from A9: the embedded job of `2 · Platforms` installs its
+   toolchains without the packages apt recommends, under a 30-minute step
+   limit. `10 · Machine models` has done the same since VERIFY-060. The
+   step names every package the checks use.
+
+Because a workflow file changes, the seven usual workflows run with
+`12 · Coq: bits.h`, as at run 1.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A10 | **The library's sources are printed:** 64 modules, each with its `.v` from the archive, including the ten the scripts require. The report-only step exits 0. | a module with no source, or a count other than 64 | M–H: `opam source` must fetch the archive, as the install does |
+| A11 | **The scripts are run 2's,** line for line. | any difference | H |
+| A12 | **The run is otherwise run 2's:** 88 / 100, the same twelve. | a different count or a different goal | H |
+| A13 | **The embedded job leaves out the C++ library.** apt lists `libstdc++-arm-none-eabi-newlib` under its recommended packages and does not install it. It has about 380 MB to get, and less than 400 MB. The checks give run 2's results. | the library is installed, apt has 400 MB or more to get, or a result differs | M–H |
+| A14 | **Nothing else moves:** every job of the other workflows is at its pins and green. | any change | H |
+
+How long the install takes is not predicted, because the mirror decides
+it.
