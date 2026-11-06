@@ -29958,3 +29958,96 @@ cross-compilers without recommended packages.
   Frama-C: the type compatibility there is not proved.
 - **The CI still reads the apt index and opam from the Ubuntu mirror** at
   every Frama-C job, so a slow mirror can still slow a setup by minutes.
+
+## VERIFY-061: Pre-registration — bits.h's Twelve Residuals in Coq; Phase A, the Goals
+
+| Field          | Value |
+|----------------|-------|
+| **ID**         | VERIFY-061 |
+| **Date**       | 2026-11-06 |
+| **Status**     | PREDICTED (phase A). This record is committed before phase A's workflow and script, which are pushed with it; neither has run in CI. |
+| **Baseline**   | 966f40c (`VERIFY-060 closed: phase C matched every prediction`) |
+| **Scope**      | Phase A: `.github/workflows/coq.yml` ("12 · Coq: bits.h", new, report-only), `tools/coq/phase_a.sh`, the CI map's row 12. Phases B and C: the proof scripts, their replay in CI, and `frama-c-bits`'s pins. |
+| **Category**   | Interactive proofs of goals the automatic provers leave. Decided with the author (2026-11-06): "Try to prove what we can and if we can't, leave it." |
+
+### What was decided, and the phases
+
+The plan's item after VERIFY-060, which the plan holds as required: Coq
+for bits.h's residuals. The author (2026-11-06) asked for it done honestly:
+prove what can be proved, and leave what cannot.
+
+**The twelve.** `frama-c-bits` proves 745 / 757 at x86_64, and the same
+twelve goals stay unproved at the nine models of VERIFY-060:
+
+| # | Goal (`frama-c-bits`) | Argued in this record as |
+|---|---|---|
+| 1 | `typed_bits_bswap16_assert_rte_signed_overflow` | true: `value << 8`, the `u16` promoted to `int`, is at most 65535 × 256 (fixed-width block, row 6) |
+| 2 | `typed_bits_bswap32_ensures` | true: each term moves one masked byte, below 2^32, with disjoint bits (row 7) |
+| 3 | `typed_bits_bswap64_ensures` | true: the same below 2^64 (row 8) |
+| 4 | `typed_bits_clear_ensures` | true: `~(1ULL << bit)` is the spec's mask (row 3) |
+| 5 | `typed_bits_insert_normal_ensures_part3` | true since VERIFY-039 G15's cast |
+| 6 | `typed_bits_next_power_of_two_normal_ensures_part3` | true: `\result >= value` on the smearing path |
+| 7 | `typed_bits_next_power_of_two_normal_ensures_2_part3` | true: `\result != 0` there |
+| 8 | `typed_bits_next_power_of_two_normal_ensures_3_part3` | true: `\result` a power of two there |
+| 9 | `typed_bits_next_power_of_two_normal_ensures_4_part3` | true: `\result / 2 < value` there, the minimality |
+| 10 | `typed_bits_popcount_ensures` | true: `0 <= \result <= 64` through the SWAR steps (its own block) |
+| 11 | `typed_bits_rotl_assert_rte_shift_2` | true: `64u - sh` is 1 to 63 past `sh == 0u` (row 4) |
+| 12 | `typed_bits_rotr_assert_rte_shift_2` | true: the same in `bits_rotr` (row 5) |
+
+**What a proof in Coq adds, and what it rests on.** A goal proved in Coq
+is proved as WP states it: from bits.h's contract and code, at the machine
+model the job runs at. It adds to what the proofs already trust (Frama-C,
+WP, Why3) Coq's kernel, Why3's Coq library and WP's Coq library, and the
+proof itself is checked by Coq, not trusted. Coq proves only what is true:
+a goal that will not yield may be hard rather than false, and is left
+unproved, its argument standing as it is. A goal found false would be a
+finding of its own and would be recorded.
+
+**The phases.**
+
+- **A, the goals.** A report-only job installs Coq into the Frama-C switch,
+  has WP write the twelve goals as Coq scripts, and prints them with the
+  Coq sources they can require, so that the proofs are written here
+  against exactly what CI gives Coq. It proves nothing.
+- **B, the proofs.** Each is written and checked here with the same Coq
+  (8.18.0, which apt gives here). The scripts are committed as a WP
+  session, and the job replays them, report-only, at runs 1 and 2.
+- **C, the pins.** Coq goes into `frama-c-bits`, and each goal proved
+  leaves its roll-call. Its pin moves from 745 / 757 by the number proved;
+  the docs follow.
+
+### Phase A: pre-registration
+
+**The change.** `.github/workflows/coq.yml`, "12 · Coq: bits.h", one job,
+report-only, run when its own paths change (the workflow, `tools/coq/`,
+bits.h, the Frama-C setup) and by hand:
+
+1. After the Frama-C setup, `opam install coq.8.18.0 why3-coq.1.7.2` puts
+   Coq and Why3's Coq library into the switch, in this job only; the cached
+   switch is unchanged. 8.18 is the newest Coq that why3-coq 1.7.2 accepts
+   (`coq >= 8.11 & < 8.19`, its opam file). The job prints what opam
+   would do first. Then `why3 config detect`, and cvc5 is added again as
+   the setup adds it.
+2. `tools/coq/phase_a.sh` runs `frama-c-bits`'s command with `coq` added
+   to the provers, in `-wp-interactive update` mode with a session
+   directory, at the nine functions that hold the twelve. It prints Why3's
+   configuration for Coq, every file of the session by name, the twelve
+   goals' scripts in full, and every Coq source under Why3's and WP's
+   library directories.
+
+A workflow file is new, so the eight usual workflows run too.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| A1 | **Coq 8.18.0 and why3-coq 1.7.2 install** into the switch within the step's 90 minutes, and opam's plan only adds packages: Frama-C, Why3, Alt-Ergo, Z3 and their libraries are not rebuilt. | the install fails or runs out of time, or the plan rebuilds an installed package | M: the switch's `dune` and `zarith` must fall within Coq's bounds |
+| A2 | **Why3 finds Coq 8.18.0** with its libraries, and lists it beside Alt-Ergo, Z3 and cvc5. | Coq is not listed, or is listed without its libraries | M–H |
+| A3 | **WP writes a Coq script for each of the twelve** in the session, and the log carries them with the sources they require. | a goal with no script, or a script that requires a source the log does not print | M: where WP 29 puts the scripts, and whether it writes them for goals an automatic prover proves, is unmeasured here, where Frama-C is 25 |
+| A4 | **The twelve stay unproved** in this run: their scripts hold no proof yet. | one of them proved | H |
+| A5 | **Nothing else moves:** every other job at its pins and green. | any change | H |
+
+What WP's run proves besides the twelve is measured, not predicted: Coq's
+checks share the runner with the three automatic provers.
+
+**What follows.** Phase B, pre-registered from what phase A shows: the
+proofs that could be written, each checked here, and which goals could
+not be done, and why.
