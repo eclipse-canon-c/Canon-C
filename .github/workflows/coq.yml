@@ -1,0 +1,57 @@
+name: "12 · Coq: bits.h"
+# VERIFY-061 (docs/deviations.md): bits.h's twelve residual goals, which the
+# three automatic provers leave at every model (745 / 757 at x86_64), given
+# to Coq. Phase A, report-only: it installs Coq 8.18.0, the newest that
+# Why3 1.7.2's Coq library supports (why3-coq: coq >= 8.11 and < 8.19), into
+# the Frama-C switch, has WP write the twelve goals as Coq scripts, and
+# prints them with the Coq sources they can require (tools/coq/phase_a.sh).
+# Coq is installed in this job only; the cached switch is unchanged. Runs
+# when its own paths change, and by hand. Map: .github/workflows/README.md.
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - '.github/workflows/coq.yml'
+      - 'tools/coq/**'
+      - 'core/primitives/bits.h'
+      - '.github/actions/framac-setup/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coq-bits:
+    name: "coq: bits.h (VERIFY-061, report-only)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/framac-setup
+      - name: "Install Coq 8.18.0 and why3-coq 1.7.2 into the Frama-C switch"
+        timeout-minutes: 90
+        run: |
+          eval $(opam env --switch=frama-c)
+          echo "--- What opam would do (it should only add packages)"
+          opam install --dry-run --yes --assume-depexts coq.8.18.0 why3-coq.1.7.2
+          start=$(date +%s)
+          opam install --yes --assume-depexts coq.8.18.0 why3-coq.1.7.2
+          echo "opam install took $(( $(date +%s) - start )) seconds"
+          coqc --version
+          echo "--- why3 config detect, then cvc5 again as the setup adds it"
+          why3 config detect
+          for family in cvc5 CVC5; do
+            why3 config add-prover "${family}" /usr/local/bin/cvc5 cvc5 && break
+          done
+          why3 config list-provers
+      - name: "bits.h's twelve goals, as Coq is given them (report-only)"
+        continue-on-error: true   # VERIFY-061 phase A: report-only
+        run: |
+          eval $(opam env --switch=frama-c)
+          tools/coq/phase_a.sh out
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coq-bits-phase-a
+          path: out/
+          retention-days: 90
