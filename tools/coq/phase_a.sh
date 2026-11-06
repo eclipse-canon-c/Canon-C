@@ -12,9 +12,13 @@
 #      provers, in -wp-interactive update mode, which writes a Coq script
 #      for the goals it gives Coq into the session's interactive directory;
 #   3. every file the session holds, by name, and the twelve goals' scripts
-#      in full;
-#   4. the Coq sources the scripts can require: Why3's Coq library and
-#      WP's own.
+#      in full: WP names each after its goal without the "typed_" prefix
+#      (session/interactive/bits_clear_ensures.v; phase A's run #1);
+#   4. what the scripts can require: the Coq prover's entry in Why3's
+#      detection data (its command), every Coq source of the switch whose
+#      path names why3, frama-c or wp, Coq's own library aside, and the
+#      Coq drivers; if Why3's Coq library was installed compiled only, its
+#      sources from why3-coq's source archive.
 # Exit status: the number of the twelve goals with no script found.
 
 set -u
@@ -62,7 +66,7 @@ echo "=== 3. The session's files"
 find "$OUT/session" -type f | sort | sed 's/^/   /'
 MISSING=0
 for g in "${GOALS[@]}"; do
-  files=$(find "$OUT/session" -type f -name "*${g}*" | sort)
+  files=$(find "$OUT/session" -type f -name "${g#typed_}.v" | sort)
   if [ -z "$files" ]; then
     echo "-- ${g}: no file in the session"
     MISSING=$((MISSING + 1))
@@ -75,15 +79,27 @@ for g in "${GOALS[@]}"; do
   done
 done
 
-echo "=== 4. The Coq sources the scripts can require"
-why3lib=$(why3 --print-libdir)
-wpshare="$(frama-c -print-share-path)/wp"
-for d in "${why3lib}/coq" "${wpshare}"; do
-  echo "-- directory ${d}:"
-  find "$d" -type f \( -name '*.v' -o -name '_CoqProject' -o -name '*.drv' \) 2>/dev/null \
-    | sort | sed 's/^/   /'
-done
-find "${why3lib}/coq" "${wpshare}" -type f -name '*.v' 2>/dev/null | sort | while read -r f; do
+echo "=== 4. What the scripts can require"
+why3data=$(why3 --print-datadir)
+echo "why3 libdir: $(why3 --print-libdir); datadir: ${why3data}"
+echo "-- Coq in ${why3data}/provers-detection-data.conf:"
+awk '/^\[/{p=0} /^\[ATP coq\]|^\[ITP coq\]/{p=1} p' "${why3data}/provers-detection-data.conf" | sed 's/^/   /'
+lib=$(opam var lib)
+share=$(opam var share)
+srcs=$( { find "$lib" "$share" -type f -name '*.v' 2>/dev/null \
+            | grep -E 'why3|frama-c|/wp/'
+          find "$lib" "$share" -type f \( -name '*.drv' -o -name '*.gen' \) 2>/dev/null \
+            | grep -i coq; } \
+        | grep -v -E '/lib/coq/(theories|plugins)/|/coq-core/' | sort -u)
+echo "-- the compiled Coq files there, by name:"
+find "$lib" "$share" -type f -name '*.vo' 2>/dev/null | grep -E 'why3|frama-c|/wp/' | sort | sed 's/^/   /'
+if ! echo "$srcs" | grep -q '\.v$'; then
+  echo "-- no Coq source installed beside them: why3-coq's sources instead"
+  opam source why3-coq.1.7.2 --dir "$OUT/why3-src" > /dev/null 2>&1 || echo "   opam source failed"
+  srcs="${srcs}
+$(find "$OUT/why3-src/lib/coq" -type f -name '*.v' 2>/dev/null | sort)"
+fi
+for f in $srcs; do
   echo "-- FILE ${f}"
   cat "$f"
   echo "-- END ${f}"
