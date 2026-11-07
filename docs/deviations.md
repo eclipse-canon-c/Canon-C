@@ -30376,3 +30376,37 @@ A workflow file changes, so all eight workflows run.
 **After run 1.** Run 2, for name stability, is the Coq job again on the
 same commit, started by hand, since nothing needs to change. Run 3
 enforces the Coq job and brings the docs.
+
+### Phase C, run 1: scored (2026-11-07)
+
+The push of 50180e2, 9aa2ddd and 41dd414 ran ten workflows, all `success`.
+The record said eight. `10 · Machine models` #8 and `11 · Proofs: machine
+models` #5 ran too, because `check_pins.py` lives under `tools/machdeps/`,
+which both workflows watch. Their 91 jobs give the notices of their last
+runs (9902e06). The Coq job took 8 minutes. Its replay took 3 minutes 55
+seconds: 15 seconds for the twelve Coq runs, and about 22 for WP at each of
+the ten models.
+
+| # | scored |
+|---|--------|
+| C1 | **MATCH.** Coq accepts the twelve, in 0.7 to 2.4 seconds each. Each proof rests only on names declared in its own script: 4 for the two rotations, and 34 to 36 for the others. |
+| C2 | **MATCH.** All ten models pass. At each, WP gives 100 / 100, credits Coq with twelve, leaves no goal unproved and changes no script. The report-only step exits 0. |
+| C3 | **MATCH.** `frama-c-bits` passes its full roll-call: 745 / 757, with exactly the twelve names unproved. |
+| C4 | **MATCH.** `8 · Records` #41 is green. Record coverage, strict and complete and measured from 3da4eda, finds no problem. `check_pins.py` finds 0 problems: each class's twelve are pinned by `frama-c-bits` by name. |
+| C5 | **MATCH.** The 77 jobs of the six usual workflows give the notices they gave at phase B's run 1 push. |
+
+### Phase C, run 2: pre-registration
+
+Run 2 is the Coq job again, for name stability, with the same scripts and
+the same replay. The push changes only this record and
+`tools/coq/README.md`. The README's local check now compiles a copy outside
+the repository, so that Coq's output files stay out of it. `12 · Coq:
+bits.h`, `8 · Records` and `2 · Platforms` run; the others skip the push.
+
+| # | prediction | falsified if | confidence |
+|---|------------|--------------|------------|
+| C6 | **Run 1 again:** Coq accepts the twelve, each resting only on names declared in its own script, and all ten models pass. The step exits 0. | any difference | H |
+| C7 | **Nothing else moves:** `8 · Records` is green, and `2 · Platforms`'s 15 jobs give run 1's notices. | any change | H |
+
+**After run 2.** Run 3 enforces the Coq job, brings the docs and closes the
+record.
